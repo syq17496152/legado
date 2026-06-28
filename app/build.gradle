@@ -51,7 +51,7 @@ android {
         }
     }
     defaultConfig {
-        applicationId "io.legado.app"
+        applicationId project.hasProperty("customAppId") ? project.property("customAppId") : "io.legado.app"
         minSdk 21
         targetSdk 36
         versionCode 10000 + gitCommits
