@@ -1,0 +1,47 @@
+*.iml
+.gradle
+local.properties
+.DS_Store
+/build
+build/
+/captures
+.externalNativeBuild
+/release
+/tmp
+node_modules/
+/app/app
+/app/google
+/app/gradle.properties
+package-lock.json
+.idea/
+# Kotlin 2.0
+.kotlin/
+.cxx
+.vscode
+
+# Python 缓存与虚拟环境
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# legado-jvm 构建产物
+tools/legado-jvm/build/
+tools/legado-jvm/.gradle/
+
+# 临时目录和输出
+temp/
+output/
+
+# 异常文件
+nul
+
+# Skill 运行时产物
+.trae/skills/*/output/
+.trae/skills/*/scripts/reports/
+.trae/skills/*/scripts/.coverage
+.trae/skills/*/data/*.db
+.trae/skills/*/scripts/*.log
+
+# 通用日志
+*.log
