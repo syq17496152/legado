@@ -242,6 +242,15 @@ source-creator → workflow-auditor 传递以下上下文：
 
 > **完整陷阱**：[exception_rules.md](./docs/project-rules/exception_rules.md) | [logging_rules.md](./docs/project-rules/logging_rules.md) | [architecture_rules.md](./docs/project-rules/architecture_rules.md)
 
+### Git 仓库管理
+
+- **远程仓库**：`https://github.com/syq17496152/legado.git`（私有）
+- **主分支**：`master`
+- **.gitignore 核心排除**：`temp/`（Android SDK/缓存）、`output/`（测试输出）、Skill 运行时产物、`*.log`
+- **Commit 规范**：Conventional Commits（`feat:` / `fix:` / `docs:` / `refactor:` / `skill:` 等）
+
+> **完整规范**：[git-repo-management.md](./docs/project-flow/git-repo-management.md)
+
 ---
 
 ## 快速入口
@@ -252,6 +261,7 @@ source-creator → workflow-auditor 传递以下上下文：
 | **任务导航（14模块代码锚点）** | [docs/project-flow/task-navigation.md](./docs/project-flow/task-navigation.md) |
 | **构建/运行/测试命令** | [docs/project-flow/quick-reference.md](./docs/project-flow/quick-reference.md) |
 | **项目规范（7个规范文档）** | [docs/project-rules/](./docs/project-rules/) |
+| **Git 仓库管理** | [docs/project-flow/git-repo-management.md](./docs/project-flow/git-repo-management.md) |
 | **规则引擎详解** | [docs/project-flow/architecture/rule-engine.md](./docs/project-flow/architecture/rule-engine.md) |
 | **Skill 参考文档索引** | [.trae/skills/legado-source-creator/references/_INDEX.md](./.trae/skills/legado-source-creator/references/_INDEX.md) |
 | **功能设计文档** | [docs/specs/](./docs/specs/) |
