@@ -1,0 +1,82 @@
+﻿
+---
+
+## 7 数据流图 — 从接收入库的完整流程
+
+### 7.1 URL Scheme 导入流程
+
+    浏览器/其他App -> legado://import/bookSource?src=https://xxx.json
+        |
+    Android系统匹配 -> OnLineImportActivity
+        |
+    intent.data.path == "/bookSource" -> 直接启动 ImportBookSourceDialog(url, true)
+        |
+    ImportBookSourceViewModel.importSource(url)
+        | (isAbsUrl)
+    importSourceUrl(url) -> HTTP GET -> decompressed -> GSON.fromJsonArray<BookSource>()
+        |
+    comparisonSource() -> 查 appDb.bookSourceDao.getBookSourcePart() 对比
+        |
+    successLiveData -> Dialog 显示列表 (新增/更新/已有)
+        |
+    用户选择 -> importSelect() -> SourceHelp.insertBookSource() -> 入库
+        |
+    dismiss -> activity.finish()
+
+### 7.2 文件关联导入流程
+
+    文件管理器打开 .json -> Android系统匹配 -> FileAssociationActivity
+        |
+    viewModel.dispatchIntent(uri) -> content scheme
+        |
+    dispatch(fileDoc) -> 文件内容是JSON
+        |
+    importJson(uri) -> BaseAssociationViewModel -> 识别类型 "bookSource"
+        |
+    successLive.postValue("bookSource" to uri.toString())
+        |
+    Activity 观察 -> ImportBookSourceDialog(uri, true)
+        |
+    ImportBookSourceViewModel.importSource(uri) -> isUri -> uri.inputStream -> GSON 解析
+        | (后续同 7.1)
+
+### 7.3 书籍文件导入流程
+
+    文件管理器打开 .epub -> FileAssociationActivity
+        |
+    viewModel.dispatchIntent(uri) -> dispatch(fileDoc)
+        |
+    fileDoc.name 匹配 bookFileRegex -> importBookLiveData
+        |
+    Activity 观察 -> importBook(uri)
+        |
+    检查 defaultBookTreeUri -> 选择保存目录 -> 复制文件
+        |
+    viewModel.importBook(doc.uri) -> LocalBook.importFile(uri) -> Book实体
+        |
+    openBookLiveData -> startActivityForBook(book) -> 打开阅读
+
+### 7.4 验证码处理流程
+
+    书源请求遇到验证码 -> VerificationCodeActivity
+        | (imageUrl, sourceOrigin, sourceName, sourceType)
+    VerificationCodeDialog
+        |
+    Glide 加载验证码图片 -> 用户输入验证码
+        |
+    SourceVerificationHelp.setResult(sourceOrigin, code)
+        |
+    dismiss -> SourceVerificationHelp.checkResult(sourceOrigin)
+        |
+    书源后续请求从 CacheManager 获取验证码结果
+
+### 7.5 URL 跳转确认流程
+
+    书源请求需要跳转外部链接 -> OpenUrlConfirmActivity
+        | (uri, mimeType, sourceOrigin, sourceName, sourceType)
+    OpenUrlConfirmDialog
+        |
+    用户确认 -> Intent.ACTION_VIEW 打开链接/应用
+        |
+    或：禁用源 -> SourceHelp.enableSource(origin, type, false)
+    或：删除源 -> SourceHelp.deleteSource(origin, type)

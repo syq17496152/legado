@@ -1,0 +1,77 @@
+﻿
+---
+
+## 9 辅助功能
+
+### 9.1 VerificationCodeDialog（验证码）
+
+源码：VerificationCodeDialog.kt
+
+**流程**：
+1. 使用 Glide 加载验证码图片（禁用磁盘/内存缓存，每次重新获取）
+2. 加载成功后将 Bitmap 存入 ImageProvider，供 PhotoDialog 查看大图
+3. 用户输入验证码后点确认 -> SourceVerificationHelp.setResult(origin, code)
+4. Dialog 销毁时 -> SourceVerificationHelp.checkResult(origin) 检查结果
+5. Activity 随之 finish
+
+**菜单操作**：确认 / 禁用源 / 删除源
+
+验证码结果存储在内存缓存：Key = ${sourceOrigin}_verificationResult，读取方式 CacheManager.get(key)
+
+### 9.2 OpenUrlConfirmDialog（URL跳转确认）
+
+源码：OpenUrlConfirmDialog.kt
+
+**流程**：
+1. 显示"正在请求跳转链接/应用，是否跳转？"
+2. 确认 -> 创建 ACTION_VIEW Intent，如有 mimeType 则 setDataAndType，否则仅 setData
+3. 验证目标 Intent 是否可解析，不可则 toast "无法打开"
+4. Dialog 关闭后 finish Activity
+
+**菜单操作**：禁用源 / 删除源
+
+### 9.3 ReadConfig 导入
+
+通过 OnLineImportActivity 路径 /readConfig 触发，走 OnLineImportViewModel.importReadConfig()：
+
+1. 下载二进制内容
+2. 调用 ReadBookConfig.import(bytes) 解析
+3. 在 configList 中按 name 查找：同名则替换，否则追加
+4. 直接入库，无预览选择
+
+源码：OnLineImportViewModel.kt L52-L72
+
+---
+
+## 10 完整文件清单
+
+| 文件 | 行数 | 类型 | 职责 |
+|------|------|------|------|
+| BaseAssociationViewModel.kt | 46 | ViewModel | 类型识别基类，importJson() |
+| OnLineImportActivity.kt | 109 | Activity | Deep Link 入口 |
+| OnLineImportViewModel.kt | 109 | ViewModel | 在线导入处理 |
+| FileAssociationActivity.kt | 217 | Activity | 文件关联入口 |
+| FileAssociationViewModel.kt | 66 | ViewModel | 文件分发处理 |
+| ImportBookSourceDialog.kt | 248 | Dialog | 书源导入对话框 |
+| ImportBookSourceViewModel.kt | 225 | ViewModel | 书源导入逻辑 |
+| ImportRssSourceDialog.kt | 217 | Dialog | 订阅源导入对话框 |
+| ImportRssSourceViewModel.kt | 187 | ViewModel | 订阅源导入逻辑 |
+| ImportReplaceRuleDialog.kt | 181 | Dialog | 替换规则导入对话框 |
+| ImportReplaceRuleViewModel.kt | 146 | ViewModel | 替换规则导入逻辑 |
+| ImportHttpTtsDialog.kt | 133 | Dialog | TTS导入对话框 |
+| ImportHttpTtsViewModel.kt | 97 | ViewModel | TTS导入逻辑 |
+| ImportThemeDialog.kt | 124 | Dialog | 主题导入对话框 |
+| ImportThemeViewModel.kt | 96 | ViewModel | 主题导入逻辑 |
+| ImportTxtTocRuleDialog.kt | 120 | Dialog | TXT目录规则导入对话框 |
+| ImportTxtTocRuleViewModel.kt | 93 | ViewModel | TXT目录规则导入逻辑 |
+| ImportDictRuleDialog.kt | 120 | Dialog | 字典规则导入对话框 |
+| ImportDictRuleViewModel.kt | 88 | ViewModel | 字典规则导入逻辑 |
+| AddToBookshelfDialog.kt | 163 | Dialog | 添加书籍到书架 |
+| VerificationCodeActivity.kt | 24 | Activity | 验证码入口 |
+| VerificationCodeDialog.kt | 152 | Dialog | 验证码输入 |
+| VerificationCodeViewModel.kt | 35 | ViewModel | 禁用/删除源 |
+| OpenUrlConfirmActivity.kt | 21 | Activity | URL跳转确认入口 |
+| OpenUrlConfirmDialog.kt | 108 | Dialog | URL跳转确认 |
+| OpenUrlConfirmViewModel.kt | 32 | ViewModel | 禁用/删除源 |
+
+ASSOCIATION_IMPORT_DOC_COMPLETE: 26 files analyzed, 10 sections

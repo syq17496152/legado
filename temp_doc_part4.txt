@@ -1,0 +1,91 @@
+﻿
+---
+
+## 4 FileAssociationActivity — 文件关联导入
+
+### 4.1 AndroidManifest 注册
+
+FileAssociationActivity 注册了两组 intent-filter：
+
+**第一组（MIME 类型匹配）**：scheme = app/content/file，支持 MIME 类型：
+- text/plain
+- application/json
+- application/epub+zip
+- application/pdf
+- application/mobi, application/x-mobipocket-ebook
+- application/azw, application/azw3, application/x-mobi8-ebook
+- application/octet-stream
+
+**第二组（路径模式匹配）**：scheme = app/content/file，mimeType = */*，通过 pathPattern 匹配扩展名：
+- .txt / .json / .epub / .pdf / .mobi / .azw / .azw3 / .zip / .rar / .7z（含大小写）
+
+源码：AndroidManifest.xml L388-L480
+
+### 4.2 整体流程
+
+    接收系统 Intent (ACTION_VIEW)
+    +-- content scheme 且可读 -> viewModel.dispatchIntent(data)
+    +-- 其他 -> 请求存储权限 -> viewModel.dispatchIntent(data)
+
+### 4.3 ViewModel 分发逻辑
+
+    FileAssociationViewModel.dispatchIntent(uri)
+    +-- content/file scheme
+    |   +-- 压缩包(archiveFileRegex: .zip/.rar/.7z)
+    |   |   +-- ArchiveUtils.deCompress() -> 解压后对每个匹配 bookFileRegex 的文件递归 dispatch()
+    |   +-- 普通文件 -> dispatch(fileDoc)
+    |       +-- 文件内容是 JSON -> importJson(uri) -> BaseAssociationViewModel -> successLive
+    |       +-- 文件名匹配 bookFileRegex -> importBookLiveData
+    |       +-- 以上都不匹配 -> notSupportedLiveData (弹窗询问是否仍导入)
+    +-- 其他 scheme (http/https) -> onLineImportLive -> 跳转 OnLineImportActivity
+
+bookFileRegex 匹配的书籍格式：.txt, .epub, .umd, .pdf, .mobi, .azw3, .azw（定义于 AppPattern.kt L43）
+archiveFileRegex 匹配的压缩格式：.zip, .rar, .7z（定义于 AppPattern.kt L45）
+
+源码：
+- dispatchIntent 入口：FileAssociationViewModel.kt L19-L43
+- dispatch 单文件：FileAssociationViewModel.kt L46-L59
+- 书籍导入：FileAssociationViewModel.kt L62-L65
+
+### 4.4 BaseAssociationViewModel 类型识别
+
+importJson(uri) 解析 JSON 的第一个元素，按特征字段识别类型：
+
+| 特征字段 | 返回类型标识 | 对应对话框 |
+|----------|-------------|-----------|
+| bookSourceUrl | bookSource | ImportBookSourceDialog |
+| sourceUrl | rssSource | ImportRssSourceDialog |
+| pattern | replaceRule | ImportReplaceRuleDialog |
+| themeName | theme | ImportThemeDialog |
+| showRule | dictRule | ImportDictRuleDialog |
+| name + rule | txtRule | ImportTxtTocRuleDialog |
+| name + url | httpTts | ImportHttpTtsDialog |
+| 不匹配任何字段 | errorLive | 弹窗提示"格式不对" |
+
+识别逻辑：先尝试 jsonPath.parse(it).read<Map<String, *>>("$[0]")（数组首元素），失败则 ead("$")（对象本身）。
+
+源码：BaseAssociationViewModel.kt L15-L46
+
+### 4.5 书籍文件复制流程
+
+当导入的是书籍文件（非 JSON 配置）时：
+
+1. 检查 AppConfig.defaultBookTreeUri 是否已设置
+2. 未设置 → 启动 HandleFileContract 让用户选择书籍保存目录
+3. 已设置 → 根据目录类型执行复制：
+   - **content scheme**：通过 DocumentFile 操作，比较 lastModified，仅当源文件更新时才覆盖
+   - **file scheme**：通过 File 操作，同样比较 lastModified
+4. 复制完成后调用 iewModel.importBook(doc.uri) → LocalBook.importFile(uri) 创建 Book 实体
+5. 成功后 openBookLiveData 观察回调 → startActivityForBook(book) → finish
+
+源码：FileAssociationActivity.kt L132-L217
+
+### 4.6 不支持文件的处理
+
+对于既不是 JSON 也不是书籍文件的文件，弹出确认对话框：
+- 标题："提示"
+- 消息："不支持打开此文件 {fileName}"
+- "是" → 尝试按书籍文件导入（importBook）
+- "否" → finish
+
+源码：FileAssociationActivity.kt L98-L112

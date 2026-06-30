@@ -1,0 +1,60 @@
+﻿
+---
+
+## 5 Dialog 体系 — 通用导入对话框模式
+
+7 种 ImportDialog 遵循统一模式，由 BaseDialogFragment 派生。
+
+### 5.1 通用构造函数
+
+    constructor(source: String, finishOnDismiss: Boolean = false)
+
+- source：可以是 JSON 字符串、URL 或 content URI
+- inishOnDismiss：从外部 Activity 启动时为 true，对话框关闭时同时 finish Activity
+
+### 5.2 通用 UI 布局
+
+所有 Dialog 使用 R.layout.dialog_recycler_view，包含：
+- **Toolbar**：标题 + 菜单
+- **RotateLoading**：加载动画
+- **RecyclerView**：列表项，使用 ItemSourceImportBinding 布局
+- **tvMsg**：错误/空数据提示
+- **tvCancel / tvOk**：取消 / 确认按钮
+- **tvFooterLeft**：全选/取消全选按钮
+
+### 5.3 通用列表项布局 (ItemSourceImportBinding)
+
+每条记录包含：
+- **cbSourceName**：复选框 + 名称
+- **tvSourceState**：状态文本（"新增" / "更新" / "已有"）
+- **tvOpen**：查看/编辑 JSON 按钮 → 打开 CodeDialog
+- **showComment**：注释/示例文本（部分类型支持）
+
+### 5.4 通用选择机制
+
+    val selectStatus = arrayListOf<Boolean>()   // 每条记录是否选中
+    val isSelectAll: Boolean                    // 是否全选
+    val selectCount: Int                        // 选中数量
+
+默认选中逻辑：新增和更新的记录默认选中，已有的默认不选中（DictRule 例外：仅新增选中）。
+
+### 5.5 通用导入执行流程
+
+    用户点击 OK -> WaitDialog.show()
+    -> viewModel.importSelect() { waitDialog.dismiss(); dismissAllowingStateLoss() }
+
+### 5.6 CodeDialog 编辑回写
+
+实现 CodeDialog.Callback 的 Dialog 可在用户编辑 JSON 后回写数据：
+
+    // ImportBookSourceDialog.kt 示例
+    override fun onCodeSave(code: String, requestId: String?) {
+        requestId?.toInt()?.let {
+            GSON.fromJsonObject<BookSource>(code).getOrNull()?.let { source ->
+                viewModel.allSources[it] = source
+                adapter.setItem(it, source)
+            }
+        }
+    }
+
+ImportThemeDialog 和 ImportTxtTocRuleDialog 未实现此接口，Adapter 中的 tvOpen 虽然仍弹出 CodeDialog，但编辑后无法回写。

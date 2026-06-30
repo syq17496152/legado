@@ -1,0 +1,43 @@
+﻿
+---
+
+## 8 错误处理与用户反馈
+
+### 8.1 错误传播链
+
+    ViewModel.execute {} .onError { errorLiveData.postValue(msg) }
+        |
+    Dialog 观察 errorLiveData -> 隐藏加载动画 -> 显示错误文本
+        |
+    FileAssociationActivity 观察 errorLive -> toast 提示 -> 2秒后 finish
+    OnLineImportActivity 观察 errorLive -> alert 对话框 -> dismiss 后 finish
+
+### 8.2 各层错误处理
+
+| 层级 | 错误来源 | 处理方式 | 日志 |
+|------|---------|---------|------|
+| ViewModel 网络请求 | HTTP失败 | errorLive.postValue(localizedMessage) | AppLog.put() |
+| ViewModel JSON解析 | 格式不对/不是书源 | 抛 NoStackTraceException | AppLog.put() |
+| ViewModel 对比 | 数据库查询 | 不抛异常，null即新增 | 无 |
+| Activity 权限 | 存储权限拒绝 | toast提示 -> 2秒后finish | 无 |
+| Activity 书籍复制 | InvalidBooksDirException | 重新选择目录 | AppLog.put() |
+| Activity 书籍复制 | 其他异常 | toast提示 -> 2秒后finish | AppLog.put() |
+
+### 8.3 用户反馈 UI
+
+| 场景 | 反馈方式 | 说明 |
+|------|---------|------|
+| 数据加载中 | RotateLoading 可见 | 通用 |
+| 加载成功有数据 | 列表显示，更新选择计数 | 通用 |
+| 加载成功无数据 | tvMsg 显示"格式不对" | 通用 |
+| 加载失败 | tvMsg 显示错误信息（前缀 ImportError:） | Dialog 内 |
+| 导入执行中 | WaitDialog | 通用 |
+| 不支持文件类型 | alert 对话框，可选"是/否" | FileAssociationActivity |
+| URL 导入失败 | alert 对话框（标题+消息），关闭后 finish | OnLineImportActivity |
+| 已在书架 | toast 提示，直接跳转 BookInfoActivity | AddToBookshelfDialog |
+
+### 8.4 异常类型
+
+- NoStackTraceException：所有业务异常使用此类（覆写 illInStackTrace() 减少开销）
+- InvalidBooksDirException：书籍保存目录无效时的专用异常
+- 网络异常通过 okHttpClient 自动传播，由 .onError 统一捕获

@@ -1,0 +1,65 @@
+﻿
+---
+
+## 3 OnLineImportActivity — URL Scheme 导入流程
+
+### 3.1 Deep Link 注册
+
+在 AndroidManifest.xml 中注册了两个 scheme：
+
+    <!-- AndroidManifest.xml L367-L375 -->
+    <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="legado" />
+        <data android:scheme="yuedu" />
+    </intent-filter>
+
+URL 格式：legado://import/{path}?src={url} 或 yuedu://import/{path}?src={url}
+
+### 3.2 路径路由表
+
+OnLineImportActivity 按路径直接路由到对应 Dialog，无需类型识别：
+
+| 路径 | 目标 | 说明 |
+|------|------|------|
+| /bookSource | ImportBookSourceDialog | 书源 |
+| /rssSource | ImportRssSourceDialog | 订阅源 |
+| /replaceRule | ImportReplaceRuleDialog | 替换规则 |
+| /textTocRule | ImportTxtTocRuleDialog | TXT目录规则 |
+| /httpTTS | ImportHttpTtsDialog | TTS |
+| /dictRule | ImportDictRuleDialog | 字典规则 |
+| /theme | ImportThemeDialog | 主题 |
+| /readConfig | viewModel.importReadConfig() | 阅读排版配置（二进制，直接入库无预览） |
+| /addToBookshelf | AddToBookshelfDialog | 添加书籍到书架 |
+| /importonline | 按 host 分流 | host=booksource/rsssource/replace 直接匹配 |
+| 其他路径 | viewModel.determineType() | 自动判断 |
+
+源码：OnLineImportActivity.kt L57-L101
+
+### 3.3 determineType 自动识别流程
+
+当路径无法直接路由时，OnLineImportViewModel 下载内容后按 ContentType 判断：
+
+    determineType(url)
+    +-- Content-Type = application/zip | application/octet-stream
+    |   +-- importReadConfig(bytes) -> ReadBookConfig.import() -> 直接入库
+    +-- 其他 Content-Type
+        +-- 下载到缓存文件 scheme_import_cache.json
+        +-- importJson(file.uri) -> BaseAssociationViewModel 按字段识别
+
+源码：OnLineImportViewModel.kt L78-L109
+
+### 3.4 successLive 观察
+
+OnLineImportActivity 同时观察 successLive（来自 BaseAssociationViewModel），当 determineType 通过 importJson 识别出类型后，同样启动对应 Dialog：
+
+    // OnLineImportActivity.kt L34-L54
+    viewModel.successLive.observe(this) {
+        when (it.first) {
+            "bookSource" -> showDialogFragment(ImportBookSourceDialog(it.second, true))
+            "rssSource" -> showDialogFragment(ImportRssSourceDialog(it.second, true))
+            // ... 其余类型
+        }
+    }
