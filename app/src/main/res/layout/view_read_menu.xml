@@ -164,7 +164,7 @@
                 android:tint="@color/primaryText"
                 android:tooltipText="@string/search_content"
                 app:backgroundTint="@color/background_menu"
-                app:elevation="2dp"
+                app:elevation="6dp"
                 app:fabSize="mini"
                 app:pressedTranslationZ="2dp"
                 tools:ignore="UnusedAttribute" />
@@ -184,7 +184,7 @@
                 android:tint="@color/primaryText"
                 android:tooltipText="@string/auto_next_page"
                 app:backgroundTint="@color/background_menu"
-                app:elevation="2dp"
+                app:elevation="6dp"
                 app:fabSize="mini"
                 app:pressedTranslationZ="2dp"
                 tools:ignore="UnusedAttribute" />
@@ -204,7 +204,7 @@
                 android:tint="@color/primaryText"
                 android:tooltipText="@string/replace_rule_title"
                 app:backgroundTint="@color/background_menu"
-                app:elevation="2dp"
+                app:elevation="6dp"
                 app:fabSize="mini"
                 app:pressedTranslationZ="2dp"
                 tools:ignore="UnusedAttribute" />
@@ -224,7 +224,7 @@
                 android:tint="@color/primaryText"
                 android:tooltipText="@string/dark_theme"
                 app:backgroundTint="@color/background_menu"
-                app:elevation="2dp"
+                app:elevation="6dp"
                 app:fabSize="mini"
                 app:pressedTranslationZ="2dp"
                 tools:ignore="UnusedAttribute" />

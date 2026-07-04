@@ -5,6 +5,7 @@ import android.animation.AnimatorListenerAdapter
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import androidx.core.graphics.ColorUtils
 import android.graphics.Paint
 import android.graphics.RectF
 import android.util.AttributeSet
@@ -117,7 +118,7 @@ class RotateLoading @JvmOverloads constructor(
             return
         }
 
-        mPaint.color = Color.parseColor("#1a000000")
+        mPaint.color = ColorUtils.setAlphaComponent(loadingColor, 26)
         shadowRectF?.let {
             canvas.drawArc(it, topDegree.toFloat(), arc, false, mPaint)
             canvas.drawArc(it, bottomDegree.toFloat(), arc, false, mPaint)

@@ -236,7 +236,7 @@ class BgTextConfigDialog : BaseDialogFragment(R.layout.dialog_read_bg_text) {
                 if (i >= 0) {
                     ReadBookConfig.durConfig = defaultConfigs[i].copy()
                     initData()
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
+                    postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5, 13))
                 }
             }
         }
@@ -289,7 +289,7 @@ class BgTextConfigDialog : BaseDialogFragment(R.layout.dialog_read_bg_text) {
         }
         binding.ivDelete.setOnClickListener {
             if (ReadBookConfig.deleteDur()) {
-                postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
+                postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5, 13))
                 dismissAllowingStateLoss()
             } else {
                 toastOnUi("数量已是最少,不能删除.")
@@ -414,7 +414,7 @@ class BgTextConfigDialog : BaseDialogFragment(R.layout.dialog_read_bg_text) {
             ReadBookConfig.import(byteArray)
         }.onSuccess {
             ReadBookConfig.durConfig = it
-            postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5))
+            postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5, 13))
             toastOnUi("导入成功")
         }.onError {
             it.printOnDebug()

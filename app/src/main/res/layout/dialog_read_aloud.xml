@@ -41,10 +41,11 @@
 
         <ImageView
             android:id="@+id/iv_play_prev"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_marginLeft="8dp"
-            android:layout_marginRight="8dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="9dp"
+            android:layout_marginLeft="4dp"
+            android:layout_marginRight="4dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/prev_sentence"
             android:src="@drawable/ic_skip_previous"
@@ -54,10 +55,11 @@
 
         <ImageView
             android:id="@+id/iv_play_pause"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_marginLeft="8dp"
-            android:layout_marginRight="8dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="9dp"
+            android:layout_marginLeft="4dp"
+            android:layout_marginRight="4dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/audio_play"
             android:src="@drawable/ic_play_24dp"
@@ -67,10 +69,11 @@
 
         <ImageView
             android:id="@+id/iv_stop"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_marginLeft="8dp"
-            android:layout_marginRight="8dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="9dp"
+            android:layout_marginLeft="4dp"
+            android:layout_marginRight="4dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/stop"
             android:src="@drawable/ic_stop_black_24dp"
@@ -80,10 +83,11 @@
 
         <ImageView
             android:id="@+id/iv_play_next"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_marginLeft="8dp"
-            android:layout_marginRight="8dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="9dp"
+            android:layout_marginLeft="4dp"
+            android:layout_marginRight="4dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/next_sentence"
             android:src="@drawable/ic_skip_next"
@@ -207,8 +211,9 @@
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/iv_tts_speech_reduce"
-                android:layout_width="30dp"
-                android:layout_height="30dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="9dp"
                 android:contentDescription="@string/tts_speech_reduce"
                 android:src="@drawable/ic_reduce"
                 android:tint="@color/primaryText"
@@ -224,8 +229,9 @@
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/iv_tts_speech_add"
-                android:layout_width="30dp"
-                android:layout_height="30dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="9dp"
                 android:contentDescription="@string/tts_speech_add"
                 android:src="@drawable/ic_add"
                 android:tint="@color/primaryText"

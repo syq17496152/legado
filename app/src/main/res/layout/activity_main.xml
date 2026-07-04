@@ -18,7 +18,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/background"
-        android:minHeight="50dp"
+        android:minHeight="56dp"
         app:itemActiveIndicatorStyle="@color/transparent"
         app:labelVisibilityMode="unlabeled"
         app:menu="@menu/main_bnv" />

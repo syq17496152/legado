@@ -2,7 +2,7 @@
 <resources>
     <color name="primary">@color/md_blue_grey_600</color>
     <color name="primaryDark">@color/md_blue_grey_700</color>
-    <color name="accent">@color/md_deep_orange_800</color>
+    <color name="accent">@color/md_deep_orange_500</color>
 
     <color name="disabled">@color/md_dark_disabled</color>
 
@@ -36,6 +36,12 @@
     <color name="secondaryText">#b3ffffff</color>
     <color name="tv_text_summary">#B3B3B3</color>
     <color name="menu_color_default">#b7b7b7</color>
+
+    <!-- 暗色模式补充覆盖 -->
+    <color name="highlight">#ff6e40</color>
+    <color name="error">#ff5252</color>
+    <color name="success">#66bb6a</color>
+    <color name="lightBlue_color">#FF90CAF9</color>
 
 
     <color name="tv_text_button_nor">#303030</color>

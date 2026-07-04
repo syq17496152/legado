@@ -15,7 +15,44 @@
     <dimen name="line_height">0.8dp</dimen>
     <dimen name="shadow_height">10dp</dimen>
 
-    <dimen name="desc_icon_size">18sp</dimen>
+    <dimen name="desc_icon_size">18dp</dimen>
+
+    <!-- ========== Design Tokens: Corner Radius (M3 Shape System) ========== -->
+    <dimen name="corner_extra_small">4dp</dimen>
+    <dimen name="corner_small">8dp</dimen>
+    <dimen name="corner_medium">12dp</dimen>
+    <dimen name="corner_large">16dp</dimen>
+    <!-- corner_full = 50% 需在代码/drawable中设置 -->
+
+    <!-- ========== Design Tokens: Typography Scale (M3 子集) ========== -->
+    <dimen name="text_display_small">36sp</dimen>
+    <dimen name="text_headline_medium">28sp</dimen>
+    <dimen name="text_headline_small">24sp</dimen>
+    <dimen name="text_title_large">22sp</dimen>
+    <dimen name="text_title_medium">16sp</dimen>
+    <dimen name="text_title_small">14sp</dimen>
+    <dimen name="text_body_large">16sp</dimen>
+    <dimen name="text_body_medium">14sp</dimen>
+    <dimen name="text_body_small">12sp</dimen>
+    <dimen name="text_label_large">14sp</dimen>
+    <dimen name="text_label_medium">12sp</dimen>
+    <dimen name="text_label_small">11sp</dimen>
+
+    <!-- ========== Design Tokens: Spacing (4dp Grid) ========== -->
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_sm">8dp</dimen>
+    <dimen name="spacing_md">12dp</dimen>
+    <dimen name="spacing_lg">16dp</dimen>
+    <dimen name="spacing_xl">24dp</dimen>
+    <dimen name="spacing_xxl">32dp</dimen>
+
+    <!-- ========== Design Tokens: Elevation (M3 Level System) ========== -->
+    <dimen name="elevation_level0">0dp</dimen>
+    <dimen name="elevation_level1">1dp</dimen>
+    <dimen name="elevation_level2">3dp</dimen>
+    <dimen name="elevation_level3">6dp</dimen>
+    <dimen name="elevation_level4">8dp</dimen>
+    <dimen name="elevation_level5">12dp</dimen>
 
     <dimen name="toolbar_elevation">4dp</dimen>
 

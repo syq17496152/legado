@@ -221,7 +221,8 @@
         <!-- 搜索界面 -->
         <activity
             android:name=".ui.book.search.SearchActivity"
-            android:launchMode="standard" />
+            android:launchMode="standard"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
         <!-- 关于界面 -->
         <activity
             android:name=".ui.about.AboutActivity"
@@ -266,7 +267,8 @@
         <activity
             android:name=".ui.book.searchContent.SearchContentActivity"
             android:launchMode="singleTop"
-            android:screenOrientation="behind" />
+            android:screenOrientation="behind"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
         <!-- RSS条目 -->
         <activity
             android:name=".ui.rss.article.RssSortActivity"

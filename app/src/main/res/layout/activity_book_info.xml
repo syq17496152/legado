@@ -18,7 +18,7 @@
         android:id="@+id/vw_bg"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#50000000"
+        android:background="@color/transparent50"
         android:orientation="vertical">
 
         <io.legado.app.ui.widget.TitleBar
@@ -159,8 +159,8 @@
                                 tools:ignore="UseCompoundDrawables">
 
                                 <ImageView
-                                    android:layout_width="18sp"
-                                    android:layout_height="18sp"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
                                     android:contentDescription="@string/author"
                                     android:paddingRight="2dp"
                                     android:src="@drawable/ic_author"
@@ -193,8 +193,8 @@
 
                                 <ImageView
                                     android:id="@+id/iv_web"
-                                    android:layout_width="18sp"
-                                    android:layout_height="18sp"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
                                     android:contentDescription="@string/origin_format"
                                     android:paddingRight="2dp"
                                     android:src="@drawable/ic_web_outline"
@@ -239,8 +239,8 @@
 
                                 <ImageView
                                     android:id="@+id/ic_book_last"
-                                    android:layout_width="18sp"
-                                    android:layout_height="18sp"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
                                     android:contentDescription="@string/read_dur_progress"
                                     android:paddingRight="2dp"
                                     android:src="@drawable/ic_book_last"
@@ -272,8 +272,8 @@
                                 android:paddingBottom="3dp">
 
                                 <ImageView
-                                    android:layout_width="18sp"
-                                    android:layout_height="18sp"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
                                     android:contentDescription="@string/read_dur_progress"
                                     android:paddingRight="2dp"
                                     android:src="@drawable/ic_groups"
@@ -317,8 +317,8 @@
                                 android:paddingBottom="3dp">
 
                                 <ImageView
-                                    android:layout_width="18sp"
-                                    android:layout_height="18sp"
+                                    android:layout_width="18dp"
+                                    android:layout_height="18dp"
                                     android:contentDescription="@string/read_dur_progress"
                                     android:paddingRight="2dp"
                                     android:src="@drawable/ic_folder_open"

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="launcher_background">#FF1A2F5A</color>
-    <color name="primary">@color/md_light_blue_600</color>
-    <color name="primaryDark">@color/md_light_blue_700</color>
+    <color name="primary">@color/md_light_blue_800</color>
+    <color name="primaryDark">@color/md_light_blue_900</color>
     <color name="accent">@color/md_pink_800</color>
 
     <color name="disabled">@color/md_light_disabled</color>
@@ -42,7 +42,7 @@
 
     <color name="primaryText">#de000000</color>
     <color name="secondaryText">#8a000000</color>
-    <color name="tv_text_summary">#8A2C2C2C</color>
+    <color name="tv_text_summary">#8A000000</color>
     <color name="tv_text_book_detail">#dfdfdf</color>
     <color name="menu_color_default">#383838</color>
 

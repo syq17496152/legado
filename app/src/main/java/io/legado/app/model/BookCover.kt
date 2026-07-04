@@ -123,6 +123,7 @@ object BookCover {
         }
         return builder.placeholder(defaultDrawable)
             .error(defaultDrawable)
+            .transition(DrawableTransitionOptions.withCrossFade(300))
             .centerCrop()
     }
 

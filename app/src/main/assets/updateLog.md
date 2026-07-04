@@ -4,6 +4,20 @@
 
 ## cronet版本: 128.0.6613.40
 
+**2026/07/04**
+- 同步阅读Sigma最新提交：修复WebDAV同步循环提前退出、预设布局切换后翻页动画不刷新
+- 更新内置订阅源：源仓库CSS选择器适配、导入源域名迁移
+- 搜索线程默认值调整为32、预下载默认值调整为2
+- UI/UX 系统性优化：修复暗色模式下文字不可见、WCAG 对比度不达标等11项P0问题
+- 新增 Design Token 体系：圆角(4级)、排版(12级)、间距(6级)、阴影(6级)
+- 补全暗色模式颜色覆盖：highlight/error/success/lightBlue
+- 统一圆角规范：Card/Dialog 12dp、Popup 8dp，新增 shape_corner 四级 Drawable
+- 修正图标体系：viewport/dp尺寸归一化、fillColor 统一为 tint 着色
+- 触控目标合规化：26+ 处操作图标/按钮从 24~36dp 提升至 48dp
+- BottomNav 高度 50→56dp、FAB elevation 2→6dp、封面加载添加 crossfade 过渡
+- 搜索 Activity 添加 windowSoftInputMode 适配键盘
+- 自定义 Toast 适配 Android 11+ 禁令
+
 **2026/03/07**
 - 优化代码，修复问题
 

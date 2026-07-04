@@ -84,6 +84,35 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
 
 ---
 
+## 🔴🔴 强制规则：版本交付同步
+
+> **任何涉及代码变更的任务完成后，必须同步更新 `assets/updateLog.md`。禁止只改代码不写更新日志！**
+
+### 同步清单
+
+| 变更类型 | 必须同步的文件 | 说明 |
+|----------|--------------|------|
+| **任何代码变更** | `app/src/main/assets/updateLog.md` | 顶部追加日期条目，写明用户可感知的变更内容 |
+| **文档变更** | `docs/INDEX.md` | 更新 spec 状态标记 |
+| **架构变更** | `docs/project-flow/` 相关文档 | 同步架构说明 |
+| **Skill 变更** | `.trae/skills/` 相关 SKILL.md | 同步能力说明 |
+
+### updateLog.md 格式
+
+```markdown
+**YYYY/MM/DD**
+- 变更说明1（面向用户，非技术细节）
+- 变更说明2
+```
+
+条目追加在 `## cronet版本:` 行之后、已有条目之前。内容面向用户，用通俗语言描述可感知的变化，而非内部技术术语。
+
+### 反模式
+
+❌ 改代码不写 updateLog.md / updateLog.md 只写"优化代码，修复问题"无具体内容 / 新功能上线但用户不知道 / tasks.md 全部完成但 updateLog.md 未更新
+
+---
+
 ## 项目核心 Skill：legado-source-creator
 
 > **本项目核心工具**：Legado 书源/订阅源智能创建器。79 条陷阱检查、5 阶段闭环工作流、10 大参考目录、16 个验证脚本、JVM 仿真器（legado-jvm.jar，覆盖率 85-90%）。

@@ -48,8 +48,9 @@
 
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/iv_seek_reduce"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="12dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/reduce"
             android:src="@drawable/ic_reduce"
@@ -65,8 +66,9 @@
 
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/iv_seek_plus"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="12dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/plus"
             android:src="@drawable/ic_add"
