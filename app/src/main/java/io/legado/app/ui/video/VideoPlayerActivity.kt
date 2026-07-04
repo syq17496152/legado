@@ -90,6 +90,7 @@ import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.html.HtmlPlugin
 import io.noties.markwon.image.glide.GlideImagesPlugin
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -744,10 +745,15 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             alert(title = getString(R.string.add_to_bookshelf)) {
                 setMessage(getString(R.string.check_add_bookshelf, book.name))
                 okButton {
-                    VideoPlay.book?.removeType(BookType.notShelf)
-                    VideoPlay.book?.save()
-                    VideoPlay.inBookshelf = true
-                    setResult(RESULT_OK)
+                    val book = VideoPlay.book
+                    book?.removeType(BookType.notShelf)
+                    lifecycleScope.launch(IO) {
+                        book?.save()
+                        withContext(Main) {
+                            VideoPlay.inBookshelf = true
+                            setResult(RESULT_OK)
+                        }
+                    }
                 }
                 noButton {
                     callBackBookEnd()

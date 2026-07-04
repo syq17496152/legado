@@ -1,5 +1,6 @@
 package io.legado.app.lib.mobi
 
+import io.legado.app.constant.AppLog
 import io.legado.app.lib.mobi.entities.FdstHeader
 import io.legado.app.lib.mobi.entities.Fragment
 import io.legado.app.lib.mobi.entities.KF8Pos
@@ -252,7 +253,7 @@ class KF8Book(
                 fdstTableEnds!![i] = fdstBuffer.readUInt32()
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            AppLog.put("KF8Book: parse", e)
         }
     }
 

@@ -17,6 +17,8 @@ import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 object ReadRss {
     /**
@@ -47,7 +49,9 @@ object ReadRss {
 
     fun readRss(fragment: Fragment, rssArticle: RssArticle,rssSource: RssSource? = null) {
         val rssReadRecord = rssArticle.toRecord()
-        appDb.rssReadRecordDao.insertRecord(rssReadRecord)
+        fragment.viewLifecycleOwner.lifecycleScope.launch(IO) {
+            appDb.rssReadRecordDao.insertRecord(rssReadRecord)
+        }
         val type = rssArticle.type
         if (type == 0) {
             //web网页
@@ -73,48 +77,52 @@ object ReadRss {
     }
 
     private fun readNoHtml(fragment: Fragment, rssArticle: RssArticle, rssSource: RssSource? = null, type: Int) {
-        val rssSource = rssSource ?: appDb.rssSourceDao.getByKey(rssArticle.origin)
-        rssSource?.let { s ->
-            val ruleContent = s.ruleContent
-            if (ruleContent.isNullOrBlank()) {
-                when (type) {
-                    1 -> fragment.showDialogFragment(PhotoDialog(rssArticle.link))
-                }
-            } else {
-                Rss.getContent(fragment.viewLifecycleOwner.lifecycleScope, rssArticle, ruleContent, s)
-                    .onSuccess(IO) { body ->
-                        if (body.isBlank()) {
-                            throw ContentEmptyException("正文为空")
-                        }
-                        val url = NetworkUtils.getAbsoluteURL(rssArticle.link, body)
-                        when (type) {
-                            1 -> fragment.showDialogFragment(PhotoDialog(url))
-                        }
-                    }.onError {
-                        AppLog.put("加载为链接的正文失败", it, true)
+        fragment.viewLifecycleOwner.lifecycleScope.launch {
+            val rssSource = rssSource ?: withContext(IO) { appDb.rssSourceDao.getByKey(rssArticle.origin) }
+            rssSource?.let { s ->
+                val ruleContent = s.ruleContent
+                if (ruleContent.isNullOrBlank()) {
+                    when (type) {
+                        1 -> fragment.showDialogFragment(PhotoDialog(rssArticle.link))
                     }
+                } else {
+                    Rss.getContent(fragment.viewLifecycleOwner.lifecycleScope, rssArticle, ruleContent, s)
+                        .onSuccess(IO) { body ->
+                            if (body.isBlank()) {
+                                throw ContentEmptyException("正文为空")
+                            }
+                            val url = NetworkUtils.getAbsoluteURL(rssArticle.link, body)
+                            when (type) {
+                                1 -> fragment.showDialogFragment(PhotoDialog(url))
+                            }
+                        }.onError {
+                            AppLog.put("加载为链接的正文失败", it, true)
+                        }
+                }
             }
         }
     }
 
     private fun readNoHtml(activity: AppCompatActivity, record: RssReadRecord, type: Int) {
-        val rssSource = appDb.rssSourceDao.getByKey(record.origin)
-        rssSource?.let { s ->
-            val ruleContent = s.ruleContent
-            if (ruleContent.isNullOrBlank()) {
-                when (type) {
-                    1 -> activity.showDialogFragment(PhotoDialog(record.record))
-                }
-            } else {
-                Rss.getContent(activity.lifecycleScope, record.toRssArticle(), ruleContent, s)
-                    .onSuccess(IO) { body ->
-                        val url = NetworkUtils.getAbsoluteURL(record.record, body)
-                        when (type) {
-                            1 -> activity.showDialogFragment(PhotoDialog(url))
-                        }
-                    }.onError {
-                        AppLog.put("加载为链接的正文失败", it, true)
+        activity.lifecycleScope.launch {
+            val rssSource = withContext(IO) { appDb.rssSourceDao.getByKey(record.origin) }
+            rssSource?.let { s ->
+                val ruleContent = s.ruleContent
+                if (ruleContent.isNullOrBlank()) {
+                    when (type) {
+                        1 -> activity.showDialogFragment(PhotoDialog(record.record))
                     }
+                } else {
+                    Rss.getContent(activity.lifecycleScope, record.toRssArticle(), ruleContent, s)
+                        .onSuccess(IO) { body ->
+                            val url = NetworkUtils.getAbsoluteURL(record.record, body)
+                            when (type) {
+                                1 -> activity.showDialogFragment(PhotoDialog(url))
+                            }
+                        }.onError {
+                            AppLog.put("加载为链接的正文失败", it, true)
+                        }
+                }
             }
         }
     }

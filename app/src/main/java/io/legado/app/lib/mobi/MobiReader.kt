@@ -1,6 +1,7 @@
 package io.legado.app.lib.mobi
 
 import android.os.ParcelFileDescriptor
+import io.legado.app.constant.AppLog
 import io.legado.app.lib.mobi.entities.ExthRecordType
 import io.legado.app.lib.mobi.entities.KF8Header
 import io.legado.app.lib.mobi.entities.MobiEntryHeaders
@@ -37,7 +38,7 @@ class MobiReader {
                     kf8BoundaryOffset = boundary
                     isKF8 = true
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    AppLog.put("MobiReader: read", e)
                 }
             }
         }

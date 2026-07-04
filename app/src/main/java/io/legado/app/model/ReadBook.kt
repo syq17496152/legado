@@ -52,6 +52,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
+import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.max
 import kotlin.math.min
@@ -60,7 +61,7 @@ import kotlin.math.min
 @Suppress("MemberVisibilityCanBePrivate")
 object ReadBook : CoroutineScope by MainScope() {
     var book: Book? = null
-    var callBack: CallBack? = null
+    var callBack: WeakReference<CallBack>? = null
     var inBookshelf = false
     var chapterSize = 0
     var simulatedChapterSize = 0
@@ -73,7 +74,7 @@ object ReadBook : CoroutineScope by MainScope() {
     var nextTextChapter: TextChapter? = null
     var bookSource: BookSource? = null
     var msg: String? = null
-    private val loadingChapters = arrayListOf<Int>()
+    private val loadingChapters = java.util.concurrent.CopyOnWriteArrayList<Int>()
     private val readRecord = ReadRecord()
     private val chapterLoadingJobs = ConcurrentHashMap<Int, Coroutine<*>>()
     private val prevChapterLoadingLock = Mutex()
@@ -88,8 +89,8 @@ object ReadBook : CoroutineScope by MainScope() {
     var webBookProgress: BookProgress? = null
 
     var preDownloadTask: Job? = null
-    val downloadedChapters = hashSetOf<Int>()
-    val downloadFailChapters = hashMapOf<Int, Int>()
+    val downloadedChapters = java.util.concurrent.CopyOnWriteArraySet<Int>()
+    val downloadFailChapters = java.util.concurrent.ConcurrentHashMap<Int, Int>()
     var contentProcessor: ContentProcessor? = null
     val downloadScope = CoroutineScope(SupervisorJob() + IO)
     val preDownloadSemaphore = Semaphore(2)
@@ -111,18 +112,16 @@ object ReadBook : CoroutineScope by MainScope() {
         durChapterPos = book.durChapterPos
         isLocalBook = book.isLocal
         clearTextChapter()
-        callBack?.upContent()
-        callBack?.upMenuView()
-        callBack?.upPageAnim()
+        callBack?.get()?.upContent()
+        callBack?.get()?.upMenuView()
+        callBack?.get()?.upPageAnim()
         upWebBook(book)
         lastBookProgress = null
         webBookProgress = null
         TextFile.clear()
-        synchronized(this) {
-            loadingChapters.clear()
-            downloadedChapters.clear()
-            downloadFailChapters.clear()
-        }
+        loadingChapters.clear()
+        downloadedChapters.clear()
+        downloadFailChapters.clear()
     }
 
     fun upData(book: Book) {
@@ -148,13 +147,11 @@ object ReadBook : CoroutineScope by MainScope() {
         if (prevTextChapter?.isCompleted == false) {
             prevTextChapter = null
         }
-        callBack?.upMenuView()
+        callBack?.get()?.upMenuView()
         upWebBook(book)
-        synchronized(this) {
-            loadingChapters.clear()
-            downloadedChapters.clear()
-            downloadFailChapters.clear()
-        }
+        loadingChapters.clear()
+        downloadedChapters.clear()
+        downloadFailChapters.clear()
     }
 
     fun upWebBook(book: Book) {
@@ -202,7 +199,7 @@ object ReadBook : CoroutineScope by MainScope() {
             durChapterPos = progress.durChapterPos
             saveRead()
             clearTextChapter()
-            callBack?.upContent()
+            callBack?.get()?.upContent()
             loadContent(resetPageOffset = true)
         }
     }
@@ -297,7 +294,7 @@ object ReadBook : CoroutineScope by MainScope() {
     fun upMsg(msg: String?) {
         if (ReadBook.msg != msg) {
             ReadBook.msg = msg
-            callBack?.upContent()
+            callBack?.get()?.upContent()
         }
     }
 
@@ -309,8 +306,8 @@ object ReadBook : CoroutineScope by MainScope() {
                 hasNextPage = true
                 it.getPage(durPageIndex)?.removePageAloudSpan()
                 durChapterPos = nextPagePos
-                callBack?.cancelSelect()
-                callBack?.upContent()
+                callBack?.get()?.cancelSelect()
+                callBack?.get()?.upContent()
                 saveRead(true)
             }
         }
@@ -324,7 +321,7 @@ object ReadBook : CoroutineScope by MainScope() {
             if (prevPagePos >= 0) {
                 hasPrevPage = true
                 durChapterPos = prevPagePos
-                callBack?.upContent()
+                callBack?.get()?.upContent()
                 saveRead(true)
             }
         }
@@ -341,15 +338,15 @@ object ReadBook : CoroutineScope by MainScope() {
             nextTextChapter = null
             if (curTextChapter == null) {
                 AppLog.putDebug("moveToNextChapter-章节未加载,开始加载")
-                if (upContentInPlace) callBack?.upContent()
+                if (upContentInPlace) callBack?.get()?.upContent()
                 loadContent(durChapterIndex, upContent, resetPageOffset = false)
             } else if (upContent && upContentInPlace) {
                 AppLog.putDebug("moveToNextChapter-章节已加载,刷新视图")
-                callBack?.upContent()
+                callBack?.get()?.upContent()
             }
             loadContent(durChapterIndex.plus(1), upContent, false)
             saveRead()
-            callBack?.upMenuView()
+            callBack?.get()?.upMenuView()
             AppLog.putDebug("moveToNextChapter-curPageChanged()")
             curPageChanged()
             return true
@@ -372,15 +369,15 @@ object ReadBook : CoroutineScope by MainScope() {
             nextTextChapter = null
             if (curTextChapter == null) {
                 AppLog.putDebug("moveToNextChapter-章节未加载,开始加载")
-                if (upContentInPlace) callBack?.upContentAwait()
+                if (upContentInPlace) callBack?.get()?.upContentAwait()
                 loadContentAwait(durChapterIndex, upContent, resetPageOffset = false)
             } else if (upContent && upContentInPlace) {
                 AppLog.putDebug("moveToNextChapter-章节已加载,刷新视图")
-                callBack?.upContentAwait()
+                callBack?.get()?.upContentAwait()
             }
             loadContent(durChapterIndex.plus(1), upContent, false)
             saveRead()
-            callBack?.upMenuView()
+            callBack?.get()?.upMenuView()
             AppLog.putDebug("moveToNextChapter-curPageChanged()")
             curPageChanged()
             return true
@@ -403,14 +400,14 @@ object ReadBook : CoroutineScope by MainScope() {
             curTextChapter = prevTextChapter
             prevTextChapter = null
             if (curTextChapter == null) {
-                if (upContentInPlace) callBack?.upContent()
+                if (upContentInPlace) callBack?.get()?.upContent()
                 loadContent(durChapterIndex, upContent, resetPageOffset = false)
             } else if (upContent && upContentInPlace) {
-                callBack?.upContent()
+                callBack?.get()?.upContent()
             }
             loadContent(durChapterIndex.minus(1), upContent, false)
             saveRead()
-            callBack?.upMenuView()
+            callBack?.get()?.upMenuView()
             curPageChanged()
             return true
         } else {
@@ -420,7 +417,7 @@ object ReadBook : CoroutineScope by MainScope() {
 
     fun skipToPage(index: Int, success: (() -> Unit)? = null) {
         durChapterPos = curTextChapter?.getReadLength(index) ?: index
-        callBack?.upContent {
+        callBack?.get()?.upContent {
             success?.invoke()
         }
         curPageChanged()
@@ -457,7 +454,7 @@ object ReadBook : CoroutineScope by MainScope() {
     ) {
         if (index < chapterSize) {
             clearTextChapter()
-            if (upContent) callBack?.upContent()
+            if (upContent) callBack?.get()?.upContent()
             durChapterIndex = index
             ReadBook.durChapterPos = durChapterPos
             saveRead()
@@ -471,7 +468,7 @@ object ReadBook : CoroutineScope by MainScope() {
      * 当前页面变化
      */
     private fun curPageChanged(pageChanged: Boolean = false) {
-        callBack?.pageChanged()
+        callBack?.get()?.pageChanged()
         curTextChapter?.let {
             if (BaseReadAloudService.isRun && it.isCompleted) {
                 val scrollPageAnim = pageAnim() == 3
@@ -548,7 +545,7 @@ object ReadBook : CoroutineScope by MainScope() {
                 success?.invoke()
             }
         } else {
-            callBack?.upContent()
+            callBack?.get()?.upContent()
         }
         if (nextTextChapter == null) {
             loadContent(durChapterIndex + 1)
@@ -674,14 +671,12 @@ object ReadBook : CoroutineScope by MainScope() {
         }
     }
 
-    @Synchronized
     private fun addLoading(index: Int): Boolean {
         if (loadingChapters.contains(index)) return false
         loadingChapters.add(index)
         return true
     }
 
-    @Synchronized
     fun removeLoading(index: Int) {
         loadingChapters.remove(index)
     }
@@ -689,7 +684,6 @@ object ReadBook : CoroutineScope by MainScope() {
     /**
      * 内容加载完成
      */
-    @Synchronized
     fun contentLoadFinish(
         book: Book,
         chapter: BookChapter,
@@ -723,26 +717,26 @@ object ReadBook : CoroutineScope by MainScope() {
                         ensureActive()
                         curTextChapter = textChapter
                     }
-                    callBack?.upMenuView()
+                    callBack?.get()?.upMenuView()
                     var available = false
                     for (page in textChapter.layoutChannel) {
                         val index = page.index
                         if (!available && page.containPos(durChapterPos)) {
                             if (upContent) {
-                                callBack?.upContent(offset, resetPageOffset)
+                                callBack?.get()?.upContent(offset, resetPageOffset)
                             }
                             available = true
                         }
                         if (upContent && isScroll) {
                             if (max(index - 3, 0) < durPageIndex) {
-                                callBack?.upContent(offset, false)
+                                callBack?.get()?.upContent(offset, false)
                             }
                         }
-                        callBack?.onLayoutPageCompleted(index, page)
+                        callBack?.get()?.onLayoutPageCompleted(index, page)
                     }
-                    if (upContent) callBack?.upContent(offset, !available && resetPageOffset)
+                    if (upContent) callBack?.get()?.upContent(offset, !available && resetPageOffset)
                     curPageChanged()
-                    callBack?.contentLoadFinish()
+                    callBack?.get()?.contentLoadFinish()
                 }
 
                 -1 -> prevChapterLoadingLock.withLock {
@@ -751,7 +745,7 @@ object ReadBook : CoroutineScope by MainScope() {
                         prevTextChapter = textChapter
                     }
                     textChapter.layoutChannel.receiveAsFlow().collect()
-                    if (upContent) callBack?.upContent(offset, resetPageOffset)
+                    if (upContent) callBack?.get()?.upContent(offset, resetPageOffset)
                 }
 
                 1 -> nextChapterLoadingLock.withLock {
@@ -763,7 +757,7 @@ object ReadBook : CoroutineScope by MainScope() {
                         if (page.index > 1) {
                             continue
                         }
-                        if (upContent) callBack?.upContent(offset, resetPageOffset)
+                        if (upContent) callBack?.get()?.upContent(offset, resetPageOffset)
                     }
                 }
             }
@@ -811,26 +805,26 @@ object ReadBook : CoroutineScope by MainScope() {
                     withContext(Main) {
                         curTextChapter = textChapter
                     }
-                    callBack?.upMenuView()
+                    callBack?.get()?.upMenuView()
                     var available = false
                     for (page in textChapter.layoutChannel) {
                         val index = page.index
                         if (!available && page.containPos(durChapterPos)) {
                             if (upContent) {
-                                callBack?.upContent(offset, resetPageOffset)
+                                callBack?.get()?.upContent(offset, resetPageOffset)
                             }
                             available = true
                         }
                         if (upContent && isScroll) {
                             if (max(index - 3, 0) < durPageIndex) {
-                                callBack?.upContent(offset, false)
+                                callBack?.get()?.upContent(offset, false)
                             }
                         }
-                        callBack?.onLayoutPageCompleted(index, page)
+                        callBack?.get()?.onLayoutPageCompleted(index, page)
                     }
-                    if (upContent) callBack?.upContent(offset, !available && resetPageOffset)
+                    if (upContent) callBack?.get()?.upContent(offset, !available && resetPageOffset)
                     curPageChanged()
-                    callBack?.contentLoadFinish()
+                    callBack?.get()?.contentLoadFinish()
                 }
 
                 -1 -> {
@@ -839,7 +833,7 @@ object ReadBook : CoroutineScope by MainScope() {
                         prevTextChapter = textChapter
                     }
                     textChapter.layoutChannel.receiveAsFlow().collect()
-                    if (upContent) callBack?.upContent(offset, resetPageOffset)
+                    if (upContent) callBack?.get()?.upContent(offset, resetPageOffset)
                 }
 
                 1 -> {
@@ -851,7 +845,7 @@ object ReadBook : CoroutineScope by MainScope() {
                         if (page.index > 1) {
                             continue
                         }
-                        if (upContent) callBack?.upContent(offset, resetPageOffset)
+                        if (upContent) callBack?.get()?.upContent(offset, resetPageOffset)
                     }
                 }
             }
@@ -867,7 +861,6 @@ object ReadBook : CoroutineScope by MainScope() {
     /**
      * 预下载时，章节已完，更新目录
      */
-    @Synchronized
     fun upToc() {
         val bookSource = bookSource ?: return
         val book = book ?: return
@@ -900,7 +893,7 @@ object ReadBook : CoroutineScope by MainScope() {
     fun setCharset(charset: String) {
         book?.let {
             it.charset = charset
-            callBack?.loadChapterList(it)
+            callBack?.get()?.loadChapterList(it)
         }
         saveRead()
     }
@@ -981,8 +974,8 @@ object ReadBook : CoroutineScope by MainScope() {
             if (simulatedChapterSize > 0 && durChapterIndex > simulatedChapterSize - 1) {
                 durChapterIndex = simulatedChapterSize - 1
             }
-            callBack?.upMenuView()
-            if (callBack == null) {
+            callBack?.get()?.upMenuView()
+            if (callBack?.get() == null) {
                 clearTextChapter()
             } else if (loadContent) {
                 loadContent(true)
@@ -1005,15 +998,15 @@ object ReadBook : CoroutineScope by MainScope() {
      * 注册回调
      */
     fun register(cb: CallBack) {
-        callBack?.notifyBookChanged()
-        callBack = cb
+        callBack?.get()?.notifyBookChanged()
+        callBack = WeakReference(cb)
     }
 
     /**
      * 取消注册回调
      */
     fun unregister(cb: CallBack) {
-        if (callBack === cb) {
+        if (callBack?.get() === cb) {
             callBack = null
         }
         releaseAndCancel()

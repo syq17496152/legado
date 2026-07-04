@@ -7,6 +7,7 @@ import okio.Pipe
 import okio.buffer
 import org.chromium.net.UploadDataProvider
 import org.chromium.net.UploadDataSink
+import io.legado.app.constant.AppLog
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
@@ -54,7 +55,7 @@ class LargeBodyUploadProvider(
                 body.writeTo(writeSink)
                 writeSink.flush()
             } catch (e: IOException) {
-                e.printStackTrace()
+                AppLog.put("LargeBodyUploadProvider: read", e)
             }
 
         }

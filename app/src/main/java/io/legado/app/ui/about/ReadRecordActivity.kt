@@ -101,7 +101,9 @@ class ReadRecordActivity : BaseActivity<ActivityReadRecordBinding>() {
         binding.tvRemove.setOnClickListener {
             alert(R.string.delete, R.string.sure_del) {
                 yesButton {
-                    appDb.readRecordDao.clear()
+                    lifecycleScope.launch(IO) {
+                        appDb.readRecordDao.clear()
+                    }
                     initData()
                 }
                 noButton()
@@ -207,7 +209,9 @@ class ReadRecordActivity : BaseActivity<ActivityReadRecordBinding>() {
             alert(R.string.delete) {
                 setMessage(getString(R.string.sure_del_any, item.bookName))
                 yesButton {
-                    appDb.readRecordDao.deleteByName(item.bookName)
+                    lifecycleScope.launch(IO) {
+                        appDb.readRecordDao.deleteByName(item.bookName)
+                    }
                     initData()
                 }
                 noButton()

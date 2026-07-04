@@ -181,10 +181,15 @@ class BookInfoActivity :
             return@registerForActivityResult
         }
         book?.let { book ->
-            viewModel.bookSource = appDb.bookSourceDao.getBookSource(book.origin)?.also { source ->
-                viewModel.hasCustomBtn = source.customButton
+            lifecycleScope.launch(IO) {
+                val source = appDb.bookSourceDao.getBookSource(book.origin)
+                withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    viewModel.bookSource = source?.also {
+                        viewModel.hasCustomBtn = it.customButton
+                    }
+                    viewModel.refreshBook(book)
+                }
             }
-            viewModel.refreshBook(book)
         }
     }
     private var chapterChanged = false
@@ -793,12 +798,17 @@ class BookInfoActivity :
         tvOrigin.setOnClickListener {
             viewModel.getBook()?.let { book ->
                 if (book.isLocal) return@let
-                if (!appDb.bookSourceDao.has(book.origin)) {
-                    toastOnUi(R.string.error_no_source)
-                    return@let
-                }
-                editSourceResult.launch {
-                    putExtra("sourceUrl", book.origin)
+                lifecycleScope.launch(IO) {
+                    val hasSource = appDb.bookSourceDao.has(book.origin)
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        if (!hasSource) {
+                            toastOnUi(R.string.error_no_source)
+                            return@withContext
+                        }
+                        editSourceResult.launch {
+                            putExtra("sourceUrl", book.origin)
+                        }
+                    }
                 }
             }
         }

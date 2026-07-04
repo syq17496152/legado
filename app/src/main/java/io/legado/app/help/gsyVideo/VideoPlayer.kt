@@ -17,6 +17,7 @@ import com.shuyu.gsyvideoplayer.utils.CommonUtil
 import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer
 import com.shuyu.gsyvideoplayer.video.base.GSYVideoPlayer
 import io.legado.app.R
+import io.legado.app.constant.AppLog
 import io.legado.app.model.VideoPlay
 import master.flame.danmaku.controller.DrawHandler
 import master.flame.danmaku.danmaku.loader.IllegalDataException
@@ -365,7 +366,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
                 }
             }
         } catch (e: IllegalDataException) {
-            e.printStackTrace()
+            AppLog.put("VideoPlayer: release", e)
         }
         val parser: BaseDanmakuParser = BiliDanmukuParser()
         val dataSource = loader.dataSource

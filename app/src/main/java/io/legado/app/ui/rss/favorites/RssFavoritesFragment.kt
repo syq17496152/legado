@@ -75,7 +75,9 @@ class RssFavoritesFragment() : VMBaseFragment<RssFavoritesViewModel>(R.layout.fr
             setMessage(getString(R.string.sure_del) + "\n<" + rssStar.title + ">")
             noButton()
             yesButton {
-                appDb.rssStarDao.delete(rssStar.origin, rssStar.link)
+                lifecycleScope.launch(IO) {
+                    appDb.rssStarDao.delete(rssStar.origin, rssStar.link)
+                }
             }
         }
     }

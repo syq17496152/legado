@@ -220,7 +220,7 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
 
     private fun initGroupFlow() {
         lifecycleScope.launch {
-            appDb.rssSourceDao.flowGroups().conflate().collect {
+            appDb.rssSourceDao.flowGroups().flowOn(IO).conflate().collect {
                 groups.clear()
                 groups.addAll(it)
                 upGroupMenu()

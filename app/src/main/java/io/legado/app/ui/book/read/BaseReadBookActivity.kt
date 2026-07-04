@@ -13,6 +13,11 @@ import androidx.activity.viewModels
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppConst.charsets
@@ -72,8 +77,12 @@ abstract class BaseReadBookActivity :
             ReadBook.book?.let { book ->
                 FileDoc.fromUri(uri, true).find(book.originName)?.let { doc ->
                     book.bookUrl = doc.uri.toString()
-                    book.save()
-                    viewModel.loadChapterList(book)
+                    lifecycleScope.launch(IO) {
+                        book.save()
+                        withContext(Main) {
+                            viewModel.loadChapterList(book)
+                        }
+                    }
                 } ?: ReadBook.upMsg("找不到文件")
             }
         } ?: ReadBook.upMsg("没有权限访问")
@@ -335,9 +344,13 @@ abstract class BaseReadBookActivity :
                     book.setDailyChapters(num)
                     book.setStartChapter(start)
                     book.setReadSimulating(enabled)
-                    book.save()
-                    ReadBook.clearTextChapter()
-                    viewModel.initData(intent)
+                    lifecycleScope.launch(IO) {
+                        book.save()
+                        withContext(Main) {
+                            ReadBook.clearTextChapter()
+                            viewModel.initData(intent)
+                        }
+                    }
                 }
             }
             cancelButton()

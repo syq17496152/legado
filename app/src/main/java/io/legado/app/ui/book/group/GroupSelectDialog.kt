@@ -28,7 +28,9 @@ import io.legado.app.utils.applyTint
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.viewbindingdelegate.viewBinding
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
 
@@ -87,7 +89,7 @@ class GroupSelectDialog() : BaseDialogFragment(R.layout.dialog_book_group_picker
 
     private fun initData() {
         lifecycleScope.launch {
-            appDb.bookGroupDao.flowSelect().conflate().collect {
+            appDb.bookGroupDao.flowSelect().flowOn(IO).conflate().collect {
                 adapter.setItems(it)
             }
         }

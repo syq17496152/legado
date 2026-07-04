@@ -105,7 +105,7 @@ class VideoPlayService : BaseService() {
         try {
             windowManager.updateViewLayout(floatingView, params)
         } catch (e: Exception) {
-            e.printStackTrace()
+            AppLog.put("VideoPlayService: play", e)
         }
     }
 
@@ -592,7 +592,7 @@ class VideoPlayService : BaseService() {
             application.unregisterActivityLifecycleCallbacks(activityLifecycleCallbacks)
             playerView.release()
         } catch (e: Exception) {
-            e.printStackTrace()
+            AppLog.put("VideoPlayService: release", e)
         }
     }
 

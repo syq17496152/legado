@@ -29,10 +29,12 @@ import io.legado.app.utils.dpToPx
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import splitties.views.onClick
 
 /**
@@ -139,10 +141,15 @@ class SourcePickerDialog : BaseDialogFragment(R.layout.dialog_source_picker),
         override fun registerListener(holder: ItemViewHolder, binding: Item1lineTextBinding) {
             binding.root.onClick {
                 getItemByLayoutPosition(holder.layoutPosition)?.let {
-                    it.getBookSource()?.let { source ->
-                        callback?.sourceOnClick(source)
+                    lifecycleScope.launch(IO) {
+                        val source = it.getBookSource()
+                        withContext(Main) {
+                            source?.let { s ->
+                                callback?.sourceOnClick(s)
+                            }
+                            dismissAllowingStateLoss()
+                        }
                     }
-                    dismissAllowingStateLoss()
                 }
             }
         }

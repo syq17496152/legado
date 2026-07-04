@@ -9,6 +9,7 @@ import android.service.quicksettings.TileService
 import android.view.WindowManager.BadTokenException
 import androidx.annotation.RequiresApi
 import io.legado.app.R
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.IntentAction
 import io.legado.app.utils.printOnDebug
 
@@ -61,14 +62,14 @@ class WebTileService : TileService() {
                     try {
                         WebService.startForeground(this)
                     } catch (e: ForegroundServiceStartNotAllowedException) {
-                        e.printStackTrace()
+                        AppLog.put("WebTileService: start", e)
                     }
                     dialog.dismiss()
                 }
                 try {
                     showDialog(dialog)
                 } catch (e: BadTokenException) {
-                    e.printStackTrace()
+                    AppLog.put("WebTileService: click", e)
                 }
             } else {
                 WebService.start(this)

@@ -18,6 +18,11 @@ import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.postEvent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 
 /**
@@ -105,11 +110,15 @@ class MediaButtonReceiver : BroadcastReceiver() {
                     if (ReadBook.book != null) {
                         ReadBook.readAloud()
                     } else {
-                        appDb.bookDao.lastReadBook?.let {
-                            ReadBook.resetData(it)
-                            ReadBook.clearTextChapter()
-                            ReadBook.loadContent(false) {
-                                ReadBook.readAloud()
+                        CoroutineScope(IO).launch {
+                            appDb.bookDao.lastReadBook?.let {
+                                withContext(Main) {
+                                    ReadBook.resetData(it)
+                                    ReadBook.clearTextChapter()
+                                    ReadBook.loadContent(false) {
+                                        ReadBook.readAloud()
+                                    }
+                                }
                             }
                         }
                     }

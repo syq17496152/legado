@@ -48,6 +48,7 @@ import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -239,7 +240,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
             }
         }
         lifecycleScope.launch {
-            appDb.bookSourceDao.flowEnabledGroups().conflate().collect {
+            appDb.bookSourceDao.flowEnabledGroups().flowOn(IO).conflate().collect {
                 groups.clear()
                 groups.addAll(it)
                 upGroupMenu()

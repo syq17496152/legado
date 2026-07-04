@@ -22,6 +22,7 @@ import androidx.lifecycle.lifecycleScope
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import io.legado.app.BuildConfig
 import io.legado.app.R
+import java.lang.ref.WeakReference
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookType
@@ -346,7 +347,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         ReadBook.readStartTime = System.currentTimeMillis()
         if (bookChanged) {
             bookChanged = false
-            ReadBook.callBack = this
+            ReadBook.callBack = WeakReference(this)
             viewModel.initData(intent)
             justInitData = true
         } else {
@@ -474,15 +475,17 @@ class ReadBookActivity : BaseReadBookActivity(),
                 }
             }
 
-            R.id.menu_chapter_change_source -> lifecycleScope.launch {
+            R.id.menu_chapter_change_source -> lifecycleScope.launch(IO) {
                 val book = ReadBook.book ?: return@launch
                 val chapter =
                     appDb.bookChapterDao.getChapter(book.bookUrl, ReadBook.durChapterIndex)
                         ?: return@launch
-                binding.readMenu.runMenuOut()
-                showDialogFragment(
-                    ChangeChapterSourceDialog(book.name, book.author, chapter.index, chapter.title)
-                )
+                withContext(Main) {
+                    binding.readMenu.runMenuOut()
+                    showDialogFragment(
+                        ChangeChapterSourceDialog(book.name, book.author, chapter.index, chapter.title)
+                    )
+                }
             }
 
             R.id.menu_refresh,
@@ -1289,56 +1292,60 @@ class ReadBookActivity : BaseReadBookActivity(),
     override fun payAction() {
         val book = ReadBook.book ?: return
         if (book.isLocal) return
-        val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, ReadBook.durChapterIndex)
-        if (chapter == null) {
-            toastOnUi("no chapter")
-            return
-        }
-        alert(R.string.chapter_pay) {
-            setMessage(chapter.title)
-            yesButton {
-                Coroutine.async(lifecycleScope) {
-                    val source =
-                        ReadBook.bookSource ?: throw NoStackTraceException("no book source")
-                    val payAction = source.getContentRule().payAction
-                    if (payAction.isNullOrBlank()) {
-                        throw NoStackTraceException("no pay action")
-                    }
-                    val java = SourceLoginJsExtensions(this@ReadBookActivity, source, BookType.text)
-                    runScriptWithContext {
-                        source.evalJS(payAction) {
-                            put("java", java)
-                            put("book", book)
-                            put("chapter", chapter)
-                            put("title", chapter.title)
-                            put("baseUrl", chapter.url)
-                            put("result", null)
-                            put("src", null)
-                        }.toString()
-                    }
-                }.onSuccess(IO) {
-                    if (it.isAbsUrl()) {
-                        startActivity<WebViewActivity> {
-                            val bookSource = ReadBook.bookSource
-                            putExtra("title", getString(R.string.chapter_pay))
-                            putExtra("url", it)
-                            putExtra("sourceOrigin", bookSource?.bookSourceUrl)
-                            putExtra("sourceName", bookSource?.bookSourceName)
-                            putExtra("sourceType", bookSource?.getSourceType())
+        lifecycleScope.launch(IO) {
+            val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, ReadBook.durChapterIndex)
+            if (chapter == null) {
+                withContext(Main) { toastOnUi("no chapter") }
+                return@launch
+            }
+            withContext(Main) {
+                alert(R.string.chapter_pay) {
+                    setMessage(chapter.title)
+                    yesButton {
+                        Coroutine.async(lifecycleScope) {
+                            val source =
+                                ReadBook.bookSource ?: throw NoStackTraceException("no book source")
+                            val payAction = source.getContentRule().payAction
+                            if (payAction.isNullOrBlank()) {
+                                throw NoStackTraceException("no pay action")
+                            }
+                            val java = SourceLoginJsExtensions(this@ReadBookActivity, source, BookType.text)
+                            runScriptWithContext {
+                                source.evalJS(payAction) {
+                                    put("java", java)
+                                    put("book", book)
+                                    put("chapter", chapter)
+                                    put("title", chapter.title)
+                                    put("baseUrl", chapter.url)
+                                    put("result", null)
+                                    put("src", null)
+                                }.toString()
+                            }
+                        }.onSuccess(IO) {
+                            if (it.isAbsUrl()) {
+                                startActivity<WebViewActivity> {
+                                    val bookSource = ReadBook.bookSource
+                                    putExtra("title", getString(R.string.chapter_pay))
+                                    putExtra("url", it)
+                                    putExtra("sourceOrigin", bookSource?.bookSourceUrl)
+                                    putExtra("sourceName", bookSource?.bookSourceName)
+                                    putExtra("sourceType", bookSource?.getSourceType())
+                                }
+                            } else if (it.isTrue()) {
+                                //购买成功后刷新目录
+                                ReadBook.book?.let {
+                                    ReadBook.curTextChapter = null
+                                    BookHelp.delContent(book, chapter)
+                                    loadChapterList(book)
+                                }
+                            }
+                        }.onError {
+                            AppLog.put("执行购买操作出错\n${it.localizedMessage}", it, true)
                         }
-                    } else if (it.isTrue()) {
-                        //购买成功后刷新目录
-                        ReadBook.book?.let {
-                            ReadBook.curTextChapter = null
-                            BookHelp.delContent(book, chapter)
-                            loadChapterList(book)
-                        }
                     }
-                }.onError {
-                    AppLog.put("执行购买操作出错\n${it.localizedMessage}", it, true)
+                    noButton()
                 }
             }
-            noButton()
         }
     }
 
@@ -1701,11 +1708,16 @@ class ReadBookActivity : BaseReadBookActivity(),
             alert(title = getString(R.string.add_to_bookshelf)) {
                 setMessage(getString(R.string.check_add_bookshelf, book.name))
                 okButton {
-                    ReadBook.book?.removeType(BookType.notShelf)
-                    ReadBook.book?.save()
-                    SourceCallBack.callBackBook(SourceCallBack.ADD_BOOK_SHELF, ReadBook.bookSource, ReadBook.book)
-                    ReadBook.inBookshelf = true
-                    setResult(RESULT_OK)
+                    val book = ReadBook.book
+                    book?.removeType(BookType.notShelf)
+                    lifecycleScope.launch(IO) {
+                        book?.save()
+                        withContext(Main) {
+                            SourceCallBack.callBackBook(SourceCallBack.ADD_BOOK_SHELF, ReadBook.bookSource, ReadBook.book)
+                            ReadBook.inBookshelf = true
+                            setResult(RESULT_OK)
+                        }
+                    }
                 }
                 noButton {
                     callBackBookEnd()

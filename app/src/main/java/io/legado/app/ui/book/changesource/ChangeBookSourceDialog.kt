@@ -49,9 +49,11 @@ import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 换源界面
@@ -259,7 +261,7 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
         }
 
         lifecycleScope.launch {
-            appDb.bookSourceDao.flowEnabledGroups().conflate().collect {
+            appDb.bookSourceDao.flowEnabledGroups().flowOn(IO).conflate().collect {
                 groups.clear()
                 groups.addAll(it)
                 upGroupMenu()
@@ -391,14 +393,16 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
         waitDialog.show()
         val book = viewModel.bookMap[searchBook.primaryStr()] ?: searchBook.toBook()
         if (book.isWebFile) { //文件类书源不解析目录
-            val source = appDb.bookSourceDao.getBookSource(book.origin)
-            if (source == null) {
-                AppLog.put("书源不存在", null, true)
-                return
+            lifecycleScope.launch {
+                val source = withContext(IO) { appDb.bookSourceDao.getBookSource(book.origin) }
+                if (source == null) {
+                    AppLog.put("书源不存在", null, true)
+                    return@launch
+                }
+                waitDialog.dismiss()
+                callBack?.changeTo(source, book, emptyList())
+                onSuccess?.invoke()
             }
-            waitDialog.dismiss()
-            callBack?.changeTo(source, book, emptyList())
-            onSuccess?.invoke()
             return
         }
         val coroutine = viewModel.getToc(book, { toc, source ->

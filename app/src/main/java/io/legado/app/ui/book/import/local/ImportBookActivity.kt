@@ -311,13 +311,19 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
 
     override fun startRead(fileDoc: FileDoc) {
         if (!ArchiveUtils.isArchive(fileDoc.name)) {
-            appDb.bookDao.getBookByFileName(fileDoc.name)?.let {
-                val filePath = fileDoc.toString()
-                if (it.bookUrl != filePath) {
-                    it.bookUrl = filePath
-                    appDb.bookDao.insert(it)
+            lifecycleScope.launch {
+                withContext(IO) {
+                    appDb.bookDao.getBookByFileName(fileDoc.name)?.let {
+                        val filePath = fileDoc.toString()
+                        if (it.bookUrl != filePath) {
+                            it.bookUrl = filePath
+                            appDb.bookDao.insert(it)
+                        }
+                        it
+                    }
+                }?.let {
+                    startReadBook(it)
                 }
-                startReadBook(it)
             }
         } else {
             onArchiveFileClick(fileDoc)

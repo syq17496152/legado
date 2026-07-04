@@ -17,6 +17,7 @@ import com.script.rhino.RhinoScriptEngine
 import com.script.rhino.RhinoWrapFactory
 import io.legado.app.base.AppContextWrapper
 import io.legado.app.constant.AppConst.channelIdDownload
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppConst.channelIdReadAloud
 import io.legado.app.constant.AppConst.channelIdWeb
 import io.legado.app.constant.PreferKey
@@ -168,7 +169,7 @@ class App : Application() {
                 .getMethod("insertProvider", Context::class.java)
                 .invoke(null, gms)
         } catch (e: java.lang.Exception) {
-            e.printStackTrace()
+            AppLog.put("App: init", e)
         }
     }
 

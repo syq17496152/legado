@@ -218,7 +218,7 @@ class BookshelfManageActivity :
     private fun upBookDataByGroupId() {
         booksFlowJob?.cancel()
         booksFlowJob = lifecycleScope.launch {
-            val bookSort = AppConfig.getBookSortByGroupId(viewModel.groupId)
+            val bookSort = withContext(IO) { AppConfig.getBookSortByGroupId(viewModel.groupId) }
             appDb.bookDao.flowByGroup(viewModel.groupId).map { list ->
                 when (bookSort) {
                     1 -> list.sortedByDescending {
@@ -289,9 +289,11 @@ class BookshelfManageActivity :
             else -> if (item.groupId == R.id.menu_group) {
                 viewModel.groupName = item.title.toString()
                 upTitle()
-                viewModel.groupId =
-                    appDb.bookGroupDao.getByName(item.title.toString())?.groupId ?: 0
-                upBookDataByGroupId()
+                lifecycleScope.launch {
+                    viewModel.groupId =
+                        withContext(IO) { appDb.bookGroupDao.getByName(item.title.toString()) }?.groupId ?: 0
+                    upBookDataByGroupId()
+                }
             }
         }
         return super.onCompatOptionsItemSelected(item)

@@ -54,8 +54,12 @@ class RuleSubActivity : BaseActivity<ActivityRuleSubBinding>(),
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.menu_add -> {
-                val order = appDb.ruleSubDao.maxOrder + 1
-                editSubscription(RuleSub(customOrder = order))
+                lifecycleScope.launch(IO) {
+                    val order = appDb.ruleSubDao.maxOrder + 1
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        editSubscription(RuleSub(customOrder = order))
+                    }
+                }
             }
         }
         return super.onCompatOptionsItemSelected(item)

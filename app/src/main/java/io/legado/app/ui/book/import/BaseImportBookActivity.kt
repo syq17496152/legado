@@ -21,7 +21,11 @@ import io.legado.app.utils.applyTint
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
 abstract class BaseImportBookActivity<VM : ViewModel> :
@@ -92,9 +96,11 @@ abstract class BaseImportBookActivity<VM : ViewModel> :
         }
         if (fileNames.size == 1) {
             val name = fileNames[0]
-            appDb.bookDao.getBookByFileName(name)?.let {
-                startReadBook(it)
-            } ?: showImportAlert(fileDoc, name)
+            lifecycleScope.launch {
+                withContext(IO) { appDb.bookDao.getBookByFileName(name) }?.let {
+                    startReadBook(it)
+                } ?: showImportAlert(fileDoc, name)
+            }
         } else {
             showSelectBookReadAlert(fileDoc, fileNames)
         }
@@ -109,9 +115,11 @@ abstract class BaseImportBookActivity<VM : ViewModel> :
             R.string.start_read,
             fileNames
         ) { _, name, _ ->
-            appDb.bookDao.getBookByFileName(name)?.let {
-                startReadBook(it)
-            } ?: showImportAlert(fileDoc, name)
+            lifecycleScope.launch {
+                withContext(IO) { appDb.bookDao.getBookByFileName(name) }?.let {
+                    startReadBook(it)
+                } ?: showImportAlert(fileDoc, name)
+            }
         }
     }
 

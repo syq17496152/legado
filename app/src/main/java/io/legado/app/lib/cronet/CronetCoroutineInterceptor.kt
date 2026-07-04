@@ -82,7 +82,13 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
 
             val callBack = object : AbsCallBack(request, call, readTimeoutMillis) {
                 override fun waitForDone(urlRequest: UrlRequest): Response {
-                    TODO("Not yet implemented")
+                    // CronetCoroutineInterceptor uses suspendCancellableCoroutine pattern
+                    // instead of the blocking waitForDone pattern used by OldCallback/NewCallBack.
+                    // This method should never be called in this code path.
+                    throw UnsupportedOperationException(
+                        "waitForDone is not used in CronetCoroutineInterceptor; " +
+                        "use proceedWithCronet's suspendCancellableCoroutine pattern instead."
+                    )
                 }
 
                 override fun onError(error: IOException) {

@@ -330,7 +330,7 @@ class EpubFile(var book: Book) {
                                 title = elements[0].text()
                             }
                         } catch (e: IOException) {
-                            e.printStackTrace()
+                            AppLog.put("EpubFile: parse", e)
                         }
                     }
                     val chapter = BookChapter()

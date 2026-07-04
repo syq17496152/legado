@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.base.adapter.ItemViewHolder
@@ -34,6 +35,10 @@ import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import splitties.views.onClick
 
 
@@ -208,31 +213,35 @@ class ImportBookSourceDialog() : BaseDialogFragment(R.layout.dialog_recycler_vie
     }
 
     private fun alertCustomGroup(item: MenuItem) {
-        alert(R.string.diy_edit_source_group) {
-            val alertBinding = DialogCustomGroupBinding.inflate(layoutInflater).apply {
-                val groups = appDb.bookSourceDao.allGroups()
-                textInputLayout.setHint(R.string.group_name)
-                editView.setFilterValues(groups.toList())
-                editView.dropDownHeight = 180.dpToPx()
-            }
-            customView {
-                alertBinding.root
-            }
-            okButton {
-                viewModel.isAddGroup = alertBinding.swAddGroup.isChecked
-                viewModel.groupName = alertBinding.editView.text?.toString()
-                if (viewModel.groupName.isNullOrBlank()) {
-                    item.title = getString(R.string.diy_source_group)
-                } else {
-                    val group = getString(R.string.diy_edit_source_group_title, viewModel.groupName)
-                    if (viewModel.isAddGroup) {
-                        item.title = "+$group"
-                    } else {
-                        item.title = group
+        lifecycleScope.launch(IO) {
+            val groups = appDb.bookSourceDao.allGroups()
+            withContext(Main) {
+                alert(R.string.diy_edit_source_group) {
+                    val alertBinding = DialogCustomGroupBinding.inflate(layoutInflater).apply {
+                        textInputLayout.setHint(R.string.group_name)
+                        editView.setFilterValues(groups.toList())
+                        editView.dropDownHeight = 180.dpToPx()
                     }
+                    customView {
+                        alertBinding.root
+                    }
+                    okButton {
+                        viewModel.isAddGroup = alertBinding.swAddGroup.isChecked
+                        viewModel.groupName = alertBinding.editView.text?.toString()
+                        if (viewModel.groupName.isNullOrBlank()) {
+                            item.title = getString(R.string.diy_source_group)
+                        } else {
+                            val group = getString(R.string.diy_edit_source_group_title, viewModel.groupName)
+                            if (viewModel.isAddGroup) {
+                                item.title = "+$group"
+                            } else {
+                                item.title = group
+                            }
+                        }
+                    }
+                    cancelButton()
                 }
             }
-            cancelButton()
         }
     }
 

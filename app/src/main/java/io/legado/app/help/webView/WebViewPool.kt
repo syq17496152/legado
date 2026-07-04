@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import io.legado.app.constant.AppLog
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.rss.read.VisibleWebView
 import io.legado.app.utils.setDarkeningAllowed
@@ -20,8 +21,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import splitties.init.appCtx
 import java.util.Stack
+import java.util.concurrent.locks.ReentrantLock
 import kotlin.math.max
 import kotlin.random.Random
+import kotlin.concurrent.withLock
 
 object WebViewPool {
     const val BLANK_HTML = "about:blank"
@@ -31,7 +34,9 @@ object WebViewPool {
     // 正在使用的WebView集合
     private val inUsePool = mutableMapOf<String, PooledWebView>()
 
+    @Volatile
     private var needInitialize = true
+    private val poolLock = ReentrantLock()
     private val CACHED_WEB_VIEW_MAX_NUM = max(AppConfig.threadCount / 10, 5) // 池子总容量（闲置+使用）
     private const val IDLE_TIME_OUT: Long = 5 * 60 * 1000 // 闲置5分钟后销毁
     private const val IDLE_TIME_OUT_LAST: Long = 30 * 60 * 1000 // 最后一个闲置30分钟后销毁
@@ -39,8 +44,7 @@ object WebViewPool {
     private var cleanupJob: Job? = null
 
     // 获取一个WebView
-    @Synchronized
-    fun acquire(context: Context): PooledWebView {
+    fun acquire(context: Context): PooledWebView = poolLock.withLock {
         val pooledWebView = if (idlePool.isNotEmpty()) {
             idlePool.pop() // 复用闲置实例
         } else {
@@ -62,10 +66,9 @@ object WebViewPool {
     }
 
     // 释放WebView回池
-    @Synchronized
-    fun release(pooledWebView: PooledWebView) {
+    fun release(pooledWebView: PooledWebView) = poolLock.withLock {
         if (inUsePool.remove(pooledWebView.id) == null) {
-            pooledWebView.realWebView.destroy()
+            destroyWithRetry(pooledWebView.realWebView)
             return
         }
         // 重置WebView状态
@@ -92,7 +95,7 @@ object WebViewPool {
             pooledWebView.upContext(appCtx)
             if (idlePool.size >= CACHED_WEB_VIEW_MAX_NUM - inUsePool.size) {
                 // 池子已满，直接销毁
-                pooledWebView.realWebView.destroy()
+                destroyWithRetry(pooledWebView.realWebView)
                 return
             }
             webViewClient = object: WebViewClient() {
@@ -161,7 +164,7 @@ object WebViewPool {
                 val now = System.currentTimeMillis()
                 val toRemove = mutableListOf<PooledWebView>()
                 var shouldCancel = false
-                synchronized(this@WebViewPool) {
+                poolLock.withLock {
                     for ((index, pooled) in idlePool.withIndex()) {
                         val timeout = if (index == 0) {
                             IDLE_TIME_OUT_LAST
@@ -174,11 +177,7 @@ object WebViewPool {
                     }
                     toRemove.forEach { pooled ->
                         idlePool.remove(pooled)
-                        try {
-                            pooled.realWebView.destroy()
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
+                        destroyWithRetry(pooled.realWebView)
                     }
                     if (idlePool.isEmpty()) {
                         shouldCancel = true
@@ -187,6 +186,24 @@ object WebViewPool {
                 if (shouldCancel) {
                     needInitialize = true
                     this@launch.cancel()
+                }
+            }
+        }
+    }
+
+    /**
+     * 安全销毁 WebView，最多重试 3 次
+     */
+    private fun destroyWithRetry(webView: WebView, maxRetries: Int = 3) {
+        var attempt = 0
+        while (attempt < maxRetries) {
+            try {
+                webView.destroy()
+                return
+            } catch (e: Exception) {
+                attempt++
+                if (attempt >= maxRetries) {
+                    AppLog.put("WebViewPool: destroy failed after $maxRetries attempts", e)
                 }
             }
         }

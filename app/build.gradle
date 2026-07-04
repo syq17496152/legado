@@ -2,7 +2,7 @@ plugins {
 //    id "com.android.application"
 //    id 'org.jetbrains.kotlin.android'
 //    id 'kotlin-parcelize'
-//    //id 'kotlin-kapt'
+    id 'kotlin-kapt'
 //    id 'com.google.devtools.ksp'
 //    id "com.google.gms.google-services"
 
@@ -257,7 +257,7 @@ dependencies {
     //Glide
     implementation(libs.glide.glide)
     implementation(libs.glide.okhttp)
-    ksp(libs.glide.ksp)
+    kapt(libs.glide.ksp)
 
     //Svg
     implementation(libs.androidsvg)

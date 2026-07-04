@@ -24,6 +24,9 @@ import io.legado.app.model.ReadBook
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.launch
 
 /**
  * 起效的替换规则
@@ -108,7 +111,9 @@ class EffectiveReplacesDialog : BaseDialogFragment(R.layout.dialog_recycler_view
                         return@let
                     }
                     item.isEnabled = false
-                    appDb.replaceRuleDao.insert(item)
+                    lifecycleScope.launch(IO) {
+                        appDb.replaceRuleDao.insert(item)
+                    }
                 }
             }
         }

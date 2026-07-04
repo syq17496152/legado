@@ -219,8 +219,10 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
             else -> if (item.groupId == R.id.menu_group) {
                 binding.titleBar.subtitle = item.title
-                groupId = appDb.bookGroupDao.getByName(item.title.toString())?.groupId ?: 0
-                initBookData()
+                lifecycleScope.launch {
+                    groupId = withContext(IO) { appDb.bookGroupDao.getByName(item.title.toString()) }?.groupId ?: 0
+                    initBookData()
+                }
             }
         }
         return super.onCompatOptionsItemSelected(item)
@@ -256,7 +258,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
 
                     else -> booksDownload.sortedByDescending { it.durChapterTime }
                 }
-            }.flowWithLifecycleAndDatabaseChange(
+            }.flowOn(IO).flowWithLifecycleAndDatabaseChange(
                 lifecycle, table = AppDatabase.BOOK_TABLE_NAME
             ).catch {
                 AppLog.put("缓存管理界面获取书籍列表失败\n${it.localizedMessage}", it)

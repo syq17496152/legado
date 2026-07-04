@@ -29,6 +29,8 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 
 class ReadAloudConfigDialog : BasePrefDialogFragment() {
     private val readAloudPreferTag = "readAloudPreferTag"
@@ -71,7 +73,7 @@ class ReadAloudConfigDialog : BasePrefDialogFragment() {
                 val ttsEngine = ReadAloud.ttsEngine
                     ?: return getString(R.string.system_tts)
                 if (StringUtils.isNumeric(ttsEngine)) {
-                    return appDb.httpTTSDao.getName(ttsEngine.toLong())
+                    return runBlocking(IO) { appDb.httpTTSDao.getName(ttsEngine.toLong()) }
                         ?: getString(R.string.system_tts)
                 }
                 return GSON.fromJsonObject<SelectItem<String>>(ttsEngine).getOrNull()?.title

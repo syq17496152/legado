@@ -405,7 +405,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     private fun initLiveDataGroup() {
         lifecycleScope.launch {
-            appDb.bookSourceDao.flowGroups()
+            appDb.bookSourceDao.flowGroups().flowOn(IO)
                 .flowWithLifecycleAndDatabaseChange(
                     lifecycle,
                     table = AppDatabase.BOOK_SOURCE_TABLE_NAME

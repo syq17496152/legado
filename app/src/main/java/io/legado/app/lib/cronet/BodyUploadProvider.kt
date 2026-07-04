@@ -5,6 +5,7 @@ import okhttp3.RequestBody
 import okio.Buffer
 import org.chromium.net.UploadDataProvider
 import org.chromium.net.UploadDataSink
+import io.legado.app.constant.AppLog
 import java.io.IOException
 import java.nio.ByteBuffer
 
@@ -27,7 +28,7 @@ class BodyUploadProvider(private val body: RequestBody) : UploadDataProvider(), 
             body.writeTo(buffer)
             buffer.flush()
         } catch (e: IOException) {
-            e.printStackTrace()
+            AppLog.put("BodyUploadProvider: read", e)
         }
     }
 

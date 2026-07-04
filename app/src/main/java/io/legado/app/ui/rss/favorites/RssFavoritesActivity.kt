@@ -142,7 +142,9 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
             )
             noButton()
             yesButton {
-                appDb.rssStarDao.deleteByGroup(group)
+                lifecycleScope.launch(IO) {
+                    appDb.rssStarDao.deleteByGroup(group)
+                }
             }
         }
     }
@@ -155,7 +157,9 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
             )
             noButton()
             yesButton {
-                appDb.rssStarDao.deleteAll()
+                lifecycleScope.launch(IO) {
+                    appDb.rssStarDao.deleteAll()
+                }
             }
         }
     }

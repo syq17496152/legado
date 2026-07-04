@@ -12,6 +12,9 @@ import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.data.entities.Book
 import java.lang.ref.WeakReference
 import android.content.DialogInterface
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.launch
 
 class AudioSkipCredits : BaseDialogFragment(R.layout.dialog_audio_skip_credits) {
     private val binding by viewBinding(DialogAudioSkipCreditsBinding::bind)
@@ -64,6 +67,8 @@ class AudioSkipCredits : BaseDialogFragment(R.layout.dialog_audio_skip_credits) 
     override fun onDismiss(dialog: DialogInterface) {
         //保存设定
         super.onDismiss(dialog)
-        book.save()
+        lifecycleScope.launch(IO) {
+            book.save()
+        }
     }
 }

@@ -15,6 +15,7 @@ import io.legado.app.utils.withTimeoutOrNullAsync
 import kotlinx.coroutines.ensureActive
 import splitties.views.onLongClick
 import java.util.Collections
+import java.util.concurrent.CopyOnWriteArrayList
 import androidx.core.util.size
 
 /**
@@ -31,7 +32,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
     private val headerItems: SparseArray<(parent: ViewGroup) -> ViewBinding> by lazy { SparseArray() }
     private val footerItems: SparseArray<(parent: ViewGroup) -> ViewBinding> by lazy { SparseArray() }
 
-    private val items: MutableList<ITEM> = mutableListOf()
+    private val items: CopyOnWriteArrayList<ITEM> = CopyOnWriteArrayList()
 
     private var itemClickListener: ((holder: ItemViewHolder, item: ITEM) -> Unit)? = null
     private var itemLongClickListener: ((holder: ItemViewHolder, item: ITEM) -> Boolean)? = null
@@ -54,7 +55,6 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         recyclerView.adapter = this
     }
 
-    @Synchronized
     fun addHeaderView(header: ((parent: ViewGroup) -> ViewBinding)) {
         kotlin.runCatching {
             val index = headerItems.size
@@ -63,8 +63,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         }
     }
 
-    @Synchronized
-    fun addFooterView(footer: ((parent: ViewGroup) -> ViewBinding)) {
+        fun addFooterView(footer: ((parent: ViewGroup) -> ViewBinding)) {
         kotlin.runCatching {
             val index = getActualItemCount() + footerItems.size
             footerItems.put(TYPE_FOOTER_VIEW + footerItems.size, footer)
@@ -72,8 +71,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         }
     }
 
-    @Synchronized
-    fun removeHeaderView(header: ((parent: ViewGroup) -> ViewBinding)) {
+        fun removeHeaderView(header: ((parent: ViewGroup) -> ViewBinding)) {
         kotlin.runCatching {
             val index = headerItems.indexOfValue(header)
             if (index >= 0) {
@@ -83,8 +81,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         }
     }
 
-    @Synchronized
-    fun removeFooterView(footer: ((parent: ViewGroup) -> ViewBinding)) {
+        fun removeFooterView(footer: ((parent: ViewGroup) -> ViewBinding)) {
         kotlin.runCatching {
             val index = footerItems.indexOfValue(footer)
             if (index >= 0) {
@@ -95,8 +92,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
     }
 
     @SuppressLint("NotifyDataSetChanged")
-    @Synchronized
-    fun setItems(items: List<ITEM>?) {
+        fun setItems(items: List<ITEM>?) {
         kotlin.runCatching {
             if (this.items.isNotEmpty()) {
                 this.items.clear()
@@ -109,8 +105,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         }
     }
 
-    @Synchronized
-    fun setItems(
+        fun setItems(
         items: List<ITEM>?,
         itemCallback: DiffUtil.ItemCallback<ITEM>,
         skipDiff: Boolean = false
@@ -194,8 +189,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         }
     }
 
-    @Synchronized
-    fun setItem(position: Int, item: ITEM) {
+        fun setItem(position: Int, item: ITEM) {
         kotlin.runCatching {
             val oldSize = getActualItemCount()
             if (position in 0 until oldSize) {
@@ -206,8 +200,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         }
     }
 
-    @Synchronized
-    fun addItem(item: ITEM) {
+        fun addItem(item: ITEM) {
         kotlin.runCatching {
             val oldSize = getActualItemCount()
             if (this.items.add(item)) {
@@ -217,8 +210,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         }
     }
 
-    @Synchronized
-    fun addItems(position: Int, newItems: List<ITEM>) {
+        fun addItems(position: Int, newItems: List<ITEM>) {
         kotlin.runCatching {
             if (this.items.addAll(position, newItems)) {
                 notifyItemRangeInserted(position + getHeaderCount(), newItems.size)
@@ -228,8 +220,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
     }
 
     @SuppressLint("NotifyDataSetChanged")
-    @Synchronized
-    fun addItems(newItems: List<ITEM>) {
+        fun addItems(newItems: List<ITEM>) {
         kotlin.runCatching {
             val oldSize = getActualItemCount()
             if (this.items.addAll(newItems)) {
@@ -243,8 +234,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         }
     }
 
-    @Synchronized
-    fun removeItem(position: Int) {
+        fun removeItem(position: Int) {
         kotlin.runCatching {
             if (this.items.removeAt(position) != null) {
                 notifyItemRemoved(position + getHeaderCount())
@@ -253,8 +243,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         }
     }
 
-    @Synchronized
-    fun removeItem(item: ITEM) {
+        fun removeItem(item: ITEM) {
         kotlin.runCatching {
             if (this.items.remove(item)) {
                 notifyItemRemoved(this.items.indexOf(item) + getHeaderCount())
@@ -264,8 +253,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
     }
 
     @SuppressLint("NotifyDataSetChanged")
-    @Synchronized
-    fun removeItems(items: List<ITEM>) {
+        fun removeItems(items: List<ITEM>) {
         kotlin.runCatching {
             if (this.items.removeAll(items)) {
                 notifyDataSetChanged()
@@ -274,8 +262,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         }
     }
 
-    @Synchronized
-    fun swapItem(oldPosition: Int, newPosition: Int) {
+        fun swapItem(oldPosition: Int, newPosition: Int) {
         kotlin.runCatching {
             val size = getActualItemCount()
             if (oldPosition in 0 until size && newPosition in 0 until size) {
@@ -288,8 +275,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         }
     }
 
-    @Synchronized
-    fun updateItem(item: ITEM) {
+        fun updateItem(item: ITEM) {
         kotlin.runCatching {
             val index = this.items.indexOf(item)
             if (index >= 0) {
@@ -300,8 +286,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         }
     }
 
-    @Synchronized
-    fun updateItem(position: Int, payload: Any) {
+        fun updateItem(position: Int, payload: Any) {
         kotlin.runCatching {
             val size = getActualItemCount()
             if (position in 0 until size) {
@@ -310,8 +295,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
         }
     }
 
-    @Synchronized
-    fun updateItems(fromPosition: Int, toPosition: Int, payloads: Any) {
+        fun updateItems(fromPosition: Int, toPosition: Int, payloads: Any) {
         kotlin.runCatching {
             val size = getActualItemCount()
             if (fromPosition in 0 until size && toPosition in 0 until size) {
@@ -325,8 +309,7 @@ abstract class RecyclerAdapter<ITEM, VB : ViewBinding>(protected val context: Co
     }
 
     @SuppressLint("NotifyDataSetChanged")
-    @Synchronized
-    fun clearItems() {
+        fun clearItems() {
         kotlin.runCatching {
             this.items.clear()
             notifyDataSetChanged()

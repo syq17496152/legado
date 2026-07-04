@@ -71,6 +71,7 @@ import io.legado.app.utils.toggleSystemBar
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.DecimalFormat
@@ -791,10 +792,15 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             alert(title = getString(R.string.add_to_bookshelf)) {
                 setMessage(getString(R.string.check_add_bookshelf, book.name))
                 okButton {
-                    ReadManga.book?.removeType(BookType.notShelf)
-                    ReadManga.book?.save()
-                    ReadManga.inBookshelf = true
-                    setResult(RESULT_OK)
+                    val book = ReadManga.book
+                    book?.removeType(BookType.notShelf)
+                    lifecycleScope.launch(IO) {
+                        book?.save()
+                        withContext(Main) {
+                            ReadManga.inBookshelf = true
+                            setResult(RESULT_OK)
+                        }
+                    }
                 }
                 noButton { viewModel.removeFromBookshelf { super.finish() } }
             }

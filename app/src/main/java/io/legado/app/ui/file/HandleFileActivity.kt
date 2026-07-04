@@ -57,7 +57,9 @@ class HandleFileActivity :
                     Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 try {
                     contentResolver.takePersistableUriPermission(it, modeFlags)
-                } catch (_: SecurityException) { }
+                } catch (_: SecurityException) {
+                    // 部分设备/ContentProvider不支持持久化URI权限，忽略即可
+                }
             }
             onResult(Intent().setData(it))
         } ?: finish()
@@ -261,12 +263,14 @@ class HandleFileActivity :
                 return true
             }
         } catch (_: IllegalArgumentException) {
+            // 部分 ROM 上 isExternalStorageEmulated 抛异常，忽略即可
         }
         try {
             if (Environment.isExternalStorageRemovable(path)) {
                 return true
             }
         } catch (_: IllegalArgumentException) {
+            // 部分 ROM 上 isExternalStorageRemovable 抛异常，忽略即可
         }
         return false
     }

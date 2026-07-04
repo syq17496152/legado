@@ -71,14 +71,9 @@ object LifecycleHelp : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityDestroyed(activity: Activity) {
         LogUtils.d(TAG, "${activity::class.simpleName} onDestroy")
-        for (temp in activities) {
-            if (temp.get() != null && temp.get() === activity) {
-                activities.remove(temp)
-                if (services.isEmpty() && activities.isEmpty()) {
-                    onAppFinished()
-                }
-                break
-            }
+        activities.removeAll { it.get() == null || it.get() === activity }
+        if (services.isEmpty() && activities.isEmpty()) {
+            onAppFinished()
         }
     }
 
@@ -104,14 +99,9 @@ object LifecycleHelp : Application.ActivityLifecycleCallbacks {
     @Synchronized
     fun onServiceDestroy(service: BaseService) {
         LogUtils.d(TAG, "${service::class.simpleName} onDestroy")
-        for (temp in services) {
-            if (temp.get() != null && temp.get() === service) {
-                services.remove(temp)
-                if (services.isEmpty() && activities.isEmpty()) {
-                    onAppFinished()
-                }
-                break
-            }
+        services.removeAll { it.get() == null || it.get() === service }
+        if (services.isEmpty() && activities.isEmpty()) {
+            onAppFinished()
         }
     }
 

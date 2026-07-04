@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 书籍分组管理
@@ -93,10 +94,15 @@ class GroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
     override fun onMenuItemClick(item: MenuItem?): Boolean {
         when (item?.itemId) {
             R.id.menu_add -> {
-                if (appDb.bookGroupDao.canAddGroup) {
-                    showDialogFragment(GroupEditDialog())
-                } else {
-                    toastOnUi("分组已达上限(64个)")
+                lifecycleScope.launch(IO) {
+                    val canAdd = appDb.bookGroupDao.canAddGroup
+                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        if (canAdd) {
+                            showDialogFragment(GroupEditDialog())
+                        } else {
+                            toastOnUi("分组已达上限(64个)")
+                        }
+                    }
                 }
             }
         }

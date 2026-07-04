@@ -26,9 +26,11 @@ import io.legado.app.utils.FileDoc
 import io.legado.app.utils.find
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -227,8 +229,10 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
     override fun startRead(remoteBook: RemoteBook) {
         val downloadFileName = remoteBook.filename
         if (!ArchiveUtils.isArchive(downloadFileName)) {
-            appDb.bookDao.getBookByFileName(downloadFileName)?.let {
-                startReadBook(it)
+            lifecycleScope.launch {
+                withContext(IO) { appDb.bookDao.getBookByFileName(downloadFileName) }?.let {
+                    startReadBook(it)
+                }
             }
         } else {
             AppConfig.defaultBookTreeUri ?: return

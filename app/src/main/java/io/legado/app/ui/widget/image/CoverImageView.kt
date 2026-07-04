@@ -19,6 +19,7 @@ import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.RequestOptions
 import com.bumptech.glide.request.target.Target
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.glide.ImageLoader
@@ -148,7 +149,7 @@ class CoverImageView @JvmOverloads constructor(
                 invalidate()
             } catch (_: CancellationException) {
             } catch (e: Exception) {
-                e.printStackTrace()
+                AppLog.put("CoverImageView: load", e)
             }
         }
     }

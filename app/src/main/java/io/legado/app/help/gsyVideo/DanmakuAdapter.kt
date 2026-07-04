@@ -16,6 +16,7 @@ import java.io.InputStream
 import java.net.MalformedURLException
 import java.net.URL
 import androidx.core.graphics.toColorInt
+import io.legado.app.constant.AppLog
 
 class DanmakuAdapter(private val mDanmakuView: IDanmakuView?) : BaseCacheStuffer.Proxy() {
     private var mDrawable: Drawable? = null
@@ -36,9 +37,9 @@ class DanmakuAdapter(private val mDanmakuView: IDanmakuView?) : BaseCacheStuffer
                             drawable = BitmapDrawable.createFromStream(inputStream, "bitmap")
                             mDrawable = drawable
                         } catch (e: MalformedURLException) {
-                            e.printStackTrace()
+                            AppLog.put("DanmakuAdapter: parse", e)
                         } catch (e: IOException) {
-                            e.printStackTrace()
+                            AppLog.put("DanmakuAdapter: load", e)
                         } finally {
                             IOUtils.closeQuietly(inputStream)
                         }

@@ -4,6 +4,20 @@
 
 ## cronet版本: 128.0.6613.40
 
+**2026/07/05**
+- 核心质量优化：修复内存泄漏、线程安全、数据库ANR等重大问题
+- 修复 IntentData 内存泄漏：改用 ConcurrentHashMap + TTL 自动清理 + Activity 作用域关联
+- 修复 ReadBook.callBack 泄漏：改用 WeakReference 防止 Activity 无法回收
+- 修复 WebViewPool 泄漏：destroy 失败重试机制、统一 ReentrantLock 锁策略
+- 消除数据库主线程查询：移除 allowMainThreadQueries()，所有 DAO 调用迁移至 IO 线程
+- 线程安全优化：ReadBook/RecyclerAdapter/WebViewPool 改用并发集合+ReentrantLock 替代 @Synchronized
+- 修复 LifecycleHelp ConcurrentModificationException：遍历中删除改为 removeAll
+- 修复 Cronet TODO() 崩溃：替换为 UnsupportedOperationException
+- 统一错误日志：27处 e.printStackTrace() 替换为 AppLog.put
+- 补充空 catch 块注释说明
+- 新增核心模块单元测试：规则解析器（CSS/JSONPath/Regex）12 用例、DAO 5 用例
+- 修复 MigrationTest：填充完整迁移链数组
+
 **2026/07/04**
 - 修复新主题未显示的问题：升级版本号触发主题合并逻辑，确保已有用户也能看到新增主题
 - 新增8个内置主题：绿意、莫兰迪、海洋、薰衣草、琥珀（日间），暗夜绿、暗夜蓝、暗夜紫（夜间）

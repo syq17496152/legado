@@ -24,6 +24,10 @@ import io.legado.app.utils.setStatusBarColorAuto
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import io.legado.app.utils.windowSize
 
 open class WelcomeActivity : BaseActivity<ActivityWelcomeBinding>() {
@@ -100,8 +104,13 @@ open class WelcomeActivity : BaseActivity<ActivityWelcomeBinding>() {
 
     private fun startMainActivity() {
         startActivity<MainActivity>()
-        if (getPrefBoolean(PreferKey.defaultToRead) && appDb.bookDao.lastReadBook != null) {
-            startActivity<ReadBookActivity>()
+        lifecycleScope.launch(IO) {
+            val lastReadBook = appDb.bookDao.lastReadBook
+            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                if (getPrefBoolean(PreferKey.defaultToRead) && lastReadBook != null) {
+                    startActivity<ReadBookActivity>()
+                }
+            }
         }
         finish()
     }

@@ -151,7 +151,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             ReadBook.chapterChanged = false
         } else if (!(isSameBook && BaseReadAloudService.isRun) && ReadBook.inBookshelf) {
             if (AppConfig.syncBookProgressPlus) {
-                ReadBook.syncProgress({ progress -> ReadBook.callBack?.sureNewProgress(progress) })
+                ReadBook.syncProgress({ progress -> ReadBook.callBack?.get()?.sureNewProgress(progress) })
             } else {
                 syncBookProgress(book)
             }

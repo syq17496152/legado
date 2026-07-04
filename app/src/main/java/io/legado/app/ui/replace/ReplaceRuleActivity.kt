@@ -227,7 +227,7 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
 
     private fun observeGroupData() {
         lifecycleScope.launch {
-            appDb.replaceRuleDao.flowGroups().collect {
+            appDb.replaceRuleDao.flowGroups().flowOn(IO).collect {
                 groups.clear()
                 groups.addAll(it)
                 upGroupMenu()

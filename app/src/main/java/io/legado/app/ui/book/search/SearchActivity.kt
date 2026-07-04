@@ -308,7 +308,7 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
             adapter.setItems(it)
         }
         lifecycleScope.launch {
-            appDb.bookSourceDao.flowEnabledGroups().collect {
+            appDb.bookSourceDao.flowEnabledGroups().flowOn(IO).collect {
                 groups = it
             }
         }

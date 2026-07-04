@@ -13,6 +13,7 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.ReplacementSpan
 import android.util.AttributeSet
 import androidx.annotation.ColorInt
+import io.legado.app.constant.AppLog
 import io.legado.app.ui.widget.text.ScrollMultiAutoCompleteTextView
 import java.util.*
 import java.util.regex.Matcher
@@ -225,7 +226,7 @@ class CodeView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
             highlightErrorLines(editable)
             highlightSyntax(editable)
         } catch (e: IllegalStateException) {
-            e.printStackTrace()
+            AppLog.put("CodeView: setText", e)
         }
         return editable
     }

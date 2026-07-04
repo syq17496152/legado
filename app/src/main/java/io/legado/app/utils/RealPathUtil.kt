@@ -10,6 +10,7 @@ import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import androidx.core.provider.DocumentsContractCompat
+import io.legado.app.constant.AppLog
 
 import java.io.File
 import java.io.FileInputStream
@@ -143,7 +144,7 @@ object RealPathUtil {
                     File(filePath).absolutePath
                 }
             } catch (e: IOException) {
-                e.printStackTrace()
+                AppLog.put("RealPathUtil: getPath", e)
             }
         } finally {
             cursor?.close()

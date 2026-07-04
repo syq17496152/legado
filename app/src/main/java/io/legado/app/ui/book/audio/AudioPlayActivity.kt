@@ -47,6 +47,7 @@ import io.legado.app.utils.toDurationTime
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import splitties.views.onLongClick
@@ -337,11 +338,16 @@ class AudioPlayActivity :
             alert(title = getString(R.string.add_to_bookshelf)) {
                 setMessage(getString(R.string.check_add_bookshelf, book.name))
                 okButton {
-                    AudioPlay.book?.removeType(BookType.notShelf)
-                    AudioPlay.book?.save()
-                    SourceCallBack.callBackBook(SourceCallBack.ADD_BOOK_SHELF, AudioPlay.bookSource, AudioPlay.book)
-                    AudioPlay.inBookshelf = true
-                    setResult(RESULT_OK)
+                    val book = AudioPlay.book
+                    book?.removeType(BookType.notShelf)
+                    lifecycleScope.launch(IO) {
+                        book?.save()
+                        withContext(Main) {
+                            SourceCallBack.callBackBook(SourceCallBack.ADD_BOOK_SHELF, AudioPlay.bookSource, AudioPlay.book)
+                            AudioPlay.inBookshelf = true
+                            setResult(RESULT_OK)
+                        }
+                    }
                 }
                 noButton {
                     callBackBookEnd()

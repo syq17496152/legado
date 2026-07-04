@@ -332,7 +332,9 @@ class SpeakEngineDialog() : BaseDialogFragment(R.layout.dialog_recycler_view),
                             setMessage(getString(R.string.sure_del) + "\n" + httpTTS.name)
                             noButton()
                             yesButton {
-                                appDb.httpTTSDao.delete(httpTTS)
+                                lifecycleScope.launch(IO) {
+                                    appDb.httpTTSDao.delete(httpTTS)
+                                }
                             }
                         }
                     }

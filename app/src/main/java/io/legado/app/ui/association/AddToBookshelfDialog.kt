@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.base.BaseViewModel
@@ -27,6 +28,10 @@ import io.legado.app.utils.setLayout
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 添加书籍链接到书架，需要对应网站书源
@@ -68,39 +73,44 @@ class AddToBookshelfDialog() : BaseDialogFragment(R.layout.dialog_add_to_bookshe
             dismiss()
             return
         }
-        appDb.bookDao.getBook(bookUrl)?.let { //已在书架时直接跳转到书籍详情页
-            AppLog.put("${it.name} 已在书架", null, true)
-            startActivity<BookInfoActivity> {
-                putExtra("name", it.name)
-                putExtra("author", it.author)
-                putExtra("bookUrl", it.bookUrl)
-            }
-            dismiss()
-            return
-        }
-        viewModel.loadStateLiveData.observe(this) {
-            if (it) {
-                binding.rotateLoading.visible()
-            } else {
-                binding.rotateLoading.gone()
-            }
-        }
-        viewModel.loadErrorLiveData.observe(this) {
-            toastOnUi(it)
-            dismiss()
-        }
-        viewModel.load(bookUrl) {
-            viewModel.saveSearchBook(it) {
-                startActivity<BookInfoActivity> {
-                    putExtra("name", it.name)
-                    putExtra("author", it.author)
-                    putExtra("bookUrl", it.bookUrl)
+        lifecycleScope.launch(IO) {
+            val existingBook = appDb.bookDao.getBook(bookUrl)
+            withContext(Main) {
+                if (existingBook != null) {
+                    AppLog.put("${existingBook.name} 已在书架", null, true)
+                    startActivity<BookInfoActivity> {
+                        putExtra("name", existingBook.name)
+                        putExtra("author", existingBook.author)
+                        putExtra("bookUrl", existingBook.bookUrl)
+                    }
+                    dismiss()
+                    return@withContext
                 }
-                dismiss()
+                viewModel.loadStateLiveData.observe(this@AddToBookshelfDialog) {
+                    if (it) {
+                        binding.rotateLoading.visible()
+                    } else {
+                        binding.rotateLoading.gone()
+                    }
+                }
+                viewModel.loadErrorLiveData.observe(this@AddToBookshelfDialog) {
+                    toastOnUi(it)
+                    dismiss()
+                }
+                viewModel.load(bookUrl) {
+                    viewModel.saveSearchBook(it) {
+                        startActivity<BookInfoActivity> {
+                            putExtra("name", it.name)
+                            putExtra("author", it.author)
+                            putExtra("bookUrl", it.bookUrl)
+                        }
+                        dismiss()
+                    }
+                }
+                binding.tvCancel.setOnClickListener {
+                    dismiss()
+                }
             }
-        }
-        binding.tvCancel.setOnClickListener {
-            dismiss()
         }
     }
 
