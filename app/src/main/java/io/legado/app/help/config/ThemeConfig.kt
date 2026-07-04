@@ -200,6 +200,28 @@ object ThemeConfig {
         save()
     }
 
+    /**
+     * 仅添加新主题，不覆盖用户已有的同名主题
+     * 用于版本升级时合并新增的默认主题
+     */
+    fun addNewConfigs(newConfigs: List<Config>?) {
+        val newConfigs = newConfigs?.filter { validateConfig(it) }
+        if (newConfigs.isNullOrEmpty()) {
+            return
+        }
+        var changed = false
+        newConfigs.forEach { newConfig ->
+            val existingIndex = configList.indexOfFirst { it.themeName == newConfig.themeName }
+            if (existingIndex == -1) {
+                configList.add(newConfig)
+                changed = true
+            }
+        }
+        if (changed) {
+            save()
+        }
+    }
+
     private fun validateConfig(config: Config): Boolean {
         try {
             config.primaryColor.toColorInt()

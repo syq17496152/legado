@@ -36,6 +36,9 @@ object DefaultData {
                 if (LocalConfig.needUpDictRule) {
                     importDefaultDictRules()
                 }
+                if (LocalConfig.needUpThemeConfig) {
+                    importDefaultThemeConfigs()
+                }
             }.onError {
                 it.printOnDebug()
             }
@@ -127,6 +130,10 @@ object DefaultData {
 
     fun importDefaultDictRules() {
         appDb.dictRuleDao.insert(*dictRules.toTypedArray())
+    }
+
+    fun importDefaultThemeConfigs() {
+        ThemeConfig.addNewConfigs(themeConfigs)
     }
 
 }

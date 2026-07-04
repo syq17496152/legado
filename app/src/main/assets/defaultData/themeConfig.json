@@ -30,5 +30,69 @@
     "accentColor": "#FFFFFF",
     "backgroundColor": "#000000",
     "bottomBackground": "#000000"
+  },
+  {
+    "themeName": "绿意",
+    "isNightTheme": false,
+    "primaryColor": "#2E7D32",
+    "accentColor": "#BF360C",
+    "backgroundColor": "#F1F8E9",
+    "bottomBackground": "#DCEDC8"
+  },
+  {
+    "themeName": "莫兰迪",
+    "isNightTheme": false,
+    "primaryColor": "#5D4037",
+    "accentColor": "#3949AB",
+    "backgroundColor": "#EFEBE9",
+    "bottomBackground": "#D7CCC8"
+  },
+  {
+    "themeName": "海洋",
+    "isNightTheme": false,
+    "primaryColor": "#00695C",
+    "accentColor": "#DD2C00",
+    "backgroundColor": "#E0F7FA",
+    "bottomBackground": "#B2EBF2"
+  },
+  {
+    "themeName": "薰衣草",
+    "isNightTheme": false,
+    "primaryColor": "#7B1FA2",
+    "accentColor": "#00796B",
+    "backgroundColor": "#F3E5F5",
+    "bottomBackground": "#E1BEE7"
+  },
+  {
+    "themeName": "琥珀",
+    "isNightTheme": false,
+    "primaryColor": "#BF360C",
+    "accentColor": "#1565C0",
+    "backgroundColor": "#FFF8E1",
+    "bottomBackground": "#FFECB3"
+  },
+  {
+    "themeName": "暗夜绿",
+    "isNightTheme": true,
+    "primaryColor": "#2E7D32",
+    "accentColor": "#66BB6A",
+    "backgroundColor": "#1B1B1B",
+    "bottomBackground": "#1B1B1B"
+  },
+  {
+    "themeName": "暗夜蓝",
+    "isNightTheme": true,
+    "primaryColor": "#1565C0",
+    "accentColor": "#4FC3F7",
+    "backgroundColor": "#121212",
+    "bottomBackground": "#121212"
+  },
+  {
+    "themeName": "暗夜紫",
+    "isNightTheme": true,
+    "primaryColor": "#7B1FA2",
+    "accentColor": "#CE93D8",
+    "backgroundColor": "#1E1E32",
+    "bottomBackground": "#1E1E32"
   }
 ]

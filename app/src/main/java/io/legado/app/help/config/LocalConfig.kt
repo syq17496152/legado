@@ -71,6 +71,9 @@ by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
     val needUpDictRule: Boolean
         get() = !isLastVersion(2, "needUpDictRule")
 
+    val needUpThemeConfig: Boolean
+        get() = !isLastVersion(2, "themeConfigVersion")
+
     var versionCode
         get() = getLong(versionCodeKey, 0)
         set(value) {
