@@ -618,18 +618,20 @@ class ReadBookActivity : BaseReadBookActivity(),
 
             R.id.menu_same_title_removed -> {
                 ReadBook.book?.let {
-                    val contentProcessor = ContentProcessor.get(it)
-                    val textChapter = ReadBook.curTextChapter
-                    if (textChapter != null
-                        && !textChapter.sameTitleRemoved
-                        && !contentProcessor.removeSameTitleCache.contains(
-                            textChapter.chapter.getFileName("nr")
-                        )
-                    ) {
-                        toastOnUi("未找到可移除的重复标题")
+                    lifecycleScope.launch {
+                        val contentProcessor = withContext(IO) { ContentProcessor.get(it) }
+                        val textChapter = ReadBook.curTextChapter
+                        if (textChapter != null
+                            && !textChapter.sameTitleRemoved
+                            && !contentProcessor.removeSameTitleCache.contains(
+                                textChapter.chapter.getFileName("nr")
+                            )
+                        ) {
+                            toastOnUi("未找到可移除的重复标题")
+                        }
+                        viewModel.reverseRemoveSameTitle()
                     }
                 }
-                viewModel.reverseRemoveSameTitle()
             }
 
             R.id.menu_effective_replaces -> showDialogFragment<EffectiveReplacesDialog>()

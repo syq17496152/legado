@@ -16,7 +16,7 @@ import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.ResponseBody
-import okhttp3.internal.http.RealResponseBody
+import okhttp3.ResponseBody.Companion.asResponseBody
 import okio.buffer
 import okio.source
 import java.io.File
@@ -107,7 +107,7 @@ fun ResponseBody.decompressed(): ResponseBody {
             throw e
         }
     }.source().buffer()
-    return RealResponseBody(null, -1, source)
+    return source.asResponseBody(null, -1)
 }
 
 fun Request.Builder.addHeaders(headers: Map<String, String>) {

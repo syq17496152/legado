@@ -8,6 +8,8 @@ import io.legado.app.data.entities.Cache
 import io.legado.app.model.analyzeRule.QueryTTF
 import io.legado.app.utils.ACache
 import io.legado.app.utils.memorySize
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 
 private val queryTTFMap = LruCache<String, QueryTTF>(4)
 
@@ -64,7 +66,7 @@ object CacheManager {
                 val valueStr = value.toString()
                 putMemory(key, valueStr)
                 val cache = Cache(key, valueStr, deadline)
-                appDb.cacheDao.insert(cache)
+                runBlocking(IO) { appDb.cacheDao.insert(cache) }
             }
         }
     }
@@ -86,7 +88,7 @@ object CacheManager {
         getFromMemory(key)?.let {
             if (it is String) return it
         }
-        val cache = appDb.cacheDao.get(key)
+        val cache = runBlocking(IO) { appDb.cacheDao.get(key) }
         if (cache != null && (cache.deadline == 0L || cache.deadline > System.currentTimeMillis())) {
             return cache.value?.also {
                 putMemory(key, it)
@@ -99,7 +101,7 @@ object CacheManager {
         if (!onlyDisk) {
             return get(key)
         }
-        val cache = appDb.cacheDao.get(key)
+        val cache = runBlocking(IO) { appDb.cacheDao.get(key) }
         if (cache != null && (cache.deadline == 0L || cache.deadline > System.currentTimeMillis())) {
             return cache.value
         }
@@ -147,7 +149,7 @@ object CacheManager {
     }
 
     fun delete(key: String) {
-        appDb.cacheDao.delete(key)
+        runBlocking(IO) { appDb.cacheDao.delete(key) }
         deleteMemory(key)
         ACache.get().remove(key)
     }

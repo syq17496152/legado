@@ -27,6 +27,8 @@ import io.legado.app.utils.inputStream
 import io.legado.app.utils.isUri
 import io.legado.app.utils.normalizeFileName
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 import splitties.init.appCtx
 import java.io.File
 import java.time.LocalDate
@@ -239,13 +241,13 @@ fun Book.upType() {
 }
 
 fun Book.sync(oldBook: Book) {
-    val curBook = appDb.bookDao.getBook(oldBook.bookUrl)!!
+    val curBook = runBlocking(IO) { appDb.bookDao.getBook(oldBook.bookUrl) }!!
     durChapterTime = curBook.durChapterTime
     durChapterPos = curBook.durChapterPos
     if (durChapterIndex != curBook.durChapterIndex) {
         durChapterIndex = curBook.durChapterIndex
         val replaceRules = ContentProcessor.get(this).getTitleReplaceRules()
-        appDb.bookChapterDao.getChapter(bookUrl, durChapterIndex)?.let {
+        runBlocking(IO) { appDb.bookChapterDao.getChapter(bookUrl, durChapterIndex) }?.let {
             durChapterTitle = it.getDisplayTitle(
                 replaceRules,
                 getUseReplaceRule(),
@@ -258,7 +260,7 @@ fun Book.sync(oldBook: Book) {
 }
 
 fun Book.update() {
-    appDb.bookDao.update(this)
+    runBlocking(IO) { appDb.bookDao.update(this@update) }
 }
 
 fun Book.primaryStr(): String {
@@ -297,7 +299,7 @@ fun Book.getFolderNameNoCache(): String {
 }
 
 fun Book.getBookSource(): BookSource? {
-    return appDb.bookSourceDao.getBookSource(origin)
+    return runBlocking(IO) { appDb.bookSourceDao.getBookSource(origin) }
 }
 
 fun Book.isLocalModified(): Boolean {

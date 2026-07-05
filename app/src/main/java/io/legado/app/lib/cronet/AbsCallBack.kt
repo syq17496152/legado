@@ -19,9 +19,6 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.asResponseBody
-import okhttp3.internal.http.HTTP_PERM_REDIRECT
-import okhttp3.internal.http.HTTP_TEMP_REDIRECT
-import okhttp3.internal.http.HttpMethod
 import okio.Buffer
 import okio.Source
 import okio.Timeout
@@ -391,12 +388,12 @@ abstract class AbsCallBack(
         ): Request {
             // Most redirects don't include a request body.
             val requestBuilder = userResponse.request.newBuilder()
-            if (HttpMethod.permitsRequestBody(method)) {
+            if (permitsRequestBody(method)) {
                 val responseCode = userResponse.code
-                val maintainBody = HttpMethod.redirectsWithBody(method) ||
+                val maintainBody = redirectsWithBody(method) ||
                         responseCode == HTTP_PERM_REDIRECT ||
                         responseCode == HTTP_TEMP_REDIRECT
-                if (HttpMethod.redirectsToGet(method)
+                if (redirectsToGet(method)
                     && responseCode != HTTP_PERM_REDIRECT
                     && responseCode != HTTP_TEMP_REDIRECT
                 ) {
@@ -414,6 +411,25 @@ abstract class AbsCallBack(
 
             return requestBuilder.url(newLocationUrl).build()
         }
+
+        /** 替代 okhttp3.internal.http.HttpMethod 的常量 */
+        private const val HTTP_PERM_REDIRECT = 308
+        private const val HTTP_TEMP_REDIRECT = 307
+
+        /** 替代 HttpMethod.permitsRequestBody：POST/PUT/PATCH/DELETE/PROPPATCH/REPORT 允许 body */
+        private fun permitsRequestBody(method: String): Boolean = when (method) {
+            "GET", "HEAD", "OPTIONS", "TRACE", "CONNECT" -> false
+            else -> true
+        }
+
+        /** 替代 HttpMethod.redirectsWithBody：PROPFIND/PROPPATCH/MKACTIVITY/MKCALENDAR/REPORT 保持 body */
+        private fun redirectsWithBody(method: String): Boolean = when (method) {
+            "PROPFIND", "PROPPATCH", "MKACTIVITY", "MKCALENDAR", "REPORT" -> true
+            else -> false
+        }
+
+        /** 替代 HttpMethod.redirectsToGet：除 PROPFIND 外的重定向都转为 GET */
+        private fun redirectsToGet(method: String): Boolean = method != "PROPFIND"
 
         private fun toResponse(
             request: Request,

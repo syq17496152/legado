@@ -52,7 +52,7 @@ android {
     }
     defaultConfig {
         applicationId project.hasProperty("customAppId") ? project.property("customAppId") : "io.legado.app"
-        minSdk 21
+        minSdk 23
         targetSdk 36
         versionCode 10000 + gitCommits
         versionName version
@@ -161,6 +161,30 @@ android {
     lint { //忽略string翻译缺失，后面需要翻译时去掉，todo
         disable 'MissingTranslation'
     }
+}
+
+// 全局排除 Compose 依赖（项目未使用 Compose，避免 activity 1.13+ / material 1.14+ 传递依赖引入整个 Compose 运行时）
+configurations.all {
+    exclude group: 'androidx.compose.compiler', module: 'compiler'
+    exclude group: 'androidx.compose.foundation', module: 'foundation'
+    exclude group: 'androidx.compose.material3', module: 'material3'
+    exclude group: 'androidx.compose.material', module: 'material'
+    exclude group: 'androidx.compose.material', module: 'material-icons-core'
+    exclude group: 'androidx.compose.material', module: 'material-ripple'
+    exclude group: 'androidx.compose.runtime', module: 'runtime'
+    exclude group: 'androidx.compose.runtime', module: 'runtime-saveable'
+    exclude group: 'androidx.compose.runtime', module: 'runtime-annotation'
+    exclude group: 'androidx.compose.ui', module: 'ui'
+    exclude group: 'androidx.compose.ui', module: 'ui-graphics'
+    exclude group: 'androidx.compose.ui', module: 'ui-text'
+    exclude group: 'androidx.compose.ui', module: 'ui-unit'
+    exclude group: 'androidx.compose.animation', module: 'animation'
+    exclude group: 'androidx.compose.animation', module: 'animation-core'
+    exclude group: 'androidx.activity', module: 'activity-compose'
+    exclude group: 'androidx.lifecycle', module: 'lifecycle-runtime-compose'
+    exclude group: 'androidx.lifecycle', module: 'lifecycle-viewmodel-compose'
+    exclude group: 'androidx.savedstate', module: 'savedstate-compose'
+    exclude group: 'androidx.navigationevent', module: 'navigationevent-compose'
 }
 
 dependencies {

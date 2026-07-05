@@ -6,6 +6,8 @@ import io.legado.app.BuildConfig
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.withContext
 import io.legado.app.utils.GSON
 import io.legado.app.utils.canvasrecorder.CanvasRecorderFactory
 import io.legado.app.utils.fromJsonObject
@@ -625,8 +627,8 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.bookshelfSort, value)
         }
 
-    fun getBookSortByGroupId(groupId: Long): Int {
-        return appDb.bookGroupDao.getByID(groupId)?.getRealBookSort()
+    suspend fun getBookSortByGroupId(groupId: Long): Int = withContext(IO) {
+        appDb.bookGroupDao.getByID(groupId)?.getRealBookSort()
             ?: bookshelfSort
     }
 

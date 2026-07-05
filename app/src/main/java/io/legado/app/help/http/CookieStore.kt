@@ -16,6 +16,8 @@ import io.legado.app.help.http.api.CookieManagerInterface
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.removeCookie
 import io.legado.app.utils.splitNotBlank
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 
 @Keep
 object CookieStore : CookieManagerInterface {
@@ -28,7 +30,7 @@ object CookieStore : CookieManagerInterface {
             val domain = NetworkUtils.getSubDomain(url)
             CacheManager.putMemory("${domain}_cookie", cookie ?: "")
             val cookieBean = Cookie(domain, cookie ?: "")
-            appDb.cookieDao.insert(cookieBean)
+            runBlocking(IO) { appDb.cookieDao.insert(cookieBean) }
         } catch (e: Exception) {
             AppLog.put("保存Cookie失败\n$e", e)
         }
@@ -93,7 +95,7 @@ object CookieStore : CookieManagerInterface {
 
     override fun removeCookie(url: String) {
         val domain = NetworkUtils.getSubDomain(url)
-        appDb.cookieDao.delete(domain)
+        runBlocking(IO) { appDb.cookieDao.delete(domain) }
         CacheManager.deleteMemory("${domain}_cookie")
         CacheManager.deleteMemory("${domain}_session_cookie")
         android.webkit.CookieManager.getInstance().removeCookie(url)
@@ -132,7 +134,7 @@ object CookieStore : CookieManagerInterface {
     }
 
     fun clear() {
-        appDb.cookieDao.deleteOkHttp()
+        runBlocking(IO) { appDb.cookieDao.deleteOkHttp() }
     }
 
 }

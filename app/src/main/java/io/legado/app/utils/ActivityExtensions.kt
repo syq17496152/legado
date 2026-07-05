@@ -127,16 +127,14 @@ fun Activity.setLightStatusBar(isLightBar: Boolean) {
         }
     }
     @Suppress("DEPRECATION")
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-        val decorView = window.decorView
-        val systemUiVisibility = decorView.systemUiVisibility
-        if (isLightBar) {
-            decorView.systemUiVisibility =
-                systemUiVisibility or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-        } else {
-            decorView.systemUiVisibility =
-                systemUiVisibility and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
-        }
+    val decorView = window.decorView
+    val systemUiVisibility = decorView.systemUiVisibility
+    if (isLightBar) {
+        decorView.systemUiVisibility =
+            systemUiVisibility or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+    } else {
+        decorView.systemUiVisibility =
+            systemUiVisibility and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
     }
 }
 

@@ -17,6 +17,8 @@ import io.legado.app.utils.replace
 import io.legado.app.utils.stackTraceStr
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 import splitties.init.appCtx
 import java.lang.ref.WeakReference
 import java.util.concurrent.CopyOnWriteArrayList
@@ -63,16 +65,16 @@ class ContentProcessor private constructor(
     fun upReplaceRules() {
         titleReplaceRules.run {
             clear()
-            addAll(appDb.replaceRuleDao.findEnabledByTitleScope(bookName, bookOrigin))
+            addAll(runBlocking(IO) { appDb.replaceRuleDao.findEnabledByTitleScope(bookName, bookOrigin) })
         }
         contentReplaceRules.run {
             clear()
-            addAll(appDb.replaceRuleDao.findEnabledByContentScope(bookName, bookOrigin))
+            addAll(runBlocking(IO) { appDb.replaceRuleDao.findEnabledByContentScope(bookName, bookOrigin) })
         }
     }
 
     private fun upRemoveSameTitle() {
-        val book = appDb.bookDao.getBookByOrigin(bookName, bookOrigin) ?: return
+        val book = runBlocking(IO) { appDb.bookDao.getBookByOrigin(bookName, bookOrigin) } ?: return
         removeSameTitleCache.clear()
         val files = BookHelp.getChapterFiles(book).filter {
             it.endsWith("nr")
@@ -181,7 +183,7 @@ class ContentProcessor private constructor(
                         }
                     } catch (e: RegexTimeoutException) {
                         item.isEnabled = false
-                        appDb.replaceRuleDao.update(item)
+                        runBlocking(IO) { appDb.replaceRuleDao.update(item) }
                         mContent = item.name + e.stackTraceStr
                     } catch (_: CancellationException) {
                     } catch (e: Exception) {

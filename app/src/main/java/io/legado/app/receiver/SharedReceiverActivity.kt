@@ -1,8 +1,6 @@
 package io.legado.app.receiver
 
-import android.annotation.SuppressLint
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import io.legado.app.ui.book.search.SearchActivity
@@ -20,7 +18,6 @@ class SharedReceiverActivity : AppCompatActivity() {
         finish()
     }
 
-    @SuppressLint("ObsoleteSdkInt")
     private fun initIntent() {
         when {
             intent.action == Intent.ACTION_SEND && intent.type == receivingType -> {
@@ -28,8 +25,7 @@ class SharedReceiverActivity : AppCompatActivity() {
                     dispose(it)
                 }
             }
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
-                    && intent.action == Intent.ACTION_PROCESS_TEXT
+            intent.action == Intent.ACTION_PROCESS_TEXT
                     && intent.type == receivingType -> {
                 intent.getStringExtra(Intent.EXTRA_PROCESS_TEXT)?.let {
                     dispose(it)

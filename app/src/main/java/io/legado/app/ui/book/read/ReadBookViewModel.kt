@@ -71,12 +71,14 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
     }
 
     fun initReadBookConfig(intent: Intent) {
-        val bookUrl = intent.getStringExtra("bookUrl")
-        val book = when {
-            bookUrl.isNullOrEmpty() -> appDb.bookDao.lastReadBook
-            else -> appDb.bookDao.getBook(bookUrl)
-        } ?: return
-        ReadBook.upReadBookConfig(book)
+        execute {
+            val bookUrl = intent.getStringExtra("bookUrl")
+            val book = when {
+                bookUrl.isNullOrEmpty() -> appDb.bookDao.lastReadBook
+                else -> appDb.bookDao.getBook(bookUrl)
+            } ?: return@execute
+            ReadBook.upReadBookConfig(book)
+        }
     }
 
     /**

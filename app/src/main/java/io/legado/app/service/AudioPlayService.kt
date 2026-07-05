@@ -9,7 +9,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.AudioManager
 import android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
-import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.support.v4.media.MediaMetadataCompat
@@ -336,14 +335,11 @@ class AudioPlayService : BaseService(),
     /**
      * 调节速度
      */
-    @SuppressLint(value = ["ObsoleteSdkInt"])
     private fun upSpeed(speed: Float) {
         kotlin.runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                playSpeed = speed
-                exoPlayer.setPlaybackSpeed(playSpeed)
-                postEvent(EventBus.AUDIO_SPEED, playSpeed)
-            }
+            playSpeed = speed
+            exoPlayer.setPlaybackSpeed(playSpeed)
+            postEvent(EventBus.AUDIO_SPEED, playSpeed)
         }
     }
 

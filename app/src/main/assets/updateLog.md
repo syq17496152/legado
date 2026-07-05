@@ -5,6 +5,13 @@
 ## cronet版本: 128.0.6613.40
 
 **2026/07/05**
+- 依赖升级性能优化：Kotlin协程Channel性能提升9.8倍、5组AndroidX组件升级
+- 最低系统版本提升至Android 6.0（原4.4），解锁AndroidX生态新版本
+- WebView滚动流畅度优化：启用硬件加速渲染层
+- OkHttp升级至5.4.0：消除4处内部API依赖，提升HTTP安全性
+- 全面修复Room数据库主线程访问崩溃（20+处调用点迁移至IO线程）
+- 排除Compose运行时传递依赖，DEX体积减少21%（约15MB）
+- 清理9处已废弃的版本兼容代码，提升代码可维护性
 - 核心质量优化：修复内存泄漏、线程安全、数据库ANR等重大问题
 - 修复 IntentData 内存泄漏：改用 ConcurrentHashMap + TTL 自动清理 + Activity 作用域关联
 - 修复 ReadBook.callBack 泄漏：改用 WeakReference 防止 Activity 无法回收

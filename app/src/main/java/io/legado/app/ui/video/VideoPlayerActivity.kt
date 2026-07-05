@@ -192,12 +192,14 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             val bookUrl = intent.getStringExtra("bookUrl")
             val record = intent.getStringExtra("record")
             VideoPlay.inBookshelf = intent.getBooleanExtra("inBookshelf", true)
-            if (!VideoPlay.initSource(sourceKey, sourceType, bookUrl, record)) {
-                finish()
-                return
+            lifecycleScope.launch {
+                if (!VideoPlay.initSource(sourceKey, sourceType, bookUrl, record)) {
+                    finish()
+                    return@launch
+                }
+                VideoPlay.startPlay(playerView)
+                VideoPlay.saveRead()
             }
-            VideoPlay.startPlay(playerView)
-            VideoPlay.saveRead()
         } else {
             VideoPlay.clonePlayState(playerView)
             playerView.setSurfaceToPlay()

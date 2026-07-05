@@ -15,6 +15,8 @@ import io.legado.app.utils.HtmlFormatter
 import io.legado.app.utils.encodeURI
 import io.legado.app.utils.isXml
 import io.legado.app.utils.printOnDebug
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 import me.ag2s.epublib.domain.EpubBook
 import me.ag2s.epublib.domain.Resource
 import me.ag2s.epublib.domain.TOCReference
@@ -442,7 +444,7 @@ class EpubFile(var book: Book) {
         if (!AppConfig.tocCountWords) {
             return
         }
-        val chapterList = appDb.bookChapterDao.getChapterList(book.bookUrl)
+        val chapterList = runBlocking(IO) { appDb.bookChapterDao.getChapterList(book.bookUrl) }
         if (chapterList.isNotEmpty()) {
             val map = chapterList.associateBy({ it.getFileName() }, { it.wordCount })
             for (bookChapter in list) {

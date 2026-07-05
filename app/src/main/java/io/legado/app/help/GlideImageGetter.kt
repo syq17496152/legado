@@ -33,6 +33,8 @@ import com.bumptech.glide.request.RequestOptions
 import io.legado.app.data.appDb
 import io.legado.app.help.glide.OkHttpModelLoader
 import io.legado.app.model.analyzeRule.AnalyzeUrl
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 
 class GlideImageGetter(
     context: Context,
@@ -49,7 +51,7 @@ class GlideImageGetter(
         Color.TRANSPARENT.toDrawable()
     }
     private val bookSource by lazy {
-        sourceOrigin?.let { appDb.bookSourceDao.getBookSource(it) }
+        sourceOrigin?.let { runBlocking(IO) { appDb.bookSourceDao.getBookSource(it) } }
     }
 
     override fun getDrawable(source: String?): Drawable {

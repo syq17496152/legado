@@ -4,7 +4,6 @@ import okhttp3.Interceptor
 import okhttp3.Response
 import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.asResponseBody
-import okhttp3.internal.http.promisesBody
 import okio.buffer
 import okio.source
 import java.util.zip.GZIPInputStream
@@ -41,5 +40,17 @@ object DecompressInterceptor : Interceptor {
             .removeHeader("Content-Length")
             .body(source.asResponseBody(body.contentType(), -1))
             .build()
+    }
+
+    /**
+     * 判断响应是否承诺有 body（替代 okhttp3.internal.http.promisesBody）
+     *
+     * 逻辑等价于 OkHttp 内部实现：
+     * HEAD 请求和 1xx/204/205 响应码没有 body
+     */
+    private fun Response.promisesBody(): Boolean {
+        if (request.method == "HEAD") return false
+        val code = code
+        return !(code in 100..199 || code == 204 || code == 205)
     }
 }

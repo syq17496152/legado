@@ -16,6 +16,8 @@ import io.legado.app.utils.EncodingDetect
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.StringUtils
 import io.legado.app.utils.Utf8BomUtils
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 import java.io.FileNotFoundException
 import java.nio.charset.Charset
 import java.util.regex.Matcher
@@ -594,10 +596,10 @@ class TextFile(private var book: Book) {
      * 获取启用的目录规则
      */
     private fun getTocRules(): List<TxtTocRule> {
-        var rules = appDb.txtTocRuleDao.enabled
-        if (appDb.txtTocRuleDao.count == 0) {
+        var rules = runBlocking(IO) { appDb.txtTocRuleDao.enabled }
+        if (runBlocking(IO) { appDb.txtTocRuleDao.count } == 0) {
             rules = DefaultData.txtTocRules.apply {
-                appDb.txtTocRuleDao.insert(*this.toTypedArray())
+                runBlocking(IO) { appDb.txtTocRuleDao.insert(*this@apply.toTypedArray()) }
             }.filter {
                 it.enable
             }
@@ -609,7 +611,7 @@ class TextFile(private var book: Book) {
         if (!AppConfig.tocCountWords) {
             return
         }
-        val chapterList = appDb.bookChapterDao.getChapterList(book.bookUrl)
+        val chapterList = runBlocking(IO) { appDb.bookChapterDao.getChapterList(book.bookUrl) }
         if (chapterList.isNotEmpty()) {
             val map = chapterList.associateBy({ it.getFileName() }, { it.wordCount })
             for (bookChapter in list) {

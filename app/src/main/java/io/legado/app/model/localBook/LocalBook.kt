@@ -49,6 +49,7 @@ import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.isDataUrl
 import io.legado.app.utils.printOnDebug
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.runBlocking
 import org.apache.commons.text.StringEscapeUtils
 import splitties.init.appCtx
@@ -246,7 +247,7 @@ object LocalBook {
 
             bookUrl = toString()
         }
-        var book = appDb.bookDao.getBook(bookUrl)
+        var book = runBlocking(IO) { appDb.bookDao.getBook(bookUrl) }
         if (book == null) {
             val nameAuthor = analyzeNameAuthor(fileName)
             book = Book(
@@ -256,17 +257,17 @@ object LocalBook {
                 author = nameAuthor.second,
                 originName = fileName,
                 latestChapterTime = updateTime,
-                order = appDb.bookDao.minOrder - 1
+                order = runBlocking(IO) { appDb.bookDao.minOrder - 1 }
             )
             upBookInfo(book)
-            appDb.bookDao.insert(book)
+            runBlocking(IO) { appDb.bookDao.insert(book) }
         } else {
             deleteBook(book, false)
             upBookInfo(book)
             // 触发 isLocalModified
             book.latestChapterTime = 0
             //已有书籍说明是更新,删除原有目录
-            appDb.bookChapterDao.delByBook(bookUrl)
+            runBlocking(IO) { appDb.bookChapterDao.delByBook(bookUrl) }
         }
         return book
     }
@@ -469,7 +470,7 @@ object LocalBook {
     fun isOnBookShelf(
         fileName: String
     ): Boolean {
-        return appDb.bookDao.hasFile(fileName)
+        return runBlocking(IO) { appDb.bookDao.hasFile(fileName) }
     }
 
     //文件类书源 合并在线书籍信息 在线 > 本地

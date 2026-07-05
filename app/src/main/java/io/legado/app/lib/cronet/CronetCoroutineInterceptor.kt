@@ -6,12 +6,13 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import okhttp3.Call
+import okhttp3.Cookie
 import okhttp3.CookieJar
+import okhttp3.Headers
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
-import okhttp3.internal.http.receiveHeaders
 import org.chromium.net.UrlRequest
 import org.chromium.net.UrlResponseInfo
 import java.io.IOException
@@ -49,12 +50,12 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
                 if (timeout > 0) {
                     withTimeout(timeout) {
                         proceedWithCronet(newReq, chain.call(), chain.readTimeoutMillis()).also { response ->
-                            cookieJar.receiveHeaders(newReq.url, response.headers)
+                            receiveCookies(cookieJar, newReq.url, response.headers)
                         }
                     }
                 } else {
                     proceedWithCronet(newReq, chain.call(), chain.readTimeoutMillis()).also { response ->
-                        cookieJar.receiveHeaders(newReq.url, response.headers)
+                        receiveCookies(cookieJar, newReq.url, response.headers)
                     }
                 }
             }
@@ -123,5 +124,13 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
             if (index > 0) append("; ")
             append(cookie.name).append('=').append(cookie.value)
         }
+    }
+
+    /**
+     * 从响应头解析 Set-Cookie 并存入 CookieJar（替代 okhttp3.internal.http.receiveHeaders）
+     */
+    private fun receiveCookies(cookieJar: CookieJar, url: HttpUrl, headers: Headers) {
+        val cookies = headers.values("Set-Cookie").mapNotNull { Cookie.parse(url, it) }
+        cookieJar.saveFromResponse(url, cookies)
     }
 }

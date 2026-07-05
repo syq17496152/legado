@@ -3,7 +3,7 @@ package io.legado.app.help.webView
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.MutableContextWrapper
-import android.os.Build
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -81,9 +81,7 @@ object WebViewPool {
             stopLoading()
             clearFocus() //清除焦点
             setOnLongClickListener(null)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                setOnScrollChangeListener(null)
-            }
+            setOnScrollChangeListener(null)
             setDownloadListener(null)
             outlineProvider = null
             clipToOutline = false
@@ -153,6 +151,7 @@ object WebViewPool {
             displayZoomControls = false
             textZoom = 100
         }
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
     }
 
     // 定时清理闲置过久的WebView

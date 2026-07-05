@@ -399,7 +399,7 @@ object VideoPlay : CoroutineScope by MainScope(){
         loadScope.coroutineContext.cancelChildren()
     }
 
-    fun initSource(sourceKey: String?, sourceType: Int?, bookUrl: String?, record:String?): Boolean {
+    suspend fun initSource(sourceKey: String?, sourceType: Int?, bookUrl: String?, record:String?): Boolean = withContext(IO) {
         isLoading = true
         source = sourceKey?.let {
             when (sourceType) {
@@ -422,12 +422,16 @@ object VideoPlay : CoroutineScope by MainScope(){
             durVolumeIndex = b.durVolumeIndex
             durChapterPos = b.durChapterPos
             source = appDb.bookSourceDao.getBookSource(b.origin)
-            SourceCallBack.callBackBook(SourceCallBack.START_READ, source as BookSource?, b, chapter)
+            withContext(Main) {
+                SourceCallBack.callBackBook(SourceCallBack.START_READ, source as BookSource?, b, chapter)
+            }
         }
         upEpisodes()
         if (source == null) {
-            appCtx.toastOnUi("未找到源")
-            return false
+            withContext(Main) {
+                appCtx.toastOnUi("未找到源")
+            }
+            return@withContext false
         }
         record?.let{ //订阅源
             val sourceKey = sourceKey ?: return@let
@@ -440,7 +444,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                 }
             }
         }
-        return true
+        return@withContext true
     }
 
     fun upEpisodes() {

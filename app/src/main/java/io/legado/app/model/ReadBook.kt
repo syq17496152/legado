@@ -96,7 +96,7 @@ object ReadBook : CoroutineScope by MainScope() {
     val preDownloadSemaphore = Semaphore(2)
     val executor = globalExecutor
 
-    fun resetData(book: Book) {
+    suspend fun resetData(book: Book) = withContext(IO) {
         releaseAndCancel()
         ReadBook.book = book
         readRecord.bookName = book.name

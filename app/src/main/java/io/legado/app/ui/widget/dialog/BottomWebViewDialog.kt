@@ -345,14 +345,12 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
 
         val scrollNoDraggable = config.scrollNoDraggable ?: if (first) true else null
         scrollNoDraggable?.let {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                if (it) {
-                    currentWebView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                        behavior?.isDraggable = scrollY == 0
-                    }
-                } else {
-                    currentWebView.setOnScrollChangeListener(null)
+            if (it) {
+                currentWebView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                    behavior?.isDraggable = scrollY == 0
                 }
+            } else {
+                currentWebView.setOnScrollChangeListener(null)
             }
         }
 
@@ -430,10 +428,8 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
                             sheet.layoutParams = layoutParams
                         }
                         setLongClickSaveImg()
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            currentWebView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                                behavior?.isDraggable = scrollY == 0
-                            }
+                        currentWebView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                            behavior?.isDraggable = scrollY == 0
                         }
                     }
                 }

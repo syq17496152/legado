@@ -1,6 +1,5 @@
 package io.legado.app.lib.permission
 
-import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Environment
@@ -52,7 +51,6 @@ internal class Request : OnRequestPermissionsResultCallback {
         this.rationale = rationale
     }
 
-    @SuppressLint("ObsoleteSdkInt")
     fun start() {
         RequestPlugins.setOnRequestPermissionsCallback(this)
 
@@ -66,27 +64,23 @@ internal class Request : OnRequestPermissionsResultCallback {
             onPermissionsDenied(deniedPermissions)
             return
         }
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            toSetting()
-        } else {
-            if (deniedPermissions.contains(Permissions.SYSTEM_ALERT_WINDOW)) {
-                toSystemAlertWindowSetting(deniedPermissions)
+        if (deniedPermissions.contains(Permissions.SYSTEM_ALERT_WINDOW)) {
+            toSystemAlertWindowSetting(deniedPermissions)
+        }
+        else if (deniedPermissions.contains(Permissions.MANAGE_EXTERNAL_STORAGE)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                toManageFileSetting(deniedPermissions)
             }
-            else if (deniedPermissions.contains(Permissions.MANAGE_EXTERNAL_STORAGE)) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    toManageFileSetting(deniedPermissions)
-                }
-            } else if (deniedPermissions.contains(Permissions.POST_NOTIFICATIONS)) {
-                toNotificationSetting(deniedPermissions)
-            } else if (deniedPermissions.contains(Permissions.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)) {
-                toIgnoreBatterySetting(deniedPermissions)
-            } else if (deniedPermissions.isNotEmpty()) {
-                appCtx.startActivity<PermissionActivity> {
-                    putExtra(PermissionActivity.KEY_RATIONALE, rationale)
-                    putExtra(PermissionActivity.KEY_INPUT_REQUEST_TYPE, TYPE_REQUEST_PERMISSION)
-                    putExtra(PermissionActivity.KEY_INPUT_PERMISSIONS_CODE, requestCode)
-                    putExtra(PermissionActivity.KEY_INPUT_PERMISSIONS, deniedPermissions)
-                }
+        } else if (deniedPermissions.contains(Permissions.POST_NOTIFICATIONS)) {
+            toNotificationSetting(deniedPermissions)
+        } else if (deniedPermissions.contains(Permissions.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)) {
+            toIgnoreBatterySetting(deniedPermissions)
+        } else if (deniedPermissions.isNotEmpty()) {
+            appCtx.startActivity<PermissionActivity> {
+                putExtra(PermissionActivity.KEY_RATIONALE, rationale)
+                putExtra(PermissionActivity.KEY_INPUT_REQUEST_TYPE, TYPE_REQUEST_PERMISSION)
+                putExtra(PermissionActivity.KEY_INPUT_PERMISSIONS_CODE, requestCode)
+                putExtra(PermissionActivity.KEY_INPUT_PERMISSIONS, deniedPermissions)
             }
         }
     }
@@ -115,18 +109,14 @@ internal class Request : OnRequestPermissionsResultCallback {
                 }
 
                 Permissions.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        if (!powerManager.isIgnoringBatteryOptimizations(appCtx.packageName)) {
-                            deniedPermissionList.add(permission)
-                        }
+                    if (!powerManager.isIgnoringBatteryOptimizations(appCtx.packageName)) {
+                        deniedPermissionList.add(permission)
                     }
                 }
 
                 Permissions.SYSTEM_ALERT_WINDOW -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        if (!Settings.canDrawOverlays(appCtx)) {
-                            deniedPermissionList.add(permission)
-                        }
+                    if (!Settings.canDrawOverlays(appCtx)) {
+                        deniedPermissionList.add(permission)
                     }
                 }
 

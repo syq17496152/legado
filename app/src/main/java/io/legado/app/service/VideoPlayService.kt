@@ -184,12 +184,10 @@ class VideoPlayService : BaseService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (!Settings.canDrawOverlays(this)) {
-                checkFloatPermission()
-                stopSelf()
-                return START_NOT_STICKY
-            }
+        if (!Settings.canDrawOverlays(this)) {
+            checkFloatPermission()
+            stopSelf()
+            return START_NOT_STICKY
         }
         if (intent == null) return START_NOT_STICKY
         intent.action?.let { action ->
@@ -216,12 +214,14 @@ class VideoPlayService : BaseService() {
             val bookUrl = intent.getStringExtra("bookUrl")
             val record = intent.getStringExtra("record")
             VideoPlay.inBookshelf = intent.getBooleanExtra("inBookshelf", true)
-            if (!VideoPlay.initSource(sourceKey, sourceType, bookUrl, record)) {
-                stopSelf()
-                return START_NOT_STICKY
+            lifecycleScope.launch {
+                if (!VideoPlay.initSource(sourceKey, sourceType, bookUrl, record)) {
+                    stopSelf()
+                    return@launch
+                }
+                VideoPlay.startPlay(playerView)
+                VideoPlay.saveRead()
             }
-            VideoPlay.startPlay(playerView)
-            VideoPlay.saveRead()
         } else {
             VideoPlay.clonePlayState(playerView)
             playerView.setSurfaceToPlay()

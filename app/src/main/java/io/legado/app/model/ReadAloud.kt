@@ -17,6 +17,8 @@ import io.legado.app.utils.StringUtils
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.startForegroundServiceCompat
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 import splitties.init.appCtx
 
 object ReadAloud {
@@ -30,7 +32,7 @@ object ReadAloud {
             return TTSReadAloudService::class.java
         }
         if (StringUtils.isNumeric(ttsEngine)) {
-            httpTTS = appDb.httpTTSDao.get(ttsEngine.toLong())
+            httpTTS = runBlocking(IO) { appDb.httpTTSDao.get(ttsEngine.toLong()) }
             if (httpTTS != null) {
                 return HttpReadAloudService::class.java
             }

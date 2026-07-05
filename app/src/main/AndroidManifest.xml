@@ -311,6 +311,7 @@
         <activity
             android:name=".ui.browser.WebViewActivity"
             android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout"
+            android:hardwareAccelerated="true"
             android:launchMode="standard" />
         <!-- 书源登录 -->
         <activity

@@ -1,12 +1,10 @@
 package io.legado.app.utils
 
-import android.annotation.SuppressLint
-import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.os.Build
 import cn.hutool.core.lang.Validator
 import io.legado.app.constant.AppLog
 import io.legado.app.help.config.AppConfig
+// okhttp3.internal API，升级 OkHttp 时需验证兼容性（无公共 API 替代）
 import okhttp3.internal.publicsuffix.PublicSuffixDatabase
 import splitties.systemservices.connectivityManager
 import java.net.InetAddress
@@ -22,35 +20,20 @@ object NetworkUtils {
     /**
      * 判断是否联网
      */
-    @SuppressLint("ObsoleteSdkInt")
     @Suppress("DEPRECATION")
     fun isAvailable(): Boolean {
-        if (Build.VERSION.SDK_INT < 23) {
-            val mWiFiNetworkInfo = connectivityManager.activeNetworkInfo
-            if (mWiFiNetworkInfo != null) {
+        val network = connectivityManager.activeNetwork
+        if (network != null) {
+            val nc = connectivityManager.getNetworkCapabilities(network)
+            if (nc != null) {
                 // WIFI
-                return mWiFiNetworkInfo.type == ConnectivityManager.TYPE_WIFI ||
+                return nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
                         // 移动数据
-                        mWiFiNetworkInfo.type == ConnectivityManager.TYPE_MOBILE ||
+                        nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
                         // 以太网
-                        mWiFiNetworkInfo.type == ConnectivityManager.TYPE_ETHERNET ||
+                        nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
                         // VPN
-                        mWiFiNetworkInfo.type == ConnectivityManager.TYPE_VPN
-            }
-        } else {
-            val network = connectivityManager.activeNetwork
-            if (network != null) {
-                val nc = connectivityManager.getNetworkCapabilities(network)
-                if (nc != null) {
-                    // WIFI
-                    return nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                            // 移动数据
-                            nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                            // 以太网
-                            nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
-                            // VPN
-                            nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-                }
+                        nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
             }
         }
         return false

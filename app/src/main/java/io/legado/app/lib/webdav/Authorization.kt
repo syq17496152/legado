@@ -2,6 +2,8 @@ package io.legado.app.lib.webdav
 
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Server.WebDavConfig
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 import okhttp3.Credentials
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
@@ -23,7 +25,7 @@ data class Authorization(
     }
 
     constructor(serverID: Long) : this(
-        appDb.serverDao.get(serverID)?.getWebDavConfig()
+        runBlocking(IO) { appDb.serverDao.get(serverID) }?.getWebDavConfig()
             ?: throw WebDavException("Unexpected WebDav Authorization")
     )
 

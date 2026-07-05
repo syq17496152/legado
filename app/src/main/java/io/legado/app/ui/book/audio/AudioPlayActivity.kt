@@ -1,7 +1,6 @@
 package io.legado.app.ui.book.audio
 
 import android.annotation.SuppressLint
-import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.Menu
@@ -63,7 +62,6 @@ import io.legado.app.utils.gone
 /**
  * 音频播放
  */
-@SuppressLint("ObsoleteSdkInt")
 class AudioPlayActivity :
     VMBaseActivity<ActivityAudioPlayBinding, AudioPlayViewModel>(toolBarTheme = Theme.Dark),
     ChangeBookSourceDialog.CallBack,
@@ -206,11 +204,6 @@ class AudioPlayActivity :
                 AudioPlay.adjustProgress(seekBar.progress)
             }
         })
-        /* 低于安卓6不显示调速按钮 */
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            binding.ivSpeedControl.invisible()
-        }
-        
         binding.ivSpeedControl.setOnClickListener {
             speedControlPopup.showAsDropDown(it, 0, (-100).dpToPx(), Gravity.TOP)
         }

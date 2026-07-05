@@ -57,6 +57,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import splitties.views.onLongClick
 import java.util.concurrent.ConcurrentHashMap
@@ -136,7 +137,7 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
         kotlin.runCatching {
             recyclerFlexbox(flexbox)
             flexbox.visible()
-            val source by lazy { appDb.bookSourceDao.getBookSource(sourceUrl) }
+            val source by lazy { runBlocking(IO) { appDb.bookSourceDao.getBookSource(sourceUrl) } }
             val infoMap by lazy {
                 exploreInfoMapList[sourceUrl] ?:  InfoMap(sourceUrl).also {
                     exploreInfoMapList.put(sourceUrl, it)

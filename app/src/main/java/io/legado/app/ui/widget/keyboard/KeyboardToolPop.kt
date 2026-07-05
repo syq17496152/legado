@@ -3,7 +3,6 @@ package io.legado.app.ui.widget.keyboard
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Rect
-import android.os.Build
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -108,22 +107,20 @@ class KeyboardToolPop(
                 }
             }
         }
-        // 安卓6以上支持撤销重做
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            adapter.addHeaderView {
-                ItemFilletTextBinding.inflate(context.layoutInflater, it, false).apply {
-                    textView.text = "↩\uFE0F"
-                    root.setOnClickListener {
-                        callBack.onUndoClicked()
-                    }
+        // 撤销重做
+        adapter.addHeaderView {
+            ItemFilletTextBinding.inflate(context.layoutInflater, it, false).apply {
+                textView.text = "↩\uFE0F"
+                root.setOnClickListener {
+                    callBack.onUndoClicked()
                 }
             }
-            adapter.addHeaderView {
-                ItemFilletTextBinding.inflate(context.layoutInflater, it, false).apply {
-                    textView.text = "↪\uFE0F"
-                    root.setOnClickListener {
-                        callBack.onRedoClicked()
-                    }
+        }
+        adapter.addHeaderView {
+            ItemFilletTextBinding.inflate(context.layoutInflater, it, false).apply {
+                textView.text = "↪\uFE0F"
+                root.setOnClickListener {
+                    callBack.onRedoClicked()
                 }
             }
         }
