@@ -26,8 +26,10 @@ import io.legado.app.utils.cnCompare
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.stackTraceStr
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import java.io.File
 import java.util.WeakHashMap
@@ -45,7 +47,7 @@ object BookController {
      */
     val bookshelf: ReturnData
         get() {
-            val books = appDb.bookDao.all
+            val books = runBlocking(IO) { appDb.bookDao.all }
             val returnData = ReturnData()
             return if (books.isEmpty()) {
                 returnData.setErrorMsg("还没有添加小说")
@@ -104,9 +106,9 @@ object BookController {
             ?: return returnData.setErrorMsg("图片链接为空")
         val width = parameters["width"]?.firstOrNull()?.toInt() ?: 640
         if (this.bookUrl != bookUrl) {
-            this.book = appDb.bookDao.getBook(bookUrl)
+            this.book = runBlocking(IO) { appDb.bookDao.getBook(bookUrl) }
                 ?: return returnData.setErrorMsg("bookUrl不对")
-            this.bookSource = appDb.bookSourceDao.getBookSource(book.origin)
+            this.bookSource = runBlocking(IO) { appDb.bookSourceDao.getBookSource(book.origin) }
         }
         this.bookUrl = bookUrl
         val bitmap = runBlocking {
@@ -126,16 +128,18 @@ object BookController {
             if (bookUrl.isNullOrEmpty()) {
                 return returnData.setErrorMsg("参数url不能为空，请指定书籍地址")
             }
-            val book = appDb.bookDao.getBook(bookUrl)
+            val book = runBlocking(IO) { appDb.bookDao.getBook(bookUrl) }
                 ?: return returnData.setErrorMsg("未在数据库找到对应书籍，请先添加")
             if (book.isLocal) {
                 val toc = LocalBook.getChapterList(book)
-                appDb.bookChapterDao.delByBook(book.bookUrl)
-                appDb.bookChapterDao.insert(*toc.toTypedArray())
-                appDb.bookDao.update(book)
+                runBlocking(IO) {
+                    appDb.bookChapterDao.delByBook(book.bookUrl)
+                    appDb.bookChapterDao.insert(*toc.toTypedArray())
+                    appDb.bookDao.update(book)
+                }
                 return returnData.setData(toc)
             } else {
-                val bookSource = appDb.bookSourceDao.getBookSource(book.origin)
+                val bookSource = runBlocking(IO) { appDb.bookSourceDao.getBookSource(book.origin) }
                     ?: return returnData.setErrorMsg("未找到对应书源,请换源")
                 val toc = runBlocking {
                     if (book.tocUrl.isBlank()) {
@@ -143,9 +147,11 @@ object BookController {
                     }
                     WebBook.getChapterListAwait(bookSource, book).getOrThrow()
                 }
-                appDb.bookChapterDao.delByBook(book.bookUrl)
-                appDb.bookChapterDao.insert(*toc.toTypedArray())
-                appDb.bookDao.update(book)
+                runBlocking(IO) {
+                    appDb.bookChapterDao.delByBook(book.bookUrl)
+                    appDb.bookChapterDao.insert(*toc.toTypedArray())
+                    appDb.bookDao.update(book)
+                }
                 return returnData.setData(toc)
             }
         } catch (e: Exception) {
@@ -162,7 +168,7 @@ object BookController {
         if (bookUrl.isNullOrEmpty()) {
             return returnData.setErrorMsg("参数url不能为空，请指定书籍地址")
         }
-        val chapterList = appDb.bookChapterDao.getChapterList(bookUrl)
+        val chapterList = runBlocking(IO) { appDb.bookChapterDao.getChapterList(bookUrl) }
         if (chapterList.isEmpty()) {
             return refreshToc(parameters)
         }
@@ -182,8 +188,8 @@ object BookController {
         if (index == null) {
             return returnData.setErrorMsg("参数index不能为空, 请指定目录序号")
         }
-        val book = appDb.bookDao.getBook(bookUrl)
-        val chapter = runBlocking {
+        val book = runBlocking(IO) { appDb.bookDao.getBook(bookUrl) }
+        val chapter = runBlocking(IO) {
             var chapter = appDb.bookChapterDao.getChapter(bookUrl, index)
             var wait = 0
             while (chapter == null && wait < 30) {
@@ -205,7 +211,7 @@ object BookController {
             }
             return returnData.setData(content)
         }
-        val bookSource = appDb.bookSourceDao.getBookSource(book.origin)
+        val bookSource = runBlocking(IO) { appDb.bookSourceDao.getBookSource(book.origin) }
             ?: return returnData.setErrorMsg("未找到书源")
         try {
             content = runBlocking {
@@ -255,7 +261,7 @@ object BookController {
         GSON.fromJsonObject<BookProgress>(postData)
             .onFailure { it.printOnDebug() }
             .getOrNull()?.let { bookProgress ->
-                appDb.bookDao.getBook(bookProgress.name, bookProgress.author)?.let { book ->
+                withContext(IO) { appDb.bookDao.getBook(bookProgress.name, bookProgress.author) }?.let { book ->
                     book.durChapterIndex = bookProgress.durChapterIndex
                     book.durChapterPos = bookProgress.durChapterPos
                     book.durChapterTitle = bookProgress.durChapterTitle
@@ -263,7 +269,7 @@ object BookController {
                     AppWebDav.uploadBookProgress(bookProgress) {
                         book.syncTime = System.currentTimeMillis()
                     }
-                    appDb.bookDao.update(book)
+                    withContext(IO) { appDb.bookDao.update(book) }
                     ReadBook.book?.let {
                         if (it.name == bookProgress.name &&
                             it.author == bookProgress.author

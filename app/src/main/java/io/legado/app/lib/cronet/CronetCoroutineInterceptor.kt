@@ -1,15 +1,14 @@
 package io.legado.app.lib.cronet
 
 import androidx.annotation.Keep
+import io.legado.app.help.http.CookieManager
+import io.legado.app.help.http.CookieManager.cookieJarHeader
 import io.legado.app.utils.printOnDebug
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import okhttp3.Call
-import okhttp3.Cookie
 import okhttp3.CookieJar
-import okhttp3.Headers
-import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
@@ -23,6 +22,10 @@ import kotlin.coroutines.resumeWithException
 @Suppress("unused")
 class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor {
 
+    companion object {
+        private const val TAG = "CronetCookie"
+    }
+
     override fun intercept(chain: Interceptor.Chain): Response {
         if (chain.call().isCanceled()) {
             throw IOException("Canceled")
@@ -32,30 +35,57 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
         return if (!CronetLoader.install() || cronetEngine == null) {
             chain.proceed(original)
         } else try {
+            val enableCookieJar = original.header(cookieJarHeader) != null
             val builder: Request.Builder = original.newBuilder()
             //移除Keep-Alive,手动设置会导致400 BadRequest
             builder.removeHeader("Keep-Alive")
             builder.removeHeader("Accept-Encoding")
-            if (cookieJar != CookieJar.NO_COOKIES) {
-                val cookieStr = getCookie(original.url)
-                //设置Cookie
-                if (cookieStr.length > 3) {
-                    builder.addHeader("Cookie", cookieStr)
-                }
-            }
 
-            val newReq = builder.build()
-            val timeout = chain.call().timeout().timeoutNanos() / 1000000
-            runBlocking() {
-                if (timeout > 0) {
-                    withTimeout(timeout) {
+            if (enableCookieJar) {
+                // 使用 CookieManager 体系加载 Cookie（与 WebView 登录保存的 Cookie 一致）
+                // 注意：不在此处移除 cookieJarHeader，由 AbsCallBack.init() 移除并处理响应 Cookie
+                val requestWithCookie = CookieManager.loadRequest(builder.build())
+                android.util.Log.e(TAG, "intercept: url=${original.url}, enableCookieJar=true, cookie=${requestWithCookie.header("Cookie")?.take(80)}")
+                val newBuilder = requestWithCookie.newBuilder()
+                // loadRequest 不会移除 cookieJarHeader，确保 AbsCallBack 能检测到
+                newBuilder.removeHeader("Keep-Alive")
+                newBuilder.removeHeader("Accept-Encoding")
+
+                val newReq = newBuilder.build()
+                val timeout = chain.call().timeout().timeoutNanos() / 1000000
+                runBlocking {
+                    if (timeout > 0) {
+                        withTimeout(timeout) {
+                            proceedWithCronet(newReq, chain.call(), chain.readTimeoutMillis())
+                        }
+                    } else {
+                        proceedWithCronet(newReq, chain.call(), chain.readTimeoutMillis())
+                    }
+                }
+                // AbsCallBack 已在 onResponseStarted/onRedirectReceived 中调用 CookieManager.saveResponse()
+                // 无需在此处重复保存
+            } else {
+                // 未启用 CookieJar 的请求，保持原有行为（从 CookieJar 读取）
+                if (cookieJar != CookieJar.NO_COOKIES) {
+                    val cookieStr = getCookieFromJar(original.url)
+                    if (cookieStr.length > 3) {
+                        builder.addHeader("Cookie", cookieStr)
+                    }
+                }
+
+                val newReq = builder.build()
+                val timeout = chain.call().timeout().timeoutNanos() / 1000000
+                runBlocking {
+                    if (timeout > 0) {
+                        withTimeout(timeout) {
+                            proceedWithCronet(newReq, chain.call(), chain.readTimeoutMillis()).also { response ->
+                                receiveCookies(cookieJar, newReq.url, response.headers)
+                            }
+                        }
+                    } else {
                         proceedWithCronet(newReq, chain.call(), chain.readTimeoutMillis()).also { response ->
                             receiveCookies(cookieJar, newReq.url, response.headers)
                         }
-                    }
-                } else {
-                    proceedWithCronet(newReq, chain.call(), chain.readTimeoutMillis()).also { response ->
-                        receiveCookies(cookieJar, newReq.url, response.headers)
                     }
                 }
             }
@@ -83,9 +113,6 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
 
             val callBack = object : AbsCallBack(request, call, readTimeoutMillis) {
                 override fun waitForDone(urlRequest: UrlRequest): Response {
-                    // CronetCoroutineInterceptor uses suspendCancellableCoroutine pattern
-                    // instead of the blocking waitForDone pattern used by OldCallback/NewCallBack.
-                    // This method should never be called in this code path.
                     throw UnsupportedOperationException(
                         "waitForDone is not used in CronetCoroutineInterceptor; " +
                         "use proceedWithCronet's suspendCancellableCoroutine pattern instead."
@@ -117,8 +144,8 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
         }
 
 
-    /** Returns a 'Cookie' HTTP request header with all cookies, like `a=b; c=d`. */
-    private fun getCookie(url: HttpUrl): String = buildString {
+    /** 从 CookieJar 读取 Cookie（仅用于未启用 cookieJarHeader 的请求） */
+    private fun getCookieFromJar(url: okhttp3.HttpUrl): String = buildString {
         val cookies = cookieJar.loadForRequest(url)
         cookies.forEachIndexed { index, cookie ->
             if (index > 0) append("; ")
@@ -127,10 +154,11 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
     }
 
     /**
-     * 从响应头解析 Set-Cookie 并存入 CookieJar（替代 okhttp3.internal.http.receiveHeaders）
+     * 从响应头解析 Set-Cookie 并存入 CookieJar（仅用于未启用 cookieJarHeader 的请求）
+     * 替代 okhttp3.internal.http.receiveHeaders
      */
-    private fun receiveCookies(cookieJar: CookieJar, url: HttpUrl, headers: Headers) {
-        val cookies = headers.values("Set-Cookie").mapNotNull { Cookie.parse(url, it) }
+    private fun receiveCookies(cookieJar: CookieJar, url: okhttp3.HttpUrl, headers: okhttp3.Headers) {
+        val cookies = headers.values("Set-Cookie").mapNotNull { okhttp3.Cookie.parse(url, it) }
         cookieJar.saveFromResponse(url, cookies)
     }
 }

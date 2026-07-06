@@ -22,6 +22,8 @@ import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.replace
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import splitties.init.appCtx
@@ -86,7 +88,9 @@ data class BookChapter(
     }
 
     fun update() {
-        appDb.bookChapterDao.update(this)
+        runBlocking(IO) {
+            appDb.bookChapterDao.update(this@BookChapter)
+        }
     }
 
     @Ignore
@@ -155,7 +159,9 @@ data class BookChapter(
                         }
                     } catch (_: RegexTimeoutException) {
                         item.isEnabled = false
-                        appDb.replaceRuleDao.update(item)
+                        runBlocking(IO) {
+                            appDb.replaceRuleDao.update(item)
+                        }
                     } catch (_: CancellationException) {
                         return@run
                     } catch (e: Exception) {

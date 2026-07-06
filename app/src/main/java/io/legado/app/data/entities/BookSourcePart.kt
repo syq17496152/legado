@@ -5,6 +5,8 @@ import androidx.room.DatabaseView
 import io.legado.app.constant.AppPattern
 import io.legado.app.data.appDb
 import io.legado.app.utils.splitNotBlank
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 
 
 @DatabaseView(
@@ -60,7 +62,7 @@ data class BookSourcePart(
     }
 
     fun getBookSource(): BookSource? {
-        return appDb.bookSourceDao.getBookSource(bookSourceUrl)
+        return runBlocking(IO) { appDb.bookSourceDao.getBookSource(bookSourceUrl) }
     }
 
     fun addGroup(groups: String) {

@@ -281,7 +281,7 @@ dependencies {
     //Glide
     implementation(libs.glide.glide)
     implementation(libs.glide.okhttp)
-    kapt(libs.glide.ksp)
+    kapt(libs.glide.compiler)
 
     //Svg
     implementation(libs.androidsvg)

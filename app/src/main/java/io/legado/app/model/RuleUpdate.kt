@@ -14,6 +14,8 @@ import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 
 object RuleUpdate {
@@ -31,7 +33,7 @@ object RuleUpdate {
             return false
         } else {
             ruleSub.update = System.currentTimeMillis()
-            appDb.ruleSubDao.update(ruleSub)
+            withContext(IO) { appDb.ruleSubDao.update(ruleSub) }
         }
         var upRules = false
         okHttpClient.newCallResponseBody {
@@ -49,7 +51,7 @@ object RuleUpdate {
                         throw NoStackTraceException("不是书源")
                     }
                     lists.forEach { list ->
-                        val localSource = appDb.bookSourceDao.getBookSourcePart(list.bookSourceUrl)
+                        val localSource = withContext(IO) { appDb.bookSourceDao.getBookSourcePart(list.bookSourceUrl) }
                         if (localSource == null || localSource.lastUpdateTime < list.lastUpdateTime) {
                             if (silentUpdate) {
                                 if (localSource != null) {
@@ -71,7 +73,7 @@ object RuleUpdate {
                         throw NoStackTraceException("不是订阅源")
                     }
                     lists.forEach { list ->
-                        val localSource = appDb.rssSourceDao.getByKey(list.sourceUrl)
+                        val localSource = withContext(IO) { appDb.rssSourceDao.getByKey(list.sourceUrl) }
                         if (localSource == null || localSource.lastUpdateTime < list.lastUpdateTime) {
                             if (silentUpdate) {
                                 if (localSource != null) {
@@ -88,10 +90,10 @@ object RuleUpdate {
                 }
                 2 -> GSON.fromJsonArray<ReplaceRule>(it).getOrThrow().let { lists ->
                     lists.forEach { list ->
-                        val oldRule = appDb.replaceRuleDao.findById(list.id)
+                        val oldRule = withContext(IO) { appDb.replaceRuleDao.findById(list.id) }
                         if (oldRule == null || list.pattern != oldRule.pattern || list.replacement != oldRule.replacement) {
                             if (silentUpdate) {
-                                appDb.replaceRuleDao.insert(list)
+                                withContext(IO) { appDb.replaceRuleDao.insert(list) }
                                 upRules = true
                             }
                             else {

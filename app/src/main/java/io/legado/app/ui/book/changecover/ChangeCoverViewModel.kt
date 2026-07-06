@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.Collections
 import java.util.concurrent.Executors
@@ -177,7 +178,9 @@ class ChangeCoverViewModel(application: Application) : BaseViewModel(application
         if (searchBook.name == name && searchBook.author == author
             && !searchBook.coverUrl.isNullOrEmpty()
         ) {
-            appDb.searchBookDao.insert(searchBook)
+            withContext(IO) {
+                appDb.searchBookDao.insert(searchBook)
+            }
             searchSuccess?.invoke(searchBook)
         }
     }

@@ -302,6 +302,19 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     }
 
     override fun finish() {
+        if (viewModel.sourceVerificationEnable) {
+            // 验证模式下，确保先保存验证结果再关闭
+            // 根因：返回键等路径直接调用 finish() 绕过了 saveVerificationResult，
+            // 导致 checkResult 发现无结果时设置空 Pair("", "") → "验证结果为空"
+            // 检查是否已有结果，无结果则先执行保存
+            if (SourceVerificationHelp.getResult(viewModel.sourceOrigin) == null) {
+                viewModel.saveVerificationResult(currentWebView) {
+                    SourceVerificationHelp.checkResult(viewModel.sourceOrigin)
+                    super.finish()
+                }
+                return
+            }
+        }
         SourceVerificationHelp.checkResult(viewModel.sourceOrigin)
         super.finish()
     }
@@ -454,8 +467,13 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
             val cookieManager = CookieManager.getInstance()
+            // 异步保存 WebView Cookie，避免 runBlocking(IO) 阻塞主线程
+            // CookieStore.setCookie 已有空值保护，不会用 null 覆盖有效 Cookie
             url?.let {
-                CookieStore.setCookie(it, cookieManager.getCookie(it))
+                val webViewCookie = cookieManager.getCookie(it)
+                if (!webViewCookie.isNullOrEmpty()) {
+                    CookieStore.setCookie(it, webViewCookie)
+                }
             }
             view?.title?.let { title ->
                 if (title != url && title != view.url && title.isNotBlank()) {

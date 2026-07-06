@@ -28,8 +28,10 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.startService
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.runBlocking
 import splitties.init.appCtx
 import kotlin.text.trim
 
@@ -85,7 +87,7 @@ object AudioPlay : CoroutineScope by MainScope() {
 
     fun upData(book: Book) {
         AudioPlay.book = book
-        chapterSize = appDb.bookChapterDao.getChapterCount(book.bookUrl)
+        chapterSize = runBlocking(IO) { appDb.bookChapterDao.getChapterCount(book.bookUrl) }
         simulatedChapterSize = if (book.readSimulating()) {
             book.simulatedTotalChapterNum()
         } else {
@@ -106,8 +108,8 @@ object AudioPlay : CoroutineScope by MainScope() {
         stop()
         AudioPlay.book = book
         readRecord.bookName = book.name
-        readRecord.readTime = appDb.readRecordDao.getReadTime(book.name) ?: 0
-        chapterSize = appDb.bookChapterDao.getChapterCount(book.bookUrl)
+        readRecord.readTime = runBlocking(IO) { appDb.readRecordDao.getReadTime(book.name) } ?: 0
+        chapterSize = runBlocking(IO) { appDb.bookChapterDao.getChapterCount(book.bookUrl) }
         simulatedChapterSize = if (book.readSimulating()) {
             book.simulatedTotalChapterNum()
         } else {
@@ -139,7 +141,7 @@ object AudioPlay : CoroutineScope by MainScope() {
             readRecord.readTime = readRecord.readTime + System.currentTimeMillis() - readStartTime
             readStartTime = System.currentTimeMillis()
             readRecord.lastRead = System.currentTimeMillis()
-            appDb.readRecordDao.insert(readRecord)
+            runBlocking(IO) { appDb.readRecordDao.insert(readRecord) }
         }
     }
 
@@ -252,7 +254,7 @@ object AudioPlay : CoroutineScope by MainScope() {
      */
     fun upDurChapter() {
         val book = book ?: return
-        durChapter = appDb.bookChapterDao.getChapter(book.bookUrl, durChapterIndex)
+        durChapter = runBlocking(IO) { appDb.bookChapterDao.getChapter(book.bookUrl, durChapterIndex) }
         durAudioSize = durChapter?.end?.toInt() ?: 0
         val title = durChapter?.title ?: appCtx.getString(R.string.data_loading)
         postEvent(EventBus.AUDIO_SUB_TITLE, title)
@@ -408,7 +410,7 @@ object AudioPlay : CoroutineScope by MainScope() {
 
     fun saveRead(first: Boolean = false) {
         val book = book ?: return
-        Coroutine.async {
+        Coroutine.async(executeContext = IO) {
             book.lastCheckCount = 0
             val durTime = System.currentTimeMillis()
             book.durChapterTime = durTime
@@ -434,7 +436,7 @@ object AudioPlay : CoroutineScope by MainScope() {
      */
     fun saveDurChapter(audioSize: Long) {
         val chapter = durChapter ?: return
-        Coroutine.async {
+        Coroutine.async(executeContext = IO) {
             durAudioSize = audioSize.toInt()
             chapter.end = audioSize
             chapter.update()

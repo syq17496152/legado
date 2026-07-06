@@ -16,8 +16,6 @@ import io.legado.app.help.http.api.CookieManagerInterface
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.removeCookie
 import io.legado.app.utils.splitNotBlank
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.runBlocking
 
 @Keep
 object CookieStore : CookieManagerInterface {
@@ -28,9 +26,16 @@ object CookieStore : CookieManagerInterface {
     override fun setCookie(url: String, cookie: String?) {
         try {
             val domain = NetworkUtils.getSubDomain(url)
-            CacheManager.putMemory("${domain}_cookie", cookie ?: "")
-            val cookieBean = Cookie(domain, cookie ?: "")
-            runBlocking(IO) { appDb.cookieDao.insert(cookieBean) }
+            // 空值保护：不允许用 null/空字符串覆盖已有的有效 Cookie
+            // 根因：onPageFinished 中 CookieManager.getCookie 可能返回 null，
+            // 若直接 putMemory 会覆盖网络拦截器已保存的有效 session Cookie，
+            // 导致后续 refetch 请求不带 Cookie → 服务器拒绝 → "验证结果为空"
+            if (cookie.isNullOrEmpty()) {
+                return
+            }
+            CacheManager.putMemory("${domain}_cookie", cookie)
+            val cookieBean = Cookie(domain, cookie)
+            appDb.cookieDao.insert(cookieBean)
         } catch (e: Exception) {
             AppLog.put("保存Cookie失败\n$e", e)
         }
@@ -95,7 +100,7 @@ object CookieStore : CookieManagerInterface {
 
     override fun removeCookie(url: String) {
         val domain = NetworkUtils.getSubDomain(url)
-        runBlocking(IO) { appDb.cookieDao.delete(domain) }
+        appDb.cookieDao.delete(domain)
         CacheManager.deleteMemory("${domain}_cookie")
         CacheManager.deleteMemory("${domain}_session_cookie")
         android.webkit.CookieManager.getInstance().removeCookie(url)
@@ -134,7 +139,7 @@ object CookieStore : CookieManagerInterface {
     }
 
     fun clear() {
-        runBlocking(IO) { appDb.cookieDao.deleteOkHttp() }
+        appDb.cookieDao.deleteOkHttp()
     }
 
 }

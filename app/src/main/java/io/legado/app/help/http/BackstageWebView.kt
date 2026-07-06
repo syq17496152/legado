@@ -34,6 +34,7 @@ import io.legado.app.utils.get
 import io.legado.app.utils.runOnUI
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 import okhttp3.Protocol
@@ -114,7 +115,7 @@ class BackstageWebView(
                     if (isRule) {
                         webView.addJavascriptInterface(WebCacheManager, nameCache)
                         tag?.let { key ->
-                           appDb.bookSourceDao.getBookSource(key)?.let {
+                           runBlocking(IO) { appDb.bookSourceDao.getBookSource(key) }?.let {
                                webView.webChromeClient = object : WebChromeClient() {
                                    /* 监听网页日志 */
                                    override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {

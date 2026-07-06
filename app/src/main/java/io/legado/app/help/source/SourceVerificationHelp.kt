@@ -100,7 +100,9 @@ object SourceVerificationHelp {
 
 
     fun checkResult(sourceKey: String) {
-        getResult(sourceKey) ?: setResult(sourceKey, "")
+        // 不再设置空结果降级：避免 Pair("", "") 导致 result.second.isEmpty() 崩溃
+        // 如果 saveVerificationResult 未执行，getVerificationResult 会自然超时
+        // 而不是收到一个"验证结果为空"的误导性异常
         val thread = IntentData.get<Thread>(getVerificationResultKey(sourceKey))
         LockSupport.unpark(thread)
     }

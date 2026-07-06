@@ -24,8 +24,6 @@ import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.runBlocking
 import splitties.init.appCtx
 
 object SourceHelp {
@@ -52,20 +50,16 @@ object SourceHelp {
         } else if (VideoPlay.source?.getKey() == key) {
             return VideoPlay.source
         }
-        return runBlocking(IO) {
-            appDb.bookSourceDao.getBookSource(key)
-                ?: appDb.rssSourceDao.getByKey(key)
-        }
+        return appDb.bookSourceDao.getBookSource(key)
+            ?: appDb.rssSourceDao.getByKey(key)
     }
 
     fun getSource(key: String?, @SourceType.Type type: Int): BaseSource? {
         key ?: return null
-        return runBlocking(IO) {
-            when (type) {
-                SourceType.book -> appDb.bookSourceDao.getBookSource(key)
-                SourceType.rss -> appDb.rssSourceDao.getByKey(key)
-                else -> null
-            }
+        return when (type) {
+            SourceType.book -> appDb.bookSourceDao.getBookSource(key)
+            SourceType.rss -> appDb.rssSourceDao.getByKey(key)
+            else -> null
         }
     }
 
@@ -95,10 +89,8 @@ object SourceHelp {
     }
 
     private fun deleteBookSourceInternal(key: String) {
-        runBlocking(IO) {
-            appDb.bookSourceDao.delete(key)
-            appDb.cacheDao.deleteSourceVariables(key)
-        }
+        appDb.bookSourceDao.delete(key)
+        appDb.cacheDao.deleteSourceVariables(key)
         SourceConfig.removeSource(key)
     }
 
@@ -117,11 +109,9 @@ object SourceHelp {
     }
 
     private fun deleteRssSourceInternal(key: String) {
-        runBlocking(IO) {
-            appDb.rssSourceDao.delete(key)
-            appDb.rssArticleDao.delete(key)
-            appDb.cacheDao.deleteSourceVariables(key)
-        }
+        appDb.rssSourceDao.delete(key)
+        appDb.rssArticleDao.delete(key)
+        appDb.cacheDao.deleteSourceVariables(key)
     }
 
     fun deleteRssSource(key: String) {
@@ -130,11 +120,9 @@ object SourceHelp {
     }
 
     fun enableSource(key: String, @SourceType.Type type: Int, enable: Boolean) {
-        runBlocking(IO) {
-            when (type) {
-                SourceType.book -> appDb.bookSourceDao.enable(key, enable)
-                SourceType.rss -> appDb.rssSourceDao.enable(key, enable)
-            }
+        when (type) {
+            SourceType.book -> appDb.bookSourceDao.enable(key, enable)
+            SourceType.rss -> appDb.rssSourceDao.enable(key, enable)
         }
     }
 
@@ -146,7 +134,7 @@ object SourceHelp {
             appCtx.toastOnUi("${it.sourceName}是18+网址,禁止导入.")
         }
         rssSourcesGroup[false]?.let {
-            runBlocking(IO) { appDb.rssSourceDao.insert(*it.toTypedArray()) }
+            appDb.rssSourceDao.insert(*it.toTypedArray())
         }
     }
 
@@ -158,7 +146,7 @@ object SourceHelp {
             appCtx.toastOnUi("${it.bookSourceName}是18+网址,禁止导入.")
         }
         bookSourcesGroup[false]?.let {
-            runBlocking(IO) { appDb.bookSourceDao.insert(*it.toTypedArray()) }
+            appDb.bookSourceDao.insert(*it.toTypedArray())
         }
         Coroutine.async {
             adjustSortNumber()
@@ -184,8 +172,7 @@ object SourceHelp {
      * 调整排序序号
      */
     fun adjustSortNumber() {
-        runBlocking(IO) {
-            if (
+        if (
                 appDb.bookSourceDao.maxOrder > 99999
                 || appDb.bookSourceDao.minOrder < -99999
                 || appDb.bookSourceDao.hasDuplicateOrder
@@ -196,7 +183,6 @@ object SourceHelp {
                 }
                 appDb.bookSourceDao.upOrder(sources)
             }
-        }
     }
 
     fun openVideoPlayer(source: BaseSource?, url: String, title: String, isFloat: Boolean) {

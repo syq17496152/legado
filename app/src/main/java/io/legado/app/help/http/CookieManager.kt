@@ -6,6 +6,8 @@ import io.legado.app.data.appDb
 import io.legado.app.help.CacheManager
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.splitNotBlank
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 import okhttp3.Cookie
 import okhttp3.Headers
 import okhttp3.HttpUrl
@@ -132,10 +134,10 @@ object CookieManager {
         val domain = NetworkUtils.getSubDomain(url)
         val cacheCookie = CacheManager.getFromMemory("${domain}_cookie") as? String
 
-        return if (cacheCookie != null) {
+        return if (!cacheCookie.isNullOrEmpty()) {
             cacheCookie
         } else {
-            val cookieBean = appDb.cookieDao.get(domain)
+            val cookieBean = runBlocking(IO) { appDb.cookieDao.get(domain) }
             cookieBean?.cookie ?: ""
         }
     }

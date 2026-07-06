@@ -12,6 +12,7 @@
 - 全面修复Room数据库主线程访问崩溃（20+处调用点迁移至IO线程）
 - 排除Compose运行时传递依赖，DEX体积减少21%（约15MB）
 - 清理9处已废弃的版本兼容代码，提升代码可维护性
+- 修复订阅源加密封面图片无法显示：Rhino引擎无法识别Java 8接口default方法导致decrypt(InputStream)走错路径
 - 核心质量优化：修复内存泄漏、线程安全、数据库ANR等重大问题
 - 修复 IntentData 内存泄漏：改用 ConcurrentHashMap + TTL 自动清理 + Activity 作用域关联
 - 修复 ReadBook.callBack 泄漏：改用 WeakReference 防止 Activity 无法回收

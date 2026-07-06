@@ -36,6 +36,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import org.apache.commons.text.similarity.JaccardSimilarity
@@ -132,7 +133,7 @@ object BookHelp {
         //向前保留设定数量，向后保留预下载数量
         val startIndex = book.durChapterIndex - AppConfig.imageRetainNum
         val endIndex = book.durChapterIndex + AppConfig.preDownloadNum
-        val chapterList = appDb.bookChapterDao.getChapterList(book.bookUrl, startIndex, endIndex)
+        val chapterList = runBlocking(IO) { appDb.bookChapterDao.getChapterList(book.bookUrl, startIndex, endIndex) }
         val imgNames = hashSetOf<String>()
         //获取需要保留章节的图片信息
         chapterList.forEach {
@@ -188,7 +189,9 @@ object BookHelp {
         if (book.isOnLineTxt && AppConfig.tocCountWords) {
             val wordCount = StringUtils.wordCountFormat(content.length)
             bookChapter.wordCount = wordCount
-            appDb.bookChapterDao.upWordCount(bookChapter.bookUrl, bookChapter.url, wordCount)
+            runBlocking(IO) {
+                appDb.bookChapterDao.upWordCount(bookChapter.bookUrl, bookChapter.url, wordCount)
+            }
         }
     }
 

@@ -28,9 +28,11 @@ import io.legado.app.utils.isJson
 import io.legado.app.utils.normalizeFileName
 import io.legado.app.utils.removePref
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import java.io.File
 
@@ -311,7 +313,7 @@ object AppWebDav {
         bookProgressFiles.forEach {
             map[it.displayName] = it
         }
-        appDb.bookDao.all.forEach { book ->
+        withContext(IO) { appDb.bookDao.all }.forEach { book ->
             val progressFileName = getProgressFileName(book.name, book.author)
             val webDavFile = map[progressFileName]
             webDavFile ?: return@forEach
@@ -329,7 +331,7 @@ object AppWebDav {
                     book.durChapterTitle = bookProgress.durChapterTitle
                     book.durChapterTime = bookProgress.durChapterTime
                     book.syncTime = System.currentTimeMillis()
-                    appDb.bookDao.update(book)
+                    withContext(IO) { appDb.bookDao.update(book) }
                 }
             }
         }

@@ -50,6 +50,7 @@ import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.isJsonArray
 import io.legado.app.utils.openInputStream
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -114,26 +115,26 @@ object Restore {
                 if (ignoreLocalBook && book.isLocal) {
                     return@forEach
                 }
-                if (appDb.bookDao.has(book.bookUrl)) {
+                if (withContext(IO) { appDb.bookDao.has(book.bookUrl) }) {
                     try {
-                        appDb.bookDao.update(book)
+                        withContext(IO) { appDb.bookDao.update(book) }
                     } catch (_: SQLiteConstraintException) {
-                        appDb.bookDao.insert(book)
+                        withContext(IO) { appDb.bookDao.insert(book) }
                     }
                 } else {
                     newBooks.add(book)
                 }
             }
-            appDb.bookDao.insert(*newBooks.toTypedArray())
+            withContext(IO) { appDb.bookDao.insert(*newBooks.toTypedArray()) }
         }
         fileToListT<Bookmark>(path, "bookmark.json")?.let {
-            appDb.bookmarkDao.insert(*it.toTypedArray())
+            withContext(IO) { appDb.bookmarkDao.insert(*it.toTypedArray()) }
         }
         fileToListT<BookGroup>(path, "bookGroup.json")?.let {
-            appDb.bookGroupDao.insert(*it.toTypedArray())
+            withContext(IO) { appDb.bookGroupDao.insert(*it.toTypedArray()) }
         }
         fileToListT<BookSource>(path, "bookSource.json")?.let {
-            appDb.bookSourceDao.insert(*it.toTypedArray())
+            withContext(IO) { appDb.bookSourceDao.insert(*it.toTypedArray()) }
         } ?: run {
             val bookSourceFile = File(path, "bookSource.json")
             if (bookSourceFile.exists()) {
@@ -142,43 +143,44 @@ object Restore {
             }
         }
         fileToListT<RssSource>(path, "rssSources.json")?.let {
-            appDb.rssSourceDao.insert(*it.toTypedArray())
+            withContext(IO) { appDb.rssSourceDao.insert(*it.toTypedArray()) }
         }
         fileToListT<RssStar>(path, "rssStar.json")?.let {
-            appDb.rssStarDao.insert(*it.toTypedArray())
+            withContext(IO) { appDb.rssStarDao.insert(*it.toTypedArray()) }
         }
         fileToListT<ReplaceRule>(path, "replaceRule.json")?.let {
-            appDb.replaceRuleDao.insert(*it.toTypedArray())
+            withContext(IO) { appDb.replaceRuleDao.insert(*it.toTypedArray()) }
         }
         fileToListT<SearchKeyword>(path, "searchHistory.json")?.let {
-            appDb.searchKeywordDao.insert(*it.toTypedArray())
+            withContext(IO) { appDb.searchKeywordDao.insert(*it.toTypedArray()) }
         }
         fileToListT<RuleSub>(path, "sourceSub.json")?.let {
-            appDb.ruleSubDao.insert(*it.toTypedArray())
+            withContext(IO) { appDb.ruleSubDao.insert(*it.toTypedArray()) }
         }
         fileToListT<TxtTocRule>(path, "txtTocRule.json")?.let {
-            appDb.txtTocRuleDao.insert(*it.toTypedArray())
+            withContext(IO) { appDb.txtTocRuleDao.insert(*it.toTypedArray()) }
         }
         fileToListT<HttpTTS>(path, "httpTTS.json")?.let {
-            appDb.httpTTSDao.insert(*it.toTypedArray())
+            withContext(IO) { appDb.httpTTSDao.insert(*it.toTypedArray()) }
         }
         fileToListT<DictRule>(path, "dictRule.json")?.let {
-            appDb.dictRuleDao.insert(*it.toTypedArray())
+            withContext(IO) { appDb.dictRuleDao.insert(*it.toTypedArray()) }
         }
         fileToListT<KeyboardAssist>(path, "keyboardAssists.json")?.let {
-            appDb.keyboardAssistsDao.deleteAll() //先删除所有,保证和备份数据一样
-            appDb.keyboardAssistsDao.insert(*it.toTypedArray())
+            withContext(IO) { appDb.keyboardAssistsDao.deleteAll() } //先删除所有,保证和备份数据一样
+            withContext(IO) { appDb.keyboardAssistsDao.insert(*it.toTypedArray()) }
         }
         fileToListT<ReadRecord>(path, "readRecord.json")?.let {
             it.forEach { readRecord ->
                 //判断是不是本机记录
                 if (readRecord.deviceId != androidId) {
-                    appDb.readRecordDao.insert(readRecord)
+                    withContext(IO) { appDb.readRecordDao.insert(readRecord) }
                 } else {
-                    val time = appDb.readRecordDao
-                        .getReadTime(readRecord.deviceId, readRecord.bookName)
+                    val time = withContext(IO) {
+                        appDb.readRecordDao.getReadTime(readRecord.deviceId, readRecord.bookName)
+                    }
                     if (time == null || time < readRecord.readTime) {
-                        appDb.readRecordDao.insert(readRecord)
+                        withContext(IO) { appDb.readRecordDao.insert(readRecord) }
                     }
                 }
             }
@@ -191,7 +193,7 @@ object Restore {
                 json = aes.decryptStr(json)
             }
             GSON.fromJsonArray<Server>(json).getOrNull()?.let {
-                appDb.serverDao.insert(*it.toTypedArray())
+                withContext(IO) { appDb.serverDao.insert(*it.toTypedArray()) }
             }
         }?.onFailure {
             AppLog.put("恢复服务器配置出错\n${it.localizedMessage}", it)

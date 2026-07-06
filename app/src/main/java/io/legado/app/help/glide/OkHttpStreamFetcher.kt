@@ -1,5 +1,6 @@
 package io.legado.app.help.glide
 
+import android.util.Log
 import com.bumptech.glide.Priority
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.HttpException
@@ -19,6 +20,7 @@ import io.legado.app.model.ReadManga
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.utils.ImageUtils
 import io.legado.app.utils.isWifiConnect
+import io.legado.app.constant.AppLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.SupervisorJob
@@ -50,6 +52,7 @@ class OkHttpStreamFetcher(
     private var call: Call? = null
 
     companion object {
+        private const val TAG = "ImgDecrypt"
         private val failUrl = hashSetOf<String>()
     }
 
@@ -64,9 +67,13 @@ class OkHttpStreamFetcher(
             return
         }
 
-        options.get(OkHttpModelLoader.sourceOriginOption)?.let { sourceUrl ->
+        val sourceUrl = options.get(OkHttpModelLoader.sourceOriginOption)
+        if (sourceUrl != null) {
             source = SourceHelp.getSource(sourceUrl)
         }
+        // 使用 Log.e 直接输出到 logcat（不依赖 AppLog），确保诊断信息必定可见
+        Log.e(TAG, "loadData: sourceUrl=$sourceUrl, source=${source?.getKey()}, " +
+                "sourceClass=${source?.javaClass?.simpleName}, manga=$manga, url=${url.toStringUrl().take(80)}")
 
         analyzedUrl = AnalyzeUrl(
             url.toString(),
@@ -109,6 +116,7 @@ class OkHttpStreamFetcher(
     }
 
     override fun onFailure(call: Call, e: IOException) {
+        Log.e(TAG, "onFailure: url=${url.toStringUrl().take(80)}, error=${e.message}")
         callback?.onLoadFailed(e)
     }
 
@@ -121,7 +129,12 @@ class OkHttpStreamFetcher(
             callback?.onLoadFailed(HttpException(response.message, response.code))
             return
         }
-        if (ImageUtils.skipDecode(source, !manga)) {
+        val isCover = !manga
+        val needDecode = !ImageUtils.skipDecode(source, isCover)
+        Log.e(TAG, "onResponse: source=${source?.getKey()}, isCover=$isCover, " +
+                "needDecode=$needDecode, url=${analyzedUrl.toStringUrl().take(80)}")
+
+        if (!needDecode) {
             onStreamReady(responseBody!!.byteStream())
             return
         }
@@ -142,6 +155,8 @@ class OkHttpStreamFetcher(
                     )
                 }
             }
+            Log.e(TAG, "decodeResult: isNull=${decodeResult == null}, " +
+                    "url=${analyzedUrl.toStringUrl().take(60)}")
             onStreamReady(decodeResult)
         }
     }
@@ -151,6 +166,7 @@ class OkHttpStreamFetcher(
             if (!manga) {
                 failUrl.add(url.toStringUrl())
             }
+            Log.e(TAG, "onStreamReady: FAILED (null result), url=${url.toStringUrl().take(80)}")
             callback?.onLoadFailed(NoStackTraceException("封面二次解密失败"))
         } else {
             val contentLength: Long =

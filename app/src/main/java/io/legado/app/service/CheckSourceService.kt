@@ -29,6 +29,7 @@ import io.legado.app.utils.onEachParallel
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -40,6 +41,7 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.mozilla.javascript.WrappedException
 import splitties.init.appCtx
@@ -107,7 +109,7 @@ class CheckSourceService : BaseService() {
         checkJob = lifecycleScope.launch(searchCoroutine) {
             flow {
                 for (origin in ids) {
-                    appDb.bookSourceDao.getBookSource(origin)?.let {
+                    runBlocking(IO) { appDb.bookSourceDao.getBookSource(origin) }?.let {
                         emit(it)
                     }
                 }
@@ -127,7 +129,7 @@ class CheckSourceService : BaseService() {
                     originSize
                 )
                 upNotification()
-                appDb.bookSourceDao.update(it)
+                runBlocking(IO) { appDb.bookSourceDao.update(it) }
             }.onCompletion {
                 stopSelf()
             }.collect()

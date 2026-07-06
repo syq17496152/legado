@@ -7,12 +7,14 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.replace
 import io.legado.app.utils.stackTraceStr
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 
 object ReplaceRuleController {
 
     val allRules: ReturnData
         get() {
-            val rules = appDb.replaceRuleDao.all
+            val rules = runBlocking(IO) { appDb.replaceRuleDao.all }
             val returnData = ReturnData()
             returnData.setData(GSON.toJson(rules))
             return returnData
@@ -27,9 +29,9 @@ object ReplaceRuleController {
             returnData.setErrorMsg("格式不对")
         } else {
             if (rule.order == Int.MIN_VALUE) {
-                rule.order = appDb.replaceRuleDao.maxOrder + 1
+                rule.order = runBlocking(IO) { appDb.replaceRuleDao.maxOrder } + 1
             }
-            appDb.replaceRuleDao.insert(rule)
+            runBlocking(IO) { appDb.replaceRuleDao.insert(rule) }
         }
         return returnData
     }
@@ -42,7 +44,7 @@ object ReplaceRuleController {
         if (rule == null) {
             returnData.setErrorMsg("格式不对")
         } else {
-            appDb.replaceRuleDao.delete(rule)
+            runBlocking(IO) { appDb.replaceRuleDao.delete(rule) }
         }
         return returnData
     }

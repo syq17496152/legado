@@ -119,7 +119,6 @@ class WebViewModel(application: Application) : BaseViewModel(application) {
         if (refetchAfterSuccess) {
             execute {
                 val url = intent!!.getStringExtra("url")!!
-                val source = appDb.bookSourceDao.getBookSource(sourceOrigin)
                 if (html == null) {
                     html = AnalyzeUrl(
                         url,
@@ -131,6 +130,25 @@ class WebViewModel(application: Application) : BaseViewModel(application) {
                 SourceVerificationHelp.setResult(sourceOrigin, html ?: "", baseUrl)
             }.onSuccess {
                 success.invoke()
+            }.onError {
+                // 降级方案：refetch 失败时，从 WebView 直接提取 HTML
+                // 根因：CookieStore.setCookie 空值覆盖导致 refetch 不带 Cookie 被服务器拒绝
+                // 此降级确保即使 refetch 失败，也能拿到 WebView 已渲染的内容
+                if (!html.isNullOrEmpty()) {
+                    // 已有缓存的 HTML（如 initData 阶段获取的），直接使用
+                    SourceVerificationHelp.setResult(sourceOrigin, html!!, baseUrl)
+                    success.invoke()
+                } else {
+                    // 从 WebView 异步提取当前页面 HTML（onError 在主线程，evaluateJavascript 安全）
+                    webView.evaluateJavascript("document.documentElement.outerHTML") { result ->
+                        val fallbackHtml = result?.let {
+                            StringEscapeUtils.unescapeJson(it).trim('"')
+                        }?.takeIf { it.isNotEmpty() && it != "null" } ?: ""
+                        val fallbackUrl = webView.url ?: baseUrl
+                        SourceVerificationHelp.setResult(sourceOrigin, fallbackHtml, fallbackUrl)
+                        success.invoke()
+                    }
+                }
             }
         } else {
             webView.evaluateJavascript("document.documentElement.outerHTML") {

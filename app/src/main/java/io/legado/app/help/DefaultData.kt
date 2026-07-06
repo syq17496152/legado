@@ -16,6 +16,8 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.printOnDebug
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.runBlocking
 import splitties.init.appCtx
 import java.io.File
 
@@ -114,22 +116,30 @@ object DefaultData {
     }
 
     fun importDefaultHttpTTS() {
-        appDb.httpTTSDao.deleteDefault()
-        appDb.httpTTSDao.insert(*httpTTS.toTypedArray())
+        runBlocking(IO) {
+            appDb.httpTTSDao.deleteDefault()
+            appDb.httpTTSDao.insert(*httpTTS.toTypedArray())
+        }
     }
 
     fun importDefaultTocRules() {
-        appDb.txtTocRuleDao.deleteDefault()
-        appDb.txtTocRuleDao.insert(*txtTocRules.toTypedArray())
+        runBlocking(IO) {
+            appDb.txtTocRuleDao.deleteDefault()
+            appDb.txtTocRuleDao.insert(*txtTocRules.toTypedArray())
+        }
     }
 
     fun importDefaultRssSources() {
-        appDb.rssSourceDao.deleteDefault()
-        appDb.rssSourceDao.insert(*rssSources.toTypedArray())
+        runBlocking(IO) {
+            appDb.rssSourceDao.deleteDefault()
+            appDb.rssSourceDao.insert(*rssSources.toTypedArray())
+        }
     }
 
     fun importDefaultDictRules() {
-        appDb.dictRuleDao.insert(*dictRules.toTypedArray())
+        runBlocking(IO) {
+            appDb.dictRuleDao.insert(*dictRules.toTypedArray())
+        }
     }
 
     fun importDefaultThemeConfigs() {
