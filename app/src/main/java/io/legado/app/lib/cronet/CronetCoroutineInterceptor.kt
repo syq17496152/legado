@@ -45,7 +45,7 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
                 // 使用 CookieManager 体系加载 Cookie（与 WebView 登录保存的 Cookie 一致）
                 // 注意：不在此处移除 cookieJarHeader，由 AbsCallBack.init() 移除并处理响应 Cookie
                 val requestWithCookie = CookieManager.loadRequest(builder.build())
-                android.util.Log.e(TAG, "intercept: url=${original.url}, enableCookieJar=true, cookie=${requestWithCookie.header("Cookie")?.take(80)}")
+                android.util.Log.d(TAG, "intercept: url=${original.url}, enableCookieJar=true, cookie=${requestWithCookie.header("Cookie")?.take(80)}")
                 val newBuilder = requestWithCookie.newBuilder()
                 // loadRequest 不会移除 cookieJarHeader，确保 AbsCallBack 能检测到
                 newBuilder.removeHeader("Keep-Alive")

@@ -2,9 +2,8 @@ plugins {
 //    id "com.android.application"
 //    id 'org.jetbrains.kotlin.android'
 //    id 'kotlin-parcelize'
-    id 'kotlin-kapt'
-//    id 'com.google.devtools.ksp'
-//    id "com.google.gms.google-services"
+    id 'kotlin-kapt'  // Glide KSP 存在 Windows 跨盘 bug（C:\ vs F:\），暂保留 kapt
+//    id "com.google.devtools.ksp"
 
     alias libs.plugins.android.application
     alias libs.plugins.kotlin.android
@@ -61,6 +60,11 @@ android {
 
         buildConfigField "String", "Cronet_Version", "\"$CronetVersion\""
         buildConfigField "String", "Cronet_Main_Version", "\"$CronetMainVersion\""
+
+        // 仅打包主流架构，x86/x86_64 仅模拟器使用，减少 APK 体积约 5MB
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
 
         javaCompileOptions {
             annotationProcessorOptions {
@@ -281,6 +285,7 @@ dependencies {
     //Glide
     implementation(libs.glide.glide)
     implementation(libs.glide.okhttp)
+    // KSP 存在 Windows 跨盘 bug（C:\Gradle缓存 vs F:\项目），暂用 kapt
     kapt(libs.glide.compiler)
 
     //Svg

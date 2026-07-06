@@ -712,7 +712,7 @@ class AnalyzeUrl(
             */
             CookieStore.getCookie(domain)
         }
-        android.util.Log.e("CronetCookie", "AnalyzeUrl.setCookie: domain=$domain, cookie=${cookie.take(80)}, enabledCookieJar=$enabledCookieJar")
+        android.util.Log.d("CronetCookie", "AnalyzeUrl.setCookie: domain=$domain, cookie=${cookie.take(80)}, enabledCookieJar=$enabledCookieJar")
         if (cookie.isNotEmpty()) {
             mergeCookies(cookie, headerMap["Cookie"])?.let {
                 headerMap.put("Cookie", it)

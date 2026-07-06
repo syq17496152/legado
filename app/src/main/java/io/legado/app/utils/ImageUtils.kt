@@ -50,13 +50,13 @@ object ImageUtils {
         // SymmetricCryptoAndroid 显式 override 了 decrypt(InputStream)，
         // 确保 Rhino 1.8.1 能找到该方法（原接口 default method 不可见）。
         return kotlin.runCatching {
-            Log.e(TAG, "decode: src=${src.take(80)}, ruleJs=${ruleJs.take(60)}, source=${source?.getKey()}")
+            Log.d(TAG, "decode(InputStream): src=${src.take(80)}, ruleJs=${ruleJs.take(60)}, source=${source?.getKey()}")
             val bytes = source?.evalJS(ruleJs) {
                 put("book", book)
                 put("result", inputStream)
                 put("src", src)
             } as ByteArray
-            Log.e(TAG, "decode result: size=${bytes.size}, src=${src.take(60)}")
+            Log.d(TAG, "decode result: size=${bytes.size}")
             ByteArrayInputStream(bytes)
         }.onFailure {
             Log.e(TAG, "decode failed: ${it.message}", it)

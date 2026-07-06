@@ -88,14 +88,14 @@ class WebViewLoginFragment : BaseFragment(R.layout.fragment_web_view_login) {
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 val cookie = cookieManager.getCookie(url)
-                android.util.Log.e("CronetCookie", "WebViewLogin onPageStarted: url=$url, sourceKey=${source.getKey()}, cookie=${cookie?.take(80)}")
+                android.util.Log.d("CronetCookie", "WebViewLogin onPageStarted: url=$url, sourceKey=${source.getKey()}, cookie=${cookie?.take(80)}")
                 CookieStore.setCookie(source.getKey(), cookie)
                 super.onPageStarted(view, url, favicon)
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 val cookie = cookieManager.getCookie(url)
-                android.util.Log.e("CronetCookie", "WebViewLogin onPageFinished: url=$url, sourceKey=${source.getKey()}, cookie=${cookie?.take(80)}")
+                android.util.Log.d("CronetCookie", "WebViewLogin onPageFinished: url=$url, sourceKey=${source.getKey()}, cookie=${cookie?.take(80)}")
                 CookieStore.setCookie(source.getKey(), cookie)
                 if (checking) {
                     activity?.finish()

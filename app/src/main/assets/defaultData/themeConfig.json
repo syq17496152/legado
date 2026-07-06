@@ -94,5 +94,45 @@
     "accentColor": "#CE93D8",
     "backgroundColor": "#1E1E32",
     "bottomBackground": "#1E1E32"
+  },
+  {
+    "themeName": "护眼绿",
+    "isNightTheme": false,
+    "primaryColor": "#558B2F",
+    "accentColor": "#E65100",
+    "backgroundColor": "#C8E6C9",
+    "bottomBackground": "#A5D6A7"
+  },
+  {
+    "themeName": "护眼黄",
+    "isNightTheme": false,
+    "primaryColor": "#8D6E63",
+    "accentColor": "#6A1B9A",
+    "backgroundColor": "#FFF8E1",
+    "bottomBackground": "#FFE082"
+  },
+  {
+    "themeName": "牛皮纸",
+    "isNightTheme": false,
+    "primaryColor": "#6D4C41",
+    "accentColor": "#BF360C",
+    "backgroundColor": "#D7CCC8",
+    "bottomBackground": "#BCAAA4"
+  },
+  {
+    "themeName": "暗夜护眼",
+    "isNightTheme": true,
+    "primaryColor": "#5D4037",
+    "accentColor": "#A1887F",
+    "backgroundColor": "#261E18",
+    "bottomBackground": "#261E18"
+  },
+  {
+    "themeName": "暗夜墨绿",
+    "isNightTheme": true,
+    "primaryColor": "#2E7D32",
+    "accentColor": "#81C784",
+    "backgroundColor": "#0D1F0D",
+    "bottomBackground": "#0D1F0D"
   }
 ]

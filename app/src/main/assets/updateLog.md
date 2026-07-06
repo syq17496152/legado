@@ -4,6 +4,16 @@
 
 ## cronet版本: 128.0.6613.40
 
+**2026/07/06**
+- 修复订阅源Cookie登录后列表无法加载：Cronet请求未从CookieManager读取WebView登录保存的Cookie
+- 修复Glide图片加载模块未注册：kapt错误使用glide-ksp替代glide-compiler，导致图片解密和Cookie传递全部失效
+- 修复Rhino引擎无法调用Java 8接口default方法：SymmetricCryptoAndroid显式覆写decrypt(InputStream)
+- 恢复数据库主线程查询支持：allowMainThreadQueries()在Glide等上下文中必需，改为按需处理
+- 图片解密流程还原为原始行为：直接传递InputStream给JS脚本，避免不必要的readBytes()
+- APK体积优化：仅打包ARM架构（arm64-v8a/armeabi-v7a），减少约5MB模拟器专用native库
+- 清理CronetCookie诊断日志：Cookie修复已验证，移除调试输出
+- 新增5个护眼主题：护眼绿、护眼黄、牛皮纸（浅色系）+ 暗夜护眼、暗夜墨绿（深色系）
+
 **2026/07/05**
 - 依赖升级性能优化：Kotlin协程Channel性能提升9.8倍、5组AndroidX组件升级
 - 最低系统版本提升至Android 6.0（原4.4），解锁AndroidX生态新版本

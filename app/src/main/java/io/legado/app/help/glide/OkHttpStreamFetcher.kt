@@ -72,8 +72,7 @@ class OkHttpStreamFetcher(
             source = SourceHelp.getSource(sourceUrl)
         }
         // 使用 Log.e 直接输出到 logcat（不依赖 AppLog），确保诊断信息必定可见
-        Log.e(TAG, "loadData: sourceUrl=$sourceUrl, source=${source?.getKey()}, " +
-                "sourceClass=${source?.javaClass?.simpleName}, manga=$manga, url=${url.toStringUrl().take(80)}")
+        Log.e(TAG, "loadData: source=${source?.getKey()}, manga=$manga")
 
         analyzedUrl = AnalyzeUrl(
             url.toString(),
@@ -131,8 +130,6 @@ class OkHttpStreamFetcher(
         }
         val isCover = !manga
         val needDecode = !ImageUtils.skipDecode(source, isCover)
-        Log.e(TAG, "onResponse: source=${source?.getKey()}, isCover=$isCover, " +
-                "needDecode=$needDecode, url=${analyzedUrl.toStringUrl().take(80)}")
 
         if (!needDecode) {
             onStreamReady(responseBody!!.byteStream())
@@ -155,8 +152,6 @@ class OkHttpStreamFetcher(
                     )
                 }
             }
-            Log.e(TAG, "decodeResult: isNull=${decodeResult == null}, " +
-                    "url=${analyzedUrl.toStringUrl().take(60)}")
             onStreamReady(decodeResult)
         }
     }
@@ -166,7 +161,6 @@ class OkHttpStreamFetcher(
             if (!manga) {
                 failUrl.add(url.toStringUrl())
             }
-            Log.e(TAG, "onStreamReady: FAILED (null result), url=${url.toStringUrl().take(80)}")
             callback?.onLoadFailed(NoStackTraceException("封面二次解密失败"))
         } else {
             val contentLength: Long =
