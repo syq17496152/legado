@@ -17,6 +17,37 @@ import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.removeCookie
 import io.legado.app.utils.splitNotBlank
 
+/**
+ * Tracking Cookie 识别（用于 LRU 淘汰时优先删除）
+ * 纯函数，无 Android 依赖，便于 JVM 单元测试
+ */
+private val trackingCookiePrefixes = listOf("_ga", "_gid", "_gat", "_hjid")
+
+private val trackingCookieRegex = Regex("^Hm_(lvt|lpvt)_.*")
+
+fun isTrackingCookieKey(key: String): Boolean {
+    val trimmed = key.trim()
+    if (trackingCookiePrefixes.any { trimmed == it || trimmed.startsWith("${it}_") }) {
+        return true
+    }
+    return trackingCookieRegex.matches(trimmed)
+}
+
+/**
+ * 选择下一删除 key：优先 tracking Cookie，其次按 key 长度降序
+ * 纯函数，便于单元测试；不依赖 CookieStore object 状态，避免触发 Android 初始化
+ */
+fun selectCookieKeyToRemove(cookieMap: Map<String, String>): String? {
+    if (cookieMap.isEmpty()) return null
+    // 1. 优先删除 tracking Cookie（取 key 最长者，最大化释放空间）
+    val trackingKey = cookieMap.keys
+        .filter { isTrackingCookieKey(it) }
+        .maxByOrNull { it.length }
+    if (trackingKey != null) return trackingKey
+    // 2. 其次按 key 长度降序删除（长 key 通常是追踪/临时 token，短 key 如 JSESSIONID/token/sid 通常是登录态）
+    return cookieMap.keys.maxByOrNull { it.length }
+}
+
 @Keep
 object CookieStore : CookieManagerInterface {
 
@@ -83,7 +114,8 @@ object CookieStore : CookieManagerInterface {
 
         var ck = mapToCookie(cookieMap) ?: ""
         while (ck.length > 4096) {
-            val removeKey = cookieMap.keys.random()
+            // LRU 淘汰：优先 tracking Cookie，其次 key 长度降序，避免随机删除误伤登录态
+            val removeKey = selectCookieKeyToRemove(cookieMap) ?: break
             CookieManager.removeCookie(url, removeKey)
             cookieMap.remove(removeKey)
             ck = mapToCookie(cookieMap) ?: ""

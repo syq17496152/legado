@@ -258,8 +258,8 @@ object BookHelp {
             val msg = "${book.name} ${chapter?.title} 图片 $src 下载失败\n${e.localizedMessage}"
             AppLog.put(msg, e)
         } finally {
-            downloadImages.remove(src)
             mutex.unlock()
+            downloadImages.remove(src)
         }
     }
 

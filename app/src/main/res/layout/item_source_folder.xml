@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- F-P1-8 书源/订阅源文件夹视图卡片（参考书架 grid2 样式） -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/cv_content"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_item_focused_on_tv"
+    android:clickable="true"
+    android:focusable="true"
+    android:scrollbars="none"
+    tools:ignore="UnusedAttribute">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="4dp"
+        android:scrollbars="none"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none">
+
+            <!-- 文件夹图标区域：固定高度 120dp，主题色背景 -->
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/iv_folder"
+                android:layout_width="match_parent"
+                android:layout_height="120dp"
+                android:layout_margin="4dp"
+                android:background="?attr/colorPrimary"
+                android:contentDescription="@string/folder_view"
+                android:padding="28dp"
+                android:scaleType="centerInside"
+                android:scrollbars="none"
+                android:src="@drawable/ic_folder"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="@android:color/white"
+                tools:ignore="UseAppTint" />
+
+            <!-- 文件夹名称：叠加在底部，带渐变背景（参考书架封面标题） -->
+            <TextView
+                android:id="@+id/tv_folder_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:background="@drawable/bg_gradient_cover"
+                android:ellipsize="end"
+                android:gravity="left|bottom"
+                android:includeFontPadding="false"
+                android:lines="2"
+                android:paddingStart="4dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="4dp"
+                android:paddingBottom="4dp"
+                android:scrollbars="none"
+                android:textColor="@android:color/white"
+                android:textSize="12sp"
+                app:layout_constraintBottom_toBottomOf="@+id/iv_folder"
+                app:layout_constraintEnd_toEndOf="@+id/iv_folder"
+                app:layout_constraintStart_toStartOf="@+id/iv_folder"
+                tools:ignore="RtlHardcoded,RtlSymmetry"
+                tools:text="@string/no_group" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </LinearLayout>
+
+    <View
+        android:id="@+id/vw_foreground"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="?android:attr/selectableItemBackground"
+        android:scrollbars="none"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:layout_editor_absoluteX="0dp" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

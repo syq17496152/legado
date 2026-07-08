@@ -51,6 +51,22 @@
         app:allowDividerBelow="false"
         app:iconSpaceReserved="false" />
 
+    <!-- F-P1-1 自动任务系统入口 -->
+    <io.legado.app.lib.prefs.SwitchPreference
+        android:defaultValue="false"
+        android:icon="@drawable/ic_cfg_web"
+        android:key="autoTaskService"
+        android:summary="@string/auto_task_service_desc"
+        android:title="@string/auto_task_service"
+        app:iconSpaceReserved="false" />
+
+    <io.legado.app.lib.prefs.Preference
+        android:icon="@drawable/ic_cfg_source"
+        android:key="autoTaskManage"
+        android:summary="@string/auto_task_manage_desc"
+        android:title="@string/auto_task_manage"
+        app:iconSpaceReserved="false" />
+
     <io.legado.app.lib.prefs.PreferenceCategory
         android:title="@string/setting"
         app:allowDividerAbove="false"
@@ -108,6 +124,13 @@
             android:key="fileManage"
             android:summary="@string/file_manage_summary"
             android:title="@string/file_manage"
+            app:iconSpaceReserved="false" />
+
+        <io.legado.app.lib.prefs.Preference
+            android:icon="@drawable/ic_cfg_other"
+            android:key="debug_tools"
+            android:summary="@string/debug_tools_desc"
+            android:title="@string/debug_tools"
             app:iconSpaceReserved="false" />
 
         <io.legado.app.lib.prefs.Preference

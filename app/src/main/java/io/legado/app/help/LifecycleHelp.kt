@@ -59,10 +59,12 @@ object LifecycleHelp : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityPaused(activity: Activity) {
         LogUtils.d(TAG, "${activity::class.simpleName} onPause")
+        DebugFloatBallManager.onActivityPaused(activity)
     }
 
     override fun onActivityResumed(activity: Activity) {
         LogUtils.d(TAG, "${activity::class.simpleName} onResume")
+        DebugFloatBallManager.onActivityResumed(activity)
     }
 
     override fun onActivityStarted(activity: Activity) {
@@ -71,6 +73,7 @@ object LifecycleHelp : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityDestroyed(activity: Activity) {
         LogUtils.d(TAG, "${activity::class.simpleName} onDestroy")
+        DebugFloatBallManager.onActivityDestroyed(activity)
         activities.removeAll { it.get() == null || it.get() === activity }
         if (services.isEmpty() && activities.isEmpty()) {
             onAppFinished()

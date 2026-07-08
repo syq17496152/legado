@@ -2,6 +2,7 @@ package io.legado.app.data.dao
 
 import androidx.room.*
 import io.legado.app.data.entities.ReadRecord
+import io.legado.app.data.entities.ReadRecordDetail
 import io.legado.app.data.entities.ReadRecordShow
 
 @Dao
@@ -52,4 +53,14 @@ interface ReadRecordDao {
 
     @Query("delete from readRecord where bookName = :bookName")
     fun deleteByName(bookName: String)
+
+    // F-P0-2 备份选择器（借鉴蛋蛋Max）阅读记录详情
+    @Query("select * from readRecordDetail")
+    fun getAllDetailsList(): List<ReadRecordDetail>
+
+    @Query("SELECT COUNT(*) FROM readRecordDetail")
+    fun getDetailsCount(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertDetails(vararg readRecordDetail: ReadRecordDetail)
 }

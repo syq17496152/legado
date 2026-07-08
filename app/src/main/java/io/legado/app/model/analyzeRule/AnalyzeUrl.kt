@@ -63,7 +63,6 @@ import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.net.URLEncoder
 import java.nio.charset.Charset
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 import kotlin.coroutines.ContinuationInterceptor
@@ -600,7 +599,7 @@ class AnalyzeUrl(
             return client
         }
         if (AppConfig.isCronet && dnsIp != null) {
-            customIp[urlNoQuery] = dnsIp!!
+            customIp.put(urlNoQuery, dnsIp!!)
         }
         return client.newBuilder().run {
             if (readTimeout != null) {
@@ -770,7 +769,15 @@ class AnalyzeUrl(
         private val pagePattern = Pattern.compile("<(.*?)>")
         private val queryEncoder =
             RFC3986.UNRESERVED.orNew(PercentCodec.of("!$%&()*+,/:;=?@[\\]^`{|}"))
-        val customIp by lazy { ConcurrentHashMap<String, String>() }
+        /**
+         * 自定义 DNS IP 缓存（LRU + 上限 100）
+         *
+         * 原实现用 ConcurrentHashMap 无上限，长跑会无限增长
+         * 改用 android.util.LruCache（内部 synchronized 线程安全，自动 LRU 淘汰）
+         * 使用模式：getClient() 写入 → CronetHelper.customHost() 读取并 remove（一次性）
+         * 已知上限：100 个 entry，每 entry 约 100 字节，总计约 10KB | 升级路径：如需更大可调高 maxSize
+         */
+        val customIp by lazy { android.util.LruCache<String, String>(100) }
         fun AnalyzeUrl.getMediaItem(): MediaItem {
             setCookie()
             return ExoPlayerHelper.createMediaItem(url, headerMap)

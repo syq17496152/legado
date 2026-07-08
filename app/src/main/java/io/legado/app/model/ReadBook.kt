@@ -6,10 +6,13 @@ import io.legado.app.constant.PageAnim.scrollPageAnim
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.BookHighlight
 import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReadRecord
 import io.legado.app.help.AppWebDav
+import io.legado.app.help.HighlightRuleMatcher
+import io.legado.app.help.HighlightTextBuilder
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.isImage
@@ -27,7 +30,10 @@ import io.legado.app.model.localBook.TextFile
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.service.CacheBookService
+import io.legado.app.ui.book.read.config.HighlightRule
+import io.legado.app.ui.book.read.config.HighlightRuleStore
 import io.legado.app.ui.book.read.page.entities.TextChapter
+import io.legado.app.ui.book.read.page.entities.column.TextColumn
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.book.read.page.provider.LayoutProgressListener
 import io.legado.app.utils.postEvent
@@ -99,6 +105,8 @@ object ReadBook : CoroutineScope by MainScope() {
     suspend fun resetData(book: Book) = withContext(IO) {
         releaseAndCancel()
         ReadBook.book = book
+        loadHighlights(book)
+        loadHighlightRules(book)
         readRecord.bookName = book.name
         readRecord.readTime = appDb.readRecordDao.getReadTime(book.name) ?: 0
         chapterSize = appDb.bookChapterDao.getChapterCount(book.bookUrl)
@@ -224,6 +232,88 @@ object ReadBook : CoroutineScope by MainScope() {
         curTextChapter = null
         nextTextChapter = null
     }
+
+    //region F-P1-2 高亮规则系统（借鉴阅读T）
+    @Volatile
+    var highlights: List<BookHighlight> = emptyList()
+        private set
+
+    fun loadHighlights(book: Book) {
+        highlights = appDb.bookHighlightDao.getByBook(book.name, book.author)
+    }
+
+    fun highlightsOfChapter(chapterIndex: Int): List<BookHighlight> {
+        return highlights.filter { it.chapterIndex == chapterIndex }
+    }
+
+    @Volatile
+    var highlightRules: List<HighlightRule> = emptyList()
+        private set
+
+    @Volatile
+    var highlightRulesVersion = 0
+        private set
+
+    /**
+     * 加载高亮规则: 当前项目用 SharedPreferences 存储, 非 Room
+     * 简化说明: 不按 book.name/origin 过滤, 全量加载已启用规则 | 已知上限: 不支持按书过滤规则 | 升级路径: 后续迁移到 Room 后支持
+     */
+    fun loadHighlightRules(book: Book) {
+        highlightRules = HighlightRuleStore.loadEnabled(appCtx)
+        highlightRulesVersion++
+    }
+
+    /** 规则集变化后: 重载本书规则 + 升版本(令各 TextChapter 缓存失效) + 重绘当前页 */
+    fun upHighlightRules() {
+        book?.let { loadHighlightRules(it) }
+        callBack?.get()?.upContent(resetPageOffset = false)
+    }
+
+    /** 本章规则命中(整章匹配, 缓存在 TextChapter 上, 随重排/规则版本失效) */
+    fun ruleMatchesOfChapter(
+        textChapter: TextChapter
+    ): List<HighlightRuleMatcher.RuleMatch> {
+        if (highlightRules.isEmpty()) return emptyList()
+        if (textChapter.highlightRuleMatchesVersion == highlightRulesVersion) {
+            return textChapter.highlightRuleMatches ?: emptyList()
+        }
+        val lines = textChapter.pages.flatMap { it.lines }.map { line ->
+            HighlightTextBuilder.LineInput(
+                line.columns.map { col -> (col as? TextColumn)?.charData ?: "" },
+                line.charSize,
+                line.isParagraphEnd
+            )
+        }
+        val text = HighlightTextBuilder.build(lines)
+        val rules = highlightRules.map {
+            HighlightRuleMatcher.Rule(it.id, it.pattern, it.isRegex, it.toHighlightStyle(), it.timeoutMillisecond)
+        }
+        val matches = HighlightRuleMatcher.match(text, rules)
+        if (textChapter.isCompleted) {
+            textChapter.highlightRuleMatches = matches
+            textChapter.highlightRuleMatchesVersion = highlightRulesVersion
+        }
+        return matches
+    }
+
+    fun addHighlight(highlight: BookHighlight) {
+        appDb.bookHighlightDao.insert(highlight)
+        highlights = highlights + highlight
+        callBack?.get()?.upContent(resetPageOffset = false)
+    }
+
+    fun updateHighlight(highlight: BookHighlight) {
+        appDb.bookHighlightDao.update(highlight)
+        highlights = highlights.map { if (it.time == highlight.time) highlight else it }
+        callBack?.get()?.upContent(resetPageOffset = false)
+    }
+
+    fun removeHighlight(highlight: BookHighlight) {
+        appDb.bookHighlightDao.delete(highlight)
+        highlights = highlights.filter { it.time != highlight.time }
+        callBack?.get()?.upContent(resetPageOffset = false)
+    }
+    //endregion
 
     fun clearSearchResult() {
         curTextChapter?.clearSearchResult()

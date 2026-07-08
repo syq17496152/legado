@@ -17,13 +17,29 @@ import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import java.net.InetSocketAddress
 import java.net.Proxy
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 
-private val proxyClientCache: ConcurrentHashMap<String, OkHttpClient> by lazy {
-    ConcurrentHashMap()
+/**
+ * 代理 OkHttpClient 缓存（LRU + 上限 20）
+ *
+ * 原实现用 ConcurrentHashMap 无上限，长跑会无限增长导致内存泄漏
+ * （每个 OkHttpClient 含独立连接池/调度器，泄漏代价高）
+ * 改用 LinkedHashMap(accessOrder=true) + removeEldestEntry 实现 LRU 淘汰
+ *
+ * 已知上限：synchronized 粒度为整个 map，代理书源访问频率不高，性能可接受 | 升级路径：如需更高并发可改用 java.util.concurrent.ConcurrentLinkedHashMap
+ */
+private const val PROXY_CLIENT_CACHE_MAX_SIZE = 20
+
+private val proxyClientLock = Any()
+
+private val proxyClientCache: java.util.LinkedHashMap<String, OkHttpClient> = object : java.util.LinkedHashMap<String, OkHttpClient>(
+    16, 0.75f, true  // accessOrder=true：最近访问的放末尾，淘汰最久未访问
+) {
+    override fun removeEldestEntry(eldest: Map.Entry<String, OkHttpClient>?): Boolean {
+        return size > PROXY_CLIENT_CACHE_MAX_SIZE
+    }
 }
 
 val cookieJar by lazy {
@@ -65,6 +81,11 @@ val okHttpClient: OkHttpClient by lazy {
         .retryOnConnectionFailure(true)
         .hostnameVerifier(SSLHelper.unsafeHostnameVerifier)
         .connectionSpecs(specs)
+        // 连接池调优：50 个空闲连接（默认 5），5 分钟保活
+        // 提升多书源并发访问时的连接复用率，减少 TCP/TLS 握手开销
+        // 派生客户端（okHttpClientManga / proxyClient）通过 newBuilder() 继承此连接池
+        // 已知上限：50 个连接约 2.5MB 内存（每连接 ~50KB） | 升级路径：如内存紧张可降至 20
+        .connectionPool(okhttp3.ConnectionPool(50, 5, TimeUnit.MINUTES))
         .followRedirects(true)
         .followSslRedirects(true)
         .addInterceptor(OkHttpExceptionInterceptor)
@@ -153,39 +174,39 @@ fun getProxyClient(proxy: String? = null): OkHttpClient {
     if (proxy.isNullOrBlank()) {
         return okHttpClient
     }
-    proxyClientCache[proxy]?.let {
-        return it
-    }
-    val r = Regex("(http|socks4|socks5)://(.*):(\\d{2,5})(@.*@.*)?")
-    val ms = r.findAll(proxy)
-    val group = ms.first()
-    var username = ""       //代理服务器验证用户名
-    var password = ""       //代理服务器验证密码
-    val type = if (group.groupValues[1] == "http") "http" else "socks"
-    val host = group.groupValues[2]
-    val port = group.groupValues[3].toInt()
-    if (group.groupValues[4] != "") {
-        username = group.groupValues[4].split("@")[1]
-        password = group.groupValues[4].split("@")[2]
-    }
-    if (host != "") {
-        val builder = okHttpClient.newBuilder()
-        if (type == "http") {
-            builder.proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(host, port)))
-        } else {
-            builder.proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress(host, port)))
+    synchronized(proxyClientLock) {
+        proxyClientCache[proxy]?.let { return it }
+        val r = Regex("(http|socks4|socks5)://(.*):(\\d{2,5})(@.*@.*)?")
+        val ms = r.findAll(proxy)
+        val group = ms.first()
+        var username = ""       //代理服务器验证用户名
+        var password = ""       //代理服务器验证密码
+        val type = if (group.groupValues[1] == "http") "http" else "socks"
+        val host = group.groupValues[2]
+        val port = group.groupValues[3].toInt()
+        if (group.groupValues[4] != "") {
+            username = group.groupValues[4].split("@")[1]
+            password = group.groupValues[4].split("@")[2]
         }
-        if (username != "" && password != "") {
-            builder.proxyAuthenticator { _, response -> //设置代理服务器账号密码
-                val credential: String = Credentials.basic(username, password)
-                response.request.newBuilder()
-                    .header("Proxy-Authorization", credential)
-                    .build()
+        if (host != "") {
+            val builder = okHttpClient.newBuilder()
+            if (type == "http") {
+                builder.proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(host, port)))
+            } else {
+                builder.proxy(Proxy(Proxy.Type.SOCKS, InetSocketAddress(host, port)))
             }
+            if (username != "" && password != "") {
+                builder.proxyAuthenticator { _, response -> //设置代理服务器账号密码
+                    val credential: String = Credentials.basic(username, password)
+                    response.request.newBuilder()
+                        .header("Proxy-Authorization", credential)
+                        .build()
+                }
+            }
+            val proxyClient = builder.build()
+            proxyClientCache[proxy] = proxyClient  // 写入触发 removeEldestEntry 自动 LRU 淘汰
+            return proxyClient
         }
-        val proxyClient = builder.build()
-        proxyClientCache[proxy] = proxyClient
-        return proxyClient
+        return okHttpClient
     }
-    return okHttpClient
 }

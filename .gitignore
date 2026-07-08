@@ -45,3 +45,10 @@ nul
 
 # 通用日志
 *.log
+
+# === ai_tests 测试系统 V3 ===
+ai_tests/venv/
+ai_tests/reports/
+ai_tests/__pycache__/
+ai_tests/cases/*/preconditions/
+ai_tests/lib/source_map.json.bak

@@ -17,14 +17,17 @@ import io.legado.app.lib.prefs.NameListPreference
 import io.legado.app.lib.prefs.SwitchPreference
 import io.legado.app.lib.prefs.fragment.PreferenceFragment
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.service.AutoTaskService
 import io.legado.app.service.WebService
 import io.legado.app.ui.about.AboutActivity
 import io.legado.app.ui.about.ReadRecordActivity
+import io.legado.app.ui.autoTask.AutoTaskActivity
 import io.legado.app.ui.book.bookmark.AllBookmarkActivity
 import io.legado.app.ui.book.source.manage.BookSourceActivity
 import io.legado.app.ui.book.toc.rule.TxtTocRuleActivity
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
+import io.legado.app.ui.debug.DebugToolsActivity
 import io.legado.app.ui.dict.rule.DictRuleActivity
 import io.legado.app.ui.file.FileManageActivity
 import io.legado.app.ui.main.MainFragmentInterface
@@ -79,6 +82,7 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
 
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             putPrefBoolean(PreferKey.webService, WebService.isRun)
+            putPrefBoolean(PreferKey.autoTaskService, AutoTaskService.isRun)
             addPreferencesFromResource(R.xml.pref_main)
             findPreference<SwitchPreference>("webService")?.onLongClick {
                 if (!WebService.isRun) {
@@ -138,6 +142,14 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
                     }
                 }
 
+                PreferKey.autoTaskService -> {
+                    if (requireContext().getPrefBoolean(PreferKey.autoTaskService)) {
+                        AutoTaskService.start(requireContext())
+                    } else {
+                        AutoTaskService.stop(requireContext())
+                    }
+                }
+
                 "recordLog" -> LogUtils.upLevel()
             }
         }
@@ -163,6 +175,8 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
 
                 "fileManage" -> startActivity<FileManageActivity>()
                 "readRecord" -> startActivity<ReadRecordActivity>()
+                "debug_tools" -> startActivity<DebugToolsActivity>()
+                "autoTaskManage" -> startActivity<AutoTaskActivity>()
                 "about" -> startActivity<AboutActivity>()
                 "exit" -> activity?.finish()
             }

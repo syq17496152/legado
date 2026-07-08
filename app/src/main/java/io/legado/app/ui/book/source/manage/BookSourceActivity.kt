@@ -16,7 +16,9 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.snackbar.Snackbar
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -28,6 +30,7 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.databinding.ActivityBookSourceBinding
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
+import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
@@ -39,6 +42,7 @@ import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.book.search.SearchScope
 import io.legado.app.ui.book.source.debug.BookSourceDebugActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
+import io.legado.app.ui.adapter.SourceFolderAdapter
 import io.legado.app.ui.config.CheckSourceConfig
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
@@ -83,12 +87,14 @@ import kotlinx.coroutines.launch
 class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceViewModel>(),
     PopupMenu.OnMenuItemClickListener,
     BookSourceAdapter.CallBack,
+    SourceFolderAdapter.CallBack,
     SelectActionBar.CallBack,
     SearchView.OnQueryTextListener {
     override val binding by viewBinding(ActivityBookSourceBinding::inflate)
     override val viewModel by viewModels<BookSourceViewModel>()
     private val importRecordKey = "bookSourceRecordKey"
     private val adapter by lazy { BookSourceAdapter(this, this, binding.recyclerView) }
+    private val folderAdapter by lazy { SourceFolderAdapter(this, this) }
     private val itemTouchCallback by lazy { ItemTouchCallback(adapter) }
     private val searchView: SearchView by lazy {
         binding.titleBar.findViewById(R.id.search_view)
@@ -104,6 +110,13 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     private var snackBar: Snackbar? = null
     private var groupSourcesByDomain = false
     private val hostMap = hashMapOf<String, String>()
+    // F-P1-8 用户视图偏好（持久化）：0=列表视图, 1=文件夹视图
+    private val isFolderViewMode: Boolean
+        get() = AppConfig.sourceViewMode == 1
+    // F-P1-8 当前是否显示文件夹视图（运行时状态）
+    // 点击文件夹进入分组列表时设为 false，但不修改 isFolderViewMode
+    // 用户主动点击菜单"切换视图模式"时才同步修改 isFolderViewMode
+    private var isShowingFolder: Boolean = false
     private val qrResult = registerForActivityResult(QrCodeResult()) {
         it ?: return@registerForActivityResult
         showDialogFragment(ImportBookSourceDialog(it))
@@ -145,9 +158,15 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        // F-P1-8 初始化运行时状态：跟随用户偏好
+        isShowingFolder = isFolderViewMode
         initRecyclerView()
         initSearchView()
-        upBookSource()
+        if (isShowingFolder) {
+            upFolderView()
+        } else {
+            upBookSource()
+        }
         initLiveDataGroup()
         initSelectActionBar()
         resumeCheckSource()
@@ -162,6 +181,9 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     }
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        menu.findItem(R.id.menu_view_mode)?.let {
+            it.title = if (isShowingFolder) getString(R.string.list_view) else getString(R.string.folder_view)
+        }
         groupMenu = menu.findItem(R.id.menu_group).subMenu
         val sortSubMenu = menu.findItem(R.id.action_sort).subMenu!!
         sortSubMenu.findItem(R.id.menu_sort_desc).isChecked = !sortAscending
@@ -172,6 +194,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            R.id.menu_view_mode -> switchViewMode()
             R.id.menu_add_book_source -> startActivity<BookSourceEditActivity>()
             R.id.menu_import_qr -> qrResult.launch()
             R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
@@ -272,7 +295,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     private fun initRecyclerView() {
         binding.recyclerView.setEdgeEffectColor(primaryColor)
         binding.recyclerView.addItemDecoration(VerticalDivider(this))
-        binding.recyclerView.adapter = adapter
         binding.recyclerView.recycledViewPool.setMaxRecycledViews(0, 15)
         // When this page is opened, it is in selection mode
         val dragSelectTouchHelper =
@@ -281,6 +303,54 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         dragSelectTouchHelper.activeSlideSelect()
         // Note: need judge selection first, so add ItemTouchHelper after it.
         ItemTouchHelper(itemTouchCallback).attachToRecyclerView(binding.recyclerView)
+        if (isShowingFolder) {
+            applyFolderView()
+        } else {
+            applyListView()
+        }
+    }
+
+    // F-P1-8 应用列表视图
+    private fun applyListView() {
+        binding.recyclerView.layoutManager = LinearLayoutManager(this)
+        binding.recyclerView.adapter = adapter
+        itemTouchCallback.isCanDrag =
+            sort == BookSourceSort.Default && !groupSourcesByDomain
+    }
+
+    // F-P1-8 应用文件夹视图
+    private fun applyFolderView() {
+        binding.recyclerView.layoutManager = GridLayoutManager(this, 3)
+        binding.recyclerView.adapter = folderAdapter
+        itemTouchCallback.isCanDrag = false
+    }
+
+    // F-P1-8 切换视图模式（用户主动点击菜单：永久切换 + 同步运行时状态）
+    private fun switchViewMode() {
+        if (isShowingFolder) {
+            // 当前是文件夹视图 → 切换为列表视图（永久）
+            AppConfig.sourceViewMode = 0
+            isShowingFolder = false
+            applyListView()
+            upBookSource(searchView.query?.toString())
+        } else {
+            // 当前是列表视图 → 切换为文件夹视图（永久）
+            AppConfig.sourceViewMode = 1
+            isShowingFolder = true
+            searchView.setQuery("", false)  // 清空搜索框，回到文件夹首页
+            applyFolderView()
+            upFolderView()
+        }
+        invalidateOptionsMenu()
+    }
+
+    // F-P1-8 更新文件夹视图数据
+    private fun upFolderView() {
+        val folderList = mutableListOf<String>()
+        folderList.add(getString(R.string.all_groups))
+        folderList.add(getString(R.string.no_group))
+        folderList.addAll(groups)
+        folderAdapter.setItems(folderList, folderAdapter.diffItemCallback)
     }
 
     private fun initSearchView() {
@@ -291,6 +361,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
 
     private fun upBookSource(searchKey: String? = null) {
+        if (isShowingFolder) return
         sourceFlowJob?.cancel()
         sourceFlowJob = lifecycleScope.launch {
             when {
@@ -420,6 +491,9 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                     groups.clear()
                     groups.addAll(it)
                     upGroupMenu()
+                    if (isShowingFolder) {
+                        upFolderView()
+                    }
                     delay(500)
                 }
         }
@@ -703,6 +777,20 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     override fun getSourceHost(origin: String): String {
         return hostMap.getOrPut(origin) {
             NetworkUtils.getSubDomainOrNull(origin) ?: "#"
+        }
+    }
+
+    // F-P1-8 文件夹点击回调：点击文件夹 → 临时切换到列表视图并按分组筛选
+    // 注意：不修改 sourceViewMode（用户偏好），仅修改 isShowingFolder（运行时状态）
+    // 这样再次进入或用户点击菜单"文件夹视图"时，仍会显示文件夹视图
+    override fun onFolderClick(group: String) {
+        isShowingFolder = false
+        applyListView()
+        invalidateOptionsMenu()
+        when (group) {
+            getString(R.string.all_groups) -> searchView.setQuery("", true)
+            getString(R.string.no_group) -> searchView.setQuery(getString(R.string.no_group), true)
+            else -> searchView.setQuery("group:$group", true)
         }
     }
 

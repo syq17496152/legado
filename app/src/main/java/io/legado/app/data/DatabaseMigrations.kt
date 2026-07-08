@@ -20,6 +20,7 @@ object DatabaseMigrations {
             migration_31_32, migration_32_33, migration_33_34, migration_34_35,
             migration_35_36, migration_36_37, migration_37_38, migration_38_39,
             migration_39_40, migration_40_41, migration_41_42, migration_42_43,
+            migration_89_90, migration_90_91, migration_91_92
         )
     }
 
@@ -321,6 +322,111 @@ object DatabaseMigrations {
     private val migration_42_43 = object : Migration(42, 43) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE `chapters` ADD `isVolume` INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
+    /**
+     * F-P0-2 备份选择器：新增封面图集（分组+图片）和阅读记录详情表
+     */
+    private val migration_89_90 = object : Migration(89, 90) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // 封面图集分组表
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS `cover_gallery_groups` (
+                    `id` INTEGER NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `isDefault` INTEGER NOT NULL,
+                    `order` INTEGER NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`id` AUTOINCREMENT)
+                )""".trimIndent()
+            )
+            // 封面图集图片表（外键关联分组，删除分组时级联删除图片）
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS `cover_gallery_images` (
+                    `id` INTEGER NOT NULL,
+                    `groupId` INTEGER NOT NULL,
+                    `path` TEXT NOT NULL,
+                    `order` INTEGER NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`id` AUTOINCREMENT),
+                    FOREIGN KEY(`groupId`) REFERENCES `cover_gallery_groups`(`id`) ON DELETE CASCADE
+                )""".trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_cover_gallery_images_groupId` ON `cover_gallery_images` (`groupId`)")
+            // 阅读记录详情表（复合主键）
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS `readRecordDetail` (
+                    `deviceId` TEXT NOT NULL,
+                    `bookName` TEXT NOT NULL,
+                    `bookAuthor` TEXT NOT NULL DEFAULT '',
+                    `date` TEXT NOT NULL,
+                    `readTime` INTEGER NOT NULL DEFAULT 0,
+                    `readWords` INTEGER NOT NULL DEFAULT 0,
+                    `firstReadTime` INTEGER NOT NULL DEFAULT 0,
+                    `lastReadTime` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`deviceId`, `bookName`, `bookAuthor`, `date`)
+                )""".trimIndent()
+            )
+        }
+    }
+
+    /**
+     * F-P1-1 自动任务系统：新增 auto_task_rules 表，存储定时任务规则
+     * 借鉴自阅读T (skybbk1001/legadoT)
+     */
+    private val migration_90_91 = object : Migration(90, 91) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS `auto_task_rules` (
+                    `id` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `enable` INTEGER NOT NULL,
+                    `cron` TEXT,
+                    `loginUrl` TEXT,
+                    `loginUi` TEXT,
+                    `loginCheckJs` TEXT,
+                    `comment` TEXT,
+                    `script` TEXT NOT NULL,
+                    `header` TEXT,
+                    `jsLib` TEXT,
+                    `concurrentRate` TEXT,
+                    `enabledCookieJar` INTEGER NOT NULL,
+                    `lastRunAt` INTEGER NOT NULL,
+                    `lastResult` TEXT,
+                    `lastError` TEXT,
+                    `lastLog` TEXT,
+                    PRIMARY KEY(`id`)
+                )""".trimIndent()
+            )
+        }
+    }
+
+    /**
+     * F-P1-2 高亮规则系统：新增 highlights 表，存储手动划线高亮
+     * 借鉴自阅读T (skybbk1001/legadoT)
+     */
+    private val migration_91_92 = object : Migration(91, 92) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS `highlights` (
+                    `time` INTEGER NOT NULL,
+                    `bookName` TEXT NOT NULL,
+                    `bookAuthor` TEXT NOT NULL,
+                    `chapterIndex` INTEGER NOT NULL,
+                    `chapterPos` INTEGER NOT NULL,
+                    `chapterPosEnd` INTEGER NOT NULL,
+                    `chapterName` TEXT NOT NULL,
+                    `bookText` TEXT NOT NULL,
+                    `style` TEXT NOT NULL,
+                    `note` TEXT NOT NULL,
+                    PRIMARY KEY(`time`)
+                )""".trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_highlights_bookName_bookAuthor` ON `highlights` (`bookName`, `bookAuthor`)"
+            )
         }
     }
 

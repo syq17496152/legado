@@ -65,6 +65,9 @@ interface RssSourceDao {
     @Query("select * from rssSources where sourceGroup is null or sourceGroup = '' or sourceGroup like '%未分组%'")
     fun flowNoGroup(): Flow<List<RssSource>>
 
+    @Query("select * from rssSources where enabled = 1 and (sourceGroup is null or sourceGroup = '' or sourceGroup like '%未分组%') order by customOrder")
+    fun flowEnabledNoGroup(): Flow<List<RssSource>>
+
     @Query(
         """SELECT * FROM rssSources 
         where enabled = 1 

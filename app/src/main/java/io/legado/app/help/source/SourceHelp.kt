@@ -11,6 +11,7 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.RssSource
 import io.legado.app.help.AppCacheManager
+import io.legado.app.help.ConcurrentRateLimiter
 import io.legado.app.help.config.SourceConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.AudioPlay
@@ -37,6 +38,40 @@ object SourceHelp {
         } catch (_: Exception) {
             return@lazy emptySet()
         }
+    }
+
+    /**
+     * BookSource 内存缓存（LRU + 上限 50）
+     *
+     * 用途：BackstageWebView.load() 在主线程通过 runBlocking 查询数据库获取 BookSource，
+     * 长跑下频繁主线程阻塞影响 UI 流畅度。改为先读内存缓存，未命中再走数据库。
+     *
+     * 缓存一致性：insertBookSource 写入；deleteBookSourceInternal 删除。
+     * 缓存对象为 BookSource 实体，书源编辑后需走 insertBookSource 刷新缓存。
+     *
+     * 已知上限：50 个 BookSource 约 250KB 内存（每个约 5KB） | 升级路径：如内存紧张可降至 20
+     */
+    private val bookSourceCache = android.util.LruCache<String, BookSource>(50)
+
+    /**
+     * 读取内存缓存中的 BookSource（不查数据库）
+     * 调用方：BackstageWebView.load() 主线程场景，未命中需自行 runBlocking 查数据库
+     */
+    fun getCachedBookSource(key: String): BookSource? = bookSourceCache.get(key)
+
+    /**
+     * 写入内存缓存
+     * 调用方：insertBookSource / BackstageWebView 未命中后查询数据库写入
+     */
+    fun putBookSourceCache(key: String, source: BookSource) {
+        bookSourceCache.put(key, source)
+    }
+
+    /**
+     * 删除内存缓存（删源时调用）
+     */
+    fun removeBookSourceCache(key: String) {
+        bookSourceCache.remove(key)
     }
 
     fun getSource(key: String?): BaseSource? {
@@ -89,9 +124,12 @@ object SourceHelp {
     }
 
     private fun deleteBookSourceInternal(key: String) {
+        removeBookSourceCache(key)
         appDb.bookSourceDao.delete(key)
         appDb.cacheDao.deleteSourceVariables(key)
         SourceConfig.removeSource(key)
+        // F-P1-C4 删源时清理并发限流记录，避免内存泄漏
+        ConcurrentRateLimiter.clearRecord(key)
     }
 
     fun deleteBookSource(key: String) {
@@ -112,6 +150,8 @@ object SourceHelp {
         appDb.rssSourceDao.delete(key)
         appDb.rssArticleDao.delete(key)
         appDb.cacheDao.deleteSourceVariables(key)
+        // F-P1-C4 删源时清理并发限流记录，避免内存泄漏
+        ConcurrentRateLimiter.clearRecord(key)
     }
 
     fun deleteRssSource(key: String) {
@@ -147,6 +187,7 @@ object SourceHelp {
         }
         bookSourcesGroup[false]?.let {
             appDb.bookSourceDao.insert(*it.toTypedArray())
+            it.forEach { source -> putBookSourceCache(source.bookSourceUrl, source) }
         }
         Coroutine.async {
             adjustSortNumber()

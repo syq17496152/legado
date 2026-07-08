@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- F-P1-2 高亮规则系统（借鉴阅读T） -->
+<!-- 适配说明：去掉 skin_textColor 皮肤属性, 当前项目无皮肤系统 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingBottom="12dp">
+
+    <com.google.android.material.bottomsheet.BottomSheetDragHandleView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="16dp"
+        android:paddingBottom="6dp"
+        android:text="@string/highlight_presets"
+        android:textColor="@color/secondaryText"
+        android:textSize="13sp" />
+
+    <com.google.android.flexbox.FlexboxLayout
+        android:id="@+id/fl_presets"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="12dp"
+        app:flexWrap="wrap" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginVertical="8dp"
+        android:background="@color/divider" />
+
+    <LinearLayout
+        android:id="@+id/ll_channels"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginVertical="8dp"
+        android:background="@color/divider" />
+
+    <LinearLayout
+        android:id="@+id/ll_highlight_font"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="10dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/highlight_font"
+            android:textColor="@color/primaryText"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/tv_highlight_font_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxWidth="180dp"
+            android:singleLine="true"
+            android:text="@string/highlight_font_default"
+            android:textColor="@color/secondaryText"
+            android:textSize="14sp" />
+
+    </LinearLayout>
+
+</LinearLayout>

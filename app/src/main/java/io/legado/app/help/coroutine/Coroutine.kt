@@ -179,6 +179,8 @@ class Coroutine<T>(
                 val value = executeBlock(this, context, timeMillis ?: 0L, block)
                 ensureActive()
                 success?.let { dispatchCallback(this, value, it) }
+            } catch (e: CancellationException) {
+                throw e  // 守卫：协程取消异常必须重新抛出，不能触发 error 回调
             } catch (e: Throwable) {
                 e.printOnDebug()
                 val consume: Boolean = errorReturn?.value?.let { value ->

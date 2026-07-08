@@ -18,6 +18,7 @@ import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.RuleData
 import io.legado.app.ui.main.explore.ExploreAdapter.Companion.exploreInfoMapList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -85,6 +86,8 @@ object WebBook {
                             throw throwable
                         }
                     }
+                } catch (ce: CancellationException) {
+                    throw ce  // 守卫：协程取消异常必须重新抛出
                 } catch (_: Throwable) {
                     throw throwable
                 }
@@ -156,6 +159,8 @@ object WebBook {
                             throw throwable
                         }
                     }
+                } catch (ce: CancellationException) {
+                    throw ce  // 守卫：协程取消异常必须重新抛出
                 } catch (_: Throwable) {
                     throw throwable
                 }
@@ -231,6 +236,8 @@ object WebBook {
                                 throw throwable
                             }
                         }
+                    } catch (ce: CancellationException) {
+                        throw ce  // 守卫：协程取消异常必须重新抛出
                     } catch (_: Throwable) {
                         throw throwable
                     }
@@ -328,6 +335,8 @@ object WebBook {
                                     throw throwable
                                 }
                             }
+                        } catch (ce: CancellationException) {
+                            throw ce  // 守卫：协程取消异常必须重新抛出
                         } catch (_: Throwable) {
                             throw throwable
                         }
@@ -433,6 +442,8 @@ object WebBook {
                                 throw throwable
                             }
                         }
+                    } catch (ce: CancellationException) {
+                        throw ce  // 守卫：协程取消异常必须重新抛出
                     } catch (_: Throwable) {
                         throw throwable
                     }

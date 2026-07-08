@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- F-P1-2 高亮规则系统（借鉴阅读T） -->
+<!-- 适配说明：去掉 skin_textColor 皮肤属性, 当前项目无皮肤系统 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:minHeight="44dp"
+    android:orientation="horizontal"
+    android:paddingHorizontal="16dp">
+
+    <CheckBox
+        android:id="@+id/cb_channel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textColor="@color/primaryText"
+        android:textSize="15sp" />
+
+    <TextView
+        android:id="@+id/tv_extra"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:padding="6dp"
+        android:textColor="@color/accent"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <View
+        android:id="@+id/v_swatch"
+        android:layout_width="28dp"
+        android:layout_height="20dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/shape_card_view" />
+
+</LinearLayout>

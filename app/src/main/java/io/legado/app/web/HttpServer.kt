@@ -3,6 +3,7 @@ package io.legado.app.web
 import android.graphics.Bitmap
 import fi.iki.elonen.NanoHTTPD
 import io.legado.app.api.ReturnData
+import io.legado.app.api.controller.BackupController
 import io.legado.app.api.controller.BookController
 import io.legado.app.api.controller.BookSourceController
 import io.legado.app.api.controller.ReplaceRuleController
@@ -74,6 +75,14 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
                 Method.GET -> {
                     val parameters = session.parameters
 
+                    // F-P0-2 备份选择器：/backup 返回 ZIP 文件（非 ReturnData），需特殊处理
+                    if (uri == "/backup") {
+                        val backupResponse = BackupController.backup()
+                        backupResponse.addHeader("Access-Control-Allow-Methods", "GET, POST")
+                        backupResponse.addHeader("Access-Control-Allow-Origin", session.headers["origin"])
+                        return backupResponse
+                    }
+
                     returnData = when (uri) {
                         "/getBookSource" -> BookSourceController.getSource(parameters)
                         "/getBookSources" -> BookSourceController.sources
@@ -87,6 +96,7 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
                         "/getRssSource" -> RssSourceController.getSource(parameters)
                         "/getRssSources" -> RssSourceController.sources
                         "/getReplaceRules" -> ReplaceRuleController.allRules
+                        "/backupPreview" -> BackupController.getBackupPreview()
                         else -> null
                     }
                 }

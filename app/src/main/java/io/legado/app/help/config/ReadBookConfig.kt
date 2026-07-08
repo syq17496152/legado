@@ -137,6 +137,28 @@ object ReadBookConfig {
         }
     }
 
+    // F-P0-2 备份选择器（借鉴蛋蛋Max）
+    fun getBackupConfigList(): List<Config> {
+        return configList.map { normalizeBgPathsForBackup(it.copy()) }
+    }
+
+    fun getBackupShareConfig(): Config {
+        return normalizeBgPathsForBackup(shareConfig.copy())
+    }
+
+    private fun normalizeBgPathsForBackup(config: Config): Config {
+        if (config.bgType == 2) {
+            config.bgStr = FileUtils.getName(config.bgStr)
+        }
+        if (config.bgTypeNight == 2) {
+            config.bgStrNight = FileUtils.getName(config.bgStrNight)
+        }
+        if (config.bgTypeEInk == 2) {
+            config.bgStrEInk = FileUtils.getName(config.bgStrEInk)
+        }
+        return config
+    }
+
     fun getAllPicBgStr(): ArrayList<String> {
         val list = arrayListOf<String>()
         configList.forEach {

@@ -51,6 +51,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var optimizeRender = CanvasRecorderFactory.isSupport
             && appCtx.getPrefBoolean(PreferKey.optimizeRender, false)
     var recordLog = appCtx.getPrefBoolean(PreferKey.recordLog)
+    var debugLogFloatingBall = appCtx.getPrefBoolean(PreferKey.debugLogFloatingBall, false)
     var editFontScale = appCtx.getPrefInt(PreferKey.editFontScale, 16)
     var editNonPrintable = appCtx.getPrefInt(PreferKey.editNonPrintable, 0)
     var editAutoWrap = appCtx.getPrefBoolean(PreferKey.editAutoWrap, true)
@@ -128,6 +129,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
                     && appCtx.getPrefBoolean(PreferKey.optimizeRender, false)
 
             PreferKey.recordLog -> recordLog = appCtx.getPrefBoolean(PreferKey.recordLog)
+            PreferKey.debugLogFloatingBall -> debugLogFloatingBall = appCtx.getPrefBoolean(PreferKey.debugLogFloatingBall, false)
 
         }
     }
@@ -242,6 +244,20 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefInt(PreferKey.bookshelfLayout, 0)
         set(value) {
             appCtx.putPrefInt(PreferKey.bookshelfLayout, value)
+        }
+
+    // F-P1-8 书源/订阅源视图模式（0=列表视图, 1=文件夹视图）
+    // 默认 1=文件夹视图：首页直接展示分组文件夹，参考书架布局管理模式
+    var sourceViewMode: Int
+        get() = appCtx.getPrefInt(PreferKey.sourceViewMode, 1)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.sourceViewMode, value)
+        }
+
+    var rssViewMode: Int
+        get() = appCtx.getPrefInt(PreferKey.rssViewMode, 1)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.rssViewMode, value)
         }
 
     var saveTabPosition: Int

@@ -26,6 +26,7 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.rss.read.ReadRss
 import io.legado.app.ui.widget.recycler.LoadMoreView
 import io.legado.app.ui.widget.recycler.VerticalDivider
+import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -220,6 +221,37 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
         }
     }
 
+    private fun loadArticles(targetPage: Int) {
+        fullRefresh = true
+        activityViewModel.rssSource?.let {
+            viewModel.loadArticles(it, targetPage)
+        }
+    }
+
+    private fun getCurrentPage(): Int = viewModel.page
+
+    private fun showPageMenu(): Boolean {
+        val source = activityViewModel.rssSource ?: return false
+        return !source.ruleNextPage.isNullOrEmpty()
+    }
+
+    fun showPagePicker() {
+        if (!showPageMenu()) return
+        val currentPage = getCurrentPage()
+        NumberPickerDialog(requireContext())
+            .setTitle(getString(R.string.change_page))
+            .setMinValue(1)
+            .setMaxValue(999)
+            .setValue(currentPage)
+            .show { targetPage ->
+                if (targetPage != currentPage) {
+                    fullRefresh = true
+                    loadArticles(targetPage)
+                    binding.recyclerView.scrollToPosition(0)
+                }
+            }
+    }
+
     private fun scrollToBottom(forceLoad: Boolean = false) {
         if (viewModel.isLoading) return
         fullRefresh = false
@@ -240,6 +272,9 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
             if (!hasMore) {
                 loadMoreView.noMore()
             }
+        }
+        viewModel.pageLiveData.observe(viewLifecycleOwner) { page ->
+            (requireActivity() as? RssSortActivity)?.updatePageMenu(page, showPageMenu())
         }
     }
 

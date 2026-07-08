@@ -9,7 +9,9 @@ import androidx.activity.viewModels
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.SearchView
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppLog
@@ -18,9 +20,11 @@ import io.legado.app.data.entities.RssSource
 import io.legado.app.databinding.ActivityRssSourceBinding
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
+import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.ui.adapter.SourceFolderAdapter
 import io.legado.app.ui.association.ImportRssSourceDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
@@ -56,6 +60,7 @@ import kotlinx.coroutines.launch
  */
 class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceViewModel>(),
     PopupMenu.OnMenuItemClickListener,
+    SourceFolderAdapter.CallBack,
     SelectActionBar.CallBack,
     RssSourceAdapter.CallBack {
 
@@ -63,6 +68,15 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     override val viewModel by viewModels<RssSourceViewModel>()
     private val importRecordKey = "rssSourceRecordKey"
     private val adapter by lazy { RssSourceAdapter(this, this) }
+    private val folderAdapter by lazy { SourceFolderAdapter(this, this) }
+    private val itemTouchCallback by lazy { ItemTouchCallback(adapter) }
+    // F-P1-8 用户视图偏好（持久化）：0=列表视图, 1=文件夹视图
+    private val isFolderViewMode: Boolean
+        get() = AppConfig.rssViewMode == 1
+    // F-P1-8 当前是否显示文件夹视图（运行时状态）
+    // 点击文件夹进入分组列表时设为 false，但不修改 isFolderViewMode
+    // 用户主动点击菜单"切换视图模式"时才同步修改 isFolderViewMode
+    private var isShowingFolder: Boolean = false
     private val searchView: SearchView by lazy {
         binding.titleBar.findViewById(R.id.search_view)
     }
@@ -97,10 +111,16 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        // F-P1-8 初始化运行时状态：跟随用户偏好
+        isShowingFolder = isFolderViewMode
         initRecyclerView()
         initSearchView()
         initGroupFlow()
-        upSourceFlow()
+        if (isShowingFolder) {
+            upFolderView()
+        } else {
+            upSourceFlow()
+        }
         initSelectActionBar()
     }
 
@@ -110,6 +130,9 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     }
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        menu.findItem(R.id.menu_view_mode)?.let {
+            it.title = if (isShowingFolder) getString(R.string.list_view) else getString(R.string.folder_view)
+        }
         groupMenu = menu.findItem(R.id.menu_group)?.subMenu
         upGroupMenu()
         return super.onPrepareOptionsMenu(menu)
@@ -117,6 +140,7 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            R.id.menu_view_mode -> switchViewMode()
             R.id.menu_add -> startActivity<RssSourceEditActivity>()
             R.id.menu_import_local -> importDoc.launch {
                 mode = HandleFileContract.FILE
@@ -180,16 +204,61 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     private fun initRecyclerView() {
         binding.recyclerView.setEdgeEffectColor(primaryColor)
         binding.recyclerView.addItemDecoration(VerticalDivider(this))
-        binding.recyclerView.adapter = adapter
+        binding.recyclerView.recycledViewPool.setMaxRecycledViews(0, 15)
         // When this page is opened, it is in selection mode
         val dragSelectTouchHelper: DragSelectTouchHelper =
             DragSelectTouchHelper(adapter.dragSelectCallback).setSlideArea(16, 50)
         dragSelectTouchHelper.attachToRecyclerView(binding.recyclerView)
         dragSelectTouchHelper.activeSlideSelect()
         // Note: need judge selection first, so add ItemTouchHelper after it.
-        val itemTouchCallback = ItemTouchCallback(adapter)
-        itemTouchCallback.isCanDrag = true
         ItemTouchHelper(itemTouchCallback).attachToRecyclerView(binding.recyclerView)
+        if (isShowingFolder) {
+            applyFolderView()
+        } else {
+            applyListView()
+        }
+    }
+
+    // F-P1-8 应用列表视图
+    private fun applyListView() {
+        binding.recyclerView.layoutManager = LinearLayoutManager(this)
+        binding.recyclerView.adapter = adapter
+        itemTouchCallback.isCanDrag = true
+    }
+
+    // F-P1-8 应用文件夹视图
+    private fun applyFolderView() {
+        binding.recyclerView.layoutManager = GridLayoutManager(this, 3)
+        binding.recyclerView.adapter = folderAdapter
+        itemTouchCallback.isCanDrag = false
+    }
+
+    // F-P1-8 切换视图模式（用户主动点击菜单：永久切换 + 同步运行时状态）
+    private fun switchViewMode() {
+        if (isShowingFolder) {
+            // 当前是文件夹视图 → 切换为列表视图（永久）
+            AppConfig.rssViewMode = 0
+            isShowingFolder = false
+            applyListView()
+            upSourceFlow(searchView.query?.toString())
+        } else {
+            // 当前是列表视图 → 切换为文件夹视图（永久）
+            AppConfig.rssViewMode = 1
+            isShowingFolder = true
+            searchView.setQuery("", false)  // 清空搜索框，回到文件夹首页
+            applyFolderView()
+            upFolderView()
+        }
+        invalidateOptionsMenu()
+    }
+
+    // F-P1-8 更新文件夹视图数据
+    private fun upFolderView() {
+        val folderList = mutableListOf<String>()
+        folderList.add(getString(R.string.all_groups))
+        folderList.add(getString(R.string.no_group))
+        folderList.addAll(groups)
+        folderAdapter.setItems(folderList, folderAdapter.diffItemCallback)
     }
 
     private fun initSearchView() {
@@ -224,6 +293,9 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
                 groups.clear()
                 groups.addAll(it)
                 upGroupMenu()
+                if (isShowingFolder) {
+                    upFolderView()
+                }
             }
         }
     }
@@ -299,6 +371,7 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     }
 
     private fun upSourceFlow(searchKey: String? = null) {
+        if (isShowingFolder) return
         sourceFlowJob?.cancel()
         sourceFlowJob = lifecycleScope.launch {
             when {
@@ -354,6 +427,20 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
             adapter.selection.size,
             adapter.itemCount
         )
+    }
+
+    // F-P1-8 文件夹点击回调：点击文件夹 → 临时切换到列表视图并按分组筛选
+    // 注意：不修改 rssViewMode（用户偏好），仅修改 isShowingFolder（运行时状态）
+    // 这样再次进入或用户点击菜单"文件夹视图"时，仍会显示文件夹视图
+    override fun onFolderClick(group: String) {
+        isShowingFolder = false
+        applyListView()
+        invalidateOptionsMenu()
+        when (group) {
+            getString(R.string.all_groups) -> searchView.setQuery("", true)
+            getString(R.string.no_group) -> searchView.setQuery(getString(R.string.no_group), true)
+            else -> searchView.setQuery("group:$group", true)
+        }
     }
 
     @SuppressLint("InflateParams")

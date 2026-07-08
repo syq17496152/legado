@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- F-P1-2 高亮规则系统（借鉴阅读T） -->
+<!-- 适配说明：去掉 skin_textColor 皮肤属性, 当前项目无皮肤系统 -->
+<com.google.android.flexbox.FlexboxLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@drawable/shape_card_view"
+    android:padding="4dp"
+    app:alignItems="center"
+    app:flexWrap="wrap">
+
+    <TextView
+        android:id="@+id/tv_style"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:gravity="center"
+        android:maxLines="1"
+        android:padding="5dp"
+        android:text="@string/highlight_style"
+        android:textColor="@color/primaryText"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/tv_note"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:gravity="center"
+        android:maxLines="1"
+        android:padding="5dp"
+        android:text="@string/note_content"
+        android:textColor="@color/primaryText"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/tv_batch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:gravity="center"
+        android:maxLines="1"
+        android:padding="5dp"
+        android:text="@string/highlight_batch"
+        android:textColor="@color/primaryText"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/tv_copy"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:gravity="center"
+        android:maxLines="1"
+        android:padding="5dp"
+        android:text="@android:string/copy"
+        android:textColor="@color/primaryText"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/tv_delete"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:gravity="center"
+        android:maxLines="1"
+        android:padding="5dp"
+        android:text="@string/delete"
+        android:textColor="@color/error"
+        android:textSize="14sp" />
+
+</com.google.android.flexbox.FlexboxLayout>

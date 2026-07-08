@@ -3,9 +3,11 @@ package io.legado.app.ui.book.read.page.entities.column
 import android.graphics.Canvas
 import android.os.Build
 import androidx.annotation.Keep
+import io.legado.app.help.HighlightStyle
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.ui.book.read.page.ContentTextView
+import io.legado.app.ui.book.read.page.HighlightDraw
 import io.legado.app.ui.book.read.page.entities.TextLine
 import io.legado.app.ui.book.read.page.entities.TextLine.Companion.emptyTextLine
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
@@ -41,6 +43,17 @@ data class TextColumn(
             }
             field = value
         }
+    var highlightStyle: HighlightStyle? = null
+        set(value) {
+            if (field != value) {
+                textLine.invalidate()
+                val before = field?.needsPerColumnDraw == true
+                val after = value?.needsPerColumnDraw == true
+                if (!before && after) textLine.styledColumnCount++
+                else if (before && !after) textLine.styledColumnCount--
+            }
+            field = value
+        }
 
     override fun draw(view: ContentTextView, canvas: Canvas) {
         val textPaint = if (textLine.isTitle) {
@@ -48,14 +61,21 @@ data class TextColumn(
         } else {
             ChapterProvider.contentPaint
         }
-        val textColor = if (textLine.isReadAloud || isSearchResult) {
-            ReadBookConfig.textAccentColor
-        } else {
-            ReadBookConfig.textColor
+        val hs = highlightStyle
+        val hsTextColor = hs?.textColor ?: 0
+        val textColor = when {
+            textLine.isReadAloud || isSearchResult -> ReadBookConfig.textAccentColor
+            hsTextColor != 0 -> hsTextColor
+            else -> ReadBookConfig.textColor
         }
         if (textPaint.color != textColor) {
             textPaint.color = textColor
         }
+        val fill = hs?.fill ?: 0
+        if (fill != 0) {
+            canvas.drawRect(start, 0f, end, textLine.height, view.highlightPaint(fill))
+        }
+        val saved = if (hs != null) HighlightDraw.applyTextStyle(textPaint, hs) else null
         val y = textLine.lineBase - textLine.lineTop
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
             val letterSpacing = textPaint.letterSpacing * textPaint.textSize
@@ -63,6 +83,11 @@ data class TextColumn(
             canvas.drawText(charData, start + letterSpacingHalf, y, textPaint)
         } else {
             canvas.drawText(charData, start, y, textPaint)
+        }
+        if (saved != null) HighlightDraw.restoreTextStyle(textPaint, saved)
+        hs?.emphasis?.let { e ->
+            val color = if (e.color != 0) e.color else textColor
+            HighlightDraw.drawEmphasis(canvas, start, end, textLine.height, color)
         }
         if (selected) {
             canvas.drawRect(start, 0f, end, textLine.height, view.selectedPaint)

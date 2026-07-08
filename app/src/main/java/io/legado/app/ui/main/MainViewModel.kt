@@ -40,8 +40,8 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.LinkedList
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import kotlin.collections.forEach
 import kotlin.math.min
@@ -52,7 +52,7 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
     private var threadCount = AppConfig.threadCount
     private var poolSize = min(threadCount, AppConst.MAX_THREAD)
     private var upTocPool = Executors.newFixedThreadPool(poolSize).asCoroutineDispatcher()
-    private val waitUpTocBooks = LinkedList<String>()
+    private val waitUpTocBooks = ConcurrentLinkedQueue<String>()
     private val onUpTocBooks = ConcurrentHashMap.newKeySet<String>()
     private val eventListenerSource = ConcurrentHashMap<BookSource, Boolean>()
     val onUpBooksLiveData = MutableLiveData<Int>()

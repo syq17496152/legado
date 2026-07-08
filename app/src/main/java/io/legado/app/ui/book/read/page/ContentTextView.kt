@@ -8,6 +8,7 @@ import android.view.MotionEvent
 import android.view.View
 import io.legado.app.R
 import io.legado.app.data.entities.Bookmark
+import io.legado.app.help.HighlightMatcher
 import io.legado.app.help.book.isOnLineTxt
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadBook
@@ -47,6 +48,16 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
             style = Paint.Style.FILL
         }
     }
+    private val highlightFillPaint by lazy {
+        Paint().apply { style = Paint.Style.FILL }
+    }
+
+    fun highlightPaint(bgColor: Int): Paint {
+        highlightFillPaint.color = bgColor
+        return highlightFillPaint
+    }
+    /** 仅当当前 view 内已绘制过高亮时才需要在无高亮时再跑一次清除 */
+    private var hasHighlightDrawn = false
     private var callBack: CallBack
     private val visibleRect = ChapterProvider.visibleRect
     val selectStart = TextPos(0, -1, -1)
@@ -84,12 +95,60 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
      */
     fun setContent(textPage: TextPage) {
         this.textPage = textPage
+        upHighlight()
         // 非滑动翻页动画需要同步重绘，不然翻页可能会出现闪烁
         if (isScroll) {
             postInvalidate()
         } else {
             invalidate()
         }
+    }
+
+    /**
+     * F-P1-2 应用高亮: 用 HighlightMatcher 按章节位置给可见页的列设色
+     * 借鉴阅读T, 适配当前项目(ReadBook.highlights/highlightRules/ruleMatchesOfChapter)
+     */
+    fun upHighlight() {
+        val hasRules = ReadBook.highlightRules.isNotEmpty()
+        if (ReadBook.highlights.isEmpty() && !hasRules && !hasHighlightDrawn) return
+        hasHighlightDrawn = ReadBook.highlights.isNotEmpty() || hasRules
+        val last = if (isScroll) 2 else 0
+        for (relativePos in 0..last) {
+            val page = relativePage(relativePos)
+            if (page.lines.isEmpty() || page.isMsgPage) continue
+            val textChapter = page.getTextChapter()
+            val pageBase = textChapter.getReadLength(page.index)
+            val pageLen = page.lines.sumOf { it.charSize + if (it.isParagraphEnd) 1 else 0 }
+            val pageEnd = pageBase + pageLen
+            // 规则命中: 整章匹配(按 textChapter 缓存) → 只取落在本页坐标窗口者
+            val ruleRanges = ReadBook.ruleMatchesOfChapter(textChapter)
+                .asSequence()
+                .filter { it.start < pageEnd && it.end > pageBase }
+                .map { HighlightMatcher.Range(it.start, it.end, it.style) }
+                .toList()
+            // 手动高亮排在规则之后 → resolve 按列表序逐通道 merge, 手动压过规则
+            val manualRanges = ReadBook.highlightsOfChapter(page.chapterIndex).map {
+                HighlightMatcher.Range(it.chapterPos, it.chapterPosEnd, it.styleObj())
+            }
+            val ranges = ruleRanges + manualRanges
+            val lineSpecs = page.lines.map { line ->
+                HighlightMatcher.LineSpec(
+                    line.charSize,
+                    line.columns.map { if (it is TextColumn) it.charData.length else 0 },
+                    line.isParagraphEnd
+                )
+            }
+            val colors = HighlightMatcher.resolve(pageBase, lineSpecs, ranges)
+            page.lines.forEachIndexed { li, line ->
+                line.columns.forEachIndexed { ci, col ->
+                    if (col is TextColumn) {
+                        // 标题行一律不画高亮(规则与手动划线皆跳过)
+                        col.highlightStyle = if (line.isTitle) null else colors[li][ci]
+                    }
+                }
+            }
+        }
+        postInvalidate()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {

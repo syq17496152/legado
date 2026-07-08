@@ -29,6 +29,7 @@ import io.legado.app.help.webView.WebJsExtensions.Companion.nameCache
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameJava
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameSource
 import io.legado.app.help.webView.WebViewPool
+import io.legado.app.help.source.SourceHelp
 import io.legado.app.model.Debug
 import io.legado.app.utils.get
 import io.legado.app.utils.runOnUI
@@ -68,6 +69,7 @@ class BackstageWebView(
     private val mHandler = Handler(Looper.getMainLooper())
     private var callback: Callback? = null
     private var pooledWebView: PooledWebView? = null
+    private var closed = false
 
     suspend fun getStrResponse(): StrResponse = withTimeout(timeout ?: 60000L) {
         suspendCancellableCoroutine { block ->
@@ -115,7 +117,13 @@ class BackstageWebView(
                     if (isRule) {
                         webView.addJavascriptInterface(WebCacheManager, nameCache)
                         tag?.let { key ->
-                           runBlocking(IO) { appDb.bookSourceDao.getBookSource(key) }?.let {
+                           // B1 修复：先读内存缓存，未命中再 runBlocking 查数据库并写入缓存
+                           // 原实现直接 runBlocking 主线程阻塞，长跑下频繁调用影响 UI 流畅度
+                           val bookSource = SourceHelp.getCachedBookSource(key)
+                               ?: runBlocking(IO) {
+                                   appDb.bookSourceDao.getBookSource(key)
+                               }?.also { SourceHelp.putBookSourceCache(key, it) }
+                           bookSource?.let {
                                webView.webChromeClient = object : WebChromeClient() {
                                    /* 监听网页日志 */
                                    override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
@@ -168,8 +176,16 @@ class BackstageWebView(
     }
 
     private fun destroy() {
+        closed = true
+        callback = null
         pooledWebView?.let { WebViewPool.release(it) }
         pooledWebView = null
+    }
+
+    private fun isActiveWebView(webView: WebView? = null): Boolean {
+        if (closed) return false
+        val pooled = pooledWebView ?: return false
+        return webView == null || pooled.realWebView === webView
     }
 
     private fun getJs(): String {
@@ -241,7 +257,7 @@ class BackstageWebView(
             } else mJavaScript
             override fun run() {
                 mWebView.get()?.evaluateJavascript(jsStr) {
-                    if (pooledWebView != null) {
+                    if (isActiveWebView(mWebView.get())) {
                         handleResult(it)
                     }
                 }

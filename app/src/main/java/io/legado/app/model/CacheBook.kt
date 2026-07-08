@@ -113,6 +113,7 @@ object CacheBook {
         }
     }
 
+    @Synchronized
     fun close() {
         cacheBookMap.forEach { it.value.stop() }
         cacheBookMap.clear()

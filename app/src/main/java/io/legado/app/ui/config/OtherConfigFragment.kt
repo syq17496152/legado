@@ -17,6 +17,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.databinding.DialogEditCodeBinding
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.AppFreezeMonitor
+import io.legado.app.help.DebugFloatBallManager
 import io.legado.app.help.DispatchersMonitor
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
@@ -202,6 +203,15 @@ class OtherConfigFragment : PreferenceFragment(),
                 LiveEventBus.config().enableLogger(AppConfig.recordLog)
                 AppFreezeMonitor.init(appCtx)
                 DispatchersMonitor.init()
+            }
+
+            PreferKey.debugLogFloatingBall -> {
+                val enabled = sharedPreferences?.getBoolean(key, false) ?: false
+                if (enabled) {
+                    DebugFloatBallManager.onActivityResumed(requireActivity())
+                } else {
+                    DebugFloatBallManager.updateState(false)
+                }
             }
 
             PreferKey.processText -> sharedPreferences?.let {

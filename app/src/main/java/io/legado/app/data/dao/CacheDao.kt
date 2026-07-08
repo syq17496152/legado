@@ -33,4 +33,15 @@ interface CacheDao {
     @Query("delete from caches where deadline > 0 and deadline < :now")
     fun clearDeadline(now: Long)
 
+    // F-P0-2 备份选择器（借鉴蛋蛋Max）获取书源运行数据缓存
+    @Query(
+        """select * from caches
+        where substr(`key`, 1, 2) = 'v_'
+        or substr(`key`, 1, 9) = 'userInfo_'
+        or substr(`key`, 1, 11) = 'loginHeader_'
+        or substr(`key`, 1, 15) = 'sourceVariable_'
+        or substr(`key`, 1, 8) = 'infoMap_'"""
+    )
+    fun getRuntimeSourceCaches(): List<Cache>
+
 }

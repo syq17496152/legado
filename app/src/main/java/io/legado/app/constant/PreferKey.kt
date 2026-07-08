@@ -49,6 +49,7 @@ object PreferKey {
     const val bookImportFileName = "bookImportFileName"
     const val episodeExportFileName = "episodeExportFileName"
     const val recordLog = "recordLog"
+    const val debugLogFloatingBall = "debugLogFloatingBall"
     const val processText = "process_text"
     const val cleanCache = "cleanCache"
     const val saveTabPosition = "saveTabPosition"
@@ -115,6 +116,8 @@ object PreferKey {
     const val disableHorizontalPageSnap = "disableHorizontalPageSnap"
     const val enableMangaGray = "enableMangaGray"
     const val autoRefresh = "auto_refresh"
+    // F-P1-1 自动任务服务开关
+    const val autoTaskService = "autoTaskService"
     const val onlyUpdateRead = "onlyUpdateRead"
     const val defaultToRead = "defaultToRead"
     const val exportCharset = "exportCharset"
@@ -209,4 +212,16 @@ object PreferKey {
     const val editAutoWrap = "editAutoWrap"
     const val editAutoComplete = "editAutoComplete"
     const val showBoardLine = "showBoardLine"
+
+    // F-P0-2 备份选择器（借鉴蛋蛋Max）高亮规则相关 keys
+    const val highlightRuleDialog = "highlightRuleDialog"
+    const val highlightRuleBookTitle = "highlightRuleBookTitle"
+    const val highlightRuleBracketNote = "highlightRuleBracketNote"
+    const val highlightRuleItems = "highlightRuleItems"
+    const val highlightRuleGroups = "highlightRuleGroups"
+    const val highlightRuleCurrentGroup = "highlightRuleCurrentGroup"
+
+    // F-P1-8 书源/订阅源文件夹视图模式（0=列表视图, 1=文件夹视图）
+    const val sourceViewMode = "sourceViewMode"
+    const val rssViewMode = "rssViewMode"
 }

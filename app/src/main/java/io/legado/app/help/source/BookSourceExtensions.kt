@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
  * 采用md5作为key可以在分类修改后自动重新计算,不需要手动刷新
  */
 
-private val mutexMap by lazy { hashMapOf<String, Mutex>() }
+private val mutexMap by lazy { ConcurrentHashMap<String, Mutex>() }
 private val exploreKindsMap by lazy { ConcurrentHashMap<String, List<ExploreKind>>() }
 private val aCache by lazy { ACache.get("explore") }
 
@@ -47,7 +47,7 @@ suspend fun BookSource.exploreKinds(): List<ExploreKind> {
     if (exploreUrl.isNullOrBlank()) {
         return emptyList()
     }
-    val mutex = mutexMap[bookSourceUrl] ?: Mutex().apply { mutexMap[bookSourceUrl] = this }
+    val mutex = mutexMap.computeIfAbsent(bookSourceUrl) { Mutex() }
     mutex.withLock {
         exploreKindsMap[exploreKindsKey]?.let { return it }
         val kinds = arrayListOf<ExploreKind>()

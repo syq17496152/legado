@@ -18,6 +18,7 @@ import io.legado.app.data.entities.DictRule
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.data.entities.KeyboardAssist
 import io.legado.app.data.entities.ReadRecord
+import io.legado.app.data.entities.ReadRecordDetail
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.RssStar
@@ -184,6 +185,10 @@ object Restore {
                     }
                 }
             }
+        }
+        // F-P0-2 备份选择器（借鉴蛋蛋Max）恢复阅读记录详情
+        fileToListT<ReadRecordDetail>(path, "readRecordDetail.json")?.let {
+            withContext(IO) { appDb.readRecordDao.insertDetails(*it.toTypedArray()) }
         }
         File(path, "servers.json").takeIf {
             it.exists()

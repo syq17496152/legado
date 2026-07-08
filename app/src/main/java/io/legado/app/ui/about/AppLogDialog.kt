@@ -27,6 +27,7 @@ class AppLogDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
     Toolbar.OnMenuItemClickListener {
 
     private val binding by viewBinding(DialogRecyclerViewBinding::bind)
+    private var currentFilter: AppLog.Level? = null
     private val adapter by lazy {
         LogAdapter(requireContext())
     }
@@ -45,7 +46,16 @@ class AppLogDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
             recyclerView.layoutManager = LinearLayoutManager(requireContext())
             recyclerView.adapter = adapter
         }
-        adapter.setItems(AppLog.logs)
+        refreshLogs()
+    }
+
+    private fun refreshLogs() {
+        val logs = if (currentFilter == null) {
+            AppLog.logs
+        } else {
+            AppLog.logs.filter { it.level == currentFilter }
+        }
+        adapter.setItems(logs)
     }
 
     override fun onMenuItemClick(item: MenuItem?): Boolean {
@@ -54,12 +64,37 @@ class AppLogDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
                 AppLog.clear()
                 adapter.clearItems()
             }
+            R.id.filter_all -> {
+                currentFilter = null
+                item.isChecked = true
+                refreshLogs()
+            }
+            R.id.filter_error -> {
+                currentFilter = AppLog.Level.ERROR
+                item.isChecked = true
+                refreshLogs()
+            }
+            R.id.filter_warn -> {
+                currentFilter = AppLog.Level.WARN
+                item.isChecked = true
+                refreshLogs()
+            }
+            R.id.filter_info -> {
+                currentFilter = AppLog.Level.INFO
+                item.isChecked = true
+                refreshLogs()
+            }
+            R.id.filter_debug -> {
+                currentFilter = AppLog.Level.DEBUG
+                item.isChecked = true
+                refreshLogs()
+            }
         }
         return true
     }
 
     inner class LogAdapter(context: Context) :
-        RecyclerAdapter<Triple<Long, String, Throwable?>, ItemAppLogBinding>(context) {
+        RecyclerAdapter<AppLog.LogEntry, ItemAppLogBinding>(context) {
 
         override fun getViewBinding(parent: ViewGroup): ItemAppLogBinding {
             return ItemAppLogBinding.inflate(inflater, parent, false)
@@ -68,21 +103,31 @@ class AppLogDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
         override fun convert(
             holder: ItemViewHolder,
             binding: ItemAppLogBinding,
-            item: Triple<Long, String, Throwable?>,
+            item: AppLog.LogEntry,
             payloads: MutableList<Any>
         ) {
-            binding.textTime.text = LogUtils.logTimeFormat.format(Date(item.first))
-            binding.textMessage.text = item.second
+            binding.textTime.text = LogUtils.logTimeFormat.format(Date(item.time))
+            binding.textMessage.text = formatMessage(item)
         }
 
         override fun registerListener(holder: ItemViewHolder, binding: ItemAppLogBinding) {
             binding.root.onClick {
                 getItem(holder.layoutPosition)?.let { item ->
-                    item.third?.let {
+                    item.throwable?.let {
                         showDialogFragment(TextDialog("Log", it.stackTraceToString()))
                     }
                 }
             }
+        }
+
+        private fun formatMessage(item: AppLog.LogEntry): String {
+            val prefix = when (item.level) {
+                AppLog.Level.ERROR -> "[E] "
+                AppLog.Level.WARN -> "[W] "
+                AppLog.Level.INFO -> "[I] "
+                AppLog.Level.DEBUG -> "[D] "
+            }
+            return prefix + item.message
         }
 
     }

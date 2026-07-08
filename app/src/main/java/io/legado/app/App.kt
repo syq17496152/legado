@@ -51,6 +51,7 @@ import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.rhino.NativeBaseSource
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.help.storage.Backup
+import io.legado.app.model.AutoTask
 import io.legado.app.model.BookCover
 import io.legado.app.utils.ChineseUtils
 import io.legado.app.utils.LogUtils
@@ -73,7 +74,8 @@ class App : Application() {
         super.onCreate()
         CrashHandler(this)
         if (isDebuggable) {
-            ThreadUtils.setThreadAssertsDisabledForTesting(true)
+            // Cronet 149 重命名：setThreadAssertsDisabledForTesting → hasSubtleSideEffectsSetThreadAssertsDisabledForTesting
+            ThreadUtils.hasSubtleSideEffectsSetThreadAssertsDisabledForTesting(true)
         }
         oldConfig = Configuration(resources.configuration)
         applyDayNightInit(this)
@@ -125,6 +127,8 @@ class App : Application() {
             if (AppConfig.syncBookProgress) {
                 AppWebDav.downloadAllBookProgress()
             }
+            //F-P1-1 自动任务调度恢复
+            AutoTask.refreshSchedule()
         }
     }
 

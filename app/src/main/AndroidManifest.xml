@@ -218,6 +218,28 @@
         <activity
             android:name=".ui.config.ConfigActivity"
             android:launchMode="standard" />
+        <!-- F-P0-1 调试工具集（借鉴蛋蛋Max） -->
+        <activity
+            android:name=".ui.debug.DebugToolsActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout" />
+        <activity
+            android:name=".ui.debug.EncodeToolsActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout" />
+        <activity
+            android:name=".ui.debug.HttpDebugActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout" />
+        <activity
+            android:name=".ui.debug.CurlTestActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout" />
+        <activity
+            android:name=".ui.debug.PingTestActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout" />
+        <activity
+            android:name=".ui.debug.RegexTestActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout" />
+        <activity
+            android:name=".ui.debug.TimestampConvertActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout" />
         <!-- 搜索界面 -->
         <activity
             android:name=".ui.book.search.SearchActivity"
@@ -517,6 +539,28 @@
         <service
             android:name=".service.DownloadService"
             android:foregroundServiceType="dataSync" />
+        <!-- F-P1-1 自动任务服务：Android 14+ 用 shortService，低版本用 dataSync -->
+        <service
+            android:name=".service.AutoTaskService"
+            android:foregroundServiceType="dataSync|shortService" />
+
+        <!-- F-P1-1 自动任务 UI -->
+        <activity
+            android:name=".ui.autoTask.AutoTaskActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false"
+            android:launchMode="singleTask" />
+        <activity
+            android:name=".ui.autoTask.AutoTaskEditActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false"
+            android:launchMode="singleTask" />
+        <!-- F-P1-2 高亮规则系统 -->
+        <activity
+            android:name=".ui.highlight.HighlightRuleActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false"
+            android:launchMode="singleTask" />
 
         <receiver
             android:name=".receiver.MediaButtonReceiver"

@@ -90,8 +90,9 @@ object ThemeConfig {
 
     /**
      * 获取链接获取图片文件名
+     * F-P0-2 备份选择器：Backup.kt 需要调用此方法解析主题背景图路径，故改为 public
      */
-    private fun getUrlToFile(url: String): String {
+    fun getUrlToFile(url: String): String {
         val suffix = when {
             url.contains(".9.png", ignoreCase = true) -> ".9.png"
             url.contains(".png", ignoreCase = true) -> ".png"

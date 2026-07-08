@@ -9,6 +9,7 @@ import androidx.appcompat.widget.SearchView
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.GridLayoutManager
 import io.legado.app.R
 import io.legado.app.base.VMBaseFragment
 import io.legado.app.constant.AppLog
@@ -17,9 +18,11 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssSource
 import io.legado.app.databinding.FragmentRssBinding
 import io.legado.app.databinding.ItemRssBinding
+import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.ui.adapter.SourceFolderAdapter
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.rss.article.ReadRecordDialog
 import io.legado.app.ui.rss.article.RssSortActivity
@@ -48,7 +51,8 @@ import io.legado.app.ui.login.SourceLoginActivity
  * 订阅界面
  */
 class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainFragmentInterface,
-    RssAdapter.CallBack {
+    RssAdapter.CallBack,
+    SourceFolderAdapter.CallBack {
 
     constructor(position: Int) : this() {
         val bundle = Bundle()
@@ -63,6 +67,14 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     private val adapter by lazy {
         RssAdapter(requireContext(), this, this, viewLifecycleOwner.lifecycle)
     }
+    private val folderAdapter by lazy { SourceFolderAdapter(requireContext(), this) }
+    // F-P1-8 用户视图偏好（持久化）：0=列表视图, 1=文件夹视图
+    private val isFolderViewMode: Boolean
+        get() = AppConfig.rssViewMode == 1
+    // F-P1-8 当前是否显示文件夹视图（运行时状态）
+    // 点击文件夹进入分组列表时设为 false，但不修改 isFolderViewMode
+    // 用户主动点击菜单"切换视图模式"时才同步修改 isFolderViewMode
+    private var isShowingFolder: Boolean = false
     private val searchView: SearchView by lazy {
         binding.titleBar.findViewById(R.id.search_view)
     }
@@ -74,9 +86,15 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         setSupportToolbar(binding.titleBar.toolbar)
         initSearchView()
+        // F-P1-8 初始化运行时状态：跟随用户偏好
+        isShowingFolder = isFolderViewMode
         initRecyclerView()
         initGroupData()
-        upRssFlowJob()
+        if (isShowingFolder) {
+            upFolderView()
+        } else {
+            upRssFlowJob()
+        }
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu) {
@@ -85,9 +103,17 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         upGroupsMenu()
     }
 
+    override fun onPrepareOptionsMenu(menu: Menu) {
+        super.onPrepareOptionsMenu(menu)
+        menu.findItem(R.id.menu_view_mode)?.let {
+            it.title = if (isShowingFolder) getString(R.string.list_view) else getString(R.string.folder_view)
+        }
+    }
+
     override fun onCompatOptionsItemSelected(item: MenuItem) {
         super.onCompatOptionsItemSelected(item)
         when (item.itemId) {
+            R.id.menu_view_mode -> switchViewMode()
             R.id.menu_read_record -> showDialogFragment<ReadRecordDialog>()
             R.id.menu_rss_config -> startActivity<RssSourceActivity>()
             R.id.menu_rss_star -> startActivity<RssFavoritesActivity>()
@@ -127,7 +153,6 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
 
     private fun initRecyclerView() {
         binding.recyclerView.setEdgeEffectColor(primaryColor)
-        binding.recyclerView.adapter = adapter
         adapter.addHeaderView {
             ItemRssBinding.inflate(layoutInflater, it, false).apply {
                 tvName.setText(R.string.rule_subscription)
@@ -137,6 +162,51 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                 }
             }
         }
+        if (isShowingFolder) {
+            applyFolderView()
+        } else {
+            applyListView()
+        }
+    }
+
+    // F-P1-8 应用列表视图
+    private fun applyListView() {
+        binding.recyclerView.layoutManager = GridLayoutManager(context, 4)
+        binding.recyclerView.adapter = adapter
+    }
+
+    // F-P1-8 应用文件夹视图
+    private fun applyFolderView() {
+        binding.recyclerView.layoutManager = GridLayoutManager(context, 3)
+        binding.recyclerView.adapter = folderAdapter
+    }
+
+    // F-P1-8 切换视图模式（用户主动点击菜单：永久切换 + 同步运行时状态）
+    private fun switchViewMode() {
+        if (isShowingFolder) {
+            // 当前是文件夹视图 → 切换为列表视图（永久）
+            AppConfig.rssViewMode = 0
+            isShowingFolder = false
+            applyListView()
+            upRssFlowJob(searchView.query?.toString())
+        } else {
+            // 当前是列表视图 → 切换为文件夹视图（永久）
+            AppConfig.rssViewMode = 1
+            isShowingFolder = true
+            searchView.setQuery("", false)  // 清空搜索框，回到文件夹首页
+            applyFolderView()
+            upFolderView()
+        }
+        requireActivity().invalidateOptionsMenu()
+    }
+
+    // F-P1-8 更新文件夹视图数据
+    private fun upFolderView() {
+        val folderList = mutableListOf<String>()
+        folderList.add(getString(R.string.all_groups))
+        folderList.add(getString(R.string.no_group))
+        folderList.addAll(groups)
+        folderAdapter.setItems(folderList, folderAdapter.diffItemCallback)
     }
 
     private fun initGroupData() {
@@ -152,15 +222,22 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                 groups.clear()
                 groups.addAll(it)
                 upGroupsMenu()
+                if (isShowingFolder) {
+                    upFolderView()
+                }
             }
         }
     }
 
     private fun upRssFlowJob(searchKey: String? = null) {
+        if (isShowingFolder) return
         rssFlowJob?.cancel()
         rssFlowJob = viewLifecycleOwner.lifecycleScope.launch {
             when {
                 searchKey.isNullOrEmpty() -> appDb.rssSourceDao.flowEnabled()
+                searchKey == getString(R.string.no_group) -> {
+                    appDb.rssSourceDao.flowEnabledNoGroup()
+                }
                 searchKey.startsWith("group:") -> {
                     val key = searchKey.substringAfter("group:")
                     appDb.rssSourceDao.flowEnabledByGroup(key)
@@ -176,6 +253,20 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
             }.flowOn(IO).collect {
                 adapter.setItems(it)
             }
+        }
+    }
+
+    // F-P1-8 文件夹点击回调：点击文件夹 → 临时切换到列表视图并按分组筛选
+    // 注意：不修改 rssViewMode（用户偏好），仅修改 isShowingFolder（运行时状态）
+    // 这样再次进入或用户点击菜单"文件夹视图"时，仍会显示文件夹视图
+    override fun onFolderClick(group: String) {
+        isShowingFolder = false
+        applyListView()
+        requireActivity().invalidateOptionsMenu()
+        when (group) {
+            getString(R.string.all_groups) -> searchView.setQuery("", true)
+            getString(R.string.no_group) -> searchView.setQuery(getString(R.string.no_group), true)
+            else -> searchView.setQuery("group:$group", true)
         }
     }
 

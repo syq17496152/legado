@@ -13,6 +13,12 @@
         tools:visible="true" />
 
     <item
+        android:id="@+id/menu_page"
+        android:title="@string/menu_page"
+        android:visible="false"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/menu_login"
         android:title="@string/login"
         app:showAsAction="never" />

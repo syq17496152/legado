@@ -44,6 +44,14 @@ class ConcurrentRateLimiter(source: BaseSource?) {
                 }
             }
         }
+
+        /**
+         * F-P1-C4 删除指定源的并发限流记录
+         * 调用方：SourceHelp.deleteBookSourceInternal / deleteRssSourceInternal（删源时清理，避免内存泄漏）
+         */
+        fun clearRecord(key: String) {
+            concurrentRecordMap.remove(key)
+        }
     }
 
     private val concurrentRate = source?.concurrentRate

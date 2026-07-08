@@ -4,6 +4,12 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <item
+        android:id="@+id/menu_view_mode"
+        android:icon="@drawable/ic_folder_outline"
+        android:title="@string/view_mode"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/menu_group"
         android:icon="@drawable/ic_groups"
         android:title="@string/menu_action_group"

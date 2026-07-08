@@ -53,11 +53,12 @@ class OkHttpStreamFetcher(
 
     companion object {
         private const val TAG = "ImgDecrypt"
-        private val failUrl = hashSetOf<String>()
+        // F-P1-C4 修复无界 HashSet 内存泄漏 | 已知上限：200 条失败 URL | 升级路径：无
+        private val failUrl = android.util.LruCache<String, Boolean>(200)
     }
 
     override fun loadData(priority: Priority, callback: DataFetcher.DataCallback<in InputStream>) {
-        if (failUrl.contains(url.toStringUrl())) {
+        if (failUrl.get(url.toStringUrl()) != null) {
             callback.onLoadFailed(NoStackTraceException("跳过加载失败的图片"))
             return
         }
@@ -123,7 +124,7 @@ class OkHttpStreamFetcher(
         responseBody = response.body
         if (!response.isSuccessful) {
             if (!manga) {
-                failUrl.add(url.toStringUrl())
+                failUrl.put(url.toStringUrl(), true)
             }
             callback?.onLoadFailed(HttpException(response.message, response.code))
             return
@@ -159,7 +160,7 @@ class OkHttpStreamFetcher(
     private fun onStreamReady(inputStream: InputStream?) {
         if (inputStream == null) {
             if (!manga) {
-                failUrl.add(url.toStringUrl())
+                failUrl.put(url.toStringUrl(), true)
             }
             callback?.onLoadFailed(NoStackTraceException("封面二次解密失败"))
         } else {

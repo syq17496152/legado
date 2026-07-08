@@ -76,7 +76,8 @@ class AnalyzeRule(
     private var analyzeByJSoup: AnalyzeByJSoup? = null
     private var analyzeByJSonPath: AnalyzeByJSonPath? = null
 
-    private val stringRuleCache = hashMapOf<String, List<SourceRule>>()
+    // F-P1-C4 修复无界 HashMap 内存泄漏 | 已知上限：64 条规则缓存（LRU 自动淘汰最久未使用） | 升级路径：无
+    private val stringRuleCache = android.util.LruCache<String, List<SourceRule>>(64)
     private val regexCache = hashMapOf<String, Regex?>()
     private val scriptCache = hashMapOf<String, CompiledScript>()
     private var topScopeRef: WeakReference<Scriptable>? = null
@@ -520,8 +521,9 @@ class AnalyzeRule(
      */
     private fun splitSourceRuleCacheString(ruleStr: String?): List<SourceRule> {
         if (ruleStr.isNullOrEmpty()) return emptyList()
-        return stringRuleCache.getOrPut(ruleStr) {
-            splitSourceRule(ruleStr)
+        // F-P1-C4 LruCache 不支持 getOrPut，改用 get + put 模式
+        return stringRuleCache.get(ruleStr) ?: splitSourceRule(ruleStr).also {
+            stringRuleCache.put(ruleStr, it)
         }
     }
 
@@ -574,8 +576,9 @@ class AnalyzeRule(
     }
 
     private fun getOrCreateSingleSourceRule(rule: String): List<SourceRule> {
-        return stringRuleCache.getOrPutLimit(rule, 16) {
-            listOf(SourceRule(rule))
+        // F-P1-C4 LruCache 已有 maxSize=64 的 LRU 淘汰，无需 getOrPutLimit 的 16 上限
+        return stringRuleCache.get(rule) ?: listOf(SourceRule(rule)).also {
+            stringRuleCache.put(rule, it)
         }
     }
 

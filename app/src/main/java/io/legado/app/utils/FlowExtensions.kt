@@ -3,6 +3,7 @@ package io.legado.app.utils
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import io.legado.app.data.appDb
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
@@ -41,6 +42,8 @@ inline fun <T> Flow<T>.onEachParallelSafe(
     flow {
         try {
             action(value)
+        } catch (e: CancellationException) {
+            throw e  // 守卫：协程取消异常必须重新抛出
         } catch (e: Throwable) {
             currentCoroutineContext().ensureActive()
         }
@@ -63,6 +66,8 @@ inline fun <T, R> Flow<T>.mapParallelSafe(
     flow {
         try {
             emit(transform(value))
+        } catch (e: CancellationException) {
+            throw e  // 守卫：协程取消异常必须重新抛出
         } catch (_: Throwable) {
             currentCoroutineContext().ensureActive()
         }
@@ -77,6 +82,8 @@ inline fun <T, R> Flow<T>.transformParallelSafe(
     flow {
         try {
             transform(value)
+        } catch (e: CancellationException) {
+            throw e  // 守卫：协程取消异常必须重新抛出
         } catch (e: Throwable) {
             currentCoroutineContext().ensureActive()
         }

@@ -22,4 +22,6 @@ object IntentAction {
     const val init = "init"
     const val remove = "remove"
     const val stopPlay = "stopPlay"
+    // F-P1-1 自动任务调度刷新
+    const val refreshSchedule = "refreshSchedule"
 }

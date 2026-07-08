@@ -49,6 +49,12 @@
         android:title="@string/bookmark_add"
         app:showAsAction="never" />
 
+    <!-- F-P1-2 高亮规则管理入口 -->
+    <item
+        android:id="@+id/menu_highlight_rule"
+        android:title="@string/highlight_rule_manage"
+        app:showAsAction="never" />
+
     <item
         android:id="@+id/menu_edit_content"
         android:title="@string/edit_content"

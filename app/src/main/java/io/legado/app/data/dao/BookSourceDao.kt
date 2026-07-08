@@ -83,10 +83,18 @@ interface BookSourceDao {
     fun flowDisabled(): Flow<List<BookSourcePart>>
 
     @Query(
-        """select * from book_sources_part 
+        """select * from book_sources_part
         where enabledExplore = 1 and hasExploreUrl = 1 order by customOrder asc"""
     )
     fun flowExplore(): Flow<List<BookSourcePart>>
+
+    @Query(
+        """select * from book_sources_part
+        where enabledExplore = 1 and hasExploreUrl = 1
+        and (bookSourceGroup is null or bookSourceGroup = '' or bookSourceGroup like '%未分组%')
+        order by customOrder asc"""
+    )
+    fun flowExploreNoGroup(): Flow<List<BookSourcePart>>
 
     @Query("select * from book_sources_part where hasLoginUrl = 1 order by customOrder asc")
     fun flowLogin(): Flow<List<BookSourcePart>>

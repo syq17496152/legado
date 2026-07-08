@@ -8,6 +8,7 @@ plugins {
     alias libs.plugins.android.application
     alias libs.plugins.kotlin.android
     alias libs.plugins.kotlin.parcelize
+    alias libs.plugins.kotlin.compose
     alias libs.plugins.room
     alias libs.plugins.ksp
     alias libs.plugins.google.services
@@ -66,6 +67,12 @@ android {
             abiFilters 'arm64-v8a', 'armeabi-v7a'
         }
 
+        // F-P1-7 打包压缩优化：仅保留项目已翻译语言，移除第三方库（Material Components/AppCompat 等）自带的其他语言资源
+        // 项目实际语言资源：values(默认en)/values-zh/values-zh-rHK/values-zh-rTW/values-es-rES/values-ja-rJP/values-pt-rBR/values-vi
+        // 预期减小 APK 体积约 50-100KB（移除第三方库的法语/德语/俄语等未使用语言资源）
+        // 不实施 R8 full mode：会破坏 Rhino JS 引擎/Gson/Hutool 反射调用
+        resConfigs 'zh', 'zh-rHK', 'zh-rTW', 'en', 'es', 'es-rES', 'ja', 'ja-rJP', 'pt', 'pt-rBR', 'vi'
+
         javaCompileOptions {
             annotationProcessorOptions {
                 arguments += [
@@ -79,6 +86,7 @@ android {
     buildFeatures {
         buildConfig = true
         viewBinding = true
+        compose = true
     }
     buildTypes {
         release {
@@ -167,29 +175,12 @@ android {
     }
 }
 
-// 全局排除 Compose 依赖（项目未使用 Compose，避免 activity 1.13+ / material 1.14+ 传递依赖引入整个 Compose 运行时）
-configurations.all {
-    exclude group: 'androidx.compose.compiler', module: 'compiler'
-    exclude group: 'androidx.compose.foundation', module: 'foundation'
-    exclude group: 'androidx.compose.material3', module: 'material3'
-    exclude group: 'androidx.compose.material', module: 'material'
-    exclude group: 'androidx.compose.material', module: 'material-icons-core'
-    exclude group: 'androidx.compose.material', module: 'material-ripple'
-    exclude group: 'androidx.compose.runtime', module: 'runtime'
-    exclude group: 'androidx.compose.runtime', module: 'runtime-saveable'
-    exclude group: 'androidx.compose.runtime', module: 'runtime-annotation'
-    exclude group: 'androidx.compose.ui', module: 'ui'
-    exclude group: 'androidx.compose.ui', module: 'ui-graphics'
-    exclude group: 'androidx.compose.ui', module: 'ui-text'
-    exclude group: 'androidx.compose.ui', module: 'ui-unit'
-    exclude group: 'androidx.compose.animation', module: 'animation'
-    exclude group: 'androidx.compose.animation', module: 'animation-core'
-    exclude group: 'androidx.activity', module: 'activity-compose'
-    exclude group: 'androidx.lifecycle', module: 'lifecycle-runtime-compose'
-    exclude group: 'androidx.lifecycle', module: 'lifecycle-viewmodel-compose'
-    exclude group: 'androidx.savedstate', module: 'savedstate-compose'
-    exclude group: 'androidx.navigationevent', module: 'navigationevent-compose'
-}
+// Compose 已启用（F-P0-1 调试工具集需要），原全局排除配置已移除
+// configurations.all {
+//     exclude group: 'androidx.compose.compiler', module: 'compiler'
+//     exclude group: 'androidx.compose.foundation', module: 'foundation'
+//     ... 原排除配置已注释，Compose 现已作为正式依赖引入
+// }
 
 dependencies {
     //compileOnly "com.android.tools.build:gradle:$agp_version"
@@ -210,6 +201,19 @@ dependencies {
     //def coroutines_version = '1.7.3'
     implementation(libs.bundles.coroutines)
 
+    //Compose（F-P0-1 调试工具集）
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.material3)
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.graphics)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.compose.foundation)
+    implementation(libs.compose.runtime)
+    implementation(libs.compose.material.icons.extended)
+    implementation(libs.activity.compose)
+    implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.lifecycle.runtime.compose)
+    debugImplementation(libs.compose.ui.tooling)
 
     //图像处理库Toolkit
     implementation(libs.renderscript.intrinsics.replacement.toolkit)

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/menu_add_highlight_rule"
+        android:icon="@drawable/ic_add"
+        android:title="@string/menu_add_highlight_rule"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/menu_group_manage"
+        android:title="@string/highlight_rule_group_manage_title"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_preset_rule"
+        android:title="@string/highlight_rule_preset"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_import_highlight_rule"
+        android:title="@string/import_highlight_rule"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/menu_export_highlight_rule"
+        android:title="@string/export_highlight_rule"
+        app:showAsAction="never" />
+</menu>

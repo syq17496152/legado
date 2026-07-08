@@ -5,6 +5,7 @@ import androidx.annotation.Keep
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.ReplaceRule
+import io.legado.app.help.HighlightRuleMatcher
 import io.legado.app.help.book.BookContent
 import io.legado.app.ui.book.read.page.provider.LayoutProgressListener
 import io.legado.app.ui.book.read.page.provider.TextChapterLayout
@@ -56,6 +57,10 @@ data class TextChapter(
     var listener: LayoutProgressListener? = null
 
     var isCompleted = false
+
+    // F-P1-2: 高亮规则匹配结果缓存(随规则版本失效)
+    var highlightRuleMatches: List<HighlightRuleMatcher.RuleMatch>? = null
+    var highlightRuleMatchesVersion: Int = 0
 
     val paragraphs by lazy {
         paragraphsInternal

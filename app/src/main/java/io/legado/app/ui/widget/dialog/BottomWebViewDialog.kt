@@ -66,7 +66,6 @@ import androidx.core.view.size
 import io.legado.app.constant.AppConst.imagePathKey
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.coroutine.Coroutine
-import io.legado.app.help.http.newCallResponse
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.text
@@ -832,17 +831,39 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
             return super.shouldInterceptRequest(view, request)
         }
         private val webCookieManager by lazy { android.webkit.CookieManager.getInstance() }
-        private suspend fun getModifiedContentWithJs(url: String, request: WebResourceRequest): WebResourceResponse? {
+
+        /**
+         * B2 优化：同步执行 OkHttp 请求，避免协程调度开销
+         *
+         * 原 suspend 版本调用 okHttpClient.newCallResponse（内部 suspendCancellableCoroutine + enqueue + resume），
+         * 但 shouldInterceptRequest 必须 synchronous，runBlocking 已阻塞主线程，
+         * 协程调度（IO 线程切换 + Callback 回调 + resume）纯属额外开销。
+         * 改为同步 execute() 直接在 runBlocking(IO) 的 IO 线程执行，省去协程调度。
+         *
+         * 保留 307/308 兜底逻辑（P0-7 修复），与 newCallResponse 行为一致。
+         */
+        private fun getModifiedContentWithJs(url: String, request: WebResourceRequest): WebResourceResponse? {
             try {
                 val cookie = webCookieManager.getCookie(url)
-                val res = okHttpClient.newCallResponse {
-                    url(url)
-                    method(request.method, null)
-                    if (!cookie.isNullOrEmpty()) {
-                        addHeader("Cookie", cookie)
-                    }
-                    request.requestHeaders?.forEach { (key, value) ->
-                        addHeader(key, value)
+                val requestBuilder = okhttp3.Request.Builder()
+                    .url(url)
+                    .method(request.method, null)
+                if (!cookie.isNullOrEmpty()) {
+                    requestBuilder.addHeader("Cookie", cookie)
+                }
+                request.requestHeaders?.forEach { (key, value) ->
+                    requestBuilder.addHeader(key, value)
+                }
+                var res = okHttpClient.newCall(requestBuilder.build()).execute()
+                // 307/308 兜底：OkHttp 自动重定向未跟随时（如 body 一次性流），手动保持 method+body 跟随
+                if (res.code == 307 || res.code == 308) {
+                    res.header("Location")?.let { location ->
+                        val redirectRequest = requestBuilder
+                            .url(location)
+                            .method(request.method, null)
+                            .build()
+                        res.close()
+                        res = okHttpClient.newCall(redirectRequest).execute()
                     }
                 }
                 res.headers("Set-Cookie").forEach { setCookie ->

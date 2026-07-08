@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers.IO
 class RssArticlesViewModel(application: Application) : BaseViewModel(application) {
     val loadFinallyLiveData = MutableLiveData<Boolean>()
     val loadErrorLiveData = MutableLiveData<String>()
+    val pageLiveData = MutableLiveData<Int>()
     var isLoading = true
     var order = System.currentTimeMillis()
     private var nextPageUrl: String? = null
@@ -33,10 +34,14 @@ class RssArticlesViewModel(application: Application) : BaseViewModel(application
         }
     }
 
-    fun loadArticles(rssSource: RssSource) {
+    fun loadArticles(rssSource: RssSource) = loadArticles(rssSource, 1)
+
+    fun loadArticles(rssSource: RssSource, targetPage: Int) {
         isLoading = true
-        page = 1
+        page = targetPage.coerceAtLeast(1)
         order = System.currentTimeMillis()
+        nextPageUrl = null
+        pageLiveData.postValue(page)
         Rss.getArticles(viewModelScope, sortName, sortUrl, rssSource, page, searchKey).onSuccess(IO) {
             nextPageUrl = it.second
             val articles = it.first

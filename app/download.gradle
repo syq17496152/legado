@@ -34,7 +34,10 @@ tasks.register('downloadJar', Download) {
             BASE_PATH + "cronet_impl_common_java.jar",
             BASE_PATH + "cronet_impl_native_java.jar",
             BASE_PATH + "cronet_impl_platform_java.jar",
-            BASE_PATH + "cronet_shared_java.jar"
+            BASE_PATH + "cronet_shared_java.jar",
+            // Cronet 149+ 新增：HttpEngine 适配层 jar，包含 HttpEngineNativeProvider 等类
+            // 缺失会导致 JavaCronetProvider.shouldUseHttpEngine() 在 Android 11+ 抛 NoClassDefFoundError
+            BASE_PATH + "httpengine_native_provider_java.jar"
     ])
     dest libPath
     overwrite true

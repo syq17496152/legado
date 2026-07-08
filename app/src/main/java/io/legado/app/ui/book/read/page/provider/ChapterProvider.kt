@@ -233,6 +233,33 @@ object ChapterProvider {
         } ?: Typeface.DEFAULT
     }
 
+    private val highlightTypefaceCache = HashMap<String, Typeface?>()
+
+    /**
+     * 高亮自定义字体: 按路径解析 Typeface 并缓存。
+     * 逐列绘制时高频调用, 必须缓存(命中与未命中都缓存)。失败返回 null, 不影响阅读字体。
+     */
+    fun getHighlightTypeface(fontPath: String): Typeface? {
+        if (fontPath.isEmpty()) return null
+        if (highlightTypefaceCache.containsKey(fontPath)) return highlightTypefaceCache[fontPath]
+        val typeface = kotlin.runCatching {
+            when {
+                fontPath.isContentScheme() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
+                    appCtx.contentResolver
+                        .openFileDescriptor(fontPath.toUri(), "r")!!
+                        .use { Typeface.Builder(it.fileDescriptor).build() }
+                }
+
+                fontPath.isContentScheme() ->
+                    Typeface.createFromFile(RealPathUtil.getPath(appCtx, fontPath.toUri()))
+
+                else -> Typeface.createFromFile(fontPath)
+            }
+        }.getOrNull()
+        highlightTypefaceCache[fontPath] = typeface
+        return typeface
+    }
+
     private fun getPaints(typeface: Typeface?): Pair<TextPaint, TextPaint> {
         // 字体统一处理
         val bold = Typeface.create(typeface, Typeface.BOLD)

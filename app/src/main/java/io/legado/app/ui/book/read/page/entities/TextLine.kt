@@ -13,6 +13,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.page.ContentTextView
+import io.legado.app.ui.book.read.page.HighlightDraw
 import io.legado.app.ui.book.read.page.entities.TextPage.Companion.emptyTextPage
 import io.legado.app.ui.book.read.page.entities.column.BaseColumn
 import io.legado.app.ui.book.read.page.entities.column.TextColumn
@@ -57,6 +58,7 @@ data class TextLine(
     val height: Float inline get() = lineBottom - lineTop
     val canvasRecorder = CanvasRecorderFactory.create()
     var searchResultColumnCount = 0
+    var styledColumnCount = 0
     var isReadAloud: Boolean = false
         set(value) {
             if (field != value) {
@@ -171,6 +173,8 @@ data class TextLine(
             }
         }
 
+        drawHighlightRuns(canvas)
+
         // 墨水屏模式下的朗读和搜索下划线
         if (AppConfig.isEInkMode && (isReadAloud || searchResultColumnCount > 0)) {
             val underlinePaint = PaintPool.obtain()
@@ -253,6 +257,30 @@ data class TextLine(
         }
     }
 
+    /** 按连续同装饰的列区间画 下划线/删除线/方框(文字之上) */
+    private fun drawHighlightRuns(canvas: Canvas) {
+        val baseline = lineBase - lineTop
+        var i = 0
+        val cols = columns
+        while (i < cols.size) {
+            val c = cols[i] as? TextColumn
+            val st = c?.highlightStyle
+            val u = st?.underline; val sk = st?.strike; val bx = st?.box
+            if (st == null || (u == null && sk == null && bx == null)) { i++; continue }
+            // 向后合并 underline/strike/box 完全相同的连续列
+            var j = i + 1
+            while (j < cols.size) {
+                val n = (cols[j] as? TextColumn)?.highlightStyle
+                if (n?.underline == u && n?.strike == sk && n?.box == bx) j++ else break
+            }
+            val x0 = (cols[i] as TextColumn).start
+            val x1 = (cols[j - 1] as TextColumn).end
+            val fallback = if (st.textColor != 0) st.textColor else ReadBookConfig.textColor
+            HighlightDraw.drawRun(canvas, x0, x1, baseline, height, u, sk, bx, fallback)
+            i = j
+        }
+    }
+
     fun checkFastDraw(): Boolean {
         if (!AppConfig.optimizeRender || exceed || !onlyTextColumn || textPage.isMsgPage) {
             return false
@@ -260,7 +288,7 @@ data class TextLine(
         if (wordSpacing != 0f && (!atLeastApi26 || !wordSpacingWorking)) {
             return false
         }
-        return searchResultColumnCount == 0
+        return searchResultColumnCount == 0 && styledColumnCount == 0
     }
 
     fun invalidate() {

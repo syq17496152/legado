@@ -258,6 +258,12 @@
     <string name="del_all">删除所有</string>
     <string name="searchHistory">搜索历史</string>
     <string name="clear">清除</string>
+    <string name="filter">过滤</string>
+    <string name="filter_all">全部</string>
+    <string name="filter_error">错误</string>
+    <string name="filter_warn">警告</string>
+    <string name="filter_info">信息</string>
+    <string name="filter_debug">调试</string>
     <string name="showTitle">正文显示标题</string>
     <string name="refresh_default">书源同步</string>
     <string name="no_last_chapter">无最新章节信息</string>
@@ -632,6 +638,10 @@
     <string name="prev_page_key">上一页按键</string>
     <string name="next_page_key">下一页按键</string>
     <string name="no_group">未分组</string>
+    <string name="view_mode">视图模式</string>
+    <string name="list_view">列表视图</string>
+    <string name="folder_view">文件夹视图</string>
+    <string name="all_groups">全部分组</string>
     <string name="prev_sentence">上一句</string>
     <string name="next_sentence">下一句</string>
     <string name="other_folder">其它目录</string>
@@ -654,6 +664,8 @@
     <string name="add_to_text_context_menu_s">长按文字在操作菜单中显示阅读·搜索</string>
     <string name="add_to_text_context_menu_t">文字操作显示搜索</string>
     <string name="record_log">记录日志</string>
+    <string name="debug_log_floating_ball">调试日志悬浮球</string>
+    <string name="debug_log_floating_ball_s">在屏幕上显示悬浮球，点击可快速查看日志</string>
     <string name="log">日志</string>
     <string name="chinese_converter">中文简繁体转换</string>
     <string name="change_icon_error">图标为矢量图标，Android 8.0 以前不支持</string>
@@ -1236,4 +1248,16 @@
     <string name="auto_check_new_backup_t">自动检查新备份</string>
     <string name="auto_check_new_backup_s">打开软件时检查是否有新备份，有新备份时提示是否更新</string>
     <string name="sys_image_picker">系统图片选择器</string>
+    <!-- F-P1-2 高亮规则分组管理（借鉴蛋蛋Max） -->
+    <string name="more">更多</string>
+    <string name="highlight_rule_group_manage_title">分组管理</string>
+    <string name="highlight_rule_group_manage_subtitle">管理高亮规则分组，支持新增、重命名和删除。</string>
+    <string name="highlight_rule_group_add">新增</string>
+    <string name="highlight_rule_group_view_all">查看全部分组</string>
+    <string name="highlight_rule_group_empty">暂无分组</string>
+    <string name="preview">预览</string>
+    <string name="highlight_rule_preset">预设规则</string>
+    <string name="highlight_rule_preset_subtitle">点右侧加号，只把这一条预置规则加入当前列表。</string>
+    <string name="import_highlight_rule">导入规则</string>
+    <string name="export_highlight_rule">导出规则</string>
 </resources>

@@ -1,0 +1,536 @@
+Initialized native services in: C:\Users\shiyq\.gradle\native
+Initialized jansi services in: C:\Users\shiyq\.gradle\native
+Found daemon DaemonInfo{pid=91268, address=[662943e2-08fc-428a-bdc1-634ea1f3872f port:49240, addresses:[/127.0.0.1]], state=Idle, lastBusy=1783328259129, context=DefaultDaemonContext[uid=4f88612b-fff7-4a78-8363-a21397b95b2c,javaHome=D:\Program Files\Java\jbr-21.0.6,javaVersion=21,javaVendor=JetBrains s.r.o.,daemonRegistryDir=C:\Users\shiyq\.gradle\daemon,pid=91268,idleTimeout=10800000,priority=NORMAL,applyInstrumentationAgent=true,nativeServicesMode=ENABLED,daemonOpts=-XX:+UseParallelGC,-XX:MaxMetaspaceSize=512m,-XX:+HeapDumpOnOutOfMemoryError,-Xms256m,-Xmx6g,-Dfile.encoding=UTF-8,-Duser.country=CN,-Duser.language=zh,-Duser.variant]} however its context does not match the desired criteria.
+JVM is incompatible.
+Wanted: DaemonRequestContext{jvmCriteria=C:\Program Files\AdoptOpenJDK\jdk-17.0.0.20-hotspot (no JDK specified, using current Java home), daemonOpts=[-XX:+UseParallelGC, -XX:MaxMetaspaceSize=512m, -XX:+HeapDumpOnOutOfMemoryError, -Xms256m, -Xmx6g, -Dfile.encoding=UTF-8, -Duser.country=CN, -Duser.language=zh, -Duser.variant], applyInstrumentationAgent=true, nativeServicesMode=ENABLED, priority=NORMAL}
+Actual: DefaultDaemonContext[uid=4f88612b-fff7-4a78-8363-a21397b95b2c,javaHome=D:\Program Files\Java\jbr-21.0.6,javaVersion=21,javaVendor=JetBrains s.r.o.,daemonRegistryDir=C:\Users\shiyq\.gradle\daemon,pid=91268,idleTimeout=10800000,priority=NORMAL,applyInstrumentationAgent=true,nativeServicesMode=ENABLED,daemonOpts=-XX:+UseParallelGC,-XX:MaxMetaspaceSize=512m,-XX:+HeapDumpOnOutOfMemoryError,-Xms256m,-Xmx6g,-Dfile.encoding=UTF-8,-Duser.country=CN,-Duser.language=zh,-Duser.variant]
+
+  Looking for a different daemon...
+The client will now receive all logging from the daemon (pid: 94408). The daemon log file: C:\Users\shiyq\.gradle\daemon\8.14.4\daemon-94408.out.log
+Starting 12th build in daemon [uptime: 25 mins 9.54 secs, performance: 100%, GC rate: 0.02/s, heap usage: 6% of 4 GiB, non-heap usage: 39% of 512 MiB]
+Using 32 worker leases.
+Now considering [F:\myself\github\WeAgentChat\temp\legado] as hierarchies to watch
+Watching the file system is configured to be enabled
+File system watching is active
+Starting Build
+Settings evaluated using settings file 'F:\myself\github\WeAgentChat\temp\legado\settings.gradle'.
+Projects loaded. Root project using build file 'F:\myself\github\WeAgentChat\temp\legado\build.gradle'.
+Included projects: [root project 'legado', project ':app', project ':modules', project ':modules:book', project ':modules:rhino']
+
+> Configure project :
+Evaluating root project 'legado' using build file 'F:\myself\github\WeAgentChat\temp\legado\build.gradle'.
+Resolved plugin [id: 'com.android.application', version: '8.13.2', apply: false]
+Resolved plugin [id: 'com.android.library', version: '8.13.2', apply: false]
+Resolved plugin [id: 'org.jetbrains.kotlin.android', version: '2.3.10', apply: false]
+Resolved plugin [id: 'org.jetbrains.kotlin.plugin.parcelize', version: '2.3.10', apply: false]
+Resolved plugin [id: 'com.google.devtools.ksp', version: '2.3.4', apply: false]
+Resolved plugin [id: 'com.google.gms.google-services', version: '4.4.2', apply: false]
+Resolved plugin [id: 'androidx.room', version: '2.7.1', apply: false]
+Resolved plugin [id: 'de.undercouch.download', version: '5.6.0', apply: false]
+
+> Configure project :app
+Evaluating project ':app' using build file 'F:\myself\github\WeAgentChat\temp\legado\app\build.gradle'.
+Resolved plugin [id: 'kotlin-kapt']
+Resolved plugin [id: 'com.android.application', version: '8.13.2']
+Resolved plugin [id: 'org.jetbrains.kotlin.android', version: '2.3.10']
+Resolved plugin [id: 'org.jetbrains.kotlin.plugin.parcelize', version: '2.3.10']
+Resolved plugin [id: 'org.jetbrains.kotlin.plugin.compose', version: '2.3.10']
+Resolved plugin [id: 'androidx.room', version: '2.7.1']
+Resolved plugin [id: 'com.google.devtools.ksp', version: '2.3.4']
+Resolved plugin [id: 'com.google.gms.google-services', version: '4.4.2']
+Using default execution profile
+Using Kotlin Gradle Plugin gradle813 variant
+Detected Android Gradle Plugin compose compiler configuration
+Detected Android Gradle Plugin compose compiler configuration
+Detected Android Gradle Plugin compose compiler configuration
+Detected Android Gradle Plugin compose compiler configuration
+Detected Android Gradle Plugin compose compiler configuration
+
+> Configure project :modules
+Evaluating project ':modules' using build file 'F:\myself\github\WeAgentChat\temp\legado\modules\build.gradle'.
+
+> Configure project :modules:book
+Evaluating project ':modules:book' using build file 'F:\myself\github\WeAgentChat\temp\legado\modules\book\build.gradle'.
+Resolved plugin [id: 'com.android.library', version: '8.13.2']
+Resolved plugin [id: 'org.jetbrains.kotlin.android', version: '2.3.10']
+Using default execution profile
+Using Kotlin Gradle Plugin gradle813 variant
+
+> Configure project :modules:rhino
+Evaluating project ':modules:rhino' using build file 'F:\myself\github\WeAgentChat\temp\legado\modules\rhino\build.gradle'.
+Resolved plugin [id: 'com.android.library', version: '8.13.2']
+Resolved plugin [id: 'org.jetbrains.kotlin.android', version: '2.3.10']
+Using default execution profile
+Using Kotlin Gradle Plugin gradle813 variant
+All projects evaluated.
+Task path ':app:kspAppDebugKotlin' matched project ':app'
+Task name matched 'kspAppDebugKotlin'
+Selected primary task 'kspAppDebugKotlin' from project :app
+Adding -Xuse-inline-scopes-numbers Kotlin compiler flag for task :app:compileAppDebugKotlin
+Tasks to be executed: [task ':app:preBuild', task ':app:preAppDebugBuild', task ':app:dataBindingMergeDependencyArtifactsAppDebug', task ':app:generateAppDebugResources', task ':app:processAppDebugGoogleServices', task ':modules:book:preBuild', task ':modules:book:preDebugBuild', task ':modules:book:generateDebugResources', task ':modules:book:packageDebugResources', task ':modules:rhino:preBuild', task ':modules:rhino:preDebugBuild', task ':modules:rhino:generateDebugResources', task ':modules:rhino:packageDebugResources', task ':app:mergeAppDebugResources', task ':app:packageAppDebugResources', task ':modules:book:processDebugNavigationResources', task ':modules:rhino:processDebugNavigationResources', task ':app:processAppDebugNavigationResources', task ':app:parseAppDebugLocalResources', task ':modules:book:parseDebugLocalResources', task ':modules:book:generateDebugRFile', task ':modules:rhino:parseDebugLocalResources', task ':modules:rhino:generateDebugRFile', task ':app:dataBindingGenBaseClassesAppDebug', task ':app:generateAppDebugBuildConfig', task ':modules:book:writeDebugAarMetadata', task ':modules:rhino:writeDebugAarMetadata', task ':app:checkAppDebugAarMetadata', task ':app:compileAppDebugNavigationResources', task ':app:mapAppDebugSourceSetPaths', task ':app:createAppDebugCompatibleScreenManifests', task ':app:extractDeepLinksAppDebug', task ':modules:book:extractDeepLinksDebug', task ':modules:book:processDebugManifest', task ':modules:rhino:extractDeepLinksDebug', task ':modules:rhino:processDebugManifest', task ':app:processAppDebugMainManifest', task ':app:processAppDebugManifest', task ':app:processAppDebugManifestForPackage', task ':modules:book:compileDebugLibraryResources', task ':modules:rhino:compileDebugLibraryResources', task ':app:processAppDebugResources', task ':modules:book:checkKotlinGradlePluginConfigurationErrors', task ':modules:book:compileDebugKotlin', task ':modules:book:javaPreCompileDebug', task ':modules:book:compileDebugJavaWithJavac', task ':modules:book:bundleLibCompileToJarDebug', task ':modules:rhino:checkKotlinGradlePluginConfigurationErrors', task ':modules:rhino:compileDebugKotlin', task ':modules:rhino:javaPreCompileDebug', task ':modules:rhino:compileDebugJavaWithJavac', task ':modules:rhino:bundleLibCompileToJarDebug', task ':app:kspAppDebugKotlin', task ':app:copyRoomSchemas']
+Tasks that were excluded: []
+Resolve mutations for :app:preBuild (Thread[Execution worker,5,main]) started.
+:app:preBuild (Thread[Execution worker Thread 6,5,main]) started.
+
+> Task :app:preBuild UP-TO-DATE
+Skipping task ':app:preBuild' as it has no actions.
+Resolve mutations for :app:preAppDebugBuild (Thread[Execution worker Thread 6,5,main]) started.
+:app:preAppDebugBuild (Thread[Execution worker Thread 11,5,main]) started.
+
+> Task :app:preAppDebugBuild UP-TO-DATE
+Skipping task ':app:preAppDebugBuild' as it has no actions.
+Resolve mutations for :app:dataBindingMergeDependencyArtifactsAppDebug (Thread[Execution worker Thread 11,5,main]) started.
+:app:dataBindingMergeDependencyArtifactsAppDebug (Thread[Execution worker Thread 11,5,main]) started.
+
+> Task :app:dataBindingMergeDependencyArtifactsAppDebug
+Registered task dependencies: app:appDebugCompileClasspath
+Skipping misunderstood TO dep string: androidx.compose.ui:ui-tooling
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: androidx.compose.material3:material3
+Skipping misunderstood TO dep string: androidx.compose.ui:ui
+Skipping misunderstood TO dep string: androidx.compose.ui:ui-graphics
+Skipping misunderstood TO dep string: androidx.compose.ui:ui-tooling-preview
+Skipping misunderstood TO dep string: androidx.compose.foundation:foundation
+Skipping misunderstood TO dep string: androidx.compose.runtime:runtime
+Skipping misunderstood TO dep string: androidx.compose.material:material-icons-extended
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: org.jetbrains.kotlin:kotlin-stdlib
+Skipping misunderstood TO dep string: com.google.firebase:firebase-analytics
+Skipping misunderstood TO dep string: com.google.firebase:firebase-perf
+Skipping misunderstood TO dep string: io.github.rosemoe:editor
+Skipping misunderstood TO dep string: io.github.rosemoe:language-textmate
+Starting dependency analysis
+Caching disabled for task ':app:dataBindingMergeDependencyArtifactsAppDebug' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:dataBindingMergeDependencyArtifactsAppDebug' as it is up-to-date.
+
+> Task :app:dataBindingMergeDependencyArtifactsAppDebug UP-TO-DATE
+Resolve mutations for :app:generateAppDebugResources (Thread[Execution worker Thread 11,5,main]) started.
+:app:generateAppDebugResources (Thread[Execution worker Thread 25,5,main]) started.
+
+> Task :app:generateAppDebugResources UP-TO-DATE
+Caching disabled for task ':app:generateAppDebugResources' because:
+  Build cache is disabled
+Skipping task ':app:generateAppDebugResources' as it is up-to-date.
+Resolve mutations for :app:processAppDebugGoogleServices (Thread[Execution worker Thread 25,5,main]) started.
+:app:processAppDebugGoogleServices (Thread[Execution worker,5,main]) started.
+
+> Task :app:processAppDebugGoogleServices UP-TO-DATE
+Caching disabled for task ':app:processAppDebugGoogleServices' because:
+  Build cache is disabled
+Skipping task ':app:processAppDebugGoogleServices' as it is up-to-date.
+Resolve mutations for :modules:book:preBuild (Thread[Execution worker,5,main]) started.
+:modules:book:preBuild (Thread[Execution worker Thread 15,5,main]) started.
+
+> Task :modules:book:preBuild UP-TO-DATE
+Skipping task ':modules:book:preBuild' as it has no actions.
+Resolve mutations for :modules:book:preDebugBuild (Thread[Execution worker Thread 15,5,main]) started.
+:modules:book:preDebugBuild (Thread[Execution worker Thread 15,5,main]) started.
+
+> Task :modules:book:preDebugBuild UP-TO-DATE
+Skipping task ':modules:book:preDebugBuild' as it has no actions.
+Resolve mutations for :modules:book:generateDebugResources (Thread[Execution worker Thread 15,5,main]) started.
+:modules:book:generateDebugResources (Thread[Execution worker Thread 15,5,main]) started.
+
+> Task :modules:book:generateDebugResources UP-TO-DATE
+Caching disabled for task ':modules:book:generateDebugResources' because:
+  Build cache is disabled
+Skipping task ':modules:book:generateDebugResources' as it is up-to-date.
+Resolve mutations for :modules:book:packageDebugResources (Thread[Execution worker Thread 15,5,main]) started.
+:modules:book:packageDebugResources (Thread[Execution worker Thread 15,5,main]) started.
+
+> Task :modules:book:packageDebugResources UP-TO-DATE
+Caching disabled for task ':modules:book:packageDebugResources' because:
+  Build cache is disabled
+Skipping task ':modules:book:packageDebugResources' as it is up-to-date.
+work action resolve packageDebugResources (project :modules:book) (Thread[Execution worker Thread 15,5,main]) started.
+Resolve mutations for :modules:rhino:preBuild (Thread[Execution worker Thread 15,5,main]) started.
+:modules:rhino:preBuild (Thread[Execution worker Thread 15,5,main]) started.
+
+> Task :modules:rhino:preBuild UP-TO-DATE
+Skipping task ':modules:rhino:preBuild' as it has no actions.
+Resolve mutations for :modules:rhino:preDebugBuild (Thread[Execution worker Thread 9,5,main]) started.
+:modules:rhino:preDebugBuild (Thread[Execution worker Thread 9,5,main]) started.
+
+> Task :modules:rhino:preDebugBuild UP-TO-DATE
+Skipping task ':modules:rhino:preDebugBuild' as it has no actions.
+Resolve mutations for :modules:rhino:generateDebugResources (Thread[Execution worker Thread 24,5,main]) started.
+:modules:rhino:generateDebugResources (Thread[Execution worker Thread 24,5,main]) started.
+
+> Task :modules:rhino:generateDebugResources UP-TO-DATE
+Caching disabled for task ':modules:rhino:generateDebugResources' because:
+  Build cache is disabled
+Skipping task ':modules:rhino:generateDebugResources' as it is up-to-date.
+Resolve mutations for :modules:rhino:packageDebugResources (Thread[Execution worker Thread 24,5,main]) started.
+:modules:rhino:packageDebugResources (Thread[Execution worker Thread 5,5,main]) started.
+
+> Task :modules:rhino:packageDebugResources UP-TO-DATE
+Caching disabled for task ':modules:rhino:packageDebugResources' because:
+  Build cache is disabled
+Skipping task ':modules:rhino:packageDebugResources' as it is up-to-date.
+work action resolve packageDebugResources (project :modules:rhino) (Thread[Execution worker Thread 5,5,main]) started.
+Resolve mutations for :app:mergeAppDebugResources (Thread[Execution worker Thread 5,5,main]) started.
+:app:mergeAppDebugResources (Thread[Execution worker Thread 13,5,main]) started.
+
+> Task :app:mergeAppDebugResources UP-TO-DATE
+Caching disabled for task ':app:mergeAppDebugResources' because:
+  Build cache is disabled
+Skipping task ':app:mergeAppDebugResources' as it is up-to-date.
+Resolve mutations for :app:packageAppDebugResources (Thread[Execution worker Thread 13,5,main]) started.
+:app:packageAppDebugResources (Thread[Execution worker Thread 12,5,main]) started.
+
+> Task :app:packageAppDebugResources UP-TO-DATE
+Caching disabled for task ':app:packageAppDebugResources' because:
+  Build cache is disabled
+Skipping task ':app:packageAppDebugResources' as it is up-to-date.
+Resolve mutations for :modules:book:processDebugNavigationResources (Thread[Execution worker Thread 12,5,main]) started.
+:modules:book:processDebugNavigationResources (Thread[Execution worker,5,main]) started.
+
+> Task :modules:book:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':modules:book:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':modules:book:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :modules:book) (Thread[Execution worker,5,main]) started.
+Resolve mutations for :modules:rhino:processDebugNavigationResources (Thread[Execution worker,5,main]) started.
+:modules:rhino:processDebugNavigationResources (Thread[Execution worker,5,main]) started.
+
+> Task :modules:rhino:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':modules:rhino:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':modules:rhino:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :modules:rhino) (Thread[Execution worker,5,main]) started.
+Resolve mutations for :app:processAppDebugNavigationResources (Thread[Execution worker,5,main]) started.
+:app:processAppDebugNavigationResources (Thread[Execution worker,5,main]) started.
+
+> Task :app:processAppDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':app:processAppDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':app:processAppDebugNavigationResources' as it is up-to-date.
+Resolve mutations for :app:parseAppDebugLocalResources (Thread[Execution worker,5,main]) started.
+:app:parseAppDebugLocalResources (Thread[Execution worker Thread 9,5,main]) started.
+
+> Task :app:parseAppDebugLocalResources UP-TO-DATE
+Caching disabled for task ':app:parseAppDebugLocalResources' because:
+  Build cache is disabled
+Skipping task ':app:parseAppDebugLocalResources' as it is up-to-date.
+Resolve mutations for :modules:book:parseDebugLocalResources (Thread[Execution worker Thread 9,5,main]) started.
+:modules:book:parseDebugLocalResources (Thread[Execution worker Thread 4,5,main]) started.
+
+> Task :modules:book:parseDebugLocalResources UP-TO-DATE
+Caching disabled for task ':modules:book:parseDebugLocalResources' because:
+  Build cache is disabled
+Skipping task ':modules:book:parseDebugLocalResources' as it is up-to-date.
+Resolve mutations for :modules:book:generateDebugRFile (Thread[Execution worker Thread 4,5,main]) started.
+:modules:book:generateDebugRFile (Thread[Execution worker Thread 7,5,main]) started.
+
+> Task :modules:book:generateDebugRFile UP-TO-DATE
+Caching disabled for task ':modules:book:generateDebugRFile' because:
+  Build cache is disabled
+Skipping task ':modules:book:generateDebugRFile' as it is up-to-date.
+work action resolve package-aware-r.txt (project :modules:book) (Thread[Execution worker Thread 4,5,main]) started.
+Resolve mutations for :modules:rhino:parseDebugLocalResources (Thread[Execution worker Thread 19,5,main]) started.
+:modules:rhino:parseDebugLocalResources (Thread[Execution worker Thread 19,5,main]) started.
+
+> Task :modules:rhino:parseDebugLocalResources UP-TO-DATE
+Caching disabled for task ':modules:rhino:parseDebugLocalResources' because:
+  Build cache is disabled
+Skipping task ':modules:rhino:parseDebugLocalResources' as it is up-to-date.
+Resolve mutations for :modules:rhino:generateDebugRFile (Thread[Execution worker Thread 19,5,main]) started.
+:modules:rhino:generateDebugRFile (Thread[Execution worker Thread 21,5,main]) started.
+
+> Task :modules:rhino:generateDebugRFile UP-TO-DATE
+Caching disabled for task ':modules:rhino:generateDebugRFile' because:
+  Build cache is disabled
+Skipping task ':modules:rhino:generateDebugRFile' as it is up-to-date.
+work action resolve package-aware-r.txt (project :modules:rhino) (Thread[Execution worker Thread 21,5,main]) started.
+Resolve mutations for :app:dataBindingGenBaseClassesAppDebug (Thread[Execution worker Thread 21,5,main]) started.
+:app:dataBindingGenBaseClassesAppDebug (Thread[Execution worker Thread 21,5,main]) started.
+
+> Task :app:dataBindingGenBaseClassesAppDebug UP-TO-DATE
+Caching disabled for task ':app:dataBindingGenBaseClassesAppDebug' because:
+  Build cache is disabled
+Skipping task ':app:dataBindingGenBaseClassesAppDebug' as it is up-to-date.
+Resolve mutations for :app:generateAppDebugBuildConfig (Thread[Execution worker Thread 21,5,main]) started.
+:app:generateAppDebugBuildConfig (Thread[Execution worker Thread 21,5,main]) started.
+
+> Task :app:generateAppDebugBuildConfig UP-TO-DATE
+Caching disabled for task ':app:generateAppDebugBuildConfig' because:
+  Build cache is disabled
+Skipping task ':app:generateAppDebugBuildConfig' as it is up-to-date.
+Resolve mutations for :modules:book:writeDebugAarMetadata (Thread[Execution worker Thread 21,5,main]) started.
+:modules:book:writeDebugAarMetadata (Thread[Execution worker Thread 21,5,main]) started.
+
+> Task :modules:book:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':modules:book:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':modules:book:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :modules:book) (Thread[Execution worker Thread 21,5,main]) started.
+Resolve mutations for :modules:rhino:writeDebugAarMetadata (Thread[Execution worker Thread 21,5,main]) started.
+:modules:rhino:writeDebugAarMetadata (Thread[Execution worker Thread 21,5,main]) started.
+
+> Task :modules:rhino:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':modules:rhino:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':modules:rhino:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :modules:rhino) (Thread[Execution worker Thread 21,5,main]) started.
+Resolve mutations for :app:checkAppDebugAarMetadata (Thread[Execution worker Thread 21,5,main]) started.
+:app:checkAppDebugAarMetadata (Thread[Execution worker,5,main]) started.
+
+> Task :app:checkAppDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':app:checkAppDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:checkAppDebugAarMetadata' as it is up-to-date.
+Resolve mutations for :app:compileAppDebugNavigationResources (Thread[Execution worker,5,main]) started.
+:app:compileAppDebugNavigationResources (Thread[Execution worker Thread 28,5,main]) started.
+
+> Task :app:compileAppDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':app:compileAppDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':app:compileAppDebugNavigationResources' as it is up-to-date.
+Resolve mutations for :app:mapAppDebugSourceSetPaths (Thread[Execution worker Thread 28,5,main]) started.
+:app:mapAppDebugSourceSetPaths (Thread[Execution worker Thread 21,5,main]) started.
+
+> Task :app:mapAppDebugSourceSetPaths UP-TO-DATE
+Caching disabled for task ':app:mapAppDebugSourceSetPaths' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:mapAppDebugSourceSetPaths' as it is up-to-date.
+Resolve mutations for :app:createAppDebugCompatibleScreenManifests (Thread[Execution worker Thread 21,5,main]) started.
+:app:createAppDebugCompatibleScreenManifests (Thread[Execution worker Thread 21,5,main]) started.
+
+> Task :app:createAppDebugCompatibleScreenManifests UP-TO-DATE
+Caching disabled for task ':app:createAppDebugCompatibleScreenManifests' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:createAppDebugCompatibleScreenManifests' as it is up-to-date.
+Resolve mutations for :app:extractDeepLinksAppDebug (Thread[Execution worker Thread 21,5,main]) started.
+:app:extractDeepLinksAppDebug (Thread[Execution worker Thread 8,5,main]) started.
+
+> Task :app:extractDeepLinksAppDebug UP-TO-DATE
+Caching disabled for task ':app:extractDeepLinksAppDebug' because:
+  Build cache is disabled
+Skipping task ':app:extractDeepLinksAppDebug' as it is up-to-date.
+Resolve mutations for :modules:book:extractDeepLinksDebug (Thread[Execution worker Thread 8,5,main]) started.
+:modules:book:extractDeepLinksDebug (Thread[Execution worker Thread 3,5,main]) started.
+
+> Task :modules:book:extractDeepLinksDebug UP-TO-DATE
+Caching disabled for task ':modules:book:extractDeepLinksDebug' because:
+  Build cache is disabled
+Skipping task ':modules:book:extractDeepLinksDebug' as it is up-to-date.
+work action resolve navigation.json (project :modules:book) (Thread[Execution worker Thread 3,5,main]) started.
+Resolve mutations for :modules:book:processDebugManifest (Thread[Execution worker Thread 3,5,main]) started.
+:modules:book:processDebugManifest (Thread[Execution worker,5,main]) started.
+
+> Task :modules:book:processDebugManifest UP-TO-DATE
+Caching disabled for task ':modules:book:processDebugManifest' because:
+  Build cache is disabled
+Skipping task ':modules:book:processDebugManifest' as it is up-to-date.
+work action resolve AndroidManifest.xml (project :modules:book) (Thread[Execution worker,5,main]) started.
+Resolve mutations for :modules:rhino:extractDeepLinksDebug (Thread[Execution worker Thread 29,5,main]) started.
+:modules:rhino:extractDeepLinksDebug (Thread[Execution worker Thread 7,5,main]) started.
+
+> Task :modules:rhino:extractDeepLinksDebug UP-TO-DATE
+Caching disabled for task ':modules:rhino:extractDeepLinksDebug' because:
+  Build cache is disabled
+Skipping task ':modules:rhino:extractDeepLinksDebug' as it is up-to-date.
+work action resolve navigation.json (project :modules:rhino) (Thread[Execution worker Thread 7,5,main]) started.
+Resolve mutations for :modules:rhino:processDebugManifest (Thread[Execution worker Thread 7,5,main]) started.
+:modules:rhino:processDebugManifest (Thread[Execution worker Thread 8,5,main]) started.
+
+> Task :modules:rhino:processDebugManifest UP-TO-DATE
+Caching disabled for task ':modules:rhino:processDebugManifest' because:
+  Build cache is disabled
+Skipping task ':modules:rhino:processDebugManifest' as it is up-to-date.
+work action resolve AndroidManifest.xml (project :modules:rhino) (Thread[Execution worker Thread 8,5,main]) started.
+Resolve mutations for :app:processAppDebugMainManifest (Thread[Execution worker Thread 8,5,main]) started.
+:app:processAppDebugMainManifest (Thread[Execution worker Thread 27,5,main]) started.
+
+> Task :app:processAppDebugMainManifest UP-TO-DATE
+Caching disabled for task ':app:processAppDebugMainManifest' because:
+  Build cache is disabled
+Skipping task ':app:processAppDebugMainManifest' as it is up-to-date.
+Resolve mutations for :app:processAppDebugManifest (Thread[Execution worker Thread 27,5,main]) started.
+:app:processAppDebugManifest (Thread[Execution worker Thread 21,5,main]) started.
+
+> Task :app:processAppDebugManifest UP-TO-DATE
+Caching disabled for task ':app:processAppDebugManifest' because:
+  Build cache is disabled
+Skipping task ':app:processAppDebugManifest' as it is up-to-date.
+Resolve mutations for :app:processAppDebugManifestForPackage (Thread[Execution worker Thread 21,5,main]) started.
+:app:processAppDebugManifestForPackage (Thread[Execution worker Thread 21,5,main]) started.
+
+> Task :app:processAppDebugManifestForPackage UP-TO-DATE
+Custom actions are attached to task ':app:processAppDebugManifestForPackage'.
+Caching disabled for task ':app:processAppDebugManifestForPackage' because:
+  Build cache is disabled
+Skipping task ':app:processAppDebugManifestForPackage' as it is up-to-date.
+Resolve mutations for :modules:book:compileDebugLibraryResources (Thread[Execution worker Thread 21,5,main]) started.
+:modules:book:compileDebugLibraryResources (Thread[Execution worker Thread 21,5,main]) started.
+
+> Task :modules:book:compileDebugLibraryResources UP-TO-DATE
+Caching disabled for task ':modules:book:compileDebugLibraryResources' because:
+  Build cache is disabled
+Skipping task ':modules:book:compileDebugLibraryResources' as it is up-to-date.
+work action resolve out (project :modules:book) (Thread[Execution worker Thread 21,5,main]) started.
+Resolve mutations for :modules:rhino:compileDebugLibraryResources (Thread[Execution worker Thread 9,5,main]) started.
+:modules:rhino:compileDebugLibraryResources (Thread[Execution worker Thread 9,5,main]) started.
+
+> Task :modules:rhino:compileDebugLibraryResources UP-TO-DATE
+Caching disabled for task ':modules:rhino:compileDebugLibraryResources' because:
+  Build cache is disabled
+Skipping task ':modules:rhino:compileDebugLibraryResources' as it is up-to-date.
+work action resolve out (project :modules:rhino) (Thread[Execution worker Thread 16,5,main]) started.
+Resolve mutations for :app:processAppDebugResources (Thread[Execution worker,5,main]) started.
+:app:processAppDebugResources (Thread[Execution worker,5,main]) started.
+
+> Task :app:processAppDebugResources UP-TO-DATE
+Caching disabled for task ':app:processAppDebugResources' because:
+  Build cache is disabled
+Skipping task ':app:processAppDebugResources' as it is up-to-date.
+Resolve mutations for :modules:book:checkKotlinGradlePluginConfigurationErrors (Thread[Execution worker,5,main]) started.
+:modules:book:checkKotlinGradlePluginConfigurationErrors (Thread[Execution worker,5,main]) started.
+
+> Task :modules:book:checkKotlinGradlePluginConfigurationErrors SKIPPED
+Skipping task ':modules:book:checkKotlinGradlePluginConfigurationErrors' as task onlyIf 'errorDiagnostics are present' is false.
+Resolve mutations for :modules:book:compileDebugKotlin (Thread[Execution worker Thread 31,5,main]) started.
+:modules:book:compileDebugKotlin (Thread[Execution worker Thread 31,5,main]) started.
+
+> Task :modules:book:compileDebugKotlin NO-SOURCE
+Skipping task ':modules:book:compileDebugKotlin' as it has no source files and no previous output files.
+Resolve mutations for :modules:book:javaPreCompileDebug (Thread[Execution worker Thread 31,5,main]) started.
+:modules:book:javaPreCompileDebug (Thread[Execution worker Thread 31,5,main]) started.
+
+> Task :modules:book:javaPreCompileDebug UP-TO-DATE
+Caching disabled for task ':modules:book:javaPreCompileDebug' because:
+  Build cache is disabled
+Skipping task ':modules:book:javaPreCompileDebug' as it is up-to-date.
+Resolve mutations for :modules:book:compileDebugJavaWithJavac (Thread[Execution worker Thread 31,5,main]) started.
+:modules:book:compileDebugJavaWithJavac (Thread[Execution worker Thread 31,5,main]) started.
+
+> Task :modules:book:compileDebugJavaWithJavac UP-TO-DATE
+Custom actions are attached to task ':modules:book:compileDebugJavaWithJavac'.
+Caching disabled for task ':modules:book:compileDebugJavaWithJavac' because:
+  Build cache is disabled
+Skipping task ':modules:book:compileDebugJavaWithJavac' as it is up-to-date.
+Resolve mutations for :modules:book:bundleLibCompileToJarDebug (Thread[Execution worker Thread 31,5,main]) started.
+:modules:book:bundleLibCompileToJarDebug (Thread[Execution worker Thread 31,5,main]) started.
+
+> Task :modules:book:bundleLibCompileToJarDebug UP-TO-DATE
+Caching disabled for task ':modules:book:bundleLibCompileToJarDebug' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':modules:book:bundleLibCompileToJarDebug' as it is up-to-date.
+work action resolve classes.jar (project :modules:book) (Thread[Execution worker Thread 31,5,main]) started.
+Resolve mutations for :modules:rhino:checkKotlinGradlePluginConfigurationErrors (Thread[Execution worker Thread 17,5,main]) started.
+:modules:rhino:checkKotlinGradlePluginConfigurationErrors (Thread[Execution worker Thread 17,5,main]) started.
+
+> Task :modules:rhino:checkKotlinGradlePluginConfigurationErrors SKIPPED
+Skipping task ':modules:rhino:checkKotlinGradlePluginConfigurationErrors' as task onlyIf 'errorDiagnostics are present' is false.
+Resolve mutations for :modules:rhino:compileDebugKotlin (Thread[Execution worker Thread 7,5,main]) started.
+:modules:rhino:compileDebugKotlin (Thread[Execution worker Thread 2,5,main]) started.
+
+> Task :modules:rhino:compileDebugKotlin UP-TO-DATE
+Adding -Xuse-inline-scopes-numbers Kotlin compiler flag for task :modules:rhino:compileDebugAndroidTestKotlin
+Caching disabled for task ':modules:rhino:compileDebugKotlin' because:
+  Build cache is disabled
+Skipping task ':modules:rhino:compileDebugKotlin' as it is up-to-date.
+Resolve mutations for :modules:rhino:javaPreCompileDebug (Thread[Execution worker Thread 2,5,main]) started.
+:modules:rhino:javaPreCompileDebug (Thread[Execution worker Thread 2,5,main]) started.
+
+> Task :modules:rhino:javaPreCompileDebug UP-TO-DATE
+Caching disabled for task ':modules:rhino:javaPreCompileDebug' because:
+  Build cache is disabled
+Skipping task ':modules:rhino:javaPreCompileDebug' as it is up-to-date.
+Resolve mutations for :modules:rhino:compileDebugJavaWithJavac (Thread[Execution worker Thread 2,5,main]) started.
+:modules:rhino:compileDebugJavaWithJavac (Thread[Execution worker Thread 23,5,main]) started.
+
+> Task :modules:rhino:compileDebugJavaWithJavac NO-SOURCE
+Skipping task ':modules:rhino:compileDebugJavaWithJavac' as it has no source files and no previous output files.
+Resolve mutations for :modules:rhino:bundleLibCompileToJarDebug (Thread[Execution worker Thread 23,5,main]) started.
+:modules:rhino:bundleLibCompileToJarDebug (Thread[Execution worker Thread 17,5,main]) started.
+
+> Task :modules:rhino:bundleLibCompileToJarDebug UP-TO-DATE
+Caching disabled for task ':modules:rhino:bundleLibCompileToJarDebug' because:
+  Build cache is disabled
+  Simple merging task
+Skipping task ':modules:rhino:bundleLibCompileToJarDebug' as it is up-to-date.
+work action resolve classes.jar (project :modules:rhino) (Thread[Execution worker Thread 23,5,main]) started.
+Resolve mutations for :app:kspAppDebugKotlin (Thread[Execution worker Thread 21,5,main]) started.
+:app:kspAppDebugKotlin (Thread[Execution worker Thread 29,5,main]) started.
+
+> Task :app:kspAppDebugKotlin
+Caching disabled for task ':app:kspAppDebugKotlin' because:
+  Build cache is disabled
+Task ':app:kspAppDebugKotlin' is not up-to-date because:
+  Task has failed previously.
+The input changes require a full rebuild for incremental task ':app:kspAppDebugKotlin'.
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\appDebug\kotlin', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\appDebug\java', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\main\kotlin', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\app\kotlin', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\app\java', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\debug\kotlin', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\debug\java', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\app\java', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\debug\java', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\appDebug\java', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\appDebug\kotlin', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\appDebug\java', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\main\kotlin', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\app\kotlin', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\app\java', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\debug\kotlin', not found
+file or directory 'F:\myself\github\WeAgentChat\temp\legado\app\src\debug\java', not found
+i: [ksp] loaded provider(s): [androidx.room.RoomKspProcessor$Provider]
+e: [ksp] [MissingType]: Element 'io.legado.app.data.AppDatabase' references a type that is not present
+
+> Task :app:kspAppDebugKotlin FAILED
+Resolve mutations for :app:copyRoomSchemas (Thread[Execution worker Thread 29,5,main]) started.
+:app:copyRoomSchemas (Thread[Execution worker,5,main]) started.
+
+> Task :app:copyRoomSchemas NO-SOURCE
+Skipping task ':app:copyRoomSchemas' as it has no source files and no previous output files.
+
+[Incubating] Problems report is available at: file:///F:/myself/github/WeAgentChat/temp/legado/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:kspAppDebugKotlin'.
+> A failure occurred while executing com.google.devtools.ksp.gradle.KspAAWorkerAction
+   > KSP failed with exit code: PROCESSING_ERROR
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14.4/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 30s
+43 actionable tasks: 1 executed, 42 up-to-date
+Watched directory hierarchies: [F:\myself\github\WeAgentChat\temp\legado]

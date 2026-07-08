@@ -54,7 +54,7 @@ object SSLHelper {
 
     val unsafeSSLSocketFactory: SSLSocketFactory by lazy {
         try {
-            val sslContext = SSLContext.getInstance("SSL")
+            val sslContext = SSLContext.getInstance("TLS")
             sslContext.init(null, arrayOf(unsafeTrustManager), SecureRandom())
             sslContext.socketFactory
         } catch (e: Exception) {

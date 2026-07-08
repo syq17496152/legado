@@ -33,10 +33,27 @@ suspend fun OkHttpClient.newCallResponse(
     val requestBuilder = Request.Builder()
     requestBuilder.apply(builder)
     var response: Response? = null
+    var currentRequest = requestBuilder.build()
     for (i in 0..retry) {
-        response = newCall(requestBuilder.build()).await()
+        response = newCall(currentRequest).await()
         if (response.isSuccessful) {
             return response
+        }
+        // 307/308 兜底：OkHttp 自动重定向未跟随时（如 body 一次性流），手动保持 method+body 跟随
+        if (response.code == 307 || response.code == 308) {
+            response.header("Location")?.let { location ->
+                val redirectRequest = currentRequest.newBuilder()
+                    .url(location)
+                    .method(currentRequest.method, currentRequest.body)
+                    .headers(currentRequest.headers)
+                    .build()
+                response.close()
+                response = newCall(redirectRequest).await()
+                if (response.isSuccessful) {
+                    return response
+                }
+                currentRequest = redirectRequest
+            }
         }
     }
     return response!!
