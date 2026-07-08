@@ -20,6 +20,7 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.BookCover
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.BitmapUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.externalFiles
@@ -228,6 +229,13 @@ class WelcomeConfigFragment : PreferenceFragment(),
                             inputStream.copyTo(outputStream)
                         }
                     }
+                    // F-P7 按屏幕比例居中裁剪欢迎页图片
+                    val dm = context?.resources?.displayMetrics
+                    if (dm != null) {
+                        BitmapUtils.cropBitmapToAspectRatio(
+                            file.absolutePath, dm.widthPixels, dm.heightPixels
+                        )
+                    }
                     putPrefString(preferenceKey, file.absolutePath)
                 }.onSuccess {
                     appCtx.toastOnUi("设定成功")
@@ -251,6 +259,13 @@ class WelcomeConfigFragment : PreferenceFragment(),
                 file = FileUtils.createFileIfNotExist(file, "covers", fileName)
                 FileOutputStream(file).use {
                     inputStream.copyTo(it)
+                }
+                // F-P7 按屏幕比例居中裁剪欢迎页图片
+                val dm = context?.resources?.displayMetrics
+                if (dm != null) {
+                    BitmapUtils.cropBitmapToAspectRatio(
+                        file.absolutePath, dm.widthPixels, dm.heightPixels
+                    )
                 }
                 putPrefString(preferenceKey, file.absolutePath)
             }.onFailure {

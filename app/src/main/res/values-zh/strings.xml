@@ -1260,4 +1260,28 @@
     <string name="highlight_rule_preset_subtitle">点右侧加号，只把这一条预置规则加入当前列表。</string>
     <string name="import_highlight_rule">导入规则</string>
     <string name="export_highlight_rule">导出规则</string>
+    <!-- F-P1-8 文件夹视图配置 -->
+    <string name="source_folder_config">文件夹配置</string>
+    <string name="source_folder_group_by_group">按分组</string>
+    <string name="source_folder_group_by_type">按类型</string>
+    <!-- F-P1-8 源类型分类（书源: 文本/音频/图片/文件/视频；订阅源: 网页/图片/视频） -->
+    <string name="source_type">类型</string>
+    <string name="type_text">文本</string>
+    <string name="type_audio">音频</string>
+    <string name="type_image">图片</string>
+    <string name="type_file">文件</string>
+    <string name="type_video">视频</string>
+    <string name="type_web">网页</string>
+    <!-- source-layout-deep-refactor: 分组样式 / 视图模式 / 排序 -->
+    <string name="source_group_style_list">列表</string>
+    <string name="source_group_style_by_type">按类型</string>
+    <string name="source_group_style_by_group">按分组</string>
+    <string name="source_sort_0">手动排序</string>
+    <string name="source_sort_1">按名称</string>
+    <string name="source_sort_2">按启用状态</string>
+    <string name="source_sort_3">按类型</string>
+    <string name="source_sort_4">按分组</string>
+    <string name="source_sort_5">按URL</string>
+    <string name="source_layout">视图</string>
+    <string name="source_sort_label">排序</string>
 </resources>

@@ -158,6 +158,10 @@
 # https://android.googlesource.com/platform/sdk/+/marshmallow-mr1-release/files/proguard-android.txt#54
 -dontwarn android.support.**
 
+# android.os.SystemProperties 是 Android 隐藏 API，Cronet 的 AndroidOsSystemProperties 引用
+# 运行时存在但标准 SDK 不可见，R8 需要 dontwarn 避免构建失败
+-dontwarn android.os.SystemProperties
+
 # This class should be explicitly kept to avoid failure if
 # class/merging/horizontal proguard optimization is enabled.
 -keep class org.chromium.base.CollectionUtil

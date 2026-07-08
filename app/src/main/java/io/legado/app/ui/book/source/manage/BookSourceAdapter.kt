@@ -16,6 +16,7 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.databinding.ItemBookSourceBinding
+import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.model.Debug
 import io.legado.app.ui.login.SourceLoginActivity
@@ -165,9 +166,11 @@ class BookSourceAdapter(
         val source = getItem(position) ?: return
         val popupMenu = PopupMenu(context, view)
         popupMenu.inflate(R.menu.book_source_item)
-        popupMenu.menu.findItem(R.id.menu_top).isVisible = callBack.sort == BookSourceSort.Default
+        // source-layout-refactor menu_top/menu_bottom 仅在手动排序时可用
+        popupMenu.menu.findItem(R.id.menu_top).isVisible =
+            callBack.sort == BookSourceSort.Default && AppConfig.sourceSort == 0
         popupMenu.menu.findItem(R.id.menu_bottom).isVisible =
-            callBack.sort == BookSourceSort.Default
+            callBack.sort == BookSourceSort.Default && AppConfig.sourceSort == 0
         val qyMenu = popupMenu.menu.findItem(R.id.menu_enable_explore)
         if (!source.hasExploreUrl) {
             qyMenu.isVisible = false

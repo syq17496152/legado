@@ -29,6 +29,7 @@ import io.legado.app.ui.book.explore.ExploreShowActivity
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.main.MainFragmentInterface
+import io.legado.app.ui.widget.recycler.GridSpacingItemDecoration
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
 import io.legado.app.utils.setEdgeEffectColor
@@ -65,10 +66,11 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     private val binding by viewBinding(FragmentExploreBinding::bind)
     private val adapter by lazy { ExploreAdapter(requireContext(), this) }
     private val folderAdapter by lazy { SourceFolderAdapter(requireContext(), this) }
+    private val gridSpacingDecoration = GridSpacingItemDecoration()
     private val linearLayoutManager by lazy { LinearLayoutManager(context) }
     // F-P1-8 用户视图偏好（持久化）：0=列表视图, 1=文件夹视图
     private val isFolderViewMode: Boolean
-        get() = AppConfig.sourceViewMode == 1
+        get() = AppConfig.sourceGroupStyle != 0  // 按类型/按分组 → 文件夹视图
     // F-P1-8 当前是否显示文件夹视图（运行时状态）
     // 点击文件夹进入分组列表时设为 false，但不修改 isFolderViewMode
     // 用户主动点击菜单"切换视图模式"时才同步修改 isFolderViewMode
@@ -104,9 +106,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
 
     override fun onPrepareOptionsMenu(menu: Menu) {
         super.onPrepareOptionsMenu(menu)
-        menu.findItem(R.id.menu_view_mode)?.let {
-            it.title = if (isShowingFolder) getString(R.string.list_view) else getString(R.string.folder_view)
-        }
     }
 
     private fun initSearchView() {
@@ -145,33 +144,48 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
 
     // F-P1-8 应用列表视图
     private fun applyListView() {
+        binding.rvFind.removeItemDecoration(gridSpacingDecoration)
         binding.rvFind.layoutManager = linearLayoutManager
         binding.rvFind.adapter = adapter
     }
 
     // F-P1-8 应用文件夹视图
     private fun applyFolderView() {
-        binding.rvFind.layoutManager = GridLayoutManager(context, 3)
+        binding.rvFind.removeItemDecoration(gridSpacingDecoration)
+        val marginDp = AppConfig.sourceMargin
+        gridSpacingDecoration.spacing = SourceFolderAdapter.spacingPx(requireContext(), marginDp)
+        binding.rvFind.addItemDecoration(gridSpacingDecoration)
+        val spanCount = SourceFolderAdapter.calculateSpanCount(requireContext(), marginDp)
+        binding.rvFind.layoutManager = GridLayoutManager(context, spanCount)
         binding.rvFind.adapter = folderAdapter
     }
 
-    // F-P1-8 切换视图模式（用户主动点击菜单：永久切换 + 同步运行时状态）
-    private fun switchViewMode() {
-        if (isShowingFolder) {
-            // 当前是文件夹视图 → 切换为列表视图（永久）
-            AppConfig.sourceViewMode = 0
-            isShowingFolder = false
-            applyListView()
-            upExploreData(searchView.query?.toString())
-        } else {
-            // 当前是列表视图 → 切换为文件夹视图（永久）
-            AppConfig.sourceViewMode = 1
-            isShowingFolder = true
-            searchView.setQuery("", false)  // 清空搜索框，回到文件夹首页
-            applyFolderView()
-            upFolderView()
+    // source-layout-deep-refactor 文件夹视图配置对话框
+    private fun showFolderConfig() {
+        SourceFolderAdapter.showConfigDialog(
+            context = requireContext()
+        ) {
+            // 配置变更后根据新分组样式重新应用视图
+            val wantFolder = AppConfig.sourceGroupStyle != 0
+            if (wantFolder != isShowingFolder) {
+                isShowingFolder = wantFolder
+                if (wantFolder) searchView.setQuery("", false)
+                if (isShowingFolder) {
+                    applyFolderView()
+                    upFolderView()
+                } else {
+                    applyListView()
+                    upExploreData(searchView.query?.toString())
+                }
+            } else if (isShowingFolder) {
+                applyFolderView()
+                upFolderView()
+            } else {
+                applyListView()
+                upExploreData(searchView.query?.toString())
+            }
+            requireActivity().invalidateOptionsMenu()
         }
-        requireActivity().invalidateOptionsMenu()
     }
 
     // F-P1-8 更新文件夹视图数据
@@ -265,7 +279,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     override fun onCompatOptionsItemSelected(item: MenuItem) {
         super.onCompatOptionsItemSelected(item)
         when (item.itemId) {
-            R.id.menu_view_mode -> switchViewMode()
+            R.id.menu_folder_config -> showFolderConfig()
         }
         if (item.groupId == R.id.menu_group_text) {
             searchView.setQuery("group:${item.title}", true)

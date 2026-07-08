@@ -14,6 +14,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import com.shuyu.gsyvideoplayer.listener.LockClickListener
 import com.shuyu.gsyvideoplayer.utils.CommonUtil
+import com.shuyu.gsyvideoplayer.utils.GSYVideoType
 import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer
 import com.shuyu.gsyvideoplayer.video.base.GSYVideoPlayer
 import io.legado.app.R
@@ -41,9 +42,14 @@ class VideoPlayer: StandardGSYVideoPlayer {
     private var playbackSpeed: TextView? = null
     private var playSpeed: Float = 1.0f
     private var btnNext: ImageView? = null
+    private var ivMute: ImageView? = null
+    private var isMuted = false
     private var tipView: TextView? = null
     private var isChanging = false
     private var isLongPressSpeed = false
+    private var tvRatio: TextView? = null
+    private var currentRatioIndex = 0 // 0:默认 1:16:9 2:4:3 3:填充 4:原始
+    private var tvAudio: TextView? = null
 
     private var mParser: BaseDanmakuParser? = null //解析器对象
     private var mDanmakuView: DanmakuView? = null //弹幕view
@@ -141,9 +147,25 @@ class VideoPlayer: StandardGSYVideoPlayer {
         }
     }
 
+    private fun updateMuteIcon() {
+        ivMute?.setImageResource(
+            if (isMuted) R.drawable.ic_volume_off
+            else R.drawable.ic_volume_up
+        )
+    }
+
     override fun onPrepared() {
         super.onPrepared()
         onPrepareDanmaku(this)
+        // 默认静音：onPrepared 时 mediaPlayer 已就绪，此时设置静音最可靠
+        if (VideoPlay.muteOnStart) {
+            getGSYVideoManager().player?.setNeedMute(true)
+        }
+        // 检查音轨数量，多音轨时显示音轨按钮
+        post {
+            val tracks = getGSYVideoManager().getAudioTracks()
+            tvAudio?.visibility = if (tracks.size > 1) VISIBLE else GONE
+        }
     }
     private fun onPrepareDanmaku(gsyVideoPlayer: VideoPlayer) {
         val view = gsyVideoPlayer.mDanmakuView
@@ -243,6 +265,29 @@ class VideoPlayer: StandardGSYVideoPlayer {
         //切换选集
         episodeList = findViewById(R.id.episode_list)
         btnNext = findViewById(R.id.next)
+        //静音按钮
+        ivMute = findViewById(R.id.iv_mute)
+        isMuted = VideoPlay.muteOnStart
+        updateMuteIcon()
+        ivMute?.setOnClickListener {
+            isMuted = !isMuted
+            getGSYVideoManager().player?.setNeedMute(isMuted)
+            updateMuteIcon()
+        }
+        //画面比例按钮
+        tvRatio = findViewById(R.id.tv_ratio)
+        tvRatio?.setOnClickListener {
+            if (mHadPlay && !isChanging) {
+                showRatioDialog()
+            }
+        }
+        //音轨按钮（默认隐藏，有多音轨时显示）
+        tvAudio = findViewById(R.id.tv_audio)
+        tvAudio?.setOnClickListener {
+            if (mHadPlay && !isChanging) {
+                showAudioTrackDialog()
+            }
+        }
         if (VideoPlay.episodes == null) {
             episodeList?.visibility = GONE
             btnNext?.visibility = GONE
@@ -401,7 +446,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
         }
         isChanging = true
         val choiceSpeedDialog = ChoiceSpeedDialog(mContext)
-        choiceSpeedDialog.initList(listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 2.5f, 3.0f).reversed(), object :
+        choiceSpeedDialog.initList(listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 2.5f, 3.0f, 5.0f, 10.0f, 15.0f).reversed(), object :
             ChoiceSpeedDialog.OnListItemClickListener {
             @SuppressLint("SetTextI18n")
             override fun onItemClick(value: Float) {
@@ -418,8 +463,60 @@ class VideoPlayer: StandardGSYVideoPlayer {
             override fun finishDialog() {
                 isChanging = false
             }
-        })
+        }, currentSpeed = playSpeed)
         choiceSpeedDialog.show()
+    }
+
+    @SuppressLint("SetTextI18n")
+    private fun showRatioDialog() {
+        isChanging = true
+        val ratios = arrayOf("默认", "16:9", "4:3", "填充")
+        androidx.appcompat.app.AlertDialog.Builder(mContext)
+            .setTitle("画面比例")
+            .setSingleChoiceItems(ratios, currentRatioIndex) { dialog, which ->
+                currentRatioIndex = which
+                applyRatio(which)
+                tvRatio?.text = if (which == 0) "比例" else ratios[which]
+                dialog.dismiss()
+            }
+            .setOnDismissListener { isChanging = false }
+            .show()
+    }
+
+    @SuppressLint("SetTextI18n")
+    private fun applyRatio(index: Int) {
+        val showType = when (index) {
+            1 -> GSYVideoType.SCREEN_TYPE_16_9     // 16:9
+            2 -> GSYVideoType.SCREEN_TYPE_4_3      // 4:3
+            3 -> GSYVideoType.SCREEN_TYPE_FULL     // 填充
+            else -> GSYVideoType.SCREEN_TYPE_DEFAULT  // 默认
+        }
+        GSYVideoType.setShowType(showType)
+        // 触发重新测量以应用新的比例
+        mTextureView?.requestLayout()
+        val labels = arrayOf("默认", "16:9", "4:3", "填充")
+        showOverlayTip("画面比例: ${labels[index]}", 2000)
+    }
+
+    @SuppressLint("SetTextI18n")
+    private fun showAudioTrackDialog() {
+        val tracks = getGSYVideoManager().getAudioTracks()
+        if (tracks.size <= 1) {
+            showOverlayTip("无可用音轨", 2000)
+            return
+        }
+        isChanging = true
+        val labels = tracks.map { it.second }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(mContext)
+            .setTitle("音轨")
+            .setItems(labels) { dialog, which ->
+                val trackIndex = tracks[which].first
+                getGSYVideoManager().selectAudioTrack(trackIndex)
+                showOverlayTip("音轨: ${labels[which]}", 2000)
+                dialog.dismiss()
+            }
+            .setOnDismissListener { isChanging = false }
+            .show()
     }
 
     override fun updateStartImage() {

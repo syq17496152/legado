@@ -32,9 +32,11 @@ import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
 import io.legado.app.ui.widget.SelectActionBar
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
+import io.legado.app.ui.widget.recycler.GridSpacingItemDecoration
 import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ACache
 import io.legado.app.utils.applyTint
+import io.legado.app.utils.cnCompare
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
@@ -53,6 +55,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -68,14 +71,22 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     override val viewModel by viewModels<RssSourceViewModel>()
     private val importRecordKey = "rssSourceRecordKey"
     private val adapter by lazy { RssSourceAdapter(this, this) }
+    private val adapterCompact by lazy { RssSourceAdapterCompact(this, this) }
+    private val adapterGrid by lazy { RssSourceAdapterGrid(this, this) }
     private val folderAdapter by lazy { SourceFolderAdapter(this, this) }
     private val itemTouchCallback by lazy { ItemTouchCallback(adapter) }
-    // F-P1-8 用户视图偏好（持久化）：0=列表视图, 1=文件夹视图
+    private val verticalDivider by lazy { VerticalDivider(this) }
+    private val gridSpacingDecoration = GridSpacingItemDecoration()
+    // source-layout-refactor 隐藏字段方案：子目录状态变量
+    private var currentType: Int = -1        // -1=全部, 0-2=具体类型（网页/图片/视频）
+    private var currentGroup: String? = null // null=根目录, 非空=在某个分组内
+    private val inSubDirectory: Boolean get() = currentType >= 0 || currentGroup != null
+    // source-layout-refactor 排序升降序
+    private var sortAscending = true
+    // source-layout-refactor 视图状态：sourceGroupStyle!=0 时根目录显示文件夹
     private val isFolderViewMode: Boolean
-        get() = AppConfig.rssViewMode == 1
-    // F-P1-8 当前是否显示文件夹视图（运行时状态）
-    // 点击文件夹进入分组列表时设为 false，但不修改 isFolderViewMode
-    // 用户主动点击菜单"切换视图模式"时才同步修改 isFolderViewMode
+        get() = AppConfig.sourceGroupStyle != 0
+    // 当前是否显示文件夹视图（运行时状态）
     private var isShowingFolder: Boolean = false
     private val searchView: SearchView by lazy {
         binding.titleBar.findViewById(R.id.search_view)
@@ -130,17 +141,16 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     }
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        menu.findItem(R.id.menu_view_mode)?.let {
-            it.title = if (isShowingFolder) getString(R.string.list_view) else getString(R.string.folder_view)
-        }
         groupMenu = menu.findItem(R.id.menu_group)?.subMenu
+        // source-layout-refactor 同步排序菜单升降序勾选状态
+        menu.findItem(R.id.action_sort)?.subMenu?.findItem(R.id.menu_sort_desc)?.isChecked = !sortAscending
         upGroupMenu()
         return super.onPrepareOptionsMenu(menu)
     }
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.menu_view_mode -> switchViewMode()
+            R.id.menu_folder_config -> showFolderConfig()
             R.id.menu_add -> startActivity<RssSourceEditActivity>()
             R.id.menu_import_local -> importDoc.launch {
                 mode = HandleFileContract.FILE
@@ -151,26 +161,89 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
             R.id.menu_import_qr -> qrCodeResult.launch()
             R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
             R.id.menu_import_default -> viewModel.importDefault()
-            R.id.menu_enabled_group -> {
-                searchView.setQuery(getString(R.string.enabled), true)
-            }
-
-            R.id.menu_disabled_group -> {
-                searchView.setQuery(getString(R.string.disabled), true)
-            }
-
-            R.id.menu_group_login -> {
-                searchView.setQuery(getString(R.string.need_login), true)
-            }
-
+            // source-layout-refactor 快捷筛选词：重置子目录状态，回根目录筛选
+            R.id.menu_enabled_group, R.id.menu_disabled_group, R.id.menu_group_login,
             R.id.menu_group_null -> {
-                searchView.setQuery(getString(R.string.no_group), true)
+                currentType = -1
+                currentGroup = null
+                if (isShowingFolder) {
+                    isShowingFolder = false
+                    applyListView()
+                    invalidateOptionsMenu()
+                }
+                val keyword = when (item.itemId) {
+                    R.id.menu_enabled_group -> getString(R.string.enabled)
+                    R.id.menu_disabled_group -> getString(R.string.disabled)
+                    R.id.menu_group_login -> getString(R.string.need_login)
+                    R.id.menu_group_null -> getString(R.string.no_group)
+                    else -> ""
+                }
+                searchView.setQuery(keyword, true)
+            }
+
+            // source-layout-refactor 按类型筛选菜单（隐藏字段方案，不回填搜索框）
+            R.id.menu_type_all, R.id.menu_type_0, R.id.menu_type_1, R.id.menu_type_2 -> {
+                item.isChecked = true
+                currentType = when (item.itemId) {
+                    R.id.menu_type_all -> -1
+                    R.id.menu_type_0 -> 0
+                    R.id.menu_type_1 -> 1
+                    R.id.menu_type_2 -> 2
+                    else -> -1
+                }
+                currentGroup = null
+                if (isShowingFolder) {
+                    isShowingFolder = false
+                    applyListView()
+                    invalidateOptionsMenu()
+                }
+                upSourceFlow(searchView.query?.toString())
+            }
+
+            // source-layout-refactor 菜单排序：映射到 sourceSort 配置
+            R.id.menu_sort_manual -> {
+                item.isChecked = true
+                AppConfig.sourceSort = 0
+                upSourceFlow(searchView.query?.toString())
+            }
+            R.id.menu_sort_name -> {
+                item.isChecked = true
+                AppConfig.sourceSort = 1
+                upSourceFlow(searchView.query?.toString())
+            }
+            R.id.menu_sort_enable -> {
+                item.isChecked = true
+                AppConfig.sourceSort = 2
+                upSourceFlow(searchView.query?.toString())
+            }
+            R.id.menu_sort_url -> {
+                item.isChecked = true
+                AppConfig.sourceSort = 5
+                upSourceFlow(searchView.query?.toString())
+            }
+            R.id.menu_sort_time -> {
+                item.isChecked = true
+                AppConfig.sourceSort = 6
+                upSourceFlow(searchView.query?.toString())
+            }
+            R.id.menu_sort_desc -> {
+                sortAscending = !sortAscending
+                item.isChecked = !sortAscending
+                upSourceFlow(searchView.query?.toString())
             }
 
             R.id.menu_help -> showHelp("SourceMRssHelp")
-            else -> if (item.groupId == R.id.source_group) {
-                searchView.setQuery("group:${item.title}", true)
-            }
+            else -> // source-layout-refactor 动态分组菜单：用隐藏字段
+                if (item.groupId == R.id.source_group) {
+                    currentType = -1
+                    currentGroup = item.title.toString()
+                    if (isShowingFolder) {
+                        isShowingFolder = false
+                        applyListView()
+                        invalidateOptionsMenu()
+                    }
+                    upSourceFlow(searchView.query?.toString())
+                }
         }
         return super.onCompatOptionsItemSelected(item)
     }
@@ -203,7 +276,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
 
     private fun initRecyclerView() {
         binding.recyclerView.setEdgeEffectColor(primaryColor)
-        binding.recyclerView.addItemDecoration(VerticalDivider(this))
         binding.recyclerView.recycledViewPool.setMaxRecycledViews(0, 15)
         // When this page is opened, it is in selection mode
         val dragSelectTouchHelper: DragSelectTouchHelper =
@@ -219,45 +291,86 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         }
     }
 
-    // F-P1-8 应用列表视图
+    // source-layout-refactor 应用列表视图（支持 sourceLayout: 0=列表/1=紧凑/2-6=网格）
     private fun applyListView() {
-        binding.recyclerView.layoutManager = LinearLayoutManager(this)
-        binding.recyclerView.adapter = adapter
-        itemTouchCallback.isCanDrag = true
+        binding.recyclerView.removeItemDecoration(gridSpacingDecoration)
+        binding.recyclerView.removeItemDecoration(verticalDivider)
+        val layout = AppConfig.sourceLayout
+        when (layout) {
+            0 -> { // 列表
+                binding.recyclerView.addItemDecoration(verticalDivider)
+                binding.recyclerView.layoutManager = LinearLayoutManager(this)
+                binding.recyclerView.adapter = adapter
+            }
+            1 -> { // 紧凑列表
+                binding.recyclerView.addItemDecoration(verticalDivider)
+                binding.recyclerView.layoutManager = LinearLayoutManager(this)
+                binding.recyclerView.adapter = adapterCompact
+            }
+            else -> { // 网格 2-6 列
+                gridSpacingDecoration.spacing = AppConfig.sourceMargin.dpToPx()
+                binding.recyclerView.addItemDecoration(gridSpacingDecoration)
+                binding.recyclerView.layoutManager = GridLayoutManager(this, layout)
+                binding.recyclerView.adapter = adapterGrid
+            }
+        }
+        itemTouchCallback.isCanDrag = AppConfig.sourceSort == 0 && layout == 0
     }
 
-    // F-P1-8 应用文件夹视图
+    // source-layout-refactor 应用文件夹视图
     private fun applyFolderView() {
-        binding.recyclerView.layoutManager = GridLayoutManager(this, 3)
+        binding.recyclerView.removeItemDecoration(verticalDivider)
+        binding.recyclerView.removeItemDecoration(gridSpacingDecoration)
+        val marginDp = AppConfig.sourceMargin
+        gridSpacingDecoration.spacing = SourceFolderAdapter.spacingPx(this, marginDp)
+        binding.recyclerView.addItemDecoration(gridSpacingDecoration)
+        val spanCount = SourceFolderAdapter.calculateSpanCount(this, marginDp)
+        binding.recyclerView.layoutManager = GridLayoutManager(this, spanCount)
         binding.recyclerView.adapter = folderAdapter
         itemTouchCallback.isCanDrag = false
     }
 
-    // F-P1-8 切换视图模式（用户主动点击菜单：永久切换 + 同步运行时状态）
-    private fun switchViewMode() {
-        if (isShowingFolder) {
-            // 当前是文件夹视图 → 切换为列表视图（永久）
-            AppConfig.rssViewMode = 0
-            isShowingFolder = false
-            applyListView()
-            upSourceFlow(searchView.query?.toString())
-        } else {
-            // 当前是列表视图 → 切换为文件夹视图（永久）
-            AppConfig.rssViewMode = 1
-            isShowingFolder = true
-            searchView.setQuery("", false)  // 清空搜索框，回到文件夹首页
-            applyFolderView()
-            upFolderView()
+    // source-layout-refactor 配置对话框（新签名：onConfigChanged 回调）
+    private fun showFolderConfig() {
+        SourceFolderAdapter.showConfigDialog(this) {
+            applyConfigChange()
+        }
+    }
+
+    // source-layout-refactor 配置变更后应用视图
+    private fun applyConfigChange() {
+        currentType = -1
+        currentGroup = null
+        when (AppConfig.sourceGroupStyle) {
+            0 -> { // 列表平铺
+                isShowingFolder = false
+                applyListView()
+                upSourceFlow(searchView.query?.toString())
+            }
+            1, 2 -> { // 按类型/按分组：显示文件夹
+                isShowingFolder = true
+                applyFolderView()
+                upFolderView()
+            }
         }
         invalidateOptionsMenu()
     }
 
-    // F-P1-8 更新文件夹视图数据
+    // source-layout-refactor 更新文件夹视图数据（根据分组样式：按分组/按类型）
     private fun upFolderView() {
         val folderList = mutableListOf<String>()
-        folderList.add(getString(R.string.all_groups))
-        folderList.add(getString(R.string.no_group))
-        folderList.addAll(groups)
+        if (AppConfig.sourceGroupStyle == 1) {
+            // 按类型分组：显示类型文件夹（订阅源类型 0网页/1图片/2视频）
+            folderList.add(getString(R.string.all_groups))
+            folderList.add(getString(R.string.type_web))
+            folderList.add(getString(R.string.type_image))
+            folderList.add(getString(R.string.type_video))
+        } else {
+            // 按自定义分组
+            folderList.add(getString(R.string.all_groups))
+            folderList.add(getString(R.string.no_group))
+            folderList.addAll(groups)
+        }
         folderAdapter.setItems(folderList, folderAdapter.diffItemCallback)
     }
 
@@ -372,44 +485,66 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
 
     private fun upSourceFlow(searchKey: String? = null) {
         if (isShowingFolder) return
-        sourceFlowJob?.cancel()
-        sourceFlowJob = lifecycleScope.launch {
+        // source-layout-refactor 历史兼容：清空 type:/group: 前缀回填
+        val nameQuery = searchKey?.let {
             when {
-                searchKey.isNullOrBlank() -> {
-                    appDb.rssSourceDao.flowAll()
-                }
-
-                searchKey == getString(R.string.enabled) -> {
-                    appDb.rssSourceDao.flowEnabled()
-                }
-
-                searchKey == getString(R.string.disabled) -> {
-                    appDb.rssSourceDao.flowDisabled()
-                }
-
-                searchKey == getString(R.string.need_login) -> {
-                    appDb.rssSourceDao.flowLogin()
-                }
-
-                searchKey == getString(R.string.no_group) -> {
-                    appDb.rssSourceDao.flowNoGroup()
-                }
-
-                searchKey.startsWith("group:") -> {
-                    val key = searchKey.substringAfter("group:")
-                    appDb.rssSourceDao.flowGroupSearch(key)
-                }
-
-                else -> {
-                    appDb.rssSourceDao.flowSearch(searchKey)
-                }
-            }.catch {
-                AppLog.put("订阅源管理界面更新数据出错", it)
-            }.flowOn(IO).conflate().collect {
-                adapter.setItems(it, adapter.diffItemCallback)
-                delay(100)
+                it.startsWith("type:") || it.startsWith("group:") -> ""
+                else -> it
             }
         }
+        sourceFlowJob?.cancel()
+        sourceFlowJob = lifecycleScope.launch {
+            val flow = when {
+                // 子目录：按类型 + 名称搜索
+                currentType >= 0 && !nameQuery.isNullOrEmpty() ->
+                    appDb.rssSourceDao.flowByTypeSearch(currentType, nameQuery)
+                currentType >= 0 ->
+                    appDb.rssSourceDao.flowByType(currentType)
+                // 子目录：按分组 + 名称搜索
+                currentGroup != null && !nameQuery.isNullOrEmpty() ->
+                    appDb.rssSourceDao.flowGroupSearchExact(currentGroup!!, nameQuery)
+                currentGroup != null ->
+                    appDb.rssSourceDao.flowGroupSearch(currentGroup!!)
+                // 根目录：特殊筛选快捷词
+                !nameQuery.isNullOrEmpty() && nameQuery == getString(R.string.enabled) ->
+                    appDb.rssSourceDao.flowEnabled()
+                !nameQuery.isNullOrEmpty() && nameQuery == getString(R.string.disabled) ->
+                    appDb.rssSourceDao.flowDisabled()
+                !nameQuery.isNullOrEmpty() && nameQuery == getString(R.string.need_login) ->
+                    appDb.rssSourceDao.flowLogin()
+                !nameQuery.isNullOrEmpty() && nameQuery == getString(R.string.no_group) ->
+                    appDb.rssSourceDao.flowNoGroup()
+                // 根目录：名称搜索
+                !nameQuery.isNullOrEmpty() -> appDb.rssSourceDao.flowSearch(nameQuery)
+                // 根目录：全部
+                else -> appDb.rssSourceDao.flowAll()
+            }
+            flow.map { data -> sortSources(data) }
+                .catch {
+                    AppLog.put("订阅源管理界面更新数据出错", it)
+                }.flowOn(IO).conflate().collect {
+                    when (AppConfig.sourceLayout) {
+                        1 -> adapterCompact.setItems(it, adapterCompact.diffItemCallback)
+                        in 2..6 -> adapterGrid.setItems(it, adapterGrid.diffItemCallback)
+                        else -> adapter.setItems(it, adapter.diffItemCallback)
+                    }
+                    delay(100)
+                }
+        }
+    }
+
+    // source-layout-refactor 排序：sourceSort 配置驱动（0=手动/1=名称/2=启用/3=类型/4=分组/5=URL/6=更新时间）
+    private fun sortSources(data: List<RssSource>): List<RssSource> {
+        val sorted = when (AppConfig.sourceSort) {
+            1 -> data.sortedWith { o1, o2 -> o1.sourceName.cnCompare(o2.sourceName) }
+            2 -> data.sortedByDescending { it.enabled }
+            3 -> data.sortedBy { it.type }
+            4 -> data.sortedBy { it.sourceGroup ?: "" }
+            5 -> data.sortedBy { it.sourceUrl }
+            6 -> data.sortedByDescending { it.lastUpdateTime }
+            else -> data  // 0=手动，用 customOrder
+        }
+        return if (sortAscending) sorted else sorted.reversed()
     }
 
     override fun onResume() {
@@ -429,18 +564,53 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         )
     }
 
-    // F-P1-8 文件夹点击回调：点击文件夹 → 临时切换到列表视图并按分组筛选
-    // 注意：不修改 rssViewMode（用户偏好），仅修改 isShowingFolder（运行时状态）
-    // 这样再次进入或用户点击菜单"文件夹视图"时，仍会显示文件夹视图
+    // source-layout-refactor 文件夹点击回调：用状态变量切换子目录，不回填搜索框
+    // 注意：不修改 sourceGroupStyle（用户偏好），仅修改 isShowingFolder（运行时状态）
     override fun onFolderClick(group: String) {
+        when (AppConfig.sourceGroupStyle) {
+            1 -> { // 按类型（网页/图片/视频）
+                currentType = when (group) {
+                    getString(R.string.type_web) -> 0
+                    getString(R.string.type_image) -> 1
+                    getString(R.string.type_video) -> 2
+                    else -> -1
+                }
+                currentGroup = null
+            }
+            2 -> { // 按分组
+                currentType = -1
+                currentGroup = when (group) {
+                    getString(R.string.all_groups) -> null
+                    getString(R.string.no_group) -> null
+                    else -> group
+                }
+            }
+            else -> return
+        }
         isShowingFolder = false
         applyListView()
         invalidateOptionsMenu()
-        when (group) {
-            getString(R.string.all_groups) -> searchView.setQuery("", true)
-            getString(R.string.no_group) -> searchView.setQuery(getString(R.string.no_group), true)
-            else -> searchView.setQuery("group:$group", true)
+        upSourceFlow(searchView.query?.toString())
+    }
+
+    // source-layout-refactor 返回键：子目录内返回根目录，根目录退出 Activity
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        if (inSubDirectory) {
+            currentType = -1
+            currentGroup = null
+            if (AppConfig.sourceGroupStyle == 0) {
+                applyListView()
+            } else {
+                isShowingFolder = true
+                applyFolderView()
+                upFolderView()
+            }
+            upSourceFlow(searchView.query?.toString())
+            invalidateOptionsMenu()
+            return
         }
+        super.onBackPressed()
     }
 
     @SuppressLint("InflateParams")

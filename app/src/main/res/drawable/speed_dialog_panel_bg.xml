@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 倍速面板背景：80%不透明深灰 + 8dp圆角，与播放器画面协调 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#CC1A1A1A" />
+    <corners android:radius="8dp" />
+</shape>

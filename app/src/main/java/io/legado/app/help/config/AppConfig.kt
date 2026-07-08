@@ -46,7 +46,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var clickActionBL = appCtx.getPrefInt(PreferKey.clickActionBL, 2)
     var clickActionBC = appCtx.getPrefInt(PreferKey.clickActionBC, 1)
     var clickActionBR = appCtx.getPrefInt(PreferKey.clickActionBR, 1)
-    var themeMode = appCtx.getPrefString(PreferKey.themeMode, "0")
+    var themeMode = appCtx.getPrefString(PreferKey.themeMode, "2")
     var useDefaultCover = appCtx.getPrefBoolean(PreferKey.useDefaultCover, false)
     var optimizeRender = CanvasRecorderFactory.isSupport
             && appCtx.getPrefBoolean(PreferKey.optimizeRender, false)
@@ -69,7 +69,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             PreferKey.adaptSpecialStyle -> adaptSpecialStyle = appCtx.getPrefBoolean(PreferKey.adaptSpecialStyle, true)
 
             PreferKey.themeMode -> {
-                themeMode = appCtx.getPrefString(PreferKey.themeMode, "0")
+                themeMode = appCtx.getPrefString(PreferKey.themeMode, "2")
                 isEInkMode = themeMode == "3"
             }
 
@@ -246,18 +246,102 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.bookshelfLayout, value)
         }
 
-    // F-P1-8 书源/订阅源视图模式（0=列表视图, 1=文件夹视图）
-    // 默认 1=文件夹视图：首页直接展示分组文件夹，参考书架布局管理模式
+    // ===== 书源/订阅源布局深度重构配置（学习书架两维度独立架构） =====
+    // 分组样式：0=列表(平铺), 1=按类型, 2=按分组
+    var sourceGroupStyle: Int
+        get() {
+            migrateSourceConfigIfNeeded()
+            return appCtx.getPrefInt(PreferKey.sourceGroupStyle, 0)
+        }
+        set(value) {
+            appCtx.putPrefInt(PreferKey.sourceGroupStyle, value)
+        }
+
+    // 视图模式：0=列表, 1=紧凑, 2-6=网格2-6列（对齐书架 bookshelfLayout）
+    var sourceLayout: Int
+        get() = appCtx.getPrefInt(PreferKey.sourceLayout, 0)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.sourceLayout, value)
+        }
+
+    // 排序：0=手动, 1=名称, 2=启用, 3=类型, 4=分组, 5=URL
+    var sourceSort: Int
+        get() = appCtx.getPrefInt(PreferKey.sourceSort, 0)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.sourceSort, value)
+        }
+
+    // 卡片间距（0-60，默认 12）
+    var sourceMargin: Int
+        get() = appCtx.getPrefInt(PreferKey.sourceMargin, 12)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.sourceMargin, value)
+        }
+
+    /**
+     * 旧配置迁移到新配置（仅执行一次）。
+     * 迁移映射：
+     * - sourceViewMode=0 + sourceFolderStyle=0 → sourceGroupStyle=0 (列表平铺)
+     * - sourceViewMode=1 + sourceFolderStyle=0 → sourceGroupStyle=2 (按分组)
+     * - sourceViewMode=1 + sourceFolderStyle=1 → sourceGroupStyle=1 (按类型)
+     * - sourceViewMode=0 + sourceFolderStyle=1 → sourceGroupStyle=0 (列表平铺)
+     */
+    private fun migrateSourceConfigIfNeeded() {
+        if (appCtx.getPrefBoolean(PreferKey.sourceConfigMigrated, false)) return
+        val oldViewMode = appCtx.getPrefInt(PreferKey.sourceViewMode, 1)
+        val oldFolderStyle = appCtx.getPrefInt(PreferKey.sourceFolderStyle, 0)
+        val newGroupStyle = when {
+            oldViewMode == 0 -> 0  // 旧列表视图 → 列表平铺
+            oldFolderStyle == 1 -> 1  // 旧文件夹+按类型 → 按类型
+            else -> 2  // 旧文件夹+按分组 → 按分组
+        }
+        appCtx.putPrefInt(PreferKey.sourceGroupStyle, newGroupStyle)
+        // 迁移旧间距配置
+        val oldMargin = appCtx.getPrefInt(PreferKey.sourceFolderMargin, 12)
+        appCtx.putPrefInt(PreferKey.sourceMargin, oldMargin)
+        appCtx.putPrefBoolean(PreferKey.sourceConfigMigrated, true)
+    }
+
+    // ===== 以下为旧配置属性（@Deprecated，保留兼容，新代码请使用上面的新属性） =====
+    @Deprecated("使用 sourceGroupStyle 替代", ReplaceWith("sourceGroupStyle"))
     var sourceViewMode: Int
         get() = appCtx.getPrefInt(PreferKey.sourceViewMode, 1)
         set(value) {
             appCtx.putPrefInt(PreferKey.sourceViewMode, value)
         }
 
+    @Deprecated("使用 sourceGroupStyle 替代", ReplaceWith("sourceGroupStyle"))
     var rssViewMode: Int
         get() = appCtx.getPrefInt(PreferKey.rssViewMode, 1)
         set(value) {
             appCtx.putPrefInt(PreferKey.rssViewMode, value)
+        }
+
+    @Deprecated("使用 sourceGroupStyle 替代", ReplaceWith("sourceGroupStyle"))
+    var sourceFolderStyle: Int
+        get() = appCtx.getPrefInt(PreferKey.sourceFolderStyle, 0)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.sourceFolderStyle, value)
+        }
+
+    @Deprecated("使用 sourceMargin 替代", ReplaceWith("sourceMargin"))
+    var sourceFolderMargin: Int
+        get() = appCtx.getPrefInt(PreferKey.sourceFolderMargin, 12)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.sourceFolderMargin, value)
+        }
+
+    // 订阅源排序（0=手动/1=名称/2=URL/3=更新时间/4=启用状态）
+    var rssSort: Int
+        get() = appCtx.getPrefInt(PreferKey.rssSort, 0)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.rssSort, value)
+        }
+
+    var rssSortAscending: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.rssSortAscending, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.rssSortAscending, value)
         }
 
     var saveTabPosition: Int

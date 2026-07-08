@@ -119,6 +119,63 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
 
 ---
 
+## 🔴🔴 强制规则：AI 自动端到端测试（V3）
+
+> **任何代码变更任务，在 OpenSpec 步骤 5（实施）与步骤 6（检查点 2）之间，必须执行步骤 5.5 AI 自动端到端测试。禁止跳过！**
+
+### 子规范引用
+
+| 子规范 | 路径 | 说明 |
+|--------|------|------|
+| **S13** | [ai_e2e_testing_workflow.md](./docs/project-rules/ai_e2e_testing_workflow.md) | 5.5.1~5.5.8 八步强制流程 |
+| **S14** | [test-case-design-guide.md](./docs/project-rules/test-case-design-guide.md) | 双轨制 + 源码溯源字段 + 步骤语义化 |
+
+### 八步强制流程
+
+```
+5.5.1 源码影响分析（run_e2e.py --diff HEAD~1）→ affected_modules.json
+5.5.2 APK 自动发现 + MEmu 启动
+5.5.3 双轨用例调度（同 TC-ID Python 优先）
+5.5.4 8 类证据收集
+5.5.5 规则判定（pass/fail/manual/warning）
+5.5.6 manual 用例 AI agent 介入（生成 ai-prompt.md + 回填 ai_verdict）
+5.5.7 五件套报告生成（report.md/json + manual_cases + affected + feedback）
+5.5.8 反馈闭环触发（run_e2e.py --feedback）→ 沉淀规则/陷阱/提示词
+```
+
+### 🔴 固化层保护规则（V3）
+
+`ai_tests/lib/` 下 9 个模块文件（M1-M9）为**固化层**，AI 不应直接修改，必须通过 OpenSpec 流程：
+
+| 模块 | 文件 | 职责 |
+|------|------|------|
+| M1 | memu_controller.py | 模拟器控制 |
+| M2 | apk_deployer.py | APK 部署 |
+| M3 | case_parser.py | 用例解析（双轨+源码溯源） |
+| M4 | ui_executor.py | UI 执行器 |
+| M5 | evidence_collector.py | 8 类证据收集 |
+| M6 | rule_analyzer.py | 规则判定 |
+| M7 | report_generator.py | 五件套报告 |
+| M8 | source_impact_analyzer.py | V3 源码影响分析 |
+| M9 | source_test_generator.py | V3 B 轨测试生成 |
+
+`config.py`（固化层）含 CRASH_PATTERNS/DB_QUERIES 等常量，扩展需 OpenSpec 流程。
+
+### 持续迭代层（V3，AI 可自由追加）
+
+- `ai_tests/cases/` — 测试用例（MD + Python 双轨）
+- `ai_tests/lib/source_map.json` — Activity → TC-ID 映射（`--update-source-map`）
+- `ai_tests/docs/known_issues.md` — 陷阱库（M16 自动追加）
+- `ai_tests/docs/regression_history.md` — 回归历史（M16 自动追加）
+- `ai_tests/docs/module_matrix.md` — 覆盖率报告（`gen_module_matrix.py`）
+- `config.CRASH_PATTERNS` — 崩溃模式（基于失败案例扩展）
+- `ai_tests/templates/ai_prompt_template.j2` — 提示词模板
+
+### 反模式
+
+❌ 跳过步骤 5.5 直接审核 / ❌ 不执行 5.5.1 源码影响分析 / ❌ 不读取 manual_cases.md 就标记完成 / ❌ V3 不触发 5.5.8 反馈闭环 / ❌ 不按 S14 设计用例（缺源码溯源字段）/ ❌ 直接修改 lib/ 固化层不通过 OpenSpec / ❌ V3 不沉淀失败案例到反馈闭环
+---
+
 ## 🔴🔴🔴 强制规则：书源/订阅源自测交付流程
 
 > **任何新生成或优化的书源/订阅源，必须经过自测通过后才能视为任务完成。禁止未经自测直接交付！**
@@ -157,10 +214,118 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
 → 步骤8: 文档同步(更新docs/project-flow/)
 ```
 
+### 检查点交互规范（强制）
+
+> **OpenSpec 三个检查点（1/2/3）必须使用 AskUserQuestion 工具与用户交互，禁止依赖 ExitPlanMode 的二元确认。违反用户交互强制规范将导致用户金钱损失与体验下降。**
+
+#### 三个检查点的统一交互要求
+
+| 检查点 | 触发时机 | 必须使用工具 | 禁止行为 |
+|--------|---------|------------|----------|
+| 🛑检查点1 | 步骤3 生成四文档后 | AskUserQuestion | ExitPlanMode 二元确认 |
+| 🛑检查点2 | 步骤5 实施完成后 | AskUserQuestion | ExitPlanMode 二元确认 |
+| 🛑检查点3 | 步骤8 文档同步前 | AskUserQuestion | ExitPlanMode 二元确认 |
+
+#### 三选项强制结构
+
+每个检查点的 AskUserQuestion 必须提供以下三个选项，缺一不可：
+
+| 选项 | 含义 | 后续动作 |
+|------|------|---------|
+| **通过（继续下一阶段）** | 用户认可当前阶段产出 | 进入下一阶段，更新 TaskList 状态 |
+| **需调整** | 用户对部分内容有意见 | 用户通过 Other 输入具体意见，AI 据此修订后重新发起检查点确认 |
+| **拒绝（回退上一阶段）** | 用户不认可整体方向 | 回退到上一阶段重新分析/实施，更新 TaskList 状态 |
+
+#### Plan 模式 ExitPlanMode 前置确认
+
+Plan 模式下调用 ExitPlanMode 前，必须先通过 AskUserQuestion 获取用户明确确认，禁止直接调用 ExitPlanMode 强制二元确认：
+
+- 用户选"通过" → ExitPlanMode（执行）
+- 用户选"需调整" → 据意见修订 → 重新 AskUserQuestion
+- 用户选"拒绝回退" → 回退上一阶段
+
+#### 检查点交互示例
+
+```javascript
+// 检查点1：用户审查设计
+AskUserQuestion({
+  questions: [
+    {
+      question: "OpenSpec 四文档（README/spec/design/tasks）已生成，请审查设计是否符合预期？",
+      header: "检查点1",
+      multiSelect: false,
+      options: [
+        { label: "通过（继续实施）", description: "设计符合预期，进入步骤5按 tasks.md 实施" },
+        { label: "需调整", description: "对部分内容有意见，通过 Other 输入具体修订意见" },
+        { label: "拒绝（回退需求分析）", description: "整体方向不符，回退到步骤2重新分析需求" }
+      ]
+    }
+  ]
+})
+```
+
 ### 反模式
 
 ❌ 直接写代码不生成文档 / 凭感觉不分析需求 / spec.md 无 Alternatives 和 Drawbacks / design.md 决策记录无 ADR 结构 / 未经用户确认就实施 / 完成不更新文档 / 不更新tasks.md
+❌ 检查点直接用 ExitPlanMode 二元确认（取消/执行），用户无法反馈审核意见
+❌ AskUserQuestion 只提供"通过/取消"两选项，缺少"需调整"和"拒绝回退"
+❌ Plan 模式跳过 AskUserQuestion 直接调用 ExitPlanMode
+❌ 用户选"需调整"后 AI 不重新发起检查点确认，直接进入下一阶段
 > **完整工作流程**：[openspec-workflow.md](./docs/project-rules/openspec-workflow.md)
+
+---
+
+## 🔴🔴🔴 强制规则：上下文压缩恢复流程
+
+> **对话恢复（上下文压缩后）的第一步，必须并行读取三件套，缺一不可进入工作。违反本规则将导致 AI 丢失关键信息（OpenSpec 文档路径、tasks.md 状态、AGENTS.md 强制规则），走入单文件方案而非 OpenSpec 四文档流程。**
+
+### 恢复三件套（并行读取）
+
+| 序号 | 必读项 | 路径 / 获取方式 | 作用 |
+|------|--------|----------------|------|
+| 1 | AGENTS.md | `./AGENTS.md` | 强制规则、代码约束、Skill 触发条件 |
+| 2 | project_memory.md | memory 系统项目目录（`~/.trae-cn/memory/projects/{项目key}/project_memory.md`），可用 Grep 搜索 | 项目约束、历史决策、活跃 spec 清单 |
+| 3 | TaskList | 调用 TaskList 工具 | 任务状态唯一权威源 |
+
+读取顺序：三者必须**并行读取**（同一轮工具调用批次），禁止串行。三者全部就绪后方可进入工作。
+
+### 任务状态权威源规则
+
+| 数据源 | 角色 | 说明 |
+|--------|------|------|
+| **TaskList 工具** | 唯一权威源 | AI 判定任务进度、Phase 状态的唯一依据 |
+| **tasks.md** | 人类可读副本 | 双向同步：TaskList 变更 → 同步 tasks.md；tasks.md 人工修改 → 同步 TaskList |
+
+判定冲突时以 TaskList 为准，并将 tasks.md 同步至一致状态。压缩恢复后若发现 tasks.md 与 TaskList 不一致，先以 TaskList 为准继续工作，再异步同步 tasks.md。
+
+### basic-memory 持久化要求
+
+每个 Phase（含 OpenSpec 步骤、复杂任务 Phase 1-5、Skill Phase 1-5）完成后，必须将以下信息写入 basic-memory（project=legado）：
+
+- **关键决策**：本阶段做出的技术选型/方案决策及理由
+- **文件路径**：本阶段创建/修改的关键文件绝对路径
+- **任务状态**：当前 Phase 编号、完成标志、下一 Phase 入口
+- **OpenSpec 路径**：当前活跃 spec 的 `docs/specs/{功能名称}/` 完整路径
+
+写入后，上下文压缩恢复时可通过 basic-memory 快速定位上下文，无需重新探索。
+
+### 恢复流程
+
+1. 上下文压缩触发
+2. 并行读取三件套（AGENTS.md + project_memory.md + TaskList）
+3. 三者就绪？
+   - 是 → 检查 basic-memory 是否有当前任务历史决策
+     - 有 → 加载历史上下文后从 TaskList 当前任务继续工作
+     - 无 → 从当前 TaskList 状态重新建立上下文
+   - 否 → 暂停工作，向用户报告缺失项（禁止强行续接）
+
+### 反模式
+
+❌ 压缩后直接续接工作，不读取 AGENTS.md / project_memory.md / TaskList 三件套
+❌ 信任 tasks.md 而非 TaskList 作为任务状态权威源
+❌ Phase 完成后不写入 basic-memory，导致压缩后无法恢复关键决策与文件路径
+❌ 串行读取三件套（应并行），浪费时间且容易遗漏关键规范
+❌ 三件套缺失时仍强行续接工作，应暂停向用户报告并补齐
 
 ---
 
@@ -351,6 +516,20 @@ source-creator → workflow-auditor 传递以下上下文：
 
 > **完整陷阱**：[exception_rules.md](./docs/project-rules/exception_rules.md) | [logging_rules.md](./docs/project-rules/logging_rules.md) | [architecture_rules.md](./docs/project-rules/architecture_rules.md)
 
+### 并发文件修改规范（全局通用）
+
+> **多 Agent 并行操作时，必须遵循以下规则，防止文件内容被并发覆盖丢失。**
+> 踩坑案例：文档同步阶段，多个后台 Agent 并行修改文档时，与源码文件产生时序竞态，导致已添加的代码定义被覆盖丢失，构建失败。
+
+| 规则 | 说明 |
+|------|------|
+| **源码文件修改串行化** | 同一源码文件的所有 Edit 必须由主 Agent 串行执行，**禁止委托给后台 Agent**触碰同一源码文件 |
+| **文档与代码隔离** | 文档同步 Agent 只能修改文档目录，**禁止读取+回写**源码文件（验证时只读不写） |
+| **关键节点构建复验** | 每个阶段结束后必须重新执行项目构建验证命令，而非只在最后构建一次；文档同步后也要复验源码完整性 |
+| **git diff 校验** | 重要文件修改后用 `git diff` 确认变更范围符合预期，发现异常回退立即排查 |
+| **后台 Agent 职责单一** | 后台 Agent 只负责独立的分析/文档任务，**禁止**在后台 Agent 中执行源码文件 Edit |
+| **修改前备份上下文** | 对核心配置文件/常量文件执行 Edit 前，先 Read 确认当前内容；多轮修改后再次 Read 防止中间状态丢失 |
+
 ### Git 仓库管理
 
 - **远程仓库**：`https://github.com/syq17496152/legado.git`（私有）
@@ -374,5 +553,7 @@ source-creator → workflow-auditor 传递以下上下文：
 | **规则引擎详解** | [docs/project-flow/architecture/rule-engine.md](./docs/project-flow/architecture/rule-engine.md) |
 | **Skill 参考文档索引** | [.trae/skills/legado-source-creator/references/_INDEX.md](./.trae/skills/legado-source-creator/references/_INDEX.md) |
 | **功能设计文档** | [docs/specs/](./docs/specs/) |
+| **AI 自动化测试基础设施** | [ai_tests/README.md](./ai_tests/README.md)（E2E 测试编排器 + 8 类证据 + 规则判定 + 七件套报告） |
+| **E2E 测试设计文档** | [docs/specs/e2e-automated-testing/](./docs/specs/e2e-automated-testing/)（V3 四文档） |
 | **书源网络获取** | `https://www.yckceo.com/yuedu/shuyuans/index.html` |
 | **订阅源网络获取** | `https://www.yckceo.com/yuedu/rsss/index.html` |

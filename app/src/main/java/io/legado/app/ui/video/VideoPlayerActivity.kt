@@ -29,6 +29,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
 import com.shuyu.gsyvideoplayer.listener.GSYSampleCallBack
+import com.shuyu.gsyvideoplayer.video.base.GSYVideoView
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.BookType
@@ -781,6 +782,25 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         super.onStart()
         if (initGetter) {
             glideImageGetter.start()
+        }
+    }
+
+    @SuppressLint("InlinedApi")
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // 画中画：仅 Android 8+ 且正在播放时进入
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                val currentPlayer = playerView.getCurrentPlayer()
+                if (currentPlayer.currentState == GSYVideoView.CURRENT_STATE_PLAYING) {
+                    val params = android.app.PictureInPictureParams.Builder()
+                        .setAspectRatio(android.util.Rational(16, 9))
+                        .build()
+                    enterPictureInPictureMode(params)
+                }
+            } catch (e: Exception) {
+                io.legado.app.constant.AppLog.put("VideoPlayerActivity: enterPiP", e)
+            }
         }
     }
 

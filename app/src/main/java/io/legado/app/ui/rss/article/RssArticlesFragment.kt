@@ -70,7 +70,7 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
     private var articlesFlowJob: Job? = null
     override val isGridLayout: Boolean
         get() = activityViewModel.articleStyle == 2
-    private var fullRefresh = true
+    private var fullRefresh = false
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         viewModel.init(arguments)
@@ -214,8 +214,8 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
         super.onPause()
     }
 
-    private fun loadArticles() {
-        fullRefresh = true
+    private fun loadArticles(fullRefresh: Boolean = false) {
+        this.fullRefresh = fullRefresh
         activityViewModel.rssSource?.let {
             viewModel.loadArticles(it)
         }

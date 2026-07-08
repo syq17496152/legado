@@ -4,17 +4,16 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <item
-        android:id="@+id/menu_view_mode"
+        android:id="@+id/menu_folder_config"
         android:icon="@drawable/ic_folder_outline"
-        android:title="@string/view_mode"
+        android:title="@string/source_folder_config"
         app:showAsAction="never" />
 
     <item
         android:id="@+id/action_sort"
         android:title="@string/sort"
         android:icon="@drawable/ic_sort"
-        app:showAsAction="always"
-        tools:ignore="AlwaysShowAction">
+        app:showAsAction="never">
 
         <menu>
 
@@ -73,8 +72,7 @@
         android:id="@+id/menu_group"
         android:icon="@drawable/ic_groups"
         android:title="@string/menu_action_group"
-        app:showAsAction="always"
-        tools:ignore="AlwaysShowAction">
+        app:showAsAction="never">
 
         <menu>
 
@@ -105,6 +103,48 @@
             <item
                 android:id="@+id/menu_disabled_explore_group"
                 android:title="@string/disabled_explore" />
+
+            <item
+                android:id="@+id/menu_type"
+                android:icon="@drawable/ic_type"
+                android:title="@string/source_type">
+
+                <menu>
+
+                    <group
+                        android:id="@+id/source_type_book"
+                        android:checkableBehavior="single">
+
+                        <item
+                            android:id="@+id/menu_type_all"
+                            android:checked="true"
+                            android:title="@string/all" />
+
+                        <item
+                            android:id="@+id/menu_type_0"
+                            android:title="@string/type_text" />
+
+                        <item
+                            android:id="@+id/menu_type_1"
+                            android:title="@string/type_audio" />
+
+                        <item
+                            android:id="@+id/menu_type_2"
+                            android:title="@string/type_image" />
+
+                        <item
+                            android:id="@+id/menu_type_3"
+                            android:title="@string/type_file" />
+
+                        <item
+                            android:id="@+id/menu_type_4"
+                            android:title="@string/type_video" />
+
+                    </group>
+
+                </menu>
+
+            </item>
 
             <group android:id="@+id/source_group">
 

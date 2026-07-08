@@ -9,6 +9,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -70,7 +71,15 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 mRendererFactory.setExtensionRendererMode(extensionRendererMode)
             }
             if (mLoadControl == null) {
-                mLoadControl = DefaultLoadControl()
+                // 首屏缓冲优化：bufferForPlayback 从默认 2500ms 降至 250ms，rebuffer 从 5000ms 降至 500ms
+                // 复用 ExoPlayerHelper.createHttpExoPlayer 的优化策略，首屏启动延迟降至 1/10
+                mLoadControl = DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(
+                        DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                        DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
+                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS / 10,      // 250ms（默认 2500ms）
+                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS / 10  // 500ms（默认 5000ms）
+                    ).build()
             }
             mInternalPlayer =
                 ExoPlayer.Builder(mAppContext, mRendererFactory).setLooper(Looper.myLooper()!!)
@@ -125,6 +134,37 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             }
             return mInternalPlayer.currentMediaItemIndex
         }
+
+    /**
+     * 获取所有音轨信息
+     * @return 音轨列表（索引 + 显示名称）
+     */
+    @OptIn(UnstableApi::class)
+    fun getAudioTracks(): List<Pair<Int, String>> {
+        val exoPlayer = mInternalPlayer ?: return emptyList()
+        val audioGroups = exoPlayer.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+        if (audioGroups.isEmpty()) return emptyList()
+        return audioGroups.mapIndexed { index, group ->
+            val format = group.getTrackFormat(0)
+            val label = format.label ?: format.language ?: "音轨 ${index + 1}"
+            index to label
+        }
+    }
+
+    /**
+     * 切换到指定音轨
+     * @param groupIndex 音轨组索引（来自 getAudioTracks）
+     */
+    @OptIn(UnstableApi::class)
+    fun selectAudioTrack(groupIndex: Int) {
+        val exoPlayer = mInternalPlayer ?: return
+        val audioGroups = exoPlayer.currentTracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+        val targetGroup = audioGroups.getOrNull(groupIndex) ?: return
+        val override = TrackSelectionOverride(targetGroup.mediaTrackGroup, 0)
+        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+            .setOverrideForType(override)
+            .build()
+    }
 
 
 }

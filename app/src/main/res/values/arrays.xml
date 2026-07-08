@@ -32,6 +32,26 @@
 		<item>Folder</item>
 	</string-array>
 
+	<!-- F-P1-8 文件夹视图分组样式（按分组/按类型）—— 已废弃，保留兼容 -->
+	<string-array name="source_folder_group_style">
+		<item>@string/source_folder_group_by_group</item>
+		<item>@string/source_folder_group_by_type</item>
+	</string-array>
+
+	<!-- source-layout-deep-refactor: 分组样式（列表/按类型/按分组） -->
+	<string-array name="source_group_style_new">
+		<item>@string/source_group_style_list</item>
+		<item>@string/source_group_style_by_type</item>
+		<item>@string/source_group_style_by_group</item>
+	</string-array>
+
+	<!-- F-P9-1 自动任务 Cron 频率选择 -->
+	<string-array name="auto_task_cron_frequency_items">
+		<item>@string/auto_task_cron_every_day</item>
+		<item>@string/auto_task_cron_every_hour</item>
+		<item>@string/auto_task_cron_custom</item>
+	</string-array>
+
 	<string-array name="book_sort">
 		<item>@string/text_default</item>
 		<item>@string/bookshelf_px_0</item>

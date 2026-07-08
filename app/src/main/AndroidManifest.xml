@@ -177,6 +177,7 @@
         <activity
             android:name="io.legado.app.ui.video.VideoPlayerActivity"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+            android:supportsPictureInPicture="true"
             android:launchMode="singleTask" />
         <!-- 授权界面 -->
         <activity

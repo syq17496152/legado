@@ -49,7 +49,6 @@ object PreferKey {
     const val bookImportFileName = "bookImportFileName"
     const val episodeExportFileName = "episodeExportFileName"
     const val recordLog = "recordLog"
-    const val debugLogFloatingBall = "debugLogFloatingBall"
     const val processText = "process_text"
     const val cleanCache = "cleanCache"
     const val saveTabPosition = "saveTabPosition"
@@ -118,6 +117,8 @@ object PreferKey {
     const val autoRefresh = "auto_refresh"
     // F-P1-1 自动任务服务开关
     const val autoTaskService = "autoTaskService"
+    // F-P1-3 调试日志悬浮球开关
+    const val debugLogFloatingBall = "debugLogFloatingBall"
     const val onlyUpdateRead = "onlyUpdateRead"
     const val defaultToRead = "defaultToRead"
     const val exportCharset = "exportCharset"
@@ -221,7 +222,20 @@ object PreferKey {
     const val highlightRuleGroups = "highlightRuleGroups"
     const val highlightRuleCurrentGroup = "highlightRuleCurrentGroup"
 
-    // F-P1-8 书源/订阅源文件夹视图模式（0=列表视图, 1=文件夹视图）
+    // F-P1-8 书源/订阅源文件夹视图模式（0=列表视图, 1=文件夹视图）—— 已废弃，保留兼容
     const val sourceViewMode = "sourceViewMode"
     const val rssViewMode = "rssViewMode"
+    // F-P6 文件夹视图配置（分组样式/间距）—— 已废弃，保留兼容
+    const val sourceFolderStyle = "sourceFolderStyle"
+    const val sourceFolderMargin = "sourceFolderMargin"
+
+    // 书源/订阅源布局深度重构配置（学习书架两维度独立架构）
+    const val sourceGroupStyle = "sourceGroupStyle"       // 0=列表, 1=按类型, 2=按分组
+    const val sourceLayout = "sourceLayout"               // 0=列表, 1=紧凑, 2-6=网格2-6列
+    const val sourceSort = "sourceSort"                   // 0=手动, 1=名称, 2=启用, 3=类型, 4=分组, 5=URL
+    const val sourceMargin = "sourceMargin"               // 卡片间距 0-60
+    const val sourceConfigMigrated = "sourceConfigMigrated"  // 迁移标志（布尔）
+    // 订阅源排序（0=手动/1=名称/2=URL/3=更新时间/4=启用状态）
+    const val rssSort = "rssSort"
+    const val rssSortAscending = "rssSortAscending"
 }

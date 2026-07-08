@@ -1329,6 +1329,10 @@
     <string name="press_speed">长按倍速</string>
     <string name="press_speed_summary">长按倍速 %.1f</string>
     <string name="full_bottom_progress">全屏时显示底部进度条</string>
+    <string name="cache_play">边下边播</string>
+    <string name="video_cache_size">视频缓存容量</string>
+    <string name="video_cache_size_summary">%1$d MB（重启生效）</string>
+    <string name="mute_on_start">默认静音</string>
     <string name="json_format">json格式</string>
     <string name="open_other_video_player">其它播放器打开</string>
     <string name="show_source_comment">显示源注释</string>
@@ -1501,6 +1505,10 @@
     <string name="auto_task_delete">删除任务</string>
     <string name="auto_task_batch_cron">批量设置 Cron</string>
     <string name="auto_task_cron">cron 表达式</string>
+    <string name="auto_task_cron_frequency">执行频率</string>
+    <string name="auto_task_cron_every_day">每天</string>
+    <string name="auto_task_cron_every_hour">每小时</string>
+    <string name="auto_task_cron_custom">自定义</string>
     <string name="auto_task_comment">备注</string>
     <string name="auto_task_script">脚本</string>
     <string name="auto_task_header">请求头</string>
@@ -1554,4 +1562,28 @@
     <string name="highlight_rule_preset_subtitle">Tap the + icon to add a preset rule to the current list.</string>
     <string name="import_highlight_rule">Import Rules</string>
     <string name="export_highlight_rule">Export Rules</string>
+    <!-- F-P1-8 文件夹视图配置 -->
+    <string name="source_folder_config">Folder Config</string>
+    <string name="source_folder_group_by_group">By Group</string>
+    <string name="source_folder_group_by_type">By Type</string>
+    <!-- source-layout-redesign: 类型筛选字符串 -->
+    <string name="source_type">Type</string>
+    <string name="type_text">Text</string>
+    <string name="type_audio">Audio</string>
+    <string name="type_image">Image</string>
+    <string name="type_file">File</string>
+    <string name="type_video">Video</string>
+    <string name="type_web">Web</string>
+    <!-- source-layout-deep-refactor: group style / view mode / sort -->
+    <string name="source_group_style_list">List</string>
+    <string name="source_group_style_by_type">By Type</string>
+    <string name="source_group_style_by_group">By Group</string>
+    <string name="source_sort_0">Manual</string>
+    <string name="source_sort_1">By Name</string>
+    <string name="source_sort_2">By Enabled</string>
+    <string name="source_sort_3">By Type</string>
+    <string name="source_sort_4">By Group</string>
+    <string name="source_sort_5">By URL</string>
+    <string name="source_layout">View</string>
+    <string name="source_sort_label">Sort</string>
 </resources>

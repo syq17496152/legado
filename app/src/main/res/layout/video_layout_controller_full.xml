@@ -133,6 +133,19 @@
             android:minEms="2"
             android:text="选集"
             android:textColor="#ffffff"
+            app:layout_constraintEnd_toStartOf="@+id/tv_audio"
+            app:layout_constraintTop_toBottomOf="@+id/progress" />
+
+        <TextView
+            android:id="@+id/tv_audio"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
+            android:gravity="center"
+            android:minEms="2"
+            android:text="音轨"
+            android:textColor="#ffffff"
+            android:visibility="gone"
             app:layout_constraintEnd_toStartOf="@+id/playback_speed"
             app:layout_constraintTop_toBottomOf="@+id/progress" />
 
@@ -140,11 +153,33 @@
             android:id="@+id/playback_speed"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="32dp"
+            android:layout_marginEnd="16dp"
             android:gravity="center"
             android:minEms="2"
             android:text="倍速"
             android:textColor="#ffffff"
+            app:layout_constraintEnd_toStartOf="@+id/tv_ratio"
+            app:layout_constraintTop_toBottomOf="@+id/progress" />
+
+        <TextView
+            android:id="@+id/tv_ratio"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
+            android:gravity="center"
+            android:minEms="2"
+            android:text="比例"
+            android:textColor="#ffffff"
+            app:layout_constraintEnd_toStartOf="@+id/iv_mute"
+            app:layout_constraintTop_toBottomOf="@+id/progress" />
+
+        <ImageView
+            android:id="@+id/iv_mute"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginEnd="32dp"
+            android:src="@drawable/ic_volume_off"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/progress" />
     </androidx.constraintlayout.widget.ConstraintLayout>

@@ -20,7 +20,7 @@ object DatabaseMigrations {
             migration_31_32, migration_32_33, migration_33_34, migration_34_35,
             migration_35_36, migration_36_37, migration_37_38, migration_38_39,
             migration_39_40, migration_40_41, migration_41_42, migration_42_43,
-            migration_89_90, migration_90_91, migration_91_92
+            migration_89_90, migration_90_91, migration_91_92, migration_92_93
         )
     }
 
@@ -427,6 +427,56 @@ object DatabaseMigrations {
             db.execSQL(
                 "CREATE INDEX IF NOT EXISTS `index_highlights_bookName_bookAuthor` ON `highlights` (`bookName`, `bookAuthor`)"
             )
+        }
+    }
+
+    /**
+     * rss-cache-first: 重建 rssSources 表，将 cacheFirst 列默认值从 0 改为 1
+     * SQLite 不支持 ALTER COLUMN 修改默认值，需重建表
+     * 同时将所有现有源的 cacheFirst 字段同步设为 1（启用缓存优先加载）
+     */
+    private val migration_92_93 = object : Migration(92, 93) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS `rssSources_new` (
+                    `sourceUrl` TEXT NOT NULL, `sourceName` TEXT NOT NULL, `sourceIcon` TEXT NOT NULL,
+                    `sourceGroup` TEXT, `sourceComment` TEXT, `enabled` INTEGER NOT NULL,
+                    `variableComment` TEXT, `jsLib` TEXT, `enabledCookieJar` INTEGER DEFAULT 0,
+                    `concurrentRate` TEXT, `header` TEXT, `loginUrl` TEXT, `loginUi` TEXT,
+                    `loginCheckJs` TEXT, `coverDecodeJs` TEXT, `sortUrl` TEXT,
+                    `singleUrl` INTEGER NOT NULL, `articleStyle` INTEGER NOT NULL DEFAULT 0,
+                    `ruleArticles` TEXT, `ruleNextPage` TEXT, `ruleTitle` TEXT, `rulePubDate` TEXT,
+                    `ruleDescription` TEXT, `ruleImage` TEXT, `ruleLink` TEXT, `ruleContent` TEXT,
+                    `contentWhitelist` TEXT, `contentBlacklist` TEXT, `shouldOverrideUrlLoading` TEXT,
+                    `style` TEXT, `enableJs` INTEGER NOT NULL DEFAULT 1, `loadWithBaseUrl` INTEGER NOT NULL DEFAULT 1,
+                    `injectJs` TEXT, `preloadJs` TEXT, `startHtml` TEXT, `startStyle` TEXT, `startJs` TEXT,
+                    `showWebLog` INTEGER NOT NULL DEFAULT 0, `lastUpdateTime` INTEGER NOT NULL DEFAULT 0,
+                    `customOrder` INTEGER NOT NULL DEFAULT 0, `type` INTEGER NOT NULL DEFAULT 0,
+                    `preload` INTEGER NOT NULL DEFAULT 0, `cacheFirst` INTEGER NOT NULL DEFAULT 1,
+                    `searchUrl` TEXT, PRIMARY KEY(`sourceUrl`))""".trimIndent()
+            )
+            // 复制数据并将 cacheFirst 全部设为 1（启用缓存优先加载，与 RssSource.kt 默认值一致）
+            db.execSQL(
+                """INSERT INTO `rssSources_new` (`sourceUrl`, `sourceName`, `sourceIcon`, `sourceGroup`,
+                    `sourceComment`, `enabled`, `variableComment`, `jsLib`, `enabledCookieJar`, `concurrentRate`,
+                    `header`, `loginUrl`, `loginUi`, `loginCheckJs`, `coverDecodeJs`, `sortUrl`,
+                    `singleUrl`, `articleStyle`, `ruleArticles`, `ruleNextPage`, `ruleTitle`, `rulePubDate`,
+                    `ruleDescription`, `ruleImage`, `ruleLink`, `ruleContent`, `contentWhitelist`,
+                    `contentBlacklist`, `shouldOverrideUrlLoading`, `style`, `enableJs`, `loadWithBaseUrl`,
+                    `injectJs`, `preloadJs`, `startHtml`, `startStyle`, `startJs`, `showWebLog`,
+                    `lastUpdateTime`, `customOrder`, `type`, `preload`, `cacheFirst`, `searchUrl`)
+                    SELECT `sourceUrl`, `sourceName`, `sourceIcon`, `sourceGroup`, `sourceComment`, `enabled`,
+                    `variableComment`, `jsLib`, `enabledCookieJar`, `concurrentRate`, `header`, `loginUrl`,
+                    `loginUi`, `loginCheckJs`, `coverDecodeJs`, `sortUrl`, `singleUrl`, `articleStyle`,
+                    `ruleArticles`, `ruleNextPage`, `ruleTitle`, `rulePubDate`, `ruleDescription`, `ruleImage`,
+                    `ruleLink`, `ruleContent`, `contentWhitelist`, `contentBlacklist`, `shouldOverrideUrlLoading`,
+                    `style`, `enableJs`, `loadWithBaseUrl`, `injectJs`, `preloadJs`, `startHtml`, `startStyle`,
+                    `startJs`, `showWebLog`, `lastUpdateTime`, `customOrder`, `type`, `preload`,
+                    1 AS `cacheFirst`, `searchUrl` FROM `rssSources`""".trimIndent()
+            )
+            db.execSQL("DROP TABLE `rssSources`")
+            db.execSQL("ALTER TABLE `rssSources_new` RENAME TO `rssSources`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_rssSources_sourceUrl` ON `rssSources` (`sourceUrl`)")
         }
     }
 

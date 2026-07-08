@@ -72,4 +72,23 @@ class ExoVideoManager: GSYVideoBaseManager() {
         (playerManager as ExoPlayerManager).next()
     }
 
+    /**
+     * 获取所有音轨
+     */
+    @OptIn(UnstableApi::class)
+    fun getAudioTracks(): List<Pair<Int, String>> {
+        if (playerManager == null) return emptyList()
+        return (playerManager as ExoPlayerManager).getAudioTracks()
+    }
+
+    /**
+     * 切换音轨
+     */
+    @OptIn(UnstableApi::class)
+    fun selectAudioTrack(groupIndex: Int) {
+        if (playerManager != null) {
+            (playerManager as ExoPlayerManager).selectAudioTrack(groupIndex)
+        }
+    }
+
 }

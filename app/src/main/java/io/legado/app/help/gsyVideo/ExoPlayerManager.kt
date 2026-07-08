@@ -167,6 +167,9 @@ class ExoPlayerManager : BasePlayerManager() {
     }
 
     override fun getBufferedPercentage(): Int {
+        if (mediaPlayer != null) {
+            return mediaPlayer!!.bufferedPercentage
+        }
         return -1
     }
 
@@ -190,11 +193,36 @@ class ExoPlayerManager : BasePlayerManager() {
         mediaPlayer!!.next()
     }
 
+    /**
+     * 获取所有音轨
+     */
+    fun getAudioTracks(): List<Pair<Int, String>> {
+        if (mediaPlayer == null) return emptyList()
+        return mediaPlayer!!.getAudioTracks()
+    }
+
+    /**
+     * 切换音轨
+     */
+    fun selectAudioTrack(groupIndex: Int) {
+        if (mediaPlayer != null) {
+            mediaPlayer!!.selectAudioTrack(groupIndex)
+        }
+    }
+
     override fun getNetSpeed(): Long {
         return 0
     }
 
     override fun setSpeedPlaying(speed: Float, soundTouch: Boolean) {
+        // 播放中动态调速：与 setSpeed 同链路，IjkExo2MediaPlayer.setSpeed 内部会更新 ExoPlayer.playbackParameters
+        if (mediaPlayer != null) {
+            try {
+                mediaPlayer!!.setSpeed(speed, 1f)
+            } catch (e: Exception) {
+                AppLog.put("ExoPlayerManager: setSpeedPlaying", e)
+            }
+        }
     }
 
     override fun start() {

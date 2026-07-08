@@ -65,6 +65,34 @@ interface RssSourceDao {
     @Query("select * from rssSources where sourceGroup is null or sourceGroup = '' or sourceGroup like '%未分组%'")
     fun flowNoGroup(): Flow<List<RssSource>>
 
+    @Query("select * from rssSources where type = :type order by customOrder")
+    fun flowByType(type: Int): Flow<List<RssSource>>
+
+    @Query(
+        """SELECT * FROM rssSources
+        where type = :type
+        and (sourceName like '%' || :searchKey || '%'
+            or sourceGroup like '%' || :searchKey || '%'
+            or sourceUrl like '%' || :searchKey || '%'
+            or sourceComment like '%' || :searchKey || '%')
+        order by customOrder"""
+    )
+    fun flowByTypeSearch(type: Int, searchKey: String): Flow<List<RssSource>>
+
+    @Query(
+        """SELECT * FROM rssSources
+        where (sourceGroup = :group
+        or sourceGroup like :group || ',%'
+        or sourceGroup like  '%,' || :group
+        or sourceGroup like  '%,' || :group || ',%')
+        and (sourceName like '%' || :searchKey || '%'
+            or sourceGroup like '%' || :searchKey || '%'
+            or sourceUrl like '%' || :searchKey || '%'
+            or sourceComment like '%' || :searchKey || '%')
+        order by customOrder"""
+    )
+    fun flowGroupSearchExact(group: String, searchKey: String): Flow<List<RssSource>>
+
     @Query("select * from rssSources where enabled = 1 and (sourceGroup is null or sourceGroup = '' or sourceGroup like '%未分组%') order by customOrder")
     fun flowEnabledNoGroup(): Flow<List<RssSource>>
 

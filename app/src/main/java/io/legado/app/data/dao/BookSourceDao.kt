@@ -99,6 +99,36 @@ interface BookSourceDao {
     @Query("select * from book_sources_part where hasLoginUrl = 1 order by customOrder asc")
     fun flowLogin(): Flow<List<BookSourcePart>>
 
+    @Query("select * from book_sources_part where bookSourceType = :type order by customOrder asc")
+    fun flowByType(type: Int): Flow<List<BookSourcePart>>
+
+    @Query(
+        """select bp.*
+        from book_sources b join book_sources_part bp on b.bookSourceUrl = bp.bookSourceUrl
+        where bp.bookSourceType = :type
+        and (b.bookSourceName like '%' || :searchKey || '%'
+            or b.bookSourceGroup like '%' || :searchKey || '%'
+            or b.bookSourceUrl like '%' || :searchKey || '%'
+            or b.bookSourceComment like '%' || :searchKey || '%')
+        order by bp.customOrder asc"""
+    )
+    fun flowByTypeSearch(type: Int, searchKey: String): Flow<List<BookSourcePart>>
+
+    @Query(
+        """select bp.*
+        from book_sources b join book_sources_part bp on b.bookSourceUrl = bp.bookSourceUrl
+        where (bp.bookSourceGroup = :group
+            or bp.bookSourceGroup like :group || ',%'
+            or bp.bookSourceGroup like  '%,' || :group
+            or bp.bookSourceGroup like  '%,' || :group || ',%')
+        and (b.bookSourceName like '%' || :searchKey || '%'
+            or b.bookSourceGroup like '%' || :searchKey || '%'
+            or b.bookSourceUrl like '%' || :searchKey || '%'
+            or b.bookSourceComment like '%' || :searchKey || '%')
+        order by bp.customOrder asc"""
+    )
+    fun flowGroupSearchExact(group: String, searchKey: String): Flow<List<BookSourcePart>>
+
     @Query(
         """select * from book_sources_part 
         where bookSourceGroup is null or bookSourceGroup = '' or bookSourceGroup like '%未分组%'

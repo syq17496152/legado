@@ -127,13 +127,6 @@
             app:iconSpaceReserved="false" />
 
         <io.legado.app.lib.prefs.Preference
-            android:icon="@drawable/ic_cfg_other"
-            android:key="debug_tools"
-            android:summary="@string/debug_tools_desc"
-            android:title="@string/debug_tools"
-            app:iconSpaceReserved="false" />
-
-        <io.legado.app.lib.prefs.Preference
             android:icon="@drawable/ic_cfg_about"
             android:key="about"
             android:title="@string/about"

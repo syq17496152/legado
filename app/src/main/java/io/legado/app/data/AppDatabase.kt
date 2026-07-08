@@ -74,7 +74,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 92,
+    version = 93,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -134,6 +134,7 @@ val appDb by lazy {
         // F-P0-2: 89→90 使用手动 Migration（DatabaseMigrations.migration_89_90），新增 3 张表
         // F-P1-1: 90→91 使用手动 Migration（DatabaseMigrations.migration_90_91），新增 auto_task_rules 表
         // F-P1-2: 91→92 使用手动 Migration（DatabaseMigrations.migration_91_92），新增 highlights 表
+        // rss-cache-first: 92→93 使用手动 Migration（DatabaseMigrations.migration_92_93），重建 rssSources 表将 cacheFirst 默认值 0→1
     ]
 )
 abstract class AppDatabase : RoomDatabase() {

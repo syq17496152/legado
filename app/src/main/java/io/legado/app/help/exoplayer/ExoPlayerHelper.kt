@@ -25,6 +25,7 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.extractor.DefaultExtractorsFactory
 import com.google.gson.reflect.TypeToken
 import io.legado.app.help.http.okHttpClient
+import io.legado.app.model.VideoPlay
 import io.legado.app.utils.GSON
 import io.legado.app.utils.externalCache
 import io.legado.app.utils.fromJsonArray
@@ -118,14 +119,16 @@ object ExoPlayerHelper {
 
     /**
      * Exoplayer 内置的缓存
+     * P0-3：缓存容量从 VideoPlay.videoCacheSize 读取（首次 lazy 初始化时生效，修改后需重启 App）
      */
     private val cache: Cache by lazy {
         val databaseProvider = StandaloneDatabaseProvider(appCtx)
+        val cacheSizeMb = VideoPlay.videoCacheSize.coerceIn(50, 500)  // 容量范围保护：50-500MB
         return@lazy SimpleCache(
             //Exoplayer的缓存路径
             File(appCtx.externalCache, "exoplayer"),
-            //100M的缓存
-            LeastRecentlyUsedCacheEvictor((100 * 1024 * 1024).toLong()),
+            //容量从配置读取（默认 100MB）
+            LeastRecentlyUsedCacheEvictor((cacheSizeMb * 1024 * 1024).toLong()),
             //记录缓存的数据库
             databaseProvider
         )

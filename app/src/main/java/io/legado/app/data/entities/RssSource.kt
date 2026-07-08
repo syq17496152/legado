@@ -109,8 +109,8 @@ data class RssSource(
     @ColumnInfo(defaultValue = "0")
     var preload: Boolean = false,
     /**是否优先加载缓存**/
-    @ColumnInfo(defaultValue = "0")
-    var cacheFirst: Boolean = false,
+    @ColumnInfo(defaultValue = "1")
+    var cacheFirst: Boolean = true,
     /**搜索url**/
     var searchUrl: String? = null
 ) : Parcelable, BaseSource {

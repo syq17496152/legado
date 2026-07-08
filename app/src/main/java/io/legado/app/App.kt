@@ -9,6 +9,7 @@ import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.os.Build
+import androidx.core.graphics.toColorInt
 import com.github.liuyueyi.quick.transfer.constants.TransType
 import com.jeremyliao.liveeventbus.LiveEventBus
 import com.jeremyliao.liveeventbus.logger.DefaultLogger
@@ -41,6 +42,7 @@ import io.legado.app.help.RuleBigDataHelp
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.config.ThemeConfig.applyDayNight
 import io.legado.app.help.config.ThemeConfig.applyDayNightInit
 import io.legado.app.help.coroutine.Coroutine
@@ -57,7 +59,10 @@ import io.legado.app.utils.ChineseUtils
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.getPrefBoolean
+import io.legado.app.utils.getPrefString
 import io.legado.app.utils.isDebuggable
+import io.legado.app.utils.putPrefInt
+import io.legado.app.utils.putPrefString
 import kotlinx.coroutines.launch
 import org.chromium.base.ThreadUtils
 import splitties.init.appCtx
@@ -78,6 +83,16 @@ class App : Application() {
             ThreadUtils.hasSubtleSideEffectsSetThreadAssertsDisabledForTesting(true)
         }
         oldConfig = Configuration(resources.configuration)
+        // F-暗夜紫默认主题：首次安装时写入暗夜紫夜间主题配置（老用户 dNThemeName 已有值，不受影响）
+        if (getPrefString(PreferKey.dNThemeName).isNullOrBlank()) {
+            ThemeConfig.configList.firstOrNull { it.themeName == "暗夜紫" }?.let { c ->
+                appCtx.putPrefString(PreferKey.dNThemeName, c.themeName)
+                appCtx.putPrefInt(PreferKey.cNPrimary, c.primaryColor.toColorInt())
+                appCtx.putPrefInt(PreferKey.cNAccent, c.accentColor.toColorInt())
+                appCtx.putPrefInt(PreferKey.cNBackground, c.backgroundColor.toColorInt())
+                appCtx.putPrefInt(PreferKey.cNBBackground, c.bottomBackground.toColorInt())
+            }
+        }
         applyDayNightInit(this)
         registerActivityLifecycleCallbacks(LifecycleHelp)
         defaultSharedPreferences.registerOnSharedPreferenceChangeListener(AppConfig)

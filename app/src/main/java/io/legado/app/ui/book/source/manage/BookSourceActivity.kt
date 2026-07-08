@@ -49,6 +49,7 @@ import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.SelectActionBar
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
+import io.legado.app.ui.widget.recycler.GridSpacingItemDecoration
 import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ACache
 import io.legado.app.utils.NetworkUtils
@@ -75,7 +76,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
@@ -94,8 +94,12 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     override val viewModel by viewModels<BookSourceViewModel>()
     private val importRecordKey = "bookSourceRecordKey"
     private val adapter by lazy { BookSourceAdapter(this, this, binding.recyclerView) }
+    private val adapterCompact by lazy { BookSourceAdapterCompact(this, this) }
+    private val adapterGrid by lazy { BookSourceAdapterGrid(this, this) }
     private val folderAdapter by lazy { SourceFolderAdapter(this, this) }
     private val itemTouchCallback by lazy { ItemTouchCallback(adapter) }
+    private val verticalDivider by lazy { VerticalDivider(this) }
+    private val gridSpacingDecoration = GridSpacingItemDecoration()
     private val searchView: SearchView by lazy {
         binding.titleBar.findViewById(R.id.search_view)
     }
@@ -110,12 +114,14 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     private var snackBar: Snackbar? = null
     private var groupSourcesByDomain = false
     private val hostMap = hashMapOf<String, String>()
-    // F-P1-8 用户视图偏好（持久化）：0=列表视图, 1=文件夹视图
+    // source-layout-refactor 隐藏字段方案：子目录状态变量
+    private var currentType: Int = -1        // -1=全部, 0-4=具体类型
+    private var currentGroup: String? = null // null=根目录, 非空=在某个分组内
+    private val inSubDirectory: Boolean get() = currentType >= 0 || currentGroup != null
+    // source-layout-refactor 视图状态：sourceGroupStyle!=0 时根目录显示文件夹
     private val isFolderViewMode: Boolean
-        get() = AppConfig.sourceViewMode == 1
-    // F-P1-8 当前是否显示文件夹视图（运行时状态）
-    // 点击文件夹进入分组列表时设为 false，但不修改 isFolderViewMode
-    // 用户主动点击菜单"切换视图模式"时才同步修改 isFolderViewMode
+        get() = AppConfig.sourceGroupStyle != 0
+    // 当前是否显示文件夹视图（运行时状态）
     private var isShowingFolder: Boolean = false
     private val qrResult = registerForActivityResult(QrCodeResult()) {
         it ?: return@registerForActivityResult
@@ -143,19 +149,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             }
         }
     }
-    private val groupMenuLifecycleOwner = object : LifecycleOwner {
-        private val registry = LifecycleRegistry(this)
-        override val lifecycle: Lifecycle get() = registry
-
-        fun onMenuOpened() {
-            registry.handleLifecycleEvent(Lifecycle.Event.ON_START)
-        }
-
-        fun onMenuClosed() {
-            registry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
-        }
-
-    }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         // F-P1-8 初始化运行时状态：跟随用户偏好
@@ -181,9 +174,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     }
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        menu.findItem(R.id.menu_view_mode)?.let {
-            it.title = if (isShowingFolder) getString(R.string.list_view) else getString(R.string.folder_view)
-        }
         groupMenu = menu.findItem(R.id.menu_group).subMenu
         val sortSubMenu = menu.findItem(R.id.action_sort).subMenu!!
         sortSubMenu.findItem(R.id.menu_sort_desc).isChecked = !sortAscending
@@ -194,7 +184,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.menu_view_mode -> switchViewMode()
+            R.id.menu_folder_config -> showFolderConfig()
             R.id.menu_add_book_source -> startActivity<BookSourceEditActivity>()
             R.id.menu_import_qr -> qrResult.launch()
             R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
@@ -211,70 +201,77 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 upBookSource(searchView.query?.toString())
             }
 
+            // source-layout-refactor 菜单排序：同步重置 sourceSort=0，使旧 sort 逻辑生效
             R.id.menu_sort_manual -> {
                 item.isChecked = true
+                AppConfig.sourceSort = 0
                 sort = BookSourceSort.Default
                 upBookSource(searchView.query?.toString())
             }
 
             R.id.menu_sort_auto -> {
                 item.isChecked = true
+                AppConfig.sourceSort = 0
                 sort = BookSourceSort.Weight
                 upBookSource(searchView.query?.toString())
             }
 
             R.id.menu_sort_name -> {
                 item.isChecked = true
+                AppConfig.sourceSort = 0
                 sort = BookSourceSort.Name
                 upBookSource(searchView.query?.toString())
             }
 
             R.id.menu_sort_url -> {
                 item.isChecked = true
+                AppConfig.sourceSort = 0
                 sort = BookSourceSort.Url
                 upBookSource(searchView.query?.toString())
             }
 
             R.id.menu_sort_time -> {
                 item.isChecked = true
+                AppConfig.sourceSort = 0
                 sort = BookSourceSort.Update
                 upBookSource(searchView.query?.toString())
             }
 
             R.id.menu_sort_respondTime -> {
                 item.isChecked = true
+                AppConfig.sourceSort = 0
                 sort = BookSourceSort.Respond
                 upBookSource(searchView.query?.toString())
             }
 
             R.id.menu_sort_enable -> {
                 item.isChecked = true
+                AppConfig.sourceSort = 0
                 sort = BookSourceSort.Enable
                 upBookSource(searchView.query?.toString())
             }
 
-            R.id.menu_enabled_group -> {
-                searchView.setQuery(getString(R.string.enabled), true)
-            }
-
-            R.id.menu_disabled_group -> {
-                searchView.setQuery(getString(R.string.disabled), true)
-            }
-
-            R.id.menu_group_login -> {
-                searchView.setQuery(getString(R.string.need_login), true)
-            }
-
-            R.id.menu_group_null -> {
-                searchView.setQuery(getString(R.string.no_group), true)
-            }
-
-            R.id.menu_enabled_explore_group -> {
-                searchView.setQuery(getString(R.string.enabled_explore), true)
-            }
-
+            // source-layout-refactor 快捷筛选词：重置子目录状态，回根目录筛选
+            R.id.menu_enabled_group, R.id.menu_disabled_group, R.id.menu_group_login,
+            R.id.menu_group_null, R.id.menu_enabled_explore_group,
             R.id.menu_disabled_explore_group -> {
-                searchView.setQuery(getString(R.string.disabled_explore), true)
+                currentType = -1
+                currentGroup = null
+                if (isShowingFolder) {
+                    isShowingFolder = false
+                    applyListView()
+                    invalidateOptionsMenu()
+                }
+                val keyword = when (item.itemId) {
+                    R.id.menu_enabled_group -> getString(R.string.enabled)
+                    R.id.menu_disabled_group -> getString(R.string.disabled)
+                    R.id.menu_group_login -> getString(R.string.need_login)
+                    R.id.menu_group_null -> getString(R.string.no_group)
+                    R.id.menu_enabled_explore_group -> getString(R.string.enabled_explore)
+                    R.id.menu_disabled_explore_group -> getString(R.string.disabled_explore)
+                    else -> ""
+                }
+                searchView.setQuery(keyword, true)
             }
 
             R.id.menu_group_sources_by_domain -> {
@@ -284,17 +281,46 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 upBookSource(searchView.query?.toString())
             }
 
+            // source-layout-refactor 按类型筛选菜单（隐藏字段方案，不回填搜索框）
+            R.id.menu_type_all, R.id.menu_type_0, R.id.menu_type_1,
+            R.id.menu_type_2, R.id.menu_type_3, R.id.menu_type_4 -> {
+                item.isChecked = true
+                currentType = when (item.itemId) {
+                    R.id.menu_type_all -> -1
+                    R.id.menu_type_0 -> 0
+                    R.id.menu_type_1 -> 1
+                    R.id.menu_type_2 -> 2
+                    R.id.menu_type_3 -> 3
+                    R.id.menu_type_4 -> 4
+                    else -> -1
+                }
+                currentGroup = null
+                if (isShowingFolder) {
+                    isShowingFolder = false
+                    applyListView()
+                    invalidateOptionsMenu()
+                }
+                upBookSource(searchView.query?.toString())
+            }
+
             R.id.menu_help -> showHelp("SourceMBookHelp")
         }
+        // source-layout-refactor 动态分组菜单：用隐藏字段，不回填搜索框
         if (item.groupId == R.id.source_group) {
-            searchView.setQuery("group:${item.title}", true)
+            currentType = -1
+            currentGroup = item.title.toString()
+            if (isShowingFolder) {
+                isShowingFolder = false
+                applyListView()
+                invalidateOptionsMenu()
+            }
+            upBookSource(searchView.query?.toString())
         }
         return super.onCompatOptionsItemSelected(item)
     }
 
     private fun initRecyclerView() {
         binding.recyclerView.setEdgeEffectColor(primaryColor)
-        binding.recyclerView.addItemDecoration(VerticalDivider(this))
         binding.recyclerView.recycledViewPool.setMaxRecycledViews(0, 15)
         // When this page is opened, it is in selection mode
         val dragSelectTouchHelper =
@@ -310,46 +336,91 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         }
     }
 
-    // F-P1-8 应用列表视图
+    // source-layout-refactor 应用列表视图（支持 sourceLayout: 0=列表/1=紧凑/2-6=网格）
     private fun applyListView() {
-        binding.recyclerView.layoutManager = LinearLayoutManager(this)
-        binding.recyclerView.adapter = adapter
+        binding.recyclerView.removeItemDecoration(gridSpacingDecoration)
+        binding.recyclerView.removeItemDecoration(verticalDivider)
+        val layout = AppConfig.sourceLayout
+        when (layout) {
+            0 -> { // 列表
+                binding.recyclerView.addItemDecoration(verticalDivider)
+                binding.recyclerView.layoutManager = LinearLayoutManager(this)
+                binding.recyclerView.adapter = adapter
+            }
+            1 -> { // 紧凑列表
+                binding.recyclerView.addItemDecoration(verticalDivider)
+                binding.recyclerView.layoutManager = LinearLayoutManager(this)
+                binding.recyclerView.adapter = adapterCompact
+            }
+            else -> { // 网格 2-6 列
+                gridSpacingDecoration.spacing = AppConfig.sourceMargin.dpToPx()
+                binding.recyclerView.addItemDecoration(gridSpacingDecoration)
+                binding.recyclerView.layoutManager = GridLayoutManager(this, layout)
+                binding.recyclerView.adapter = adapterGrid
+            }
+        }
         itemTouchCallback.isCanDrag =
-            sort == BookSourceSort.Default && !groupSourcesByDomain
+            AppConfig.sourceSort == 0 && sort == BookSourceSort.Default
+            && layout == 0 && !groupSourcesByDomain
     }
 
-    // F-P1-8 应用文件夹视图
+    // source-layout-refactor 应用文件夹视图
     private fun applyFolderView() {
-        binding.recyclerView.layoutManager = GridLayoutManager(this, 3)
+        binding.recyclerView.removeItemDecoration(verticalDivider)
+        binding.recyclerView.removeItemDecoration(gridSpacingDecoration)
+        val marginDp = AppConfig.sourceMargin
+        gridSpacingDecoration.spacing = SourceFolderAdapter.spacingPx(this, marginDp)
+        binding.recyclerView.addItemDecoration(gridSpacingDecoration)
+        val spanCount = SourceFolderAdapter.calculateSpanCount(this, marginDp)
+        binding.recyclerView.layoutManager = GridLayoutManager(this, spanCount)
         binding.recyclerView.adapter = folderAdapter
         itemTouchCallback.isCanDrag = false
     }
 
-    // F-P1-8 切换视图模式（用户主动点击菜单：永久切换 + 同步运行时状态）
-    private fun switchViewMode() {
-        if (isShowingFolder) {
-            // 当前是文件夹视图 → 切换为列表视图（永久）
-            AppConfig.sourceViewMode = 0
-            isShowingFolder = false
-            applyListView()
-            upBookSource(searchView.query?.toString())
-        } else {
-            // 当前是列表视图 → 切换为文件夹视图（永久）
-            AppConfig.sourceViewMode = 1
-            isShowingFolder = true
-            searchView.setQuery("", false)  // 清空搜索框，回到文件夹首页
-            applyFolderView()
-            upFolderView()
+    // source-layout-refactor 配置对话框（新签名：onConfigChanged 回调）
+    private fun showFolderConfig() {
+        SourceFolderAdapter.showConfigDialog(this) {
+            applyConfigChange()
+        }
+    }
+
+    // source-layout-refactor 配置变更后应用视图
+    private fun applyConfigChange() {
+        // 配置变更后重置子目录状态
+        currentType = -1
+        currentGroup = null
+        when (AppConfig.sourceGroupStyle) {
+            0 -> { // 列表平铺：直接显示所有源
+                isShowingFolder = false
+                applyListView()
+                upBookSource(searchView.query?.toString())
+            }
+            1, 2 -> { // 按类型/按分组：显示文件夹
+                isShowingFolder = true
+                applyFolderView()
+                upFolderView()
+            }
         }
         invalidateOptionsMenu()
     }
 
-    // F-P1-8 更新文件夹视图数据
+    // F-P1-8 更新文件夹视图数据（根据分组样式：按分组/按类型）
     private fun upFolderView() {
         val folderList = mutableListOf<String>()
-        folderList.add(getString(R.string.all_groups))
-        folderList.add(getString(R.string.no_group))
-        folderList.addAll(groups)
+        if (AppConfig.sourceGroupStyle == 1) {
+            // 按类型分组：显示类型文件夹
+            folderList.add(getString(R.string.all_groups))
+            folderList.add(getString(R.string.type_text))
+            folderList.add(getString(R.string.type_audio))
+            folderList.add(getString(R.string.type_image))
+            folderList.add(getString(R.string.type_file))
+            folderList.add(getString(R.string.type_video))
+        } else {
+            // 按自定义分组
+            folderList.add(getString(R.string.all_groups))
+            folderList.add(getString(R.string.no_group))
+            folderList.addAll(groups)
+        }
         folderAdapter.setItems(folderList, folderAdapter.diffItemCallback)
     }
 
@@ -362,92 +433,53 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     private fun upBookSource(searchKey: String? = null) {
         if (isShowingFolder) return
+        // source-layout-refactor 历史兼容：清空 type:/group: 前缀回填（防止旧代码遗留）
+        val nameQuery = searchKey?.let {
+            when {
+                it.startsWith("type:") || it.startsWith("group:") -> ""
+                else -> it
+            }
+        }
         sourceFlowJob?.cancel()
         sourceFlowJob = lifecycleScope.launch {
-            when {
-                searchKey.isNullOrEmpty() -> {
-                    appDb.bookSourceDao.flowAll()
-                }
-
-                searchKey == getString(R.string.enabled) -> {
+            val flow = when {
+                // 子目录：按类型 + 名称搜索
+                currentType >= 0 && !nameQuery.isNullOrEmpty() ->
+                    appDb.bookSourceDao.flowByTypeSearch(currentType, nameQuery)
+                currentType >= 0 ->
+                    appDb.bookSourceDao.flowByType(currentType)
+                // 子目录：按分组 + 名称搜索
+                currentGroup != null && !nameQuery.isNullOrEmpty() ->
+                    appDb.bookSourceDao.flowGroupSearchExact(currentGroup!!, nameQuery)
+                currentGroup != null ->
+                    appDb.bookSourceDao.flowGroupSearch(currentGroup!!)
+                // 根目录：特殊筛选快捷词（保留 enabled/disabled/need_login 等）
+                !nameQuery.isNullOrEmpty() && nameQuery == getString(R.string.enabled) ->
                     appDb.bookSourceDao.flowEnabled()
-                }
-
-                searchKey == getString(R.string.disabled) -> {
+                !nameQuery.isNullOrEmpty() && nameQuery == getString(R.string.disabled) ->
                     appDb.bookSourceDao.flowDisabled()
-                }
-
-                searchKey == getString(R.string.need_login) -> {
+                !nameQuery.isNullOrEmpty() && nameQuery == getString(R.string.need_login) ->
                     appDb.bookSourceDao.flowLogin()
-                }
-
-                searchKey == getString(R.string.no_group) -> {
+                !nameQuery.isNullOrEmpty() && nameQuery == getString(R.string.no_group) ->
                     appDb.bookSourceDao.flowNoGroup()
-                }
-
-                searchKey == getString(R.string.enabled_explore) -> {
+                !nameQuery.isNullOrEmpty() && nameQuery == getString(R.string.enabled_explore) ->
                     appDb.bookSourceDao.flowEnabledExplore()
-                }
-
-                searchKey == getString(R.string.disabled_explore) -> {
+                !nameQuery.isNullOrEmpty() && nameQuery == getString(R.string.disabled_explore) ->
                     appDb.bookSourceDao.flowDisabledExplore()
-                }
-
-                searchKey.startsWith("group:") -> {
-                    val key = searchKey.substringAfter("group:")
-                    appDb.bookSourceDao.flowGroupSearch(key)
-                }
-
-                else -> {
-                    appDb.bookSourceDao.flowSearch(searchKey)
-                }
-            }.map { data ->
+                // 根目录：名称搜索
+                !nameQuery.isNullOrEmpty() -> appDb.bookSourceDao.flowSearch(nameQuery)
+                // 根目录：全部
+                else -> appDb.bookSourceDao.flowAll()
+            }
+            flow.map { data ->
                 hostMap.clear()
                 if (groupSourcesByDomain) {
                     data.sortedWith(
                         compareBy<BookSourcePart> { getSourceHost(it.bookSourceUrl) == "#" }
                             .thenBy { getSourceHost(it.bookSourceUrl) }
                             .thenByDescending { it.lastUpdateTime })
-                } else if (sortAscending) {
-                    when (sort) {
-                        BookSourceSort.Weight -> data.sortedBy { it.weight }
-                        BookSourceSort.Name -> data.sortedWith { o1, o2 ->
-                            o1.bookSourceName.cnCompare(o2.bookSourceName)
-                        }
-
-                        BookSourceSort.Url -> data.sortedBy { it.bookSourceUrl }
-                        BookSourceSort.Update -> data.sortedByDescending { it.lastUpdateTime }
-                        BookSourceSort.Respond -> data.sortedBy { it.respondTime }
-                        BookSourceSort.Enable -> data.sortedWith { o1, o2 ->
-                            var sort = -o1.enabled.compareTo(o2.enabled)
-                            if (sort == 0) {
-                                sort = o1.bookSourceName.cnCompare(o2.bookSourceName)
-                            }
-                            sort
-                        }
-
-                        else -> data
-                    }
                 } else {
-                    when (sort) {
-                        BookSourceSort.Weight -> data.sortedByDescending { it.weight }
-                        BookSourceSort.Name -> data.sortedWith { o1, o2 ->
-                            o2.bookSourceName.cnCompare(o1.bookSourceName)
-                        }
-
-                        BookSourceSort.Url -> data.sortedByDescending { it.bookSourceUrl }
-                        BookSourceSort.Update -> data.sortedBy { it.lastUpdateTime }
-                        BookSourceSort.Respond -> data.sortedByDescending { it.respondTime }
-                        BookSourceSort.Enable -> data.sortedWith { o1, o2 ->
-                            var sort = o1.enabled.compareTo(o2.enabled)
-                            if (sort == 0) {
-                                sort = o1.bookSourceName.cnCompare(o2.bookSourceName)
-                            }
-                            sort
-                        }
-
-                        else -> data.reversed()
-                    }
+                    sortSources(data)
                 }
             }.flowWithLifecycleAndDatabaseChange(
                 lifecycle,
@@ -455,10 +487,66 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             ).catch {
                 AppLog.put("书源界面更新书源出错", it)
             }.flowOn(IO).conflate().collect { data ->
-                adapter.setItems(data, adapter.diffItemCallback, !Debug.isChecking)
+                when (AppConfig.sourceLayout) {
+                    1 -> adapterCompact.setItems(data, adapterCompact.diffItemCallback, !Debug.isChecking)
+                    in 2..6 -> adapterGrid.setItems(data, adapterGrid.diffItemCallback, !Debug.isChecking)
+                    else -> adapter.setItems(data, adapter.diffItemCallback, !Debug.isChecking)
+                }
                 itemTouchCallback.isCanDrag =
-                    sort == BookSourceSort.Default && !groupSourcesByDomain
+                    AppConfig.sourceSort == 0 && sort == BookSourceSort.Default
+                    && !groupSourcesByDomain
                 delay(500)
+            }
+        }
+    }
+
+    // source-layout-refactor 排序：sourceSort 配置驱动（6 选项），sourceSort==0 时回退旧 sort 逻辑
+    private fun sortSources(data: List<BookSourcePart>): List<BookSourcePart> {
+        return if (AppConfig.sourceSort != 0) {
+            val sorted = when (AppConfig.sourceSort) {
+                1 -> data.sortedWith { o1, o2 -> o1.bookSourceName.cnCompare(o2.bookSourceName) }
+                2 -> data.sortedByDescending { it.enabled }
+                3 -> data.sortedBy { it.bookSourceType }
+                4 -> data.sortedBy { it.bookSourceGroup ?: "" }
+                5 -> data.sortedBy { it.bookSourceUrl }
+                6 -> data.sortedByDescending { it.lastUpdateTime }
+                else -> data
+            }
+            if (!sortAscending) sorted.reversed() else sorted
+        } else {
+            // 旧逻辑：保留 BookSourceSort.Weight/Update/Respond 等菜单排序
+            if (sortAscending) {
+                when (sort) {
+                    BookSourceSort.Weight -> data.sortedBy { it.weight }
+                    BookSourceSort.Name -> data.sortedWith { o1, o2 ->
+                        o1.bookSourceName.cnCompare(o2.bookSourceName)
+                    }
+                    BookSourceSort.Url -> data.sortedBy { it.bookSourceUrl }
+                    BookSourceSort.Update -> data.sortedByDescending { it.lastUpdateTime }
+                    BookSourceSort.Respond -> data.sortedBy { it.respondTime }
+                    BookSourceSort.Enable -> data.sortedWith { o1, o2 ->
+                        var cmp = -o1.enabled.compareTo(o2.enabled)
+                        if (cmp == 0) cmp = o1.bookSourceName.cnCompare(o2.bookSourceName)
+                        cmp
+                    }
+                    else -> data
+                }
+            } else {
+                when (sort) {
+                    BookSourceSort.Weight -> data.sortedByDescending { it.weight }
+                    BookSourceSort.Name -> data.sortedWith { o1, o2 ->
+                        o2.bookSourceName.cnCompare(o1.bookSourceName)
+                    }
+                    BookSourceSort.Url -> data.sortedByDescending { it.bookSourceUrl }
+                    BookSourceSort.Update -> data.sortedBy { it.lastUpdateTime }
+                    BookSourceSort.Respond -> data.sortedByDescending { it.respondTime }
+                    BookSourceSort.Enable -> data.sortedWith { o1, o2 ->
+                        var cmp = o1.enabled.compareTo(o2.enabled)
+                        if (cmp == 0) cmp = o1.bookSourceName.cnCompare(o2.bookSourceName)
+                        cmp
+                    }
+                    else -> data.reversed()
+                }
             }
         }
     }
@@ -473,29 +561,37 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         super.onPause()
     }
 
+    // source-layout-refactor 子目录内按返回键：回根目录；根目录：退出
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        if (inSubDirectory) {
+            currentType = -1
+            currentGroup = null
+            if (AppConfig.sourceGroupStyle == 0) {
+                applyListView()
+            } else {
+                isShowingFolder = true
+                applyFolderView()
+                upFolderView()
+            }
+            upBookSource(searchView.query?.toString())
+            invalidateOptionsMenu()
+            return
+        }
+        super.onBackPressed()
+    }
+
 
     private fun initLiveDataGroup() {
         lifecycleScope.launch {
-            appDb.bookSourceDao.flowGroups().flowOn(IO)
-                .flowWithLifecycleAndDatabaseChange(
-                    lifecycle,
-                    table = AppDatabase.BOOK_SOURCE_TABLE_NAME
-                )
-                .flowWithLifecycleAndDatabaseChangeFirst(
-                    groupMenuLifecycleOwner.lifecycle,
-                    table = AppDatabase.BOOK_SOURCE_TABLE_NAME
-                )
-                .conflate()
-                .distinctUntilChanged()
-                .collect {
-                    groups.clear()
-                    groups.addAll(it)
-                    upGroupMenu()
-                    if (isShowingFolder) {
-                        upFolderView()
-                    }
-                    delay(500)
+            appDb.bookSourceDao.flowGroups().flowOn(IO).conflate().collect {
+                groups.clear()
+                groups.addAll(it)
+                upGroupMenu()
+                if (isShowingFolder) {
+                    upFolderView()
                 }
+            }
         }
     }
 
@@ -515,20 +611,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         alert(titleResource = R.string.draw, messageResource = R.string.sure_del) {
             yesButton { viewModel.del(adapter.selection) }
             noButton()
-        }
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        if (menu === groupMenu) {
-            groupMenuLifecycleOwner.onMenuOpened()
-        }
-        return super.onMenuOpened(featureId, menu)
-    }
-
-    override fun onPanelClosed(featureId: Int, menu: Menu) {
-        super.onPanelClosed(featureId, menu)
-        if (menu === groupMenu) {
-            groupMenuLifecycleOwner.onMenuClosed()
         }
     }
 
@@ -780,18 +862,34 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         }
     }
 
-    // F-P1-8 文件夹点击回调：点击文件夹 → 临时切换到列表视图并按分组筛选
-    // 注意：不修改 sourceViewMode（用户偏好），仅修改 isShowingFolder（运行时状态）
-    // 这样再次进入或用户点击菜单"文件夹视图"时，仍会显示文件夹视图
+    // source-layout-refactor 文件夹点击回调：设置状态变量，不触碰搜索框
     override fun onFolderClick(group: String) {
+        when (AppConfig.sourceGroupStyle) {
+            1 -> { // 按类型
+                currentType = when (group) {
+                    getString(R.string.type_text) -> 0
+                    getString(R.string.type_audio) -> 1
+                    getString(R.string.type_image) -> 2
+                    getString(R.string.type_file) -> 3
+                    getString(R.string.type_video) -> 4
+                    else -> -1  // all_groups
+                }
+                currentGroup = null
+            }
+            2 -> { // 按分组
+                currentType = -1
+                currentGroup = when (group) {
+                    getString(R.string.all_groups) -> null
+                    getString(R.string.no_group) -> null
+                    else -> group
+                }
+            }
+            else -> return  // 列表平铺模式无文件夹
+        }
         isShowingFolder = false
         applyListView()
         invalidateOptionsMenu()
-        when (group) {
-            getString(R.string.all_groups) -> searchView.setQuery("", true)
-            getString(R.string.no_group) -> searchView.setQuery(getString(R.string.no_group), true)
-            else -> searchView.setQuery("group:$group", true)
-        }
+        upBookSource(searchView.query?.toString())
     }
 
     override fun onQueryTextChange(newText: String?): Boolean {

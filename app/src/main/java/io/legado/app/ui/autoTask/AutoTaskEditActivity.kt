@@ -5,6 +5,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
+import android.widget.AdapterView
 import androidx.activity.viewModels
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -34,6 +36,10 @@ class AutoTaskEditActivity :
     VMBaseActivity<ActivityAutoTaskEditBinding, AutoTaskEditViewModel>() {
 
     companion object {
+        // F-P9-1 Cron 频率预设值
+        private const val CRON_EVERY_DAY = "0 0 * * *"
+        private const val CRON_EVERY_HOUR = "0 * * * *"
+
         fun startIntent(context: Context, id: String? = null): Intent {
             return Intent(context, AutoTaskEditActivity::class.java).apply {
                 if (!id.isNullOrBlank()) {
@@ -54,6 +60,18 @@ class AutoTaskEditActivity :
             task = it
             upView(it)
         }
+        // F-P9-1 Cron 频率选择器：自定义档才显示 Cron 输入框
+        binding.spCronFrequency.onItemSelectedListener =
+            object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent: AdapterView<*>?, view: View?, position: Int, id: Long
+                ) {
+                    binding.tilCron.visibility =
+                        if (position == 2) View.VISIBLE else View.GONE
+                }
+
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
+            }
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
@@ -102,7 +120,15 @@ class AutoTaskEditActivity :
         cbEnable.isChecked = rule.enable
         cbCookie.isChecked = rule.enabledCookieJar
         etName.setText(rule.name)
-        etCron.setText(rule.cron?.ifBlank { AutoTask.DEFAULT_CRON })
+        // F-P9-1 根据 cron 判断频率并设置 Spinner 选中项
+        val cron = rule.cron?.ifBlank { AutoTask.DEFAULT_CRON }.orEmpty()
+        etCron.setText(cron)
+        val freqIndex = when (cron) {
+            CRON_EVERY_DAY -> 0
+            CRON_EVERY_HOUR -> 1
+            else -> 2
+        }
+        spCronFrequency.setSelection(freqIndex)
         etComment.setText(rule.comment.orEmpty())
         etScript.setText(rule.script)
         etHeader.setText(rule.header.orEmpty())
@@ -119,10 +145,19 @@ class AutoTaskEditActivity :
             toastOnUi(getString(R.string.auto_task_name_required))
             return null
         }
-        val cron = etCron.text?.toString()?.trim().orEmpty().ifBlank { AutoTask.DEFAULT_CRON }
-        if (CronSchedule.parse(cron) == null) {
-            toastOnUi(getString(R.string.auto_task_cron_invalid))
-            return null
+        // F-P9-1 根据频率生成 cron
+        val cron = when (spCronFrequency.selectedItemPosition) {
+            0 -> CRON_EVERY_DAY
+            1 -> CRON_EVERY_HOUR
+            else -> {
+                val customCron = etCron.text?.toString()?.trim().orEmpty()
+                    .ifBlank { AutoTask.DEFAULT_CRON }
+                if (CronSchedule.parse(customCron) == null) {
+                    toastOnUi(getString(R.string.auto_task_cron_invalid))
+                    return null
+                }
+                customCron
+            }
         }
         val script = etScript.text?.toString().orEmpty()
         if (script.isBlank()) {
@@ -150,7 +185,13 @@ class AutoTaskEditActivity :
         val base = originTask ?: task ?: AutoTaskRule()
         base.copy(
             name = etName.text?.toString().orEmpty(),
-            cron = etCron.text?.toString()?.trim()?.ifBlank { AutoTask.DEFAULT_CRON },
+            // F-P9-1 根据频率生成 cron
+            cron = when (spCronFrequency.selectedItemPosition) {
+                0 -> CRON_EVERY_DAY
+                1 -> CRON_EVERY_HOUR
+                else -> etCron.text?.toString()?.trim()?.ifBlank { AutoTask.DEFAULT_CRON }
+                    ?: AutoTask.DEFAULT_CRON
+            },
             comment = etComment.text?.toString()?.trim()?.ifBlank { null },
             script = etScript.text?.toString().orEmpty(),
             header = etHeader.text?.toString()?.trim()?.ifBlank { null },

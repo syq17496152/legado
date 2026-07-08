@@ -16,7 +16,7 @@
         app:selectable="false" />
 
     <io.legado.app.lib.prefs.SwitchPreference
-        android:defaultValue="false"
+        android:defaultValue="true"
         android:key="customWelcome"
         android:summary="@string/custom_welcome_summary"
         android:title="@string/custom_welcome"

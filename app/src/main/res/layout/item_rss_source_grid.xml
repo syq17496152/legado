@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- source-layout-deep-refactor 订阅源网格项：卡片 首字封面+名称+启用指示 -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:clickable="true"
+    android:focusable="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="4dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="4dp"
+        android:paddingBottom="4dp"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="@dimen/corner_medium"
+            app:cardElevation="@dimen/elevation_level1"
+            app:cardPreventCornerOverlap="false"
+            app:cardUseCompatPadding="false">
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <ImageView
+                    android:id="@+id/iv_source_cover"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:background="@drawable/bg_source_folder_cover"
+                    android:contentDescription="@string/rss_source"
+                    android:scaleType="centerInside"
+                    app:layout_constraintDimensionRatio="3:4"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent"
+                    tools:ignore="ImageContrastCheck" />
+
+                <TextView
+                    android:id="@+id/tv_source_initial"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:includeFontPadding="false"
+                    android:textColor="@android:color/white"
+                    android:textSize="36sp"
+                    android:textStyle="bold"
+                    app:layout_constraintBottom_toBottomOf="@id/iv_source_cover"
+                    app:layout_constraintEnd_toEndOf="@id/iv_source_cover"
+                    app:layout_constraintStart_toStartOf="@id/iv_source_cover"
+                    app:layout_constraintTop_toTopOf="@id/iv_source_cover"
+                    tools:ignore="TextContrastCheck"
+                    tools:text="默" />
+
+                <View
+                    android:id="@+id/v_enabled_dot"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:layout_margin="6dp"
+                    android:background="@drawable/bg_source_enabled_dot"
+                    app:layout_constraintEnd_toEndOf="@id/iv_source_cover"
+                    app:layout_constraintTop_toTopOf="@id/iv_source_cover" />
+
+            </androidx.constraintlayout.widget.ConstraintLayout>
+        </androidx.cardview.widget.CardView>
+
+        <TextView
+            android:id="@+id/tv_source_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:ellipsize="end"
+            android:gravity="top|center_horizontal"
+            android:includeFontPadding="false"
+            android:lines="2"
+            android:textColor="@color/primaryText"
+            android:textSize="12sp"
+            tools:ignore="RtlHardcoded,RtlSymmetry"
+            tools:text="订阅源名称" />
+
+    </LinearLayout>
+
+    <View
+        android:id="@+id/vw_foreground"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="?android:attr/selectableItemBackground"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

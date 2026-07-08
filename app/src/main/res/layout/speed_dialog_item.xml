@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 倍速列表项：圆角卡片背景 + 白字16sp，SpeedAdapter 专用（不影响选集列表） -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/text1"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/card_video_background"
+    android:gravity="center_vertical"
+    android:paddingLeft="20dp"
+    android:paddingTop="11dp"
+    android:paddingRight="20dp"
+    android:paddingBottom="11dp"
+    android:textColor="#FFFFFF"
+    android:textSize="16sp" />

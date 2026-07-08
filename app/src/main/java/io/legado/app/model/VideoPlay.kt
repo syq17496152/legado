@@ -86,6 +86,31 @@ object VideoPlay : CoroutineScope by MainScope(){
         set(value) {
             videoPrefs.edit { putBoolean("fullBottomProgressBar", value) }
         }
+    /**  边下边播缓存（已废弃，保留字段仅为兼容旧配置数据）
+     * P0-2 统一缓存机制：ExoPlayer SimpleCache 已默认接管所有视频缓存（见 ExoPlayerHelper.cacheDataSourceFactory），
+     * 旧版 GSY ProxyCacheManager 代理缓存路径对带 header/m3u8/特殊 URL 不兼容会导致播放失败，故永久关闭。
+     * getter 始终返回 false，setter 保留仅为避免旧 UI 调用崩溃。
+     */
+    @Deprecated("ExoPlayer SimpleCache 已默认接管缓存，此开关不再生效")
+    var cachePlay
+        get() = false
+        set(value) {
+            videoPrefs.edit { putBoolean("cachePlay", value) }
+        }
+    /**  视频缓存容量（MB），默认 100MB，可选 50/100/200/500
+     * P0-3 缓存容量可配置：修改后需重启 App 生效（SimpleCache 单例在首次访问时初始化，不可动态修改大小）
+     **/
+    var videoCacheSize: Int
+        get() = videoPrefs.getInt("videoCacheSize", 100)
+        set(value) {
+            videoPrefs.edit { putInt("videoCacheSize", value) }
+        }
+    /**  默认静音（播放时默认关闭声音，用户可手动开启）  **/
+    var muteOnStart
+        get() = videoPrefs.getBoolean("muteOnStart", true)
+        set(value) {
+            videoPrefs.edit { putBoolean("muteOnStart", value) }
+        }
     /**  弹幕滚动速度  **/
     var danmakuSpeed = 1.2f
     /**  锁屏  **/
@@ -147,7 +172,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                 withContext(Main) {
                     player.mapHeadData = analyzeUrl.headerMap
                     val url = analyzeUrl.url
-                    player.setUp(url, false, File(appCtx.externalCache, "exoplayer"), videoTitle)
+                    player.setUp(url, cachePlay, File(appCtx.externalCache, "exoplayer"), videoTitle)
                     if (autoPlay) {
                         player.startPlayLogic()
                     }
@@ -178,7 +203,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                         player.mapHeadData = analyzeUrl.headerMap
                         player.setUp(
                             analyzeUrl.url,
-                            false,
+                            cachePlay,
                             File(appCtx.externalCache, "exoplayer"),
                             rssArticle.title
                         )
@@ -212,7 +237,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                         val playUrl = analyzeUrl.url
                         withContext(Main) {
                             player.mapHeadData = analyzeUrl.headerMap
-                            player.setUp(playUrl, false, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
+                            player.setUp(playUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
                             if (autoPlay) {
                                 player.startPlayLogic()
                             }
@@ -275,7 +300,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                 val playUrl = analyzeUrl.url
                 withContext(Main) {
                     player.mapHeadData = analyzeUrl.headerMap
-                    player.setUp(playUrl, false, File(appCtx.externalCache, "exoplayer"), chapter.title)
+                    player.setUp(playUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), chapter.title)
                     if (autoPlay) {
                         player.startPlayLogic()
                     }
