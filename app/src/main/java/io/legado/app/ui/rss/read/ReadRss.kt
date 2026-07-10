@@ -41,6 +41,7 @@ object ReadRss {
                 putExtra("sourceKey", record.origin)
                 putExtra("sourceType", SourceType.rss)
                 putExtra("record", record.record)
+                putExtra("videoTitle", record.title) // R3 title 修复：传递标题给 VideoPlayerActivity
             }
             return
         }
@@ -70,6 +71,7 @@ object ReadRss {
                 putExtra("sourceKey", rssArticle.origin)
                 putExtra("sourceType", SourceType.rss)
                 putExtra("record", rssArticle.link)
+                putExtra("videoTitle", rssArticle.title) // R3 title 修复：传递标题给 VideoPlayerActivity
             }
             return
         }

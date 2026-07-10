@@ -118,6 +118,20 @@ object ExoPlayerHelper {
     }
 
     /**
+     * R5 Header 修复：设置 okhttpDataFactory 的默认请求头
+     *
+     * Exo2MediaPlayer.prepareAsyncInternal 使用 no-op resolver（不处理 Header），
+     * 但其 MediaSource 使用 cacheDataSourceFactory（upstream 是 okhttpDataFactory）。
+     * 在 ExoPlayerManager.initVideoPlayer 中 setDataSource 前调用此方法，
+     * 可确保 Header 到达 HTTP 请求（解决 CDN 防盗链 404 问题）。
+     *
+     * 简化说明：单播放器场景，Header 覆盖不影响 | 已知上限：多播放器并发会互相覆盖 | 升级路径：改用 per-request Header 注入
+     */
+    fun setDefaultHeaders(headers: Map<String, String>) {
+        okhttpDataFactory.setDefaultRequestProperties(headers)
+    }
+
+    /**
      * Exoplayer 内置的缓存
      * P0-3：缓存容量从 VideoPlay.videoCacheSize 读取（首次 lazy 初始化时生效，修改后需重启 App）
      */

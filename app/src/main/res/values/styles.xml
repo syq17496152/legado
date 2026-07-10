@@ -132,4 +132,16 @@
         <item name="android:windowNoTitle">true</item>
     </style>
 
+    //*******************Video Player Style**********************************//
+
+    <!-- R3 视频播放器控制按钮样式（Borderless 避免AppCompat主题不兼容） -->
+    <style name="VideoCtrlButton" parent="Widget.AppCompat.Button.Borderless">
+        <item name="android:minWidth">48dp</item>
+        <item name="android:minHeight">36dp</item>
+        <item name="android:padding">3dp</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:textColor">@color/primaryText</item>
+        <item name="android:background">@drawable/bg_video_ctrl_btn</item>
+    </style>
+
 </resources>

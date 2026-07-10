@@ -12,6 +12,7 @@ import androidx.core.content.edit
 import com.shuyu.gsyvideoplayer.listener.GSYMediaPlayerListener
 import com.shuyu.gsyvideoplayer.utils.CommonUtil
 import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer
+import com.shuyu.gsyvideoplayer.video.base.GSYBaseVideoPlayer
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
@@ -21,6 +22,7 @@ import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.RssEpisode
 import io.legado.app.data.entities.RssReadRecord
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.RssStar
@@ -33,6 +35,7 @@ import io.legado.app.help.gsyVideo.ExoVideoManager
 import io.legado.app.help.gsyVideo.ExoVideoManager.Companion.FULLSCREEN_ID
 import io.legado.app.help.gsyVideo.FloatingPlayer
 import io.legado.app.help.gsyVideo.VideoPlayer
+import io.legado.app.help.video.VideoUrlExtractor
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.rss.Rss
 import io.legado.app.model.webBook.WebBook
@@ -50,6 +53,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
+import org.json.JSONArray
 import java.io.File
 
 object VideoPlay : CoroutineScope by MainScope(){
@@ -143,6 +147,10 @@ object VideoPlay : CoroutineScope by MainScope(){
     var rssStar: RssStar? = null
     /**  订阅历史记录,收藏优先  **/
     var rssRecord: RssReadRecord? = null
+    /**  订阅源多集列表（R1 多集选择播放，ruleContent 返回 JSON 数组或多行 URL 时解析）  **/
+    var rssEpisodes: List<RssEpisode>? = null
+    /**  当前订阅源集索引（R1 多集选择播放）  **/
+    var rssEpisodeIndex: Int = 0
     /**  弹幕相关  **/
     var danmakuFile: File? = null
     var danmakuStr: String? = null
@@ -191,33 +199,87 @@ object VideoPlay : CoroutineScope by MainScope(){
             }
             val ruleContent = s.ruleContent
             if (ruleContent.isNullOrBlank()) {
+                // R5 自动视频链接抓取 + R3 title 修复
+                videoTitle = rssArticle.title
+                postEvent(EventBus.VIDEO_SUB_TITLE, "正在抓取视频链接...")
                 Coroutine.async(loadScope, IO) {
-                    val mUrl = rssArticle.link
-                    videoUrl = mUrl
-                    val analyzeUrl = AnalyzeUrl(
-                        mUrl,
-                        source = source,
-                        ruleData = rssArticle
-                    )
-                    withContext(Main) {
-                        player.mapHeadData = analyzeUrl.headerMap
-                        player.setUp(
-                            analyzeUrl.url,
-                            cachePlay,
-                            File(appCtx.externalCache, "exoplayer"),
-                            rssArticle.title
-                        )
-                        if (autoPlay) {
-                            player.startPlayLogic()
+                    // 获取文章页面 HTML
+                    val pageAnalyzeUrl = AnalyzeUrl(rssArticle.link, source = source, ruleData = rssArticle)
+                    val res = pageAnalyzeUrl.getStrResponseAwait()
+                    val html = res.body ?: ""
+                    // R5 综合提取视频 URL（五种方法去重）
+                    val videoUrls = VideoUrlExtractor.extract(html, rssArticle.link)
+                    when {
+                        videoUrls.size == 1 -> {
+                            // R5 单 URL 分支
+                            val mUrl = videoUrls[0]
+                            videoUrl = mUrl
+                            val playAnalyzeUrl = AnalyzeUrl(mUrl, source = source, ruleData = rssArticle)
+                            // R5 Header 修复：注入 Referer（模拟 WebView 行为，解决 CDN 防盗链 404）
+                            if (!playAnalyzeUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
+                                playAnalyzeUrl.headerMap["Referer"] = rssArticle.link
+                            }
+                            withContext(Main) {
+                                player.mapHeadData = playAnalyzeUrl.headerMap
+                                player.setUp(playAnalyzeUrl.url, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
+                                postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
+                                if (autoPlay) {
+                                    player.startPlayLogic()
+                                }
+                            }
+                        }
+                        videoUrls.size > 1 -> {
+                            // R5 多 URL 分支：直接构建 List<RssEpisode>（不走 parseRssEpisodes，避免 JSON 序列化冗余）
+                            val episodes = videoUrls.mapIndexed { i, url ->
+                                RssEpisode(title = "第${i + 1}集", url = url)
+                            }
+                            rssEpisodes = episodes
+                            rssEpisodeIndex = 0
+                            withContext(Main) {
+                                postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
+                                playRssEpisode(player, episodes[0])
+                                postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1))
+                            }
+                        }
+                        else -> {
+                            // R5 未找到分支：回退当前逻辑（用文章链接）+ AppLog 提示
+                            AppLog.put("R5自动抓取：未从文章页面找到视频URL，回退使用文章链接")
+                            val mUrl = rssArticle.link
+                            videoUrl = mUrl
+                            val fallbackUrl = AnalyzeUrl(mUrl, source = source, ruleData = rssArticle)
+                            // R5 Header 修复：注入 Referer
+                            if (!fallbackUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
+                                fallbackUrl.headerMap["Referer"] = rssArticle.link
+                            }
+                            withContext(Main) {
+                                player.mapHeadData = fallbackUrl.headerMap
+                                player.setUp(fallbackUrl.url, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
+                                postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
+                                if (autoPlay) {
+                                    player.startPlayLogic()
+                                }
+                            }
                         }
                     }
                 }.onError {
-                    AppLog.put("加载订阅源视频链接失败", it, true)
+                    AppLog.put("R5自动抓取视频链接失败", it, true)
                 }
             } else {
                 Rss.getContent(loadScope, rssArticle, ruleContent, s)
                     .onSuccess(IO) { content ->
                         val content = content.trim()
+                        // R1 多集选择播放：尝试解析为多集列表（JSON数组/多行URL）
+                        // 注意：用 isNotEmpty() 而非 size > 1，避免单元素 JSON 数组回退到单 URL 逻辑
+                        val episodes = parseRssEpisodes(content, rssArticle.link)
+                        if (episodes != null && episodes.isNotEmpty()) {
+                            rssEpisodes = episodes
+                            rssEpisodeIndex = 0
+                            postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title) // R3 title 修复
+                            playRssEpisode(player, episodes[0])
+                            postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1)) //通知 UI 更新多集列表
+                            return@onSuccess
+                        }
+                        // 单 URL（现有逻辑）
                         val mUrl = if (content.isEmpty()) {
                             throw ContentEmptyException("正文为空")
                         } else if (content.startsWith("<")) { //当作mpd文本
@@ -234,10 +296,15 @@ object VideoPlay : CoroutineScope by MainScope(){
                             source = source,
                             ruleData = rssArticle
                         )
+                        // R5 Header 修复：注入 Referer（模拟 WebView 行为，解决 CDN 防盗链 404）
+                        if (!analyzeUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
+                            analyzeUrl.headerMap["Referer"] = rssArticle.link
+                        }
                         val playUrl = analyzeUrl.url
                         withContext(Main) {
                             player.mapHeadData = analyzeUrl.headerMap
                             player.setUp(playUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
+                            postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title) // R3 title 修复
                             if (autoPlay) {
                                 player.startPlayLogic()
                             }
@@ -360,6 +427,8 @@ object VideoPlay : CoroutineScope by MainScope(){
             danmakuFile = null
             lockCurScreen = false
             isPortraitVideo = false
+            rssEpisodes = null
+            rssEpisodeIndex = 0
             release()
             if (needClearTemp) {
                 needClearTemp = false
@@ -504,6 +573,107 @@ object VideoPlay : CoroutineScope by MainScope(){
         chapterInVolumeIndex = index
         saveRead(0)
         startPlay(player)
+        postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1)) //更新选集视图
+        return true
+    }
+
+    /**
+     * R1 多集选择播放：解析 ruleContent 返回的内容为多集列表
+     *
+     * 支持三种模式（兼容性保证：现有单 URL 订阅源无需修改，自动走模式①）：
+     * - 模式①单 URL：返回 null，交由现有逻辑处理（100% 向后兼容）
+     * - 模式②多行 URL：每行合法 URL（http/https/绝对路径）才判定多集
+     * - 模式③JSON 数组：[{"url":"...","title":"..."}]，url 必须，title 可选（缺省"第N集"）
+     *
+     * 详见 docs/specs/rss-video-player-enhancement/design.md 1.5 节"内容规则编写指南"
+     */
+    private fun parseRssEpisodes(content: String, baseUrl: String): List<RssEpisode>? {
+        val trimmed = content.trim()
+        // 模式③：JSON 数组（完整多集，支持 title 等可选字段）
+        if (trimmed.startsWith("[")) {
+            return try {
+                val arr = JSONArray(trimmed)
+                (0 until arr.length()).map { i ->
+                    val obj = arr.getJSONObject(i)
+                    RssEpisode(
+                        title = obj.optString("title", "第${i + 1}集"),
+                        url = NetworkUtils.getAbsoluteURL(baseUrl, obj.optString("url"))
+                    )
+                }.filter { it.url.isNotBlank() }
+            } catch (e: Exception) {
+                null
+            }
+        }
+        // 模式②：多行 URL（简写多集，每行必须是合法 URL）
+        val lines = trimmed.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+        if (lines.size > 1 && lines.all { isLikelyUrl(it) }) {
+            return lines.mapIndexed { i, url ->
+                RssEpisode(title = "第${i + 1}集", url = NetworkUtils.getAbsoluteURL(baseUrl, url))
+            }
+        }
+        // 模式①：单 URL，交由现有逻辑处理
+        return null
+    }
+
+    private fun isLikelyUrl(s: String): Boolean {
+        return s.startsWith("http://") || s.startsWith("https://") || s.startsWith("/")
+    }
+
+    /**
+     * R1 多集选择播放：播放指定集
+     *
+     * 参考 startPlay RssSource 分支的 AnalyzeUrl + setUp + startPlayLogic 模式
+     */
+    fun playRssEpisode(player: GSYBaseVideoPlayer, episode: RssEpisode) {
+        val rssArticle = rssStar?.toRssArticle() ?: rssRecord?.toRssArticle()
+        if (rssArticle == null) {
+            appCtx.toastOnUi("未找到订阅")
+            return
+        }
+        videoUrl = episode.url
+        videoTitle = episode.title
+        Coroutine.async(loadScope, IO) {
+            val analyzeUrl = AnalyzeUrl(
+                episode.url,
+                source = source,
+                ruleData = rssArticle
+            )
+            // R5 Header 修复：注入 Referer（模拟 WebView 行为，解决 CDN 防盗链 404）
+            if (!analyzeUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
+                analyzeUrl.headerMap["Referer"] = rssArticle.link
+            }
+            withContext(Main) {
+                player.mapHeadData = analyzeUrl.headerMap
+                player.setUp(analyzeUrl.url, cachePlay, File(appCtx.externalCache, "exoplayer"), episode.title)
+                // R3 title 修复：TitleBar 统一显示文章标题（用户反馈：单URL/多行URL模式title用rssArticle.title）
+                postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
+                if (autoPlay) {
+                    player.startPlayLogic()
+                }
+            }
+        }.onError {
+            AppLog.put("加载订阅源视频集失败: ${episode.title}", it, true)
+        }
+    }
+
+    /**
+     * R1 多集选择播放：切换集数（上一集/下一集）
+     *
+     * 参考 upDurIndex 模式：检查边界→更新索引→播放→通知 UI
+     */
+    fun upRssEpisodeIndex(offset: Int, player: GSYBaseVideoPlayer): Boolean {
+        val episodes = rssEpisodes ?: return false
+        val index = rssEpisodeIndex + offset
+        if (index < 0) {
+            appCtx.toastOnUi("已到开头")
+            return false
+        }
+        if (index >= episodes.size) {
+            appCtx.toastOnUi("已播放完")
+            return false
+        }
+        rssEpisodeIndex = index
+        playRssEpisode(player, episodes[index])
         postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1)) //更新选集视图
         return true
     }

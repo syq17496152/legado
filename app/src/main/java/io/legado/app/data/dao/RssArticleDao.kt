@@ -13,8 +13,10 @@ interface RssArticleDao {
     @Query("select * from rssArticles where origin = :origin and link = :link")
     fun getByLink(origin: String, link: String): RssArticle?
 
+    // R4.3 修复：去掉 t1.content 字段，避免大文章 content 超过 CursorWindow 2MB 限制导致 SQLiteBlobTooBigException
+    // content 字段在列表界面未被使用，ReadRssViewModel 使用 description 或从网络获取内容
     @Query(
-        """select t1.link, t1.sort, t1.origin, t1.`order`, t1.title, t1.content, 
+        """select t1.link, t1.sort, t1.origin, t1.`order`, t1.title,
             t1.description, t1.image, t1.`group`, t1.pubDate, t1.variable, t1.type, t1.durPos, ifNull(t2.read, 0) as read
         from rssArticles as t1 left join rssReadRecords as t2
         on t1.link = t2.record  where t1.origin = :origin and t1.sort = :sort

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- R3 布局优化：VideoCtrlButton 圆角背景 selector（pressed 状态深色反馈） -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#66757575" />
+            <corners android:radius="2dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#33757575" />
+            <corners android:radius="2dp" />
+        </shape>
+    </item>
+</selector>

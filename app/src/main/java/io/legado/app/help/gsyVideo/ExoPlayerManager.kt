@@ -16,6 +16,7 @@ import com.shuyu.gsyvideoplayer.model.GSYModel
 import com.shuyu.gsyvideoplayer.model.VideoOptionModel
 import com.shuyu.gsyvideoplayer.player.BasePlayerManager
 import io.legado.app.constant.AppLog
+import io.legado.app.help.exoplayer.ExoPlayerHelper
 import tv.danmaku.ijk.media.player.IMediaPlayer
 
 
@@ -53,8 +54,14 @@ class ExoPlayerManager : BasePlayerManager() {
                 // 处理URL为空的情况
                 return
             }
+            mediaPlayer!!.currentUrl = model.getUrl()
             mediaPlayer!!.setLooping(model.isLooping)
             mediaPlayer!!.setPreview(!model.getMapHeadData().isNullOrEmpty())
+            // R5 Header 修复：在 setDataSource 前注入 Header 到 okhttpDataFactory，
+            // 确保 Exo2MediaPlayer.prepareAsyncInternal 构建的 HTTP 请求带上 Header（解决 CDN 防盗链 404）
+            model.getMapHeadData()?.takeIf { it.isNotEmpty() }?.let { headers ->
+                ExoPlayerHelper.setDefaultHeaders(headers)
+            }
             if (model.isCache()) {
                 //通过管理器处理
                 cacheManager.doCacheLogic(

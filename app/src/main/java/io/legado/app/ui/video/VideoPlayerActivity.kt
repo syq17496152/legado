@@ -16,6 +16,8 @@ import android.view.textclassifier.TextClassifier
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.ArrayAdapter
+import android.widget.AdapterView
 import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.annotation.OptIn
@@ -37,6 +39,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.RssEpisode
 import io.legado.app.data.entities.RssSource
 import io.legado.app.databinding.ActivityVideoPlayerBinding
 import io.legado.app.help.GlideImageGetter
@@ -225,7 +228,20 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         val book = VideoPlay.book
         if (book == null) {
             binding.data.invisible()
-            binding.chaptersContainer.invisible()
+            // R3 布局学习：订阅源功能区显示
+            binding.rssVideoPanel.visible()
+            setupRssVideoPanel()
+            // R1 多集选择播放：订阅源多集列表显示
+            // startPlay 异步解析 ruleContent，rssEpisodes 可能在 initView 后才就绪
+            // 就绪后通过 UP_VIDEO_INFO 事件触发 showRssEpisodes
+            val rssEpisodes = VideoPlay.rssEpisodes
+            if (!rssEpisodes.isNullOrEmpty()) {
+                binding.chaptersContainer.visible()
+                binding.chapters.visible()
+                showRssEpisodes(rssEpisodes)
+            } else {
+                binding.chaptersContainer.invisible()
+            }
             return
         }
         showBook(book)
@@ -423,6 +439,147 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         scrollToDurChapter(recyclerView, VideoPlay.chapterInVolumeIndex)
     }
 
+    /**
+     * R1 多集选择播放：显示订阅源多集列表
+     *
+     * 复用 binding.chapters（RecyclerView），与书源集数列表 UI 一致
+     */
+    private fun showRssEpisodes(episodes: List<RssEpisode>) {
+        val recyclerView = binding.chapters
+        val layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        recyclerView.layoutManager = layoutManager
+        val adapter = RssEpisodeAdapter(episodes, VideoPlay.rssEpisodeIndex) { episode, index ->
+            if (index != VideoPlay.rssEpisodeIndex) {
+                VideoPlay.rssEpisodeIndex = index
+                VideoPlay.playRssEpisode(playerView, episode)
+                upRssEpisodesView()
+            }
+        }
+        recyclerView.adapter = adapter
+        scrollToDurChapter(recyclerView, VideoPlay.rssEpisodeIndex)
+        // R3 布局学习：多集时显示上一集/下一集按钮
+        if (episodes.size > 1) {
+            binding.rssEpisodesContainer.visible()
+            binding.btnPrevEpisode.setOnClickListener {
+                if (VideoPlay.upRssEpisodeIndex(-1, playerView)) {
+                    upRssEpisodesView()
+                }
+            }
+            binding.btnNextEpisode.setOnClickListener {
+                if (VideoPlay.upRssEpisodeIndex(1, playerView)) {
+                    upRssEpisodesView()
+                }
+            }
+        }
+    }
+
+    /**
+     * R1 多集选择播放：更新订阅源多集列表选中位置
+     */
+    private fun upRssEpisodesView() {
+        if (!VideoPlay.rssEpisodes.isNullOrEmpty()) {
+            val adapter = binding.chapters.adapter as? RssEpisodeAdapter
+            adapter?.updateSelectedPosition(VideoPlay.rssEpisodeIndex)
+            scrollToDurChapter(binding.chapters, VideoPlay.rssEpisodeIndex)
+        }
+    }
+
+    /**
+     * R2 调试日志：追加文本到调试面板
+     */
+    private fun appendDebugLog(text: String) {
+        val time = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+            .format(java.util.Date())
+        binding.tvDebugLog.append("[$time] $text\n")
+    }
+
+    /**
+     * R2 调试日志：切换调试面板显示/隐藏
+     */
+    private fun toggleDebugPanel() {
+        if (binding.debugPanel.isShown) {
+            binding.debugPanel.gone()
+        } else {
+            binding.debugPanel.visible()
+        }
+    }
+
+    /**
+     * R3 修复：更新播放地址展示 + 复制按钮
+     * startPlay 异步赋值 videoUrl，setupRssVideoPanel 同步执行时可能为空，
+     * 需在 VIDEO_SUB_TITLE 事件（每次 player.setUp 后触发）中重复调用兜底。
+     */
+    private fun updateVideoUrlDisplay() {
+        val videoUrl = VideoPlay.videoUrl
+        if (!videoUrl.isNullOrEmpty()) {
+            binding.tvVideoUrl.text = "播放地址：$videoUrl"
+            binding.tvVideoUrl.visible()
+            binding.btnCopyUrl.visible()
+            binding.tvVideoUrl.setOnClickListener {
+                sendToClip(videoUrl)
+                toastOnUi("播放地址已复制")
+            }
+            binding.btnCopyUrl.setOnClickListener {
+                sendToClip(videoUrl)
+                toastOnUi("播放地址已复制")
+            }
+        }
+    }
+
+    /**
+     * R3 布局学习：初始化订阅源功能区按钮（播放地址/快进快退/倍速/调试/上一集下一集/简介）
+     */
+    private fun setupRssVideoPanel() {
+        // 播放地址展示 + 复制按钮（REQ-3.11 多行换行 / REQ-3.12 复制按钮）
+        updateVideoUrlDisplay()
+
+        // 快进快退按钮
+        binding.btnSkipBack30s.setOnClickListener { skipVideo(-30000) }
+        binding.btnSkipBack10s.setOnClickListener { skipVideo(-10000) }
+        binding.btnSkipFwd10s.setOnClickListener { skipVideo(10000) }
+        binding.btnSkipFwd30s.setOnClickListener { skipVideo(30000) }
+
+        // 倍速Spinner（1x/2x/3x/5x/10x，移除15x避免高倍速问题）
+        val speeds = arrayOf("1x", "2x", "3x", "5x", "10x")
+        val speedValues = floatArrayOf(1f, 2f, 3f, 5f, 10f)
+        // R3 布局优化：用自定义 item 布局（textSize=11sp）替代 simple_spinner_item（默认~14sp），与 Button 文字大小一致
+        val speedAdapter = ArrayAdapter(this, R.layout.item_spinner_speed, speeds)
+        speedAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.spinnerPlaybackRate.adapter = speedAdapter
+        binding.spinnerPlaybackRate.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                playerView.setSpeed(speedValues[position], true)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        // 调试按钮
+        binding.btnToggleDebug.setOnClickListener { toggleDebugPanel() }
+
+        // 上一集/下一集按钮在 showRssEpisodes 中设置（rssEpisodes 就绪后才显示）
+
+        // 视频简介（从 rssStar/rssRecord 获取 description）
+        val description = VideoPlay.rssStar?.toRssArticle()?.description
+            ?: VideoPlay.rssRecord?.toRssArticle()?.description
+        if (!description.isNullOrEmpty()) {
+            binding.tvRssDescription.text = description
+            binding.tvRssDescription.visible()
+        }
+    }
+
+    /**
+     * R3 快进快退：跳转到当前位置 ± offset
+     */
+    private fun skipVideo(offsetMillis: Long) {
+        val player = playerView.getCurrentPlayer()
+        val currentPosition = VideoPlay.videoManager.currentPosition
+        val duration = VideoPlay.videoManager.duration
+        var target = currentPosition + offsetMillis
+        if (target < 0) target = 0
+        if (duration > 0 && target > duration) target = duration
+        player.seekTo(target)
+    }
+
     private fun showVolumes(volumes: List<BookChapter>) {
         val recyclerView = binding.volumes
         val layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
@@ -495,6 +652,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             supportActionBar?.hide()
             binding.chaptersContainer.gone()
             binding.data.gone()
+            binding.rssVideoPanel.gone()
             playerView.startWindowFullscreen(this, false, false)
         } else {
             requestedOrientation = orientation
@@ -502,6 +660,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             if (VideoPlay.book != null) {
                 binding.chaptersContainer.visible()
                 binding.data.visible()
+            } else {
+                // R3 布局学习：订阅源退出全屏恢复功能区
+                binding.rssVideoPanel.visible()
+                if (!VideoPlay.rssEpisodes.isNullOrEmpty()) {
+                    // R1 多集选择播放：订阅源多集时退出全屏恢复集数列表
+                    binding.chaptersContainer.visible()
+                }
             }
             playerView.postDelayed({
                 playerView.backFromFull(this)
@@ -723,13 +888,36 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
         observeEventSticky<String>(EventBus.VIDEO_SUB_TITLE) {
             binding.titleBar.title = it
+            // R3 修复：startPlay 异步赋值 videoUrl，VIDEO_SUB_TITLE 在每次 player.setUp 后触发，此时 videoUrl 已就绪
+            updateVideoUrlDisplay()
         }
 
         observeEvent<ArrayList<Int>>(EventBus.UP_VIDEO_INFO) {
             it.forEach { value ->
                 when (value) {
-                    1 -> upEpisodesView()
+                    1 -> {
+                        // R1 多集选择播放：优先处理订阅源多集列表
+                        val rssEpisodes = VideoPlay.rssEpisodes
+                        if (rssEpisodes != null && rssEpisodes.isNotEmpty()) {
+                            if (binding.chapters.adapter !is RssEpisodeAdapter) {
+                                binding.chaptersContainer.visible()
+                                binding.chapters.visible()
+                                showRssEpisodes(rssEpisodes)
+                            } else {
+                                upRssEpisodesView()
+                            }
+                        } else {
+                            upEpisodesView()
+                        }
+                    }
                 }
+            }
+        }
+
+        observeEvent<String>(EventBus.VIDEO_PLAY_ERROR) {
+            appendDebugLog(it)
+            if (!isFullScreen) {
+                binding.debugPanel.visible()
             }
         }
 

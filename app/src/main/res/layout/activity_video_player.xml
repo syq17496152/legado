@@ -17,6 +17,134 @@
         android:layout_height="wrap_content"
         tools:layout_height="300dp" />
 
+    <!-- R3 订阅源功能区（book==null 时可见） -->
+    <LinearLayout
+        android:id="@+id/rss_video_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <!-- 播放地址展示 + 复制按钮（REQ-3.11 多行换行 / REQ-3.12 复制按钮） -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="#1A2B4A"
+            android:padding="4dp">
+
+            <TextView
+                android:id="@+id/tv_video_url"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_gravity="center_vertical"
+                android:textColor="#8AB4F8"
+                android:textSize="11sp"
+                android:maxLines="3"
+                android:ellipsize="end"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/btn_copy_url"
+                style="@style/VideoCtrlButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:text="复制"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- 功能区：快进快退 + 倍速 + 调试按钮 -->
+        <LinearLayout
+            android:id="@+id/video_controls_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:padding="4dp">
+
+            <Button
+                android:id="@+id/btn_skip_back_30s"
+                style="@style/VideoCtrlButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="←30s" />
+
+            <Button
+                android:id="@+id/btn_skip_back_10s"
+                style="@style/VideoCtrlButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="←10s" />
+
+            <Button
+                android:id="@+id/btn_skip_fwd_10s"
+                style="@style/VideoCtrlButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="10s→" />
+
+            <Button
+                android:id="@+id/btn_skip_fwd_30s"
+                style="@style/VideoCtrlButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="30s→" />
+
+            <Spinner
+                android:id="@+id/spinner_playback_rate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="48dp"
+                android:minHeight="36dp"
+                android:padding="3dp" />
+
+            <Button
+                android:id="@+id/btn_toggle_debug"
+                style="@style/VideoCtrlButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="调试" />
+        </LinearLayout>
+
+        <!-- 多集选择：上一集/下一集（rssEpisodes.size>1 时显示，集数选择用 R1 的 RecyclerView） -->
+        <LinearLayout
+            android:id="@+id/rss_episodes_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:padding="4dp"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/btn_prev_episode"
+                style="@style/VideoCtrlButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="上一集" />
+
+            <Button
+                android:id="@+id/btn_next_episode"
+                style="@style/VideoCtrlButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="下一集" />
+        </LinearLayout>
+
+        <!-- 视频简介（订阅源，有则显示） -->
+        <TextView
+            android:id="@+id/tv_rss_description"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="8dp"
+            android:textColor="@color/secondaryText"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
     <LinearLayout
         android:id="@+id/data"
         android:layout_width="match_parent"
@@ -131,6 +259,27 @@
 
         </LinearLayout>
 
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/debug_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#80000000"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tv_debug_log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:maxLines="12"
+            android:scrollbars="vertical"
+            android:textColor="#FFFFFF"
+            android:textIsSelectable="true"
+            android:textSize="11sp" />
     </LinearLayout>
 
 </LinearLayout>

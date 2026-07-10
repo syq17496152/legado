@@ -220,7 +220,10 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
             }
 
             override fun getItemId(position: Int): RssSource {
-                return getItem(position)!!
+                // R4.6 修复：getItem(position) 可能返回 null（数据未加载/position 越界），
+                // 原代码 !! 导致 NPE 崩溃。改用空对象兜底，mOriginalSelection.contains(空对象)
+                // 返回 false，mFirstWasSelected = false，不影响拖拽选择逻辑。
+                return getItem(position) ?: RssSource()
             }
 
             override fun updateSelectState(position: Int, isSelected: Boolean): Boolean {
