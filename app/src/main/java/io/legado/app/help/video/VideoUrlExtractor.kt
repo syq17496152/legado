@@ -2,6 +2,7 @@ package io.legado.app.help.video
 
 import io.legado.app.utils.NetworkUtils
 import org.jsoup.Jsoup
+import java.net.URLDecoder
 
 /**
  * R5 自动视频链接抓取器
@@ -50,7 +51,14 @@ object VideoUrlExtractor {
         result.addAll(extractFromScriptJson(html, baseUrl))
         result.addAll(extractFromJsVars(html, baseUrl))
         result.addAll(extractByRegex(html, baseUrl))
-        return result.toList()
+        // 3003 Bug 修复：播放器页面 URL 解析
+        // 候选 URL 可能是播放器页面（如 /player/?url=https%3A%2F%2F...m3u8），需提取 url 参数中的实际视频流
+        val resolved = mutableListOf<String>()
+        for (url in result) {
+            val actualUrl = extractPlayerPageUrl(url) ?: url
+            resolved.add(actualUrl)
+        }
+        return resolved.distinct()
     }
 
     /**
@@ -151,10 +159,41 @@ object VideoUrlExtractor {
 
     /**
      * 视频URL过滤：仅保留含 .m3u8/.mp4/format=m3u8/type=m3u8 的 URL
+     * 或包含 ?url=/&url= 参数的播放器页面 URL（3003 Bug 修复：播放器页面 URL 后续由 extractPlayerPageUrl 解析）
      */
     private fun isVideoUrl(url: String): Boolean {
         val lower = url.lowercase()
         return lower.contains(".m3u8") || lower.contains(".mp4") ||
-            lower.contains("format=m3u8") || lower.contains("type=m3u8")
+            lower.contains("format=m3u8") || lower.contains("type=m3u8") ||
+            lower.contains("?url=") || lower.contains("&url=")
+    }
+
+    /**
+     * 3003 Bug 修复：识别播放器页面 URL 并提取实际视频流 URL
+     *
+     * 场景：站点A/player/?url=https%3A%2F%2Fv.example.com%2Fvideo%2F...%2Findex.m3u8
+     * 播放器页面 URL 包含 url 参数，参数值是实际视频流 URL（URL 编码）
+     *
+     * @return 实际视频流 URL（已解码），若不是播放器页面 URL 则返回 null
+     */
+    private fun extractPlayerPageUrl(url: String): String? {
+        // 检测 ?url= 或 &url= 参数
+        val urlPattern = Regex("""[?&]url=([^&]+)""")
+        val match = urlPattern.find(url) ?: return null
+        val encodedUrl = match.groupValues[1] ?: return null
+        return try {
+            val decodedUrl = URLDecoder.decode(encodedUrl, "UTF-8")
+            // 验证解码后的 URL 是否是合法视频流 URL（仅检查视频扩展名，不检查 url= 参数避免递归）
+            val lower = decodedUrl.lowercase()
+            if (lower.contains(".m3u8") || lower.contains(".mp4") ||
+                lower.contains("format=m3u8") || lower.contains("type=m3u8") ||
+                lower.startsWith("http")) {
+                decodedUrl
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 }

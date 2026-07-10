@@ -40,6 +40,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssEpisode
+import io.legado.app.data.entities.RssRoute
 import io.legado.app.data.entities.RssSource
 import io.legado.app.databinding.ActivityVideoPlayerBinding
 import io.legado.app.help.GlideImageGetter
@@ -234,8 +235,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             // R1 多集选择播放：订阅源多集列表显示
             // startPlay 异步解析 ruleContent，rssEpisodes 可能在 initView 后才就绪
             // 就绪后通过 UP_VIDEO_INFO 事件触发 showRssEpisodes
+            val rssRoutes = VideoPlay.rssRoutes
             val rssEpisodes = VideoPlay.rssEpisodes
-            if (!rssEpisodes.isNullOrEmpty()) {
+            if (!rssRoutes.isNullOrEmpty()) {
+                // R3 多线路支持：显示线路+集数
+                showRssRoutes(rssRoutes)
+            } else if (!rssEpisodes.isNullOrEmpty()) {
                 binding.chaptersContainer.visible()
                 binding.chapters.visible()
                 showRssEpisodes(rssEpisodes)
@@ -437,6 +442,63 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
         recyclerView.adapter = adapter
         scrollToDurChapter(recyclerView, VideoPlay.chapterInVolumeIndex)
+    }
+
+    /**
+     * R3 多线路支持：显示线路选择器
+     *
+     * 复用 binding.volumes（RecyclerView）显示线路列表，与书源卷选择器 UI 一致。
+     * 线路数>1时显示线路选择器；线路数==1时隐藏线路选择器只显示集数。
+     */
+    private fun showRssRoutes(routes: List<RssRoute>) {
+        binding.chaptersContainer.visible()
+        if (routes.size > 1) {
+            // 多线路：显示线路选择器
+            binding.volumes.visible()
+            val layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+            binding.volumes.layoutManager = layoutManager
+            val routeNames = routes.map { it.name }
+            val adapter = RssRouteAdapter(routeNames, VideoPlay.rssRouteIndex) { _, index ->
+                if (index != VideoPlay.rssRouteIndex) {
+                    val episode = VideoPlay.switchRssRoute(index)
+                    if (episode != null) {
+                        upRssRoutesView()
+                        VideoPlay.playRssEpisode(playerView, episode)
+                        upRssEpisodesView()
+                    }
+                }
+            }
+            binding.volumes.adapter = adapter
+            scrollToDurChapter(binding.volumes, VideoPlay.rssRouteIndex)
+        } else {
+            // 单线路：隐藏线路选择器
+            binding.volumes.gone()
+        }
+        // 显示当前线路的集数列表
+        val episodes = routes.getOrNull(VideoPlay.rssRouteIndex)?.episodes
+        if (!episodes.isNullOrEmpty()) {
+            binding.chapters.visible()
+            showRssEpisodes(episodes)
+        } else {
+            binding.chapters.gone()
+        }
+    }
+
+    /**
+     * R3 多线路支持：更新线路选择器选中位置
+     */
+    private fun upRssRoutesView() {
+        val routes = VideoPlay.rssRoutes
+        if (!routes.isNullOrEmpty() && routes.size > 1) {
+            val adapter = binding.volumes.adapter as? RssRouteAdapter
+            adapter?.updateSelectedPosition(VideoPlay.rssRouteIndex)
+            scrollToDurChapter(binding.volumes, VideoPlay.rssRouteIndex)
+            // 更新集数列表
+            val episodes = routes.getOrNull(VideoPlay.rssRouteIndex)?.episodes
+            if (!episodes.isNullOrEmpty()) {
+                showRssEpisodes(episodes)
+            }
+        }
     }
 
     /**
@@ -663,9 +725,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             } else {
                 // R3 布局学习：订阅源退出全屏恢复功能区
                 binding.rssVideoPanel.visible()
-                if (!VideoPlay.rssEpisodes.isNullOrEmpty()) {
-                    // R1 多集选择播放：订阅源多集时退出全屏恢复集数列表
+                if (!VideoPlay.rssRoutes.isNullOrEmpty() || !VideoPlay.rssEpisodes.isNullOrEmpty()) {
+                    // R3 多线路 / R1 多集：退出全屏恢复线路+集数列表
                     binding.chaptersContainer.visible()
+                    val routes = VideoPlay.rssRoutes
+                    if (!routes.isNullOrEmpty() && routes.size > 1) {
+                        binding.volumes.visible()
+                    }
                 }
             }
             playerView.postDelayed({
@@ -896,7 +962,16 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             it.forEach { value ->
                 when (value) {
                     1 -> {
-                        // R1 多集选择播放：优先处理订阅源多集列表
+                        // R3 多线路支持：优先处理订阅源多线路列表
+                        val rssRoutes = VideoPlay.rssRoutes
+                        if (!rssRoutes.isNullOrEmpty()) {
+                            if (binding.volumes.adapter !is RssRouteAdapter && rssRoutes.size > 1) {
+                                showRssRoutes(rssRoutes)
+                            } else {
+                                upRssRoutesView()
+                            }
+                        }
+                        // R1 多集选择播放：处理订阅源多集列表
                         val rssEpisodes = VideoPlay.rssEpisodes
                         if (rssEpisodes != null && rssEpisodes.isNotEmpty()) {
                             if (binding.chapters.adapter !is RssEpisodeAdapter) {

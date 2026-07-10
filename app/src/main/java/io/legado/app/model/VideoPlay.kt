@@ -24,6 +24,7 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssEpisode
 import io.legado.app.data.entities.RssReadRecord
+import io.legado.app.data.entities.RssRoute
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.RssStar
 import io.legado.app.exception.ContentEmptyException
@@ -151,6 +152,10 @@ object VideoPlay : CoroutineScope by MainScope(){
     var rssEpisodes: List<RssEpisode>? = null
     /**  当前订阅源集索引（R1 多集选择播放）  **/
     var rssEpisodeIndex: Int = 0
+    /**  订阅源多线路列表（R3 多线路支持，ruleContent 返回嵌套 JSON 时解析）  **/
+    var rssRoutes: List<RssRoute>? = null
+    /**  当前线路索引（R3 多线路支持）  **/
+    var rssRouteIndex: Int = 0
     /**  弹幕相关  **/
     var danmakuFile: File? = null
     var danmakuStr: String? = null
@@ -229,10 +234,13 @@ object VideoPlay : CoroutineScope by MainScope(){
                             }
                         }
                         videoUrls.size > 1 -> {
-                            // R5 多 URL 分支：直接构建 List<RssEpisode>（不走 parseRssEpisodes，避免 JSON 序列化冗余）
+                            // R5 多 URL 分支：构建 RssRoute（包装为单线路，保持数据层一致）
                             val episodes = videoUrls.mapIndexed { i, url ->
                                 RssEpisode(title = "第${i + 1}集", url = url)
                             }
+                            val route = RssRoute(name = "线路1", episodes = episodes)
+                            rssRoutes = listOf(route)
+                            rssRouteIndex = 0
                             rssEpisodes = episodes
                             rssEpisodeIndex = 0
                             withContext(Main) {
@@ -268,14 +276,15 @@ object VideoPlay : CoroutineScope by MainScope(){
                 Rss.getContent(loadScope, rssArticle, ruleContent, s)
                     .onSuccess(IO) { content ->
                         val content = content.trim()
-                        // R1 多集选择播放：尝试解析为多集列表（JSON数组/多行URL）
-                        // 注意：用 isNotEmpty() 而非 size > 1，避免单元素 JSON 数组回退到单 URL 逻辑
-                        val episodes = parseRssEpisodes(content, rssArticle.link)
-                        if (episodes != null && episodes.isNotEmpty()) {
-                            rssEpisodes = episodes
+                        // R3 多线路支持：优先解析为多线路列表，兼容旧版扁平JSON/多行URL
+                        val routes = parseRssRoutes(content, rssArticle.link)
+                        if (routes != null && routes.isNotEmpty()) {
+                            rssRoutes = routes
+                            rssRouteIndex = 0
+                            rssEpisodes = routes[0].episodes
                             rssEpisodeIndex = 0
                             postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title) // R3 title 修复
-                            playRssEpisode(player, episodes[0])
+                            playRssEpisode(player, routes[0].episodes[0])
                             postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1)) //通知 UI 更新多集列表
                             return@onSuccess
                         }
@@ -429,6 +438,8 @@ object VideoPlay : CoroutineScope by MainScope(){
             isPortraitVideo = false
             rssEpisodes = null
             rssEpisodeIndex = 0
+            rssRoutes = null
+            rssRouteIndex = 0
             release()
             if (needClearTemp) {
                 needClearTemp = false
@@ -617,6 +628,92 @@ object VideoPlay : CoroutineScope by MainScope(){
 
     private fun isLikelyUrl(s: String): Boolean {
         return s.startsWith("http://") || s.startsWith("https://") || s.startsWith("/")
+    }
+
+    /**
+     * R3 多线路支持：解析 ruleContent 返回的内容为多线路列表
+     *
+     * 支持三种格式（兼容性保证：现有单URL/扁平JSON/多行URL订阅源无需修改）：
+     * - 格式①嵌套JSON：[{"name":"线路1","episodes":[{"title":"第1集","url":"..."}]}]
+     *   name可选（缺省"线路N"），episodes必须，每个episode的url必须/title可选
+     * - 格式②扁平JSON/多行URL：回退到 parseRssEpisodes，包装为单元素 List<RssRoute>
+     * - 格式③单URL：返回null，交由现有逻辑处理
+     *
+     * 详见 docs/specs/douyin-style-video-player/design.md ruleContent JS 标准数据格式
+     */
+    fun parseRssRoutes(content: String, baseUrl: String): List<RssRoute>? {
+        val trimmed = content.trim()
+        // 格式①：嵌套 JSON 数组（含 episodes 字段判定为多线路格式）
+        if (trimmed.startsWith("[")) {
+            return try {
+                val arr = JSONArray(trimmed)
+                // 先检查是否是嵌套格式：第一个元素是否包含 episodes 字段
+                if (arr.length() > 0) {
+                    val firstObj = arr.getJSONObject(0)
+                    if (firstObj.has("episodes")) {
+                        // 嵌套 JSON 格式：解析为多线路
+                        return (0 until arr.length()).map { i ->
+                            val obj = arr.getJSONObject(i)
+                            val epArr = obj.optJSONArray("episodes")
+                            val episodes = if (epArr != null) {
+                                (0 until epArr.length()).map { j ->
+                                    val epObj = epArr.getJSONObject(j)
+                                    RssEpisode(
+                                        title = epObj.optString("title", "第${j + 1}集"),
+                                        url = NetworkUtils.getAbsoluteURL(baseUrl, epObj.optString("url"))
+                                    )
+                                }.filter { it.url.isNotBlank() }
+                            } else {
+                                emptyList()
+                            }
+                            RssRoute(
+                                name = obj.optString("name", "线路${i + 1}"),
+                                episodes = episodes
+                            )
+                        }.filter { it.episodes.isNotEmpty() }
+                    }
+                }
+                // 扁平 JSON 数组（无 episodes 字段）：回退到 parseRssEpisodes，包装为单线路
+                val episodes = parseRssEpisodes(content, baseUrl)
+                if (episodes != null && episodes.isNotEmpty()) {
+                    listOf(RssRoute(name = "线路1", episodes = episodes))
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                // JSON 解析失败，回退到 parseRssEpisodes
+                val episodes = parseRssEpisodes(content, baseUrl)
+                if (episodes != null && episodes.isNotEmpty()) {
+                    listOf(RssRoute(name = "线路1", episodes = episodes))
+                } else {
+                    null
+                }
+            }
+        }
+        // 多行 URL 格式：回退到 parseRssEpisodes，包装为单线路
+        val episodes = parseRssEpisodes(content, baseUrl)
+        return if (episodes != null && episodes.isNotEmpty()) {
+            listOf(RssRoute(name = "线路1", episodes = episodes))
+        } else {
+            null
+        }
+    }
+
+    /**
+     * R3 多线路支持：切换线路
+     *
+     * 切换后自动更新 rssEpisodes + rssEpisodeIndex，并触发 UI 更新事件
+     * 返回新线路的第一集 RssEpisode，由调用方执行播放
+     */
+    fun switchRssRoute(index: Int): RssEpisode? {
+        val routes = rssRoutes ?: return null
+        if (index < 0 || index >= routes.size) return null
+        rssRouteIndex = index
+        val route = routes[index]
+        rssEpisodes = route.episodes
+        rssEpisodeIndex = 0
+        postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1))
+        return route.episodes.firstOrNull()
     }
 
     /**
