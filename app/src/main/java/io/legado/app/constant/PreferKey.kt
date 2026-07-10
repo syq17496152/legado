@@ -231,11 +231,15 @@ object PreferKey {
 
     // 书源/订阅源布局深度重构配置（学习书架两维度独立架构）
     const val sourceGroupStyle = "sourceGroupStyle"       // 0=列表, 1=按类型, 2=按分组
+    const val sourceGroupMode = "sourceGroupMode"         // D1: 0=标签(Tab平铺), 1=分组(文件夹) —— 样式维度
     const val sourceLayout = "sourceLayout"               // 0=列表, 1=紧凑, 2-6=网格2-6列
-    const val sourceSort = "sourceSort"                   // 0=手动, 1=名称, 2=启用, 3=类型, 4=分组, 5=URL
+    // C-01 修复：拆分为 bookSourceSort（书源专用）+ rssSort（订阅源专用），原 sourceSort 保留兼容读取
+    const val bookSourceSort = "bookSourceSort"           // 书源排序：0=手动, 1=名称, 2=启用, 3=类型, 4=分组, 5=URL, 6=更新时间
+    @Deprecated("C-01 修复：改用 bookSourceSort（书源）或 rssSort（订阅源），此 key 仅保留迁移兼容读取")
+    const val sourceSort = "sourceSort"                   // 旧共享排序 key（迁移兼容）
     const val sourceMargin = "sourceMargin"               // 卡片间距 0-60
     const val sourceConfigMigrated = "sourceConfigMigrated"  // 迁移标志（布尔）
-    // 订阅源排序（0=手动/1=名称/2=URL/3=更新时间/4=启用状态）
+    // 订阅源排序（C-01 启用，原为死代码 C-05）：0=手动/1=名称/2=启用/3=类型/4=分组/5=URL/6=更新时间（与 bookSourceSort 语义统一）
     const val rssSort = "rssSort"
     const val rssSortAscending = "rssSortAscending"
 }

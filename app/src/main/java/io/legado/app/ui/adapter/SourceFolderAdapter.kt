@@ -73,23 +73,34 @@ class SourceFolderAdapter(
          */
         fun showConfigDialog(
             context: Context,
+            isBookSource: Boolean,
             onConfigChanged: () -> Unit
         ) {
             context.alert(titleResource = R.string.source_folder_config) {
                 val binding = DialogSourceFolderConfigBinding
                     .inflate(LayoutInflater.from(context))
                     .apply {
+                        // D2 修复：订阅源也支持文件夹视图，不再隐藏分组样式选项
                         spGroupStyle.setSelection(AppConfig.sourceGroupStyle)
+                        // D1: 展示模式（标签/分组）
+                        spGroupMode.setSelection(AppConfig.sourceGroupMode)
                         rgLayout.checkByIndex(AppConfig.sourceLayout)
-                        rgSort.checkByIndex(AppConfig.sourceSort)
+                        // C-01 修复：按 Activity 类型区分 bookSourceSort/rssSort
+                        rgSort.checkByIndex(if (isBookSource) AppConfig.bookSourceSort else AppConfig.rssSort)
                         sbMargin.progress = AppConfig.sourceMargin
                     }
                 customView { binding.root }
                 okButton {
                     binding.apply {
                         var changed = false
+                        // D2 修复：书源和订阅源统一保存 sourceGroupStyle
                         if (AppConfig.sourceGroupStyle != spGroupStyle.selectedItemPosition) {
                             AppConfig.sourceGroupStyle = spGroupStyle.selectedItemPosition
+                            changed = true
+                        }
+                        // D1: 保存展示模式（标签/分组）
+                        if (AppConfig.sourceGroupMode != spGroupMode.selectedItemPosition) {
+                            AppConfig.sourceGroupMode = spGroupMode.selectedItemPosition
                             changed = true
                         }
                         val newLayout = rgLayout.getCheckedIndex()
@@ -98,9 +109,17 @@ class SourceFolderAdapter(
                             changed = true
                         }
                         val newSort = rgSort.getCheckedIndex()
-                        if (AppConfig.sourceSort != newSort) {
-                            AppConfig.sourceSort = newSort
-                            changed = true
+                        // C-01 修复：按 Activity 类型区分 bookSourceSort/rssSort
+                        if (isBookSource) {
+                            if (AppConfig.bookSourceSort != newSort) {
+                                AppConfig.bookSourceSort = newSort
+                                changed = true
+                            }
+                        } else {
+                            if (AppConfig.rssSort != newSort) {
+                                AppConfig.rssSort = newSort
+                                changed = true
+                            }
                         }
                         if (AppConfig.sourceMargin != sbMargin.progress) {
                             AppConfig.sourceMargin = sbMargin.progress

@@ -1568,16 +1568,20 @@
     <string name="source_folder_group_by_type">By Type</string>
     <!-- source-layout-redesign: 类型筛选字符串 -->
     <string name="source_type">Type</string>
-    <string name="type_text">Text</string>
-    <string name="type_audio">Audio</string>
-    <string name="type_image">Image</string>
-    <string name="type_file">File</string>
-    <string name="type_video">Video</string>
-    <string name="type_web">Web</string>
+    <string name="type_text">文本</string>
+    <string name="type_audio">音频</string>
+    <string name="type_image">图片</string>
+    <string name="type_file">文件</string>
+    <string name="type_video">视频</string>
+    <string name="type_web">网页</string>
     <!-- source-layout-deep-refactor: group style / view mode / sort -->
     <string name="source_group_style_list">List</string>
     <string name="source_group_style_by_type">By Type</string>
     <string name="source_group_style_by_group">By Group</string>
+    <!-- D1: 展示模式（标签/分组），与 sourceGroupStyle 正交 -->
+    <string name="source_group_mode">展示模式</string>
+    <string name="source_group_mode_tag">标签</string>
+    <string name="source_group_mode_folder">分组</string>
     <string name="source_sort_0">Manual</string>
     <string name="source_sort_1">By Name</string>
     <string name="source_sort_2">By Enabled</string>

@@ -157,10 +157,9 @@ class VideoPlayer: StandardGSYVideoPlayer {
     override fun onPrepared() {
         super.onPrepared()
         onPrepareDanmaku(this)
-        // 默认静音：onPrepared 时 mediaPlayer 已就绪，此时设置静音最可靠
-        if (VideoPlay.muteOnStart) {
-            getGSYVideoManager().player?.setNeedMute(true)
-        }
+        // V-01 修复：换集时跟随用户当前静音状态（isMuted），而非每次强制 muteOnStart
+        // 首次播放时 isMuted 已在 initView 初始化为 VideoPlay.muteOnStart
+        getGSYVideoManager().player?.setNeedMute(isMuted)
         // 检查音轨数量，多音轨时显示音轨按钮
         post {
             val tracks = getGSYVideoManager().getAudioTracks()

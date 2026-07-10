@@ -201,52 +201,52 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 upBookSource(searchView.query?.toString())
             }
 
-            // source-layout-refactor 菜单排序：同步重置 sourceSort=0，使旧 sort 逻辑生效
+            // source-layout-refactor 菜单排序：同步重置 bookSourceSort=0，使旧 sort 逻辑生效
             R.id.menu_sort_manual -> {
                 item.isChecked = true
-                AppConfig.sourceSort = 0
+                AppConfig.bookSourceSort = 0
                 sort = BookSourceSort.Default
                 upBookSource(searchView.query?.toString())
             }
 
             R.id.menu_sort_auto -> {
                 item.isChecked = true
-                AppConfig.sourceSort = 0
+                AppConfig.bookSourceSort = 0
                 sort = BookSourceSort.Weight
                 upBookSource(searchView.query?.toString())
             }
 
             R.id.menu_sort_name -> {
                 item.isChecked = true
-                AppConfig.sourceSort = 0
+                AppConfig.bookSourceSort = 0
                 sort = BookSourceSort.Name
                 upBookSource(searchView.query?.toString())
             }
 
             R.id.menu_sort_url -> {
                 item.isChecked = true
-                AppConfig.sourceSort = 0
+                AppConfig.bookSourceSort = 0
                 sort = BookSourceSort.Url
                 upBookSource(searchView.query?.toString())
             }
 
             R.id.menu_sort_time -> {
                 item.isChecked = true
-                AppConfig.sourceSort = 0
+                AppConfig.bookSourceSort = 0
                 sort = BookSourceSort.Update
                 upBookSource(searchView.query?.toString())
             }
 
             R.id.menu_sort_respondTime -> {
                 item.isChecked = true
-                AppConfig.sourceSort = 0
+                AppConfig.bookSourceSort = 0
                 sort = BookSourceSort.Respond
                 upBookSource(searchView.query?.toString())
             }
 
             R.id.menu_sort_enable -> {
                 item.isChecked = true
-                AppConfig.sourceSort = 0
+                AppConfig.bookSourceSort = 0
                 sort = BookSourceSort.Enable
                 upBookSource(searchView.query?.toString())
             }
@@ -324,7 +324,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         binding.recyclerView.recycledViewPool.setMaxRecycledViews(0, 15)
         // When this page is opened, it is in selection mode
         val dragSelectTouchHelper =
-            DragSelectTouchHelper(adapter.dragSelectCallback).setSlideArea(16, 50)
+            DragSelectTouchHelper(currentSelectionAdapter().dragSelectCallback).setSlideArea(16, 50)
         dragSelectTouchHelper.attachToRecyclerView(binding.recyclerView)
         dragSelectTouchHelper.activeSlideSelect()
         // Note: need judge selection first, so add ItemTouchHelper after it.
@@ -360,7 +360,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             }
         }
         itemTouchCallback.isCanDrag =
-            AppConfig.sourceSort == 0 && sort == BookSourceSort.Default
+            AppConfig.bookSourceSort == 0 && sort == BookSourceSort.Default
             && layout == 0 && !groupSourcesByDomain
     }
 
@@ -377,9 +377,47 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         itemTouchCallback.isCanDrag = false
     }
 
+    // M-01 修复：获取当前选择适配器（统一 list/compact/grid 的 selection API）
+    private fun currentSelectionAdapter(): BookSourceSelection = when (AppConfig.sourceLayout) {
+        1 -> adapterCompact
+        in 2..6 -> adapterGrid
+        else -> adapter
+    }
+
+    // M-01 修复：当前适配器 item 数量
+    private val currentItemCount: Int
+        get() = when (AppConfig.sourceLayout) {
+            1 -> adapterCompact.itemCount
+            in 2..6 -> adapterGrid.itemCount
+            else -> adapter.itemCount
+        }
+
+    // M-01 修复：当前适配器刷新检查源消息
+    // 简化说明：compact/grid 的 convert 未处理 checkSourceMessage payload，收到也不会刷新 | 已知上限：compact/grid 模式检查源消息不实时显示 | 升级路径：M-10 提取基类统一 payload 处理
+    private fun currentNotifyItemRangeChanged(start: Int, count: Int, payload: Bundle) {
+        when (AppConfig.sourceLayout) {
+            1 -> adapterCompact.notifyItemRangeChanged(start, count, payload)
+            in 2..6 -> adapterGrid.notifyItemRangeChanged(start, count, payload)
+            else -> adapter.notifyItemRangeChanged(start, count, payload)
+        }
+    }
+
+    // M-01 修复：获取当前适配器全部 items
+    private fun currentGetItems(): List<BookSourcePart> = when (AppConfig.sourceLayout) {
+        1 -> adapterCompact.getItems()
+        in 2..6 -> adapterGrid.getItems()
+        else -> adapter.getItems()
+    }
+
+    // M-01 修复：通知当前适配器 resumed/paused（仅 list adapter 有 checkSourceMessage 刷新）
+    // 简化说明：compact/grid 无 upResumed 方法 | 已知上限：compact/grid 模式 resumed 时不刷新检查源消息 | 升级路径：M-10 提取基类统一 upResumed
+    private fun currentUpResumed(resumed: Boolean) {
+        if (AppConfig.sourceLayout == 0) adapter.upResumed(resumed)
+    }
+
     // source-layout-refactor 配置对话框（新签名：onConfigChanged 回调）
     private fun showFolderConfig() {
-        SourceFolderAdapter.showConfigDialog(this) {
+        SourceFolderAdapter.showConfigDialog(this, isBookSource = true) {
             applyConfigChange()
         }
     }
@@ -493,17 +531,17 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                     else -> adapter.setItems(data, adapter.diffItemCallback, !Debug.isChecking)
                 }
                 itemTouchCallback.isCanDrag =
-                    AppConfig.sourceSort == 0 && sort == BookSourceSort.Default
+                    AppConfig.bookSourceSort == 0 && sort == BookSourceSort.Default
                     && !groupSourcesByDomain
                 delay(500)
             }
         }
     }
 
-    // source-layout-refactor 排序：sourceSort 配置驱动（6 选项），sourceSort==0 时回退旧 sort 逻辑
+    // source-layout-refactor 排序：bookSourceSort 配置驱动（6 选项），bookSourceSort==0 时回退旧 sort 逻辑
     private fun sortSources(data: List<BookSourcePart>): List<BookSourcePart> {
-        return if (AppConfig.sourceSort != 0) {
-            val sorted = when (AppConfig.sourceSort) {
+        return if (AppConfig.bookSourceSort != 0) {
+            val sorted = when (AppConfig.bookSourceSort) {
                 1 -> data.sortedWith { o1, o2 -> o1.bookSourceName.cnCompare(o2.bookSourceName) }
                 2 -> data.sortedByDescending { it.enabled }
                 3 -> data.sortedBy { it.bookSourceType }
@@ -553,11 +591,11 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     override fun onResume() {
         super.onResume()
-        adapter.upResumed(true)
+        currentUpResumed(true)
     }
 
     override fun onPause() {
-        adapter.upResumed(false)
+        currentUpResumed(false)
         super.onPause()
     }
 
@@ -597,19 +635,19 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     override fun selectAll(selectAll: Boolean) {
         if (selectAll) {
-            adapter.selectAll()
+            currentSelectionAdapter().selectAll()
         } else {
-            adapter.revertSelection()
+            currentSelectionAdapter().revertSelection()
         }
     }
 
     override fun revertSelection() {
-        adapter.revertSelection()
+        currentSelectionAdapter().revertSelection()
     }
 
     override fun onClickSelectBarMainAction() {
         alert(titleResource = R.string.draw, messageResource = R.string.sure_del) {
-            yesButton { viewModel.del(adapter.selection) }
+            yesButton { viewModel.del(currentSelectionAdapter().selection) }
             noButton()
         }
     }
@@ -623,17 +661,18 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     override fun onMenuItemClick(item: MenuItem?): Boolean {
         when (item?.itemId) {
-            R.id.menu_enable_selection -> viewModel.enableSelection(adapter.selection)
-            R.id.menu_disable_selection -> viewModel.disableSelection(adapter.selection)
-            R.id.menu_enable_explore -> viewModel.enableSelectExplore(adapter.selection)
-            R.id.menu_disable_explore -> viewModel.disableSelectExplore(adapter.selection)
+            R.id.menu_enable_selection -> viewModel.enableSelection(currentSelectionAdapter().selection)
+            R.id.menu_disable_selection -> viewModel.disableSelection(currentSelectionAdapter().selection)
+            R.id.menu_enable_explore -> viewModel.enableSelectExplore(currentSelectionAdapter().selection)
+            R.id.menu_disable_explore -> viewModel.disableSelectExplore(currentSelectionAdapter().selection)
             R.id.menu_check_source -> checkSource()
-            R.id.menu_top_sel -> viewModel.topSource(*adapter.selection.toTypedArray())
-            R.id.menu_bottom_sel -> viewModel.bottomSource(*adapter.selection.toTypedArray())
+            R.id.menu_top_sel -> viewModel.topSource(*currentSelectionAdapter().selection.toTypedArray())
+            R.id.menu_bottom_sel -> viewModel.bottomSource(*currentSelectionAdapter().selection.toTypedArray())
             R.id.menu_add_group -> selectionAddToGroups()
             R.id.menu_remove_group -> selectionRemoveFromGroups()
             R.id.menu_export_selection -> viewModel.saveToFile(
-                adapter,
+                currentSelectionAdapter().selection,
+                currentItemCount,
                 searchView.query?.toString(),
                 sortAscending,
                 sort
@@ -649,7 +688,8 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             }
 
             R.id.menu_share_source -> viewModel.saveToFile(
-                adapter,
+                currentSelectionAdapter().selection,
+                currentItemCount,
                 searchView.query?.toString(),
                 sortAscending,
                 sort
@@ -657,7 +697,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 share(file)
             }
 
-            R.id.menu_check_selected_interval -> adapter.checkSelectedInterval()
+            R.id.menu_check_selected_interval -> currentSelectionAdapter().checkSelectedInterval()
         }
         return true
     }
@@ -677,9 +717,9 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                         CheckSource.keyword = it
                     }
                 }
-                val selectItems = adapter.selection
+                val selectItems = currentSelectionAdapter().selection
                 CheckSource.start(this@BookSourceActivity, selectItems)
-                val adapterItems = adapter.getItems()
+                val adapterItems = currentGetItems()
                 val firstItem = adapterItems.indexOf(selectItems.firstOrNull())
                 val lastItem = adapterItems.indexOf(selectItems.lastOrNull())
                 Debug.isChecking = firstItem >= 0 && lastItem >= 0
@@ -715,7 +755,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             okButton {
                 alertBinding.editView.text?.toString()?.let {
                     if (it.isNotEmpty()) {
-                        viewModel.selectionAddToGroups(adapter.selection, it)
+                        viewModel.selectionAddToGroups(currentSelectionAdapter().selection, it)
                     }
                 }
             }
@@ -735,7 +775,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             okButton {
                 alertBinding.editView.text?.toString()?.let {
                     if (it.isNotEmpty()) {
-                        viewModel.selectionRemoveFromGroups(adapter.selection, it)
+                        viewModel.selectionRemoveFromGroups(currentSelectionAdapter().selection, it)
                     }
                 }
             }
@@ -796,9 +836,9 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             keepScreenOn(false)
             snackBar?.dismiss()
             snackBar = null
-            adapter.notifyItemRangeChanged(
+            currentNotifyItemRangeChanged(
                 0,
-                adapter.itemCount,
+                currentItemCount,
                 bundleOf(Pair("checkSourceMessage", null))
             )
             groups.forEach { group ->
@@ -816,13 +856,13 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (isActive) {
                     if (lastItem == 0) {
-                        adapter.notifyItemRangeChanged(
+                        currentNotifyItemRangeChanged(
                             0,
-                            adapter.itemCount,
+                            currentItemCount,
                             bundleOf(Pair("checkSourceMessage", null))
                         )
                     } else {
-                        adapter.notifyItemRangeChanged(
+                        currentNotifyItemRangeChanged(
                             firstItem,
                             lastItem + 1,
                             bundleOf(Pair("checkSourceMessage", null))
@@ -853,7 +893,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     override fun upCountView() {
         binding.selectActionBar
-            .upCountView(adapter.selection.size, adapter.itemCount)
+            .upCountView(currentSelectionAdapter().selection.size, currentItemCount)
     }
 
     override fun getSourceHost(origin: String): String {

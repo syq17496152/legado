@@ -5,11 +5,13 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.SubMenu
 import android.view.View
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.widget.SearchView
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
+import com.google.android.material.tabs.TabLayout
 import io.legado.app.R
 import io.legado.app.base.VMBaseFragment
 import io.legado.app.constant.AppLog
@@ -20,6 +22,7 @@ import io.legado.app.databinding.FragmentRssBinding
 import io.legado.app.databinding.ItemRssBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.adapter.SourceFolderAdapter
@@ -70,24 +73,56 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     }
     private val folderAdapter by lazy { SourceFolderAdapter(requireContext(), this) }
     private val gridSpacingDecoration = GridSpacingItemDecoration()
-    // F-P1-8 用户视图偏好（持久化）：0=列表视图, 1=文件夹视图
+    // D1: 分组模式（sourceGroupStyle!=0 && sourceGroupMode==1）→ 文件夹视图
     private val isFolderViewMode: Boolean
-        get() = AppConfig.sourceGroupStyle != 0  // 按类型/按分组 → 文件夹视图
+        get() = AppConfig.sourceGroupStyle != 0 && AppConfig.sourceGroupMode == 1
+    // D1: 标签模式（sourceGroupStyle!=0 && sourceGroupMode==0）→ TabLayout + 列表
+    private val isTagMode: Boolean
+        get() = AppConfig.sourceGroupStyle != 0 && AppConfig.sourceGroupMode == 0
     // F-P1-8 当前是否显示文件夹视图（运行时状态）
     // 点击文件夹进入分组列表时设为 false，但不修改 isFolderViewMode
     // 用户主动点击菜单"切换视图模式"时才同步修改 isFolderViewMode
     private var isShowingFolder: Boolean = false
+    // F-01 修复：当前选中的分组（解耦 searchView，避免回填 "group:xxx" 污染搜索框）
+    // null=全部, getString(R.string.no_group)=未分组, 其他字符串=指定分组名
+    private var currentGroup: String? = null
+    // D2 修复：当前选中的类型（按类型分组时使用，sourceGroupStyle==1）
+    // -1=全部, 0=网页, 1=图片, 2=视频（RssSource.type）
+    private var currentType: Int = -1
+    // D2-补丁2：子目录状态判断（文件夹模式下，只要不在文件夹视图就是子目录）
+    // 修复：点击"全部分组"文件夹后 currentType=-1/currentGroup=null 但 isShowingFolder=false，应判定为子目录
+    private val inSubDirectory: Boolean
+        get() = isFolderViewMode && !isShowingFolder
     private val searchView: SearchView by lazy {
         binding.titleBar.findViewById(R.id.search_view)
     }
+    // D1: 标签模式 TabLayout
+    private val tabLayout: TabLayout by lazy { binding.tabLayout }
     private var groupsFlowJob: Job? = null
     private var rssFlowJob: Job? = null
     private val groups = linkedSetOf<String>()
     private var groupsMenu: SubMenu? = null
+    // D1: Tab 选中监听（用 tag 存选中项，避免 position 映射不稳定）
+    // D2: 按类型时 tag 存 Int(类型索引)，按分组时 tag 存 String(分组名)
+    private val tabSelectedListener = object : TabLayout.OnTabSelectedListener {
+        override fun onTabSelected(tab: TabLayout.Tab) {
+            if (AppConfig.sourceGroupStyle == 1) {
+                currentType = (tab.tag as? Int) ?: -1
+                currentGroup = null
+            } else {
+                currentGroup = tab.tag as? String
+                currentType = -1
+            }
+            upRssFlowJob(searchView.query?.toString())
+        }
+        override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+        override fun onTabReselected(tab: TabLayout.Tab) = Unit
+    }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         setSupportToolbar(binding.titleBar.toolbar)
         initSearchView()
+        initTabLayout()  // D1: 初始化 TabLayout
         // F-P1-8 初始化运行时状态：跟随用户偏好
         isShowingFolder = isFolderViewMode
         initRecyclerView()
@@ -97,6 +132,30 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         } else {
             upRssFlowJob()
         }
+        // D2-补丁：返回键处理——子目录内按返回键回文件夹列表/全部
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    if (inSubDirectory) {
+                        currentType = -1
+                        currentGroup = null
+                        if (isFolderViewMode) {
+                            isShowingFolder = true
+                            applyView()
+                            upFolderView()
+                        } else {
+                            applyView()
+                            upRssFlowJob(searchView.query?.toString())
+                        }
+                        requireActivity().invalidateOptionsMenu()
+                    } else {
+                        isEnabled = false
+                        requireActivity().onBackPressedDispatcher.onBackPressed()
+                        isEnabled = true
+                    }
+                }
+            }
+        )
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu) {
@@ -117,7 +176,10 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
             R.id.menu_rss_config -> startActivity<RssSourceActivity>()
             R.id.menu_rss_star -> startActivity<RssFavoritesActivity>()
             else -> if (item.groupId == R.id.menu_group_text) {
-                searchView.setQuery("group:${item.title}", true)
+                // F-01 修复：用 currentGroup 记录归类，不回填 searchView 避免污染搜索框
+                currentGroup = item.title.toString()
+                searchView.setQuery("", false)
+                upRssFlowJob()
             }
         }
     }
@@ -161,11 +223,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                 }
             }
         }
-        if (isShowingFolder) {
-            applyFolderView()
-        } else {
-            applyListView()
-        }
+        applyView()  // D1: 统一应用视图（列表/标签/文件夹）
     }
 
     // F-P1-8 应用列表视图
@@ -186,40 +244,102 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         binding.recyclerView.adapter = folderAdapter
     }
 
+    // D1: 初始化 TabLayout
+    private fun initTabLayout() {
+        tabLayout.setSelectedTabIndicatorColor(requireContext().accentColor)
+        tabLayout.tabMode = TabLayout.MODE_SCROLLABLE
+        tabLayout.addOnTabSelectedListener(tabSelectedListener)
+    }
+
+    // D1: 填充 Tab。D2: 按类型时显示类型 Tab，按分组时显示分组 Tab
+    private fun upTabLayout() {
+        tabLayout.removeOnTabSelectedListener(tabSelectedListener)
+        tabLayout.removeAllTabs()
+        if (AppConfig.sourceGroupStyle == 1) {
+            // D2: 按类型分组，Tab 显示类型名，tag 存类型索引
+            tabLayout.addTab(tabLayout.newTab().setText(R.string.all_groups).setTag(-1))
+            tabLayout.addTab(tabLayout.newTab().setText(R.string.type_web).setTag(0))
+            tabLayout.addTab(tabLayout.newTab().setText(R.string.type_image).setTag(1))
+            tabLayout.addTab(tabLayout.newTab().setText(R.string.type_video).setTag(2))
+            tabLayout.getTabAt((currentType + 1).coerceIn(0, 3))?.select()
+        } else {
+            // 按分组
+            tabLayout.addTab(tabLayout.newTab().setText(R.string.all_groups).setTag(null))
+            val noGroup = getString(R.string.no_group)
+            tabLayout.addTab(tabLayout.newTab().setText(noGroup).setTag(noGroup))
+            groups.forEach { group ->
+                tabLayout.addTab(tabLayout.newTab().setText(group).setTag(group))
+            }
+            val selectedIndex = when (currentGroup) {
+                null -> 0
+                noGroup -> 1
+                else -> 2 + groups.indexOf(currentGroup).coerceAtLeast(0)
+            }
+            tabLayout.getTabAt(selectedIndex.coerceAtMost(tabLayout.tabCount - 1))?.select()
+        }
+        tabLayout.addOnTabSelectedListener(tabSelectedListener)
+    }
+
+    // D1: 统一应用视图（根据 isShowingFolder / isTagMode 控制显示）
+    private fun applyView() {
+        if (isShowingFolder) {
+            // 分组模式：显示文件夹视图
+            binding.tabLayout.visibility = View.GONE
+            applyFolderView()
+        } else {
+            // 列表视图（标签模式 或 列表平铺 或 文件夹点击后）
+            if (isTagMode) {
+                binding.tabLayout.visibility = View.VISIBLE
+                upTabLayout()
+            } else {
+                binding.tabLayout.visibility = View.GONE
+            }
+            applyListView()
+        }
+    }
+
     // source-layout-deep-refactor 文件夹视图配置对话框
     private fun showFolderConfig() {
+        val oldStyle = AppConfig.sourceGroupStyle
         SourceFolderAdapter.showConfigDialog(
-            context = requireContext()
+            context = requireContext(),
+            isBookSource = false  // C-01 修复：订阅源用 rssSort
         ) {
-            // 配置变更后根据新分组样式重新应用视图
-            val wantFolder = AppConfig.sourceGroupStyle != 0
-            if (wantFolder != isShowingFolder) {
-                isShowingFolder = wantFolder
-                if (wantFolder) searchView.setQuery("", false)
-                if (isShowingFolder) {
-                    applyFolderView()
-                    upFolderView()
-                } else {
-                    applyListView()
-                    upRssFlowJob(searchView.query?.toString())
-                }
-            } else if (isShowingFolder) {
-                applyFolderView()
+            // D1: 配置变更后根据新配置重新应用视图
+            // D2: 分组样式变更时重置 currentType 和 currentGroup，避免旧状态残留
+            if (AppConfig.sourceGroupStyle != oldStyle) {
+                currentGroup = null
+                currentType = -1
+            }
+            val newIsFolder = isFolderViewMode  // sourceGroupStyle!=0 && sourceGroupMode==1
+            if (newIsFolder != isShowingFolder) {
+                isShowingFolder = newIsFolder
+                if (newIsFolder) searchView.setQuery("", false)
+            }
+            applyView()
+            if (isShowingFolder) {
                 upFolderView()
             } else {
-                applyListView()
                 upRssFlowJob(searchView.query?.toString())
             }
             requireActivity().invalidateOptionsMenu()
         }
     }
 
-    // F-P1-8 更新文件夹视图数据
+    // F-P1-8 更新文件夹视图数据。D2: 按类型时显示类型文件夹
     private fun upFolderView() {
         val folderList = mutableListOf<String>()
-        folderList.add(getString(R.string.all_groups))
-        folderList.add(getString(R.string.no_group))
-        folderList.addAll(groups)
+        if (AppConfig.sourceGroupStyle == 1) {
+            // D2: 按类型分组
+            folderList.add(getString(R.string.all_groups))
+            folderList.add(getString(R.string.type_web))
+            folderList.add(getString(R.string.type_image))
+            folderList.add(getString(R.string.type_video))
+        } else {
+            folderList.add(getString(R.string.all_groups))
+            folderList.add(getString(R.string.no_group))
+            folderList.addAll(groups)
+        }
         folderAdapter.setItems(folderList, folderAdapter.diffItemCallback)
     }
 
@@ -238,6 +358,8 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                 upGroupsMenu()
                 if (isShowingFolder) {
                     upFolderView()
+                } else if (isTagMode) {
+                    upTabLayout()  // D1: 标签模式下刷新 Tab
                 }
             }
         }
@@ -247,17 +369,32 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         if (isShowingFolder) return
         rssFlowJob?.cancel()
         rssFlowJob = viewLifecycleOwner.lifecycleScope.launch {
+            // F-01 修复：currentGroup + searchKey 组合查询（6 分支，解耦 searchView 回填）
+            val noGroup = getString(R.string.no_group)
             when {
-                searchKey.isNullOrEmpty() -> appDb.rssSourceDao.flowEnabled()
-                searchKey == getString(R.string.no_group) -> {
+                // D2: 按类型 + 有搜索词
+                currentType >= 0 && !searchKey.isNullOrBlank() ->
+                    appDb.rssSourceDao.flowByTypeSearch(currentType, searchKey)
+                // D2: 按类型 + 无搜索词
+                currentType >= 0 ->
+                    appDb.rssSourceDao.flowByType(currentType)
+                // 分支1: 未分组 + 无搜索词
+                currentGroup == noGroup && searchKey.isNullOrBlank() ->
                     appDb.rssSourceDao.flowEnabledNoGroup()
-                }
-                searchKey.startsWith("group:") -> {
-                    val key = searchKey.substringAfter("group:")
-                    appDb.rssSourceDao.flowEnabledByGroup(key)
-                }
-
-                else -> appDb.rssSourceDao.flowEnabled(searchKey)
+                // 分支2: 未分组 + 有搜索词
+                currentGroup == noGroup && !searchKey.isNullOrBlank() ->
+                    appDb.rssSourceDao.flowNoGroupSearch(searchKey)
+                // 分支3: 指定分组 + 有搜索词
+                currentGroup != null && currentGroup != noGroup && !searchKey.isNullOrBlank() ->
+                    appDb.rssSourceDao.flowGroupSearchExact(currentGroup!!, searchKey)
+                // 分支4: 指定分组 + 无搜索词
+                currentGroup != null && currentGroup != noGroup && searchKey.isNullOrBlank() ->
+                    appDb.rssSourceDao.flowEnabledByGroup(currentGroup!!)
+                // 分支5: 无分组 + 有搜索词
+                currentGroup == null && !searchKey.isNullOrBlank() ->
+                    appDb.rssSourceDao.flowEnabled(searchKey)
+                // 分支6: 无分组 + 无搜索词（默认全部）
+                else -> appDb.rssSourceDao.flowEnabled()
             }.flowWithLifecycleAndDatabaseChange(
                 viewLifecycleOwner.lifecycle,
                 Lifecycle.State.RESUMED,
@@ -275,13 +412,27 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     // 这样再次进入或用户点击菜单"文件夹视图"时，仍会显示文件夹视图
     override fun onFolderClick(group: String) {
         isShowingFolder = false
-        applyListView()
+        applyView()  // D1: 统一应用视图（分组模式点击文件夹后进入列表）
         requireActivity().invalidateOptionsMenu()
-        when (group) {
-            getString(R.string.all_groups) -> searchView.setQuery("", true)
-            getString(R.string.no_group) -> searchView.setQuery(getString(R.string.no_group), true)
-            else -> searchView.setQuery("group:$group", true)
+        // D2: 按类型时设置 currentType，按分组时设置 currentGroup
+        if (AppConfig.sourceGroupStyle == 1) {
+            currentType = when (group) {
+                getString(R.string.type_web) -> 0
+                getString(R.string.type_image) -> 1
+                getString(R.string.type_video) -> 2
+                else -> -1  // all_groups
+            }
+            currentGroup = null
+        } else {
+            currentType = -1
+            currentGroup = when (group) {
+                getString(R.string.all_groups) -> null
+                getString(R.string.no_group) -> getString(R.string.no_group)
+                else -> group
+            }
         }
+        searchView.setQuery("", false)  // 清空搜索框，不触发查询
+        upRssFlowJob()  // 直接触发查询
     }
 
     override fun openRss(rssSource: RssSource) {

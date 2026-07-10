@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
 import android.view.View
+import android.widget.ArrayAdapter
+import android.widget.AdapterView
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.databinding.DialogVideoSettingsBinding
@@ -27,9 +29,6 @@ class SettingsDialog(private val context: Context, private val callBack: CallBac
             cbAutoPlay.isChecked = VideoPlay.autoPlay
             cbStartFull.isChecked = VideoPlay.startFull
             cbFullBottomProgress.isChecked = VideoPlay.fullBottomProgressBar
-            tvVideoCacheSize.text = getString(
-                R.string.video_cache_size_summary, VideoPlay.videoCacheSize
-            )
             cbMuteOnStart.isChecked = VideoPlay.muteOnStart
         }
     }
@@ -65,20 +64,20 @@ class SettingsDialog(private val context: Context, private val callBack: CallBac
                         tvPressSpeed.text = (it / 10.0f).toPressSpeedStr()
                     }
             }
-            // P0-3 缓存容量选择：50/100/200/500 MB，修改后需重启 App 生效
-            tvVideoCacheSize.setOnClickListener { _ ->
-                val sizes = intArrayOf(50, 100, 200, 500)
-                val current = VideoPlay.videoCacheSize
-                val checkedIndex = sizes.indexOfFirst { it == current }.coerceAtLeast(0)
-                val labels = sizes.map { getString(R.string.video_cache_size_summary, it) }.toTypedArray()
-                androidx.appcompat.app.AlertDialog.Builder(context)
-                    .setTitle(R.string.video_cache_size)
-                    .setSingleChoiceItems(labels, checkedIndex) { dialog, which ->
-                        VideoPlay.videoCacheSize = sizes[which]
-                        tvVideoCacheSize.text = labels[which]
-                        dialog.dismiss()
-                    }
-                    .show()
+            // D5: 缓存容量 Spinner 下拉选择（50/100/200/500 MB，修改后需重启 App 生效）
+            val cacheSizes = intArrayOf(50, 100, 200, 500)
+            val cacheLabels = cacheSizes.map { getString(R.string.video_cache_size_summary, it) }
+            spVideoCacheSize.adapter = ArrayAdapter(
+                context, android.R.layout.simple_spinner_item, cacheLabels
+            )
+            spVideoCacheSize.setSelection(
+                cacheSizes.indexOfFirst { it == VideoPlay.videoCacheSize }.coerceAtLeast(0)
+            )
+            spVideoCacheSize.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    VideoPlay.videoCacheSize = cacheSizes[position]
+                }
+                override fun onNothingSelected(parent: AdapterView<*>?) {}
             }
         }
     }

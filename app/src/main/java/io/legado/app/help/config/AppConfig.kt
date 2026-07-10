@@ -257,6 +257,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.sourceGroupStyle, value)
         }
 
+    // D1: 展示模式（样式维度）：0=标签(Tab平铺), 1=分组(文件夹) —— 与 sourceGroupStyle(数据归类) 正交
+    var sourceGroupMode: Int
+        get() = appCtx.getPrefInt(PreferKey.sourceGroupMode, 0)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.sourceGroupMode, value)
+        }
+
     // 视图模式：0=列表, 1=紧凑, 2-6=网格2-6列（对齐书架 bookshelfLayout）
     var sourceLayout: Int
         get() = appCtx.getPrefInt(PreferKey.sourceLayout, 0)
@@ -264,11 +271,22 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.sourceLayout, value)
         }
 
-    // 排序：0=手动, 1=名称, 2=启用, 3=类型, 4=分组, 5=URL
-    var sourceSort: Int
-        get() = appCtx.getPrefInt(PreferKey.sourceSort, 0)
+    // C-01 修复：书源排序（0=手动, 1=名称, 2=启用, 3=类型, 4=分组, 5=URL, 6=更新时间）
+    var bookSourceSort: Int
+        get() {
+            // 迁移兼容：优先读 bookSourceSort，若未设置则回退读旧 sourceSort
+            val migrated = appCtx.getPrefInt(PreferKey.bookSourceSort, -1)
+            return if (migrated >= 0) migrated else appCtx.getPrefInt(PreferKey.sourceSort, 0)
+        }
         set(value) {
-            appCtx.putPrefInt(PreferKey.sourceSort, value)
+            appCtx.putPrefInt(PreferKey.bookSourceSort, value)
+        }
+
+    @Deprecated("C-01 修复：书源用 bookSourceSort，订阅源用 rssSort", ReplaceWith("bookSourceSort"))
+    var sourceSort: Int
+        get() = bookSourceSort
+        set(value) {
+            bookSourceSort = value
         }
 
     // 卡片间距（0-60，默认 12）
@@ -331,7 +349,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.sourceFolderMargin, value)
         }
 
-    // 订阅源排序（0=手动/1=名称/2=URL/3=更新时间/4=启用状态）
+    // C-01 修复：订阅源排序（启用，原 C-05 死代码激活）：0=手动/1=名称/2=启用/3=类型/4=分组/5=URL/6=更新时间（与 bookSourceSort 语义统一）
     var rssSort: Int
         get() = appCtx.getPrefInt(PreferKey.rssSort, 0)
         set(value) {

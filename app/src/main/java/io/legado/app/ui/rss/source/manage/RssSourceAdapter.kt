@@ -22,11 +22,12 @@ import java.util.Collections
 
 class RssSourceAdapter(context: Context, val callBack: CallBack) :
     RecyclerAdapter<RssSource, ItemRssSourceBinding>(context),
-    ItemTouchCallback.Callback {
+    ItemTouchCallback.Callback,
+    RssSourceSelection {
 
     private val selected = linkedSetOf<RssSource>()
 
-    val selection: List<RssSource>
+    override val selection: List<RssSource>
         get() {
             return getItems().filter {
                 selected.contains(it)
@@ -126,7 +127,7 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
         callBack.upCountView()
     }
 
-    fun selectAll() {
+    override fun selectAll() {
         getItems().forEach {
             selected.add(it)
         }
@@ -134,7 +135,7 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
         callBack.upCountView()
     }
 
-    fun revertSelection() {
+    override fun revertSelection() {
         getItems().forEach {
             if (selected.contains(it)) {
                 selected.remove(it)
@@ -146,13 +147,15 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
         callBack.upCountView()
     }
 
-    fun checkSelectedInterval() {
+    override fun checkSelectedInterval() {
         val selectedPosition = linkedSetOf<Int>()
         getItems().forEachIndexed { index, it ->
             if (selected.contains(it)) {
                 selectedPosition.add(index)
             }
         }
+        // M-02 修复：空判保护，避免无选中项时 Collections.min/max 抛 NoSuchElementException
+        if (selectedPosition.isEmpty()) return
         val minPosition = Collections.min(selectedPosition)
         val maxPosition = Collections.max(selectedPosition)
         val itemCount = maxPosition - minPosition + 1
@@ -210,7 +213,7 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
         }
     }
 
-    val dragSelectCallback: DragSelectTouchHelper.Callback =
+    override val dragSelectCallback: DragSelectTouchHelper.Callback =
         object : DragSelectTouchHelper.AdvanceCallback<RssSource>(Mode.ToggleAndReverse) {
             override fun currentSelectedId(): MutableSet<RssSource> {
                 return selected
@@ -244,4 +247,16 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
         fun upOrder()
         fun upCountView()
     }
+}
+
+/**
+ * M-02 修复：选择模式接口（compact/grid 选择机制统一）
+ * P2 的 M-10 会提取 BaseSourceAdapter 基类，届时本接口可移除
+ */
+interface RssSourceSelection {
+    val selection: List<RssSource>
+    val dragSelectCallback: DragSelectTouchHelper.Callback
+    fun selectAll()
+    fun revertSelection()
+    fun checkSelectedInterval()
 }

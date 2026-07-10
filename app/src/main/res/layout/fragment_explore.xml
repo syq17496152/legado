@@ -15,11 +15,20 @@
         app:layout_constraintTop_toTopOf="parent"
         app:title="@string/discovery" />
 
+    <!-- D1: 标签模式 TabLayout（sourceGroupStyle!=0 && sourceGroupMode==0 时显示） -->
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tab_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:tabMode="scrollable"
+        app:layout_constraintTop_toBottomOf="@+id/title_bar" />
+
     <io.legado.app.ui.widget.recycler.RecyclerViewAtPager2
         android:id="@+id/rv_find"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        app:layout_constraintTop_toBottomOf="@+id/title_bar"
+        app:layout_constraintTop_toBottomOf="@+id/tab_layout"
         app:layout_constraintBottom_toBottomOf="parent"
         tools:listitem="@layout/item_find_book" />
 
@@ -31,7 +40,7 @@
         android:gravity="center"
         android:visibility="gone"
         android:text="@string/explore_empty"
-        app:layout_constraintTop_toBottomOf="@+id/title_bar"
+        app:layout_constraintTop_toBottomOf="@+id/tab_layout"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"

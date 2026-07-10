@@ -1,89 +1,93 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- F-P1-8 重构：书源/订阅源文件夹视图卡片（复用书架 grid 样式 + 首字占位） -->
+<!-- F-P1-8 文件夹视图卡片（学习书架 grid_group2 样式：无 CardView + 名称叠加封面底部 + 渐变遮罩） -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/cv_content"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="@drawable/bg_item_focused_on_tv"
     android:clickable="true"
     android:focusable="true"
+    android:scrollbars="none"
     tools:ignore="UnusedAttribute">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingStart="4dp"
+        android:paddingLeft="4dp"
         android:paddingTop="4dp"
-        android:paddingEnd="4dp"
+        android:paddingRight="4dp"
         android:paddingBottom="4dp"
+        android:scrollbars="none"
         app:layout_constraintTop_toTopOf="parent">
 
-        <androidx.cardview.widget.CardView
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardCornerRadius="@dimen/corner_medium"
-            app:cardElevation="@dimen/elevation_level1"
-            app:cardPreventCornerOverlap="false"
-            app:cardUseCompatPadding="false">
+            android:scrollbars="none">
 
-            <androidx.constraintlayout.widget.ConstraintLayout
+            <!-- 文件夹封面区域：主题色渐变背景（3:4 比例，对齐书架书封） -->
+            <ImageView
+                android:id="@+id/iv_folder_cover"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content">
+                android:layout_height="0dp"
+                android:layout_margin="4dp"
+                android:background="@drawable/bg_source_folder_cover"
+                android:contentDescription="@string/folder_view"
+                android:scaleType="centerCrop"
+                android:src="@drawable/image_cover_default"
+                android:transitionName="img_cover"
+                app:layout_constraintDimensionRatio="3:4"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:ignore="ImageContrastCheck,UnusedAttribute" />
 
-                <!-- 文件夹封面区域：主题色背景（3:4 比例，对齐书架书封） -->
-                <ImageView
-                    android:id="@+id/iv_folder_cover"
-                    android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:background="@drawable/bg_source_folder_cover"
-                    android:contentDescription="@string/folder_view"
-                    android:scaleType="centerCrop"
-                    android:src="@drawable/image_cover_default"
-                    app:layout_constraintDimensionRatio="3:4"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
-                    tools:ignore="ImageContrastCheck" />
+            <!-- 分组名首字（居中叠加在渐变背景上，白色加粗） -->
+            <TextView
+                android:id="@+id/tv_folder_initial"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:shadowColor="#80000000"
+                android:shadowDx="0"
+                android:shadowDy="2"
+                android:shadowRadius="4"
+                android:textColor="@android:color/white"
+                android:textSize="32sp"
+                android:textStyle="bold"
+                app:layout_constraintBottom_toBottomOf="@id/iv_folder_cover"
+                app:layout_constraintEnd_toEndOf="@id/iv_folder_cover"
+                app:layout_constraintStart_toStartOf="@id/iv_folder_cover"
+                app:layout_constraintTop_toTopOf="@id/iv_folder_cover"
+                tools:ignore="TextContrastCheck"
+                tools:text="默" />
 
-                <!-- 分组名首字（居中叠加在渐变背景上，白色加粗，参考书架卡片视觉） -->
-                <TextView
-                    android:id="@+id/tv_folder_initial"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:includeFontPadding="false"
-                    android:shadowColor="#80000000"
-                    android:shadowDx="0"
-                    android:shadowDy="2"
-                    android:shadowRadius="4"
-                    android:textColor="@android:color/white"
-                    android:textSize="32sp"
-                    android:textStyle="bold"
-                    app:layout_constraintBottom_toBottomOf="@id/iv_folder_cover"
-                    app:layout_constraintEnd_toEndOf="@id/iv_folder_cover"
-                    app:layout_constraintStart_toStartOf="@id/iv_folder_cover"
-                    app:layout_constraintTop_toTopOf="@id/iv_folder_cover"
-                    tools:ignore="TextContrastCheck"
-                    tools:text="默" />
+            <!-- 分组名（叠加在封面底部，渐变遮罩背景，对齐书架 tv_name 样式） -->
+            <TextView
+                android:id="@+id/tv_folder_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_gradient_cover"
+                android:ellipsize="end"
+                android:gravity="left|bottom"
+                android:includeFontPadding="false"
+                android:lines="2"
+                android:paddingStart="4dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="4dp"
+                android:paddingBottom="4dp"
+                android:textColor="@color/md_dark_primary_text"
+                android:textSize="11sp"
+                app:layout_constraintBottom_toBottomOf="@+id/iv_folder_cover"
+                app:layout_constraintEnd_toEndOf="@+id/iv_folder_cover"
+                app:layout_constraintStart_toStartOf="@+id/iv_folder_cover"
+                tools:ignore="RtlHardcoded,RtlSymmetry"
+                tools:text="默认分组" />
 
-            </androidx.constraintlayout.widget.ConstraintLayout>
-        </androidx.cardview.widget.CardView>
-
-        <!-- 分组名（卡片下方独立显示，对齐书架 tv_name 样式） -->
-        <TextView
-            android:id="@+id/tv_folder_name"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:ellipsize="end"
-            android:gravity="top|center_horizontal"
-            android:includeFontPadding="false"
-            android:lines="2"
-            android:textColor="@color/primaryText"
-            android:textSize="12sp"
-            tools:ignore="RtlHardcoded,RtlSymmetry"
-            tools:text="默认分组" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
     </LinearLayout>
 
@@ -92,8 +96,10 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:background="?android:attr/selectableItemBackground"
+        android:scrollbars="none"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.0"
         tools:layout_editor_absoluteX="0dp" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -96,6 +96,19 @@ interface RssSourceDao {
     @Query("select * from rssSources where enabled = 1 and (sourceGroup is null or sourceGroup = '' or sourceGroup like '%未分组%') order by customOrder")
     fun flowEnabledNoGroup(): Flow<List<RssSource>>
 
+    // F-01 修复：未分组+名称组合查询（onFolderClick 解耦 searchView 后所需）
+    @Query(
+        """SELECT * FROM rssSources
+        where enabled = 1
+        and (sourceGroup is null or sourceGroup = '' or sourceGroup like '%未分组%')
+        and (sourceName like '%' || :searchKey || '%'
+            or sourceGroup like '%' || :searchKey || '%'
+            or sourceUrl like '%' || :searchKey || '%'
+            or sourceComment like '%' || :searchKey || '%')
+        order by customOrder"""
+    )
+    fun flowNoGroupSearch(searchKey: String): Flow<List<RssSource>>
+
     @Query(
         """SELECT * FROM rssSources 
         where enabled = 1 

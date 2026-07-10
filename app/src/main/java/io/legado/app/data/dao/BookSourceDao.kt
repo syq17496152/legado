@@ -96,6 +96,37 @@ interface BookSourceDao {
     )
     fun flowExploreNoGroup(): Flow<List<BookSourcePart>>
 
+    // F-01 修复：未分组发现页+名称组合查询（onFolderClick 解耦 searchView 后所需）
+    @Query(
+        """select * from book_sources_part
+        where enabledExplore = 1 and hasExploreUrl = 1
+        and (bookSourceGroup is null or bookSourceGroup = '' or bookSourceGroup like '%未分组%')
+        and (bookSourceGroup like '%' || :searchKey || '%'
+            or bookSourceName like '%' || :searchKey || '%')
+        order by customOrder asc"""
+    )
+    fun flowExploreNoGroupSearch(searchKey: String): Flow<List<BookSourcePart>>
+
+    // D2 修复：发现页按类型分组查询（只返回启用发现且有发现URL的书源）
+    @Query(
+        """select * from book_sources_part
+        where enabledExplore = 1 and hasExploreUrl = 1
+        and bookSourceType = :type
+        order by customOrder asc"""
+    )
+    fun flowExploreByType(type: Int): Flow<List<BookSourcePart>>
+
+    // D2 修复：发现页按类型+搜索词组合查询
+    @Query(
+        """select * from book_sources_part
+        where enabledExplore = 1 and hasExploreUrl = 1
+        and bookSourceType = :type
+        and (bookSourceName like '%' || :searchKey || '%'
+            or bookSourceGroup like '%' || :searchKey || '%')
+        order by customOrder asc"""
+    )
+    fun flowExploreByTypeSearch(type: Int, searchKey: String): Flow<List<BookSourcePart>>
+
     @Query("select * from book_sources_part where hasLoginUrl = 1 order by customOrder asc")
     fun flowLogin(): Flow<List<BookSourcePart>>
 

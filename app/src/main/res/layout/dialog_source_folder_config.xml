@@ -38,6 +38,32 @@
 
         </LinearLayout>
 
+        <!-- D1: 展示模式（标签/分组），仅 sourceGroupStyle!=0 时生效 -->
+        <LinearLayout
+            android:id="@+id/ll_group_mode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            app:layout_constraintTop_toBottomOf="@+id/ll_group_style">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:padding="6dp"
+                android:text="@string/source_group_mode"
+                android:textColor="@color/primaryText" />
+
+            <androidx.appcompat.widget.AppCompatSpinner
+                android:id="@+id/sp_group_mode"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:entries="@array/source_group_mode_items"
+                android:theme="@style/Spinner"
+                tools:ignore="TouchTargetSizeCheck" />
+
+        </LinearLayout>
+
         <!-- 2. 视图模式 + 3. 排序（左右两列布局，参考书架） -->
         <LinearLayout
             android:id="@+id/ll_layout"
@@ -46,7 +72,7 @@
             android:orientation="vertical"
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintRight_toLeftOf="@+id/ll_sort"
-            app:layout_constraintTop_toBottomOf="@+id/ll_group_style">
+            app:layout_constraintTop_toBottomOf="@+id/ll_group_mode">
 
             <io.legado.app.ui.widget.text.AccentTextView
                 android:layout_width="match_parent"
@@ -120,7 +146,7 @@
             android:orientation="vertical"
             app:layout_constraintLeft_toRightOf="@+id/ll_layout"
             app:layout_constraintRight_toRightOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/ll_group_style">
+            app:layout_constraintTop_toBottomOf="@id/ll_group_mode">
 
             <io.legado.app.ui.widget.text.AccentTextView
                 android:layout_width="match_parent"

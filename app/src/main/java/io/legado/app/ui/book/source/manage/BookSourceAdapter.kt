@@ -36,14 +36,15 @@ class BookSourceAdapter(
     private val callBack: CallBack,
     private val recyclerView: RecyclerView
 ) : RecyclerAdapter<BookSourcePart, ItemBookSourceBinding>(context),
-    ItemTouchCallback.Callback {
+    ItemTouchCallback.Callback,
+    BookSourceSelection {
 
     private val selected = linkedSetOf<BookSourcePart>()
     private val finalMessageRegex = Regex("成功|失败")
     private val handler = buildMainHandler()
     var showSourceHost = false
 
-    val selection: List<BookSourcePart>
+    override val selection: List<BookSourcePart>
         get() {
             return getItems().filter {
                 selected.contains(it)
@@ -168,9 +169,9 @@ class BookSourceAdapter(
         popupMenu.inflate(R.menu.book_source_item)
         // source-layout-refactor menu_top/menu_bottom 仅在手动排序时可用
         popupMenu.menu.findItem(R.id.menu_top).isVisible =
-            callBack.sort == BookSourceSort.Default && AppConfig.sourceSort == 0
+            callBack.sort == BookSourceSort.Default && AppConfig.bookSourceSort == 0
         popupMenu.menu.findItem(R.id.menu_bottom).isVisible =
-            callBack.sort == BookSourceSort.Default && AppConfig.sourceSort == 0
+            callBack.sort == BookSourceSort.Default && AppConfig.bookSourceSort == 0
         val qyMenu = popupMenu.menu.findItem(R.id.menu_enable_explore)
         if (!source.hasExploreUrl) {
             qyMenu.isVisible = false
@@ -256,7 +257,7 @@ class BookSourceAdapter(
         }
     }
 
-    fun selectAll() {
+    override fun selectAll() {
         getItems().forEach {
             selected.add(it)
         }
@@ -264,7 +265,7 @@ class BookSourceAdapter(
         callBack.upCountView()
     }
 
-    fun revertSelection() {
+    override fun revertSelection() {
         getItems().forEach {
             if (selected.contains(it)) {
                 selected.remove(it)
@@ -276,7 +277,7 @@ class BookSourceAdapter(
         callBack.upCountView()
     }
 
-    fun checkSelectedInterval() {
+    override fun checkSelectedInterval() {
         val selectedPosition = linkedSetOf<Int>()
         getItems().forEachIndexed { index, it ->
             if (selected.contains(it)) {
@@ -341,7 +342,7 @@ class BookSourceAdapter(
         }
     }
 
-    val dragSelectCallback: DragSelectTouchHelper.Callback =
+    override val dragSelectCallback: DragSelectTouchHelper.Callback =
         object : DragSelectTouchHelper.AdvanceCallback<BookSourcePart>(Mode.ToggleAndReverse) {
             override fun currentSelectedId(): MutableSet<BookSourcePart> {
                 return selected
@@ -381,4 +382,16 @@ class BookSourceAdapter(
         fun upCountView()
         fun getSourceHost(origin: String): String
     }
+}
+
+/**
+ * M-01 修复：选择模式接口（compact/grid 选择机制统一）
+ * P2 的 M-10 会提取 BaseSourceAdapter 基类，届时本接口可移除
+ */
+interface BookSourceSelection {
+    val selection: List<BookSourcePart>
+    val dragSelectCallback: DragSelectTouchHelper.Callback
+    fun selectAll()
+    fun revertSelection()
+    fun checkSelectedInterval()
 }

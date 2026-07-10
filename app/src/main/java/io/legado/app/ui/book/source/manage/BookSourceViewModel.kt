@@ -142,17 +142,19 @@ class BookSourceViewModel(application: Application) : BaseViewModel(application)
         }
     }
 
+    // M-01 修复：saveToFile 签名解耦，接受 selection + itemCount 而非具体 adapter，支持 compact/grid
     fun saveToFile(
-        adapter: BookSourceAdapter,
+        selection: List<BookSourcePart>,
+        itemCount: Int,
         searchKey: String?,
         sortAscending: Boolean,
         sort: BookSourceSort,
         success: (file: File, name: String) -> Unit
     ) {
         execute {
-            val selection = adapter.selection
             val selectionSize = selection.size
-            val selectedRate = selectionSize.toFloat() / adapter.itemCount.toFloat()
+            // 边界保护：itemCount==0 时 selectedRate=0，避免除零异常
+            val selectedRate = if (itemCount == 0) 0f else selectionSize.toFloat() / itemCount.toFloat()
             val sources = if (selectedRate == 1f) {
                 getBookSources(searchKey, sortAscending, sort)
             } else if (selectedRate < 0.3) {
