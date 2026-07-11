@@ -10,6 +10,7 @@ import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssReadRecord
 import io.legado.app.data.entities.RssSource
 import io.legado.app.exception.ContentEmptyException
+import io.legado.app.model.VideoPlay
 import io.legado.app.model.rss.Rss
 import io.legado.app.ui.video.VideoPlayerActivity
 import io.legado.app.ui.widget.dialog.PhotoDialog
@@ -48,7 +49,7 @@ object ReadRss {
         readNoHtml(activity, record, type)
     }
 
-    fun readRss(fragment: Fragment, rssArticle: RssArticle,rssSource: RssSource? = null) {
+    fun readRss(fragment: Fragment, rssArticle: RssArticle,rssSource: RssSource? = null, rssArticles: List<RssArticle>? = null) {
         val rssReadRecord = rssArticle.toRecord()
         fragment.viewLifecycleOwner.lifecycleScope.launch(IO) {
             appDb.rssReadRecordDao.insertRecord(rssReadRecord)
@@ -66,7 +67,9 @@ object ReadRss {
             return
         }
         if (type == 2) {
-            //视频播放
+            //视频播放：设置文章列表到 VideoPlay 单例，支持上下滑动切换文章
+            VideoPlay.rssArticles = rssArticles
+            VideoPlay.rssArticleIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link } ?: 0
             fragment.startActivity<VideoPlayerActivity> {
                 putExtra("sourceKey", rssArticle.origin)
                 putExtra("sourceType", SourceType.rss)

@@ -280,6 +280,8 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
 
     override fun readRss(rssArticle: RssArticle) {
         fullRefresh = false //read会触发数据库更新,此时进行差异化更新
-        ReadRss.readRss(this, rssArticle, activityViewModel.rssSource)
+        // 传递文章列表给播放器，支持上下滑动切换文章（video-article-swipe-switch spec）
+        val rssArticles = adapter.getItems()
+        ReadRss.readRss(this, rssArticle, activityViewModel.rssSource, rssArticles)
     }
 }

@@ -48,6 +48,30 @@ class VideoPlayer: StandardGSYVideoPlayer {
     /** R3 阶段2：供外部读取当前静音状态 */
     val isMutedPublic: Boolean get() = isMuted
 
+    /**
+     * 文章模式下阻止 GSY 调用 parent.requestDisallowInterceptTouchEvent(true)
+     *
+     * GSY 在 ACTION_DOWN 时会调用 parent.requestDisallowInterceptTouchEvent(true)
+     * 确保自己能持续接收触摸事件（进度条/亮度/音量）。但这会阻止 ViewPager2
+     * 的 onInterceptTouchEvent 被调用，导致垂直滑动无法切换文章。
+     *
+     * 文章模式下（rssArticles 不为空且 size > 1），我们忽略 GSY 的 true 调用，
+     * 让 ViewPager2 始终能通过 onInterceptTouchEvent 检测垂直滑动并拦截。
+     * ViewPager2 方向为垂直，水平滑动不会被拦截，GSY 的进度条功能不受影响。
+     *
+     * 非文章模式下保持原有行为。
+     */
+    override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
+        if (disallowIntercept &&
+            !VideoPlay.rssArticles.isNullOrEmpty() &&
+            VideoPlay.rssArticles!!.size > 1
+        ) {
+            // 文章模式：忽略 GSY 的 requestDisallowInterceptTouchEvent(true)
+            return
+        }
+        super.requestDisallowInterceptTouchEvent(disallowIntercept)
+    }
+
     /** R3 阶段2：切换静音状态，更新播放器+图标 */
     fun toggleMute() {
         isMuted = !isMuted

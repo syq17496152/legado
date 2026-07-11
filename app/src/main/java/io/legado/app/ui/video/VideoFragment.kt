@@ -57,7 +57,11 @@ class VideoFragment : Fragment() {
     private var _playerView: VideoPlayer? = null
     val playerView: VideoPlayer? get() = _playerView
 
-    /** 当前 Fragment 在 rssEpisodes 中的索引（订阅源模式），书源模式为 0 */
+    /** 当前 Fragment 在 ViewPager2 中的位置索引
+     *  - 文章模式（rssArticles != null）：表示文章索引
+     *  - 集数模式（rssEpisodes != null）：表示集数索引
+     *  - 书源/单URL模式：固定为 0
+     */
     private val episodeIndex: Int by lazy {
         arguments?.getInt(ARG_EPISODE_INDEX, 0) ?: 0
     }
@@ -100,6 +104,11 @@ class VideoFragment : Fragment() {
     private var twoFingerStartX1 = 0f
     private var twoFingerStartX2 = 0f
     private var isTwoFingerSwipe = false
+
+    /** 文章模式下单指垂直滑动检测：上下滑动切换文章 */
+    private var singleFingerStartX = 0f
+    private var singleFingerStartY = 0f
+    private var isVerticalSwipe = false
 
     // 设计文档：控件显隐由单击切换，无自动隐藏逻辑（移除 autoHideRunnable）
 
@@ -188,15 +197,21 @@ class VideoFragment : Fragment() {
         } else {
             // 新播放
             val book = VideoPlay.book
-            if (book != null) {
-                VideoPlay.startPlay(pv)
-            } else {
-                val episodes = VideoPlay.rssEpisodes
-                val episode = episodes?.getOrNull(episodeIndex)
-                if (episode != null) {
-                    VideoPlay.playRssEpisode(pv, episode)
-                } else {
-                    VideoPlay.startPlay(pv)
+            when {
+                book != null -> VideoPlay.startPlay(pv)
+                // 文章列表模式：上下滑动切换文章（video-article-swipe-switch spec）
+                !VideoPlay.rssArticles.isNullOrEmpty() -> {
+                    VideoPlay.switchToArticle(episodeIndex, pv)
+                }
+                // 集数列表模式（旧逻辑兼容）：上下滑动切换集数
+                else -> {
+                    val episodes = VideoPlay.rssEpisodes
+                    val episode = episodes?.getOrNull(episodeIndex)
+                    if (episode != null) {
+                        VideoPlay.playRssEpisode(pv, episode)
+                    } else {
+                        VideoPlay.startPlay(pv)
+                    }
                 }
             }
         }
@@ -395,9 +410,14 @@ class VideoFragment : Fragment() {
         btnForward = view.findViewById(R.id.btn_forward)
         btnFullscreen = view.findViewById(R.id.btn_fullscreen)
 
-        // 2.1 左下角视频标题
-        val title = VideoPlay.rssEpisodes?.getOrNull(episodeIndex)?.title
-            ?: VideoPlay.videoTitle ?: ""
+        // 2.1 左下角视频标题（适配文章模式/集数模式）
+        val title = when {
+            !VideoPlay.rssArticles.isNullOrEmpty() ->
+                VideoPlay.rssArticles?.getOrNull(episodeIndex)?.title ?: VideoPlay.videoTitle ?: ""
+            !VideoPlay.rssEpisodes.isNullOrEmpty() ->
+                VideoPlay.rssEpisodes?.getOrNull(episodeIndex)?.title ?: VideoPlay.videoTitle ?: ""
+            else -> VideoPlay.videoTitle ?: ""
+        }
         tvVideoTitle?.text = title
 
         // R3 REQ-17 线路选择器（多线路时显示，标题下方）
@@ -528,6 +548,53 @@ class VideoFragment : Fragment() {
         rv.adapter = adapter
     }
 
+    /**
+     * 文章切换后更新集数/线路选择器（video-article-swipe-switch spec）
+     *
+     * 切换文章后，VideoPlay.rssEpisodes/rssRoutes 已更新为新文章的数据。
+     * 由 VideoPlayerActivity 在 UP_VIDEO_INFO 事件中调用 currentFragment.updateEpisodeSelector()。
+     */
+    fun updateEpisodeSelector() {
+        // 更新集数选择器
+        val episodes = VideoPlay.rssEpisodes
+        if (episodes.isNullOrEmpty()) {
+            rvEpisodes?.gone()
+        } else {
+            rvEpisodes?.visible()
+            updateEpisodeList()
+        }
+        // 更新线路选择器
+        val routes = VideoPlay.rssRoutes
+        if (routes == null || routes.size <= 1) {
+            tvRouteSelector?.gone()
+        } else {
+            tvRouteSelector?.visible()
+            updateRouteSelectorText()
+            // 重新绑定点击事件（线路列表已变化）
+            tvRouteSelector?.setOnClickListener { anchor ->
+                val popup = PopupMenu(requireContext(), anchor)
+                routes.forEachIndexed { index, route ->
+                    popup.menu.add(0, index, index, route.name)
+                }
+                popup.setOnMenuItemClickListener { item ->
+                    val newIndex = item.itemId
+                    if (newIndex != VideoPlay.rssRouteIndex) {
+                        val episode = VideoPlay.switchRssRoute(newIndex)
+                        if (episode != null) {
+                            updateRouteSelectorText()
+                            updateEpisodeList()
+                            (activity as? VideoSettingsPanel.SettingsPanelCallback)?.onRouteChanged(episode)
+                        }
+                    }
+                    true
+                }
+                popup.show()
+            }
+        }
+        // 更新标题
+        tvVideoTitle?.text = VideoPlay.videoTitle ?: ""
+    }
+
     // ==================== 快进/快退按钮 ====================
 
     /**
@@ -607,8 +674,15 @@ class VideoFragment : Fragment() {
             val x = event.rawX.toInt()
             val y = event.rawY.toInt()
             if (!isTouchOnControls(x, y)) {
-                // 双指事件由我们消费，单指事件交给 GSY
-                handlePlayerTouchEvent(event)
+                // 文章模式（上下滑动切换文章）：单指垂直滑动交给 ViewPager2 拦截
+                // 非文章模式（集数模式/单URL）：双指事件由我们消费，单指事件交给 GSY
+                val isArticleMode = !VideoPlay.rssArticles.isNullOrEmpty()
+                    && VideoPlay.rssArticles!!.size > 1
+                if (isArticleMode) {
+                    handleArticleModeTouchEvent(event)
+                } else {
+                    handlePlayerTouchEvent(event)
+                }
             } else {
                 false // 控件区域内不消费
             }
@@ -661,6 +735,85 @@ class VideoFragment : Fragment() {
         // Bug修复：双指事件必须消费，阻止 GSY 播放器拦截多指手势
         // GSY 内部有单指手势处理（进度条/亮度/音量），但不处理双指事件
         // 如果不消费双指事件，GSY 可能拦截导致我们的双指检测不生效
+        return event.pointerCount >= 2
+    }
+
+    /**
+     * 文章模式下的触摸事件处理（上下滑动切换文章）
+     *
+     * 文章模式下需要区分单指滑动方向：
+     * - 垂直滑动 → 交给 ViewPager2 拦截，切换上/下一篇文章
+     * - 水平滑动 → 交给 GSY 处理（进度条拖动）
+     * - 双指缩放 → 触发全屏（复用 handlePlayerTouchEvent 的双指逻辑）
+     * - 双指左右滑动 → 隐藏控件到 PURE 态
+     * - 单击 → 切换控件显隐
+     *
+     * 实现原理：
+     * GSY 在 ACTION_DOWN 时会调用 parent.requestDisallowInterceptTouchEvent(true)
+     * 阻止 ViewPager2 拦截。我们在检测到垂直滑动时：
+     * 1. 调用 parent.requestDisallowInterceptTouchEvent(false) 恢复 ViewPager2 拦截能力
+     * 2. 返回 true 消费当前事件，阻止 GSY 的 onTouchEvent 被调用
+     *    （否则 GSY 会再次调用 requestDisallowInterceptTouchEvent(true) 覆盖）
+     * 3. 下一个 ACTION_MOVE 事件 ViewPager2 的 onInterceptTouchEvent 被调用，
+     *    检测到垂直滑动后拦截，接管后续事件完成文章切换
+     *
+     * @return true 消费事件（双指事件 + 垂直滑动），false 不消费（水平滑动交给 GSY）
+     */
+    private fun handleArticleModeTouchEvent(event: MotionEvent): Boolean {
+        gestureDetector?.onTouchEvent(event)
+        scaleGestureDetector?.onTouchEvent(event)
+
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                singleFingerStartX = event.x
+                singleFingerStartY = event.y
+                isVerticalSwipe = false
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (event.pointerCount >= 2 && isTwoFingerSwipe && currentState == PlayState.NORMAL) {
+                    // 双指左右滑动检测：隐藏控件到 PURE 态
+                    val dx1 = event.getX(0) - twoFingerStartX1
+                    val dx2 = event.getX(1) - twoFingerStartX2
+                    val threshold = 100f
+                    if (kotlin.math.abs(dx1) > threshold && kotlin.math.abs(dx2) > threshold
+                        && (dx1 > 0) == (dx2 > 0)
+                    ) {
+                        switchState(PlayState.PURE)
+                        isTwoFingerSwipe = false
+                    }
+                } else if (event.pointerCount == 1) {
+                    val dx = event.x - singleFingerStartX
+                    val dy = event.y - singleFingerStartY
+                    // 首次判定滑动方向：垂直滑动优先交给 ViewPager2
+                    if (!isVerticalSwipe && kotlin.math.abs(dy) > kotlin.math.abs(dx)
+                        && kotlin.math.abs(dy) > 30f
+                    ) {
+                        isVerticalSwipe = true
+                    }
+                    if (isVerticalSwipe) {
+                        // 垂直滑动：恢复 ViewPager2 拦截能力 + 消费事件阻止 GSY 覆盖
+                        _playerView?.parent?.requestDisallowInterceptTouchEvent(false)
+                        return true
+                    }
+                    // 水平滑动：交给 GSY 处理进度条，返回 false
+                }
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                if (event.pointerCount == 2) {
+                    twoFingerStartX1 = event.getX(0)
+                    twoFingerStartX2 = event.getX(1)
+                    isTwoFingerSwipe = true
+                }
+            }
+            MotionEvent.ACTION_POINTER_UP -> {
+                isTwoFingerSwipe = false
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                isVerticalSwipe = false
+            }
+        }
+
+        // 双指事件消费（阻止 GSY 拦截多指手势），单指水平滑动不消费（交给 GSY 进度条）
         return event.pointerCount >= 2
     }
 
@@ -733,15 +886,22 @@ class VideoFragment : Fragment() {
         if (!needReRegisterTouchListener) return
         needReRegisterTouchListener = false
         val pv = _playerView ?: return
-        // Bug修复：reRegisterTouchListener 必须与 initGestureDetector 行为一致
+        // Bug修复：reRegisterTouchListener 必须与 initGestureDetector 行为完全一致
         // 之前只注册了 gestureDetector + scaleGestureDetector，丢失了双指左右滑动检测
-        // 现统一调用 handlePlayerTouchEvent，确保所有触摸逻辑一致
-        // 双指事件消费（阻止 GSY 拦截），单指事件交给 GSY 处理
+        // 现统一调用 handlePlayerTouchEvent/handleArticleModeTouchEvent，确保所有触摸逻辑一致
+        // 文章模式：单指垂直滑动交给 ViewPager2 拦截（切换文章），水平滑动交给 GSY（进度条）
+        // 非文章模式：双指事件消费（阻止 GSY 拦截），单指事件交给 GSY 处理
         pv.setOnTouchListener { _, event ->
             val x = event.rawX.toInt()
             val y = event.rawY.toInt()
             if (!isTouchOnControls(x, y)) {
-                handlePlayerTouchEvent(event)
+                val isArticleMode = !VideoPlay.rssArticles.isNullOrEmpty()
+                    && VideoPlay.rssArticles!!.size > 1
+                if (isArticleMode) {
+                    handleArticleModeTouchEvent(event)
+                } else {
+                    handlePlayerTouchEvent(event)
+                }
             } else {
                 false
             }

@@ -22,6 +22,7 @@ import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssEpisode
 import io.legado.app.data.entities.RssReadRecord
 import io.legado.app.data.entities.RssRoute
@@ -163,6 +164,10 @@ object VideoPlay : CoroutineScope by MainScope(){
     var rssRoutes: List<RssRoute>? = null
     /**  当前线路索引（R3 多线路支持）  **/
     var rssRouteIndex: Int = 0
+    /**  订阅源文章列表（上下滑动切换文章，从 RssArticlesFragment 传入）  **/
+    var rssArticles: List<RssArticle>? = null
+    /**  当前订阅源文章索引（上下滑动切换文章）  **/
+    var rssArticleIndex: Int = 0
     /**  弹幕相关  **/
     var danmakuFile: File? = null
     var danmakuStr: String? = null
@@ -205,7 +210,7 @@ object VideoPlay : CoroutineScope by MainScope(){
         }
         durChapterPos.takeIf { it > 0 }?.toLong()?.let { player.seekOnStart = it }
         (source as? RssSource)?.let { s ->
-            val rssArticle = rssStar?.toRssArticle() ?: rssRecord?.toRssArticle()
+            val rssArticle = rssStar?.toRssArticle() ?: rssRecord?.toRssArticle() ?: rssArticles?.getOrNull(rssArticleIndex)
             if (rssArticle == null) {
                 appCtx.toastOnUi("未找到订阅")
                 return
@@ -733,12 +738,50 @@ object VideoPlay : CoroutineScope by MainScope(){
     }
 
     /**
+     * 上下滑动切换文章（video-article-swipe-switch spec）
+     *
+     * 切换到 rssArticles 中指定索引的文章，更新 rssStar/rssRecord 匹配新文章，
+     * 重置集数/线路状态，复用 startPlay 加载该文章的视频信息。
+     * 数据库查询在 IO 线程执行（Room 禁止主线程查询），startPlay 回到主线程执行。
+     *
+     * @param index 文章在 rssArticles 中的索引
+     * @param player 播放器实例
+     * @return true 切换成功，false 切换失败（无文章列表或索引越界）
+     */
+    fun switchToArticle(index: Int, player: StandardGSYVideoPlayer): Boolean {
+        val articles = rssArticles ?: return false
+        val article = articles.getOrNull(index) ?: return false
+        rssArticleIndex = index
+        // 重置集数/线路状态
+        rssEpisodes = null
+        rssRoutes = null
+        rssEpisodeIndex = 0
+        rssRouteIndex = 0
+        videoTitle = article.title
+        // 异步查询 rssStar/rssRecord（Room 禁止主线程查询）+ 加载视频信息
+        Coroutine.async(loadScope, IO) {
+            // 更新 rssStar/rssRecord 以匹配新文章（startPlay 依赖这些字段获取 rssArticle）
+            rssStar = appDb.rssStarDao.get(article.origin, article.link)
+            if (rssStar == null) {
+                rssRecord = appDb.rssReadRecordDao.getRecord(article.link, article.origin)
+            }
+            withContext(Main) {
+                // 重新加载该文章的视频信息（复用 startPlay 的 RssSource 分支）
+                startPlay(player)
+            }
+        }.onError {
+            AppLog.put("切换文章加载视频信息失败", it, true)
+        }
+        return true
+    }
+
+    /**
      * R1 多集选择播放：播放指定集
      *
      * 参考 startPlay RssSource 分支的 AnalyzeUrl + setUp + startPlayLogic 模式
      */
     fun playRssEpisode(player: GSYBaseVideoPlayer, episode: RssEpisode) {
-        val rssArticle = rssStar?.toRssArticle() ?: rssRecord?.toRssArticle()
+        val rssArticle = rssStar?.toRssArticle() ?: rssRecord?.toRssArticle() ?: rssArticles?.getOrNull(rssArticleIndex)
         if (rssArticle == null) {
             appCtx.toastOnUi("未找到订阅")
             return

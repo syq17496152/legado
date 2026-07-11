@@ -280,8 +280,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                     super.onPageSelected(position)
                     // 旧 Fragment 暂停
                     currentFragment?.deactivatePlayer()
-                    // 更新 VideoPlay 单例索引
-                    VideoPlay.rssEpisodeIndex = position
+                    // 根据数据源更新索引（文章模式 vs 集数模式）
+                    if (!VideoPlay.rssArticles.isNullOrEmpty()) {
+                        VideoPlay.rssArticleIndex = position
+                    } else {
+                        VideoPlay.rssEpisodeIndex = position
+                    }
                     // 获取新 Fragment
                     val fragment = getVideoFragment(position)
                     currentFragment = fragment
@@ -289,11 +293,21 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                     if (fragment?.playerView != null) {
                         fragment.activatePlayer()
                     }
-                    // 更新标题
-                    binding.titleBarNew.title = VideoPlay.rssEpisodes?.getOrNull(position)?.title
-                        ?: VideoPlay.videoTitle ?: ""
+                    // 更新标题（适配文章模式/集数模式）
+                    binding.titleBarNew.title = when {
+                        !VideoPlay.rssArticles.isNullOrEmpty() ->
+                            VideoPlay.rssArticles?.getOrNull(position)?.title ?: ""
+                        !VideoPlay.rssEpisodes.isNullOrEmpty() ->
+                            VideoPlay.rssEpisodes?.getOrNull(position)?.title ?: VideoPlay.videoTitle ?: ""
+                        else -> VideoPlay.videoTitle ?: ""
+                    }
                 }
             })
+        }
+
+        // 文章列表模式：定位到用户点击的文章索引（非0时需设置）
+        if (!VideoPlay.rssArticles.isNullOrEmpty() && VideoPlay.rssArticleIndex > 0) {
+            binding.viewPager.setCurrentItem(VideoPlay.rssArticleIndex, false)
         }
 
         // 设置标题
@@ -313,8 +327,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             currentFragment = fragment
             fragment.activatePlayer()
         } else if (position == binding.viewPager.currentItem) {
-            // 当前页 Fragment 重建（如回收后恢复）
+            // 当前页 Fragment 重建（如回收后恢复）：也需要激活播放
+            // Bug修复：原代码只设置 currentFragment 不调用 activatePlayer，
+            // 导致 onPageSelected 在 Fragment 视图创建前触发时（playerView=null 跳过 activatePlayer），
+            // onFragmentViewReady 兜底也不激活播放，视频永远不播放
             currentFragment = fragment
+            fragment.activatePlayer()
         }
         // 非当前页 Fragment 就绪：不做操作，等 onPageSelected 触发
     }
@@ -1086,10 +1104,16 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
     override fun onRouteChanged(episode: RssEpisode) {
         if (useViewPagerMode) {
-            // ViewPager2 模式：更新数据 + 通知 adapter + 重新播放
+            // ViewPager2 模式：重新播放新集
             val pv = currentFragment?.playerView ?: return
             VideoPlay.playRssEpisode(pv, episode)
-            onRssRouteChangedForViewPager()
+            if (VideoPlay.rssArticles.isNullOrEmpty()) {
+                // 集数模式：更新 adapter + 重置到第一页（旧逻辑）
+                onRssRouteChangedForViewPager()
+            } else {
+                // 文章模式：线路切换不影响 ViewPager2（文章数量不变），只更新当前 Fragment 的集数选择器
+                currentFragment?.updateEpisodeSelector()
+            }
         } else {
             // Legacy 模式：走旧逻辑
             upRssRoutesView()
@@ -1135,7 +1159,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
         observeEvent<ArrayList<Int>>(EventBus.UP_VIDEO_INFO) {
             if (useViewPagerMode) {
-                // R3 ViewPager2 模式：增量更新 adapter 数量（避免 notifyDataSetChanged 重建首个 Fragment）
+                // 文章列表模式：文章数量不变，只需更新当前 Fragment 的集数/线路选择器
+                if (!VideoPlay.rssArticles.isNullOrEmpty()) {
+                    currentFragment?.updateEpisodeSelector()
+                    binding.titleBarNew.title = VideoPlay.videoTitle ?: ""
+                    return@observeEvent
+                }
+                // 集数列表模式：增量更新 adapter 数量（避免 notifyDataSetChanged 重建首个 Fragment）
                 val newCount = if (VideoPlay.book != null) 1
                     else (VideoPlay.rssEpisodes?.size ?: 1)
                 val oldCount = videoPagerAdapter?.itemCount ?: 0
@@ -1146,6 +1176,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 }
                 binding.titleBarNew.title = VideoPlay.rssEpisodes?.getOrNull(VideoPlay.rssEpisodeIndex)?.title
                     ?: VideoPlay.videoTitle ?: ""
+                // 集数模式下也更新选择器（集数列表可能变化）
+                currentFragment?.updateEpisodeSelector()
                 return@observeEvent
             }
             // Legacy 模式：现有逻辑不变
@@ -1191,7 +1223,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     override fun finish() {
-        val book = VideoPlay.book ?: return super.finish()
+        val book = VideoPlay.book ?: run {
+            // 订阅源模式：清理文章列表防止内存泄漏（video-article-swipe-switch spec）
+            VideoPlay.rssArticles = null
+            VideoPlay.rssArticleIndex = 0
+            return super.finish()
+        }
         if (VideoPlay.inBookshelf) {
             callBackBookEnd()
             return super.finish()
