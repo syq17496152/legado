@@ -301,6 +301,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                             VideoPlay.rssEpisodes?.getOrNull(position)?.title ?: VideoPlay.videoTitle ?: ""
                         else -> VideoPlay.videoTitle ?: ""
                     }
+                    // 阶段8 F9：滑到最后一个文章时触发分页加载
+                    val articles = VideoPlay.rssArticles
+                    if (!articles.isNullOrEmpty() && position == articles.size - 1) {
+                        VideoPlay.loadMoreArticles()
+                    }
                 }
             })
         }
@@ -1211,6 +1216,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             }
         }
 
+        // 阶段8 F9：分页加载完成通知，刷新 adapter
+        observeEvent<Int>(EventBus.ARTICLES_LOADED) { addedCount ->
+            val oldCount = videoPagerAdapter?.itemCount ?: 0
+            videoPagerAdapter?.notifyItemRangeInserted(oldCount, addedCount)
+            android.util.Log.d("SwipeTest", "ARTICLES_LOADED: 通知 adapter 插入 $addedCount 篇文章 (oldCount=$oldCount)")
+        }
+
         observeEvent<String>(EventBus.VIDEO_PLAY_ERROR) {
             appendDebugLog(it)
             if (!isFullScreen) {
@@ -1224,7 +1236,19 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
     override fun finish() {
         val book = VideoPlay.book ?: run {
-            // 订阅源模式：清理文章列表防止内存泄漏（video-article-swipe-switch spec）
+            // 订阅源模式：保存位置记忆 + 清理缓存和文章列表防止内存泄漏
+            // 阶段8 F11：保存退出时正在看的文章 link，供 RssArticlesFragment.onResume 滚动定位
+            VideoPlay.lastPlayedArticleLink = VideoPlay.rssArticles?.getOrNull(VideoPlay.rssArticleIndex)?.link
+            android.util.Log.d("SwipeTest", "finish: 保存位置记忆 link=${VideoPlay.lastPlayedArticleLink?.takeLast(20)}")
+            // 阶段8 F10：清理预缓冲缓存
+            VideoPlay.clearPreloadCache()
+            // 阶段8 F9：清理分页加载上下文
+            VideoPlay.rssSortName = null
+            VideoPlay.rssSortUrl = null
+            VideoPlay.rssNextPageUrl = null
+            VideoPlay.rssArticlePage = 1
+            VideoPlay.rssArticlesHasMore = true
+            VideoPlay.isLoadingMoreArticles = false
             VideoPlay.rssArticles = null
             VideoPlay.rssArticleIndex = 0
             return super.finish()

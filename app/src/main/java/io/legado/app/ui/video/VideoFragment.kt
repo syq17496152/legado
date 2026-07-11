@@ -2,6 +2,8 @@ package io.legado.app.ui.video
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.GestureDetector
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -56,6 +58,10 @@ class VideoFragment : Fragment() {
 
     private var _playerView: VideoPlayer? = null
     val playerView: VideoPlayer? get() = _playerView
+
+    // 阶段8 F10：进度监听 Handler（80%进度触发预缓冲下一文章）
+    private val progressMonitorHandler = Handler(Looper.getMainLooper())
+    private var progressMonitorRunnable: Runnable? = null
 
     /** 当前 Fragment 在 ViewPager2 中的位置索引
      *  - 文章模式（rssArticles != null）：表示文章索引
@@ -135,6 +141,7 @@ class VideoFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        stopProgressMonitor()  // 阶段8 F10：停止进度监听
         releasePlayer()
         _playerView = null
         controlsLayer = null
@@ -181,6 +188,8 @@ class VideoFragment : Fragment() {
                     // 在 onPrepared 后重新注册，确保手势检测正常工作
                     reRegisterTouchListener()
                 }
+                // 阶段8 F10：视频准备就绪后启动进度监听（80%触发预缓冲）
+                startProgressMonitor()
             }
         })
 
@@ -220,11 +229,48 @@ class VideoFragment : Fragment() {
     fun deactivatePlayer() {
         if (!isActivated) return
         isActivated = false
+        stopProgressMonitor()  // 阶段8 F10：停止进度监听
         _playerView?.onVideoPause()
     }
 
     fun releasePlayer() {
         _playerView?.currentPlayer?.release()
+    }
+
+    // ==================== 阶段8 F10：进度监听（预缓冲触发） ====================
+
+    /**
+     * 启动进度监听：每5秒轮询播放进度，达到80%时触发预缓冲下一文章
+     * 只在文章列表模式下启动（rssArticles 不为空）
+     */
+    private fun startProgressMonitor() {
+        // 只在文章列表模式启动
+        if (VideoPlay.rssArticles.isNullOrEmpty()) return
+        stopProgressMonitor()
+        progressMonitorRunnable = object : Runnable {
+            override fun run() {
+                val currentPosition = VideoPlay.videoManager.currentPosition
+                val duration = VideoPlay.videoManager.duration
+                if (duration > 0 && currentPosition.toFloat() / duration >= 0.8f) {
+                    android.util.Log.d("SwipeTest", "进度监听: 80%触发预缓冲 pos=$currentPosition dur=$duration")
+                    VideoPlay.preloadNextArticleHtml(VideoPlay.rssArticleIndex)
+                    // 触发一次后停止
+                    progressMonitorRunnable = null
+                    return
+                }
+                // 每5秒轮询
+                progressMonitorHandler.postDelayed(this, 5000)
+            }
+        }
+        progressMonitorHandler.postDelayed(progressMonitorRunnable!!, 5000)
+    }
+
+    /**
+     * 停止进度监听
+     */
+    private fun stopProgressMonitor() {
+        progressMonitorRunnable?.let { progressMonitorHandler.removeCallbacks(it) }
+        progressMonitorRunnable = null
     }
 
     /**

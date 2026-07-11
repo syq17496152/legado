@@ -168,6 +168,27 @@ object VideoPlay : CoroutineScope by MainScope(){
     var rssArticles: List<RssArticle>? = null
     /**  当前订阅源文章索引（上下滑动切换文章）  **/
     var rssArticleIndex: Int = 0
+
+    // ==================== 阶段8：分页加载 + 预缓冲 + 位置记忆 ====================
+
+    /** 分页加载：分类名称（从 RssArticlesViewModel 传入） **/
+    var rssSortName: String? = null
+    /** 分页加载：分类URL（从 RssArticlesViewModel 传入） **/
+    var rssSortUrl: String? = null
+    /** 分页加载：下一页URL（Rss.getArticles 返回） **/
+    var rssNextPageUrl: String? = null
+    /** 分页加载：当前页码 **/
+    var rssArticlePage: Int = 1
+    /** 分页加载：是否还有更多文章 **/
+    var rssArticlesHasMore: Boolean = true
+    /** 分页加载：防重复加载标记 **/
+    var isLoadingMoreArticles: Boolean = false
+    /** 预缓冲：文章页面HTML缓存（key=article.link, value=page HTML），startPlay R5分支优先使用 **/
+    val preloadedHtmls: MutableMap<String, String> = mutableMapOf()
+    /** 预缓冲：已预加载的文章link集合（避免重复预加载） **/
+    val preloadedArticles: MutableSet<String> = mutableSetOf()
+    /** 位置记忆：退出播放器时正在看的文章link **/
+    var lastPlayedArticleLink: String? = null
     /**  弹幕相关  **/
     var danmakuFile: File? = null
     var danmakuStr: String? = null
@@ -221,10 +242,17 @@ object VideoPlay : CoroutineScope by MainScope(){
                 videoTitle = rssArticle.title
                 postEvent(EventBus.VIDEO_SUB_TITLE, "正在抓取视频链接...")
                 Coroutine.async(loadScope, IO) {
-                    // 获取文章页面 HTML
-                    val pageAnalyzeUrl = AnalyzeUrl(rssArticle.link, source = source, ruleData = rssArticle)
-                    val res = pageAnalyzeUrl.getStrResponseAwait()
-                    val html = res.body ?: ""
+                    // 阶段8 F10：优先使用预缓冲的 HTML 缓存，跳过网络请求
+                    val cachedHtml = preloadedHtmls[rssArticle.link]
+                    val html = if (cachedHtml != null) {
+                        android.util.Log.d("SwipeTest", "startPlay R5: 命中预缓冲缓存")
+                        cachedHtml
+                    } else {
+                        // 获取文章页面 HTML
+                        val pageAnalyzeUrl = AnalyzeUrl(rssArticle.link, source = source, ruleData = rssArticle)
+                        val res = pageAnalyzeUrl.getStrResponseAwait()
+                        res.body ?: ""
+                    }
                     // R5 综合提取视频 URL（五种方法去重）
                     val videoUrls = VideoUrlExtractor.extract(html, rssArticle.link)
                     when {
@@ -773,6 +801,121 @@ object VideoPlay : CoroutineScope by MainScope(){
             AppLog.put("切换文章加载视频信息失败", it, true)
         }
         return true
+    }
+
+    /**
+     * 阶段8 F9：分页加载下一页文章
+     *
+     * 当 ViewPager2 滑到最后一个文章时触发，异步请求下一页文章列表，
+     * 追加到 rssArticles 并通过 EventBus.ARTICLES_LOADED 通知 adapter 刷新。
+     *
+     * 复用 Rss.getArticles 逻辑，分页上下文（sortName/sortUrl/nextPageUrl/page）保存在 VideoPlay 单例中。
+     *
+     * @return true 触发加载（已发起异步请求或正在加载），false 无需加载（无更多/无分页上下文）
+     */
+    fun loadMoreArticles(): Boolean {
+        // 防重复加载
+        if (isLoadingMoreArticles) {
+            android.util.Log.d("SwipeTest", "loadMoreArticles: 跳过（正在加载中）")
+            return false
+        }
+        // 无更多文章
+        if (!rssArticlesHasMore) {
+            android.util.Log.d("SwipeTest", "loadMoreArticles: 跳过（无更多文章）")
+            return false
+        }
+        // 分页上下文缺失
+        val rssSource = source as? RssSource ?: return false
+        val sortName = rssSortName ?: return false
+        val pageUrl = rssNextPageUrl ?: rssSortUrl
+        if (pageUrl.isNullOrBlank()) {
+            android.util.Log.d("SwipeTest", "loadMoreArticles: 跳过（无 pageUrl）")
+            return false
+        }
+
+        isLoadingMoreArticles = true
+        rssArticlePage++
+        android.util.Log.d("SwipeTest", "loadMoreArticles: 触发分页加载 page=$rssArticlePage")
+
+        Rss.getArticles(loadScope, sortName, pageUrl, rssSource, rssArticlePage, null)
+            .onSuccess(IO) { pair ->
+                isLoadingMoreArticles = false
+                val articles = pair.first
+                val newNextPageUrl = pair.second
+                if (articles.isEmpty()) {
+                    rssArticlesHasMore = false
+                    android.util.Log.d("SwipeTest", "loadMoreArticles: 加载到空列表，标记无更多")
+                    return@onSuccess
+                }
+                // 追加到内存列表
+                val currentList = rssArticles?.toMutableList() ?: mutableListOf()
+                currentList.addAll(articles)
+                rssArticles = currentList
+                // 更新下一页URL和是否有更多
+                rssNextPageUrl = newNextPageUrl
+                rssArticlesHasMore = !newNextPageUrl.isNullOrEmpty() && !rssSource.ruleNextPage.isNullOrEmpty()
+                android.util.Log.d("SwipeTest", "loadMoreArticles: 成功加载${articles.size}篇文章, 总数=${currentList.size}, hasMore=$rssArticlesHasMore")
+                // 通知 adapter 刷新（传递新增文章数量）
+                postEvent(EventBus.ARTICLES_LOADED, articles.size)
+            }.onError {
+                isLoadingMoreArticles = false
+                rssArticlePage--  // 回退页码，允许下次重试
+                AppLog.put("分页加载文章失败", it, true)
+            }
+        return true
+    }
+
+    /**
+     * 阶段8 F10：预缓冲下一个文章的页面 HTML
+     *
+     * 当当前视频播放进度超过 80% 时触发，后台预加载下一个文章的页面 HTML，
+     * 存入 preloadedHtmls 缓存。startPlay 的 R5 分支会优先使用缓存 HTML 跳过网络请求。
+     *
+     * 设计决策（ADR-8）：只预加载页面 HTML（轻量级），不预缓冲完整视频流。
+     * 原因：预缓冲完整视频流需要创建额外播放器实例，管理复杂度高；
+     * 而预加载 HTML 可跳过最大的延迟部分（网络请求），VideoUrlExtractor.extract 仍需执行但耗时极低。
+     *
+     * @param currentIndex 当前播放的文章索引
+     */
+    fun preloadNextArticleHtml(currentIndex: Int) {
+        val articles = rssArticles ?: return
+        val nextIndex = currentIndex + 1
+        val nextArticle = articles.getOrNull(nextIndex) ?: return
+        val link = nextArticle.link
+
+        // 已预加载过则跳过
+        if (preloadedArticles.contains(link) || preloadedHtmls.containsKey(link)) {
+            return
+        }
+        val rssSource = source as? RssSource ?: return
+        // ruleContent 不为空时走 Rss.getContent 而非 R5 抓取，无需预加载 HTML
+        if (!rssSource.ruleContent.isNullOrBlank()) return
+
+        preloadedArticles.add(link)
+        android.util.Log.d("SwipeTest", "preloadNextArticleHtml: 预加载下一文章 index=$nextIndex")
+
+        Coroutine.async(loadScope, IO) {
+            val pageAnalyzeUrl = AnalyzeUrl(link, source = source, ruleData = nextArticle)
+            val res = pageAnalyzeUrl.getStrResponseAwait()
+            val html = res.body ?: ""
+            if (html.isNotEmpty()) {
+                preloadedHtmls[link] = html
+                android.util.Log.d("SwipeTest", "preloadNextArticleHtml: 预加载完成 html.size=${html.length}")
+            }
+        }.onError {
+            AppLog.put("预缓冲下一文章HTML失败: ${nextArticle.title}", it)
+        }
+    }
+
+    /**
+     * 阶段8：清理预缓冲缓存
+     *
+     * 退出播放器时调用，释放内存。
+     */
+    fun clearPreloadCache() {
+        preloadedHtmls.clear()
+        preloadedArticles.clear()
+        android.util.Log.d("SwipeTest", "clearPreloadCache: 缓存已清理")
     }
 
     /**

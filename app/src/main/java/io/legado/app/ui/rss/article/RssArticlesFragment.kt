@@ -23,6 +23,7 @@ import io.legado.app.databinding.FragmentRssArticlesBinding
 import io.legado.app.databinding.ViewLoadMoreBinding
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.model.VideoPlay
 import io.legado.app.ui.rss.read.ReadRss
 import io.legado.app.ui.widget.recycler.LoadMoreView
 import io.legado.app.ui.widget.recycler.VerticalDivider
@@ -206,6 +207,15 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
         super.onResume()
         isResumed = true
         adapter.upResumed(isResumed)
+        // 阶段8 F11：位置记忆——从播放器返回时滚动到退出时正在看的文章位置
+        VideoPlay.lastPlayedArticleLink?.let { link ->
+            VideoPlay.lastPlayedArticleLink = null  // 一次性使用，清除标记
+            val position = adapter.getItems().indexOfFirst { it.link == link }
+            if (position >= 0) {
+                binding.recyclerView.scrollToPosition(position)
+                android.util.Log.d("SwipeTest", "RssArticlesFragment.onResume: 位置记忆滚动到 position=$position")
+            }
+        }
     }
 
     override fun onPause() {
@@ -282,6 +292,13 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
         fullRefresh = false //read会触发数据库更新,此时进行差异化更新
         // 传递文章列表给播放器，支持上下滑动切换文章（video-article-swipe-switch spec）
         val rssArticles = adapter.getItems()
-        ReadRss.readRss(this, rssArticle, activityViewModel.rssSource, rssArticles)
+        // 阶段8 F9：传递分页上下文给播放器，支持播放器内分页加载
+        ReadRss.readRss(
+            this, rssArticle, activityViewModel.rssSource, rssArticles,
+            sortName = viewModel.sortName,
+            sortUrl = viewModel.sortUrl,
+            nextPageUrl = viewModel.nextPageUrl,
+            page = viewModel.page
+        )
     }
 }

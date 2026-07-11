@@ -40,4 +40,5 @@ object EventBus {
     const val REFRESH_BOOK_TOC = "refreshBookToc"
     const val UP_VIDEO_INFO = "upVideoInfo"
     const val VIDEO_PLAY_ERROR = "videoPlayError"
+    const val ARTICLES_LOADED = "articlesLoaded"
 }

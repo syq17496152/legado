@@ -20,7 +20,8 @@ class RssArticlesViewModel(application: Application) : BaseViewModel(application
     val pageLiveData = MutableLiveData<Int>()
     var isLoading = true
     var order = System.currentTimeMillis()
-    private var nextPageUrl: String? = null
+    /** 阶段8：暴露给 VideoPlay 传递分页上下文（仅读取，不外部修改） **/
+    var nextPageUrl: String? = null
     var sortName: String = ""
     var sortUrl: String = ""
     var searchKey: String? = null

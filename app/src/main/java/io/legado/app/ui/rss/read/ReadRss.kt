@@ -49,7 +49,16 @@ object ReadRss {
         readNoHtml(activity, record, type)
     }
 
-    fun readRss(fragment: Fragment, rssArticle: RssArticle,rssSource: RssSource? = null, rssArticles: List<RssArticle>? = null) {
+    fun readRss(
+        fragment: Fragment,
+        rssArticle: RssArticle,
+        rssSource: RssSource? = null,
+        rssArticles: List<RssArticle>? = null,
+        sortName: String? = null,
+        sortUrl: String? = null,
+        nextPageUrl: String? = null,
+        page: Int = 1
+    ) {
         val rssReadRecord = rssArticle.toRecord()
         fragment.viewLifecycleOwner.lifecycleScope.launch(IO) {
             appDb.rssReadRecordDao.insertRecord(rssReadRecord)
@@ -70,6 +79,13 @@ object ReadRss {
             //视频播放：设置文章列表到 VideoPlay 单例，支持上下滑动切换文章
             VideoPlay.rssArticles = rssArticles
             VideoPlay.rssArticleIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link } ?: 0
+            // 阶段8 F9：传递分页上下文给 VideoPlay，支持播放器内分页加载
+            VideoPlay.rssSortName = sortName
+            VideoPlay.rssSortUrl = sortUrl
+            VideoPlay.rssNextPageUrl = nextPageUrl
+            VideoPlay.rssArticlePage = page
+            VideoPlay.rssArticlesHasMore = !nextPageUrl.isNullOrBlank()
+            android.util.Log.d("SwipeTest", "ReadRss.readRss: 传递分页上下文 sortName=$sortName page=$page hasMore=${!nextPageUrl.isNullOrBlank()}")
             fragment.startActivity<VideoPlayerActivity> {
                 putExtra("sourceKey", rssArticle.origin)
                 putExtra("sourceType", SourceType.rss)
