@@ -44,6 +44,27 @@ class VideoPlayer: StandardGSYVideoPlayer {
     private var btnNext: ImageView? = null
     private var ivMute: ImageView? = null
     private var isMuted = false
+
+    /** R3 阶段2：供外部读取当前静音状态 */
+    val isMutedPublic: Boolean get() = isMuted
+
+    /** R3 阶段2：切换静音状态，更新播放器+图标 */
+    fun toggleMute() {
+        isMuted = !isMuted
+        getGSYVideoManager().player?.setNeedMute(isMuted)
+        updateMuteIcon()
+    }
+
+    /** R3 阶段5：供设置面板调用画面比例选择 */
+    internal fun showRatioDialogPublic() {
+        showRatioDialog()
+    }
+
+    /** R3 阶段5：供设置面板调用音轨选择 */
+    internal fun showAudioTrackDialogPublic() {
+        showAudioTrackDialog()
+    }
+
     private var tipView: TextView? = null
     private var isChanging = false
     private var isLongPressSpeed = false

@@ -116,6 +116,12 @@ object VideoPlay : CoroutineScope by MainScope(){
         set(value) {
             videoPrefs.edit { putBoolean("muteOnStart", value) }
         }
+    /**  快进/快退时间（秒），默认 60 秒，右侧功能区快进快退按钮使用  **/
+    var videoSkipTime: Int
+        get() = videoPrefs.getInt("videoSkipTime", 60)
+        set(value) {
+            videoPrefs.edit { putInt("videoSkipTime", value) }
+        }
     /**  弹幕滚动速度  **/
     var danmakuSpeed = 1.2f
     /**  锁屏  **/
@@ -129,6 +135,8 @@ object VideoPlay : CoroutineScope by MainScope(){
     var videoUrl: String? = null //播放链接
     var singleUrl = false
     var videoTitle: String? = null
+    var inBookshelf = true
+    var isResumeFromFloat = false  // P0-1: 从悬浮窗恢复标志，Fragment.activatePlayer 据此决定 clonePlayState 还是 startPlay
     var source: BaseSource? = null
     var book: Book? = null
     var toc: List<BookChapter>? =  null
@@ -143,7 +151,6 @@ object VideoPlay : CoroutineScope by MainScope(){
     var durVolume: BookChapter? = null
     /**  本集的进度  **/
     var durChapterPos = 0
-    var inBookshelf = true
     /**  订阅收藏  **/
     var rssStar: RssStar? = null
     /**  订阅历史记录,收藏优先  **/
@@ -184,7 +191,8 @@ object VideoPlay : CoroutineScope by MainScope(){
                 )
                 withContext(Main) {
                     player.mapHeadData = analyzeUrl.headerMap
-                    val url = analyzeUrl.url
+                    // Bug8 修复：统一解析播放器页面 URL，避免 3003 错误
+                    val url = VideoUrlExtractor.resolvePlayerPageUrl(analyzeUrl.url)
                     player.setUp(url, cachePlay, File(appCtx.externalCache, "exoplayer"), videoTitle)
                     if (autoPlay) {
                         player.startPlayLogic()
@@ -226,7 +234,9 @@ object VideoPlay : CoroutineScope by MainScope(){
                             }
                             withContext(Main) {
                                 player.mapHeadData = playAnalyzeUrl.headerMap
-                                player.setUp(playAnalyzeUrl.url, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
+                                // Bug8 修复：统一解析播放器页面 URL
+                                val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(playAnalyzeUrl.url)
+                                player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
                                 postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
                                 if (autoPlay) {
                                     player.startPlayLogic()
@@ -261,7 +271,9 @@ object VideoPlay : CoroutineScope by MainScope(){
                             }
                             withContext(Main) {
                                 player.mapHeadData = fallbackUrl.headerMap
-                                player.setUp(fallbackUrl.url, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
+                                // Bug8 修复：统一解析播放器页面 URL
+                                val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(fallbackUrl.url)
+                                player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
                                 postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
                                 if (autoPlay) {
                                     player.startPlayLogic()
@@ -312,7 +324,9 @@ object VideoPlay : CoroutineScope by MainScope(){
                         val playUrl = analyzeUrl.url
                         withContext(Main) {
                             player.mapHeadData = analyzeUrl.headerMap
-                            player.setUp(playUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
+                            // Bug8 修复：统一解析播放器页面 URL
+                            val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(playUrl)
+                            player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
                             postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title) // R3 title 修复
                             if (autoPlay) {
                                 player.startPlayLogic()
@@ -376,7 +390,9 @@ object VideoPlay : CoroutineScope by MainScope(){
                 val playUrl = analyzeUrl.url
                 withContext(Main) {
                     player.mapHeadData = analyzeUrl.headerMap
-                    player.setUp(playUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), chapter.title)
+                    // Bug8 修复：统一解析播放器页面 URL
+                    val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(playUrl)
+                    player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), chapter.title)
                     if (autoPlay) {
                         player.startPlayLogic()
                     }
@@ -741,7 +757,9 @@ object VideoPlay : CoroutineScope by MainScope(){
             }
             withContext(Main) {
                 player.mapHeadData = analyzeUrl.headerMap
-                player.setUp(analyzeUrl.url, cachePlay, File(appCtx.externalCache, "exoplayer"), episode.title)
+                // Bug8 修复：统一解析播放器页面 URL
+                val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(analyzeUrl.url)
+                player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), episode.title)
                 // R3 title 修复：TitleBar 统一显示文章标题（用户反馈：单URL/多行URL模式title用rssArticle.title）
                 postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
                 if (autoPlay) {

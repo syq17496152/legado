@@ -20,6 +20,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.exoplayer.source.BehindLiveWindowException
 import io.legado.app.help.exoplayer.ExoPlayerHelper
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
@@ -110,7 +111,20 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 mInternalPlayer.repeatMode = Player.REPEAT_MODE_ALL
             }
             if (mSurface != null) mInternalPlayer.setVideoSurface(mSurface)
-            mInternalPlayer.setMediaSource(mMediaSource)
+            // Bug7 修复：使用 setMediaItem + player 的 MediaSourceFactory（含 SimpleCache）创建 MediaSource
+            // 旧代码 mInternalPlayer.setMediaSource(mMediaSource) 使用父类 IjkExo2MediaPlayer 创建的 MediaSource，
+            // 该 MediaSource 不含缓存（DefaultDataSource.Factory），导致 ExoPlayer SimpleCache 被完全绕过，
+            // 视频播放没有缓存加速，特别卡。
+            // 修复后通过 setMediaItem 让 player 使用其自身的 MediaSourceFactory（含 cacheDataSourceFactory），
+            // 确保 HLS 分片下载 + SimpleCache 缓存读写均正常工作。
+            if (currentUrl.isNotBlank()) {
+                val mediaItem = MediaItem.Builder()
+                    .setUri(currentUrl)
+                    .build()
+                mInternalPlayer.setMediaItem(mediaItem)
+            } else {
+                mInternalPlayer.setMediaSource(mMediaSource)
+            }
             mInternalPlayer.prepare()
             mInternalPlayer.playWhenReady = false
         }
@@ -187,6 +201,19 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      */
     override fun onPlayerError(error: PlaybackException) {
         super.onPlayerError(error)
+
+        // P1-3: 直播流 1002 BEHIND_LIVE_WINDOW 自动重试
+        // 直播流播放时，如果播放器追直播落在直播窗口后面，ExoPlayer 抛出 BehindLiveWindowException
+        // 正确处理：重新 seek 到直播边缘并 prepare，不显示错误
+        if (error.cause is BehindLiveWindowException) {
+            AppLog.put("直播流追直播超时，自动重试中...")
+            mInternalPlayer?.let { player ->
+                player.seekToDefaultPosition()
+                player.prepare()
+            }
+            return
+        }
+
         // R4.4 友好提示：根据 errorCode 给出用户可理解的优化建议
         val suggestion = when (error.errorCode) {
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ->

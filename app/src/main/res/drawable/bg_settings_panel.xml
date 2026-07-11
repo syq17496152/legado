@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- R3 阶段5：设置面板背景（顶部圆角 + 半透明深色） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#E6121212" />
+    <corners
+        android:topLeftRadius="20dp"
+        android:topRightRadius="20dp" />
+</shape>

@@ -159,35 +159,39 @@ object VideoUrlExtractor {
 
     /**
      * 视频URL过滤：仅保留含 .m3u8/.mp4/format=m3u8/type=m3u8 的 URL
-     * 或包含 ?url=/&url= 参数的播放器页面 URL（3003 Bug 修复：播放器页面 URL 后续由 extractPlayerPageUrl 解析）
+     * 或包含 ?url=/&url=/?playUrl=/&playUrl= 参数的播放器页面 URL
+     * （3003 Bug 修复：播放器页面 URL 后续由 extractPlayerPageUrl 解析）
      */
     private fun isVideoUrl(url: String): Boolean {
         val lower = url.lowercase()
         return lower.contains(".m3u8") || lower.contains(".mp4") ||
             lower.contains("format=m3u8") || lower.contains("type=m3u8") ||
-            lower.contains("?url=") || lower.contains("&url=")
+            lower.contains("?url=") || lower.contains("&url=") ||
+            lower.contains("?playurl=") || lower.contains("&playurl=")
     }
 
     /**
      * 3003 Bug 修复：识别播放器页面 URL 并提取实际视频流 URL
      *
-     * 场景：站点A/player/?url=https%3A%2F%2Fv.example.com%2Fvideo%2F...%2Findex.m3u8
-     * 播放器页面 URL 包含 url 参数，参数值是实际视频流 URL（URL 编码）
+     * 场景1：/player/?url=https%3A%2F%2Fv.example.com%2Fvideo%2F...%2Findex.m3u8
+     * 场景2：/player/?playUrl=https%3A%2F%2Fv.example.com%2Fvideo%2F...%2Findex.m3u8
+     * 播放器页面 URL 包含 url/playUrl 参数，参数值是实际视频流 URL（URL 编码）
      *
      * @return 实际视频流 URL（已解码），若不是播放器页面 URL 则返回 null
      */
     private fun extractPlayerPageUrl(url: String): String? {
-        // 检测 ?url= 或 &url= 参数
-        val urlPattern = Regex("""[?&]url=([^&]+)""")
+        // 检测 ?url= / &url= / ?playUrl= / &playUrl= 参数
+        val urlPattern = Regex("""[?&](?:url|playUrl)=([^&]+)""", RegexOption.IGNORE_CASE)
         val match = urlPattern.find(url) ?: return null
         val encodedUrl = match.groupValues[1] ?: return null
         return try {
             val decodedUrl = URLDecoder.decode(encodedUrl, "UTF-8")
-            // 验证解码后的 URL 是否是合法视频流 URL（仅检查视频扩展名，不检查 url= 参数避免递归）
+            // 验证解码后的 URL 是否是合法视频流 URL
+            // Bug8 修复：移除 lower.startsWith("http") 过宽条件，要求必须包含视频扩展名
+            // 避免将非视频流的 HTML 页面 URL 误判为有效视频流
             val lower = decodedUrl.lowercase()
             if (lower.contains(".m3u8") || lower.contains(".mp4") ||
-                lower.contains("format=m3u8") || lower.contains("type=m3u8") ||
-                lower.startsWith("http")) {
+                lower.contains("format=m3u8") || lower.contains("type=m3u8")) {
                 decodedUrl
             } else {
                 null
@@ -195,5 +199,19 @@ object VideoUrlExtractor {
         } catch (e: Exception) {
             null
         }
+    }
+
+    /**
+     * Bug8 修复：公共方法，在 VideoPlay 的所有 URL 传入 player.setUp() 之前统一调用
+     *
+     * 确保播放器页面 URL（如 /player/?url=...m3u8 或 /player/?playUrl=...m3u8）
+     * 在所有代码路径（ruleContent 非空分支、playRssEpisode、书源分支）中都被正确解析，
+     * 避免播放器页面 URL 直接传给 ExoPlayer 触发 UnrecognizedInputFormatException (3003)。
+     *
+     * @param url 待检查的 URL
+     * @return 如果是播放器页面 URL 则返回解析后的实际视频流 URL，否则原样返回
+     */
+    fun resolvePlayerPageUrl(url: String): String {
+        return extractPlayerPageUrl(url) ?: url
     }
 }

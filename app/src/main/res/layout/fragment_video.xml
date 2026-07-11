@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    R3 抖音风格沉浸式竖屏视频播放器 Fragment
+    设计文档 1.4 节布局规范 + ADR-8 多线路 UI 布局：
+    - 根布局 ConstraintLayout
+    - 播放器铺满 + 悬浮控件层叠加
+    - 左下角垂直：标题 → 线路选择器 → 集数选择器（横向滚动）→ 全屏按钮（居中）
+    - 右侧竖直：快退/静音/收藏/倍速/设置/快进
+    样式：48dp按钮 / 16dp间距 / #80000000半透明黑12dp圆角 / 14sp白色标题
+    用户需求：所有功能按钮图标统一白色（android:tint="#FFFFFF"）
+-->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!-- 播放器视图（铺满屏幕） -->
+    <io.legado.app.help.gsyVideo.VideoPlayer
+        android:id="@+id/playerView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- 悬浮控件层（clickable=false，不拦截触摸事件） -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/controlsLayer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clickable="false"
+        android:focusable="false"
+        android:focusableInTouchMode="false"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- 左下角区域：标题 + 线路选择器 + 集数选择器 + 全屏按钮
+             占满宽度减去右侧按钮区域，内容左对齐，全屏按钮水平居中 -->
+        <LinearLayout
+            android:id="@+id/left_bottom_container"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="24dp"
+            android:orientation="vertical"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/right_buttons">
+
+            <!-- 视频标题（14sp 白色 #80000000背景 12dp圆角 padding 12dp） -->
+            <TextView
+                android:id="@+id/tv_video_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxLines="2"
+                android:ellipsize="end"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_overlay_button"
+                android:padding="12dp" />
+
+            <!-- 线路选择器（多线路时显示，点击弹出线路列表） -->
+            <TextView
+                android:id="@+id/tv_route_selector"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:background="@drawable/bg_overlay_button"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:visibility="gone" />
+
+            <!-- 集数选择器（横向滚动，多集时显示） -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rv_episodes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:overScrollMode="never"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+        <!-- 全屏按钮（独立于 leftBottomContainer，横屏视频一直显示）
+             用户需求：横屏视频要一直显示全屏按钮，不受控件显隐影响 -->
+        <ImageButton
+            android:id="@+id/btn_fullscreen"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginBottom="24dp"
+            android:background="@drawable/bg_overlay_button"
+            android:contentDescription="全屏"
+            android:src="@drawable/ic_fullscreen"
+            android:scaleType="centerInside"
+            android:padding="12dp"
+            android:tint="#FFFFFF"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent" />
+
+        <!-- 右侧竖直功能按钮容器（48dp按钮 / 16dp间距）
+             用户需求：所有按钮图标统一白色（android:tint="#FFFFFF"） -->
+        <LinearLayout
+            android:id="@+id/right_buttons"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <!-- 快退按钮 -->
+            <ImageButton
+                android:id="@+id/btn_rewind"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_overlay_button"
+                android:contentDescription="快退"
+                android:src="@drawable/ic_fast_rewind"
+                android:scaleType="centerInside"
+                android:padding="12dp"
+                android:tint="#FFFFFF" />
+
+            <!-- 静音按钮 -->
+            <ImageButton
+                android:id="@+id/btn_mute"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_overlay_button"
+                android:contentDescription="静音"
+                android:src="@drawable/ic_volume_up"
+                android:scaleType="centerInside"
+                android:padding="12dp"
+                android:tint="#FFFFFF" />
+
+            <!-- 收藏按钮 -->
+            <ImageButton
+                android:id="@+id/btn_star"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_overlay_button"
+                android:contentDescription="收藏"
+                android:src="@drawable/ic_star_border"
+                android:scaleType="centerInside"
+                android:padding="12dp"
+                android:tint="#FFFFFF" />
+
+            <!-- 倍速按钮 -->
+            <ImageButton
+                android:id="@+id/btn_speed"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_overlay_button"
+                android:contentDescription="倍速"
+                android:src="@drawable/ic_speed_control"
+                android:scaleType="centerInside"
+                android:padding="12dp"
+                android:tint="#FFFFFF" />
+
+            <!-- 设置按钮 -->
+            <ImageButton
+                android:id="@+id/btn_settings"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_overlay_button"
+                android:contentDescription="设置"
+                android:src="@drawable/ic_settings"
+                android:scaleType="centerInside"
+                android:padding="12dp"
+                android:tint="#FFFFFF" />
+
+            <!-- 快进按钮 -->
+            <ImageButton
+                android:id="@+id/btn_forward"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_overlay_button"
+                android:contentDescription="快进"
+                android:src="@drawable/ic_fast_forward"
+                android:scaleType="centerInside"
+                android:padding="12dp"
+                android:tint="#FFFFFF" />
+
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

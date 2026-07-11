@@ -7,12 +7,15 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
 import android.view.textclassifier.TextClassifier
+import io.legado.app.lib.permission.Permissions
+import io.legado.app.lib.permission.PermissionsCompat
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -25,6 +28,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
+import androidx.viewpager2.widget.ViewPager2
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
@@ -100,11 +104,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlayerViewModel>(),
-    SettingsDialog.CallBack,RssFavoritesDialog.Callback {
+    SettingsDialog.CallBack, RssFavoritesDialog.Callback, VideoSettingsPanel.SettingsPanelCallback {
     override val binding by viewBinding(ActivityVideoPlayerBinding::inflate)
     override val viewModel by viewModels<VideoPlayerViewModel>()
+    // P0-1: playerView 从 legacyContainer 获取（legacyContainer 已隐藏但 XML 保留避免编译错误）
+    // ViewPager2 模式下使用 currentFragment?.playerView，此字段仅供 Legacy 代码路径引用
     private val playerView: VideoPlayer by lazy { binding.playerView }
     private var starMenuItem: MenuItem? = null
+
+    // R3 抖音风格：ViewPager2 相关
+    private var useViewPagerMode = true  // P0-1: 统一 ViewPager2 模式，移除 legacyContainer
+    private var videoPagerAdapter: VideoPagerAdapter? = null
+    private var currentFragment: VideoFragment? = null
+    internal var settingsPanel: VideoSettingsPanel? = null  // 阶段5：当前打开的设置面板引用
     private var initIntroView = false
     private val introTextView by lazy {
         initIntroView = true
@@ -181,7 +193,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
     @OptIn(UnstableApi::class)
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        playerView.enlargeImageRes = R.drawable.ic_fullscreen
         isNew = intent.getBooleanExtra("isNew", true)
         if (isNew) {
             intent.getStringExtra("videoUrl")?.let {
@@ -189,7 +200,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 VideoPlay.singleUrl = true
             }
             intent.getStringExtra("videoTitle")?.let {
-                binding.titleBar.title = it
                 VideoPlay.videoTitle = it
             }
             val sourceKey = intent.getStringExtra("sourceKey")
@@ -202,18 +212,21 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                     finish()
                     return@launch
                 }
-                VideoPlay.startPlay(playerView)
-                VideoPlay.saveRead()
+                // P0-1: 统一 ViewPager2 模式，所有场景都用 ViewPager2
+                // 书源/单URL模式：单 Fragment + 禁用滑动
+                // 订阅源模式：多 Fragment + 垂直滑动
+                // startPlay 由首个 Fragment 的 activatePlayer() 触发
+                switchToViewPagerMode()
+                initView()
+                upView()
             }
         } else {
-            VideoPlay.clonePlayState(playerView)
-            playerView.setSurfaceToPlay()
-            playerView.startAfterPrepared()
-            binding.titleBar.title = VideoPlay.videoTitle
+            // 非新建恢复：从悬浮窗返回，也用 ViewPager2 模式
+            VideoPlay.isResumeFromFloat = true
+            switchToViewPagerMode()
+            initView()
+            upView()
         }
-        setupPlayerView()
-        initView()
-        upView()
         onBackPressedDispatcher.addCallback(this) {
             if (isFullScreen) {
                 toggleFullScreen()
@@ -223,45 +236,109 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
     }
 
+    // 修复：重写 onSupportNavigateUp，Toolbar 返回箭头委托给 onBackPressedDispatcher
+    // 之前未重写此方法，点击左上角返回箭头时调用默认 NavUtils.navigateUpFromSameTask，
+    // 该方法依赖 AndroidManifest 中 PARENT_ACTIVITY 声明，未声明时返回按钮无响应。
+    // 现委托给 onBackPressedDispatcher，与系统返回键行为一致（全屏退出全屏，非全屏 finish）
+    override fun onSupportNavigateUp(): Boolean {
+        onBackPressedDispatcher.onBackPressed()
+        return true
+    }
+
+    // ==================== R3 抖音风格：ViewPager2 模式管理 ====================
+
+    /**
+     * R3 抖音风格：切换到 ViewPager2 沉浸式模式
+     *
+     * 隐藏旧模式布局，显示 ViewPager2 容器。
+     * 订阅源非单URL时在 initSource 后调用。
+     * 首个 Fragment 的播放由 onFragmentViewReady → activatePlayer 触发。
+     */
+    private fun switchToViewPagerMode() {
+        useViewPagerMode = true
+        binding.legacyContainer.gone()
+        binding.viewPagerContainer.visible()
+
+        // 修复：重新绑定 titleBarNew 为 ActionBar
+        setSupportActionBar(binding.titleBarNew.toolbar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.setDisplayShowTitleEnabled(false)
+
+        // P0-1: 书源/单URL模式禁用滑动（单 Fragment），订阅源模式保持垂直滑动
+        val isSinglePage = VideoPlay.book != null || VideoPlay.singleUrl
+
+        // 配置 ViewPager2
+        videoPagerAdapter = VideoPagerAdapter(this)
+        binding.viewPager.apply {
+            orientation = ViewPager2.ORIENTATION_VERTICAL
+            offscreenPageLimit = 1
+            // 书源/单URL模式禁用滑动
+            isUserInputEnabled = !isSinglePage
+            adapter = videoPagerAdapter
+            registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+                override fun onPageSelected(position: Int) {
+                    super.onPageSelected(position)
+                    // 旧 Fragment 暂停
+                    currentFragment?.deactivatePlayer()
+                    // 更新 VideoPlay 单例索引
+                    VideoPlay.rssEpisodeIndex = position
+                    // 获取新 Fragment
+                    val fragment = getVideoFragment(position)
+                    currentFragment = fragment
+                    // 激活播放（playerView 可能未就绪，由 onFragmentViewReady 兜底）
+                    if (fragment?.playerView != null) {
+                        fragment.activatePlayer()
+                    }
+                    // 更新标题
+                    binding.titleBarNew.title = VideoPlay.rssEpisodes?.getOrNull(position)?.title
+                        ?: VideoPlay.videoTitle ?: ""
+                }
+            })
+        }
+
+        // 设置标题
+        binding.titleBarNew.title = VideoPlay.videoTitle ?: ""
+    }
+
+    /**
+     * R3 抖音风格：Fragment 视图就绪回调
+     *
+     * VideoFragment.onViewCreated 中调用，确保 playerView 已初始化后再激活播放。
+     * 解决 ViewPager2 创建 Fragment 异步时序问题：onPageSelected 可能在 Fragment 视图创建前触发。
+     */
+    fun onFragmentViewReady(fragment: VideoFragment, position: Int) {
+        if (!useViewPagerMode) return
+        if (position == binding.viewPager.currentItem && currentFragment == null) {
+            // 首次就绪：激活播放
+            currentFragment = fragment
+            fragment.activatePlayer()
+        } else if (position == binding.viewPager.currentItem) {
+            // 当前页 Fragment 重建（如回收后恢复）
+            currentFragment = fragment
+        }
+        // 非当前页 Fragment 就绪：不做操作，等 onPageSelected 触发
+    }
+
+    /**
+     * R3 抖音风格：获取指定位置的 VideoFragment
+     */
+    private fun getVideoFragment(position: Int): VideoFragment? {
+        return supportFragmentManager.findFragmentByTag("f$position") as? VideoFragment
+    }
+
+    /**
+     * R3 抖音风格：线路切换后更新 ViewPager2
+     */
+    fun onRssRouteChangedForViewPager() {
+        videoPagerAdapter?.notifyDataSetChanged()
+        binding.viewPager.setCurrentItem(0, false)
+    }
+
     private fun initView() {
         viewModel.upStarMenuData.observe(this) { upStarMenu() }
         binding.root.setBackgroundColor(backgroundColor)
-        val book = VideoPlay.book
-        if (book == null) {
-            binding.data.invisible()
-            // R3 布局学习：订阅源功能区显示
-            binding.rssVideoPanel.visible()
-            setupRssVideoPanel()
-            // R1 多集选择播放：订阅源多集列表显示
-            // startPlay 异步解析 ruleContent，rssEpisodes 可能在 initView 后才就绪
-            // 就绪后通过 UP_VIDEO_INFO 事件触发 showRssEpisodes
-            val rssRoutes = VideoPlay.rssRoutes
-            val rssEpisodes = VideoPlay.rssEpisodes
-            if (!rssRoutes.isNullOrEmpty()) {
-                // R3 多线路支持：显示线路+集数
-                showRssRoutes(rssRoutes)
-            } else if (!rssEpisodes.isNullOrEmpty()) {
-                binding.chaptersContainer.visible()
-                binding.chapters.visible()
-                showRssEpisodes(rssEpisodes)
-            } else {
-                binding.chaptersContainer.invisible()
-            }
-            return
-        }
-        showBook(book)
-        if (VideoPlay.episodes.isNullOrEmpty()) {
-            binding.chapters.gone()
-        } else {
-            binding.chapters.visible()
-            showToc(VideoPlay.episodes!!)
-        }
-        if (VideoPlay.volumes.isEmpty()) {
-            binding.volumes.gone()
-        } else {
-            binding.volumes.visible()
-            showVolumes(VideoPlay.volumes)
-        }
+        // P0-1: 统一 ViewPager2 模式，旧版 UI 初始化全部移除
+        // Fragment 自行管理播放器和控件，设置面板由 VideoSettingsPanel 提供
     }
 
     private fun showBook(book: Book) {
@@ -701,43 +778,57 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
     }
 
-    private fun toggleFullScreen() {
+    internal fun toggleFullScreen() {
         isFullScreen = !isFullScreen
         toggleSystemBar(!isFullScreen)
         if (isFullScreen) {
             orientation = requestedOrientation
-            requestedOrientation = if (VideoPlay.isPortraitVideo) {
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT //竖屏
+            if (useViewPagerMode) {
+                // R3 阶段4：ViewPager2 模式直接旋转 Activity，不使用 GSY startWindowFullscreen
+                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                supportActionBar?.hide()
+                currentFragment?.onFullScreenChanged(true)
             } else {
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE //横屏
+                requestedOrientation = if (VideoPlay.isPortraitVideo) {
+                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT //竖屏
+                } else {
+                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE //横屏
+                }
+                supportActionBar?.hide()
+                binding.chaptersContainer.gone()
+                binding.data.gone()
+                binding.rssVideoPanel.gone()
+                playerView.startWindowFullscreen(this, false, false)
             }
-            supportActionBar?.hide()
-            binding.chaptersContainer.gone()
-            binding.data.gone()
-            binding.rssVideoPanel.gone()
-            playerView.startWindowFullscreen(this, false, false)
         } else {
-            requestedOrientation = orientation
-            supportActionBar?.show()
-            if (VideoPlay.book != null) {
-                binding.chaptersContainer.visible()
-                binding.data.visible()
+            if (useViewPagerMode) {
+                // R3 阶段4：ViewPager2 模式恢复竖屏
+                requestedOrientation = orientation
+                supportActionBar?.show()
+                currentFragment?.onFullScreenChanged(false)
             } else {
-                // R3 布局学习：订阅源退出全屏恢复功能区
-                binding.rssVideoPanel.visible()
-                if (!VideoPlay.rssRoutes.isNullOrEmpty() || !VideoPlay.rssEpisodes.isNullOrEmpty()) {
-                    // R3 多线路 / R1 多集：退出全屏恢复线路+集数列表
+                requestedOrientation = orientation
+                supportActionBar?.show()
+                if (VideoPlay.book != null) {
                     binding.chaptersContainer.visible()
-                    val routes = VideoPlay.rssRoutes
-                    if (!routes.isNullOrEmpty() && routes.size > 1) {
-                        binding.volumes.visible()
+                    binding.data.visible()
+                } else {
+                    // R3 布局学习：订阅源退出全屏恢复功能区
+                    binding.rssVideoPanel.visible()
+                    if (!VideoPlay.rssRoutes.isNullOrEmpty() || !VideoPlay.rssEpisodes.isNullOrEmpty()) {
+                        // R3 多线路 / R1 多集：退出全屏恢复线路+集数列表
+                        binding.chaptersContainer.visible()
+                        val routes = VideoPlay.rssRoutes
+                        if (!routes.isNullOrEmpty() && routes.size > 1) {
+                            binding.volumes.visible()
+                        }
                     }
                 }
+                playerView.postDelayed({
+                    playerView.backFromFull(this)
+                }, if (VideoPlay.isPortraitVideo) 300 else 0)
+                upView()
             }
-            playerView.postDelayed({
-                playerView.backFromFull(this)
-            }, if (VideoPlay.isPortraitVideo) 300 else 0)
-            upView()
         }
     }
 
@@ -752,6 +843,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
             window.addFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN)
+            // R3 阶段4：ViewPager2 模式下不自动触发全屏
+            // 全屏由用户主动点击全屏按钮或双指拉伸触发，避免设备旋转后反复进入/退出全屏
+            if (useViewPagerMode) return
             when (newConfig.orientation) {
                 Configuration.ORIENTATION_LANDSCAPE -> {
                     if (!VideoPlay.isPortraitVideo) {
@@ -835,6 +929,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     private fun upStarMenu() {
+        val isStarred = VideoPlay.rssStar != null
         if (VideoPlay.rssStar != null) {
             starMenuItem?.isVisible = true
             starMenuItem?.setIcon(R.drawable.ic_star)
@@ -847,6 +942,24 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             starMenuItem?.icon?.setTintMutate(primaryTextColor)
         } else {
             starMenuItem?.isVisible = false
+        }
+        // R3 阶段2：同步更新当前 Fragment 的收藏按钮状态
+        currentFragment?.updateStarState(isStarred)
+    }
+
+    /**
+     * R3 阶段2：Fragment 收藏按钮点击委托
+     *
+     * 已收藏 → 弹出 RssFavoritesDialog 编辑
+     * 未收藏 → 调用 viewModel.addFavorite 收藏
+     */
+    fun onFragmentStarClicked() {
+        if (VideoPlay.rssStar != null) {
+            VideoPlay.rssStar?.let { showDialogFragment(RssFavoritesDialog(it)) }
+        } else {
+            viewModel.addFavorite {
+                VideoPlay.rssStar?.let { showDialogFragment(RssFavoritesDialog(it)) }
+            }
         }
     }
 
@@ -940,25 +1053,102 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     private fun startFloatingWindow() {
-        VideoPlay.savePlayState(playerView)
+        val activePlayer = if (useViewPagerMode) {
+            currentFragment?.playerView ?: return
+        } else {
+            playerView
+        }
+        // 悬浮窗Bug修复：在启动服务之前先检查 overlay 权限
+        // 之前在 VideoPlayService.onStartCommand() 中检查权限，
+        // 发现没权限时 stopSelf() 导致服务立即销毁，悬浮窗压根没展示
+        if (!Settings.canDrawOverlays(this)) {
+            PermissionsCompat.Builder()
+                .addPermissions(Permissions.SYSTEM_ALERT_WINDOW)
+                .rationale(R.string.float_permission_rationale)
+                .onGranted {
+                    // 授权成功后重新启动悬浮窗
+                    startFloatingWindow()
+                }
+                .request()
+            return
+        }
+        VideoPlay.savePlayState(activePlayer)
         // 启动悬浮窗服务
         val intent = Intent(this, VideoPlayService::class.java).apply {
             putExtra("isNew", false)
         }
         ContextCompat.startForegroundService(this, intent)
-        playerView.needDestroy = false
-        finish() //如果在播放器复刻前活动被销毁，会导致状态继承异常（这里服务创建很快，没发现异常）
+        activePlayer.needDestroy = false
+        finish()
+    }
+
+    // ==================== R3 阶段5：VideoSettingsPanel 回调实现 ====================
+
+    override fun onRouteChanged(episode: RssEpisode) {
+        if (useViewPagerMode) {
+            // ViewPager2 模式：更新数据 + 通知 adapter + 重新播放
+            val pv = currentFragment?.playerView ?: return
+            VideoPlay.playRssEpisode(pv, episode)
+            onRssRouteChangedForViewPager()
+        } else {
+            // Legacy 模式：走旧逻辑
+            upRssRoutesView()
+            VideoPlay.playRssEpisode(playerView, episode)
+            upRssEpisodesView()
+        }
+    }
+
+    override fun onFloatWindow() {
+        startFloatingWindow()
+    }
+
+    override fun onEditSource() {
+        VideoPlay.source?.let { s ->
+            when (s) {
+                is BookSource -> bookSourceEditResult.launch {
+                    putExtra("sourceUrl", s.getKey())
+                }
+                is RssSource -> rssSourceEditResult.launch {
+                    putExtra("sourceUrl", s.getKey())
+                }
+            }
+        }
+    }
+
+    override fun onLog() {
+        showDialogFragment<AppLogDialog>()
     }
 
     override fun observeLiveBus() {
 
         observeEventSticky<String>(EventBus.VIDEO_SUB_TITLE) {
-            binding.titleBar.title = it
+            if (useViewPagerMode) {
+                binding.titleBarNew.title = it
+                // R3 阶段2：同步更新当前 Fragment 的视频标题
+                currentFragment?.updateVideoTitle(it)
+            } else {
+                binding.titleBarNew.title = it
+            }
             // R3 修复：startPlay 异步赋值 videoUrl，VIDEO_SUB_TITLE 在每次 player.setUp 后触发，此时 videoUrl 已就绪
-            updateVideoUrlDisplay()
+            // P0-1: 统一 ViewPager2 模式，updateVideoUrlDisplay 已移除
         }
 
         observeEvent<ArrayList<Int>>(EventBus.UP_VIDEO_INFO) {
+            if (useViewPagerMode) {
+                // R3 ViewPager2 模式：增量更新 adapter 数量（避免 notifyDataSetChanged 重建首个 Fragment）
+                val newCount = if (VideoPlay.book != null) 1
+                    else (VideoPlay.rssEpisodes?.size ?: 1)
+                val oldCount = videoPagerAdapter?.itemCount ?: 0
+                if (newCount > oldCount) {
+                    videoPagerAdapter?.notifyItemRangeInserted(oldCount, newCount - oldCount)
+                } else if (newCount < oldCount) {
+                    videoPagerAdapter?.notifyItemRangeRemoved(newCount, oldCount - newCount)
+                }
+                binding.titleBarNew.title = VideoPlay.rssEpisodes?.getOrNull(VideoPlay.rssEpisodeIndex)?.title
+                    ?: VideoPlay.videoTitle ?: ""
+                return@observeEvent
+            }
+            // Legacy 模式：现有逻辑不变
             it.forEach { value ->
                 when (value) {
                     1 -> {
@@ -994,6 +1184,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             if (!isFullScreen) {
                 binding.debugPanel.visible()
             }
+            // R3 阶段5：同步更新设置面板的调试日志
+            settingsPanel?.appendDebugLog(it)
         }
 
     }
@@ -1054,8 +1246,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         // 画中画：仅 Android 8+ 且正在播放时进入
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
-                val currentPlayer = playerView.getCurrentPlayer()
-                if (currentPlayer.currentState == GSYVideoView.CURRENT_STATE_PLAYING) {
+                val currentPlayer = if (useViewPagerMode) {
+                    currentFragment?.playerView?.getCurrentPlayer()
+                } else {
+                    playerView.getCurrentPlayer()
+                }
+                if (currentPlayer?.currentState == GSYVideoView.CURRENT_STATE_PLAYING) {
                     val params = android.app.PictureInPictureParams.Builder()
                         .setAspectRatio(android.util.Rational(16, 9))
                         .build()
@@ -1082,7 +1278,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
         VideoPlay.saveRead()
         VideoPlay.stopLoading()
-        playerView.getCurrentPlayer().release()
+        // R3: ViewPager2 模式下旧 playerView 未使用，Fragment 自行管理释放
+        if (!useViewPagerMode) {
+            playerView.getCurrentPlayer().release()
+        }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 

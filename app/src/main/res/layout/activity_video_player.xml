@@ -1,10 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
+
+    <!-- R3 抖音风格：ViewPager2 容器（垂直滑动切换视频） -->
+    <LinearLayout
+        android:id="@+id/viewPagerContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <io.legado.app.ui.widget.TitleBar
+            android:id="@+id/title_bar_new"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/viewPager"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+    </LinearLayout>
+
+    <!-- 旧模式：传统竖屏布局（Phase 1 过渡期保留） -->
+    <LinearLayout
+        android:id="@+id/legacyContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
     <io.legado.app.ui.widget.TitleBar
         android:id="@+id/title_bar"
@@ -282,4 +309,6 @@
             android:textSize="11sp" />
     </LinearLayout>
 
-</LinearLayout>
+    </LinearLayout><!-- legacyContainer end -->
+
+</FrameLayout>

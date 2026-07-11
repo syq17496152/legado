@@ -1,0 +1,418 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    R3 阶段5：视频设置面板（BottomSheet）
+    ViewPager2 沉浸式模式下的综合功能面板
+    包含：播放控制 / 线路选择 / 集数选择 / 播放信息 / 功能菜单 / 调试 / 设置
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/bg_settings_panel"
+    android:paddingTop="8dp">
+
+    <!-- 拖拽手柄 -->
+    <View
+        android:layout_width="36dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/bg_drag_handle" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxHeight="480dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="16dp">
+
+            <!-- ====== 播放控制 ====== -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="播放控制"
+                android:textColor="#E6FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:paddingBottom="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:paddingBottom="8dp">
+
+                <Button
+                    android:id="@+id/btn_skip_back_30s"
+                    style="@style/VideoPanelButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="←30s" />
+
+                <Button
+                    android:id="@+id/btn_skip_back_10s"
+                    style="@style/VideoPanelButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="←10s" />
+
+                <Button
+                    android:id="@+id/btn_skip_fwd_10s"
+                    style="@style/VideoPanelButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="10s→" />
+
+                <Button
+                    android:id="@+id/btn_skip_fwd_30s"
+                    style="@style/VideoPanelButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="30s→" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:paddingBottom="12dp">
+
+                <Button
+                    android:id="@+id/btn_ratio"
+                    style="@style/VideoPanelButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="画面比例" />
+
+                <Button
+                    android:id="@+id/btn_audio_track"
+                    style="@style/VideoPanelButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="音轨选择" />
+
+            </LinearLayout>
+
+            <!-- ====== 播放信息 ====== -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="播放信息"
+                android:textColor="#E6FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp" />
+
+            <!-- 播放地址 + 复制 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:id="@+id/tv_play_url"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="#99FFFFFF"
+                    android:textSize="12sp"
+                    android:maxLines="3"
+                    android:ellipsize="middle"
+                    android:textIsSelectable="true" />
+
+                <Button
+                    android:id="@+id/btn_copy_url"
+                    style="@style/VideoPanelButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="复制" />
+
+            </LinearLayout>
+
+            <!-- 视频简介 -->
+            <TextView
+                android:id="@+id/tv_description"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#99FFFFFF"
+                android:textSize="13sp"
+                android:maxLines="5"
+                android:ellipsize="end"
+                android:paddingBottom="8dp"
+                android:visibility="gone" />
+
+            <!-- ====== 功能 ====== -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="功能"
+                android:textColor="#E6FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:paddingBottom="4dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:paddingBottom="4dp">
+
+                <Button
+                    android:id="@+id/btn_float_window"
+                    style="@style/VideoPanelButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="悬浮窗" />
+
+                <Button
+                    android:id="@+id/btn_other_player"
+                    style="@style/VideoPanelButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="其他播放器" />
+
+                <Button
+                    android:id="@+id/btn_edit_source"
+                    style="@style/VideoPanelButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="编辑源" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:paddingBottom="8dp">
+
+                <Button
+                    android:id="@+id/btn_login"
+                    style="@style/VideoPanelButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="登录" />
+
+                <Button
+                    android:id="@+id/btn_log"
+                    style="@style/VideoPanelButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="日志" />
+
+                <Button
+                    android:id="@+id/btn_debug_toggle"
+                    style="@style/VideoPanelButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="调试" />
+
+            </LinearLayout>
+
+            <!-- 调试日志（默认隐藏，点击调试按钮切换） -->
+            <LinearLayout
+                android:id="@+id/debug_log_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#1AFFFFFF"
+                android:padding="8dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/tv_debug_log"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:maxLines="12"
+                    android:scrollbars="vertical"
+                    android:textColor="#FFFFFF"
+                    android:textIsSelectable="true"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
+
+            <!-- ====== 播放设置 ====== -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="播放设置"
+                android:textColor="#E6FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/auto_play"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="14sp" />
+
+                <CheckBox
+                    android:id="@+id/cb_auto_play"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/ct_start_full"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/start_full"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="14sp" />
+
+                <CheckBox
+                    android:id="@+id/cb_start_full"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/full_bottom_progress"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="14sp" />
+
+                <CheckBox
+                    android:id="@+id/cb_full_bottom_progress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/mute_on_start"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="14sp" />
+
+                <CheckBox
+                    android:id="@+id/cb_mute_on_start"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:id="@+id/tv_press_speed"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/press_speed"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="14sp"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+            </LinearLayout>
+
+            <!-- 快进/快退时间配置（右侧功能按钮快进快退使用，默认60秒） -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="快进/快退时间"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="14sp" />
+
+                <Spinner
+                    android:id="@+id/sp_skip_time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/video_cache_size"
+                    android:textColor="#E6FFFFFF"
+                    android:textSize="14sp" />
+
+                <Spinner
+                    android:id="@+id/sp_video_cache_size"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </androidx.core.widget.NestedScrollView>
+
+</LinearLayout>

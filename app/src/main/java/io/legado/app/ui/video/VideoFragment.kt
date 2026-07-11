@@ -1,0 +1,792 @@
+package io.legado.app.ui.video
+
+import android.annotation.SuppressLint
+import android.os.Bundle
+import android.view.GestureDetector
+import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.PopupMenu
+import android.widget.TextView
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.shuyu.gsyvideoplayer.listener.GSYSampleCallBack
+import io.legado.app.R
+import io.legado.app.data.entities.RssEpisode
+import io.legado.app.help.gsyVideo.VideoPlayer
+import io.legado.app.model.VideoPlay
+import io.legado.app.utils.gone
+import io.legado.app.utils.toastOnUi
+import io.legado.app.utils.visible
+
+/**
+ * R3 抖音风格视频播放 Fragment
+ *
+ * ViewPager2 中的单个视频播放单元。
+ * 每个 Fragment 持有一个 VideoPlayer（GSY）+ 悬浮控件层。
+ *
+ * 三种播放状态：
+ * - PURE：纯净播放态，所有控件隐藏，仅视频画面
+ * - NORMAL：竖屏常态，显示标题+功能按钮+全屏按钮
+ * - FULLSCREEN：横屏全屏态，Activity 旋转横屏，控件可单击显隐
+ *
+ * 交互：
+ * - 单击切换控件显隐（PURE↔NORMAL / FULLSCREEN内显隐切换）
+ * - 双指拉伸触发全屏（scaleFactor > 1.2）
+ * - 横屏视频自动显示全屏按钮
+ */
+class VideoFragment : Fragment() {
+
+    // ==================== 播放状态枚举 ====================
+
+    enum class PlayState {
+        /** 纯净播放态：所有悬浮控件隐藏，仅视频画面 */
+        PURE,
+        /** 竖屏常态：显示标题+功能按钮+全屏按钮 */
+        NORMAL,
+        /** 横屏全屏态：Activity 旋转横屏 */
+        FULLSCREEN
+    }
+
+    private var _playerView: VideoPlayer? = null
+    val playerView: VideoPlayer? get() = _playerView
+
+    /** 当前 Fragment 在 rssEpisodes 中的索引（订阅源模式），书源模式为 0 */
+    private val episodeIndex: Int by lazy {
+        arguments?.getInt(ARG_EPISODE_INDEX, 0) ?: 0
+    }
+
+    /** 防止重复激活（onPageSelected + onFragmentViewReady 可能触发两次） */
+    private var isActivated = false
+
+    /** 当前播放状态（用户需求：初始为 NORMAL 控件显示，左右滑动时隐藏） */
+    private var currentState = PlayState.NORMAL
+
+    /** 横屏全屏态下控件是否可见（单击切换） */
+    private var controlsVisibleInFullscreen = true
+
+    /** 标记是否需要在 activatePlayer 后重新注册触摸监听 */
+    private var needReRegisterTouchListener = true
+
+    // ==================== 悬浮控件视图引用 ====================
+
+    private var controlsLayer: ConstraintLayout? = null
+    private var leftBottomContainer: LinearLayout? = null
+    private var tvVideoTitle: TextView? = null
+    private var tvRouteSelector: TextView? = null
+    private var rvEpisodes: RecyclerView? = null
+    private var rightButtons: LinearLayout? = null
+    private var btnRewind: ImageButton? = null
+    private var btnMute: ImageButton? = null
+    private var btnStar: ImageButton? = null
+    private var btnSpeed: ImageButton? = null
+    private var btnSettings: ImageButton? = null
+    private var btnForward: ImageButton? = null
+    private var btnFullscreen: ImageButton? = null
+
+    /** 手势检测器：单击切换控件显隐 */
+    private var gestureDetector: GestureDetector? = null
+
+    /** 4.5 双指缩放手势检测器：检测双指拉伸触发全屏 */
+    private var scaleGestureDetector: ScaleGestureDetector? = null
+
+    /** 双指左右滑动检测：用户需求——"同时左右滑动"时隐藏控件 */
+    private var twoFingerStartX1 = 0f
+    private var twoFingerStartX2 = 0f
+    private var isTwoFingerSwipe = false
+
+    // 设计文档：控件显隐由单击切换，无自动隐藏逻辑（移除 autoHideRunnable）
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        return inflater.inflate(R.layout.fragment_video, container, false)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        _playerView = view.findViewById(R.id.playerView)
+
+        // 初始化悬浮控件
+        initOverlayControls(view)
+
+        // 初始化手势检测（含双指缩放）
+        initGestureDetector(view)
+
+        // R3: 通知 Activity 视图已就绪
+        (activity as? VideoPlayerActivity)?.onFragmentViewReady(this, episodeIndex)
+    }
+
+    override fun onDestroyView() {
+        releasePlayer()
+        _playerView = null
+        controlsLayer = null
+        leftBottomContainer = null
+        tvVideoTitle = null
+        tvRouteSelector = null
+        rvEpisodes = null
+        rightButtons = null
+        btnRewind = null
+        btnMute = null
+        btnStar = null
+        btnSpeed = null
+        btnSettings = null
+        btnForward = null
+        btnFullscreen = null
+        gestureDetector = null
+        scaleGestureDetector = null
+        isActivated = false
+        super.onDestroyView()
+    }
+
+    // ==================== 播放器生命周期控制 ====================
+
+    fun activatePlayer() {
+        if (isActivated) return
+        val pv = _playerView ?: return
+        isActivated = true
+
+        // 4.1 横屏视频检测：注册 onPrepared 回调获取视频尺寸
+        pv.setVideoAllCallBack(object : GSYSampleCallBack() {
+            override fun onPrepared(url: String?, vararg objects: Any?) {
+                super.onPrepared(url, *objects)
+                pv.post {
+                    val videoWidth = pv.currentVideoWidth
+                    val videoHeight = pv.currentVideoHeight
+                    if (videoWidth > 0 && videoHeight > 0) {
+                        // 更新 VideoPlay.isPortraitVideo（供 Activity 的 onConfigurationChanged 判断）
+                        VideoPlay.isPortraitVideo =
+                            videoHeight.toFloat() / videoWidth.toFloat() > 1.2f
+                        // 4.3 全屏按钮显示逻辑：横屏视频显示全屏按钮
+                        updateFullscreenButtonVisibility(videoWidth, videoHeight)
+                    }
+                    // Bug修复：GSY 在 setUp 时可能覆盖我们设置的 OnTouchListener
+                    // 在 onPrepared 后重新注册，确保手势检测正常工作
+                    reRegisterTouchListener()
+                }
+            }
+        })
+
+        // Bug修复：确保 GSY 的底部进度条可见
+        pv.findViewById<View>(R.id.bottom_progressbar)?.visibility = View.VISIBLE
+
+        // P0-1: 判断是从悬浮窗恢复还是新播放
+        if (VideoPlay.isResumeFromFloat) {
+            // 从悬浮窗恢复：克隆播放状态
+            VideoPlay.isResumeFromFloat = false
+            VideoPlay.clonePlayState(pv)
+            pv.setSurfaceToPlay()
+            pv.startAfterPrepared()
+        } else {
+            // 新播放
+            val book = VideoPlay.book
+            if (book != null) {
+                VideoPlay.startPlay(pv)
+            } else {
+                val episodes = VideoPlay.rssEpisodes
+                val episode = episodes?.getOrNull(episodeIndex)
+                if (episode != null) {
+                    VideoPlay.playRssEpisode(pv, episode)
+                } else {
+                    VideoPlay.startPlay(pv)
+                }
+            }
+        }
+    }
+
+    fun deactivatePlayer() {
+        if (!isActivated) return
+        isActivated = false
+        _playerView?.onVideoPause()
+    }
+
+    fun releasePlayer() {
+        _playerView?.currentPlayer?.release()
+    }
+
+    /**
+     * 4.4 + 4.7 + 4.8 全屏状态变化通知
+     *
+     * 由 Activity 的 toggleFullScreen() 调用。
+     * 进入全屏：Activity 旋转横屏 → Fragment 更新状态+布局
+     * 退出全屏：Activity 恢复竖屏 → Fragment 恢复状态+布局
+     */
+    fun onFullScreenChanged(isFullScreen: Boolean) {
+        if (isFullScreen) {
+            // 进入横屏全屏态
+            currentState = PlayState.FULLSCREEN
+            controlsVisibleInFullscreen = true
+            applyState(PlayState.FULLSCREEN)
+            // 4.8 横屏布局适配：全屏按钮始终可见（显示退出图标）
+            btnFullscreen?.visible()
+            updateFullscreenButtonIcon(true)
+        } else {
+            // 退出横屏全屏态
+            currentState = PlayState.NORMAL
+            controlsVisibleInFullscreen = true
+            applyState(PlayState.NORMAL)
+            updateFullscreenButtonIcon(false)
+            // 恢复全屏按钮显示逻辑（仅横屏视频显示）
+            val pv = _playerView
+            if (pv != null && pv.currentVideoWidth > 0 && pv.currentVideoHeight > 0) {
+                updateFullscreenButtonVisibility(pv.currentVideoWidth, pv.currentVideoHeight)
+            }
+        }
+    }
+
+    /**
+     * 更新视频标题（由 Activity 在 VIDEO_SUB_TITLE 事件时调用）
+     */
+    fun updateVideoTitle(title: String) {
+        tvVideoTitle?.text = title
+    }
+
+    /**
+     * 更新收藏按钮状态
+     */
+    fun updateStarState(isStarred: Boolean) {
+        btnStar?.setImageResource(
+            if (isStarred) R.drawable.ic_star else R.drawable.ic_star_border
+        )
+    }
+
+    /**
+     * 4.3 根据视频宽高比显示/隐藏全屏按钮
+     *
+     * 横屏视频（宽高比 > 1.2）显示全屏按钮，竖屏视频隐藏。
+     * 在 FULLSCREEN 状态下始终显示（用于退出全屏）。
+     */
+    fun updateFullscreenButtonVisibility(videoWidth: Int, videoHeight: Int) {
+        if (currentState == PlayState.FULLSCREEN) {
+            // 4.8 横屏全屏态下始终显示全屏按钮
+            btnFullscreen?.visible()
+            return
+        }
+        val isLandscape =
+            videoWidth > 0 && videoHeight > 0 && videoWidth.toFloat() / videoHeight.toFloat() > 1.2f
+        if (isLandscape) {
+            btnFullscreen?.visible()
+        } else {
+            btnFullscreen?.gone()
+        }
+    }
+
+    // ==================== 状态切换 ====================
+
+    /**
+     * 切换播放状态
+     *
+     * PURE ↔ NORMAL 双向切换，FULLSCREEN 由 Activity 控制
+     */
+    private fun switchState(newState: PlayState) {
+        if (currentState == newState) return
+        currentState = newState
+        applyState(newState)
+        // 设计文档：控件显隐由单击切换，无自动隐藏逻辑
+    }
+
+    /**
+     * 应用状态：控制控件显隐 + 动画
+     */
+    private fun applyState(state: PlayState) {
+        when (state) {
+            PlayState.PURE -> {
+                // 纯净播放态：隐藏所有控件（带淡出动画）
+                hideControlsAnimated()
+            }
+            PlayState.NORMAL -> {
+                // 竖屏常态：显示所有控件（带淡入动画）
+                showControlsAnimated()
+                // P0 修复：显示控件后重新设置全屏按钮 visibility
+                // btn_fullscreen 默认 gone，需根据视频宽高比重新判断
+                // 防止 onPrepared 时序问题或容器显隐后子控件 visibility 丢失
+                val pv = _playerView
+                if (pv != null && pv.currentVideoWidth > 0 && pv.currentVideoHeight > 0) {
+                    updateFullscreenButtonVisibility(pv.currentVideoWidth, pv.currentVideoHeight)
+                }
+            }
+            PlayState.FULLSCREEN -> {
+                // 4.8 横屏全屏态：根据 controlsVisibleInFullscreen 决定显隐
+                if (controlsVisibleInFullscreen) {
+                    showControlsAnimated()
+                    // 全屏状态下确保全屏按钮可见（显示退出图标）
+                    btnFullscreen?.visible()
+                } else {
+                    hideControlsAnimated()
+                }
+                updateFullscreenButtonIcon(true)
+            }
+        }
+    }
+
+    /**
+     * 带动画显示所有悬浮控件
+     */
+    private fun showControlsAnimated() {
+        val controls = getOverlayControls()
+        controls.forEach { view ->
+            if (view.visibility == View.GONE || view.alpha == 0f) {
+                view.visible()
+                view.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(300)
+                    .start()
+            }
+        }
+    }
+
+    /**
+     * 带动画隐藏所有悬浮控件
+     */
+    private fun hideControlsAnimated() {
+        val controls = getOverlayControls()
+        controls.forEach { view ->
+            if (view.visibility == View.VISIBLE && view.alpha == 1f) {
+                view.animate()
+                    .alpha(0f)
+                    .translationY(view.height.toFloat() * 0.1f)
+                    .setDuration(300)
+                    .withEndAction { view.gone() }
+                    .start()
+            }
+        }
+    }
+
+    /**
+     * 获取所有悬浮控件视图列表
+     *
+     * P0 修复：用 leftBottomContainer 作为一个整体参与显隐动画，
+     * 避免子控件（全屏按钮等）被 hideControlsAnimated 隐藏后
+     * 因 visibility=GONE 不被 getOverlayControls 收录而无法恢复。
+     * 子控件自身的 visibility（如线路/集数选择器的 gone）不受容器显隐影响。
+     */
+    private fun getOverlayControls(): List<View> {
+        val list = mutableListOf<View>()
+        // 左下角容器（包含标题、线路选择器、集数选择器、全屏按钮）
+        leftBottomContainer?.let { list.add(it) }
+        // 右侧功能按钮容器
+        rightButtons?.let { list.add(it) }
+        return list
+    }
+
+    // ==================== 悬浮控件初始化 ====================
+
+    private fun initOverlayControls(view: View) {
+        controlsLayer = view.findViewById(R.id.controlsLayer)
+        leftBottomContainer = view.findViewById(R.id.left_bottom_container)
+        tvVideoTitle = view.findViewById(R.id.tv_video_title)
+        tvRouteSelector = view.findViewById(R.id.tv_route_selector)
+        rvEpisodes = view.findViewById(R.id.rv_episodes)
+        rightButtons = view.findViewById(R.id.right_buttons)
+        btnRewind = view.findViewById(R.id.btn_rewind)
+        btnMute = view.findViewById(R.id.btn_mute)
+        btnStar = view.findViewById(R.id.btn_star)
+        btnSpeed = view.findViewById(R.id.btn_speed)
+        btnSettings = view.findViewById(R.id.btn_settings)
+        btnForward = view.findViewById(R.id.btn_forward)
+        btnFullscreen = view.findViewById(R.id.btn_fullscreen)
+
+        // 2.1 左下角视频标题
+        val title = VideoPlay.rssEpisodes?.getOrNull(episodeIndex)?.title
+            ?: VideoPlay.videoTitle ?: ""
+        tvVideoTitle?.text = title
+
+        // R3 REQ-17 线路选择器（多线路时显示，标题下方）
+        initRouteSelector()
+
+        // R3 REQ-18 集数选择器（多集时显示，线路下方横向滚动）
+        initEpisodeSelector()
+
+        // R3 快进/快退按钮（读取配置的快进时间，默认60秒）
+        initSkipButtons()
+
+        // 2.3 静音按钮
+        updateMuteButtonState()
+        btnMute?.setOnClickListener {
+            val pv = _playerView ?: return@setOnClickListener
+            pv.toggleMute()
+            updateMuteButtonState()
+        }
+
+        // 2.4 收藏按钮
+        updateStarButtonState()
+        btnStar?.setOnClickListener {
+            (activity as? VideoPlayerActivity)?.onFragmentStarClicked()
+        }
+
+        // 2.5 倍速按钮
+        btnSpeed?.setOnClickListener { v ->
+            showSpeedMenu(v)
+        }
+
+        // 2.6 设置按钮 → 阶段5：打开综合设置面板（BottomSheet）
+        btnSettings?.setOnClickListener {
+            showSettingsPanel()
+        }
+
+        // 2.7 全屏按钮（4.4 点击切换全屏，4.7 退出全屏）
+        btnFullscreen?.setOnClickListener {
+            (activity as? VideoPlayerActivity)?.toggleFullScreen()
+        }
+
+        // 用户需求：初始状态为 NORMAL（控件显示，不自动隐藏）
+        // 左右滑动时隐藏控件到 PURE，单击恢复
+        currentState = PlayState.NORMAL
+        applyState(PlayState.NORMAL)
+    }
+
+    // ==================== 线路选择器（REQ-17） ====================
+
+    /**
+     * 初始化线路选择器
+     * 多线路时显示，点击弹出 PopupMenu 选择线路
+     */
+    private fun initRouteSelector() {
+        val routes = VideoPlay.rssRoutes
+        if (routes == null || routes.size <= 1) {
+            tvRouteSelector?.gone()
+            return
+        }
+        tvRouteSelector?.visible()
+        updateRouteSelectorText()
+        tvRouteSelector?.setOnClickListener { anchor ->
+            val popup = PopupMenu(requireContext(), anchor)
+            routes.forEachIndexed { index, route ->
+                popup.menu.add(0, index, index, route.name)
+            }
+            popup.setOnMenuItemClickListener { item ->
+                val newIndex = item.itemId
+                if (newIndex != VideoPlay.rssRouteIndex) {
+                    val episode = VideoPlay.switchRssRoute(newIndex)
+                    if (episode != null) {
+                        updateRouteSelectorText()
+                        // 更新集数列表
+                        updateEpisodeList()
+                        // 通知 Activity 播放新集
+                        (activity as? VideoSettingsPanel.SettingsPanelCallback)?.onRouteChanged(episode)
+                    }
+                }
+                true
+            }
+            popup.show()
+        }
+    }
+
+    private fun updateRouteSelectorText() {
+        val routes = VideoPlay.rssRoutes ?: return
+        val currentRoute = routes.getOrNull(VideoPlay.rssRouteIndex)
+        tvRouteSelector?.text = "线路：${currentRoute?.name ?: "未知"} ▼"
+    }
+
+    // ==================== 集数选择器（REQ-18） ====================
+
+    /**
+     * 初始化集数选择器
+     * 多集时显示横向滚动列表
+     */
+    private fun initEpisodeSelector() {
+        val episodes = VideoPlay.rssEpisodes
+        if (episodes == null || episodes.isEmpty()) {
+            rvEpisodes?.gone()
+            return
+        }
+        rvEpisodes?.visible()
+        rvEpisodes?.layoutManager =
+            LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
+        updateEpisodeList()
+    }
+
+    /**
+     * 更新集数列表数据
+     */
+    private fun updateEpisodeList() {
+        val episodes = VideoPlay.rssEpisodes ?: return
+        val rv = rvEpisodes ?: return
+        val adapter = RssEpisodeAdapter(episodes, VideoPlay.rssEpisodeIndex) { _, index ->
+            if (index != VideoPlay.rssEpisodeIndex) {
+                VideoPlay.rssEpisodeIndex = index
+                val episode = episodes.getOrNull(index)
+                val pv = _playerView
+                if (episode != null && pv != null) {
+                    VideoPlay.playRssEpisode(pv, episode)
+                    // 更新选中状态
+                    (rv.adapter as? RssEpisodeAdapter)?.updateSelectedPosition(index)
+                    // 更新标题
+                    tvVideoTitle?.text = episode.title
+                }
+            }
+        }
+        rv.adapter = adapter
+    }
+
+    // ==================== 快进/快退按钮 ====================
+
+    /**
+     * 初始化快进/快退按钮
+     * 读取 VideoPlay.videoSkipTime 配置（默认60秒），点击按配置时间快进/快退
+     */
+    private fun initSkipButtons() {
+        btnRewind?.setOnClickListener {
+            skipVideo(-VideoPlay.videoSkipTime.toLong() * 1000)
+        }
+        btnForward?.setOnClickListener {
+            skipVideo(VideoPlay.videoSkipTime.toLong() * 1000)
+        }
+    }
+
+    /**
+     * 快进/快退：跳转到当前位置 ± offsetMillis
+     */
+    private fun skipVideo(offsetMillis: Long) {
+        val pv = _playerView ?: return
+        val player = pv.currentPlayer
+        val currentPosition = VideoPlay.videoManager.currentPosition
+        val duration = VideoPlay.videoManager.duration
+        var target = currentPosition + offsetMillis
+        if (target < 0) target = 0
+        if (duration > 0 && target > duration) target = duration
+        player.seekTo(target)
+        val skipSeconds = (offsetMillis / 1000).toInt()
+        activity?.toastOnUi(if (skipSeconds > 0) "快进 ${skipSeconds}秒" else "快退 ${-skipSeconds}秒")
+    }
+
+    // ==================== 手势检测（单击切换显隐 + 双指缩放） ====================
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun initGestureDetector(rootView: View) {
+        gestureDetector = GestureDetector(requireContext(), object : GestureDetector.SimpleOnGestureListener() {
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                when (currentState) {
+                    PlayState.PURE -> switchState(PlayState.NORMAL)
+                    PlayState.NORMAL -> switchState(PlayState.PURE)
+                    PlayState.FULLSCREEN -> {
+                        // 4.7 横屏全屏态：单击切换控件显隐（不退出全屏）
+                        controlsVisibleInFullscreen = !controlsVisibleInFullscreen
+                        if (controlsVisibleInFullscreen) {
+                            showControlsAnimated()
+                            btnFullscreen?.visible()
+                            updateFullscreenButtonIcon(true)
+                        } else {
+                            hideControlsAnimated()
+                        }
+                    }
+                }
+                return true
+            }
+        })
+
+        // 4.5 双指缩放手势检测：双指向外拉伸（scaleFactor > 1.2）触发全屏
+        scaleGestureDetector = ScaleGestureDetector(
+            requireContext(),
+            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScaleEnd(detector: ScaleGestureDetector) {
+                    // 4.6 双指拉伸触发全屏（仅非全屏状态下触发）
+                    if (detector.scaleFactor > 1.2f && currentState != PlayState.FULLSCREEN) {
+                        (activity as? VideoPlayerActivity)?.toggleFullScreen()
+                    }
+                }
+            }
+        )
+
+        // 在 playerView 上设置触摸监听
+        // controlsLayer 设置了 clickable=false，触摸事件会穿透到 playerView
+        // playerView 是 GSY 播放器，自带触摸处理（进度条等）
+        // 我们检测单击手势+双指缩放+双指左右滑动
+        // 双指事件消费（阻止 GSY 拦截），单指事件交给 GSY 处理
+        _playerView?.setOnTouchListener { _, event ->
+            // 检查触摸点是否在按钮区域内（按钮区域由控件自己处理）
+            val x = event.rawX.toInt()
+            val y = event.rawY.toInt()
+            if (!isTouchOnControls(x, y)) {
+                // 双指事件由我们消费，单指事件交给 GSY
+                handlePlayerTouchEvent(event)
+            } else {
+                false // 控件区域内不消费
+            }
+        }
+    }
+
+    /**
+     * 处理播放器触摸事件（公共方法）
+     *
+     * 包含：手势检测（单击切换）+ 双指缩放（触发全屏）+ 双指左右滑动（隐藏控件）
+     * initGestureDetector 和 reRegisterTouchListener 都调用此方法，
+     * 确保 GSY 覆盖 OnTouchListener 后重新注册时不丢失双指滑动检测。
+     *
+     * @return true 表示消费事件（双指事件），阻止 GSY 拦截多指手势
+     *         false 表示不消费（单指事件），交给 GSY 处理（进度条/亮度/音量）
+     */
+    private fun handlePlayerTouchEvent(event: MotionEvent): Boolean {
+        gestureDetector?.onTouchEvent(event)
+        scaleGestureDetector?.onTouchEvent(event)
+
+        // 用户需求：双指"同时左右滑动"时隐藏控件到 PURE
+        // 双指检测避免与 GSY 单指进度条拖动冲突
+        when (event.actionMasked) {
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                if (event.pointerCount == 2) {
+                    twoFingerStartX1 = event.getX(0)
+                    twoFingerStartX2 = event.getX(1)
+                    isTwoFingerSwipe = true
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (event.pointerCount >= 2 && isTwoFingerSwipe && currentState == PlayState.NORMAL) {
+                    val dx1 = event.getX(0) - twoFingerStartX1
+                    val dx2 = event.getX(1) - twoFingerStartX2
+                    val threshold = 100f
+                    // 两指同时向同一方向（左或右）移动且超过阈值
+                    if (kotlin.math.abs(dx1) > threshold && kotlin.math.abs(dx2) > threshold
+                        && (dx1 > 0) == (dx2 > 0)
+                    ) {
+                        switchState(PlayState.PURE)
+                        isTwoFingerSwipe = false
+                    }
+                }
+            }
+            MotionEvent.ACTION_POINTER_UP -> {
+                isTwoFingerSwipe = false
+            }
+        }
+
+        // Bug修复：双指事件必须消费，阻止 GSY 播放器拦截多指手势
+        // GSY 内部有单指手势处理（进度条/亮度/音量），但不处理双指事件
+        // 如果不消费双指事件，GSY 可能拦截导致我们的双指检测不生效
+        return event.pointerCount >= 2
+    }
+
+    /**
+     * 检查触摸点是否落在悬浮控件（按钮/标题）区域内
+     */
+    private fun isTouchOnControls(x: Int, y: Int): Boolean {
+        // 检查右侧按钮容器
+        rightButtons?.let {
+            val loc = IntArray(2)
+            it.getLocationOnScreen(loc)
+            if (x >= loc[0] && x <= loc[0] + it.width && y >= loc[1] && y <= loc[1] + it.height) {
+                return true
+            }
+        }
+        // 检查左下角容器（标题+线路选择器+集数选择器+全屏按钮）
+        leftBottomContainer?.let {
+            if (it.visibility == View.VISIBLE) {
+                val loc = IntArray(2)
+                it.getLocationOnScreen(loc)
+                if (x >= loc[0] && x <= loc[0] + it.width && y >= loc[1] && y <= loc[1] + it.height) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    // ==================== 按钮状态更新 ====================
+
+    private fun updateMuteButtonState() {
+        val pv = _playerView ?: return
+        btnMute?.setImageResource(
+            if (pv.isMutedPublic) R.drawable.ic_volume_off else R.drawable.ic_volume_up
+        )
+    }
+
+    private fun updateStarButtonState() {
+        val isStarred = VideoPlay.rssStar != null
+        btnStar?.setImageResource(
+            if (isStarred) R.drawable.ic_star else R.drawable.ic_star_border
+        )
+        val showStar = VideoPlay.book == null && !VideoPlay.singleUrl
+        if (showStar) {
+            btnStar?.visible()
+        } else {
+            btnStar?.gone()
+        }
+    }
+
+    /**
+     * 4.8 更新全屏按钮图标
+     *
+     * 全屏中显示"退出全屏"图标，非全屏显示"进入全屏"图标
+     */
+    private fun updateFullscreenButtonIcon(isInFullScreen: Boolean) {
+        btnFullscreen?.setImageResource(
+            if (isInFullScreen) R.drawable.ic_fullscreen_exit else R.drawable.ic_fullscreen
+        )
+    }
+
+    /**
+     * Bug修复：重新注册触摸监听
+     *
+     * GSY 的 setUp/startPlayLogic 可能覆盖我们在 playerView 上设置的 OnTouchListener。
+     * 在 onPrepared 回调后重新注册，确保手势检测正常工作。
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    private fun reRegisterTouchListener() {
+        if (!needReRegisterTouchListener) return
+        needReRegisterTouchListener = false
+        val pv = _playerView ?: return
+        // Bug修复：reRegisterTouchListener 必须与 initGestureDetector 行为一致
+        // 之前只注册了 gestureDetector + scaleGestureDetector，丢失了双指左右滑动检测
+        // 现统一调用 handlePlayerTouchEvent，确保所有触摸逻辑一致
+        // 双指事件消费（阻止 GSY 拦截），单指事件交给 GSY 处理
+        pv.setOnTouchListener { _, event ->
+            val x = event.rawX.toInt()
+            val y = event.rawY.toInt()
+            if (!isTouchOnControls(x, y)) {
+                handlePlayerTouchEvent(event)
+            } else {
+                false
+            }
+        }
+    }
+
+    private fun showSpeedMenu(anchor: View) {
+        val popup = PopupMenu(requireContext(), anchor)
+        val speeds = floatArrayOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f, 3f, 4f, 5f, 10f)
+        val labels = arrayOf("0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x", "3.0x", "4.0x", "5.0x", "10x")
+        labels.forEachIndexed { index, label ->
+            popup.menu.add(0, index, index, label)
+        }
+        popup.setOnMenuItemClickListener { item ->
+            val speed = speeds[item.itemId]
+            val pv = _playerView ?: return@setOnMenuItemClickListener false
+            pv.setSpeed(speed, true)
+            true
+        }
+        popup.show()
+    }
+
+    /**
+     * 阶段5：打开综合设置面板（BottomSheet）
+     *
+     * 注入播放器引用和回调给面板，面板通过回调委托 Activity 处理菜单功能。
+     * Activity 保存面板引用，用于 VIDEO_PLAY_ERROR 事件同步调试日志。
+     */
+    private fun showSettingsPanel() {
+        val activity = activity ?: return
+        val panel = VideoSettingsPanel.newInstance()
+        panel.playerView = _playerView
+        panel.callback = activity as? VideoSettingsPanel.SettingsPanelCallback
+        // 通知 Activity 保存面板引用（用于调试日志同步）
+        (activity as? VideoPlayerActivity)?.settingsPanel = panel
+        panel.show(activity.supportFragmentManager, VideoSettingsPanel.TAG)
+    }
+
+    companion object {
+        private const val ARG_EPISODE_INDEX = "episode_index"
+
+        fun newInstance(index: Int): VideoFragment {
+            return VideoFragment().apply {
+                arguments = Bundle().apply { putInt(ARG_EPISODE_INDEX, index) }
+            }
+        }
+    }
+}
