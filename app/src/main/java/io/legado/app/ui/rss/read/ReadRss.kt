@@ -85,7 +85,6 @@ object ReadRss {
             VideoPlay.rssNextPageUrl = nextPageUrl
             VideoPlay.rssArticlePage = page
             VideoPlay.rssArticlesHasMore = !nextPageUrl.isNullOrBlank()
-            android.util.Log.d("SwipeTest", "ReadRss.readRss: 传递分页上下文 sortName=$sortName page=$page hasMore=${!nextPageUrl.isNullOrBlank()}")
             fragment.startActivity<VideoPlayerActivity> {
                 putExtra("sourceKey", rssArticle.origin)
                 putExtra("sourceType", SourceType.rss)

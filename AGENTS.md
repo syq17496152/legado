@@ -171,9 +171,40 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
 - `config.CRASH_PATTERNS` — 崩溃模式（基于失败案例扩展）
 - `ai_tests/templates/ai_prompt_template.j2` — 提示词模板
 
+### 🔴🔴 快速验证脚本层（V3.1，2026-07-11 新增）
+
+> **用户批评（2026-07-11）**："你的测试流程为什么老是来来回回的变动呢？难道就没有一些经验或者是固定流程的脚本可以沉淀到ai_test目录下么？！！！"
+>
+> **用户再次批评（2026-07-11）**："你还要反思为什么有了 ai_test 你为啥不去使用，需不需要在项目规范文件中加强说明"
+
+**根因反思**：`run_e2e.py` 面向"用例驱动全量测试"，需要完整用例解析+8类证据收集，流程太重不适合"快速L2验证某个功能"。`lib/` 模块是底层组件没有组合成快速验证脚本。导致 AI 每次在 `temp/` 目录从头创建临时脚本，用完就丢，下次又从头写。
+
+**解决方案**：`ai_tests/scripts/` 目录下4个固定脚本，覆盖完整测试流水线。
+
+| 脚本 | 步骤 | 用法 |
+|------|------|------|
+| [quick_build_install.py](./ai_tests/scripts/quick_build_install.py) | 1.编译+安装+L1 | `python ai_tests/scripts/quick_build_install.py` |
+| [import_rss_source.py](./ai_tests/scripts/import_rss_source.py) | 2.导入订阅源 | `python ai_tests/scripts/import_rss_source.py <json_path>` |
+| [l2_verify_video_player.py](./ai_tests/scripts/l2_verify_video_player.py) | 3.L2验证视频播放器 | `python ai_tests/scripts/l2_verify_video_player.py [--scenario SCENARIO] [--manual]` |
+| [swipe_test_log.py](./ai_tests/scripts/swipe_test_log.py) | 4.SwipeTest日志分析 | `python ai_tests/scripts/swipe_test_log.py [clear\|capture\|analyze]` |
+
+**SOP 文档**：[ai_tests/docs/fixed_test_workflow.md](./ai_tests/docs/fixed_test_workflow.md) — 测试前必读！
+
+### 🔴🔴🔴 ai_tests 使用强制规则（V3.1，2026-07-11 新增）
+
+| 规则 | 说明 |
+|------|------|
+| **测试必须用 ai_tests/scripts/** | 所有测试操作（编译/安装/L1/L2/日志分析）必须使用 `ai_tests/scripts/` 下的固定脚本 |
+| **禁止 temp/ 临时脚本** | ❌ 禁止在 `temp/` 目录创建任何测试脚本，违反即返工 |
+| **测试前必读 SOP** | 测试前必须先读取 `ai_tests/docs/fixed_test_workflow.md` |
+| **扩展不新建** | 新增测试场景时，扩展现有脚本（添加 `--scenario` 参数），禁止创建新脚本 |
+| **复用 config.py 常量** | 脚本必须 import config 常量（ADB_PATH/MEMU_ADB_HOST/PACKAGE 等），禁止硬编码路径 |
+| **venv Python** | 必须使用 `ai_tests\venv\Scripts\python.exe`，禁止公共 Python |
+| **全量测试用 run_e2e.py** | 需要全量用例测试时用 `run_e2e.py --tc all`，快速L2验证用 `scripts/` 下脚本 |
+
 ### 反模式
 
-❌ 跳过步骤 5.5 直接审核 / ❌ 不执行 5.5.1 源码影响分析 / ❌ 不读取 manual_cases.md 就标记完成 / ❌ V3 不触发 5.5.8 反馈闭环 / ❌ 不按 S14 设计用例（缺源码溯源字段）/ ❌ 直接修改 lib/ 固化层不通过 OpenSpec / ❌ V3 不沉淀失败案例到反馈闭环
+❌ 跳过步骤 5.5 直接审核 / ❌ 不执行 5.5.1 源码影响分析 / ❌ 不读取 manual_cases.md 就标记完成 / ❌ V3 不触发 5.5.8 反馈闭环 / ❌ 不按 S14 设计用例（缺源码溯源字段）/ ❌ 直接修改 lib/ 固化层不通过 OpenSpec / ❌ V3 不沉淀失败案例到反馈闭环 / ❌ **在 temp/ 目录创建临时测试脚本（必须用 ai_tests/scripts/ 固定脚本）** / ❌ **有了 ai_tests 基础设施不用，从头写临时脚本** / ❌ **测试前不读取 fixed_test_workflow.md SOP**
 ---
 
 ## 🔴🔴🔴 强制规则：书源/订阅源自测交付流程

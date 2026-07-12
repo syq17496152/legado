@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 视频播放器底部进度条（含缓冲进度）
+     三层：background(半透明黑) + secondaryProgress(半透明白缓冲进度) + progress(白色播放进度)
+     替代 GSY 默认的 video_progress.xml，增大可见性 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 背景 -->
+    <item android:id="@android:id/background">
+        <shape>
+            <solid android:color="#33000000" />
+            <size android:height="3dp" />
+        </shape>
+    </item>
+    <!-- 缓冲进度（secondaryProgress） -->
+    <item android:id="@android:id/secondaryProgress">
+        <clip>
+            <shape>
+                <solid android:color="#88FFFFFF" />
+                <size android:height="3dp" />
+            </shape>
+        </clip>
+    </item>
+    <!-- 播放进度（progress） -->
+    <item android:id="@android:id/progress">
+        <clip>
+            <shape>
+                <solid android:color="#FFFFFF" />
+                <size android:height="3dp" />
+            </shape>
+        </clip>
+    </item>
+</layer-list>

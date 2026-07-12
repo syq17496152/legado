@@ -52,3 +52,4 @@ ai_tests/reports/
 ai_tests/__pycache__/
 ai_tests/cases/*/preconditions/
 ai_tests/lib/source_map.json.bak
+extracted/com/shuyu/gsyvideoplayer/GSYBaseActivityDetail.class

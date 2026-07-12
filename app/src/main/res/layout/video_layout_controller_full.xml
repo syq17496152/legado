@@ -188,10 +188,10 @@
         android:id="@+id/bottom_progressbar"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
-        android:layout_height="1.5dp"
+        android:layout_height="3dp"
         android:layout_alignParentBottom="true"
         android:max="100"
-        android:progressDrawable="@drawable/video_progress" />
+        android:progressDrawable="@drawable/bottom_progress_buffer" />
 
     <ImageView
         android:id="@+id/back_tiny"

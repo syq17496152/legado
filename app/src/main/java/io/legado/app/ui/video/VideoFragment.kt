@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.PopupMenu
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.fragment.app.Fragment
@@ -93,9 +94,7 @@ class VideoFragment : Fragment() {
     private var rvEpisodes: RecyclerView? = null
     private var rightButtons: LinearLayout? = null
     private var btnRewind: ImageButton? = null
-    private var btnMute: ImageButton? = null
     private var btnStar: ImageButton? = null
-    private var btnSpeed: ImageButton? = null
     private var btnSettings: ImageButton? = null
     private var btnForward: ImageButton? = null
     private var btnFullscreen: ImageButton? = null
@@ -116,7 +115,29 @@ class VideoFragment : Fragment() {
     private var singleFingerStartY = 0f
     private var isVerticalSwipe = false
 
-    // 设计文档：控件显隐由单击切换，无自动隐藏逻辑（移除 autoHideRunnable）
+    // ==================== F1: 缓冲进度条更新 ====================
+    /** GSY 底部进度条引用（用于更新 secondaryProgress 显示缓冲进度） */
+    private var bottomProgressbar: ProgressBar? = null
+    /** 缓冲进度更新 Handler（每 500ms 轮询 bufferedPercentage 更新 secondaryProgress） */
+    private val bufferUpdateHandler = Handler(Looper.getMainLooper())
+    private var bufferUpdateRunnable: Runnable? = null
+
+    // ==================== F2: 控件自动隐藏（3秒无操作后隐藏） ====================
+    /** 自动隐藏 Handler：控件显示 3 秒后自动切换到 PURE 态 */
+    private val autoHideHandler = Handler(Looper.getMainLooper())
+    private val autoHideRunnable = Runnable {
+        when (currentState) {
+            PlayState.NORMAL -> switchState(PlayState.PURE)
+            PlayState.FULLSCREEN -> {
+                if (controlsVisibleInFullscreen) {
+                    controlsVisibleInFullscreen = false
+                    hideControlsAnimated()
+                    _playerView?.setGsyControlVisibility(false)  // F2 修复：同步隐藏 GSY 原始控件
+                }
+            }
+            else -> { /* PURE 态无需处理 */ }
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -129,6 +150,8 @@ class VideoFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         _playerView = view.findViewById(R.id.playerView)
+        // F1: 获取 GSY 底部进度条引用（用于更新 secondaryProgress 显示缓冲进度）
+        bottomProgressbar = _playerView?.findViewById(R.id.bottom_progressbar)
 
         // 初始化悬浮控件
         initOverlayControls(view)
@@ -141,9 +164,12 @@ class VideoFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        cancelAutoHide()  // F2: 清理自动隐藏 Handler
+        stopBufferUpdate()  // F1: 停止缓冲进度更新
         stopProgressMonitor()  // 阶段8 F10：停止进度监听
         releasePlayer()
         _playerView = null
+        bottomProgressbar = null  // F1: 清理引用
         controlsLayer = null
         leftBottomContainer = null
         tvVideoTitle = null
@@ -151,9 +177,7 @@ class VideoFragment : Fragment() {
         rvEpisodes = null
         rightButtons = null
         btnRewind = null
-        btnMute = null
         btnStar = null
-        btnSpeed = null
         btnSettings = null
         btnForward = null
         btnFullscreen = null
@@ -190,6 +214,13 @@ class VideoFragment : Fragment() {
                 }
                 // 阶段8 F10：视频准备就绪后启动进度监听（80%触发预缓冲）
                 startProgressMonitor()
+                // F1: 启动缓冲进度更新（GSY 不更新 secondaryProgress，需手动更新）
+                startBufferUpdate()
+                // F2: 控件显示 3 秒后自动隐藏（与 GSY 播放条行为一致）
+                if (currentState == PlayState.NORMAL) {
+                    pv.setGsyControlVisibility(true)  // F2 修复：显示 GSY 原始控件 + 取消 GSY 的 dismissControlViewTimer，用我们的 scheduleAutoHide 统一管理
+                    scheduleAutoHide()
+                }
             }
         })
 
@@ -229,6 +260,8 @@ class VideoFragment : Fragment() {
     fun deactivatePlayer() {
         if (!isActivated) return
         isActivated = false
+        cancelAutoHide()  // F2: 停止自动隐藏
+        stopBufferUpdate()  // F1: 停止缓冲进度更新
         stopProgressMonitor()  // 阶段8 F10：停止进度监听
         _playerView?.onVideoPause()
     }
@@ -252,7 +285,6 @@ class VideoFragment : Fragment() {
                 val currentPosition = VideoPlay.videoManager.currentPosition
                 val duration = VideoPlay.videoManager.duration
                 if (duration > 0 && currentPosition.toFloat() / duration >= 0.8f) {
-                    android.util.Log.d("SwipeTest", "进度监听: 80%触发预缓冲 pos=$currentPosition dur=$duration")
                     VideoPlay.preloadNextArticleHtml(VideoPlay.rssArticleIndex)
                     // 触发一次后停止
                     progressMonitorRunnable = null
@@ -273,6 +305,58 @@ class VideoFragment : Fragment() {
         progressMonitorRunnable = null
     }
 
+    // ==================== F2: 控件自动隐藏（3秒无操作后隐藏） ====================
+
+    /**
+     * 启动自动隐藏计时（默认 3 秒后切换到 PURE 态）
+     *
+     * 用户需求变更：控件显示后过段时间自动隐藏，与 GSY 播放条/倍速行为一致。
+     * - NORMAL 态：3 秒后切换到 PURE（隐藏控件）
+     * - FULLSCREEN 态：3 秒后隐藏控件（controlsVisibleInFullscreen = false）
+     */
+    private fun scheduleAutoHide(delay: Long = 3000L) {
+        autoHideHandler.removeCallbacks(autoHideRunnable)
+        autoHideHandler.postDelayed(autoHideRunnable, delay)
+    }
+
+    /**
+     * 取消自动隐藏计时（手动隐藏或控件已隐藏时调用）
+     */
+    private fun cancelAutoHide() {
+        autoHideHandler.removeCallbacks(autoHideRunnable)
+    }
+
+    // ==================== F1: 缓冲进度更新 ====================
+
+    /**
+     * 启动缓冲进度更新（每 500ms 轮询 bufferedPercentage 更新 secondaryProgress）
+     *
+     * GSY 框架只更新 progress（播放进度），不更新 secondaryProgress（缓冲进度），
+     * 需手动调用 ExoPlayerManager.getBufferedPercentage() 更新 secondaryProgress。
+     */
+    private fun startBufferUpdate() {
+        stopBufferUpdate()
+        bufferUpdateRunnable = object : Runnable {
+            override fun run() {
+                val bp = bottomProgressbar ?: return
+                val percentage = VideoPlay.videoManager.bufferedPercentage
+                if (percentage >= 0) {
+                    bp.secondaryProgress = percentage
+                }
+                bufferUpdateHandler.postDelayed(this, 500)
+            }
+        }
+        bufferUpdateHandler.postDelayed(bufferUpdateRunnable!!, 500)
+    }
+
+    /**
+     * 停止缓冲进度更新
+     */
+    private fun stopBufferUpdate() {
+        bufferUpdateRunnable?.let { bufferUpdateHandler.removeCallbacks(it) }
+        bufferUpdateRunnable = null
+    }
+
     /**
      * 4.4 + 4.7 + 4.8 全屏状态变化通知
      *
@@ -289,6 +373,7 @@ class VideoFragment : Fragment() {
             // 4.8 横屏布局适配：全屏按钮始终可见（显示退出图标）
             btnFullscreen?.visible()
             updateFullscreenButtonIcon(true)
+            scheduleAutoHide()  // F2: 显示控件后 3 秒自动隐藏
         } else {
             // 退出横屏全屏态
             currentState = PlayState.NORMAL
@@ -300,6 +385,7 @@ class VideoFragment : Fragment() {
             if (pv != null && pv.currentVideoWidth > 0 && pv.currentVideoHeight > 0) {
                 updateFullscreenButtonVisibility(pv.currentVideoWidth, pv.currentVideoHeight)
             }
+            scheduleAutoHide()  // F2: 显示控件后 3 秒自动隐藏
         }
     }
 
@@ -351,7 +437,7 @@ class VideoFragment : Fragment() {
         if (currentState == newState) return
         currentState = newState
         applyState(newState)
-        // 设计文档：控件显隐由单击切换，无自动隐藏逻辑
+        // F2: 控件显隐由单击切换 + 3 秒自动隐藏（scheduleAutoHide 由调用方触发）
     }
 
     /**
@@ -362,10 +448,12 @@ class VideoFragment : Fragment() {
             PlayState.PURE -> {
                 // 纯净播放态：隐藏所有控件（带淡出动画）
                 hideControlsAnimated()
+                _playerView?.setGsyControlVisibility(false)  // F2 修复：同步隐藏 GSY 原始控件
             }
             PlayState.NORMAL -> {
                 // 竖屏常态：显示所有控件（带淡入动画）
                 showControlsAnimated()
+                _playerView?.setGsyControlVisibility(true)  // F2 修复：同步显示 GSY 原始控件
                 // P0 修复：显示控件后重新设置全屏按钮 visibility
                 // btn_fullscreen 默认 gone，需根据视频宽高比重新判断
                 // 防止 onPrepared 时序问题或容器显隐后子控件 visibility 丢失
@@ -378,10 +466,12 @@ class VideoFragment : Fragment() {
                 // 4.8 横屏全屏态：根据 controlsVisibleInFullscreen 决定显隐
                 if (controlsVisibleInFullscreen) {
                     showControlsAnimated()
+                    _playerView?.setGsyControlVisibility(true)  // F2 修复：同步显示 GSY 原始控件
                     // 全屏状态下确保全屏按钮可见（显示退出图标）
                     btnFullscreen?.visible()
                 } else {
                     hideControlsAnimated()
+                    _playerView?.setGsyControlVisibility(false)  // F2 修复：同步隐藏 GSY 原始控件
                 }
                 updateFullscreenButtonIcon(true)
             }
@@ -449,9 +539,7 @@ class VideoFragment : Fragment() {
         rvEpisodes = view.findViewById(R.id.rv_episodes)
         rightButtons = view.findViewById(R.id.right_buttons)
         btnRewind = view.findViewById(R.id.btn_rewind)
-        btnMute = view.findViewById(R.id.btn_mute)
         btnStar = view.findViewById(R.id.btn_star)
-        btnSpeed = view.findViewById(R.id.btn_speed)
         btnSettings = view.findViewById(R.id.btn_settings)
         btnForward = view.findViewById(R.id.btn_forward)
         btnFullscreen = view.findViewById(R.id.btn_fullscreen)
@@ -475,23 +563,10 @@ class VideoFragment : Fragment() {
         // R3 快进/快退按钮（读取配置的快进时间，默认60秒）
         initSkipButtons()
 
-        // 2.3 静音按钮
-        updateMuteButtonState()
-        btnMute?.setOnClickListener {
-            val pv = _playerView ?: return@setOnClickListener
-            pv.toggleMute()
-            updateMuteButtonState()
-        }
-
         // 2.4 收藏按钮
         updateStarButtonState()
         btnStar?.setOnClickListener {
             (activity as? VideoPlayerActivity)?.onFragmentStarClicked()
-        }
-
-        // 2.5 倍速按钮
-        btnSpeed?.setOnClickListener { v ->
-            showSpeedMenu(v)
         }
 
         // 2.6 设置按钮 → 阶段5：打开综合设置面板（BottomSheet）
@@ -504,8 +579,8 @@ class VideoFragment : Fragment() {
             (activity as? VideoPlayerActivity)?.toggleFullScreen()
         }
 
-        // 用户需求：初始状态为 NORMAL（控件显示，不自动隐藏）
-        // 左右滑动时隐藏控件到 PURE，单击恢复
+        // 用户需求：初始状态为 NORMAL（控件显示）
+        // F2: onPrepared 后启动 3 秒自动隐藏；左右滑动/单击可切换显隐
         currentState = PlayState.NORMAL
         applyState(PlayState.NORMAL)
     }
@@ -679,17 +754,27 @@ class VideoFragment : Fragment() {
         gestureDetector = GestureDetector(requireContext(), object : GestureDetector.SimpleOnGestureListener() {
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 when (currentState) {
-                    PlayState.PURE -> switchState(PlayState.NORMAL)
-                    PlayState.NORMAL -> switchState(PlayState.PURE)
+                    PlayState.PURE -> {
+                        switchState(PlayState.NORMAL)
+                        scheduleAutoHide()  // F2: 显示后 3 秒自动隐藏
+                    }
+                    PlayState.NORMAL -> {
+                        switchState(PlayState.PURE)
+                        cancelAutoHide()  // F2: 手动隐藏，取消计时
+                    }
                     PlayState.FULLSCREEN -> {
                         // 4.7 横屏全屏态：单击切换控件显隐（不退出全屏）
                         controlsVisibleInFullscreen = !controlsVisibleInFullscreen
                         if (controlsVisibleInFullscreen) {
                             showControlsAnimated()
+                            _playerView?.setGsyControlVisibility(true)  // F2 修复：同步显示 GSY 原始控件
                             btnFullscreen?.visible()
                             updateFullscreenButtonIcon(true)
+                            scheduleAutoHide()  // F2: 显示后 3 秒自动隐藏
                         } else {
                             hideControlsAnimated()
+                            _playerView?.setGsyControlVisibility(false)  // F2 修复：同步隐藏 GSY 原始控件
+                            cancelAutoHide()  // F2: 手动隐藏，取消计时
                         }
                     }
                 }
@@ -710,27 +795,35 @@ class VideoFragment : Fragment() {
             }
         )
 
-        // 在 playerView 上设置触摸监听
-        // controlsLayer 设置了 clickable=false，触摸事件会穿透到 playerView
-        // playerView 是 GSY 播放器，自带触摸处理（进度条等）
-        // 我们检测单击手势+双指缩放+双指左右滑动
-        // 双指事件消费（阻止 GSY 拦截），单指事件交给 GSY 处理
-        _playerView?.setOnTouchListener { _, event ->
+        // Bug修复（F2 触摸事件不到达根因）：
+        // GSY 在 GSYVideoControlView.init() 中对 mTextureViewContainer（即 R.id.surface_container，
+        // 全屏 RelativeLayout）同时调用 setOnClickListener(this) 和 setOnTouchListener(this)。
+        // 因此触摸事件被 surface_container 直接消费，playerView 的 OnTouchListener 永远不触发。
+        // 修复：将 OnTouchListener 设到 surface_container 上（GSY 实际接收触摸的视图），
+        // 替换 GSY 的 OnTouchListener，由我们统一处理手势（单击切换+双指缩放+双指滑动+文章切换）。
+        // controlsLayer 在 playerView 之上，其按钮（ImageButton）仍可正常接收触摸（buttons 是 clickable）；
+        // controlsLayer 的非按钮区域（clickable=false）穿透到 playerView → surface_container → 我们的 listener。
+        val touchTarget: View? = _playerView?.findViewById(R.id.surface_container) ?: _playerView
+        touchTarget?.setOnTouchListener { v, event ->
             // 检查触摸点是否在按钮区域内（按钮区域由控件自己处理）
             val x = event.rawX.toInt()
             val y = event.rawY.toInt()
-            if (!isTouchOnControls(x, y)) {
+            val onControls = isTouchOnControls(x, y)
+            val isArticleMode = !VideoPlay.rssArticles.isNullOrEmpty()
+                && VideoPlay.rssArticles!!.size > 1
+            if (!onControls) {
                 // 文章模式（上下滑动切换文章）：单指垂直滑动交给 ViewPager2 拦截
                 // 非文章模式（集数模式/单URL）：双指事件由我们消费，单指事件交给 GSY
-                val isArticleMode = !VideoPlay.rssArticles.isNullOrEmpty()
-                    && VideoPlay.rssArticles!!.size > 1
                 if (isArticleMode) {
                     handleArticleModeTouchEvent(event)
                 } else {
                     handlePlayerTouchEvent(event)
                 }
+                // 始终消费事件（返回 true），阻止 GSY 的 onClick（onClickBlank 回调）和
+                // surface_container.onTouchEvent 触发。R3 抖音风格不使用 GSY 的亮度/音量/进度滑动手势。
+                true
             } else {
-                false // 控件区域内不消费
+                false // 控件区域内不消费（让按钮处理；实际按钮在 controlsLayer 上层已消费）
             }
         }
     }
@@ -769,6 +862,7 @@ class VideoFragment : Fragment() {
                         && (dx1 > 0) == (dx2 > 0)
                     ) {
                         switchState(PlayState.PURE)
+                        cancelAutoHide()  // F2: 已隐藏控件，取消自动隐藏计时
                         isTwoFingerSwipe = false
                     }
                 }
@@ -825,6 +919,7 @@ class VideoFragment : Fragment() {
                         && (dx1 > 0) == (dx2 > 0)
                     ) {
                         switchState(PlayState.PURE)
+                        cancelAutoHide()  // F2: 已隐藏控件，取消自动隐藏计时
                         isTwoFingerSwipe = false
                     }
                 } else if (event.pointerCount == 1) {
@@ -890,13 +985,6 @@ class VideoFragment : Fragment() {
 
     // ==================== 按钮状态更新 ====================
 
-    private fun updateMuteButtonState() {
-        val pv = _playerView ?: return
-        btnMute?.setImageResource(
-            if (pv.isMutedPublic) R.drawable.ic_volume_off else R.drawable.ic_volume_up
-        )
-    }
-
     private fun updateStarButtonState() {
         val isStarred = VideoPlay.rssStar != null
         btnStar?.setImageResource(
@@ -924,8 +1012,12 @@ class VideoFragment : Fragment() {
     /**
      * Bug修复：重新注册触摸监听
      *
-     * GSY 的 setUp/startPlayLogic 可能覆盖我们在 playerView 上设置的 OnTouchListener。
+     * GSY 的 setUp/startPlayLogic 可能覆盖我们在 surface_container 上设置的 OnTouchListener。
      * 在 onPrepared 回调后重新注册，确保手势检测正常工作。
+     *
+     * 注意：OnTouchListener 必须设在 R.id.surface_container 上（不是 playerView），
+     * 因为 GSY 在 init() 中对 surface_container 调用了 setOnTouchListener(this)，
+     * surface_container 是实际接收触摸的视图。
      */
     @SuppressLint("ClickableViewAccessibility")
     private fun reRegisterTouchListener() {
@@ -937,37 +1029,25 @@ class VideoFragment : Fragment() {
         // 现统一调用 handlePlayerTouchEvent/handleArticleModeTouchEvent，确保所有触摸逻辑一致
         // 文章模式：单指垂直滑动交给 ViewPager2 拦截（切换文章），水平滑动交给 GSY（进度条）
         // 非文章模式：双指事件消费（阻止 GSY 拦截），单指事件交给 GSY 处理
-        pv.setOnTouchListener { _, event ->
+        val touchTarget: View? = pv.findViewById(R.id.surface_container) ?: pv
+        touchTarget?.setOnTouchListener { v, event ->
             val x = event.rawX.toInt()
             val y = event.rawY.toInt()
-            if (!isTouchOnControls(x, y)) {
-                val isArticleMode = !VideoPlay.rssArticles.isNullOrEmpty()
-                    && VideoPlay.rssArticles!!.size > 1
+            val onControls = isTouchOnControls(x, y)
+            val isArticleMode = !VideoPlay.rssArticles.isNullOrEmpty()
+                && VideoPlay.rssArticles!!.size > 1
+            if (!onControls) {
                 if (isArticleMode) {
                     handleArticleModeTouchEvent(event)
                 } else {
                     handlePlayerTouchEvent(event)
                 }
+                // 始终消费事件（返回 true），阻止 GSY 的 onClick 和 onTouchEvent
+                true
             } else {
                 false
             }
         }
-    }
-
-    private fun showSpeedMenu(anchor: View) {
-        val popup = PopupMenu(requireContext(), anchor)
-        val speeds = floatArrayOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f, 3f, 4f, 5f, 10f)
-        val labels = arrayOf("0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x", "3.0x", "4.0x", "5.0x", "10x")
-        labels.forEachIndexed { index, label ->
-            popup.menu.add(0, index, index, label)
-        }
-        popup.setOnMenuItemClickListener { item ->
-            val speed = speeds[item.itemId]
-            val pv = _playerView ?: return@setOnMenuItemClickListener false
-            pv.setSpeed(speed, true)
-            true
-        }
-        popup.show()
     }
 
     /**

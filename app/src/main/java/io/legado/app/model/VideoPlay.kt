@@ -245,7 +245,6 @@ object VideoPlay : CoroutineScope by MainScope(){
                     // 阶段8 F10：优先使用预缓冲的 HTML 缓存，跳过网络请求
                     val cachedHtml = preloadedHtmls[rssArticle.link]
                     val html = if (cachedHtml != null) {
-                        android.util.Log.d("SwipeTest", "startPlay R5: 命中预缓冲缓存")
                         cachedHtml
                     } else {
                         // 获取文章页面 HTML
@@ -816,12 +815,10 @@ object VideoPlay : CoroutineScope by MainScope(){
     fun loadMoreArticles(): Boolean {
         // 防重复加载
         if (isLoadingMoreArticles) {
-            android.util.Log.d("SwipeTest", "loadMoreArticles: 跳过（正在加载中）")
             return false
         }
         // 无更多文章
         if (!rssArticlesHasMore) {
-            android.util.Log.d("SwipeTest", "loadMoreArticles: 跳过（无更多文章）")
             return false
         }
         // 分页上下文缺失
@@ -829,13 +826,11 @@ object VideoPlay : CoroutineScope by MainScope(){
         val sortName = rssSortName ?: return false
         val pageUrl = rssNextPageUrl ?: rssSortUrl
         if (pageUrl.isNullOrBlank()) {
-            android.util.Log.d("SwipeTest", "loadMoreArticles: 跳过（无 pageUrl）")
             return false
         }
 
         isLoadingMoreArticles = true
         rssArticlePage++
-        android.util.Log.d("SwipeTest", "loadMoreArticles: 触发分页加载 page=$rssArticlePage")
 
         Rss.getArticles(loadScope, sortName, pageUrl, rssSource, rssArticlePage, null)
             .onSuccess(IO) { pair ->
@@ -844,7 +839,6 @@ object VideoPlay : CoroutineScope by MainScope(){
                 val newNextPageUrl = pair.second
                 if (articles.isEmpty()) {
                     rssArticlesHasMore = false
-                    android.util.Log.d("SwipeTest", "loadMoreArticles: 加载到空列表，标记无更多")
                     return@onSuccess
                 }
                 // 追加到内存列表
@@ -854,7 +848,6 @@ object VideoPlay : CoroutineScope by MainScope(){
                 // 更新下一页URL和是否有更多
                 rssNextPageUrl = newNextPageUrl
                 rssArticlesHasMore = !newNextPageUrl.isNullOrEmpty() && !rssSource.ruleNextPage.isNullOrEmpty()
-                android.util.Log.d("SwipeTest", "loadMoreArticles: 成功加载${articles.size}篇文章, 总数=${currentList.size}, hasMore=$rssArticlesHasMore")
                 // 通知 adapter 刷新（传递新增文章数量）
                 postEvent(EventBus.ARTICLES_LOADED, articles.size)
             }.onError {
@@ -892,7 +885,6 @@ object VideoPlay : CoroutineScope by MainScope(){
         if (!rssSource.ruleContent.isNullOrBlank()) return
 
         preloadedArticles.add(link)
-        android.util.Log.d("SwipeTest", "preloadNextArticleHtml: 预加载下一文章 index=$nextIndex")
 
         Coroutine.async(loadScope, IO) {
             val pageAnalyzeUrl = AnalyzeUrl(link, source = source, ruleData = nextArticle)
@@ -900,7 +892,6 @@ object VideoPlay : CoroutineScope by MainScope(){
             val html = res.body ?: ""
             if (html.isNotEmpty()) {
                 preloadedHtmls[link] = html
-                android.util.Log.d("SwipeTest", "preloadNextArticleHtml: 预加载完成 html.size=${html.length}")
             }
         }.onError {
             AppLog.put("预缓冲下一文章HTML失败: ${nextArticle.title}", it)
@@ -915,7 +906,6 @@ object VideoPlay : CoroutineScope by MainScope(){
     fun clearPreloadCache() {
         preloadedHtmls.clear()
         preloadedArticles.clear()
-        android.util.Log.d("SwipeTest", "clearPreloadCache: 缓存已清理")
     }
 
     /**

@@ -137,6 +137,112 @@ class VideoPlayer: StandardGSYVideoPlayer {
 
     public override fun lockTouchLogic() = super.lockTouchLogic()
 
+    /**
+     * F2-Bug3 标志：GSY 原始控件是否应保持可见
+     *
+     * 根因：GSY 的 changeUiToPlayingBufferingClear()（缓冲结束时调用）和
+     * changeUiToClear()（被 changeUiToPlayingClear/changeUiToPauseClear 调用）
+     * 会将 mTopContainer/mBottomContainer/mStartButton 设为 INVISIBLE，
+     * 覆盖我们通过 setGsyControlVisibility(true) 设置的 VISIBLE 状态。
+     *
+     * m3u8 流媒体播放时缓冲事件频繁，每次缓冲结束后 GSY 都会隐藏控件，
+     * 导致用户点击显示控件后很快又被 GSY 内部逻辑隐藏。
+     *
+     * 修复：此标志在 setGsyControlVisibility 中设置，override 的 changeUiToClear() 和
+     * changeUiToPlayingBufferingClear() 检查此标志，为 true 时在 super 调用后恢复控件可见性。
+     */
+    private var gsyControlsVisible = false
+
+    /**
+     * R3 F2 修复：供 VideoFragment 调用，同步切换 GSY 原始控件显隐
+     *
+     * F2 触摸事件修复后，VideoFragment 的 OnTouchListener 替换了 GSY 的 OnTouchListener，
+     * 导致 GSY 内部的 onClickUiToggle 不再被触发，GSY 原始控件（底部播放条/倍速/静音/设置/
+     * 暂停播放按钮）隐藏后无法通过点击重新显示。
+     *
+     * 此方法供 VideoFragment 在 applyState 中调用，同步切换 GSY 原始控件与我们自定义控件层。
+     *
+     * 根因修复（F2-Bug2）：直接设置 visibility=VISIBLE 不够——GSY 有内部 UI 状态机，
+     * hideAllWidget() 将 UI 状态设为"hide"后，GSY 后续事件（缓冲/seek/播放状态变化）会
+     * 通过 changeUiToXXX 覆盖我们的 visibility 设置，导致控件重新隐藏。
+     * 正确做法：调用 GSY 标准 changeUiToPlayingShow()/changeUiToPauseShow() 切换 UI 状态。
+     *
+     * 根因修复（F2-Bug3）：即使调用了 changeUiToPlayingShow()，m3u8 流媒体缓冲结束时
+     * GSY 会调用 changeUiToPlayingBufferingClear() 将控件设为 INVISIBLE。
+     * 通过 gsyControlsVisible 标志 + override changeUiToClear/changeUiToPlayingBufferingClear
+     * 确保 GSY 内部状态变化不覆盖我们的显隐设置。
+     *
+     * 注意：不启动 GSY 的 dismissControlViewTimer，使用 VideoFragment 的 scheduleAutoHide
+     * 统一管理自动隐藏，避免两套计时器不同步。
+     *
+     * @param show true=显示GSY原始控件，false=隐藏GSY原始控件
+     */
+    fun setGsyControlVisibility(show: Boolean) {
+        gsyControlsVisible = show  // F2-Bug3：设置标志供 override 方法检查
+        if (show) {
+            // 调用 GSY 标准 UI 切换方法，正确设置 UI 状态并显示所有控件
+            // 直接设置 visibility 不够：GSY 的 UI 状态机仍是"hide"状态，
+            // 后续事件（缓冲/seek/播放状态变化）会通过 changeUiToXXX 覆盖
+            when (mCurrentState) {
+                CURRENT_STATE_PAUSE -> {
+                    changeUiToPauseShow()
+                }
+                CURRENT_STATE_PLAYING -> {
+                    changeUiToPlayingShow()
+                }
+                else -> {
+                    // 其他状态（PREPARING/NORMAL/ERROR等）直接设置 visibility
+                    mTopContainer?.visibility = VISIBLE
+                    mBottomContainer?.visibility = VISIBLE
+                    mStartButton?.visibility = VISIBLE
+                }
+            }
+            // 取消 GSY 自带的 dismissControlViewTimer
+            // changeUiToPlayingShow/changeUiToPauseShow 会启动 dismissControlViewTimer，
+            // 我们用自己的 scheduleAutoHide 统一管理自动隐藏
+            cancelDismissControlViewTimer()
+        } else {
+            hideAllWidget()  // 隐藏所有 GSY 原始控件（内部会 cancelDismissControlViewTimer）
+        }
+    }
+
+    /**
+     * F2-Bug3 修复：override changeUiToPlayingBufferingClear
+     *
+     * GSY 在 m3u8 流媒体缓冲结束时调用此方法，将 mTopContainer/mBottomContainer/mStartButton
+     * 设为 INVISIBLE。当 gsyControlsVisible=true 时（用户要求控件可见），在 super 调用后
+     * 恢复这三个容器的可见性，防止 GSY 内部缓冲状态变化覆盖用户的显隐设置。
+     *
+     * 同帧内先隐藏再恢复，不会产生视觉闪烁。
+     */
+    override fun changeUiToPlayingBufferingClear() {
+        super.changeUiToPlayingBufferingClear()
+        if (gsyControlsVisible) {
+            // 缓冲结束后恢复控件可见性，防止 GSY 内部逻辑覆盖用户的"显示控件"设置
+            mTopContainer?.visibility = VISIBLE
+            mBottomContainer?.visibility = VISIBLE
+            mStartButton?.visibility = VISIBLE
+        }
+    }
+
+    /**
+     * F2-Bug3 修复：override changeUiToClear
+     *
+     * changeUiToClear 被 changeUiToPlayingClear() 和 changeUiToPauseClear() 调用，
+     * 将 mTopContainer/mBottomContainer/mStartButton 设为 INVISIBLE。
+     * changeUiToPlayingClear/PauseClear 由 GSY 的 dismissControlViewTimer 触发
+     * （我们通过 cancelDismissControlViewTimer 取消），但作为安全兜底，
+     * 当 gsyControlsVisible=true 时仍恢复控件可见性。
+     */
+    override fun changeUiToClear() {
+        super.changeUiToClear()
+        if (gsyControlsVisible) {
+            mTopContainer?.visibility = VISIBLE
+            mBottomContainer?.visibility = VISIBLE
+            mStartButton?.visibility = VISIBLE
+        }
+    }
+
     override fun init(context: Context) {
         super.init(context)
         initView()

@@ -213,7 +213,6 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
             val position = adapter.getItems().indexOfFirst { it.link == link }
             if (position >= 0) {
                 binding.recyclerView.scrollToPosition(position)
-                android.util.Log.d("SwipeTest", "RssArticlesFragment.onResume: 位置记忆滚动到 position=$position")
             }
         }
     }

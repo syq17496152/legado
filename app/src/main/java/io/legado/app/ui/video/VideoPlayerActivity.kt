@@ -1220,7 +1220,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         observeEvent<Int>(EventBus.ARTICLES_LOADED) { addedCount ->
             val oldCount = videoPagerAdapter?.itemCount ?: 0
             videoPagerAdapter?.notifyItemRangeInserted(oldCount, addedCount)
-            android.util.Log.d("SwipeTest", "ARTICLES_LOADED: 通知 adapter 插入 $addedCount 篇文章 (oldCount=$oldCount)")
         }
 
         observeEvent<String>(EventBus.VIDEO_PLAY_ERROR) {
@@ -1239,7 +1238,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             // 订阅源模式：保存位置记忆 + 清理缓存和文章列表防止内存泄漏
             // 阶段8 F11：保存退出时正在看的文章 link，供 RssArticlesFragment.onResume 滚动定位
             VideoPlay.lastPlayedArticleLink = VideoPlay.rssArticles?.getOrNull(VideoPlay.rssArticleIndex)?.link
-            android.util.Log.d("SwipeTest", "finish: 保存位置记忆 link=${VideoPlay.lastPlayedArticleLink?.takeLast(20)}")
             // 阶段8 F10：清理预缓冲缓存
             VideoPlay.clearPreloadCache()
             // 阶段8 F9：清理分页加载上下文
