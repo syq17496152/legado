@@ -1,10 +1,12 @@
 package io.legado.app.help.crypto
 
+import android.util.Log
 import androidx.annotation.Keep
 import cn.hutool.core.codec.Base64
 import cn.hutool.core.io.IoUtil
 import cn.hutool.core.util.HexUtil
 import cn.hutool.crypto.symmetric.SymmetricCrypto
+import io.legado.app.constant.AppLog
 import io.legado.app.utils.EncoderUtils
 import io.legado.app.utils.isHex
 import java.io.InputStream
@@ -42,7 +44,16 @@ class SymmetricCryptoAndroid(
         } else {
             Base64.decode(data)
         }
-        return decrypt(bytes)
+        return try {
+            decrypt(bytes)
+        } catch (e: Exception) {
+            // P1-2.1: 捕获加密解密异常（IllegalBlockSizeException/BadPaddingException 等）
+            // 记录日志并返回空 ByteArray，避免异常传播导致播放崩溃
+            val algoName = this.javaClass.simpleName
+            AppLog.put("解密失败: algorithm=${algoName}, dataLen=${data.length}, exception=${e.javaClass.simpleName}", e)
+            Log.d("RssDecrypt", "decrypt failed: algo=${algoName}, dataLen=${data.length}, exception=${e.javaClass.simpleName}")
+            ByteArray(0)
+        }
     }
 
     // 显式 override decrypt(InputStream)，确保 Rhino 能找到该方法。

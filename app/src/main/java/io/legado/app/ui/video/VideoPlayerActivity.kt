@@ -24,6 +24,7 @@ import android.widget.AdapterView
 import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.annotation.OptIn
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
@@ -38,6 +39,7 @@ import com.shuyu.gsyvideoplayer.listener.GSYSampleCallBack
 import com.shuyu.gsyvideoplayer.video.base.GSYVideoView
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookType
 import io.legado.app.constant.EventBus
 import io.legado.app.data.entities.Book
@@ -117,6 +119,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     private var videoPagerAdapter: VideoPagerAdapter? = null
     private var currentFragment: VideoFragment? = null
     internal var settingsPanel: VideoSettingsPanel? = null  // 阶段5：当前打开的设置面板引用
+    // P0-1.4: 视频播放错误对话框引用（防止重复弹窗）
+    private var errorDialog: AlertDialog? = null
     private var initIntroView = false
     private val introTextView by lazy {
         initIntroView = true
@@ -1229,8 +1233,112 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             }
             // R3 阶段5：同步更新设置面板的调试日志
             settingsPanel?.appendDebugLog(it)
+            // P0-1.4: 显示错误对话框，提供 WebView 降级选项（仅当存在建议时弹窗）
+            showVideoPlayErrorDialog(it)
         }
 
+    }
+
+    /**
+     * P0-1.4 / 1.7: 显示视频播放错误对话框（F1+F2: 四级降级链+决策日志）
+     *
+     * 四级降级链：
+     * Level 1: ExoPlayer（默认，含 E2 网络错误自动重试）
+     * Level 2: ExoPlayer 重试（用户手动，重置 retryCount）
+     * Level 3: WebView + HLS.js（降级方案）
+     * Level 4: 系统浏览器（最终兜底，适用于 mp4 等直链）
+     *
+     * 根据 playerType 决定行为：
+     * - playerType=2 (WEB_VIEW): 自动降级到 WebView，不弹窗
+     * - playerType=1 (EXO_PLAYER): 仅"重试"/"系统浏览器"/"取消"
+     * - playerType=0 (AUTO): "WebView播放"/"重试"/"系统浏览器"（可按 Back 取消）
+     *
+     * F2 决策日志：每个降级转换点记录 AppLog.put（永久日志）
+     * 防重复弹窗：若已有对话框显示中则跳过。
+     */
+    private fun showVideoPlayErrorDialog(errorInfo: String) {
+        if (errorDialog?.isShowing == true) return
+        // 无播放地址则不弹窗（仅记录日志）
+        val url = VideoPlay.videoUrl ?: return
+        val title = VideoPlay.videoTitle ?: ""
+        // P0-1.7: WEB_VIEW 模式下自动降级，不弹窗
+        if (VideoPlay.playerType == 2) {
+            // F2 决策日志：Level 1→3 自动降级（WEB_VIEW 强制模式）
+            AppLog.put("降级决策: ExoPlayer→WebView(auto, playerType=2), title=$title, urlLen=${url.length}")
+            switchCurrentToWebView(url, title)
+            return
+        }
+        // P0-1.7: EXO_PLAYER 强制模式(1) 不提供 WebView 选项；AUTO(0) 根据错误信息判断
+        val canUseWebView = errorInfo.contains("WebView") && VideoPlay.playerType != 1
+        errorDialog = alert(title = getString(R.string.video_play_error_title), message = errorInfo) {
+            if (canUseWebView) {
+                // AUTO 模式可降级：positive=WebView, neutral=重试, negative=系统浏览器（Back 可取消）
+                positiveButton(getString(R.string.use_webview_play)) {
+                    // F2 决策日志：Level 1→3 用户选择 WebView
+                    AppLog.put("降级决策: ExoPlayer→WebView(user choice), title=$title, urlLen=${url.length}")
+                    switchCurrentToWebView(url, title)
+                }
+                neutralButton(getString(R.string.retry)) {
+                    // F2 决策日志：Level 2 用户手动重试
+                    AppLog.put("降级决策: ExoPlayer 重试(user choice), title=$title")
+                    retryCurrentPlayback()
+                }
+                negativeButton(getString(R.string.open_in_browser)) {
+                    // F2 决策日志：Level 1→4 用户选择系统浏览器
+                    AppLog.put("降级决策: ExoPlayer→系统浏览器(user choice), title=$title, urlLen=${url.length}")
+                    openInSystemBrowser(url)
+                }
+            } else {
+                // 不可降级（EXO_PLAYER 强制模式或无 "WebView" 建议的错误）
+                positiveButton(getString(R.string.retry)) {
+                    // F2 决策日志：Level 2 用户手动重试
+                    AppLog.put("降级决策: ExoPlayer 重试(user choice), title=$title")
+                    retryCurrentPlayback()
+                }
+                neutralButton(getString(R.string.open_in_browser)) {
+                    // F2 决策日志：Level 1→4 用户选择系统浏览器
+                    AppLog.put("降级决策: ExoPlayer→系统浏览器(user choice), title=$title, urlLen=${url.length}")
+                    openInSystemBrowser(url)
+                }
+                negativeButton(getString(R.string.cancel)) { }
+            }
+        }
+    }
+
+    /**
+     * F1 Level 4: 用系统浏览器打开视频 URL（最终兜底方案）
+     *
+     * 适用场景：ExoPlayer 和 WebView 都无法播放时，交给系统浏览器处理。
+     * 注意：系统浏览器不支持自定义 Headers，仅适用于无需防盗链的直链（mp4 等）。
+     */
+    private fun openInSystemBrowser(url: String) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+        } catch (e: Exception) {
+            AppLog.put("系统浏览器打开失败: urlLen=${url.length}", e)
+        }
+    }
+
+    /**
+     * P0-1.4: 重试当前播放（ExoPlayer）
+     *
+     * 由错误对话框"重试"按钮调用，重新触发当前 Fragment 的 ExoPlayer 播放。
+     */
+    private fun retryCurrentPlayback() {
+        currentFragment?.retryExoPlayback()
+    }
+
+    /**
+     * P0-1.4: 当前 Fragment 切换到 WebView 播放模式
+     *
+     * 由错误对话框"使用WebView播放"按钮调用。
+     * 将当前 Fragment 切换为 WebView 播放（使用 skill V2 hls-video-player 模板）。
+     */
+    private fun switchCurrentToWebView(url: String, title: String) {
+        val headers = VideoPlay.currentPlayHeaders ?: emptyMap()
+        currentFragment?.switchToWebViewMode(url, title, headers)
     }
 
     override fun finish() {
@@ -1332,6 +1440,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     override fun onDestroy() {
         destroyWeb()
         super.onDestroy()
+        // P0-1.4: 清理错误对话框，防止窗口泄漏
+        errorDialog?.dismiss()
+        errorDialog = null
         if (initGetter) {
             glideImageGetter.clear()
         }

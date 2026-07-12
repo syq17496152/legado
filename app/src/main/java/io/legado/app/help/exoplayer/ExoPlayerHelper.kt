@@ -3,6 +3,7 @@ package io.legado.app.help.exoplayer
 import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.database.StandaloneDatabaseProvider
@@ -69,7 +70,7 @@ object ExoPlayerHelper {
     }
 
 
-    private val resolvingDataSource: ResolvingDataSource.Factory by lazy {
+    val resolvingDataSource: ResolvingDataSource.Factory by lazy {
         ResolvingDataSource.Factory(cacheDataSourceFactory) {
             var res = it
 
@@ -80,7 +81,11 @@ object ExoPlayerHelper {
                 try {
                     val headers: Map<String, String> = GSON.fromJson(urls[1], mapType)
                     okhttpDataFactory.setDefaultRequestProperties(headers)
-                } catch (_: Exception) {
+                    // P0 日志规范：Header 注入成功确认（Tag=ExoHeader）
+                    Log.d("ExoHeader", "Headers injected via SPLIT_TAG: keys=${headers.keys}, urlLen=${url.length}")
+                } catch (e: Exception) {
+                    // P0 日志规范：错误处理路径必须有日志
+                    Log.e("ExoHeader", "Failed to parse headers from SPLIT_TAG", e)
                 }
             }
 

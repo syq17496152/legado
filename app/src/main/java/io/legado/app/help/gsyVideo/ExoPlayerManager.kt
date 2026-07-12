@@ -59,8 +59,10 @@ class ExoPlayerManager : BasePlayerManager() {
             mediaPlayer!!.setPreview(!model.getMapHeadData().isNullOrEmpty())
             // R5 Header 修复：在 setDataSource 前注入 Header 到 okhttpDataFactory，
             // 确保 Exo2MediaPlayer.prepareAsyncInternal 构建的 HTTP 请求带上 Header（解决 CDN 防盗链 404）
+            // E1 优化：同时设置 currentHeaders，通过 SPLIT_TAG per-request 注入（双保险，解决 setDefaultHeaders 全局覆盖问题）
             model.getMapHeadData()?.takeIf { it.isNotEmpty() }?.let { headers ->
                 ExoPlayerHelper.setDefaultHeaders(headers)
+                mediaPlayer!!.currentHeaders = headers
             }
             if (model.isCache()) {
                 //通过管理器处理

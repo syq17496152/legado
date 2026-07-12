@@ -84,6 +84,30 @@ Phase 1: 准备阶段 → Phase 2: 分类对比 → Phase 3: 差异识别 → Ph
 
 ---
 
+## 🔴🔴🔴 子规范强制加载硬约束（V2.1，解决"缩减后AI不关注子规范"问题）
+
+> **历史教训**：以前尝试过缩减主规范，缩减后 AI 反而不去关注放在子规范文件中的规范。
+> **铁证（2026-07-13）**：spec-system-optimization 实施后上下文压缩，AI 执行 OpenSpec 任务时未加载 `openspec-workflow.md` 子规范，仅根据记忆执行，导致子规范强制加载机制未生效。
+
+**硬性约束**：
+
+1. **每个强制规则的"何时必须加载本子规范"触发场景是硬性约束**，不是建议。AI 在触发场景出现时，**必须用 Read 工具实际加载**对应子规范文件，禁止仅根据记忆执行。
+2. **加载验证机制**：AI 加载子规范后，必须在输出中引用子规范的具体条款（如"根据 openspec-workflow.md §X.Y"），证明已实际加载。
+3. **禁止"只移不引"**：移到子规范的内容，主规范必须有明确的"详见 [子规范]"引用。
+4. **上下文压缩恢复后必须重新加载**：压缩恢复后，AI 不仅依赖记忆，必须根据当前任务类型重新用 Read 工具加载相关子规范。
+
+**按任务类型必须加载的子规范**：
+
+| 任务类型 | 必须加载的子规范 | 触发条件 |
+|---------|----------------|---------|
+| OpenSpec 任务 | openspec-workflow.md | 新功能/优化/Bug修复/重构 |
+| 代码变更任务 | logging-during-refactoring.md + version-delivery-sync.md | 代码优化/改造/Bug修复 |
+| 复杂任务（50+文件） | complex-task-pipeline.md | 50+源文件分析/多文档验证 |
+| E2E 测试任务 | ai_e2e_testing_workflow.md | 代码变更后步骤5.5 |
+| 书源/订阅源任务 | SKILL.md | 书源/订阅源/RSS源/阅读Legado |
+
+---
+
 ## 🔴 强制规则：复杂任务处理流程
 
 > **当任务涉及 50+ 源文件分析、多份文档验证/修复、或任何单次上下文无法容纳的复杂任务时，必须严格遵循以下流程。禁止跳过任何阶段。**
@@ -161,16 +185,6 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
 
 `config.py`（固化层）含 CRASH_PATTERNS/DB_QUERIES 等常量，扩展需 OpenSpec 流程。
 
-### 持续迭代层（V3，AI 可自由追加）
-
-- `ai_tests/cases/` — 测试用例（MD + Python 双轨）
-- `ai_tests/lib/source_map.json` — Activity → TC-ID 映射（`--update-source-map`）
-- `ai_tests/docs/known_issues.md` — 陷阱库（M16 自动追加）
-- `ai_tests/docs/regression_history.md` — 回归历史（M16 自动追加）
-- `ai_tests/docs/module_matrix.md` — 覆盖率报告（`gen_module_matrix.py`）
-- `config.CRASH_PATTERNS` — 崩溃模式（基于失败案例扩展）
-- `ai_tests/templates/ai_prompt_template.j2` — 提示词模板
-
 ### 🔴🔴 快速验证脚本层（V3.1，2026-07-11 新增）
 
 > **用户批评（2026-07-11）**："你的测试流程为什么老是来来回回的变动呢？难道就没有一些经验或者是固定流程的脚本可以沉淀到ai_test目录下么？！！！"
@@ -202,19 +216,29 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
 | **venv Python** | 必须使用 `ai_tests\venv\Scripts\python.exe`，禁止公共 Python |
 | **全量测试用 run_e2e.py** | 需要全量用例测试时用 `run_e2e.py --tc all`，快速L2验证用 `scripts/` 下脚本 |
 
-### 反模式
+> **反模式（跳过5.5/不执行源码影响分析/不读取manual_cases/不触发反馈闭环/不按S14设计用例/改lib固化层不通过OpenSpec/temp/创建临时脚本/不读SOP）**：详见 [ai_e2e_testing_workflow.md](./docs/project-rules/ai_e2e_testing_workflow.md)
+>
+> **何时必须加载本子规范**：任何代码变更任务在 OpenSpec 步骤 5（实施）与步骤 6（检查点2）之间，必须执行步骤 5.5 AI 自动端到端测试。测试前必读 SOP：[ai_tests/docs/fixed_test_workflow.md](./ai_tests/docs/fixed_test_workflow.md)
 
-❌ 跳过步骤 5.5 直接审核 / ❌ 不执行 5.5.1 源码影响分析 / ❌ 不读取 manual_cases.md 就标记完成 / ❌ V3 不触发 5.5.8 反馈闭环 / ❌ 不按 S14 设计用例（缺源码溯源字段）/ ❌ 直接修改 lib/ 固化层不通过 OpenSpec / ❌ V3 不沉淀失败案例到反馈闭环 / ❌ **在 temp/ 目录创建临时测试脚本（必须用 ai_tests/scripts/ 固定脚本）** / ❌ **有了 ai_tests 基础设施不用，从头写临时脚本** / ❌ **测试前不读取 fixed_test_workflow.md SOP**
 ---
 
 ## 🔴🔴🔴 强制规则：书源/订阅源自测交付流程
 
 > **任何新生成或优化的书源/订阅源，必须经过自测通过后才能视为任务完成。禁止未经自测直接交付！**
 
+### 核心要求
+
 - **源码验证优先**：每一步规则编写必须先去 Legado 源码核实验证，不能凭经验臆测
 - **自测不通过=未完成**：任务状态不得标记为 completed，直到自测全部通过
 - **经验必须源码验证**：写入 skill 参考文档的经验教训，必须经过源码深度分析核实
 
+### 五阶段闭环工作流
+
+```
+Phase 1: 经验优先 → Phase 2: 构建规则 → Phase 3: 测试驱动 → Phase 4: 源码深挖 → Phase 5: 经验反哺
+```
+
+> **何时必须加载本子规范**：新生成/优化书源或订阅源任务。
 > **自测三阶段流水线 + 79 条 Rhino 陷阱清单 + 验证脚本**：详见 [SKILL.md](./.trae/skills/legado-source-creator/SKILL.md)
 
 ---
@@ -247,15 +271,7 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
 
 ### 检查点交互规范（强制）
 
-> **OpenSpec 三个检查点（1/2/3）必须使用 AskUserQuestion 工具与用户交互，禁止依赖 ExitPlanMode 的二元确认。违反用户交互强制规范将导致用户金钱损失与体验下降。**
-
-#### 三个检查点的统一交互要求
-
-| 检查点 | 触发时机 | 必须使用工具 | 禁止行为 |
-|--------|---------|------------|----------|
-| 🛑检查点1 | 步骤3 生成四文档后 | AskUserQuestion | ExitPlanMode 二元确认 |
-| 🛑检查点2 | 步骤5 实施完成后 | AskUserQuestion | ExitPlanMode 二元确认 |
-| 🛑检查点3 | 步骤8 文档同步前 | AskUserQuestion | ExitPlanMode 二元确认 |
+> **OpenSpec 三个检查点（1/2/3）必须使用 AskUserQuestion 工具与用户交互，禁止依赖 ExitPlanMode 的二元确认。**
 
 #### 三选项强制结构
 
@@ -269,131 +285,26 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
 
 #### Plan 模式 ExitPlanMode 前置确认
 
-Plan 模式下调用 ExitPlanMode 前，必须先通过 AskUserQuestion 获取用户明确确认，禁止直接调用 ExitPlanMode 强制二元确认：
-
+Plan 模式下调用 ExitPlanMode 前，必须先通过 AskUserQuestion 获取用户明确确认：
 - 用户选"通过" → ExitPlanMode（执行）
 - 用户选"需调整" → 据意见修订 → 重新 AskUserQuestion
 - 用户选"拒绝回退" → 回退上一阶段
 
-#### 检查点交互示例
-
-```javascript
-// 检查点1：用户审查设计
-AskUserQuestion({
-  questions: [
-    {
-      question: "OpenSpec 四文档（README/spec/design/tasks）已生成，请审查设计是否符合预期？",
-      header: "检查点1",
-      multiSelect: false,
-      options: [
-        { label: "通过（继续实施）", description: "设计符合预期，进入步骤5按 tasks.md 实施" },
-        { label: "需调整", description: "对部分内容有意见，通过 Other 输入具体修订意见" },
-        { label: "拒绝（回退需求分析）", description: "整体方向不符，回退到步骤2重新分析需求" }
-      ]
-    }
-  ]
-})
-```
-
-### 反模式
-
-❌ 直接写代码不生成文档 / 凭感觉不分析需求 / spec.md 无 Alternatives 和 Drawbacks / design.md 决策记录无 ADR 结构 / 未经用户确认就实施 / 完成不更新文档 / 不更新tasks.md
-❌ 检查点直接用 ExitPlanMode 二元确认（取消/执行），用户无法反馈审核意见
-❌ AskUserQuestion 只提供"通过/取消"两选项，缺少"需调整"和"拒绝回退"
-❌ Plan 模式跳过 AskUserQuestion 直接调用 ExitPlanMode
-❌ 用户选"需调整"后 AI 不重新发起检查点确认，直接进入下一阶段
-> **完整工作流程**：[openspec-workflow.md](./docs/project-rules/openspec-workflow.md)
+> **何时必须加载本子规范**：任何新增功能/优化功能/Bug修复/重构任务开始前。
+> **完整工作流程（检查点交互示例+反模式+文档状态流转+检查清单）**：[openspec-workflow.md](./docs/project-rules/openspec-workflow.md)
 
 ---
 
-## 🔴🔴🔴 强制规则：上下文压缩恢复流程
+## 🔴 上下文压缩恢复流程（由全局规范管理）
 
-> **对话恢复（上下文压缩后）的第一步，必须并行读取四件套，缺一不可进入工作。违反本规则将导致 AI 丢失关键信息（OpenSpec 文档路径、tasks.md 状态、AGENTS.md 强制规则、用户反馈），走入单文件方案而非 OpenSpec 四文档流程，且无视用户已明确的反馈。**
-
-### 恢复四件套（并行读取）
-
-| 序号 | 必读项 | 路径 / 获取方式 | 作用 |
-|------|--------|----------------|------|
-| 1 | AGENTS.md | `./AGENTS.md` | 强制规则、代码约束、Skill 触发条件 |
-| 2 | project_memory.md | memory 系统项目目录（`~/.trae-cn/memory/projects/{项目key}/project_memory.md`），可用 Grep 搜索 | 项目约束、历史决策、活跃 spec 清单、**用户反馈与决策记录（重点读取）** |
-| 3 | TaskList | 调用 TaskList 工具 | 任务状态唯一权威源 |
-| 4 | basic-memory | `search_notes(query=..., project="legado")` | 当前任务历史决策（若有） |
-
-读取顺序：四者必须**并行读取**（同一轮工具调用批次），禁止串行。四者全部就绪后方可进入工作。
-
-### 用户反馈持久化（强制）
-
-AI 在以下场景必须立即将用户反馈写入 project_memory.md 的"用户反馈与决策记录"小节（在 AI 继续任何工作前写入）：
-
-| 场景 | 持久化内容 | 写入时机 |
-|------|-----------|---------|
-| AskUserQuestion 响应 | 用户选择/Other 输入原文 + 触发问题 | 用户响应后、AI 继续工作前 |
-| 用户批评 | 批评原文 + AI 反思要点 | AI 回复前先写入 |
-| 用户纠正 | 纠正内容 + 被纠正的错误行为 | AI 调整行为前先写入 |
-| 用户明确决策 | 决策内容 + 决策上下文 | AI 执行决策前先写入 |
-
-格式：`[YYYY-MM-DD HH:MM] 类型 | 触发上下文摘要 | 用户原文/响应 | 影响`
-
-反馈记录保留最近 7 天，超期归档到 `archived_feedback/YYYYMM.md`（每周首次压缩恢复时执行归档）。
-
-### AskUserQuestion 响应处理（强制）
-
-用户通过 AskUserQuestion 给出响应后，AI 必须在继续工作前：
-
-1. **复述**用户的选择（"收到您选择：XXX"）
-2. 若用户选"需调整"并通过 Other 输入意见，必须**原文复述**意见
-3. 将响应**写入** project_memory.md 的"用户反馈与决策记录"小节
-4. 然后才能继续执行后续工作
-
-> 此规范防止上下文压缩后 AI 无视用户通过 AskUserQuestion 给出的响应（用户控诉："尤其是你提问后我给你的响应信息！！！"）。
-
-### 恢复后输出反馈清单（强制）
-
-压缩恢复读取四件套后，必须输出"已加载的用户反馈清单"，列出最近 7 天的用户反馈，并声明"以上反馈将在本次会话中严格遵守"。禁止静默读取后不输出。
-
-### 任务状态权威源规则
-
-| 数据源 | 角色 | 说明 |
-|--------|------|------|
-| **TaskList 工具** | 唯一权威源 | AI 判定任务进度、Phase 状态的唯一依据 |
-| **tasks.md** | 人类可读副本 | 双向同步：TaskList 变更 → 同步 tasks.md；tasks.md 人工修改 → 同步 TaskList |
-
-判定冲突时以 TaskList 为准，并将 tasks.md 同步至一致状态。压缩恢复后若发现 tasks.md 与 TaskList 不一致，先以 TaskList 为准继续工作，再异步同步 tasks.md。
-
-### basic-memory 持久化要求
-
-每个 Phase（含 OpenSpec 步骤、复杂任务 Phase 1-5、Skill Phase 1-5）完成后，必须将以下信息写入 basic-memory（project=legado）：
-
-- **关键决策**：本阶段做出的技术选型/方案决策及理由
-- **文件路径**：本阶段创建/修改的关键文件绝对路径
-- **任务状态**：当前 Phase 编号、完成标志、下一 Phase 入口
-- **OpenSpec 路径**：当前活跃 spec 的 `docs/specs/{功能名称}/` 完整路径
-
-写入后，上下文压缩恢复时可通过 basic-memory 快速定位上下文，无需重新探索。
-
-### 恢复流程
-
-1. 上下文压缩触发
-2. 并行读取四件套（AGENTS.md + project_memory.md 含反馈记录 + TaskList + basic-memory）
-3. 四者就绪？
-   - 是 → 解析 project_memory.md 的"用户反馈与决策记录"小节，筛选最近 7 天反馈
-     - 输出"已加载的用户反馈清单"，声明"以上反馈将在本次会话中严格遵守"
-     - 检查 basic-memory 是否有当前任务历史决策
-       - 有 → 加载历史上下文后从 TaskList 当前任务继续工作
-       - 无 → 从当前 TaskList 状态重新建立上下文
-   - 否 → 暂停工作，向用户报告缺失项（禁止强行续接）
-
-### 反模式
-
-❌ 压缩后直接续接工作，不读取 AGENTS.md / project_memory.md / TaskList / basic-memory 四件套
-❌ 压缩后不读取 project_memory.md 的"用户反馈与决策记录"小节，无视用户已明确的反馈
-❌ 压缩恢复后不输出"已加载的用户反馈清单"，静默读取后不确认理解
-❌ AskUserQuestion 响应后不复述、不持久化，直接继续工作（导致压缩后丢失用户响应）
-❌ 用户批评/纠正/决策后不立即写入 project_memory.md，只存在于对话上下文
-❌ 信任 tasks.md 而非 TaskList 作为任务状态权威源
-❌ Phase 完成后不写入 basic-memory，导致压缩后无法恢复关键决策与文件路径
-❌ 串行读取四件套（应并行），浪费时间且容易遗漏关键规范或用户反馈
-❌ 四件套缺失时仍强行续接工作，应暂停向用户报告并补齐
+> **本机制由全局规范 `~/.trae-cn/user_rules/core-spec.md` §1 统一管理。AI 必须遵守全局规范中的：压缩恢复四件套并行读取 + 用户反馈持久化 + AskUserQuestion 响应处理 + 恢复后输出反馈清单 + 任务状态权威源规则 + basic-memory 持久化要求。**
+>
+> **何时必须加载全局规范**：上下文压缩恢复时（强制）、AskUserQuestion 响应后（强制）、每个 Phase 完成后（持久化决策）。
+>
+> **项目特定配置**（供全局规范引用）：
+> - 项目主规范：`./AGENTS.md`
+> - 项目记忆：`c:\Users\shiyq\.trae-cn\memory\projects\-f-myself-github-WeAgentChat-temp-legado\project_memory.md`
+> - 经验索引：basic-memory（project=legado）
 
 ---
 
@@ -410,19 +321,55 @@ AI 在以下场景必须立即将用户反馈写入 project_memory.md 的"用户
 | **架构变更** | `docs/project-flow/` 相关文档 | 同步架构说明 |
 | **Skill 变更** | `.trae/skills/` 相关 SKILL.md | 同步能力说明 |
 
-### updateLog.md 格式
+### updateLog.md 格式（摘要）
 
 ```markdown
 **YYYY/MM/DD**
 - 变更说明1（面向用户，非技术细节）
-- 变更说明2
 ```
 
-条目追加在 `## cronet版本:` 行之后、已有条目之前。内容面向用户，用通俗语言描述可感知的变化，而非内部技术术语。
+> 条目追加在 `## cronet版本:` 行之后。内容面向用户，用通俗语言描述可感知的变化。
+> **更新时机**：编译前更新，不是交付阶段！
 
-### 反模式
+> **何时必须加载本子规范**：任何代码变更任务完成后（编译前必须更新）。
+> **反模式（改代码不写updateLog/只写"优化代码"无具体内容/新功能用户不知道/tasks.md完成但updateLog未更新/交付阶段才补写）+ 完整格式规范**：[version-delivery-sync.md](./docs/project-rules/version-delivery-sync.md)
 
-❌ 改代码不写 updateLog.md / updateLog.md 只写"优化代码，修复问题"无具体内容 / 新功能上线但用户不知道 / tasks.md 全部完成但 updateLog.md 未更新
+---
+
+## 🔴🔴🔴 强制规则：改造过程日志记录
+
+> **任何代码优化、改造、Bug 修复任务，在实施过程中必须适度添加日志，帮助定位分析问题、发现隐藏问题、避免遗漏问题。禁止改造代码不加日志！**
+
+### 核心要求
+
+| 要求 | 说明 |
+|------|------|
+| **改造必加日志** | 任何代码改造（优化/Bug修复/新功能）必须在关键路径添加日志 |
+| **永久+临时双轨** | 永久日志（错误处理/状态切换）用 `AppLog.put` 保留；临时日志（调试验证）用 `Log.d` 验证后移除 |
+| **日志覆盖错误分支** | 所有 `catch` 块和错误码处理必须有日志，禁止异常被静默吞掉 |
+| **日志内容安全** | 禁止输出完整 URL/视频域名/敏感字段，只保留路径模式（详见输出安全规范） |
+
+### 必须加日志的 10 类场景
+
+1. **播放器状态切换**（降级/播放/暂停/释放）
+2. **错误处理路径**（所有 catch 块和错误码）
+3. **网络请求关键节点**（发起/成功/失败/重试）
+4. **数据库异常**（查询失败/记录跳过/超大记录）
+5. **类型转换**（String→List/JSON解析）
+6. **加密解密**（解密失败/数据长度异常）
+7. **生命周期关键节点**（Fragment/WebView/Player 创建/销毁）
+8. **配置变更**（播放器类型切换/设置变更）
+9. **触摸事件流转**（事件分发/消费/穿透）
+10. **JS 交互**（JS调用Native/Native调用JS）
+
+### 临时日志使用流程（摘要）
+
+```
+添加 Log.d（统一Tag）→ 编译安装操作 → logcat抓取分析 → 发现问题修复 → 验证通过Grep移除 → 重新编译确认
+```
+
+> **何时必须加载本子规范**：代码优化/改造/Bug修复实施过程（必加日志）。
+> **完整规范（10类场景详细说明+日志级别+Tag规范+临时/永久双轨+反模式+验证检查清单）**：[logging-during-refactoring.md](./docs/project-rules/logging-during-refactoring.md)
 
 ---
 
@@ -432,131 +379,42 @@ AI 在以下场景必须立即将用户反馈写入 project_memory.md 的"用户
 
 **触发条件**：用户提到「书源」「订阅源/RSS源」「阅读/Legado」「网站→JSON」「修复/优化源」时，必须使用本 skill。
 
-### 5 阶段闭环工作流
+### 5 阶段闭环工作流（流程骨架）
 
 ```
 Phase 1: 经验优先 → Phase 2: 构建规则 → Phase 3: 测试驱动 → Phase 4: 源码深挖 → Phase 5: 经验反哺+代码进化
 (先查skill文档)    (按规则写源)      (JVM/Python验证)    (失败时深入源码)    (新经验写入skill+JVM/Python代码更新)
 ```
 
-### 参考文档（10 大目录）
-
-[references/](./.trae/skills/legado-source-creator/references/_INDEX.md)(4:规则语法+URL模板+实体字段+示例源) |
-[troubleshooting/](./.trae/skills/legado-source-creator/references/troubleshooting/_index.md)(6:陷阱排查) |
-[js-extensions/](./.trae/skills/legado-source-creator/references/js-extensions/_index.md)(11:JS扩展函数) |
-[js-patterns/](./.trae/skills/legado-source-creator/references/js-patterns/_index.md)(11:JS模式) |
-[special-scenarios/](./.trae/skills/legado-source-creator/references/special-scenarios/_index.md)(13:登录/验证码/加密/视频) |
-[source-analysis/](./.trae/skills/legado-source-creator/references/source-analysis/_index.md)(6:源码分析验证) |
-[site-features/](./.trae/skills/legado-source-creator/references/site-features/_INDEX.md)(5:站点特征与规则类型映射) |
-[rule-construction-guide/](./.trae/skills/legado-source-creator/references/rule-construction-guide/_index.md)(3:规则构建指南) |
-[known-fix-patterns/](./.trae/skills/legado-source-creator/references/known-fix-patterns/_index.md)(8:已知修复模式) |
-[cms-samples/](./.trae/skills/legado-source-creator/references/cms-samples/_INDEX.md)(2:CMS模板样本)
-
-### 书源/订阅源网络获取地址
-
-> **AI 获取真实书源/订阅源 JSON 用于测试验证时，必须从以下地址获取。禁止凭空构造测试数据！**
-
-| 类型 | 地址 | 说明 |
-|------|------|------|
-| **书源** | `https://www.yckceo.com/yuedu/shuyuans/index.html` | 社区书源分享平台，746+ 条合集，每条含用户名/源数量/下载量 |
-| **订阅源** | `https://www.yckceo.com/yuedu/rsss/index.html` | 社区订阅源分享平台，87+ 条合集，同结构 |
-
-**获取流程**：
-1. 访问列表页，按下载量/更新时间筛选合适的源合集
-2. 点击进入详情页（URL 格式：`/yuedu/shuyuans/content/id/{id}.html` 或 `/yuedu/rsss/content/id/{id}.html`）
-3. 从详情页获取 JSON 下载链接，下载 BookSource/RssSource JSON 文件
-4. 用 `quick-verify.py` / `verify-source.py` 验证 JSON 格式合法性
-5. 用 JVM 仿真器或 Python 客户端加载测试
-
-**筛选建议**：
-- 优先选择「已校验」「已效验」标记的源合集（校验过可用性）
-- 优先选择源数量 100-500 的合集（过大合集含大量失效源，过小合集覆盖不足）
-- 下载量 Top 10 的合集通常质量较高
-
-### 验证脚本与工具
-
-**验证脚本**：`quick-verify.py`(浅层) | `verify-source.py`(深度) | `debug-source.py`(端到端调试)
-**固化脚本**：`verify-decrypt.py` | `verify-selector.py` | `verify-image.py` | `analyze_site.py` | `verify-source.py`
-**辅助脚本**：`generate-js-doc.py` | `deep-analyze-js.py` | `html_fetcher.py`(HTML获取回退链) | `diagnose-failures.py`(失败诊断) | `run-full-regression.py`(全量回归) | `debug-single.py` | `fix_rule_articles.py` | `quick-test-sources.py` | `test-real-biquge.py` | `test-rss-single.py`
-**JVM 仿真器**：legado-jvm.jar（Rhino桥接+jsoup CSS+hutool加密+AnalyzeRule，统一JAR），覆盖率 85-90%
-**完整文档**：[SKILL.md](./.trae/skills/legado-source-creator/SKILL.md) | [AI_README.md](./.trae/skills/legado-source-creator/AI_README.md)
-
 ### 🔴🔴🔴 强制规则：Phase 完成标志与审计
 
 > **使用 legado-source-creator Skill 时，必须遵守以下规则。禁止跳过任何步骤。**
 
-1. **Phase 完成标志**：每个 Phase 完成后必须输出 `[PHASEX_COMPLETE]` 标志，格式如下：
+1. **Phase 完成标志**：每个 Phase 完成后必须输出 `[PHASEX_COMPLETE]` 标志
    - Phase 1: `[PHASE1_COMPLETE] basic-memory搜索:命中/未命中/降级, 陷阱检查:已检查/未检查`
    - Phase 3: `[PHASE3_COMPLETE] 测试覆盖率:X%, 高可信:N, 中可信:N, 需真机:N`
    - Phase 5: `[PHASE5_COMPLETE] 双写:完成/部分完成/失败, Schema验证:通过/未通过`
+2. **Phase 切换约束**：未输出 `[PHASEX_COMPLETE]` 标志，禁止进入下一 Phase
+3. **任务后审计**：书源/订阅源任务完成后，必须调用 `legado-workflow-auditor` Skill 审计
+4. **basic-memory 执行证据**：Phase 1/3/5 完成后必须将执行证据写入 basic-memory (project=legado)
 
-2. **Phase 切换约束**：如果未输出 `[PHASEX_COMPLETE]` 标志，禁止进入下一 Phase。
+### Skill 三件套协作（路由概要）
 
-3. **任务后审计**：书源/订阅源创建或优化任务完成后，必须调用 `legado-workflow-auditor` Skill 进行审计。
-
-4. **basic-memory 执行证据**：Phase 1/3/5 完成后必须将执行证据写入 basic-memory (project=legado)。
-
-### 经验引擎（basic-memory）
-
-> **basic-memory project=legado** 是经验索引层，存储陷阱、模式、验证结论的摘要+指针。完整内容保留在 references/ 目录。
-
-- **Phase 1 经验搜索**：`search_notes(query="{网站特征}", search_type="hybrid", project="legado")`
-- **Phase 5 经验反哺**：先更新 Skill 文档（权威源），再写入 basic-memory（索引层）
-- **权威源规则**：Skill 文档为准，basic-memory 为索引层
-- **降级路径**：basic-memory 不可用时手动 Grep 搜索 references/
-
-### Skill 三件套协作
-
-> 本项目包含三个相互协作的 Skill，形成"审查 skill → 创建源 → 审计执行"的完整闭环。
-
-#### 调用链路图
-
-```mermaid
-flowchart LR
-    A["legado-skill-auditor<br/>Skill 质量审查器<br/>触发词：审查skill/优化skill/全面审查/skill质量/审计skill<br/>输出：审查报告+修复+评分"]
-    -->|审查后创建| B["legado-source-creator<br/>书源/订阅源创建器<br/>触发词：书源/订阅源/阅读Legado/网站→JSON/修复优化源<br/>输出：BookSource/RssSource JSON 配置"]
-    -->|创建后审计| C["legado-workflow-auditor<br/>任务执行证据审计器<br/>触发条件：source-creator 任务完成后/用户明确要求审计时<br/>输出：审计报告（8项检查通过/失败）"]
-```
-
-#### 全局触发词表（去重）
-
-| 触发词 | 归属 Skill | 说明 |
-|--------|-----------|------|
-| 书源 | source-creator | 唯一归属 |
-| 订阅源/RSS源 | source-creator | 唯一归属 |
-| 阅读/Legado | source-creator | 唯一归属 |
-| 网站→JSON | source-creator | 唯一归属 |
-| 修复/优化源 | source-creator | 优化对象是"源"（书源/订阅源） |
-| 审计（任务执行） | workflow-auditor | 审计 Phase 执行证据 |
-| 审查报告 | workflow-auditor | 唯一归属 |
-| 执行证据检查 | workflow-auditor | 唯一归属 |
-| 审查skill | skill-auditor | 带"skill"限定词 |
-| 优化skill | skill-auditor | 带"skill"限定词 |
-| 全面审查 | skill-auditor | 指向 skill 本身质量 |
-| skill质量 | skill-auditor | 唯一归属 |
-| 审计skill | skill-auditor | 带"skill"限定词 |
-
-**冲突词优先级说明**：
-- **"审计"**：单独使用 → workflow-auditor（任务执行证据审计）；带"skill" → skill-auditor（skill 本身审计）
-- **"优化"**：带"源" → source-creator；带"skill" → skill-auditor
-- **"审查"**：带"skill"或"全面/深度"修饰 → skill-auditor；其他上下文 → 根据语境判断
-
-#### 上下文传递规范
-
-source-creator → workflow-auditor 传递以下上下文：
-- `source_name`：源名称（从 Phase 1 获取）
-- `source_type`：`book` 或 `rss`
-- `task_type`：`create` / `repair` / `optimize`
-- `phases_completed`：已完成的 Phase 列表（如 `[1, 3, 5]`）
-- `execution_logs`：各 Phase 的 basic-memory 执行证据 identifier
-
-#### 三件套 Skill 概览
+本项目三个 Skill 形成"审查 skill → 创建源 → 审计执行"闭环：
 
 | Skill | 路径 | 核心能力 |
 |-------|------|---------|
-| **legado-source-creator** | [.trae/skills/legado-source-creator/SKILL.md](./.trae/skills/legado-source-creator/SKILL.md) | 79 条陷阱检查、5 阶段闭环工作流、10 大参考目录、JVM 仿真器（legado-jvm.jar） |
-| **legado-workflow-auditor** | [.trae/skills/legado-workflow-auditor/SKILL.md](./.trae/skills/legado-workflow-auditor/SKILL.md) | 8 项执行证据检查、审计报告输出、basic-memory 降级路径 |
-| **legado-skill-auditor** | [.trae/skills/legado-skill-auditor/SKILL.md](./.trae/skills/legado-skill-auditor/SKILL.md) | 8 维度 42 检查点（L1/L2/L3 三层，合并后~30模块）、精准修复+回归验证 |
+| **legado-source-creator** | [.trae/skills/legado-source-creator/SKILL.md](./.trae/skills/legado-source-creator/SKILL.md) | 79 条陷阱检查、5 阶段闭环工作流、10 大参考目录、JVM 仿真器 |
+| **legado-workflow-auditor** | [.trae/skills/legado-workflow-auditor/SKILL.md](./.trae/skills/legado-workflow-auditor/SKILL.md) | 8 项执行证据检查、审计报告输出 |
+| **legado-skill-auditor** | [.trae/skills/legado-skill-auditor/SKILL.md](./.trae/skills/legado-skill-auditor/SKILL.md) | 8 维度 42 检查点（L1/L2/L3 三层）、精准修复+回归验证 |
+
+**冲突词优先级**：
+- **"审计"**：单独使用 → workflow-auditor；带"skill" → skill-auditor
+- **"优化"**：带"源" → source-creator；带"skill" → skill-auditor
+- **"审查"**：带"skill"或"全面/深度"修饰 → skill-auditor；其他根据语境判断
+
+> **何时必须加载本子规范**：用户提到书源/订阅源/RSS源/阅读Legado/网站→JSON/修复优化源/审计/审查skill等触发词时。
+> **完整 Skill 文档（10大参考目录+网络获取地址+验证脚本+经验引擎+触发词表+上下文传递规范+mermaid调用链路图）**：[SKILL.md](./.trae/skills/legado-source-creator/SKILL.md) | [AI_README.md](./.trae/skills/legado-source-creator/AI_README.md)
 
 ---
 
@@ -616,7 +474,7 @@ source-creator → workflow-auditor 传递以下上下文：
 | **所有文档统一索引** | [docs/INDEX.md](./docs/INDEX.md) |
 | **任务导航（14模块代码锚点）** | [docs/project-flow/task-navigation.md](./docs/project-flow/task-navigation.md) |
 | **构建/运行/测试命令** | [docs/project-flow/quick-reference.md](./docs/project-flow/quick-reference.md) |
-| **项目规范（8个规范文档）** | [docs/project-rules/](./docs/project-rules/)（含 [延伸版本对比方法论](./docs/project-rules/forks_comparison_methodology.md)） |
+| **项目规范（9个规范文档）** | [docs/project-rules/](./docs/project-rules/)（含 [延伸版本对比方法论](./docs/project-rules/forks_comparison_methodology.md) + [改造过程日志记录规范](./docs/project-rules/logging-during-refactoring.md)） |
 | **Git 仓库管理** | [docs/project-flow/git-repo-management.md](./docs/project-flow/git-repo-management.md) |
 | **规则引擎详解** | [docs/project-flow/architecture/rule-engine.md](./docs/project-flow/architecture/rule-engine.md) |
 | **Skill 参考文档索引** | [.trae/skills/legado-source-creator/references/_INDEX.md](./.trae/skills/legado-source-creator/references/_INDEX.md) |

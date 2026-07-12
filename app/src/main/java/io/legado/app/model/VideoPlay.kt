@@ -136,6 +136,14 @@ object VideoPlay : CoroutineScope by MainScope(){
     var videoUrl: String? = null //播放链接
     var singleUrl = false
     var videoTitle: String? = null
+    /** P0: 当前播放使用的 Headers（供 WebView 降级复用，避免重新构造 AnalyzeUrl） */
+    var currentPlayHeaders: Map<String, String>? = null
+    /** P0: 播放器类型（0=AUTO 自动选择, 1=EXO_PLAYER 强制内置播放器, 2=WEB_VIEW 强制 WebView） */
+    var playerType: Int
+        get() = videoPrefs.getInt("playerType", 0)
+        set(value) {
+            videoPrefs.edit { putInt("playerType", value) }
+        }
     var inBookshelf = true
     var isResumeFromFloat = false  // P0-1: 从悬浮窗恢复标志，Fragment.activatePlayer 据此决定 clonePlayState 还是 startPlay
     var source: BaseSource? = null
@@ -217,6 +225,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                 )
                 withContext(Main) {
                     player.mapHeadData = analyzeUrl.headerMap
+                    currentPlayHeaders = analyzeUrl.headerMap
                     // Bug8 修复：统一解析播放器页面 URL，避免 3003 错误
                     val url = VideoUrlExtractor.resolvePlayerPageUrl(analyzeUrl.url)
                     player.setUp(url, cachePlay, File(appCtx.externalCache, "exoplayer"), videoTitle)
@@ -266,6 +275,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                             }
                             withContext(Main) {
                                 player.mapHeadData = playAnalyzeUrl.headerMap
+                                currentPlayHeaders = playAnalyzeUrl.headerMap
                                 // Bug8 修复：统一解析播放器页面 URL
                                 val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(playAnalyzeUrl.url)
                                 player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
@@ -303,6 +313,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                             }
                             withContext(Main) {
                                 player.mapHeadData = fallbackUrl.headerMap
+                                currentPlayHeaders = fallbackUrl.headerMap
                                 // Bug8 修复：统一解析播放器页面 URL
                                 val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(fallbackUrl.url)
                                 player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
@@ -356,6 +367,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                         val playUrl = analyzeUrl.url
                         withContext(Main) {
                             player.mapHeadData = analyzeUrl.headerMap
+                            currentPlayHeaders = analyzeUrl.headerMap
                             // Bug8 修复：统一解析播放器页面 URL
                             val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(playUrl)
                             player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
@@ -422,6 +434,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                 val playUrl = analyzeUrl.url
                 withContext(Main) {
                     player.mapHeadData = analyzeUrl.headerMap
+                    currentPlayHeaders = analyzeUrl.headerMap
                     // Bug8 修复：统一解析播放器页面 URL
                     val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(playUrl)
                     player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), chapter.title)
@@ -933,6 +946,7 @@ object VideoPlay : CoroutineScope by MainScope(){
             }
             withContext(Main) {
                 player.mapHeadData = analyzeUrl.headerMap
+                currentPlayHeaders = analyzeUrl.headerMap
                 // Bug8 修复：统一解析播放器页面 URL
                 val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(analyzeUrl.url)
                 player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), episode.title)

@@ -1590,4 +1590,12 @@
     <string name="source_sort_5">By URL</string>
     <string name="source_layout">View</string>
     <string name="source_sort_label">Sort</string>
+    <!-- video-playback-issues-round1: ExoPlayer 失败降级 WebView 相关字符串 -->
+    <string name="video_play_error_title">视频播放失败</string>
+    <string name="use_webview_play">使用WebView播放</string>
+    <string name="switch_to_exo_player">切换回内置播放器</string>
+    <string name="player_type">播放器类型</string>
+    <string name="player_type_auto">自动</string>
+    <string name="player_type_exo">内置播放器</string>
+    <string name="player_type_webview">WebView播放器</string>
 </resources>

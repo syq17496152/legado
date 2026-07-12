@@ -2,6 +2,7 @@ package io.legado.app.model.analyzeRule
 
 import android.annotation.SuppressLint
 import android.util.Base64
+import android.util.Log
 import androidx.annotation.Keep
 import androidx.media3.common.MediaItem
 import cn.hutool.core.codec.PercentCodec
@@ -112,6 +113,7 @@ class AnalyzeUrl(
     private var method = RequestMethod.GET
     private var proxy: String? = null
     private var retry: Int = 0
+    private var networkRetryCount: Int = 0  // P2-3.1: 网络异常自动重试计数器（最多1次）
     private var useWebView: Boolean = false
     private var webJs: String? = null
     private var bodyJs: String? = null
@@ -234,6 +236,9 @@ class AnalyzeUrl(
                 urlOption = GSON.fromJsonObject<UrlOption>(urlOptionStr).getOrNull()
                 if (urlOption != null) {
                     log("链接参数 JSON 格式不规范，请改为规范格式")
+                } else {
+                    // P2-3.2: 两种模式都解析失败，记录警告不阻塞播放
+                    Log.d("AnalyzeUrl", "链接参数解析失败: optionLen=${urlOptionStr.length}, path=${url.take(50)}")
                 }
             }
             urlOption?.let { option ->
@@ -513,6 +518,20 @@ class AnalyzeUrl(
             strResponse.putCallTime(connectionTime.toInt())
             return strResponse
         } catch (e: Exception) {
+            // P2-3.1: 网络重试机制（Connection reset/Timeout 自动重试1次，间隔1秒）
+            val isNetworkError = e is java.net.SocketTimeoutException
+                || e is java.net.SocketException
+                || e is java.io.InterruptedIOException
+                || (e.message?.contains("Connection reset", true) == true)
+            if (isNetworkError && networkRetryCount < 1) {
+                networkRetryCount++
+                Log.d("AnalyzeUrl", "network retry: path=${url.take(50)}, exception=${e.javaClass.simpleName}, retry=$networkRetryCount")
+                kotlinx.coroutines.delay(1000)
+                return executeStrRequest(jsStr, sourceRegex, useWebView, isTest)
+            }
+            if (isNetworkError) {
+                Log.d("AnalyzeUrl", "network retry exhausted: path=${url.take(50)}, exception=${e.javaClass.simpleName}")
+            }
             if (!isTest) {
                 throw e
             }

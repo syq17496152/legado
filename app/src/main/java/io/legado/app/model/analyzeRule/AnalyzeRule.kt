@@ -1,6 +1,7 @@
 package io.legado.app.model.analyzeRule
 
 import android.text.TextUtils
+import android.util.Log
 import androidx.annotation.Keep
 import com.google.gson.internal.LinkedTreeMap
 import com.script.CompiledScript
@@ -435,7 +436,18 @@ class AnalyzeRule(
             }
         }
         result?.let {
-            return it as List<Any>
+            // P1-2.2: 类型容错，避免 String→List 强制转换抛 ClassCastException
+            return when (it) {
+                is List<*> -> it as List<Any>
+                is String -> {
+                    Log.d("AnalyzeRule", "getElements type wrap: String -> List (len=${it.length})")
+                    listOf(it)
+                }
+                else -> {
+                    Log.d("AnalyzeRule", "getElements type wrap: ${it.javaClass.simpleName} -> List")
+                    listOf(it)
+                }
+            }
         }
         return ArrayList()
     }

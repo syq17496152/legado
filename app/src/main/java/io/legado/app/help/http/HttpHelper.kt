@@ -130,6 +130,9 @@ val okHttpClient: OkHttpClient by lazy {
             Cronet.interceptor?.let {
                 builder.addInterceptor(it)
             }
+        } else {
+            // P2-3.3: Cronet 加载失败，回退到 OkHttp
+            android.util.Log.d("AnalyzeUrl", "Cronet install failed, fallback to OkHttp")
         }
     }
     builder.addInterceptor(DecompressInterceptor)

@@ -312,6 +312,24 @@ class VideoSettingsPanel : BottomSheetDialogFragment() {
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
+
+        // P0-1.8: 播放器类型 Spinner（0=自动 / 1=内置播放器 / 2=WebView）
+        val spPlayerType = view.findViewById<android.widget.Spinner>(R.id.sp_player_type)
+        val playerTypeLabels = listOf(
+            getString(R.string.player_type_auto),
+            getString(R.string.player_type_exo),
+            getString(R.string.player_type_webview)
+        )
+        spPlayerType?.adapter = ArrayAdapter(
+            requireContext(), android.R.layout.simple_spinner_item, playerTypeLabels
+        )
+        spPlayerType?.setSelection(VideoPlay.playerType.coerceIn(0, 2))
+        spPlayerType?.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                VideoPlay.playerType = position
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
     }
 
     private fun Float.toPressSpeedStr(): String {
