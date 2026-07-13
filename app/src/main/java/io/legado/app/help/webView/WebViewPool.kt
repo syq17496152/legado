@@ -3,6 +3,8 @@ package io.legado.app.help.webView
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.MutableContextWrapper
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebSettings
@@ -29,6 +31,8 @@ import kotlin.concurrent.withLock
 object WebViewPool {
     const val BLANK_HTML = "about:blank"
     const val DATA_HTML = "data:text/html;charset=utf-8;base64,"
+    // P1-C 修复：主线程 Handler，用于在非 UI 线程切回主线程销毁 WebView
+    private val mainHandler = Handler(Looper.getMainLooper())
     // 未使用的、已预初始化的WebView池 (使用栈结构，后进先出，复用缓存)
     private val idlePool = Stack<PooledWebView>()
     // 正在使用的WebView集合
@@ -192,8 +196,22 @@ object WebViewPool {
 
     /**
      * 安全销毁 WebView，最多重试 3 次
+     * P1-C 修复：WebView.destroy() 必须在主线程调用
+     * startCleanupTimer 在 Dispatchers.IO 协程中调用此方法，需 post 到主线程执行
+     * 证据：appLog-26-07-12 多次 "destroy failed after 3 attempts" +
+     *       "WebView method was called on thread 'DefaultDispatcher-worker-4'" (5次复发跨多日)
+     * 根因：WebView 单线程约束，所有方法必须在 UI 线程调用
      */
     private fun destroyWithRetry(webView: WebView, maxRetries: Int = 3) {
+        // 如果已在主线程，直接执行；否则 post 到主线程
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            destroyOnMainThread(webView, maxRetries)
+        } else {
+            mainHandler.post { destroyOnMainThread(webView, maxRetries) }
+        }
+    }
+
+    private fun destroyOnMainThread(webView: WebView, maxRetries: Int) {
         var attempt = 0
         while (attempt < maxRetries) {
             try {

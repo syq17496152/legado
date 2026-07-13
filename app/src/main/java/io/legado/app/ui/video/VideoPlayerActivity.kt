@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
@@ -156,7 +157,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         })
     }
     private var isNew = true
-    private var isFullScreen = false
+    internal var isFullScreen = false
     private var orientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     private var menuCustomBtn: MenuItem? = null
     private val bookSourceEditResult =
@@ -267,6 +268,16 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         setSupportActionBar(binding.titleBarNew.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setDisplayShowTitleEnabled(false)
+
+        // B1 修复：直接绑定返回按钮点击事件，绕过 onSupportNavigateUp 的 ActionBar 链路
+        // 根因：activity_video_player.xml 有两个 TitleBar（title_bar 在 legacyContainer + title_bar_new 在 viewPagerContainer），
+        // TitleBar.kt 的 attachToActivity() 在 onAttachedToWindow() 时自动调用 setSupportActionBar(toolbar)，
+        // 两个 TitleBar 都调用 setSupportActionBar 导致 ActionBar 引用混乱，onSupportNavigateUp 可能未被正确触发。
+        // setNavigationOnClickListener 直接绑定点击事件更可靠，与 ActionBar 状态无关。
+        binding.titleBarNew.setNavigationOnClickListener {
+            Log.d("VideoBack", "NavigationOnClickListener triggered, isFullScreen=$isFullScreen")
+            onBackPressedDispatcher.onBackPressed()
+        }
 
         // P0-1: 书源/单URL模式禁用滑动（单 Fragment），订阅源模式保持垂直滑动
         val isSinglePage = VideoPlay.book != null || VideoPlay.singleUrl
@@ -813,7 +824,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             if (useViewPagerMode) {
                 // R3 阶段4：ViewPager2 模式直接旋转 Activity，不使用 GSY startWindowFullscreen
                 requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                supportActionBar?.hide()
+                // F1 真全屏修复：用 titleBarNew.gone() 替代 supportActionBar?.hide()
+                // 根因：supportActionBar?.hide() 只隐藏 ActionBar 内容显示，但 TitleBar（AppBarLayout）
+                // 作为 viewPagerContainer（LinearLayout）子控件仍占据布局空间，
+                // 导致 ViewPager2 高度 = 屏幕高度 - TitleBar高度，playerView 无法铺满全屏。
+                // gone() 释放布局空间，ViewPager2 可铺满整个屏幕实现真全屏。
+                binding.titleBarNew.gone()
+                Log.d("VideoFS", "enter fullscreen: titleBarNew gone, isFullScreen=$isFullScreen")
                 currentFragment?.onFullScreenChanged(true)
             } else {
                 requestedOrientation = if (VideoPlay.isPortraitVideo) {
@@ -831,7 +848,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             if (useViewPagerMode) {
                 // R3 阶段4：ViewPager2 模式恢复竖屏
                 requestedOrientation = orientation
+                // F1 真全屏修复：恢复 TitleBar 显示（与 entering 的 gone() 对应）
+                binding.titleBarNew.visible()
                 supportActionBar?.show()
+                Log.d("VideoFS", "exit fullscreen: titleBarNew visible, isFullScreen=$isFullScreen")
                 currentFragment?.onFullScreenChanged(false)
             } else {
                 requestedOrientation = orientation

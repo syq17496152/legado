@@ -40,7 +40,8 @@ class VideoPlayer: StandardGSYVideoPlayer {
 
     private var episodeList: TextView? = null
     private var playbackSpeed: TextView? = null
-    private var playSpeed: Float = 1.0f
+    /** video-gesture-overhaul: 改为 internal 供 VideoFragment 访问（长按倍速恢复原速） */
+    internal var playSpeed: Float = 1.0f
     private var btnNext: ImageView? = null
     private var ivMute: ImageView? = null
     private var isMuted = false
@@ -290,7 +291,8 @@ class VideoPlayer: StandardGSYVideoPlayer {
         super.touchSurfaceUp()
     }
 
-    private fun setVideoSpeed(speed: Float) {
+    /** video-gesture-overhaul: 改为 internal 供 VideoFragment 访问（长按倍速设置） */
+    internal fun setVideoSpeed(speed: Float) {
         setSpeed(speed, true)
         if (mDanmakuView != null&& !mDanmakuView!!.isPaused) {
             mDanmakuContext!!.setScrollSpeedFactor(VideoPlay.danmakuSpeed - (speed - 1f) / 6f)

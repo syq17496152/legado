@@ -10,11 +10,14 @@ import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
+import android.graphics.Bitmap
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import io.legado.app.constant.AppConst
+import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.exception.NoStackTraceException
@@ -31,6 +34,8 @@ import io.legado.app.help.webView.WebJsExtensions.Companion.nameSource
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.model.Debug
+import io.legado.app.utils.GSON
+import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.get
 import io.legado.app.utils.runOnUI
 import kotlinx.coroutines.Dispatchers.IO
@@ -63,7 +68,9 @@ class BackstageWebView(
     private val cacheFirst: Boolean = false,
     private val timeout: Long? = null,
     private val result: String? = null,
-    private val isRule: Boolean = false
+    private val isRule: Boolean = false,
+    private val interceptAllRequests: Boolean = false,  // 新增：是否拦截所有请求（fetch/XHR），仅视频抓取场景启用
+    private val videoSniffJs: String? = null            // 新增：页面加载前注入的JS（视频嗅探用）
 ) {
 
     private val mHandler = Handler(Looper.getMainLooper())
@@ -320,6 +327,50 @@ class BackstageWebView(
 
     private inner class SnifferWebClient : WebViewClient() {
 
+        // 新增：拦截所有网络请求（包括 fetch/XHR），这是 onLoadResource 无法捕获的
+        // 参考 Fongmi/TV Sniffer.java 的 shouldInterceptRequest + isVideoFormat 多层判断
+        override fun shouldInterceptRequest(
+            view: WebView?,
+            request: WebResourceRequest?
+        ): WebResourceResponse? {
+            // 防御：destroy 后不再处理（shouldInterceptRequest 在工作线程调用，可能延迟）
+            if (closed || callback == null) return null
+            if (interceptAllRequests && request != null) {
+                val resUrl = request.url?.toString() ?: return null
+                // isVideoFormat 第1层：排除嵌套URL（参考 Sniffer.java isVideoFormat 第3步）
+                // 避免 ?url=https://cdn.com/video.m3u8 重定向URL误匹配
+                if (resUrl.contains("url=http") || resUrl.contains("v=http") || resUrl.contains(".html")) {
+                    return null  // 跳过嵌套URL，不拦截
+                }
+                // isVideoFormat 第2层：sourceRegex 匹配
+                sourceRegex?.let { regex ->
+                    if (resUrl.matches(regex.toRegex())) {
+                        try {
+                            val response = StrResponse(url!!, resUrl)
+                            callback?.onResult(response)
+                        } catch (e: Exception) {
+                            callback?.onError(e)
+                        }
+                        // 修复P0崩溃：shouldInterceptRequest 在工作线程调用（chromium 设计），
+                        // destroy() 内部 WebViewPool.release 操作 webView.setLayoutParams 等 View 方法，
+                        // 必须切到 UI 线程执行，否则抛 IllegalStateException: Calling View methods on another thread than the UI thread
+                        // 崩溃证据：crash-2026-07-13-14-53-47 + logcat L4258 shouldInterceptRequest(BackstageWebView.kt:354)
+                        AppLog.putInfo("R5网络抓包命中(工作线程), post到UI线程执行destroy")
+                        mHandler.post { destroy() }
+                    }
+                }
+            }
+            return null  // 返回 null 表示不拦截，让请求正常发出
+        }
+
+        // 新增：onPageStarted 注入 JS 嗅探脚本（覆写 fetch/XHR，参考 M3U8 Link Finder bookmarklet）
+        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+            super.onPageStarted(view, url, favicon)
+            videoSniffJs?.let { js ->
+                view?.evaluateJavascript(js, null)
+            }
+        }
+
         override fun shouldOverrideUrlLoading(
             view: WebView,
             request: WebResourceRequest
@@ -374,6 +425,12 @@ class BackstageWebView(
                 val runnable = LoadJsRunnable(webView, javaScript)
                 mHandler.postDelayed(runnable, 100L + delayTime)
             }
+            // 优化1+2：videoSniffJs 非空时，delayTime 后读取 window.__videoUrls__
+            // delayTime 从 onPageFinished 开始计时（自适应慢站点，页面加载时间不计入 delayTime）
+            if (!videoSniffJs.isNullOrEmpty()) {
+                val readRunnable = ReadVideoUrlsRunnable(webView, sourceRegex)
+                mHandler.postDelayed(readRunnable, 200L + delayTime)  // 200L 确保 JS hook 已执行
+            }
         }
 
         @SuppressLint("WebViewClientOnReceivedSslError")
@@ -392,6 +449,40 @@ class BackstageWebView(
             private val mWebView: WeakReference<WebView> = WeakReference(webView)
             override fun run() {
                 mWebView.get()?.loadUrl("javascript:${mJavaScript}")
+            }
+        }
+
+        // 优化1：新增 ReadVideoUrlsRunnable 读取 window.__videoUrls__，作为 shouldInterceptRequest 和 onLoadResource 的兜底
+        // 覆盖 video.src 直接赋值、MSE blob 等 shouldInterceptRequest/onLoadResource 无法捕获的场景
+        private inner class ReadVideoUrlsRunnable(
+            webView: WebView,
+            private val regex: String?
+        ) : Runnable {
+            private val mWebView: WeakReference<WebView> = WeakReference(webView)
+            override fun run() {
+                if (closed || callback == null) return  // 防御：destroy 后不处理
+                mWebView.get()?.evaluateJavascript("JSON.stringify(window.__videoUrls__ || [])") { result ->
+                    if (closed || callback == null) return@evaluateJavascript  // 防御
+                    if (result.isNullOrEmpty() || result == "null" || result == "[]") {
+                        AppLog.putInfo("R5网络抓包: window.__videoUrls__ 为空, 等待 shouldInterceptRequest 或超时")
+                        return@evaluateJavascript
+                    }
+                    val urls = GSON.fromJsonArray<String>(result).getOrNull()
+                    if (urls == null) {
+                        AppLog.putWarn("R5网络抓包: 解析 window.__videoUrls__ 失败")
+                        return@evaluateJavascript
+                    }
+                    for (url in urls) {
+                        if (regex != null && url.matches(regex.toRegex())) {
+                            AppLog.putInfo("R5网络抓包: window.__videoUrls__ 命中")
+                            val response = StrResponse(this@BackstageWebView.url!!, url)
+                            callback?.onResult(response)
+                            destroy()
+                            return@evaluateJavascript
+                        }
+                    }
+                    AppLog.putInfo("R5网络抓包: window.__videoUrls__ 有 ${urls.size} 个 URL 但无匹配")
+                }
             }
         }
 

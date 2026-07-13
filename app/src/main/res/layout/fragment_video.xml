@@ -67,6 +67,27 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
+        <!-- B1+ 修复：全屏模式下的悬浮返回按钮
+             根因：F1 真全屏修复中 titleBarNew.gone() 隐藏了整个 TitleBar 包括返回按钮，
+             导致全屏模式下返回按钮不可见、不可点击（日志证据：全屏9秒内无VideoBack日志触发）。
+             修复：添加独立的悬浮返回按钮，全屏时显示，参与 overlay controls 3秒自动隐藏。
+             非全屏时隐藏（由 titleBarNew 提供返回按钮）。 -->
+        <ImageButton
+            android:id="@+id/btn_back_overlay"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_overlay_button"
+            android:contentDescription="返回"
+            android:src="@drawable/ic_back"
+            android:scaleType="centerInside"
+            android:padding="12dp"
+            android:tint="#FFFFFF"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+
         <!-- 左下角区域：标题 + 线路选择器 + 集数选择器 + 全屏按钮
              占满宽度减去右侧按钮区域，内容左对齐，全屏按钮水平居中 -->
         <LinearLayout
@@ -122,25 +143,8 @@
 
         </LinearLayout>
 
-        <!-- 全屏按钮（独立于 leftBottomContainer，横屏视频一直显示）
-             用户需求：横屏视频要一直显示全屏按钮，不受控件显隐影响 -->
-        <ImageButton
-            android:id="@+id/btn_fullscreen"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginBottom="56dp"
-            android:background="@drawable/bg_overlay_button"
-            android:contentDescription="全屏"
-            android:src="@drawable/ic_fullscreen"
-            android:scaleType="centerInside"
-            android:padding="12dp"
-            android:tint="#FFFFFF"
-            android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
-
         <!-- 右侧竖直功能按钮容器（48dp按钮 / 16dp间距）
+             U1 优化：全屏按钮移入此容器作为第一个按钮，随整体3秒自动隐藏+单击重新显示
              用户需求：所有按钮图标统一白色（android:tint="#FFFFFF"） -->
         <LinearLayout
             android:id="@+id/right_buttons"
@@ -153,18 +157,22 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent">
 
-            <!-- 快退按钮 -->
+            <!-- 全屏按钮（U1：从视频中下方迁移到右侧功能区，随整体显隐；
+                 visibility=gone 默认隐藏，横屏视频时由 updateFullscreenButtonVisibility 设为 visible） -->
             <ImageButton
-                android:id="@+id/btn_rewind"
+                android:id="@+id/btn_fullscreen"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:layout_marginBottom="16dp"
                 android:background="@drawable/bg_overlay_button"
-                android:contentDescription="快退"
-                android:src="@drawable/ic_fast_rewind"
+                android:contentDescription="全屏"
+                android:src="@drawable/ic_fullscreen"
                 android:scaleType="centerInside"
                 android:padding="12dp"
-                android:tint="#FFFFFF" />
+                android:tint="#FFFFFF"
+                android:visibility="gone" />
+
+            <!-- video-gesture-overhaul: 快退按钮已移除，改为左右滑动 seek（R2/R3） -->
 
             <!-- 收藏按钮 -->
             <ImageButton
@@ -192,17 +200,7 @@
                 android:padding="12dp"
                 android:tint="#FFFFFF" />
 
-            <!-- 快进按钮 -->
-            <ImageButton
-                android:id="@+id/btn_forward"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="@drawable/bg_overlay_button"
-                android:contentDescription="快进"
-                android:src="@drawable/ic_fast_forward"
-                android:scaleType="centerInside"
-                android:padding="12dp"
-                android:tint="#FFFFFF" />
+            <!-- video-gesture-overhaul: 快进按钮已移除，改为左右滑动 seek（R2/R3） -->
 
         </LinearLayout>
 

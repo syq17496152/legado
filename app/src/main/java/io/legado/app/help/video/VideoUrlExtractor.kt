@@ -1,5 +1,9 @@
 package io.legado.app.help.video
 
+import io.legado.app.constant.AppLog
+import io.legado.app.data.entities.BaseSource
+import io.legado.app.help.http.BackstageWebView
+import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.utils.NetworkUtils
 import org.jsoup.Jsoup
 import java.net.URLDecoder
@@ -35,6 +39,75 @@ object VideoUrlExtractor {
     private val SCRIPT_JSON_REGEX =
         Regex("""["'](?:url|src|video|source|file)["']\s*:\s*["'](https?://[^"']+?\.(?:m3u8|mp4)(?:\?[^"']*)?)["']""", RegexOption.IGNORE_CASE)
 
+    // 视频流 URL 正则：用于 BackstageWebView SnifferWebClient.shouldInterceptRequest + onLoadResource 匹配网络请求
+    // 参考 Fongmi/TV Sniffer.java 的 SNIFFER 正则（生产环境验证方案）
+    // 匹配 m3u8/mp4/mkv/flv/mp3/m4a/aac/mpd + video/tos + rtmp，URL长度≥12 过滤短URL误匹配
+    // 移除 .ts：避免 HLS 分片先于 m3u8 主playlist 被捕获（ExoPlayer 需 m3u8 主索引，无法单独播放 .ts 分片）
+    // 注意：BackstageWebView 用 resUrl.matches(regex) 全匹配，需 .* 前后通配
+    val VIDEO_SOURCE_REGEX = """(?i).*(?:https?://[^\s]{12,}\.(?:m3u8|mp4|mkv|flv|mp3|m4a|aac|mpd)(?:\?.*)?|https?://.*?video/tos[^\s]*|rtmp:[^\s]+).*"""
+
+    // JS 嗅探脚本：5路 hook + Performance API 兜底，捕获播放器动态构造的视频请求
+    // 参考 M3U8 Link Finder bookmarklet + MediaSource Hook 技术 + react-native-intercepting-webview
+    // 在 onPageStarted 时注入（页面 JS 执行前），将请求 URL 存入 window.__videoUrls__
+    // 5路 hook：fetch / XHR / HTMLMediaElement.src setter / URL.createObjectURL / MediaSource.addSourceBuffer
+    // 由 BackstageWebView.ReadVideoUrlsRunnable 在 onPageFinished + delayTime 后读取 window.__videoUrls__
+    const val VIDEO_SNIFF_JS = """
+        (function() {
+            if (window.__videoUrls__) return;
+            window.__videoUrls__ = [];
+            function pushUrl(url) {
+                if (typeof url === 'string' && url.length > 0) window.__videoUrls__.push(url);
+            }
+            // 1. Hook fetch
+            var origFetch = window.fetch;
+            window.fetch = function(url, opts) {
+                pushUrl(typeof url === 'string' ? url : (url && url.url) ? url.url : '');
+                return origFetch.apply(this, arguments);
+            };
+            // 2. Hook XMLHttpRequest.open
+            var origOpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url) {
+                pushUrl(url);
+                return origOpen.apply(this, arguments);
+            };
+            // 3. Hook HTMLMediaElement.src setter（捕获 video.src = url 直接赋值）
+            try {
+                var desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
+                if (desc && desc.set) {
+                    Object.defineProperty(HTMLMediaElement.prototype, 'src', {
+                        set: function(v) { pushUrl(v); desc.set.call(this, v); },
+                        get: function() { return desc.get.call(this); },
+                        configurable: true
+                    });
+                }
+            } catch(e) {}
+            // 4. Hook URL.createObjectURL（检测 MSE blob URL 创建）
+            var origCOU = URL.createObjectURL;
+            URL.createObjectURL = function(obj) {
+                var u = origCOU.apply(this, arguments);
+                if (obj instanceof MediaSource) pushUrl('__MSE__:' + u);
+                return u;
+            };
+            // 5. Hook MediaSource.addSourceBuffer（捕获 MSE 流的 MIME 类型）
+            if (window.MediaSource) {
+                var origASB = MediaSource.prototype.addSourceBuffer;
+                MediaSource.prototype.addSourceBuffer = function(mimeType) {
+                    pushUrl('__MSE_MIME__:' + mimeType);
+                    return origASB.apply(this, arguments);
+                };
+            }
+            // 6. Performance API 兜底：页面加载后检查所有资源条目
+            function checkPerf() {
+                try {
+                    var entries = performance.getEntriesByType('resource');
+                    for (var i = 0; i < entries.length; i++) pushUrl(entries[i].name);
+                } catch(e) {}
+            }
+            if (document.readyState === 'complete') setTimeout(checkPerf, 1000);
+            else window.addEventListener('load', function() { setTimeout(checkPerf, 1000); });
+        })();
+    """
+
     /**
      * 综合提取视频 URL（五种方法去重）
      *
@@ -59,6 +132,75 @@ object VideoUrlExtractor {
             resolved.add(actualUrl)
         }
         return resolved.distinct()
+    }
+
+    /**
+     * 第二层抓取：BackstageWebView 网络抓包拦截
+     *
+     * 当 [extract] 静态解析未命中时调用。加载文章页面，监听浏览器网络请求，
+     * 正则匹配视频流 URL（m3u8/mp4/mkv/flv/mp3/m4a/aac/mpd + video/tos + rtmp，参考 Fongmi/TV SNIFFER），
+     * 绕过前端地址混淆、Blob 封装等伪装手段。
+     *
+     * 这是用户手填 V2 模板 `java.webViewGetSource(null, baseUrl, null, ".*\\.m3u8.*")` 的等价能力（增强版）。
+     * 增强点：shouldInterceptRequest 拦截 fetch/XHR（V2 没有）+ 5路 JS hook + 多格式支持 + Referer 自动注入。
+     *
+     * 必须在后台线程调用（BackstageWebView 内部 runOnUI，但 getStrResponse 是 suspend）。
+     *
+     * @param url 文章页面 URL
+     * @param source 订阅源（用于构造 AnalyzeUrl 获取 headerMap）
+     * @param delayTime 等待 JS 动态加载视频地址的时间（默认 3000ms，从 onPageFinished 开始计时）
+     * @param timeout 抓取超时时间（默认 15000ms，BackstageWebView 默认 60s 太长）
+     * @return 视频 URL（已匹配 sourceRegex），失败返回 null
+     */
+    suspend fun extractWithWebView(
+        url: String,
+        source: BaseSource?,
+        delayTime: Long = 3000L,
+        timeout: Long = 15000L
+    ): String? {
+        if (url.isBlank()) return null
+        AppLog.putInfo("R5网络抓包: 启动, ${sanitizeUrl(url)}, delayTime=${delayTime}, timeout=${timeout}")
+        // 构造 AnalyzeUrl 获取 headerMap（防盗链 Referer/UA/Cookie 等）
+        val headerMap = try {
+            val analyzeUrl = AnalyzeUrl(url, source = source, ruleData = null)
+            HashMap(analyzeUrl.headerMap).apply {
+                if (!keys.any { it.equals("Referer", ignoreCase = true) }) {
+                    put("Referer", url)
+                }
+            }
+        } catch (e: Exception) {
+            AppLog.putWarn("R5网络抓包: 构造 headerMap 失败, 使用空 headerMap", e)
+            hashMapOf("Referer" to url)
+        }
+        return runCatching {
+            BackstageWebView(
+                url = url,
+                headerMap = headerMap,
+                tag = source?.getKey(),
+                sourceRegex = VIDEO_SOURCE_REGEX,
+                delayTime = delayTime,
+                timeout = timeout,
+                interceptAllRequests = true,   // 新增：启用 shouldInterceptRequest 拦截 fetch/XHR
+                videoSniffJs = VIDEO_SNIFF_JS   // 新增：注入 JS 覆写 fetch/XHR
+            ).getStrResponse().body
+        }.onFailure { e ->
+            AppLog.putWarn("R5网络抓包失败: ${sanitizeUrl(url)}", e)
+        }.getOrNull()
+    }
+
+    /**
+     * URL 脱敏：用于日志输出，只保留 path 前40字符，不输出域名和 query 参数（含 token/鉴权）
+     * 符合 P0 安全规范：绝不输出完整 URL/视频域名/敏感字段
+     */
+    fun sanitizeUrl(url: String?): String {
+        if (url.isNullOrBlank()) return "empty"
+        return try {
+            val u = java.net.URL(url)
+            val path = u.path?.take(40) ?: ""
+            "path=${path}"
+        } catch (e: Exception) {
+            "raw=${url.take(30)}"
+        }
     }
 
     /**

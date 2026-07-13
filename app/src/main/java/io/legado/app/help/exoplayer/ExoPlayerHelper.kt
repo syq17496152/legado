@@ -100,9 +100,13 @@ object ExoPlayerHelper {
      */
     val cacheDataSourceFactory by lazy {
         //使用自定义的CacheDataSource以支持设置UA
+        // P2 修复：用 DefaultDataSource 包装 okhttpDataFactory，支持 file:// 等本地协议
+        // 根因：OkHttpDataSource 只支持 http/https，遇到 file:// 路径抛 HttpDataSourceException: Malformed URL
+        // 证据：crash-2026-07-13-14-53-47 + logcat L81452 OkHttpDataSource.makeRequest 请求 file://...mpd
+        // DefaultDataSource 会根据 URI scheme 自动选择 FileDataSource/OkHttpDataSource/ContentDataSource
         CacheDataSource.Factory()
             .setCache(cache)
-            .setUpstreamDataSourceFactory(okhttpDataFactory)
+            .setUpstreamDataSourceFactory(DefaultDataSource.Factory(appCtx, okhttpDataFactory))
             .setCacheReadDataSourceFactory(FileDataSource.Factory())
             .setCacheWriteDataSinkFactory(
                 CacheDataSink.Factory()

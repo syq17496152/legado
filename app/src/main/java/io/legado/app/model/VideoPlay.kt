@@ -302,24 +302,56 @@ object VideoPlay : CoroutineScope by MainScope(){
                             }
                         }
                         else -> {
-                            // R5 未找到分支：回退当前逻辑（用文章链接）+ AppLog 提示
-                            AppLog.put("R5自动抓取：未从文章页面找到视频URL，回退使用文章链接")
-                            val mUrl = rssArticle.link
-                            videoUrl = mUrl
-                            val fallbackUrl = AnalyzeUrl(mUrl, source = source, ruleData = rssArticle)
-                            // R5 Header 修复：注入 Referer
-                            if (!fallbackUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
-                                fallbackUrl.headerMap["Referer"] = rssArticle.link
-                            }
-                            withContext(Main) {
-                                player.mapHeadData = fallbackUrl.headerMap
-                                currentPlayHeaders = fallbackUrl.headerMap
-                                // Bug8 修复：统一解析播放器页面 URL
-                                val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(fallbackUrl.url)
-                                player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
-                                postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
-                                if (autoPlay) {
-                                    player.startPlayLogic()
+                            // R5 第二层降级：网络抓包拦截（BackstageWebView shouldInterceptRequest + JS hook）
+                            // 静态 HTML 解析未命中时，启动 WebView 加载页面，拦截 fetch/XHR/MediaSource 等动态请求
+                            // 适用场景：JS 动态构造视频 URL、播放器运行时请求 m3u8、CDN 鉴权 URL 等
+                            AppLog.putInfo("R5静态解析未命中, 启动网络抓包拦截, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
+                            val webViewUrl = VideoUrlExtractor.extractWithWebView(
+                                url = rssArticle.link,
+                                source = source,
+                                delayTime = 3000L,
+                                timeout = 15000L
+                            )
+                            if (webViewUrl != null) {
+                                // R5 网络抓包命中：走单 URL 播放流程（复用单 URL 分支模式）
+                                AppLog.putInfo("R5网络抓包命中, ${VideoUrlExtractor.sanitizeUrl(webViewUrl)}")
+                                videoUrl = webViewUrl
+                                val playAnalyzeUrl = AnalyzeUrl(webViewUrl, source = source, ruleData = rssArticle)
+                                // R5 Header 修复：视频 URL 来源页面为文章链接，Referer 防盗链必需
+                                if (!playAnalyzeUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
+                                    playAnalyzeUrl.headerMap["Referer"] = rssArticle.link
+                                }
+                                withContext(Main) {
+                                    player.mapHeadData = playAnalyzeUrl.headerMap
+                                    currentPlayHeaders = playAnalyzeUrl.headerMap
+                                    // Bug8 修复：统一解析播放器页面 URL
+                                    val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(playAnalyzeUrl.url)
+                                    player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
+                                    postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
+                                    if (autoPlay) {
+                                        player.startPlayLogic()
+                                    }
+                                }
+                            } else {
+                                // R5 第三层降级：网络抓包未命中，回退文章链接交给 ExoPlayer
+                                AppLog.putWarn("R5网络抓包未命中, 回退文章链接, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
+                                val mUrl = rssArticle.link
+                                videoUrl = mUrl
+                                val fallbackUrl = AnalyzeUrl(mUrl, source = source, ruleData = rssArticle)
+                                // R5 Header 修复：注入 Referer
+                                if (!fallbackUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
+                                    fallbackUrl.headerMap["Referer"] = rssArticle.link
+                                }
+                                withContext(Main) {
+                                    player.mapHeadData = fallbackUrl.headerMap
+                                    currentPlayHeaders = fallbackUrl.headerMap
+                                    // Bug8 修复：统一解析播放器页面 URL
+                                    val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(fallbackUrl.url)
+                                    player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
+                                    postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
+                                    if (autoPlay) {
+                                        player.startPlayLogic()
+                                    }
                                 }
                             }
                         }

@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.view.GestureDetector
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -21,6 +20,7 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.shuyu.gsyvideoplayer.listener.GSYSampleCallBack
+import com.shuyu.gsyvideoplayer.video.base.GSYVideoView
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.RssEpisode
@@ -101,11 +101,11 @@ class VideoFragment : Fragment() {
     private var tvRouteSelector: TextView? = null
     private var rvEpisodes: RecyclerView? = null
     private var rightButtons: LinearLayout? = null
-    private var btnRewind: ImageButton? = null
     private var btnStar: ImageButton? = null
     private var btnSettings: ImageButton? = null
-    private var btnForward: ImageButton? = null
     private var btnFullscreen: ImageButton? = null
+    // B1+ 修复：全屏模式下的悬浮返回按钮（F1 的 titleBarNew.gone() 隐藏了 TitleBar 返回按钮）
+    private var btnBackOverlay: ImageButton? = null
 
     /** 手势检测器：单击切换控件显隐 */
     private var gestureDetector: GestureDetector? = null
@@ -122,6 +122,16 @@ class VideoFragment : Fragment() {
     private var singleFingerStartX = 0f
     private var singleFingerStartY = 0f
     private var isVerticalSwipe = false
+
+    /** video-gesture-overhaul: 长按倍速状态标志（onLongPress 设置，ACTION_UP 恢复） */
+    private var isLongPressSpeed = false
+
+    /** video-gesture-overhaul: 左右滑动 seek 状态（R2: 替代快退/快进按钮） */
+    private var slideSeekStartX = 0f
+    private var isSeeking = false
+    private var seekTarget = 0L
+    /** 修复: ACTION_DOWN 时记录的播放位置，避免滑动过程中 currentPosition 持续变化导致 seekTarget 漂移 */
+    private var slideSeekStartPos = 0L
 
     // ==================== F1: 缓冲进度条更新 ====================
     /** GSY 底部进度条引用（用于更新 secondaryProgress 显示缓冲进度） */
@@ -195,11 +205,10 @@ class VideoFragment : Fragment() {
         tvRouteSelector = null
         rvEpisodes = null
         rightButtons = null
-        btnRewind = null
         btnStar = null
         btnSettings = null
-        btnForward = null
         btnFullscreen = null
+        btnBackOverlay = null
         gestureDetector = null
         scaleGestureDetector = null
         isActivated = false
@@ -468,6 +477,8 @@ class VideoFragment : Fragment() {
             // 4.8 横屏布局适配：全屏按钮始终可见（显示退出图标）
             btnFullscreen?.visible()
             updateFullscreenButtonIcon(true)
+            // B1+ 修复：全屏模式下显示悬浮返回按钮（titleBarNew 已被 gone() 隐藏）
+            btnBackOverlay?.visible()
             scheduleAutoHide()  // F2: 显示控件后 3 秒自动隐藏
         } else {
             // 退出横屏全屏态
@@ -475,6 +486,8 @@ class VideoFragment : Fragment() {
             controlsVisibleInFullscreen = true
             applyState(PlayState.NORMAL)
             updateFullscreenButtonIcon(false)
+            // B1+ 修复：退出全屏时隐藏悬浮返回按钮（titleBarNew 恢复显示提供返回按钮）
+            btnBackOverlay?.gone()
             // 恢复全屏按钮显示逻辑（仅横屏视频显示）
             val pv = _playerView
             if (pv != null && pv.currentVideoWidth > 0 && pv.currentVideoHeight > 0) {
@@ -611,16 +624,23 @@ class VideoFragment : Fragment() {
      * 获取所有悬浮控件视图列表
      *
      * P0 修复：用 leftBottomContainer 作为一个整体参与显隐动画，
-     * 避免子控件（全屏按钮等）被 hideControlsAnimated 隐藏后
+     * 避免子控件（线路/集数选择器等）被 hideControlsAnimated 隐藏后
      * 因 visibility=GONE 不被 getOverlayControls 收录而无法恢复。
      * 子控件自身的 visibility（如线路/集数选择器的 gone）不受容器显隐影响。
+     *
+     * U1 优化：btn_fullscreen 已移入 rightButtons 容器作为第一个按钮，
+     * 随 rightButtons 整体参与显隐动画（3秒自动隐藏+单击重新显示）。
+     * btn_fullscreen 自身的 visibility 仍由 updateFullscreenButtonVisibility 控制
+     *（横屏视频 visible / 竖屏视频 gone / 全屏态始终 visible）。
      */
     private fun getOverlayControls(): List<View> {
         val list = mutableListOf<View>()
-        // 左下角容器（包含标题、线路选择器、集数选择器、全屏按钮）
+        // 左下角容器（包含标题、线路选择器、集数选择器）
         leftBottomContainer?.let { list.add(it) }
-        // 右侧功能按钮容器
+        // 右侧功能按钮容器（U1：现在包含全屏按钮作为第一个子控件）
         rightButtons?.let { list.add(it) }
+        // B1+ 修复：全屏模式悬浮返回按钮参与自动隐藏（仅全屏时 visible）
+        btnBackOverlay?.let { list.add(it) }
         return list
     }
 
@@ -633,11 +653,14 @@ class VideoFragment : Fragment() {
         tvRouteSelector = view.findViewById(R.id.tv_route_selector)
         rvEpisodes = view.findViewById(R.id.rv_episodes)
         rightButtons = view.findViewById(R.id.right_buttons)
-        btnRewind = view.findViewById(R.id.btn_rewind)
         btnStar = view.findViewById(R.id.btn_star)
         btnSettings = view.findViewById(R.id.btn_settings)
-        btnForward = view.findViewById(R.id.btn_forward)
         btnFullscreen = view.findViewById(R.id.btn_fullscreen)
+        // B1+ 修复：初始化全屏模式悬浮返回按钮
+        btnBackOverlay = view.findViewById(R.id.btn_back_overlay)
+        btnBackOverlay?.setOnClickListener {
+            requireActivity().onBackPressedDispatcher.onBackPressed()
+        }
 
         // 2.1 左下角视频标题（适配文章模式/集数模式）
         val title = when {
@@ -655,8 +678,7 @@ class VideoFragment : Fragment() {
         // R3 REQ-18 集数选择器（多集时显示，线路下方横向滚动）
         initEpisodeSelector()
 
-        // R3 快进/快退按钮（读取配置的快进时间，默认60秒）
-        initSkipButtons()
+        // video-gesture-overhaul: 快退/快进按钮已移除，改为左右滑动 seek（R2/R3）
 
         // 2.4 收藏按钮
         updateStarButtonState()
@@ -811,38 +833,9 @@ class VideoFragment : Fragment() {
         tvVideoTitle?.text = VideoPlay.videoTitle ?: ""
     }
 
-    // ==================== 快进/快退按钮 ====================
+    // video-gesture-overhaul: 快退/快进按钮已移除，改为左右滑动 seek（R2/R3）
 
-    /**
-     * 初始化快进/快退按钮
-     * 读取 VideoPlay.videoSkipTime 配置（默认60秒），点击按配置时间快进/快退
-     */
-    private fun initSkipButtons() {
-        btnRewind?.setOnClickListener {
-            skipVideo(-VideoPlay.videoSkipTime.toLong() * 1000)
-        }
-        btnForward?.setOnClickListener {
-            skipVideo(VideoPlay.videoSkipTime.toLong() * 1000)
-        }
-    }
-
-    /**
-     * 快进/快退：跳转到当前位置 ± offsetMillis
-     */
-    private fun skipVideo(offsetMillis: Long) {
-        val pv = _playerView ?: return
-        val player = pv.currentPlayer
-        val currentPosition = VideoPlay.videoManager.currentPosition
-        val duration = VideoPlay.videoManager.duration
-        var target = currentPosition + offsetMillis
-        if (target < 0) target = 0
-        if (duration > 0 && target > duration) target = duration
-        player.seekTo(target)
-        val skipSeconds = (offsetMillis / 1000).toInt()
-        activity?.toastOnUi(if (skipSeconds > 0) "快进 ${skipSeconds}秒" else "快退 ${-skipSeconds}秒")
-    }
-
-    // ==================== 手势检测（单击切换显隐 + 双指缩放） ====================
+    // ==================== 手势检测（单击切换显隐 + 双指缩放 + 长按倍速 + 双击暂停） ====================
 
     @SuppressLint("ClickableViewAccessibility")
     private fun initGestureDetector(rootView: View) {
@@ -872,6 +865,29 @@ class VideoFragment : Fragment() {
                             cancelAutoHide()  // F2: 手动隐藏，取消计时
                         }
                     }
+                }
+                return true
+            }
+
+            // video-gesture-overhaul R1: 长按倍速播放（onLongPress 触发，ACTION_UP 恢复原速）
+            // 根因：R3 重构替换 surface_container OnTouchListener 后，GSY 内部 onLongPress 收不到事件。
+            // 在 VideoFragment 的 GestureDetector 中重新实现，复用 VideoPlayer 的 setVideoSpeed/showOverlayTip。
+            override fun onLongPress(e: MotionEvent) {
+                val pv = _playerView ?: return
+                if (pv.currentState == GSYVideoView.CURRENT_STATE_PLAYING) {
+                    val speed = VideoPlay.longPressSpeed / 10.0f
+                    pv.setVideoSpeed(speed)
+                    pv.showOverlayTip("${speed}倍速播放中")
+                    isLongPressSpeed = true
+                }
+            }
+
+            // video-gesture-overhaul R4: 双击暂停/播放（根因同 R1，GSY 内部 onDoubleTap 失效）
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                val pv = _playerView ?: return false
+                when (pv.currentState) {
+                    GSYVideoView.CURRENT_STATE_PLAYING -> pv.onVideoPause()
+                    GSYVideoView.CURRENT_STATE_PAUSE -> pv.startAfterPrepared()
                 }
                 return true
             }
@@ -945,9 +961,15 @@ class VideoFragment : Fragment() {
         gestureDetector?.onTouchEvent(event)
         scaleGestureDetector?.onTouchEvent(event)
 
-        // 用户需求：双指"同时左右滑动"时隐藏控件到 PURE
-        // 双指检测避免与 GSY 单指进度条拖动冲突
         when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                // video-gesture-overhaul R2: 记录左右滑动 seek 起点 + 方向判定基准
+                slideSeekStartX = event.x
+                singleFingerStartY = event.y
+                isSeeking = false
+                // 修复 seek 预览漂移: ACTION_DOWN 时记录播放位置，避免滑动中 currentPosition 持续变化导致 seekTarget 漂移
+                slideSeekStartPos = VideoPlay.videoManager.currentPosition
+            }
             MotionEvent.ACTION_POINTER_DOWN -> {
                 if (event.pointerCount == 2) {
                     twoFingerStartX1 = event.getX(0)
@@ -957,10 +979,10 @@ class VideoFragment : Fragment() {
             }
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount >= 2 && isTwoFingerSwipe && currentState == PlayState.NORMAL) {
+                    // 双指左右滑动检测：隐藏控件到 PURE 态
                     val dx1 = event.getX(0) - twoFingerStartX1
                     val dx2 = event.getX(1) - twoFingerStartX2
                     val threshold = 100f
-                    // 两指同时向同一方向（左或右）移动且超过阈值
                     if (kotlin.math.abs(dx1) > threshold && kotlin.math.abs(dx2) > threshold
                         && (dx1 > 0) == (dx2 > 0)
                     ) {
@@ -968,17 +990,25 @@ class VideoFragment : Fragment() {
                         cancelAutoHide()  // F2: 已隐藏控件，取消自动隐藏计时
                         isTwoFingerSwipe = false
                     }
+                } else if (event.pointerCount == 1 && !isLongPressSpeed) {
+                    // video-gesture-overhaul R2: 单指左右滑动 seek（非文章模式）
+                    handleSlideSeekMove(event)
                 }
             }
             MotionEvent.ACTION_POINTER_UP -> {
                 isTwoFingerSwipe = false
             }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                // video-gesture-overhaul R1: 长按倍速松手恢复原速
+                handleLongPressSpeedRelease()
+                // video-gesture-overhaul R2: 执行左右滑动 seek
+                handleSlideSeekRelease()
+            }
         }
 
-        // Bug修复：双指事件必须消费，阻止 GSY 播放器拦截多指手势
-        // GSY 内部有单指手势处理（进度条/亮度/音量），但不处理双指事件
-        // 如果不消费双指事件，GSY 可能拦截导致我们的双指检测不生效
-        return event.pointerCount >= 2
+        // 双指事件消费（阻止 GSY 拦截多指手势）
+        // video-gesture-overhaul R2: seek 期间也消费（阻止 GSY 进度条冲突）
+        return event.pointerCount >= 2 || isSeeking
     }
 
     /**
@@ -1010,7 +1040,12 @@ class VideoFragment : Fragment() {
             MotionEvent.ACTION_DOWN -> {
                 singleFingerStartX = event.x
                 singleFingerStartY = event.y
+                // video-gesture-overhaul R2: 记录 seek 起点（与 singleFingerStartX 一致）
+                slideSeekStartX = event.x
                 isVerticalSwipe = false
+                isSeeking = false
+                // 修复 seek 预览漂移: ACTION_DOWN 时记录播放位置，避免滑动中 currentPosition 持续变化导致 seekTarget 漂移
+                slideSeekStartPos = VideoPlay.videoManager.currentPosition
             }
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount >= 2 && isTwoFingerSwipe && currentState == PlayState.NORMAL) {
@@ -1028,8 +1063,8 @@ class VideoFragment : Fragment() {
                 } else if (event.pointerCount == 1) {
                     val dx = event.x - singleFingerStartX
                     val dy = event.y - singleFingerStartY
-                    // 首次判定滑动方向：垂直滑动优先交给 ViewPager2
-                    if (!isVerticalSwipe && kotlin.math.abs(dy) > kotlin.math.abs(dx)
+                    // AD-05: 首次判定滑动方向——垂直滑动优先交给 ViewPager2（上下滑动切文章完全保留）
+                    if (!isVerticalSwipe && !isSeeking && kotlin.math.abs(dy) > kotlin.math.abs(dx)
                         && kotlin.math.abs(dy) > 30f
                     ) {
                         isVerticalSwipe = true
@@ -1039,7 +1074,16 @@ class VideoFragment : Fragment() {
                         _playerView?.parent?.requestDisallowInterceptTouchEvent(false)
                         return true
                     }
-                    // 水平滑动：交给 GSY 处理进度条，返回 false
+                    // video-gesture-overhaul R2: 水平滑动判定为 seek（方向锁定，与垂直滑动互斥）
+                    if (!isSeeking && !isLongPressSpeed && kotlin.math.abs(dx) > kotlin.math.abs(dy)
+                        && kotlin.math.abs(dx) > 30f
+                    ) {
+                        isSeeking = true
+                    }
+                    if (isSeeking && !isLongPressSpeed) {
+                        handleSlideSeekMove(event)
+                        return true  // 消费事件，阻止 GSY 处理水平滑动
+                    }
                 }
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
@@ -1054,11 +1098,103 @@ class VideoFragment : Fragment() {
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 isVerticalSwipe = false
+                // video-gesture-overhaul R1: 长按倍速松手恢复原速
+                handleLongPressSpeedRelease()
+                // video-gesture-overhaul R2: 执行左右滑动 seek
+                handleSlideSeekRelease()
             }
         }
 
-        // 双指事件消费（阻止 GSY 拦截多指手势），单指水平滑动不消费（交给 GSY 进度条）
-        return event.pointerCount >= 2
+        // 双指事件消费 + seek 期间消费（阻止 GSY 拦截）
+        // AD-05: 垂直滑动已 return true 消费，水平滑动未达阈值时返回 false 交给 GSY
+        return event.pointerCount >= 2 || isSeeking
+    }
+
+    // ==================== video-gesture-overhaul: 左右滑动 seek + 长按倍速辅助方法 ====================
+
+    /**
+     * R2: 处理左右滑动 seek 的 ACTION_MOVE 逻辑
+     *
+     * 方向判定锁定机制（AD-05）：
+     * - 首次判定为水平（|dx|>|dy| 且 |dx|>30）后，设置 isSeeking=true
+     * - 一旦锁定为 seek，本次触摸序列内不再改变（即使手指轨迹偏移）
+     * - 只有 ACTION_UP/ACTION_CANCEL 才重置 isSeeking
+     * - 这确保了上下滑动切文章和左右滑动 seek 互不干扰
+     *
+     * seek 量计算（AD-02）：seek量 = (dx / screenWidth) × duration
+     * - 滑动全屏宽度 ≈ 跳转整个视频时长，与主流播放器一致
+     * - 非固定 60 秒，符合用户"跟常规视频播放器一样"的要求
+     */
+    private fun handleSlideSeekMove(event: MotionEvent) {
+        val pv = _playerView ?: return
+        val dx = event.x - slideSeekStartX
+        // 首次方向判定：水平滑动（|dx|>|dy| 且 |dx|>30）锁定为 seek
+        if (!isSeeking) {
+            val dy = event.y - singleFingerStartY
+            if (kotlin.math.abs(dx) > 30f && kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
+                isSeeking = true
+            } else {
+                return  // 未达阈值或不满足方向判定，不处理
+            }
+        }
+        // 持续更新 seek 预览
+        val screenWidth = resources.displayMetrics.widthPixels
+        val duration = VideoPlay.videoManager.duration
+        // 边界修复: 视频未准备好时 duration<=0，重置 isSeeking 避免 ACTION_UP 执行无效 seekTo
+        if (duration <= 0) {
+            isSeeking = false
+            return
+        }
+        val ratio = dx / screenWidth  // -1.0 ~ 1.0（左滑负/右滑正）
+        val offset = (ratio * duration).toLong()
+        // 修复 seek 预览漂移: 基于 ACTION_DOWN 时记录的 slideSeekStartPos 计算，而非实时 currentPosition
+        // 原因: currentPosition 在视频播放过程中持续增长，滑动过程中用它做基准会导致 seekTarget 不断漂移
+        seekTarget = (slideSeekStartPos + offset).coerceIn(0, duration)
+        val targetSec = seekTarget / 1000
+        val arrow = if (dx >= 0) "→" else "←"
+        pv.showOverlayTip("$arrow ${formatSeekTime(targetSec)}")
+    }
+
+    /**
+     * R2: ACTION_UP 中执行 seek（左右滑动结束）
+     * 重置 isSeeking 标志，隐藏预览提示
+     */
+    private fun handleSlideSeekRelease() {
+        if (isSeeking) {
+            val pv = _playerView
+            if (pv != null && seekTarget >= 0) {
+                pv.currentPlayer.seekTo(seekTarget)
+            }
+            isSeeking = false
+            pv?.showOverlayTip()  // 隐藏预览提示
+        }
+    }
+
+    /**
+     * R1: ACTION_UP 中恢复长按倍速到原速
+     * onLongPress 没有"松手"回调，通过 ACTION_UP 配合恢复（AD-03）
+     */
+    private fun handleLongPressSpeedRelease() {
+        if (isLongPressSpeed) {
+            isLongPressSpeed = false
+            val pv = _playerView
+            val originalSpeed = pv?.playSpeed ?: 1.0f
+            pv?.setVideoSpeed(originalSpeed)
+            pv?.showOverlayTip()  // 隐藏倍速提示
+        }
+    }
+
+    /**
+     * 格式化 seek 预览时间（mm:ss 或 hh:mm:ss）
+     */
+    private fun formatSeekTime(seconds: Long): String {
+        if (seconds < 0) return "00:00"
+        val totalSec = seconds.toInt()
+        val h = totalSec / 3600
+        val m = (totalSec % 3600) / 60
+        val s = totalSec % 60
+        return if (h > 0) String.format("%d:%02d:%02d", h, m, s)
+        else String.format("%02d:%02d", m, s)
     }
 
     /**
