@@ -518,10 +518,12 @@ class AnalyzeUrl(
             strResponse.putCallTime(connectionTime.toInt())
             return strResponse
         } catch (e: Exception) {
-            // P2-3.1: 网络重试机制（Connection reset/Timeout 自动重试1次，间隔1秒）
+            // P2-3.1: 网络重试机制（Connection reset/Timeout/DNS失败 自动重试1次，间隔1秒）
+            // P2-B: 将 UnknownHostException 纳入重试（RetryableDns 已重试2次，此处再重试1次应对临时DNS故障）
             val isNetworkError = e is java.net.SocketTimeoutException
                 || e is java.net.SocketException
                 || e is java.io.InterruptedIOException
+                || e is java.net.UnknownHostException
                 || (e.message?.contains("Connection reset", true) == true)
             if (isNetworkError && networkRetryCount < 1) {
                 networkRetryCount++

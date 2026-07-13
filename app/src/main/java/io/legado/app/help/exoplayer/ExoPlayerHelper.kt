@@ -25,6 +25,7 @@ import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.extractor.DefaultExtractorsFactory
 import com.google.gson.reflect.TypeToken
+import io.legado.app.constant.AppLog
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.model.VideoPlay
 import io.legado.app.utils.GSON
@@ -117,10 +118,20 @@ object ExoPlayerHelper {
 
     /**
      * Okhttp DataSource.Factory
+     *
+     * P2-C 修复：强制 HTTP/1.1，规避 HTTP/2 PROTOCOL_ERROR
+     * 根因：部分视频 CDN 的 HTTP/2 实现对 mp4 流式响应处理有 bug，
+     *      主动发送 RST_STREAM(PROTOCOL_ERROR)，导致 OkHttp 抛 StreamResetException，
+     *      视频播放失败（ERROR_CODE_IO_NETWORK_CONNECTION_FAILED 2001）。
+     * 证据：appLog-26-07-12 + logcat 中 22 条 StreamResetException
+     * 方案：ExoPlayer 客户端限制 protocols=[HTTP_1_1]，绕开 HTTP/2 协商。
+     * 影响范围：仅视频播放，不影响书源/订阅源请求（仍用默认 OkHttp + Cronet）。
+     * 已知上限：HTTP/1.1 无多路复用，但视频流是单长连接，性能影响可忽略。
      */
     private val okhttpDataFactory by lazy {
         val client = okHttpClient.newBuilder()
             .callTimeout(0, TimeUnit.SECONDS)
+            .protocols(listOf(okhttp3.Protocol.HTTP_1_1))  // P2-C: 强制 HTTP/1.1
             .build()
         OkHttpDataSource.Factory(client)
             .setCacheControl(CacheControl.Builder().maxAge(1, TimeUnit.DAYS).build())
@@ -138,6 +149,23 @@ object ExoPlayerHelper {
      */
     fun setDefaultHeaders(headers: Map<String, String>) {
         okhttpDataFactory.setDefaultRequestProperties(headers)
+    }
+
+    /**
+     * P1-C 修复：清除视频缓存（HTTP 416 错误时调用）
+     *
+     * 根因：ExoPlayer 的 Range 请求与服务端缓存状态不匹配，服务端返回 416 Range Not Satisfiable
+     * 方案：清除缓存分片后重试，避免 Range 请求冲突
+     * 影响范围：清除所有视频缓存（416 不常见，清除全部可接受）
+     */
+    fun clearCache() {
+        try {
+            val keys = cache.keys.toList()
+            keys.forEach { cache.removeResource(it) }
+            AppLog.put("清除视频缓存: count=${keys.size}")
+        } catch (e: Exception) {
+            AppLog.put("清除视频缓存失败", e)
+        }
     }
 
     /**

@@ -235,6 +235,31 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             return
         }
 
+        // P1-C 修复：HTTP 416 错误清除缓存后重试
+        // 根因：ExoPlayer 的 Range 请求与服务端缓存状态不匹配，服务端返回 416 Range Not Satisfiable
+        // 方案：清除缓存分片后 seekToDefaultPosition + prepare 重新加载
+        // 用反射检测 responseCode 避免 media3 版本兼容问题
+        val cause416 = error.cause
+        if (cause416?.javaClass?.simpleName == "InvalidResponseCodeException" && retryCount < MAX_RETRY) {
+            try {
+                val responseCodeField = cause416.javaClass.getDeclaredField("responseCode")
+                responseCodeField.isAccessible = true
+                val responseCode = responseCodeField.get(cause416) as? Int
+                if (responseCode == 416) {
+                    retryCount++
+                    AppLog.put("HTTP 416 错误，清除缓存后重试($retryCount/$MAX_RETRY): url=${currentUrl.takeLast(60)}")
+                    ExoPlayerHelper.clearCache()
+                    mInternalPlayer?.let { player ->
+                        player.seekToDefaultPosition()
+                        player.prepare()
+                    }
+                    return
+                }
+            } catch (e: Exception) {
+                // 反射失败，忽略
+            }
+        }
+
         // E2 优化：网络错误自动重试（减少不必要的降级到 WebView）
         // 根因分析：临时网络抖动（弱信号/DNS 抖动/服务器瞬时 503）占 ExoPlayer 失败的 10%，
         // 这类错误不应直接降级 WebView，给予 1 次重试机会：seekToDefaultPosition + prepare 重新加载

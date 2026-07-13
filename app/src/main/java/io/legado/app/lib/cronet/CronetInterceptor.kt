@@ -3,6 +3,7 @@ package io.legado.app.lib.cronet
 import android.annotation.SuppressLint
 import android.os.Build
 import androidx.annotation.Keep
+import io.legado.app.constant.AppLog
 import io.legado.app.help.http.CookieManager
 import io.legado.app.help.http.CookieManager.cookieJarHeader
 import io.legado.app.utils.printOnDebug
@@ -56,10 +57,18 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
             cronetException = e
             //不能抛出错误,抛出错误会导致应用崩溃
             //遇到Cronet处理有问题时的情况，如证书过期等等，回退到okhttp处理
-            if (!e.message.toString().contains("ERR_CERT_", true)
-                && !e.message.toString().contains("ERR_SSL_", true)
+            // P2-C 修复：区分协议错误，标记回退原因
+            val errMsg = e.message.toString()
+            val isProtocolError = errMsg.contains("PROTOCOL_ERROR", true)
+                || errMsg.contains("StreamReset", true)
+                || errMsg.contains("System error", true)
+            if (!errMsg.contains("ERR_CERT_", true)
+                && !errMsg.contains("ERR_SSL_", true)
             ) {
                 e.printOnDebug()
+            }
+            if (isProtocolError) {
+                AppLog.put("Cronet 协议错误，回退到 OkHttp: error=${errMsg.take(80)}")
             }
         }
         try {

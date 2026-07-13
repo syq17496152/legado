@@ -378,7 +378,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                         // 单 URL（现有逻辑）
                         val mUrl = if (content.isEmpty()) {
                             throw ContentEmptyException("正文为空")
-                        } else if (content.startsWith("<")) { //当作mpd文本
+                        } else if (content.contains("<MPD", ignoreCase = true)) { //当作mpd文本（P1-A修复：精确判断DASH清单，避免HTML/XML误判）
                             val name = MD5Utils.md5Encode(content) + ".mpd"
                             val file = FileUtils.createFileIfNotExist(videoTempFile,name)
                             file.writeText(content)

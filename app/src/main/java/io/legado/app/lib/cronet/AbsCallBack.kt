@@ -4,6 +4,7 @@ import androidx.annotation.Keep
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.CookieManager
 import io.legado.app.help.http.CookieManager.cookieJarHeader
+import io.legado.app.constant.AppLog
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.utils.DebugLog
 import io.legado.app.utils.asIOException
@@ -190,7 +191,14 @@ abstract class AbsCallBack(
     override fun onFailed(request: UrlRequest, info: UrlResponseInfo?, error: CronetException) {
         callbackResults.add(CallbackResult(CallbackStep.ON_FAILED, null, error))
         cancelJob?.cancel()
-        DebugLog.e(javaClass.name, error.message.toString())
+        // P2-C 修复：保留原始错误信息，按 AGENTS.md "改造必加日志"规范用 AppLog.put 永久记录
+        // 根因：error.asIOException() 会把 CronetException("System error") 转为 IOException，丢失 PROTOCOL_ERROR 根因
+        // 脱敏：只保留路径片段，不输出完整域名/URL（P0 输出安全规范）
+        val protocol = info?.negotiatedProtocol ?: "unknown"
+        val httpCode = info?.httpStatusCode ?: -1
+        val urlPath = info?.url?.substringAfter("://")?.substringAfter("/")?.take(50) ?: "unknown"
+        DebugLog.e(javaClass.name, "onFailed: protocol=$protocol, httpCode=$httpCode, error=${error.message}")
+        AppLog.put("Cronet 请求失败: protocol=$protocol, httpCode=$httpCode, path=$urlPath, error=${error.message}")
         onError(error.asIOException())
         eventListener?.callFailed(mCall, error)
         responseCallback?.onFailure(mCall, error)

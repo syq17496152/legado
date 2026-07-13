@@ -8,6 +8,7 @@ import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssSource
 import java.io.ByteArrayInputStream
 import java.io.InputStream
+import kotlinx.coroutines.CancellationException
 
 /**
  * 加密图片解密工具
@@ -41,6 +42,10 @@ object ImageUtils {
                 put("src", src)
             } as ByteArray
         }.onFailure {
+            // P2-A 修复：协程取消异常必须重新抛出，不能视为解密错误污染日志
+            // 根因：runCatching 会吞掉 CancellationException，OkHttpStreamFetcher 协程取消时
+            // evalJS 挂起点抛 JobCancellationException 被误记为"解密错误"
+            if (it is CancellationException) throw it
             AppLog.putDebug("${src}解密错误", it)
         }.getOrNull()
     }
@@ -74,6 +79,8 @@ object ImageUtils {
             Log.d(TAG, "decode result: size=${bytes.size}")
             ByteArrayInputStream(bytes)
         }.onFailure {
+            // P2-A 修复：协程取消异常必须重新抛出，不能视为解密错误污染日志
+            if (it is CancellationException) throw it
             Log.e(TAG, "decode failed: ${it.message}", it)
             AppLog.put("图片解密错误 src=${src.take(60)}", it)
         }.getOrNull()

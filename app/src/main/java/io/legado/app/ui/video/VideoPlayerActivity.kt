@@ -1333,6 +1333,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      */
     private fun openInSystemBrowser(url: String) {
         try {
+            // P1-B 修复：本地文件不调用系统浏览器（系统浏览器无法播放 .mpd/.m3u8 清单，且 file:// 触发 FileUriExposedException）
+            if (url.startsWith("file://")) {
+                AppLog.put("系统浏览器不支持本地清单文件: urlLen=${url.length}")
+                return
+            }
             val intent = Intent(Intent.ACTION_VIEW, url.toUri())
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)

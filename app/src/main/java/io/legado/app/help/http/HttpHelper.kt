@@ -1,6 +1,7 @@
 package io.legado.app.help.http
 
 import io.legado.app.constant.AppConst
+import io.legado.app.constant.AppLog
 import io.legado.app.help.CacheManager
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.glide.progress.ProgressManager.LISTENER
@@ -15,8 +16,10 @@ import okhttp3.Credentials
 import okhttp3.Dns
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Proxy
+import java.net.UnknownHostException
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -119,12 +122,8 @@ val okHttpClient: OkHttpClient by lazy {
             }
             networkResponse
         }
-    if (AppConfig.addressCache.isNotEmpty()) {
-        builder.dns { hostname ->
-            val cachedAddress = AppConfig.addressCache[hostname]
-            cachedAddress ?: Dns.SYSTEM.lookup(hostname)
-        }
-    }
+    // P2-B 修复：始终使用 RetryableDns，提供重试 + 负缓存 + addressCache 优先
+    builder.dns(RetryableDns)
     if (AppConfig.isCronet) {
         if (Cronet.loader?.install() == true) {
             Cronet.interceptor?.let {
@@ -211,5 +210,64 @@ fun getProxyClient(proxy: String? = null): OkHttpClient {
             return proxyClient
         }
         return okHttpClient
+    }
+}
+
+/**
+ * P2-B 修复：可重试的 DNS 解析器
+ *
+ * 根因：Dns.SYSTEM 无重试无负缓存，特定书源域名解析失败时直接抛 UnknownHostException
+ * 证据：appLog 中 343 条 UnknownHostException（部分书源域名 252 次、96 次重复失败）
+ * 方案：addressCache 优先 + 重试2次 + 负缓存60秒 + 失败日志
+ * 影响范围：全局 OkHttp 请求的 DNS 解析
+ * 已知上限：负缓存 60 秒内相同域名直接失败，可能延迟恢复 | 升级路径：可配置 TTL
+ */
+private object RetryableDns : Dns {
+    private const val MAX_RETRY = 2
+    private const val NEGATIVE_CACHE_TTL_MS = 60_000L
+    private val negativeCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private const val TAG = "RetryableDns"
+
+    override fun lookup(hostname: String): List<InetAddress> {
+        // 负缓存检查：失败过的域名 60 秒内直接抛异常，避免反复 DNS 查询
+        val expireAt = negativeCache[hostname]
+        if (expireAt != null && System.currentTimeMillis() < expireAt) {
+            AppLog.put("DNS negative cache hit: host=${hostname.take(50)}")
+            throw UnknownHostException("Negative cached: $hostname")
+        }
+
+        // addressCache 优先（用户手动配置的 IP 映射）
+        // addressCache 值类型是 List<InetAddress>，直接返回
+        AppConfig.addressCache[hostname]?.let { cachedAddress ->
+            return cachedAddress
+        }
+
+        // 重试机制
+        var lastException: UnknownHostException? = null
+        for (attempt in 1..MAX_RETRY) {
+            try {
+                val addresses = Dns.SYSTEM.lookup(hostname)
+                // P1-D 修复：过滤本地/无效 IP（DNS 劫持/污染或 adblock hosts 屏蔽）
+                // 证据：796 次 ECONNREFUSED，部分域名解析到 127.0.0.1/0.0.0.0/::1/::
+                // 方案：过滤 isLoopbackAddress(127.x.x.x/::1) 和 isAnyLocalAddress(0.0.0.0/::)
+                val filtered = addresses.filterNot { addr ->
+                    addr.isLoopbackAddress || addr.isAnyLocalAddress
+                }
+                if (filtered.isNotEmpty()) {
+                    return filtered
+                }
+                // 全部被过滤，视为 DNS 污染，快速失败避免 15 秒连接超时
+                AppLog.put("DNS 解析到本地/无效地址，已过滤: host=${hostname.take(50)}, originalCount=${addresses.size}")
+                throw UnknownHostException("Filtered local/invalid addresses: $hostname")
+            } catch (e: UnknownHostException) {
+                lastException = e
+                android.util.Log.d(TAG, "DNS retry: host=${hostname.take(50)}, attempt=$attempt/$MAX_RETRY")
+            }
+        }
+
+        // 全部失败：写入负缓存 + 永久日志
+        negativeCache[hostname] = System.currentTimeMillis() + NEGATIVE_CACHE_TTL_MS
+        AppLog.put("DNS lookup failed after $MAX_RETRY retries: host=${hostname.take(50)}")
+        throw lastException ?: UnknownHostException(hostname)
     }
 }

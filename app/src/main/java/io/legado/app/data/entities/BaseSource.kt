@@ -119,7 +119,9 @@ interface BaseSource : JsExtensions {
                     putAll(map)
                 }
             } catch (e: Exception) {
-                AppLog.put("执行请求头规则出错\n$e", e)
+                // P1-D 修复：增强日志，记录 source 和 header 长度，便于定位是哪个书源的 header 规则有问题
+                // 根因：书源 header JS 代码内部调用 JSON.parse("") 触发 Rhino 1.8.1 SyntaxError，原 catch 块静默吞掉异常
+                AppLog.put("执行请求头规则出错: source=${getKey().take(30)}, headerLen=${it.length}, error=${e.message}", e)
             }
         }
         if (!has(AppConst.UA_NAME, true)) {
