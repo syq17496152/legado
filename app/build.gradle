@@ -11,7 +11,7 @@ plugins {
     alias libs.plugins.kotlin.compose
     alias libs.plugins.room
     alias libs.plugins.ksp
-    alias libs.plugins.google.services
+//    alias libs.plugins.google.services  // 禁用 Google Services，用于包名验证调试
 }
 apply from: 'download.gradle'
 
@@ -51,7 +51,18 @@ android {
         }
     }
     defaultConfig {
-        applicationId project.hasProperty("customAppId") ? project.property("customAppId") : "io.legado.app"
+        // 包类型判断：
+        // 1. 传 -PcustomAppId=xxx → 共存包（用户自定义包名）
+        // 2. 不传参数 + 构建类型 debug → 测试包（io.legado.missapp.debug）
+        // 3. 不传参数 + 构建类型 release → 正式包（io.legado.missapp.release）
+        applicationId project.hasProperty("customAppId") ? project.property("customAppId") : "io.legado.missapp"
+
+        // 输出包名信息，便于AI解析日志
+        println "========== PACKAGE INFO =========="
+        println "Base applicationId: ${applicationId}"
+        println "Build type: ${project.gradle.startParameter.taskNames.find { it.contains('Release') } ? 'release' : 'debug'}"
+        println "Custom package: ${project.hasProperty('customAppId')}"
+        println "=================================="
         minSdk 23
         targetSdk 36
         versionCode 10000 + gitCommits

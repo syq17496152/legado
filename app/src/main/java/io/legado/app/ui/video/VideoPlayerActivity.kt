@@ -1463,6 +1463,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     override fun onDestroy() {
+        // app-stability-round2 P2-2: 先取消抓取协程（含嗅探 WebView），再释放播放器资源
+        // 根因：原顺序 destroyWeb 先执行、stopLoading 后置，嗅探协程取消时序混乱，且 runCatching 误捕获 CancellationException
+        // 修复：stopLoading 提前到最前，协程取消后 BackstageWebView.invokeOnCancellation 主动销毁嗅探 WebView
+        VideoPlay.stopLoading()
         destroyWeb()
         super.onDestroy()
         // P0-1.4: 清理错误对话框，防止窗口泄漏
@@ -1472,7 +1476,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             glideImageGetter.clear()
         }
         VideoPlay.saveRead()
-        VideoPlay.stopLoading()
         // R3: ViewPager2 模式下旧 playerView 未使用，Fragment 自行管理释放
         if (!useViewPagerMode) {
             playerView.getCurrentPlayer().release()

@@ -4,11 +4,28 @@ setlocal
 :: ============================================================
 ::  Legado APK Build Script
 ::  Usage: build-legado.bat [debug|release|clean] [package_name]
+::
+::  Package Types:
+::  1. Test Package (测试包):
+::     - Package: io.legado.missapp.debug
+::     - Usage: Development, quick verification
+::     - Command: build-legado.bat
+::
+::  2. Coexist Package (共存包):
+::     - Package: Custom package (e.g., com.my.legado.debug)
+::     - Usage: Coexist with official version
+::     - Command: build-legado.bat debug com.my.legado
+::
+::  3. Release Package (正式包):
+::     - Package: io.legado.missapp.release
+::     - Usage: Production release
+::     - Command: build-legado.bat release
+::
 ::  Examples:
-::    build-legado.bat                          (debug, default package)
-::    build-legado.bat release                  (release, default package)
-::    build-legado.bat debug com.my.legado      (debug, custom package)
-::    build-legado.bat release com.my.legado    (release, custom package)
+::    build-legado.bat                          (test package, default)
+::    build-legado.bat release                  (release package, default)
+::    build-legado.bat debug com.my.legado      (coexist package, custom)
+::    build-legado.bat release com.my.legado    (coexist package, custom)
 ::    build-legado.bat clean
 :: ============================================================
 

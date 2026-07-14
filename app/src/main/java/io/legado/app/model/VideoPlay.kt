@@ -261,8 +261,9 @@ object VideoPlay : CoroutineScope by MainScope(){
                         val res = pageAnalyzeUrl.getStrResponseAwait()
                         res.body ?: ""
                     }
-                    // R5 综合提取视频 URL（五种方法去重）
-                    val videoUrls = VideoUrlExtractor.extract(html, rssArticle.link)
+                    // app-stability-round2 P1-4: 精确方法优先（标签/Meta/JSON/JS变量），正则后移为兜底的兜底
+                    // 根因：原 extract 5种方法混合，正则抓到非视频链接（?url= 参数页面）直接播放，不触发嗅探
+                    val videoUrls = VideoUrlExtractor.extractPrecise(html, rssArticle.link)
                     when {
                         videoUrls.size == 1 -> {
                             // R5 单 URL 分支
@@ -306,11 +307,12 @@ object VideoPlay : CoroutineScope by MainScope(){
                             // 静态 HTML 解析未命中时，启动 WebView 加载页面，拦截 fetch/XHR/MediaSource 等动态请求
                             // 适用场景：JS 动态构造视频 URL、播放器运行时请求 m3u8、CDN 鉴权 URL 等
                             AppLog.putInfo("R5静态解析未命中, 启动网络抓包拦截, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
+                            // app-stability-round2 P2-2: 嗅探超时从 15s 缩短为 10s（慢站点由 delayTime 自适应）
                             val webViewUrl = VideoUrlExtractor.extractWithWebView(
                                 url = rssArticle.link,
                                 source = source,
                                 delayTime = 3000L,
-                                timeout = 15000L
+                                timeout = 10000L
                             )
                             if (webViewUrl != null) {
                                 // R5 网络抓包命中：走单 URL 播放流程（复用单 URL 分支模式）
@@ -333,24 +335,47 @@ object VideoPlay : CoroutineScope by MainScope(){
                                     }
                                 }
                             } else {
-                                // R5 第三层降级：网络抓包未命中，回退文章链接交给 ExoPlayer
-                                AppLog.putWarn("R5网络抓包未命中, 回退文章链接, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
-                                val mUrl = rssArticle.link
-                                videoUrl = mUrl
-                                val fallbackUrl = AnalyzeUrl(mUrl, source = source, ruleData = rssArticle)
-                                // R5 Header 修复：注入 Referer
-                                if (!fallbackUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
-                                    fallbackUrl.headerMap["Referer"] = rssArticle.link
-                                }
-                                withContext(Main) {
-                                    player.mapHeadData = fallbackUrl.headerMap
-                                    currentPlayHeaders = fallbackUrl.headerMap
-                                    // Bug8 修复：统一解析播放器页面 URL
-                                    val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(fallbackUrl.url)
-                                    player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
-                                    postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
-                                    if (autoPlay) {
-                                        player.startPlayLogic()
+                                // app-stability-round2 P1-4: 第三层兜底——正则提取（嗅探失败后）
+                                // 正则用 isStrictVideoUrl 严格过滤，不再抓到 ?url= 等非视频页面链接
+                                AppLog.putInfo("R5嗅探未命中, 启动正则兜底, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
+                                val regexUrls = VideoUrlExtractor.extractByRegex(html, rssArticle.link)
+                                if (regexUrls.isNotEmpty()) {
+                                    // 正则兜底命中：走单 URL 播放流程
+                                    AppLog.putInfo("R5正则兜底命中, count=${regexUrls.size}, ${VideoUrlExtractor.sanitizeUrl(regexUrls[0])}")
+                                    val mUrl = regexUrls[0]
+                                    videoUrl = mUrl
+                                    val playAnalyzeUrl = AnalyzeUrl(mUrl, source = source, ruleData = rssArticle)
+                                    if (!playAnalyzeUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
+                                        playAnalyzeUrl.headerMap["Referer"] = rssArticle.link
+                                    }
+                                    withContext(Main) {
+                                        player.mapHeadData = playAnalyzeUrl.headerMap
+                                        currentPlayHeaders = playAnalyzeUrl.headerMap
+                                        val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(playAnalyzeUrl.url)
+                                        player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
+                                        postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
+                                        if (autoPlay) {
+                                            player.startPlayLogic()
+                                        }
+                                    }
+                                } else {
+                                    // 第四层降级：正则兜底也失败，回退文章链接交给 ExoPlayer
+                                    AppLog.putWarn("R5正则兜底未命中, 回退文章链接, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
+                                    val mUrl = rssArticle.link
+                                    videoUrl = mUrl
+                                    val fallbackUrl = AnalyzeUrl(mUrl, source = source, ruleData = rssArticle)
+                                    if (!fallbackUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
+                                        fallbackUrl.headerMap["Referer"] = rssArticle.link
+                                    }
+                                    withContext(Main) {
+                                        player.mapHeadData = fallbackUrl.headerMap
+                                        currentPlayHeaders = fallbackUrl.headerMap
+                                        val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(fallbackUrl.url)
+                                        player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
+                                        postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
+                                        if (autoPlay) {
+                                            player.startPlayLogic()
+                                        }
                                     }
                                 }
                             }
@@ -384,7 +409,27 @@ object VideoPlay : CoroutineScope by MainScope(){
                             file.writeText(content)
                             Uri.fromFile(file).toString()
                         } else {
-                            NetworkUtils.getAbsoluteURL(rssArticle.link, content)
+                            val resolved = NetworkUtils.getAbsoluteURL(rssArticle.link, content)
+                            // P3-1 修复（检查点2扩展测试发现）：ruleContent返回content有效性校验
+                            // 根因：源11-12 ruleContent配置错误，Rss.getContent返回HTML(6816字节含<script>)而非视频URL
+                            // 底层无校验直接当URL→ExoPlayer 2004错误→降级WebView也失败
+                            // 修复：校验URL有效性(长度≤2048+无HTML标签)，失败时降级R5嗅探
+                            if (isValidVideoContentUrl(resolved)) {
+                                resolved
+                            } else {
+                                AppLog.putWarn("P3-1: ruleContent返回非视频URL, 降级R5嗅探, len=${resolved.length}, hasScript=${resolved.contains("<script", ignoreCase = true)}")
+                                val sniffUrl = VideoUrlExtractor.extractWithWebView(
+                                    url = rssArticle.link, source = source,
+                                    delayTime = 3000L, timeout = 10000L
+                                )
+                                if (sniffUrl != null) {
+                                    AppLog.putInfo("P3-1降级R5嗅探命中, ${VideoUrlExtractor.sanitizeUrl(sniffUrl)}")
+                                    sniffUrl
+                                } else {
+                                    AppLog.putWarn("P3-1降级R5嗅探未命中, 回退文章链接, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
+                                    rssArticle.link
+                                }
+                            }
                         }
                         videoUrl = mUrl
                         val analyzeUrl = AnalyzeUrl(
@@ -721,6 +766,25 @@ object VideoPlay : CoroutineScope by MainScope(){
 
     private fun isLikelyUrl(s: String): Boolean {
         return s.startsWith("http://") || s.startsWith("https://") || s.startsWith("/")
+    }
+
+    /**
+     * P3-1 修复（检查点2扩展测试发现）：校验 ruleContent 返回的 content 是否是有效的视频 URL
+     *
+     * 根因：源 ruleContent 配置错误时，Rss.getContent 可能返回 HTML 页面内容（含 <script> 等标签）
+     * 而非干净视频 URL。底层无校验直接当 URL 传给播放器，导致 ExoPlayer 请求失败(2004)。
+     *
+     * 校验规则：
+     * - 长度 ≤ 2048 字符（正常视频 URL 极少超过 500 字符，6816 字节明显异常）
+     * - 不含 HTML 标签字符（< > 换行，URL 不应含这些字符）
+     * - 必须以 http:// 或 https:// 开头
+     *
+     * @return true=有效URL可播放，false=无效需降级R5嗅探
+     */
+    private fun isValidVideoContentUrl(url: String): Boolean {
+        if (url.length > 2048) return false
+        if (url.contains("<") || url.contains(">") || url.contains("\n")) return false
+        return url.startsWith("http://") || url.startsWith("https://")
     }
 
     /**

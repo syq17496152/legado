@@ -48,9 +48,54 @@ object ExoPlayerHelper {
     }
 
     fun createMediaItem(url: String, headers: Map<String, String>): MediaItem {
-        val formatUrl = url + SPLIT_TAG + GSON.toJson(headers, mapType)
-        val mediaItemBuilder = MediaItem.Builder().setUri(formatUrl)
+        val mediaItemBuilder = MediaItem.Builder().setUri(url)
+        // app-stability-round2 P1-3 修复：用 setMimeType 替代 SPLIT_TAG 拼接
+        // 根因：SPLIT_TAG(🚧)+headers JSON 拼接到 URI 后，ExoPlayer 类型推断看到 .json 后缀，
+        // 误判为非视频文件，用 ProgressiveExtractor 解析 m3u8 抛 UnrecognizedInputFormatException(3003)
+        // 证据：appLog 68次 3003 错误
+        val mimeType = getMimeType(url)
+        if (mimeType != null) {
+            mediaItemBuilder.setMimeType(mimeType)
+        }
+        // headers 通过 setDefaultHeaders 注入 okhttpDataFactory（等价原 SPLIT_TAG 路径的行为）
+        if (headers.isNotEmpty()) {
+            setDefaultHeaders(headers)
+        }
+        AppLog.putDebug("createMediaItem: mimeType=$mimeType, headerKeys=${headers.keys}, urlPath=${sanitizeUrl(url)}")
         return mediaItemBuilder.build()
+    }
+
+    /**
+     * URL 后缀→MIME 类型映射
+     * app-stability-round2 P1-3 修复：createMediaItem 不再拼接 SPLIT_TAG 到 URI，
+     * 改用 setMimeType 显式声明类型，避免 DefaultMediaSourceFactory 的 URL 后缀检测被破坏
+     */
+    private fun getMimeType(url: String): String? {
+        val lower = url.lowercase()
+        val path = lower.substringBefore("?").substringBefore("#")
+        return when {
+            path.endsWith(".m3u8") -> MimeTypes.APPLICATION_M3U8
+            path.endsWith(".mpd") -> MimeTypes.APPLICATION_MPD
+            path.endsWith(".mp4") -> MimeTypes.VIDEO_MP4
+            path.endsWith(".mkv") -> MimeTypes.VIDEO_MATROSKA
+            path.endsWith(".webm") -> MimeTypes.VIDEO_WEBM
+            path.endsWith(".flv") -> "video/x-flv"
+            path.endsWith(".ts") -> MimeTypes.VIDEO_MP2T
+            lower.contains("format=m3u8") || lower.contains("type=m3u8") -> MimeTypes.APPLICATION_M3U8
+            else -> null
+        }
+    }
+
+    /**
+     * URL 脱敏：用于日志输出，只保留 path 前40字符（符合 P0 安全规范）
+     */
+    private fun sanitizeUrl(url: String): String {
+        return try {
+            val u = java.net.URL(url)
+            "path=${u.path?.take(40)}"
+        } catch (e: Exception) {
+            "raw=${url.take(30)}"
+        }
     }
 
     fun createHttpExoPlayer(context: Context): ExoPlayer {

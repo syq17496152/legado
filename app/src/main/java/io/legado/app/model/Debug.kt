@@ -3,6 +3,7 @@ package io.legado.app.model
 import android.annotation.SuppressLint
 import android.util.Log
 import io.legado.app.BuildConfig
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.data.entities.*
 import io.legado.app.help.book.isWebFile
@@ -39,15 +40,17 @@ object Debug {
         showTime: Boolean = true,
         state: Int = 1
     ) {
+        // P0 截断保护：单点截断覆盖下游 Log.d + callback + isChecking 分支（复用 AppLog.truncateSafely 避免循环依赖）
+        val safeMsg = AppLog.truncateSafely(msg)
         if (BuildConfig.DEBUG) {
-            Log.d("sourceDebug", msg)
+            Log.d("sourceDebug", safeMsg)
         }
         //调试信息始终要执行
         callback?.let {
             if ((debugSource != sourceUrl || !print)) return
-            var printMsg = msg
+            var printMsg = safeMsg
             if (isHtml) {
-                printMsg = HtmlFormatter.format(msg)
+                printMsg = HtmlFormatter.format(safeMsg)
             }
             if (showTime) {
                 val time = debugTimeFormat.format(Date(System.currentTimeMillis() - startTime))
@@ -55,10 +58,10 @@ object Debug {
             }
             it.printLog(state, printMsg)
         }
-        if (isChecking && sourceUrl != null && (msg).length < 30) {
-            var printMsg = msg
+        if (isChecking && sourceUrl != null && safeMsg.length < 30) {
+            var printMsg = safeMsg
             if (isHtml) {
-                printMsg = HtmlFormatter.format(msg)
+                printMsg = HtmlFormatter.format(safeMsg)
             }
             if (showTime && debugTimeMap[sourceUrl] != null) {
                 val time =

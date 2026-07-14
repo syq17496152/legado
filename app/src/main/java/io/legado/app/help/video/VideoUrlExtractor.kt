@@ -109,7 +109,37 @@ object VideoUrlExtractor {
     """
 
     /**
-     * 综合提取视频 URL（五种方法去重）
+     * 精确提取视频 URL（前4种精确方法去重 + 播放器页面 URL 解析）
+     *
+     * app-stability-round2 P1-4 修复：从 extract 拆分精确方法，供 VideoPlay 优先调用
+     * 精确方法命中→直接播放（高可信度，首屏快）；未命中→VideoPlay 调用 extractWithWebView 嗅探
+     * 根因：原 extract 5种方法混合调用，正则兜底与精确方法同级，正则抓到非视频链接（?url= 参数页面）
+     *       就直接播放，不触发更准确的嗅探
+     *
+     * @param html 文章页面 HTML
+     * @param baseUrl 基础 URL（用于相对路径转绝对路径）
+     * @return 去重后的视频 URL 列表（已转绝对路径 + 已解析播放器页面 URL）
+     */
+    fun extractPrecise(html: String, baseUrl: String): List<String> {
+        if (html.isBlank()) return emptyList()
+        val result = LinkedHashSet<String>()
+        // 按精确度优先级调用：标签 > Meta > JSON > JS变量
+        result.addAll(extractFromVideoTags(html, baseUrl))
+        result.addAll(extractFromMeta(html, baseUrl))
+        result.addAll(extractFromScriptJson(html, baseUrl))
+        result.addAll(extractFromJsVars(html, baseUrl))
+        // 3003 Bug 修复：播放器页面 URL 解析
+        val resolved = mutableListOf<String>()
+        for (url in result) {
+            val actualUrl = extractPlayerPageUrl(url) ?: url
+            resolved.add(actualUrl)
+        }
+        AppLog.putDebug("extractPrecise: preciseCount=${resolved.size}, baseUrl=${sanitizeUrl(baseUrl)}")
+        return resolved.distinct()
+    }
+
+    /**
+     * 综合提取视频 URL（保留向后兼容，内部调用 extractPrecise + extractByRegex）
      *
      * @param html 文章页面 HTML
      * @param baseUrl 基础 URL（用于相对路径转绝对路径）
@@ -118,20 +148,9 @@ object VideoUrlExtractor {
     fun extract(html: String, baseUrl: String): List<String> {
         if (html.isBlank()) return emptyList()
         val result = LinkedHashSet<String>()
-        // 按精确度优先级调用：标签 > JSON > JS变量 > 正则兜底
-        result.addAll(extractFromVideoTags(html, baseUrl))
-        result.addAll(extractFromMeta(html, baseUrl))
-        result.addAll(extractFromScriptJson(html, baseUrl))
-        result.addAll(extractFromJsVars(html, baseUrl))
+        result.addAll(extractPrecise(html, baseUrl))
         result.addAll(extractByRegex(html, baseUrl))
-        // 3003 Bug 修复：播放器页面 URL 解析
-        // 候选 URL 可能是播放器页面（如 /player/?url=https%3A%2F%2F...m3u8），需提取 url 参数中的实际视频流
-        val resolved = mutableListOf<String>()
-        for (url in result) {
-            val actualUrl = extractPlayerPageUrl(url) ?: url
-            resolved.add(actualUrl)
-        }
-        return resolved.distinct()
+        return result.toList()
     }
 
     /**
@@ -149,14 +168,14 @@ object VideoUrlExtractor {
      * @param url 文章页面 URL
      * @param source 订阅源（用于构造 AnalyzeUrl 获取 headerMap）
      * @param delayTime 等待 JS 动态加载视频地址的时间（默认 3000ms，从 onPageFinished 开始计时）
-     * @param timeout 抓取超时时间（默认 15000ms，BackstageWebView 默认 60s 太长）
+     * @param timeout 抓取超时时间（默认 10000ms，app-stability-round2 P2-2 从 15s 缩短为 10s，BackstageWebView 默认 60s 太长）
      * @return 视频 URL（已匹配 sourceRegex），失败返回 null
      */
     suspend fun extractWithWebView(
         url: String,
         source: BaseSource?,
         delayTime: Long = 3000L,
-        timeout: Long = 15000L
+        timeout: Long = 10000L
     ): String? {
         if (url.isBlank()) return null
         AppLog.putInfo("R5网络抓包: 启动, ${sanitizeUrl(url)}, delayTime=${delayTime}, timeout=${timeout}")
@@ -172,7 +191,11 @@ object VideoUrlExtractor {
             AppLog.putWarn("R5网络抓包: 构造 headerMap 失败, 使用空 headerMap", e)
             hashMapOf("Referer" to url)
         }
-        return runCatching {
+        // app-stability-round2 P2-2: 不用 runCatching（会捕获 CancellationException 导致协程取消被误记为失败）
+        // 改为 try-catch + CancellationException 守卫，协程取消必须重新抛出（Kotlin 协程规范）
+        // 根因：60 次 JobCancellationException——退出播放器时 stopLoading() cancelChildren 触发协程取消，
+        //   runCatching 捕获 CancellationException → onFailure 记录为"抓包失败"（误报）
+        return try {
             BackstageWebView(
                 url = url,
                 headerMap = headerMap,
@@ -183,9 +206,13 @@ object VideoUrlExtractor {
                 interceptAllRequests = true,   // 新增：启用 shouldInterceptRequest 拦截 fetch/XHR
                 videoSniffJs = VIDEO_SNIFF_JS   // 新增：注入 JS 覆写 fetch/XHR
             ).getStrResponse().body
-        }.onFailure { e ->
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 协程取消（退出播放器/超时）是正常行为，不记录为失败
+            throw e
+        } catch (e: Exception) {
             AppLog.putWarn("R5网络抓包失败: ${sanitizeUrl(url)}", e)
-        }.getOrNull()
+            null
+        }
     }
 
     /**
@@ -287,12 +314,13 @@ object VideoUrlExtractor {
     /**
      * 方法⑤ 正则提取（通用兜底）
      * 适用：通用场景，覆盖大多数直接暴露视频 URL 的页面
+     * app-stability-round2 P1-4：改为 public，供 VideoPlay 嗅探失败后作为兜底的兜底调用
      */
-    private fun extractByRegex(html: String, baseUrl: String): List<String> {
+    fun extractByRegex(html: String, baseUrl: String): List<String> {
         return try {
             VIDEO_URL_REGEX.findAll(html).map { it.value }
                 .map { NetworkUtils.getAbsoluteURL(baseUrl, it) }
-                .filter { isVideoUrl(it) }
+                .filter { isStrictVideoUrl(it) }
                 .toList()
         } catch (e: Exception) {
             emptyList()
@@ -303,6 +331,7 @@ object VideoUrlExtractor {
      * 视频URL过滤：仅保留含 .m3u8/.mp4/format=m3u8/type=m3u8 的 URL
      * 或包含 ?url=/&url=/?playUrl=/&playUrl= 参数的播放器页面 URL
      * （3003 Bug 修复：播放器页面 URL 后续由 extractPlayerPageUrl 解析）
+     * 注意：精确方法（标签/Meta/JSON/JS变量）用此方法，放行播放器页面 URL 后续解析
      */
     private fun isVideoUrl(url: String): Boolean {
         val lower = url.lowercase()
@@ -310,6 +339,17 @@ object VideoUrlExtractor {
             lower.contains("format=m3u8") || lower.contains("type=m3u8") ||
             lower.contains("?url=") || lower.contains("&url=") ||
             lower.contains("?playurl=") || lower.contains("&playurl=")
+    }
+
+    /**
+     * 严格视频URL过滤：仅保留真实视频流特征（.m3u8/.mp4/format=m3u8/type=m3u8）
+     * app-stability-round2 P1-4 修复：正则兜底用此方法，避免 ?url= 等参数页面被误判为视频链接
+     * 根因：原 extractByRegex 用 isVideoUrl（含 ?url= 条件），正则抓到非视频页面链接直接播放
+     */
+    private fun isStrictVideoUrl(url: String): Boolean {
+        val lower = url.lowercase()
+        return lower.contains(".m3u8") || lower.contains(".mp4") ||
+            lower.contains("format=m3u8") || lower.contains("type=m3u8")
     }
 
     /**

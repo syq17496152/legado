@@ -1,6 +1,7 @@
 package io.legado.app.utils
 
 import android.util.Log
+import android.util.LruCache
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
@@ -18,6 +19,15 @@ object ImageUtils {
     private const val TAG = "ImgDecrypt"
 
     /**
+     * P1-2 解密结果缓存：避免列表刷新时重复解密相同图片
+     * 设计文档原方案为 JS 层 cache.get/put，但 CacheManager 只支持 String，ByteArray 无法缓存
+     * 调整为 Kotlin 层 LruCache 缓存解密后的 ByteArray（基于 src 做 key，2MB 上限）
+     */
+    private val decodeCache = object : LruCache<String, ByteArray>(2 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: ByteArray): Int = value.size
+    }
+
+    /**
      * @param isCover 根据这个执行书源中不同的解密规则
      * @return 解密失败返回Null 解密规则为空不处理
      */
@@ -27,6 +37,15 @@ object ImageUtils {
     ): ByteArray? {
         val ruleJs = getRuleJs(source, isCover)
         if (ruleJs.isNullOrBlank()) return bytes
+        // P1-2 缓存命中检查：相同 src 的解密结果直接返回，避免列表刷新重复解密
+        decodeCache.get(src)?.let { return it }
+        // app-stability-round2 P1-2 修复：图片文件头检测，已知格式跳过解密
+        // 根因：块校验只能过滤非块对齐数据，块对齐的未加密图片（如1024字节PNG）仍被强制解密
+        // 证据：appLog 频现 IllegalBlockSizeException（logo.png 等未加密图片被强制解密）
+        if (isKnownImageFormat(bytes)) {
+            AppLog.putDebug("图片文件头检测命中已知格式, 跳过解密, src=${src.take(60)}")
+            return bytes
+        }
         // P2-A 修复：数据长度校验，非块对齐跳过解密
         // 根因：RssSource 配置了图片解密规则但图片实际未加密，强制解密导致 IllegalBlockSizeException
         // 证据：appLog 每个会话必现 "图片解密错误 src=...logo.png" + IllegalBlockSizeException DATA_NOT_MULTIPLE_OF_BLOCK_LENGTH
@@ -47,7 +66,10 @@ object ImageUtils {
             // evalJS 挂起点抛 JobCancellationException 被误记为"解密错误"
             if (it is CancellationException) throw it
             AppLog.putDebug("${src}解密错误", it)
-        }.getOrNull()
+        }.getOrNull()?.also {
+            // P1-2 缓存解密结果，列表刷新时直接命中
+            decodeCache.put(src, it)
+        }
     }
 
     fun decode(
@@ -56,32 +78,18 @@ object ImageUtils {
     ): InputStream? {
         val ruleJs = getRuleJs(source, isCover)
         if (ruleJs.isNullOrBlank()) return inputStream
-        //解密库hutool.crypto ByteArray|InputStream -> ByteArray
-        // 恢复原版行为：直接把 InputStream 传给 JS 的 result 变量，
-        // JS 调用 decrypt(result) 时由 SymmetricCryptoAndroid.decrypt(InputStream) 处理。
-        // SymmetricCryptoAndroid 显式 override 了 decrypt(InputStream)，
-        // 确保 Rhino 1.8.1 能找到该方法（原接口 default method 不可见）。
+        // app-stability-round2 P1-2 修复：先转 ByteArray 复用 decode(ByteArray) 的文件头检测+块校验逻辑
+        // 根因：原 decode(InputStream) 无任何校验直接 evalJS，未加密图片强制解密抛 IllegalBlockSizeException
+        // 证据：appLog 频现 IllegalBlockSizeException（logo.png 等未加密图片被强制解密）
+        // 副带修复 P1-A：readBytes 后 JS 收到 ByteArray 而非 InputStream，避免 okio.RealBufferedSource 类型容错问题
         return kotlin.runCatching {
-            Log.d(TAG, "decode(InputStream): src=${src.take(80)}, ruleJs=${ruleJs.take(60)}, source=${source?.getKey()}")
-            val result = source?.evalJS(ruleJs) {
-                put("book", book)
-                put("result", inputStream)
-                put("src", src)
-            }
-            // P1-A 修复：evalJS 返回值类型容错
-            // 根因：evalJS 可能返回 InputStream (okio.RealBufferedSource) 而非 ByteArray
-            // 证据：appLog-26-07-12 ClassCastException: okio.RealBufferedSource$inputStream$1 cannot be cast to byte[]
-            val bytes = when (result) {
-                is ByteArray -> result
-                is InputStream -> result.readBytes()
-                else -> null
-            } ?: return@runCatching null
-            Log.d(TAG, "decode result: size=${bytes.size}")
-            ByteArrayInputStream(bytes)
+            val bytes = inputStream.readBytes()
+            val decoded = decode(src, bytes, isCover, source, book) ?: return@runCatching null
+            ByteArrayInputStream(decoded)
         }.onFailure {
             // P2-A 修复：协程取消异常必须重新抛出，不能视为解密错误污染日志
             if (it is CancellationException) throw it
-            Log.e(TAG, "decode failed: ${it.message}", it)
+            Log.e(TAG, "decode(InputStream) failed: ${it.message}", it)
             AppLog.put("图片解密错误 src=${src.take(60)}", it)
         }.getOrNull()
     }
@@ -101,6 +109,28 @@ object ImageUtils {
             is RssSource -> source.coverDecodeJs
             else -> null
         }
+    }
+
+    /**
+     * 图片文件头检测：判断字节数组是否为已知图片格式（未加密）
+     * PNG: 89 50 4E 47 | JPG: FF D8 FF | GIF: 47 49 46 38 | WebP: 52 49 46 46 (RIFF)
+     * 命中已知格式说明图片未加密，应跳过解密避免 IllegalBlockSizeException
+     * app-stability-round2 P1-2 修复：块校验只能过滤非块对齐数据，块对齐的未加密图片仍会被强制解密
+     */
+    private fun isKnownImageFormat(bytes: ByteArray): Boolean {
+        if (bytes.size < 4) return false
+        // PNG: 89 50 4E 47
+        if (bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte() &&
+            bytes[2] == 0x4E.toByte() && bytes[3] == 0x47.toByte()) return true
+        // JPG: FF D8 FF
+        if (bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()) return true
+        // GIF: 47 49 46 38 (GIF8)
+        if (bytes[0] == 0x47.toByte() && bytes[1] == 0x49.toByte() &&
+            bytes[2] == 0x46.toByte() && bytes[3] == 0x38.toByte()) return true
+        // WebP: 52 49 46 46 (RIFF)
+        if (bytes[0] == 0x52.toByte() && bytes[1] == 0x49.toByte() &&
+            bytes[2] == 0x46.toByte() && bytes[3] == 0x46.toByte()) return true
+        return false
     }
 
 }

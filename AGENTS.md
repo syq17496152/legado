@@ -6,6 +6,27 @@
 
 本项目 fork 自原版 [legado-E](https://github.com/Luoyacheng/legado-E)，在此基础上建立了私有化仓库（`https://github.com/syq17496152/legado.git`），并进行了私有化改造。遇到与原版行为不一致的问题时，应优先对比原版代码定位回归原因。
 
+## 全局规范引用索引
+
+> 以下通用规范已迁移到 `~/.trae-cn/user_rules/` 目录，AI 根据任务类型按需用 Read 工具加载。
+
+| 规范文件 | 内容 | 触发场景 |
+|---------|------|---------|
+| user_rules.md | 基础规则（中文/Windows/叫爸爸/驱动入口） | 系统自动注入 |
+| danger-ops.md | 危险操作安全规则 | 系统自动注入 |
+| rule-1782963384927.md | AskUserQuestion 强制规范 | 系统自动注入 |
+| output-safety.md | 输出安全与违禁词规避规范 | 系统自动注入 |
+| core-spec.md | 全局规范索引 | 系统自动注入 |
+| context-recovery.md | 上下文压缩恢复规范 | 压缩恢复后加载 |
+| coding-philosophy.md | 编码哲学规范 | 编码任务加载 |
+| openspec-workflow.md | OpenSpec 工作流规范 | OpenSpec任务加载 |
+| complex-task.md | 复杂任务处理规范 | 50+文件任务加载 |
+| concurrent-editing.md | 并发文件修改规范 | 多Agent并行加载 |
+| budget-management.md | 输出预算管理规范 | 规避思考上限加载 |
+| git-commit-workflow.md | Git多远程仓库提交规范（私仓/公仓隔离） | Git提交任务加载（项目特定） |
+
+---
+
 ## 延伸版本参考（开源阅读生态）
 
 > **AI 在进行网络层/前端/协程/WebView 等组件优化时，必须主动对比以下延伸版本的实现，学习借鉴优点，不闭门造车。**
@@ -84,17 +105,9 @@ Phase 1: 准备阶段 → Phase 2: 分类对比 → Phase 3: 差异识别 → Ph
 
 ---
 
-## 🔴🔴🔴 子规范强制加载硬约束（V2.1，解决"缩减后AI不关注子规范"问题）
+## 🔴🔴🔴 子规范强制加载硬约束
 
-> **历史教训**：以前尝试过缩减主规范，缩减后 AI 反而不去关注放在子规范文件中的规范。
-> **铁证（2026-07-13）**：spec-system-optimization 实施后上下文压缩，AI 执行 OpenSpec 任务时未加载 `openspec-workflow.md` 子规范，仅根据记忆执行，导致子规范强制加载机制未生效。
-
-**硬性约束**：
-
-1. **每个强制规则的"何时必须加载本子规范"触发场景是硬性约束**，不是建议。AI 在触发场景出现时，**必须用 Read 工具实际加载**对应子规范文件，禁止仅根据记忆执行。
-2. **加载验证机制**：AI 加载子规范后，必须在输出中引用子规范的具体条款（如"根据 openspec-workflow.md §X.Y"），证明已实际加载。
-3. **禁止"只移不引"**：移到子规范的内容，主规范必须有明确的"详见 [子规范]"引用。
-4. **上下文压缩恢复后必须重新加载**：压缩恢复后，AI 不仅依赖记忆，必须根据当前任务类型重新用 Read 工具加载相关子规范。
+> **本节内容已迁移至全局规范**：硬性约束（4条加载规则）详见 `~/.trae-cn/user_rules/core-spec.md`（按需加载）。下方"按任务类型必须加载的子规范"表为项目特定内容，保留在项目主规范中。
 
 **按任务类型必须加载的子规范**：
 
@@ -109,78 +122,21 @@ Phase 1: 准备阶段 → Phase 2: 分类对比 → Phase 3: 差异识别 → Ph
 
 ---
 
-## 🔴 强制规则：复杂任务处理流程
+## 复杂任务处理流程（已迁移）
 
-> **当任务涉及 50+ 源文件分析、多份文档验证/修复、或任何单次上下文无法容纳的复杂任务时，必须严格遵循以下流程。禁止跳过任何阶段。**
-
-### 硬性约束
-
-| 约束 | 值 | 说明 |
-|------|-----|------|
-| **单子代理上限** | ≤ 12 个源文件 | 超过即拆分，禁止合并 |
-| **低风险触发阈值** | ≥ 5 文件或 ≥ 10 工具调用 | 文档/分析任务强制子代理（详见 sub-agent-quality-management.md） |
-| **单临时文档上限** | ≤ 1000 行 | 超限说明分组过大 |
-| **启动方式** | 同批次全部并行 | 禁止串行逐个启动 |
-| **结果验证** | 必须交叉验证 | 禁止信任单一来源 |
-
-### 五阶段流水线
-
-```
-Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
-扫描分组   并行分析   交叉验证   精准修复   导航同步
-```
-
-| 阶段 | 动作 | 产出 |
-|------|------|------|
-| **Phase 1** | 3 个搜索子代理并行扫描，按 8-12 文件/组划分 | 文件分组清单 |
-| **Phase 2** | N 个分析子代理并行分析，生成临时文档到 `docs/temp-analysis/` | 临时分析文档 |
-| **Phase 3** | M 个验证子代理交叉对比临时文档 vs 现有文档 | ERROR/WARN/INFO 报告 |
-| **Phase 4** | K 个修复子代理基于验证报告精准修复 | 修复后的文档 |
-| **Phase 5** | 同步 AGENTS.md / overview.md / README.md 统计数字和索引 | 更新后的导航 |
-
-### 反模式
-
-❌ 子代理塞 30+ 文件 / 串行启动 / 信任单份文档 / 只看报告不看源码 / 只管后端不管前端 / 修完不更新导航
-> **完整方法论**：[multi-agent-analysis-spec.md](./docs/project-flow/architecture/multi-agent-analysis-spec.md)
+> **本节内容已迁移至全局规范**：复杂任务五阶段流水线（扫描分组/并行分析/交叉验证/精准修复/导航同步）、硬性约束、反模式详见 `~/.trae-cn/user_rules/complex-task.md`（50+文件任务加载）。
+> 项目特定参考：[multi-agent-analysis-spec.md](./docs/project-flow/architecture/multi-agent-analysis-spec.md)
 
 ---
 
-## 🔴🔴 输出与工具预算管理（规避思考上限，V1 实验性）
+## 输出与工具预算管理（已迁移）
 
-> **GLM-5.2 在 Trae 平台有"思考次数上限"（工具调用轮次+思考 token+上下文累积）。频繁触发导致任务中断，新对话收费增加成本。本规则通过子代理编排和预算管理，在同对话内扩展工作量。**
-> **何时必须加载本子规范**：使用 Agent 工具时/执行 OpenSpec 流程时/任务涉及多文件分析时。
-> **完整规范**：[sub-agent-quality-management.md](./docs/project-rules/sub-agent-quality-management.md)
-
-### 分级子代理策略
-
-| 风险等级 | 任务类型 | 策略 |
-|---------|---------|------|
-| 🟢 低风险 | 文档生成/代码分析/大文件读取/OpenSpec 步骤2 | ✅ 强制子代理 |
-| 🟡 中风险 | 实施阶段分析/多文件探索/OpenSpec 步骤5 分析 | 🟡 推荐子代理 |
-| 🔴 高风险 | 架构决策/源码修改/用户交互/需要用户反馈的深度分析 | ❌ 禁止子代理，主代理直接执行 |
-
-### 单次回复输出预算
-
-- 单次回复正文 ≤ 100 行，超出部分用 Write 写文件
-- 长文档（四文档/分析报告）必须用 Write 写文件，正文只给摘要
-- 工具调用结果不回显，直接基于结果给结论
-
-### 工具调用预算
-
-- 单次对话工具调用 ≥ 30 次时，主动 /compact 或用子代理分担后续工作
-- 批量并行工具调用优先（一次调用多个独立工具）
-- 避免重复读取同一文件，已读内容缓存到 memory
-
-### 禁止建议新对话
-
-- **禁止**以"避免触发思考上限"为由建议用户新开对话（新对话收费）
-- 触发上限时优先输入"继续"续接
-- "继续"后仍频繁触发时，用子代理分担后续工作
-- 仅当上下文窗口接近满（>90%）且 /compact 无效时，才向用户说明情况
+> **本节内容已迁移至全局规范**：分级子代理策略（低/中/高风险）、单次回复输出预算、工具调用预算、禁止建议新对话等规则详见 `~/.trae-cn/user_rules/budget-management.md`（规避思考上限加载）。
+> 项目特定参考：[sub-agent-quality-management.md](./docs/project-rules/sub-agent-quality-management.md)
 
 ---
 
-## 🔴🔴 强制规则：AI 自动端到端测试（V3）
+## 🔴🔴 强制规则：AI 自动端到端测试
 
 > **任何代码变更任务，在 OpenSpec 步骤 5（实施）与步骤 6（检查点 2）之间，必须执行步骤 5.5 AI 自动端到端测试。禁止跳过！**
 
@@ -204,7 +160,7 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
 5.5.8 反馈闭环触发（run_e2e.py --feedback）→ 沉淀规则/陷阱/提示词
 ```
 
-### 🔴 固化层保护规则（V3）
+### 🔴 固化层保护规则
 
 `ai_tests/lib/` 下 9 个模块文件（M1-M9）为**固化层**，AI 不应直接修改，必须通过 OpenSpec 流程：
 
@@ -222,11 +178,7 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
 
 `config.py`（固化层）含 CRASH_PATTERNS/DB_QUERIES 等常量，扩展需 OpenSpec 流程。
 
-### 🔴🔴 快速验证脚本层（V3.1，2026-07-11 新增）
-
-> **用户批评（2026-07-11）**："你的测试流程为什么老是来来回回的变动呢？难道就没有一些经验或者是固定流程的脚本可以沉淀到ai_test目录下么？！！！"
->
-> **用户再次批评（2026-07-11）**："你还要反思为什么有了 ai_test 你为啥不去使用，需不需要在项目规范文件中加强说明"
+### 🔴🔴 快速验证脚本层
 
 **根因反思**：`run_e2e.py` 面向"用例驱动全量测试"，需要完整用例解析+8类证据收集，流程太重不适合"快速L2验证某个功能"。`lib/` 模块是底层组件没有组合成快速验证脚本。导致 AI 每次在 `temp/` 目录从头创建临时脚本，用完就丢，下次又从头写。
 
@@ -241,7 +193,7 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
 
 **SOP 文档**：[ai_tests/docs/fixed_test_workflow.md](./ai_tests/docs/fixed_test_workflow.md) — 测试前必读！
 
-### 🔴🔴🔴 ai_tests 使用强制规则（V3.1，2026-07-11 新增）
+### 🔴🔴🔴 ai_tests 使用强制规则
 
 | 规则 | 说明 |
 |------|------|
@@ -280,66 +232,10 @@ Phase 1: 经验优先 → Phase 2: 构建规则 → Phase 3: 测试驱动 → Ph
 
 ---
 
-## 🔴🔴 强制规则：OpenSpec 工作流程
+## OpenSpec 工作流程（已迁移）
 
-> **任何新增功能、优化功能、Bug 修复、重构任务，必须先生成 OpenSpec 文档并经用户审核通过后，才能开始实施代码。禁止未经设计审核直接编码！**
-
-### 强制触发条件
-
-所有场景一律生成四文档（README.md + spec.md + design.md + tasks.md），不做级别区分：
-
-| 文档 | 核心内容 |
-|------|---------|
-| **README.md** | 功能概述、核心能力、文档索引、状态标记 |
-| **spec.md** | Intent/Scope/Approach（含 Alternatives Considered + Drawbacks）/Requirements/Scenarios |
-| **design.md** | Technical Approach/Architecture Decisions（ADR Y-Statement 模板）/Data Flow/File Changes |
-| **tasks.md** | `- [ ] X.Y` 格式任务清单 + AOAdapt 日志（遇问题时必须记录） |
-
-文档位置：`docs/specs/{功能名称}/`
-
-### 工作流程（8 步 + 3 检查点）
-
-```
-步骤1: 用户提出需求 → 步骤2: 需求分析 → 步骤3: 生成四文档(🔄设计中)
-→ 🛑检查点1: 用户审查设计 → 步骤5: 按tasks.md实施(🔄开发中)
-→ 🛑检查点2: 用户审核实施 → 🛑检查点3: 用户最终验收
-→ 步骤8: 文档同步(更新docs/project-flow/)
-```
-
-### 子代理使用指导（V1 实验性）
-
-> **为规避思考上限，OpenSpec 流程的以下步骤应使用子代理（详见 [sub-agent-quality-management.md](./docs/project-rules/sub-agent-quality-management.md)）：**
-
-| 步骤 | 子代理策略 | 说明 |
-|------|-----------|------|
-| **步骤2（生成四文档）** | ✅ 强制子代理 | 子代理并行生成四文档，主代理验证关键章节 |
-| **步骤5（实施）分析阶段** | 🟡 推荐子代理 | 子代理分析相关代码，主代理基于结果串行修改源码 |
-| **步骤5（实施）源码修改** | ❌ 主代理串行 | 遵守并发文件修改规范 |
-| **检查点1/2/3** | ❌ 主代理直接 | AskUserQuestion 由主代理发起 |
-
-### 检查点交互规范（强制）
-
-> **OpenSpec 三个检查点（1/2/3）必须使用 AskUserQuestion 工具与用户交互，禁止依赖 ExitPlanMode 的二元确认。**
-
-#### 三选项强制结构
-
-每个检查点的 AskUserQuestion 必须提供以下三个选项，缺一不可：
-
-| 选项 | 含义 | 后续动作 |
-|------|------|---------|
-| **通过（继续下一阶段）** | 用户认可当前阶段产出 | 进入下一阶段，更新 TaskList 状态 |
-| **需调整** | 用户对部分内容有意见 | 用户通过 Other 输入具体意见，AI 据此修订后重新发起检查点确认 |
-| **拒绝（回退上一阶段）** | 用户不认可整体方向 | 回退到上一阶段重新分析/实施，更新 TaskList 状态 |
-
-#### Plan 模式 ExitPlanMode 前置确认
-
-Plan 模式下调用 ExitPlanMode 前，必须先通过 AskUserQuestion 获取用户明确确认：
-- 用户选"通过" → ExitPlanMode（执行）
-- 用户选"需调整" → 据意见修订 → 重新 AskUserQuestion
-- 用户选"拒绝回退" → 回退上一阶段
-
-> **何时必须加载本子规范**：任何新增功能/优化功能/Bug修复/重构任务开始前。
-> **完整工作流程（检查点交互示例+反模式+文档状态流转+检查清单）**：[openspec-workflow.md](./docs/project-rules/openspec-workflow.md)
+> **本节内容已迁移至全局规范**：四文档结构（README/spec/design/tasks）、8步工作流程、子代理使用指导、检查点交互规范、三选项强制结构、Plan 模式 ExitPlanMode 前置确认详见 `~/.trae-cn/user_rules/openspec-workflow.md`（OpenSpec任务加载）。
+> 项目特定参考：[openspec-workflow.md](./docs/project-rules/openspec-workflow.md) | 文档位置：`docs/specs/{功能名称}/`
 
 ---
 
@@ -466,6 +362,43 @@ Phase 1: 经验优先 → Phase 2: 构建规则 → Phase 3: 测试驱动 → Ph
 
 ---
 
+## 包名规范（三类包分类）
+
+> 本项目在原版legado-E基础上扩展了包名机制,支持自定义包名实现与原版共存。
+
+### 三类包定义
+
+| 包类型 | 基础包名 | 后缀 | 最终包名 | 用途 |
+|--------|---------|------|---------|------|
+| **测试包** | `io.legado.missapp` | `.debug` | `io.legado.missapp.debug` | 开发调试、快速验证(默认) |
+| **共存包** | 用户自定义 | `.debug`或无 | 如`com.my.legado.debug` | 与原版共存、私有化部署 |
+| **正式包** | `io.legado.missapp` | `.release` | `io.legado.missapp.release` | 正式发布、生产环境 |
+
+### 配置差异
+
+| 配置项 | 测试包 | 共存包 | 正式包 |
+|--------|--------|--------|--------|
+| `minifyEnabled` | `false` | 由构建类型决定 | `true` |
+| `shrinkResources` | `false` | 由构建类型决定 | `true` |
+| `applicationIdSuffix` | `.debug` | `.debug`或无 | `.release` |
+| 构建速度 | 快 | 中 | 慢 |
+| APK体积 | 大 | 中 | 小 |
+
+### 使用方法
+
+| 操作 | 命令 | 最终包名 |
+|------|------|---------|
+| 构建测试包(默认) | `build-legado.bat` | `io.legado.missapp.debug` |
+| 构建正式包 | `build-legado.bat release` | `io.legado.missapp.release` |
+| 构建共存包 | `build-legado.bat debug com.my.legado` | `com.my.legado.debug` |
+
+### 与原版差异
+
+- **原版legado-E**: 单一固定包名`io.legado.app`,不支持共存
+- **本项目(missapp)**: 支持`-PcustomAppId`参数实现自定义包名,可与原版共存
+
+---
+
 ## 代码约束（摘要）
 
 ### Code Style 核心
@@ -490,19 +423,9 @@ Phase 1: 经验优先 → Phase 2: 构建规则 → Phase 3: 测试驱动 → Ph
 
 > **完整陷阱**：[exception_rules.md](./docs/project-rules/exception_rules.md) | [logging_rules.md](./docs/project-rules/logging_rules.md) | [architecture_rules.md](./docs/project-rules/architecture_rules.md)
 
-### 并发文件修改规范（全局通用）
+### 并发文件修改规范（已迁移）
 
-> **多 Agent 并行操作时，必须遵循以下规则，防止文件内容被并发覆盖丢失。**
-> 踩坑案例：文档同步阶段，多个后台 Agent 并行修改文档时，与源码文件产生时序竞态，导致已添加的代码定义被覆盖丢失，构建失败。
-
-| 规则 | 说明 |
-|------|------|
-| **源码文件修改串行化** | 同一源码文件的所有 Edit 必须由主 Agent 串行执行，**禁止委托给后台 Agent**触碰同一源码文件 |
-| **文档与代码隔离** | 文档同步 Agent 只能修改文档目录，**禁止读取+回写**源码文件（验证时只读不写） |
-| **关键节点构建复验** | 每个阶段结束后必须重新执行项目构建验证命令，而非只在最后构建一次；文档同步后也要复验源码完整性 |
-| **git diff 校验** | 重要文件修改后用 `git diff` 确认变更范围符合预期，发现异常回退立即排查 |
-| **后台 Agent 职责单一** | 后台 Agent 只负责独立的分析/文档任务，**禁止**在后台 Agent 中执行源码文件 Edit |
-| **修改前备份上下文** | 对核心配置文件/常量文件执行 Edit 前，先 Read 确认当前内容；多轮修改后再次 Read 防止中间状态丢失 |
+> **本节内容已迁移至全局规范**：源码文件修改串行化、文档与代码隔离、关键节点构建复验、git diff 校验、后台 Agent 职责单一、修改前备份上下文等规则详见 `~/.trae-cn/user_rules/concurrent-editing.md`（多Agent并行加载）。
 
 ### Git 仓库管理
 
