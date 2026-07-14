@@ -370,9 +370,9 @@ Phase 1: 经验优先 → Phase 2: 构建规则 → Phase 3: 测试驱动 → Ph
 
 | 包类型 | 基础包名 | 后缀 | 最终包名 | 用途 |
 |--------|---------|------|---------|------|
-| **测试包** | `io.legado.missapp` | `.debug` | `io.legado.missapp.debug` | 开发调试、快速验证(默认) |
+| **测试包** | `io.legado.app` | `.debug` | `io.legado.app.debug` | 开发调试、快速验证(默认) |
 | **共存包** | 用户自定义 | `.debug`或无 | 如`com.my.legado.debug` | 与原版共存、私有化部署 |
-| **正式包** | `io.legado.missapp` | `.release` | `io.legado.missapp.release` | 正式发布、生产环境 |
+| **正式包** | `io.legado.app` | `.release` | `io.legado.app.release` | 正式发布、生产环境 |
 
 ### 配置差异
 
@@ -388,14 +388,14 @@ Phase 1: 经验优先 → Phase 2: 构建规则 → Phase 3: 测试驱动 → Ph
 
 | 操作 | 命令 | 最终包名 |
 |------|------|---------|
-| 构建测试包(默认) | `build-legado.bat` | `io.legado.missapp.debug` |
-| 构建正式包 | `build-legado.bat release` | `io.legado.missapp.release` |
+| 构建测试包(默认) | `build-legado.bat` | `io.legado.app.debug` |
+| 构建正式包 | `build-legado.bat release` | `io.legado.app.release` |
 | 构建共存包 | `build-legado.bat debug com.my.legado` | `com.my.legado.debug` |
 
 ### 与原版差异
 
 - **原版legado-E**: 单一固定包名`io.legado.app`,不支持共存
-- **本项目(missapp)**: 支持`-PcustomAppId`参数实现自定义包名,可与原版共存
+- **本项目**: 支持`-PcustomAppId`参数实现自定义包名,可与原版共存
 
 ---
 

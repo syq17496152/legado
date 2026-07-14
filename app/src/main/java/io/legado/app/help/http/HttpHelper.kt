@@ -9,6 +9,9 @@ import io.legado.app.help.glide.progress.ProgressResponseBody
 import io.legado.app.help.http.CookieManager.cookieJarHeader
 import io.legado.app.model.ReadManga
 import io.legado.app.utils.NetworkUtils
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.Cache
 import okhttp3.ConnectionSpec
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -16,6 +19,8 @@ import okhttp3.Credentials
 import okhttp3.Dns
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
+import splitties.init.appCtx
+import java.io.File
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Proxy
@@ -74,6 +79,11 @@ val okHttpClient: OkHttpClient by lazy {
         ConnectionSpec.CLEARTEXT
     )
 
+    // F-P1-D HTTP 响应缓存：复用重复请求结果，减少网络往返
+    // 已知上限：50MB 磁盘缓存（OkHttp LRU 策略自动淘汰） | 升级路径：如磁盘紧张可降至 20MB
+    val cacheDir = File(appCtx.cacheDir, "okhttp_cache").apply { mkdirs() }
+    val httpCache = Cache(cacheDir, 50L * 1024 * 1024)
+
     val builder = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
@@ -89,6 +99,9 @@ val okHttpClient: OkHttpClient by lazy {
         // 派生客户端（okHttpClientManga / proxyClient）通过 newBuilder() 继承此连接池
         // 已知上限：50 个连接约 2.5MB 内存（每连接 ~50KB） | 升级路径：如内存紧张可降至 20
         .connectionPool(okhttp3.ConnectionPool(50, 5, TimeUnit.MINUTES))
+        // HTTP 响应缓存：仅缓存 GET 请求且响应含 Cache-Control/Expires 的资源
+        // 派生客户端（okHttpClientManga / proxyClient）通过 newBuilder() 继承此缓存
+        .cache(httpCache)
         .followRedirects(true)
         .followSslRedirects(true)
         .addInterceptor(OkHttpExceptionInterceptor)
@@ -269,5 +282,28 @@ private object RetryableDns : Dns {
         negativeCache[hostname] = System.currentTimeMillis() + NEGATIVE_CACHE_TTL_MS
         AppLog.put("DNS lookup failed after $MAX_RETRY retries: host=${hostname.take(50)}")
         throw lastException ?: UnknownHostException(hostname)
+    }
+}
+
+/**
+ * F-P1-D 预连接/DNS 预解析：HEAD 请求提前建立 TCP+TLS 连接，复用到后续 GET 请求
+ *
+ * 适用场景：列表解析完成后，对前 N 篇文章域名发起预连接，点击文章内容页时减少 300-1000ms
+ * 失败处理：kotlin.runCatching 捕获异常，失败不影响列表显示
+ * 已知上限：HEAD 请求无 body 开销，复用连接池 50 连接 | 升级路径：无
+ */
+suspend fun warmUpConnection(url: String) = withContext(Dispatchers.IO) {
+    if (url.isBlank()) return@withContext
+    kotlin.runCatching {
+        val request = okhttp3.Request.Builder()
+            .url(url)
+            .head()
+            .build()
+        okHttpClient.newCall(request).execute().use { response ->
+            // 仅触发连接建立，不关心响应内容
+            AppLog.put("HttpHelper 预连接完成: code=${response.code}")
+        }
+    }.onFailure {
+        AppLog.put("HttpHelper 预连接失败: ${it.message?.take(100)}")
     }
 }

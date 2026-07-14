@@ -7,6 +7,7 @@ import com.google.gson.internal.LinkedTreeMap
 import com.script.CompiledScript
 import com.script.buildScriptBindings
 import com.script.rhino.RhinoScriptEngine
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern.JS_PATTERN
 import io.legado.app.constant.AppPattern.WebJS_PATTERN
 import io.legado.app.data.entities.BaseBook
@@ -28,7 +29,6 @@ import io.legado.app.utils.GSONStrict
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
-import io.legado.app.utils.getOrPutLimit
 import io.legado.app.utils.isDataUrl
 import io.legado.app.utils.isJson
 import io.legado.app.utils.isMainThread
@@ -79,8 +79,7 @@ class AnalyzeRule(
 
     // F-P1-C4 修复无界 HashMap 内存泄漏 | 已知上限：64 条规则缓存（LRU 自动淘汰最久未使用） | 升级路径：无
     private val stringRuleCache = android.util.LruCache<String, List<SourceRule>>(64)
-    private val regexCache = hashMapOf<String, Regex?>()
-    private val scriptCache = hashMapOf<String, CompiledScript>()
+    // regexCache/scriptCache 已提升为 companion object 全局缓存（见 globalRegexCache/globalScriptCache）
     private var topScopeRef: WeakReference<Scriptable>? = null
     private var evalJSCallCount = 0
 
@@ -519,13 +518,7 @@ class AnalyzeRule(
     }
 
     private fun compileRegexCache(regex: String): Regex? {
-        return regexCache.getOrPutLimit(regex, 16) {
-            try {
-                regex.toRegex()
-            } catch (e: Exception) {
-                null
-            }
-        }
+        return getOrCompileRegex(regex)
     }
 
     /**
@@ -869,14 +862,12 @@ class AnalyzeRule(
             }
         }
         val script = compileScriptCache(jsStr)
-        val result = script.eval(scope, coroutineContext)
+        val result = script?.eval(scope, coroutineContext)
         return result
     }
 
-    private fun compileScriptCache(jsStr: String): CompiledScript {
-        return scriptCache.getOrPutLimit(jsStr, 16) {
-            RhinoScriptEngine.compile(jsStr)
-        }
+    private fun compileScriptCache(jsStr: String): CompiledScript? {
+        return getOrCompileScript(jsStr)
     }
 
     override fun getSource(): BaseSource? {
@@ -962,6 +953,39 @@ class AnalyzeRule(
         private val evalPattern =
             Pattern.compile("@get:\\{[^}]+?\\}|\\{\\{[\\w\\W]*?\\}\\}", Pattern.CASE_INSENSITIVE)
         private val regexPattern = Pattern.compile("\\$\\d{1,2}")
+
+        // F-P1-C5 全局缓存：scriptCache/regexCache 提升为 companion object，跨实例共享编译结果
+        // 线程安全：LruCache 自带 synchronized + @Synchronized 保护编译操作
+        // 已知上限：scriptCache 32条/regexCache 64条（LRU 自动淘汰） | 升级路径：无
+        private val globalScriptCache = android.util.LruCache<String, CompiledScript>(32)
+        private val globalRegexCache = android.util.LruCache<String, Regex?>(64)
+
+        @Synchronized
+        fun getOrCompileScript(script: String): CompiledScript? {
+            globalScriptCache.get(script)?.let { return it }
+            return kotlin.runCatching {
+                RhinoScriptEngine.compile(script)
+            }.getOrElse {
+                AppLog.put("AnalyzeRule JS 编译失败: ${it.message}")
+                null
+            }?.also {
+                globalScriptCache.put(script, it)
+                AppLog.put("AnalyzeRule JS 编译并缓存: script 长度=${script.length}")
+            }
+        }
+
+        @Synchronized
+        fun getOrCompileRegex(pattern: String): Regex? {
+            globalRegexCache.get(pattern)?.let { return it }
+            return kotlin.runCatching {
+                pattern.toRegex()
+            }.getOrElse {
+                AppLog.put("AnalyzeRule Regex 编译失败: ${it.message}")
+                null
+            }?.also {
+                globalRegexCache.put(pattern, it)
+            }
+        }
 
         fun AnalyzeRule.setCoroutineContext(context: CoroutineContext): AnalyzeRule {
             coroutineContext = context.minusKey(ContinuationInterceptor)

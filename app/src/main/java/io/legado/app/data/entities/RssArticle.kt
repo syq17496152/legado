@@ -3,13 +3,15 @@ package io.legado.app.data.entities
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Ignore
+import androidx.room.Index
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import kotlinx.parcelize.IgnoredOnParcel
 
 @Entity(
     tableName = "rssArticles",
-    primaryKeys = ["origin", "link", "sort"]
+    primaryKeys = ["origin", "link", "sort"],
+    indices = [Index(name = "idx_origin_sort", value = ["origin", "sort"])]
 )
 data class RssArticle(
     override var origin: String = "",

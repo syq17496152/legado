@@ -53,9 +53,9 @@ android {
     defaultConfig {
         // 包类型判断：
         // 1. 传 -PcustomAppId=xxx → 共存包（用户自定义包名）
-        // 2. 不传参数 + 构建类型 debug → 测试包（io.legado.missapp.debug）
-        // 3. 不传参数 + 构建类型 release → 正式包（io.legado.missapp.release）
-        applicationId project.hasProperty("customAppId") ? project.property("customAppId") : "io.legado.missapp"
+        // 2. 不传参数 + 构建类型 debug → 测试包（io.legado.app.debug）
+        // 3. 不传参数 + 构建类型 release → 正式包（io.legado.app.release）
+        applicationId project.hasProperty("customAppId") ? project.property("customAppId") : "io.legado.app"
 
         // 输出包名信息，便于AI解析日志
         println "========== PACKAGE INFO =========="

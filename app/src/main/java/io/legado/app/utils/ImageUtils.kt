@@ -21,10 +21,19 @@ object ImageUtils {
     /**
      * P1-2 解密结果缓存：避免列表刷新时重复解密相同图片
      * 设计文档原方案为 JS 层 cache.get/put，但 CacheManager 只支持 String，ByteArray 无法缓存
-     * 调整为 Kotlin 层 LruCache 缓存解密后的 ByteArray（基于 src 做 key，2MB 上限）
+     * 调整为 Kotlin 层 LruCache 缓存解密后的 ByteArray（基于 src 做 key）
+     * F-P1-E 动态上限：根据设备可用内存自适应（maxMemory/32），范围 4-16MB
+     * 已知上限：低端设备4MB/高端设备16MB | 升级路径：无
      */
-    private val decodeCache = object : LruCache<String, ByteArray>(2 * 1024 * 1024) {
+    private val decodeCache = object : LruCache<String, ByteArray>(
+        (Runtime.getRuntime().maxMemory() / 32).toInt().coerceIn(4 * 1024 * 1024, 16 * 1024 * 1024)
+    ) {
         override fun sizeOf(key: String, value: ByteArray): Int = value.size
+    }
+
+    init {
+        // F-P1-E 解密缓存动态上限初始化日志
+        AppLog.put("ImageUtils 解密缓存上限: ${decodeCache.maxSize()} bytes")
     }
 
     /**

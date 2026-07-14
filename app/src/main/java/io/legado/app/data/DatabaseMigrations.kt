@@ -5,6 +5,7 @@ import androidx.room.migration.AutoMigrationSpec
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import io.legado.app.constant.AppConst
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookSourceType
 import io.legado.app.constant.BookType
 
@@ -20,7 +21,8 @@ object DatabaseMigrations {
             migration_31_32, migration_32_33, migration_33_34, migration_34_35,
             migration_35_36, migration_36_37, migration_37_38, migration_38_39,
             migration_39_40, migration_40_41, migration_41_42, migration_42_43,
-            migration_89_90, migration_90_91, migration_91_92, migration_92_93
+            migration_89_90, migration_90_91, migration_91_92, migration_92_93,
+            migration_93_94
         )
     }
 
@@ -477,6 +479,21 @@ object DatabaseMigrations {
             db.execSQL("DROP TABLE `rssSources`")
             db.execSQL("ALTER TABLE `rssSources_new` RENAME TO `rssSources`")
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_rssSources_sourceUrl` ON `rssSources` (`sourceUrl`)")
+        }
+    }
+
+    /**
+     * rss-parse-optimization: 93→94 新增 rssArticles(origin, sort) 复合索引
+     * 优化 RssArticleDao.flowByOriginSort 查询性能（按 origin+sort 排序的文章列表）
+     */
+    private val migration_93_94 = object : Migration(93, 94) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            kotlin.runCatching {
+                db.execSQL("CREATE INDEX IF NOT EXISTS `idx_origin_sort` ON `rssArticles` (`origin`, `sort`)")
+                AppLog.put("AppDatabase Migration 93→94: 创建 idx_origin_sort 索引成功")
+            }.onFailure { e ->
+                AppLog.put("AppDatabase Migration 93→94: 创建索引失败: ${e.message}")
+            }
         }
     }
 

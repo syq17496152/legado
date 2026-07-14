@@ -1,9 +1,11 @@
 package io.legado.app.model.rss
 
+import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssSource
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.StrResponse
+import io.legado.app.help.http.warmUpConnection
 import io.legado.app.model.Debug
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
@@ -12,6 +14,8 @@ import io.legado.app.model.analyzeRule.RuleData
 import io.legado.app.utils.NetworkUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.currentCoroutineContext
 import kotlin.coroutines.CoroutineContext
 
@@ -77,7 +81,22 @@ object Rss {
         }
         checkRedirect(rssSource, res)
         Debug.log(rssSource.sourceUrl, "≡获取成功:${analyzeUrl.ruleUrl}")
-        return RssParserByRule.parseXML(sortName, sortUrl, res.url, res.body, rssSource, ruleData)
+        val articles = RssParserByRule.parseXML(sortName, sortUrl, res.url, res.body, rssSource, ruleData)
+        // F-P1-F 预连接：列表加载完成后，对前 3 篇文章域名发起 HEAD 预连接，点击时减少 300-1000ms
+        // coroutineScope{}.async{}.awaitAll() 并行执行，kotlin.runCatching 捕获异常，失败不影响列表显示
+        kotlin.runCatching {
+            kotlinx.coroutines.coroutineScope {
+                articles.first.take(3).mapIndexed { index, article ->
+                    async(Dispatchers.IO) {
+                        if (!article.link.isNullOrBlank()) {
+                            AppLog.put("Rss 预连接: 第${index + 1}篇")
+                            warmUpConnection(article.link)
+                        }
+                    }
+                }.awaitAll()
+            }
+        }
+        return articles
     }
 
     fun getContent(

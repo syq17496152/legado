@@ -7,7 +7,7 @@ setlocal
 ::
 ::  Package Types:
 ::  1. Test Package (测试包):
-::     - Package: io.legado.missapp.debug
+::     - Package: io.legado.app.debug
 ::     - Usage: Development, quick verification
 ::     - Command: build-legado.bat
 ::
@@ -17,7 +17,7 @@ setlocal
 ::     - Command: build-legado.bat debug com.my.legado
 ::
 ::  3. Release Package (正式包):
-::     - Package: io.legado.missapp.release
+::     - Package: io.legado.app.release
 ::     - Usage: Production release
 ::     - Command: build-legado.bat release
 ::
