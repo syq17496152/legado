@@ -59,6 +59,8 @@ class WebViewLoginFragment : BaseFragment(R.layout.fragment_web_view_login) {
                 if (!checking) {
                     checking = true
                     binding.titleBar.snackbar(R.string.check_host_cookie)
+                    // 强制持久化 WebView 当前 cookie，防止 finish 后丢失
+                    CookieManager.getInstance().flush()
                     viewModel.source?.let {
                         loadUrl(it)
                     }
@@ -88,14 +90,12 @@ class WebViewLoginFragment : BaseFragment(R.layout.fragment_web_view_login) {
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 val cookie = cookieManager.getCookie(url)
-                android.util.Log.d("CronetCookie", "WebViewLogin onPageStarted: url=$url, sourceKey=${source.getKey()}, cookie=${cookie?.take(80)}")
                 CookieStore.setCookie(source.getKey(), cookie)
                 super.onPageStarted(view, url, favicon)
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 val cookie = cookieManager.getCookie(url)
-                android.util.Log.d("CronetCookie", "WebViewLogin onPageFinished: url=$url, sourceKey=${source.getKey()}, cookie=${cookie?.take(80)}")
                 CookieStore.setCookie(source.getKey(), cookie)
                 if (checking) {
                     activity?.finish()

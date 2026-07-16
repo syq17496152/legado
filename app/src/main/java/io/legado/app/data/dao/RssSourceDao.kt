@@ -172,6 +172,9 @@ interface RssSourceDao {
     @Query("update rssSources set enabled = :enable where sourceUrl = :sourceUrl")
     fun enable(sourceUrl: String, enable: Boolean)
 
+    @Query("update rssSources set lastHost = :lastHost where sourceUrl = :sourceUrl")
+    fun updateLastHost(sourceUrl: String, lastHost: String?)
+
     private fun dealGroups(list: List<String>): List<String> {
         val groups = linkedSetOf<String>()
         list.forEach {

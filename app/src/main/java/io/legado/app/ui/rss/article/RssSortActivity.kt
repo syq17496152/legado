@@ -62,6 +62,13 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
         }
     }
 
+    // 修复：登录返回后刷新当前列表（之前 startActivity 无回调导致列表不刷新）
+    private val loginResult = registerForActivityResult(
+        StartActivityContract(SourceLoginActivity::class.java)
+    ) {
+        currentArticlesFragment?.refreshAfterLogin()
+    }
+
     // 添加类属性
     private val tabRows = mutableListOf<LinearLayout>()
     var maxTagsPerRow = 10 // 每行尽量容纳10个标签,横屏20
@@ -310,7 +317,7 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
         when (item.itemId) {
             R.id.menu_page -> currentArticlesFragment?.showPagePicker()
 
-            R.id.menu_login -> startActivity<SourceLoginActivity> {
+            R.id.menu_login -> loginResult.launch {
                 putExtra("type", "rssSource")
                 putExtra("key", viewModel.rssSource?.sourceUrl)
             }

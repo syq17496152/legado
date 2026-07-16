@@ -117,4 +117,9 @@
     <color name="ate_navigation_drawer_selected_dark">#202020</color>
 
     <color name="book_ant_10">#141414</color>
+
+    <!-- R3 阶段5：视频设置面板主题适配颜色（亮色主题用半透明黑） -->
+    <color name="panel_btn_bg">#1A000000</color>
+    <color name="panel_btn_ripple">#33000000</color>
+    <color name="drag_handle_bg">#4D000000</color>
 </resources>

@@ -299,6 +299,10 @@ class RssSourceEditActivity :
                 rs.articleStyle = 0
             }
             binding.lyType.setSelection(rs.articleStyle)
+            // Issue-5 修复：单源解析并发配置显示（0=用全局配置）
+            binding.editParseConcurrency.setText(
+                if (rs.parseConcurrency > 0) rs.parseConcurrency.toString() else ""
+            )
         }
         sourceEntities.clear()
         sourceEntities.apply {
@@ -316,6 +320,7 @@ class RssSourceEditActivity :
             add(EditEntity("header", rs.header, R.string.source_http_header))
             add(EditEntity("variableComment", rs.variableComment, R.string.variable_comment))
             add(EditEntity("concurrentRate", rs.concurrentRate, R.string.concurrent_rate))
+            add(EditEntity("parseConcurrency", rs.parseConcurrency.toString(), R.string.source_parse_concurrency))
             add(EditEntity("jsLib", rs.jsLib, "jsLib"))
         }
         startEntities.clear()
@@ -394,6 +399,9 @@ class RssSourceEditActivity :
         source.preload = binding.cbIsEnablePreload.isChecked
         source.type = binding.spType.selectedItemPosition
         source.articleStyle = binding.lyType.selectedItemPosition
+        // Issue-5 修复：保存单源解析并发配置（空值或0=用全局配置）
+        source.parseConcurrency = binding.editParseConcurrency.text.toString()
+            .trim().toIntOrNull()?.coerceIn(0, 32) ?: 0
         sourceEntities.forEach {
             it.value = it.value?.takeIf { s -> s.isNotBlank() }
             when (it.key) {
@@ -409,6 +417,8 @@ class RssSourceEditActivity :
                 "header" -> source.header = it.value
                 "variableComment" -> source.variableComment = it.value
                 "concurrentRate" -> source.concurrentRate = it.value
+                "parseConcurrency" -> source.parseConcurrency =
+                    it.value?.toIntOrNull()?.coerceIn(0, 20) ?: 0
                 "searchUrl" -> source.searchUrl = it.value
                 "sortUrl" -> source.sortUrl = it.value
                 "jsLib" -> source.jsLib = it.value

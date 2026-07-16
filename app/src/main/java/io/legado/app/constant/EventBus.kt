@@ -26,6 +26,8 @@ object EventBus {
     const val SAVE_CONTENT = "saveContent"
     const val CHECK_SOURCE = "checkSource"
     const val CHECK_SOURCE_DONE = "checkSourceDone"
+    const val CHECK_RSS_SOURCE = "checkRssSource"
+    const val CHECK_RSS_SOURCE_DONE = "checkRssSourceDone"
     const val TIP_COLOR = "tipColor"
     const val SOURCE_CHANGED = "sourceChanged"
     const val SEARCH_RESULT = "searchResult"

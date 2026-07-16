@@ -513,8 +513,8 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 hostMap.clear()
                 if (groupSourcesByDomain) {
                     data.sortedWith(
-                        compareBy<BookSourcePart> { getSourceHost(it.bookSourceUrl) == "#" }
-                            .thenBy { getSourceHost(it.bookSourceUrl) }
+                        compareBy<BookSourcePart> { getSourceHost(it.lastHost ?: it.bookSourceUrl) == "#" }
+                            .thenBy { getSourceHost(it.lastHost ?: it.bookSourceUrl) }
                             .thenByDescending { it.lastUpdateTime })
                 } else {
                     sortSources(data)
@@ -898,7 +898,14 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     override fun getSourceHost(origin: String): String {
         return hostMap.getOrPut(origin) {
-            NetworkUtils.getSubDomainOrNull(origin) ?: "#"
+            // 兼容两种输入: 1)完整URL(http://...) 2)纯host(example.com或IP)
+            // lastHost字段存储的是host,getSourceHost(it.lastHost ?: it.bookSourceUrl)调用
+            if (origin.startsWith("http", ignoreCase = true)) {
+                NetworkUtils.getSubDomainOrNull(origin) ?: "#"
+            } else {
+                // host补http://前缀再提取子域名,支持"www.example.com"→"example.com"归并
+                NetworkUtils.getSubDomainOrNull("http://$origin") ?: origin
+            }
         }
     }
 

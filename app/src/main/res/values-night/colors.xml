@@ -48,4 +48,9 @@
 
     <!--statusBarBackground-->
     <color name="navigation_bar_bag">#222222</color>
+
+    <!-- R3 阶段5：视频设置面板主题适配颜色（暗色主题用半透明白） -->
+    <color name="panel_btn_bg">#1AFFFFFF</color>
+    <color name="panel_btn_ripple">#33FFFFFF</color>
+    <color name="drag_handle_bg">#4DFFFFFF</color>
 </resources>

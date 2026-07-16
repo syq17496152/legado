@@ -99,7 +99,10 @@ data class BookSource(
     @ColumnInfo(defaultValue = "0")
     var eventListener: Boolean = false, // 是否监听事件来执行回调规则
     @ColumnInfo(defaultValue = "0")
-    var customButton: Boolean = false //由书源控制的自定义按钮
+    var customButton: Boolean = false, //由书源控制的自定义按钮
+    // AnalyzeUrl解析后的真实域名(host),校验时回填,UI分组用此字段优先于源URL截取
+    // 解决: sourceUrl含jslib/注释/#规避等复杂情况,getSourceHost(sourceUrl)提取域名不准
+    var lastHost: String? = null
 ) : Parcelable, BaseSource {
 
     override fun getTag(): String {
@@ -259,6 +262,7 @@ data class BookSource(
                 && getBookInfoRule() == source.getBookInfoRule()
                 && getTocRule() == source.getTocRule()
                 && getContentRule() == source.getContentRule()
+                && weight == source.weight
     }
 
     private fun equal(a: String?, b: String?) = a == b || (a.isNullOrEmpty() && b.isNullOrEmpty())

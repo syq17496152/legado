@@ -17,6 +17,8 @@ object CheckSource {
     var timeout = CacheManager.getLong("checkSourceTimeout") ?: 180000L
     var wSourceComment = CacheManager.get("wSourceComment")?.toBoolean() ?: true
     var checkDomain = CacheManager.get("checkDomain")?.toBoolean() ?: false
+    // 域名校验方式：0=Socket快速检测, 1=AnalyzeUrl真实请求(默认,支持jslib/注释/#规避等复杂URL)
+    var domainCheckMode = CacheManager.getInt("domainCheckMode") ?: 1
     var checkSearch = CacheManager.get("checkSearch")?.toBoolean() ?: true
     var checkDiscovery = CacheManager.get("checkDiscovery")?.toBoolean() ?: true
     var checkInfo = CacheManager.get("checkInfo")?.toBoolean() ?: true
@@ -50,6 +52,7 @@ object CheckSource {
         CacheManager.put("checkSourceTimeout", timeout)
         CacheManager.put("wSourceComment", wSourceComment)
         CacheManager.put("checkDomain", checkDomain)
+        CacheManager.put("domainCheckMode", domainCheckMode)
         CacheManager.put("checkSearch", checkSearch)
         CacheManager.put("checkDiscovery", checkDiscovery)
         CacheManager.put("checkInfo", checkInfo)

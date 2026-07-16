@@ -76,14 +76,15 @@
                     android:textSize="12sp" />
             </LinearLayout>
 
-            <com.google.android.material.button.MaterialButton
+            <Button
                 android:id="@+id/tv_add_group"
-                style="@style/Widget.Material3.Button.TonalButton"
+                style="?attr/borderlessButtonStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:minWidth="0dp"
                 android:paddingHorizontal="12dp"
                 android:text="@string/highlight_rule_group_add"
+                android:textColor="@color/primaryText"
                 tools:ignore="TouchTargetSizeCheck" />
         </LinearLayout>
 

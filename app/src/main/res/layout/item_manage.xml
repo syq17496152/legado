@@ -4,11 +4,10 @@
     + 开关 swt_enabled + 编辑 iv_edit + 更多 iv_menu_more。
     不依赖 skin_* 换肤属性、不依赖 @style/Style.ItemManageCard（本项目不存在）。
 -->
-<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/root_card"
-    style="?attr/materialCardViewOutlinedStyle"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginStart="8dp"
@@ -16,8 +15,7 @@
     android:layout_marginTop="4dp"
     android:layout_marginBottom="4dp"
     app:cardCornerRadius="8dp"
-    app:cardElevation="0dp"
-    app:strokeWidth="0dp">
+    app:cardElevation="0dp">
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/content_layout"
@@ -99,4 +97,4 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
-</com.google.android.material.card.MaterialCardView>
+</androidx.cardview.widget.CardView>

@@ -56,6 +56,8 @@ object PreferKey {
     const val backupPath = "backupUri"
     const val restoreIgnore = "restoreIgnore"
     const val threadCount = "threadCount"
+    const val rssParseConcurrency = "rssParseConcurrency"
+    const val imageLoadConcurrency = "imageLoadConcurrency"
     const val webPort = "webPort"
     const val keepLight = "keep_light"
     const val webService = "webService"

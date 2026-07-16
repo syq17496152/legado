@@ -799,6 +799,15 @@
     <string name="read_record_summary">Read record summary</string>
     <string name="local_tts">Local TTS</string>
     <string name="thread_count">Thread count</string>
+    <string name="rss_parse_concurrency">RSS parse concurrency</string>
+    <string name="rss_parse_concurrency_summary">Number of concurrent RSS article parsing (default 3)</string>
+    <string name="parse_concurrency">Parse concurrency</string>
+    <string name="image_load_concurrency">Image load concurrency</string>
+    <string name="image_load_concurrency_summary">Number of concurrent image loading threads (default 5, restart required)</string>
+    <string name="source_parse_concurrency">Source parse concurrency</string>
+    <string name="source_parse_concurrency_summary">Parse concurrency override for this source (0 = use global config)</string>
+    <string name="domain_check_socket">Socket quick check</string>
+    <string name="domain_check_analyze_url">Analyze rule real request</string>
     <string name="all_read_time">Total read time</string>
     <string name="un_select_all">Unselect all</string>
     <string name="import_str">Import</string>
@@ -972,6 +981,17 @@
     <string name="seconds">Seconds</string>
     <string name="less_than">Less than</string>
     <string name="check_source_config_summary">Check timeout: %1$ss\nCheck item:%2$s</string>
+    <string name="check_rss_source">Check RSS sources</string>
+    <string name="check_rss_source_config">RSS check setting</string>
+    <string name="check_rss_source_config_summary">RSS check timeout: %1$ss\nCheck item:%2$s\nDedup: %3$s</string>
+    <string name="check_rss_source_item">RSS check item</string>
+    <string name="check_rss_articles">Articles</string>
+    <string name="check_rss_sort">Sort URL</string>
+    <string name="enable_dedup">Enable dedup</string>
+    <string name="dedup_enabled">Enabled</string>
+    <string name="dedup_disabled">Disabled</string>
+    <string name="check_selected_rss">Check selected RSS sources</string>
+    <string name="rss_check_source">RSS source check setting</string>
     <string name="record_debug_log">Record debug log</string>
     <string name="sub_dir">Sub dir</string>
     <string name="general">General</string>

@@ -42,6 +42,9 @@ class CheckSourceConfig : BaseDialogFragment(R.layout.dialog_check_source_config
                 if (!checkSearch.isChecked && !checkDiscovery.isChecked && !checkDomain.isChecked) {
                     checkSearch.isChecked = true
                 }
+                // 域名校验方式RadioGroup可见性跟随checkDomain
+                domainCheckModeGroup.visibility =
+                    if (checkDomain.isChecked) View.VISIBLE else View.GONE
             }
             checkSearch.onClick {
                 if (!checkSearch.isChecked && !checkDiscovery.isChecked) {
@@ -86,6 +89,13 @@ class CheckSourceConfig : BaseDialogFragment(R.layout.dialog_check_source_config
             binding.checkSourceTimeout.setText((timeout / 1000).toString())
             binding.wSourceComment.isChecked  = wSourceComment
             binding.checkDomain.isChecked = checkDomain
+            // 初始化域名校验方式RadioGroup
+            when (domainCheckMode) {
+                0 -> binding.rbSocket.isChecked = true
+                else -> binding.rbAnalyzeUrl.isChecked = true
+            }
+            binding.domainCheckModeGroup.visibility =
+                if (checkDomain) View.VISIBLE else View.GONE
             binding.checkSearch.isChecked = checkSearch
             binding.checkDiscovery.isChecked = checkDiscovery
             binding.checkInfo.isChecked = checkInfo
@@ -117,6 +127,8 @@ class CheckSourceConfig : BaseDialogFragment(R.layout.dialog_check_source_config
                 }
                 wSourceComment = binding.wSourceComment.isChecked
                 checkDomain = binding.checkDomain.isChecked
+                // 保存域名校验方式：Socket=0, AnalyzeUrl=1
+                domainCheckMode = if (binding.rbSocket.isChecked) 0 else 1
                 checkSearch = binding.checkSearch.isChecked
                 checkDiscovery = binding.checkDiscovery.isChecked
                 checkInfo = binding.checkInfo.isChecked

@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import io.legado.app.base.BaseViewModel
+import io.legado.app.constant.AppLog
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleStore
 
@@ -25,6 +26,8 @@ class HighlightRuleViewModel(application: Application) : BaseViewModel(applicati
             HighlightRuleStore.load(context)
         }.onSuccess {
             _rulesLiveData.postValue(it)
+        }.onError {
+            AppLog.put("加载高亮规则失败", it)
         }
     }
 

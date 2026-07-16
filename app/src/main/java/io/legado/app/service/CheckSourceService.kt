@@ -20,8 +20,12 @@ import io.legado.app.exception.TocEmptyException
 import io.legado.app.help.IntentData
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.exploreKinds
+import io.legado.app.model.BookCheckResult
 import io.legado.app.model.CheckSource
 import io.legado.app.model.Debug
+import io.legado.app.model.SourceWeightCalculator
+import io.legado.app.model.analyzeRule.AnalyzeUrl
+import io.legado.app.model.analyzeRule.RuleData
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.ui.book.source.manage.BookSourceActivity
 import io.legado.app.utils.activityPendingIntent
@@ -32,6 +36,8 @@ import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -171,59 +177,191 @@ class CheckSourceService : BaseService() {
         }.getOrDefault(false)
     }
 
+    /**
+     * 通过 AnalyzeUrl 发起真实请求校验域名可达性
+     * 支持 jslib/注释/#规避/空格等复杂源URL
+     * @return Pair(是否可达, 真实域名host) - host用于回填source.lastHost,UI分组优先使用
+     */
+    private suspend fun checkDomainReachable(source: BookSource): Pair<Boolean, String?> {
+        return kotlin.runCatching {
+            withTimeout(30000) {
+                val analyzeUrl = AnalyzeUrl(
+                    source.bookSourceUrl,
+                    source = source,
+                    ruleData = RuleData(),
+                    coroutineContext = currentCoroutineContext()
+                )
+                analyzeUrl.getStrResponseAwait()
+                // 记录真实域名(从AnalyzeUrl处理后的最终URL提取,支持jslib/注释/#规避)
+                val realDomain = kotlin.runCatching { URI(analyzeUrl.url).host }.getOrNull()
+                Pair(true, realDomain)
+            }
+        }.getOrDefault(Pair(false, null))
+    }
+
     private suspend fun doCheckSource(source: BookSource) {
         Debug.startChecking(source)
         source.removeInvalidGroups()
         if (CheckSource.wSourceComment) {
             source.removeErrorComment()
         }
-        //检测源地址可访问性
+
+        var result = BookCheckResult()
+
+        // 维度1: 域名校验（前置条件，不可并发）
         if (CheckSource.checkDomain) {
             val domain = source.bookSourceUrl
             if (!domain.startsWith("http", ignoreCase = true)) {
                 throw NoStackTraceException("源地址不是http链接")
             }
-            else if (isDomainReachable(domain)) {
+            // 域名校验方式：0=Socket快速检测, 1=AnalyzeUrl真实请求(默认)
+            val (reachable, host) = when (CheckSource.domainCheckMode) {
+                0 -> Pair(isDomainReachable(domain), null)
+                else -> checkDomainReachable(source)
+            }
+            result = result.copy(domainReachable = reachable, realHost = host)
+            if (reachable) {
                 source.removeGroup("域名失效")
+                // 回填真实域名到lastHost,UI分组用此字段优先于源URL截取
+                if (!host.isNullOrBlank()) source.lastHost = host
             } else {
                 source.addGroup("域名失效")
+                source.weight = 0
                 throw NoStackTraceException("源地址不可访问")
             }
         }
-        //校验搜索书籍
-        if (CheckSource.checkSearch) {
-            val searchWord = source.getCheckKeyword(CheckSource.keyword)
-            if (!source.searchUrl.isNullOrBlank()) {
-                source.removeGroup("搜索链接规则为空")
-                val searchBooks = WebBook.searchBookAwait(source, searchWord)
-                if (searchBooks.isEmpty()) {
-                    source.addGroup("搜索失效")
+
+        // 维度2+3: 搜索和发现并发执行（Phase 6 重构）
+        // 各维度收集结果到局部变量,完成后串行更新分组(避免竞态)
+        coroutineScope {
+            val searchDeferred = async {
+                if (CheckSource.checkSearch) {
+                    val searchWord = source.getCheckKeyword(CheckSource.keyword)
+                    if (source.searchUrl.isNullOrBlank()) {
+                        BookCheckResult(searchChecked = true, searchUrlEmpty = true)
+                    } else {
+                        val searchBooks = WebBook.searchBookAwait(source, searchWord)
+                        if (searchBooks.isEmpty()) {
+                            BookCheckResult(searchChecked = true, searchSuccess = false)
+                        } else {
+                            // 搜索成功,执行 checkBook 收集详情/目录/正文结果
+                            val bookResult = checkBook(searchBooks.first().toBook(), source)
+                            BookCheckResult(
+                                searchChecked = true,
+                                searchSuccess = true,
+                                searchResultCount = searchBooks.size,
+                                searchInfoSuccess = bookResult.infoSuccess,
+                                searchCategorySuccess = bookResult.categorySuccess,
+                                searchContentSuccess = bookResult.contentSuccess
+                            )
+                        }
+                    }
                 } else {
-                    source.removeGroup("搜索失效")
-                    checkBook(searchBooks.first().toBook(), source)
-                }
-            } else {
-                source.addGroup("搜索链接规则为空")
-            }
-        }
-        //校验发现书籍
-        if (CheckSource.checkDiscovery && !source.exploreUrl.isNullOrBlank()) {
-            val url = source.exploreKinds().firstOrNull {
-                !it.url.isNullOrBlank()
-            }?.url
-            if (url.isNullOrBlank()) {
-                source.addGroup("发现规则为空")
-            } else {
-                source.removeGroup("发现规则为空")
-                val exploreBooks = WebBook.exploreBookAwait(source, url)
-                if (exploreBooks.isEmpty()) {
-                    source.addGroup("发现失效")
-                } else {
-                    source.removeGroup("发现失效")
-                    checkBook(exploreBooks.first().toBook(), source, false)
+                    BookCheckResult(searchChecked = false)
                 }
             }
+
+            val discoveryDeferred = async {
+                if (CheckSource.checkDiscovery && !source.exploreUrl.isNullOrBlank()) {
+                    val url = source.exploreKinds().firstOrNull { !it.url.isNullOrBlank() }?.url
+                    if (url.isNullOrBlank()) {
+                        BookCheckResult(discoveryChecked = true, discoveryRuleEmpty = true)
+                    } else {
+                        val exploreBooks = WebBook.exploreBookAwait(source, url)
+                        if (exploreBooks.isEmpty()) {
+                            BookCheckResult(discoveryChecked = true, discoverySuccess = false)
+                        } else {
+                            val bookResult = checkBook(exploreBooks.first().toBook(), source, false)
+                            BookCheckResult(
+                                discoveryChecked = true,
+                                discoverySuccess = true,
+                                discoveryResultCount = exploreBooks.size,
+                                discoveryInfoSuccess = bookResult.infoSuccess,
+                                discoveryCategorySuccess = bookResult.categorySuccess,
+                                discoveryContentSuccess = bookResult.contentSuccess
+                            )
+                        }
+                    }
+                } else {
+                    BookCheckResult(discoveryChecked = false)
+                }
+            }
+
+            val searchResult = searchDeferred.await()
+            val discoveryResult = discoveryDeferred.await()
+
+            // 串行更新分组(避免竞态) - 搜索维度
+            if (searchResult.searchChecked) {
+                if (searchResult.searchUrlEmpty) {
+                    source.addGroup("搜索链接规则为空")
+                } else {
+                    source.removeGroup("搜索链接规则为空")
+                    if (searchResult.searchSuccess) {
+                        source.removeGroup("搜索失效")
+                        // checkBook 结果分组（搜索来源）
+                        if (searchResult.searchCategorySuccess) {
+                            source.removeGroup("搜索目录失效")
+                        } else {
+                            source.addGroup("搜索目录失效")
+                        }
+                        if (searchResult.searchContentSuccess) {
+                            source.removeGroup("搜索正文失效")
+                        } else {
+                            source.addGroup("搜索正文失效")
+                        }
+                    } else {
+                        source.addGroup("搜索失效")
+                    }
+                }
+            }
+            // 串行更新分组 - 发现维度
+            if (discoveryResult.discoveryChecked) {
+                if (discoveryResult.discoveryRuleEmpty) {
+                    source.addGroup("发现规则为空")
+                } else {
+                    source.removeGroup("发现规则为空")
+                    if (discoveryResult.discoverySuccess) {
+                        source.removeGroup("发现失效")
+                        // checkBook 结果分组（发现来源）
+                        if (discoveryResult.discoveryCategorySuccess) {
+                            source.removeGroup("发现目录失效")
+                        } else {
+                            source.addGroup("发现目录失效")
+                        }
+                        if (discoveryResult.discoveryContentSuccess) {
+                            source.removeGroup("发现正文失效")
+                        } else {
+                            source.addGroup("发现正文失效")
+                        }
+                    } else {
+                        source.addGroup("发现失效")
+                    }
+                }
+            }
+
+            // 合并结果用于权重计算
+            result = result.copy(
+                searchChecked = searchResult.searchChecked,
+                searchUrlEmpty = searchResult.searchUrlEmpty,
+                searchSuccess = searchResult.searchSuccess,
+                searchResultCount = searchResult.searchResultCount,
+                searchInfoSuccess = searchResult.searchInfoSuccess,
+                searchCategorySuccess = searchResult.searchCategorySuccess,
+                searchContentSuccess = searchResult.searchContentSuccess,
+                discoveryChecked = discoveryResult.discoveryChecked,
+                discoveryRuleEmpty = discoveryResult.discoveryRuleEmpty,
+                discoverySuccess = discoveryResult.discoverySuccess,
+                discoveryResultCount = discoveryResult.discoveryResultCount,
+                discoveryInfoSuccess = discoveryResult.discoveryInfoSuccess,
+                discoveryCategorySuccess = discoveryResult.discoveryCategorySuccess,
+                discoveryContentSuccess = discoveryResult.discoveryContentSuccess
+            )
         }
+
+        // 权重计算（基于关键元素获取结果，Phase 6 重构）
+        source.weight = SourceWeightCalculator.calculateBookWeightFromResult(
+            result, CheckSource.checkDomain
+        )
         val finalCheckMessage = source.getInvalidGroupNames()
         if (finalCheckMessage.isNotBlank()) {
             throw NoStackTraceException(finalCheckMessage)
@@ -231,30 +369,44 @@ class CheckSourceService : BaseService() {
     }
 
     /**
-     *校验书源的详情目录正文
+     * 校验书源的详情目录正文（Phase 6 重构：返回结果而非直接修改分组）
+     *
+     * @param book 搜索或发现的第一本书
+     * @param source 书源
+     * @param isSearchBook true=搜索来源, false=发现来源
+     * @return CheckBookDetailResult 各维度成功状态（失败维度=false）
+     * @throws Exception 严重异常（非 ContentEmptyException/TocEmptyException）向上传播
      */
-    private suspend fun checkBook(book: Book, source: BookSource, isSearchBook: Boolean = true) {
-        kotlin.runCatching {
+    private suspend fun checkBook(book: Book, source: BookSource, isSearchBook: Boolean = true): CheckBookDetailResult {
+        var infoSuccess = false
+        var categorySuccess = false
+        var contentSuccess = false
+
+        try {
             if (!CheckSource.checkInfo) {
-                return
+                return CheckBookDetailResult()
             }
-            //校验详情
+            // 校验详情
             if (book.tocUrl.isBlank()) {
                 WebBook.getBookInfoAwait(source, book)
             }
+            infoSuccess = true
+
             if (!CheckSource.checkCategory || source.bookSourceType == BookSourceType.file) {
-                return
+                return CheckBookDetailResult(infoSuccess = infoSuccess)
             }
-            //校验目录
+            // 校验目录
             val toc = WebBook.getChapterListAwait(source, book).getOrThrow().asSequence()
                 .filter { !(it.isVolume && it.url.startsWith(it.title)) }
                 .take(2)
                 .toList()
+            categorySuccess = true
+
             val nextChapterUrl = toc.getOrNull(1)?.url ?: toc.first().url
             if (!CheckSource.checkContent) {
-                return
+                return CheckBookDetailResult(infoSuccess = infoSuccess, categorySuccess = categorySuccess)
             }
-            //校验正文
+            // 校验正文
             WebBook.getContentAwait(
                 bookSource = source,
                 book = book,
@@ -262,19 +414,27 @@ class CheckSourceService : BaseService() {
                 nextChapterUrl = nextChapterUrl,
                 needSave = false
             )
-        }.onFailure {
-            val bookType = if (isSearchBook) "搜索" else "发现"
-            when (it) {
-                is ContentEmptyException -> source.addGroup("${bookType}正文失效")
-                is TocEmptyException -> source.addGroup("${bookType}目录失效")
-                else -> throw it
+            contentSuccess = true
+        } catch (e: Exception) {
+            // ContentEmptyException/TocEmptyException 不中断,标记对应维度失败
+            when (e) {
+                is ContentEmptyException -> contentSuccess = false
+                is TocEmptyException -> categorySuccess = false
+                else -> throw e  // 严重异常向上传播
             }
-        }.onSuccess {
-            val bookType = if (isSearchBook) "搜索" else "发现"
-            source.removeGroup("${bookType}目录失效")
-            source.removeGroup("${bookType}正文失效")
         }
+
+        return CheckBookDetailResult(infoSuccess = infoSuccess, categorySuccess = categorySuccess, contentSuccess = contentSuccess)
     }
+
+    /**
+     * checkBook 结果数据类
+     */
+    private data class CheckBookDetailResult(
+        val infoSuccess: Boolean = false,
+        val categorySuccess: Boolean = false,
+        val contentSuccess: Boolean = false
+    )
 
     private fun upNotification() {
         notificationBuilder.setContentText(notificationMsg)

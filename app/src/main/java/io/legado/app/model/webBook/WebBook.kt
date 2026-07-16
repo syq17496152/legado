@@ -11,6 +11,7 @@ import io.legado.app.help.book.addType
 import io.legado.app.help.book.removeAllBookType
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.StrResponse
+import io.legado.app.help.source.SourceLastHostHelper
 import io.legado.app.help.source.getBookType
 import io.legado.app.model.Debug
 import io.legado.app.model.analyzeRule.AnalyzeRule
@@ -68,6 +69,8 @@ object WebBook {
             ruleData = ruleData,
             coroutineContext = currentCoroutineContext()
         )
+        // 回填 lastHost（变化才写 DB，内存缓存减少 DB 读）
+        SourceLastHostHelper.fillBack(bookSource, analyzeUrl)
         val checkJs = bookSource.loginCheckJs
         val res = kotlin.runCatching {
             analyzeUrl.getStrResponseAwait().let {
@@ -141,6 +144,8 @@ object WebBook {
             coroutineContext = currentCoroutineContext(),
             infoMap = exploreInfoMap
         )
+        // 回填 lastHost
+        SourceLastHostHelper.fillBack(bookSource, analyzeUrl)
         val checkJs = bookSource.loginCheckJs
         val res = kotlin.runCatching {
             analyzeUrl.getStrResponseAwait().let {
@@ -218,6 +223,8 @@ object WebBook {
                 ruleData = book,
                 coroutineContext = currentCoroutineContext()
             )
+            // 回填 lastHost
+            SourceLastHostHelper.fillBack(bookSource, analyzeUrl)
             val checkJs = bookSource.loginCheckJs
             val res = kotlin.runCatching {
                 analyzeUrl.getStrResponseAwait().let {
@@ -317,6 +324,8 @@ object WebBook {
                     ruleData = book,
                     coroutineContext = currentCoroutineContext()
                 )
+                // 回填 lastHost
+                SourceLastHostHelper.fillBack(bookSource, analyzeUrl)
                 val checkJs = bookSource.loginCheckJs
                 val res = kotlin.runCatching {
                     analyzeUrl.getStrResponseAwait().let {
@@ -421,6 +430,8 @@ object WebBook {
                 chapter = bookChapter,
                 coroutineContext = currentCoroutineContext()
             )
+            // 回填 lastHost
+            SourceLastHostHelper.fillBack(bookSource, analyzeUrl)
             val checkJs = bookSource.loginCheckJs
             val res = kotlin.runCatching {
                 analyzeUrl.getStrResponseAwait(

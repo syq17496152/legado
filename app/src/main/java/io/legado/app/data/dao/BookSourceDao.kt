@@ -405,6 +405,9 @@ interface BookSourceDao {
         }
     }
 
+    @Query("update book_sources set lastHost = :lastHost where bookSourceUrl = :bookSourceUrl")
+    fun updateLastHost(bookSourceUrl: String, lastHost: String?)
+
     private fun dealGroups(list: List<String>): List<String> {
         val groups = linkedSetOf<String>()
         list.forEach {

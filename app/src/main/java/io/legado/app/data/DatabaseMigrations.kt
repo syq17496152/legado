@@ -22,7 +22,8 @@ object DatabaseMigrations {
             migration_35_36, migration_36_37, migration_37_38, migration_38_39,
             migration_39_40, migration_40_41, migration_41_42, migration_42_43,
             migration_89_90, migration_90_91, migration_91_92, migration_92_93,
-            migration_93_94
+            migration_93_94, migration_94_95, migration_95_96, migration_96_97,
+            migration_97_98
         )
     }
 
@@ -493,6 +494,171 @@ object DatabaseMigrations {
                 AppLog.put("AppDatabase Migration 93→94: 创建 idx_origin_sort 索引成功")
             }.onFailure { e ->
                 AppLog.put("AppDatabase Migration 93→94: 创建索引失败: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * rss-concurrency-and-checksource: 94→95
+     * rssSources 表新增 parseConcurrency (解析并发数,默认0=使用全局配置) + weight (权重值,校验后回填) 两个字段
+     */
+    private val migration_94_95 = object : Migration(94, 95) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            kotlin.runCatching {
+                db.execSQL("ALTER TABLE rssSources ADD COLUMN parseConcurrency INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE rssSources ADD COLUMN weight INTEGER NOT NULL DEFAULT 0")
+                AppLog.put("AppDatabase Migration 94→95: rssSources 新增 parseConcurrency + weight 字段成功")
+            }.onFailure { e ->
+                AppLog.put("AppDatabase Migration 94→95: 新增字段失败: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 域名分组优化: 95→96
+     * book_sources + rssSources 表新增 lastHost (AnalyzeUrl解析后的真实域名)
+     * 解决: sourceUrl含jslib/注释/#规避等复杂情况,getSourceHost(sourceUrl)提取域名不准
+     * 校验时回填source.lastHost=URI(analyzeUrl.url).host,UI分组读取此字段优先
+     * 注意: BookSourcePart是DatabaseView,修改其SQL后必须在migration中DROP+CREATE重建view
+     *       否则Room校验schema不匹配抛IllegalStateException: Migration didn't properly handle
+     */
+    private val migration_95_96 = object : Migration(95, 96) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            kotlin.runCatching {
+                // 1. 给实体表新增 lastHost 字段
+                db.execSQL("ALTER TABLE book_sources ADD COLUMN lastHost TEXT")
+                db.execSQL("ALTER TABLE rssSources ADD COLUMN lastHost TEXT")
+                // 2. 重建 DatabaseView: book_sources_part (新增 lastHost 列)
+                //    Room在migration后会校验view的schema,必须手动重建否则抛IllegalStateException
+                db.execSQL("DROP VIEW IF EXISTS book_sources_part")
+                db.execSQL(
+                    """CREATE VIEW book_sources_part AS
+                    select bookSourceUrl, bookSourceName, bookSourceGroup, customOrder, enabled, enabledExplore,
+                    (loginUrl is not null and trim(loginUrl) <> '') hasLoginUrl, lastUpdateTime, respondTime, weight,
+                    (exploreUrl is not null and trim(exploreUrl) <> '') hasExploreUrl, eventListener, bookSourceType, lastHost
+                    from book_sources"""
+                )
+                AppLog.put("AppDatabase Migration 95→96: book_sources + rssSources 新增 lastHost 字段 + 重建 book_sources_part view 成功")
+            }.onFailure { e ->
+                AppLog.put("AppDatabase Migration 95→96: 失败: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * global-issue-fix Issue-1: 96→97
+     * 修复覆盖安装失败问题: 之前发布的某个中间版本96(migration_95_96未包含DROP+CREATE时的版本)
+     * 已存在于用户设备。重新安装修复后的96版本时version相同Room不执行migration,但设备上的view
+     * 结构是旧的(没有lastHost列),Room schema校验发现不匹配抛IllegalStateException导致App闪退。
+     *
+     * 解决方案: version 96→97,新增migration_96_97强制重建view。无论之前96是bug版还是修复版,
+     * 覆盖安装时都会执行96→97的migration,DROP+CREATE重建view确保结构正确。
+     *
+     * 同时增强容错: ALTER TABLE前检查列是否存在(防止重复执行报错)
+     */
+    private val migration_96_97 = object : Migration(96, 97) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            kotlin.runCatching {
+                // 1. 检查并补齐 book_sources.lastHost 字段(如果之前bug版没加)
+                val hasLastHostBook = db.query("PRAGMA table_info(book_sources)").use { cursor ->
+                    val columnIndex = cursor.getColumnIndex("name")
+                    var exists = false
+                    while (cursor.moveToNext()) {
+                        if (cursor.getString(columnIndex) == "lastHost") {
+                            exists = true
+                            break
+                        }
+                    }
+                    exists
+                }
+                if (!hasLastHostBook) {
+                    db.execSQL("ALTER TABLE book_sources ADD COLUMN lastHost TEXT")
+                    AppLog.put("AppDatabase Migration 96→97: book_sources 补加 lastHost 字段")
+                }
+
+                // 2. 检查并补齐 rssSources.lastHost 字段
+                val hasLastHostRss = db.query("PRAGMA table_info(rssSources)").use { cursor ->
+                    val columnIndex = cursor.getColumnIndex("name")
+                    var exists = false
+                    while (cursor.moveToNext()) {
+                        if (cursor.getString(columnIndex) == "lastHost") {
+                            exists = true
+                            break
+                        }
+                    }
+                    exists
+                }
+                if (!hasLastHostRss) {
+                    db.execSQL("ALTER TABLE rssSources ADD COLUMN lastHost TEXT")
+                    AppLog.put("AppDatabase Migration 96→97: rssSources 补加 lastHost 字段")
+                }
+
+                // 3. 强制重建 DatabaseView: book_sources_part (无论之前是否已重建)
+                //    Room在migration后会校验view的schema,必须手动重建否则抛IllegalStateException
+                db.execSQL("DROP VIEW IF EXISTS book_sources_part")
+                db.execSQL(
+                    """CREATE VIEW book_sources_part AS
+                    select bookSourceUrl, bookSourceName, bookSourceGroup, customOrder, enabled, enabledExplore,
+                    (loginUrl is not null and trim(loginUrl) <> '') hasLoginUrl, lastUpdateTime, respondTime, weight,
+                    (exploreUrl is not null and trim(exploreUrl) <> '') hasExploreUrl, eventListener, bookSourceType, lastHost
+                    from book_sources"""
+                )
+                AppLog.put("AppDatabase Migration 96→97: 强制重建 book_sources_part view 成功 (修复覆盖安装失败)")
+            }.onFailure { e ->
+                AppLog.put("AppDatabase Migration 96→97: 失败: ${e.message}")
+            }
+        }
+    }
+
+
+    /**
+     * global-issue-fix Issue-1 续修: 97→98
+     * 根因: book_sources 表的 weight/eventListener/customButton 字段从未有对应 migration 添加,
+     * 从旧版本(89-)覆盖安装时这些字段不存在,但 migration_95_96/96_97 的 view 引用了 weight,
+     * 导致 view 创建失败 → Room schema 校验失败 → App 闪退。
+     * 全新安装不触发(直接用最新 schema 建表),仅覆盖安装触发。
+     *
+     * 修复: 全面检查并补齐 book_sources + rssSources 表所有可能缺失的字段,然后强制重建 view。
+     * 无论之前 95/96/97 是 bug 版还是修复版,覆盖安装时都会执行 97→98 的 migration。
+     */
+    private val migration_97_98 = object : Migration(97, 98) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // 1. 检查并补齐 book_sources 表缺失字段
+            ensureColumn(db, "book_sources", "weight", "INTEGER NOT NULL DEFAULT 0")
+            ensureColumn(db, "book_sources", "eventListener", "INTEGER NOT NULL DEFAULT 0")
+            ensureColumn(db, "book_sources", "customButton", "INTEGER NOT NULL DEFAULT 0")
+            ensureColumn(db, "book_sources", "lastHost", "TEXT")
+            // 2. 检查并补齐 rssSources 表缺失字段
+            ensureColumn(db, "rssSources", "weight", "INTEGER NOT NULL DEFAULT 0")
+            ensureColumn(db, "rssSources", "parseConcurrency", "INTEGER NOT NULL DEFAULT 0")
+            ensureColumn(db, "rssSources", "lastHost", "TEXT")
+            // 3. 强制重建 DatabaseView: book_sources_part
+            //    SQL 格式必须与 @DatabaseView 注解完全一致(含反引号和缩进),否则 Room schema 校验失败
+            db.execSQL("DROP VIEW IF EXISTS `book_sources_part`")
+            db.execSQL(
+                """CREATE VIEW `book_sources_part` AS select bookSourceUrl, bookSourceName, bookSourceGroup, customOrder, enabled, enabledExplore,
+    (loginUrl is not null and trim(loginUrl) <> '') hasLoginUrl, lastUpdateTime, respondTime, weight,
+    (exploreUrl is not null and trim(exploreUrl) <> '') hasExploreUrl, eventListener, bookSourceType, lastHost
+    from book_sources"""
+            )
+            AppLog.put("AppDatabase Migration 97→98: 补齐缺失字段 + 重建 view 成功")
+        }
+
+        private fun ensureColumn(db: SupportSQLiteDatabase, table: String, column: String, definition: String) {
+            val exists = db.query("PRAGMA table_info($table)").use { cursor ->
+                val nameIndex = cursor.getColumnIndex("name")
+                var found = false
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameIndex) == column) {
+                        found = true
+                        break
+                    }
+                }
+                found
+            }
+            if (!exists) {
+                db.execSQL("ALTER TABLE $table ADD COLUMN $column $definition")
+                AppLog.put("AppDatabase Migration 97→98: $table 补加 $column 字段")
             }
         }
     }

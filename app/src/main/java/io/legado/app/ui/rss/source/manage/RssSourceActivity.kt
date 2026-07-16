@@ -6,6 +6,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.SubMenu
 import androidx.activity.viewModels
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.SearchView
 import androidx.lifecycle.lifecycleScope
@@ -24,8 +25,10 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.model.CheckRssSource
 import io.legado.app.ui.adapter.SourceFolderAdapter
 import io.legado.app.ui.association.ImportRssSourceDialog
+import io.legado.app.ui.config.CheckRssSourceConfig
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
@@ -39,6 +42,7 @@ import io.legado.app.utils.applyTint
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.isAbsUrl
+import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.launch
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setEdgeEffectColor
@@ -88,6 +92,9 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     private var isShowingFolder: Boolean = false
     // source-layout-refactor 排序升降序
     private var sortAscending = true
+    // 域名分组（参照 BookSourceActivity.groupSourcesByDomain）
+    private var groupSourcesByDomain = false
+    private val hostMap = hashMapOf<String, String>()
     private val searchView: SearchView by lazy {
         binding.titleBar.findViewById(R.id.search_view)
     }
@@ -234,6 +241,12 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
                 upSourceFlow(searchView.query?.toString())
             }
 
+            R.id.menu_group_sources_by_domain -> {
+                item.isChecked = !item.isChecked
+                groupSourcesByDomain = item.isChecked
+                upSourceFlow(searchView.query?.toString())
+            }
+
             R.id.menu_help -> showHelp("SourceMRssHelp")
             else -> // source-layout-refactor 动态分组菜单：用隐藏字段
                 if (item.groupId == R.id.source_group) {
@@ -273,6 +286,7 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
             }
 
             R.id.menu_check_selected_interval -> currentSelectionAdapter().checkSelectedInterval()
+            R.id.menu_check_rss_source -> checkRssSource()
         }
         return true
     }
@@ -542,7 +556,17 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
                 // 根目录：全部
                 else -> appDb.rssSourceDao.flowAll()
             }
-            flow.map { data -> sortSources(data) }
+            flow.map { data ->
+                hostMap.clear()
+                if (groupSourcesByDomain) {
+                    data.sortedWith(
+                        compareBy<RssSource> { getSourceHost(it.lastHost ?: it.sourceUrl) == "#" }
+                            .thenBy { getSourceHost(it.lastHost ?: it.sourceUrl) }
+                            .thenByDescending { it.lastUpdateTime })
+                } else {
+                    sortSources(data)
+                }
+            }
                 .catch {
                     AppLog.put("订阅源管理界面更新数据出错", it)
                 }.flowOn(IO).conflate().collect {
@@ -568,6 +592,20 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
             else -> data  // 0=手动，用 customOrder
         }
         return if (sortAscending) sorted else sorted.reversed()
+    }
+
+    // 域名分组辅助：提取源的真实host（参照 BookSourceActivity.getSourceHost）
+    private fun getSourceHost(origin: String): String {
+        return hostMap.getOrPut(origin) {
+            // 兼容两种输入: 1)完整URL(http://...) 2)纯host(example.com或IP)
+            // lastHost字段存储的是host,getSourceHost(it.lastHost ?: it.sourceUrl)调用
+            if (origin.startsWith("http", ignoreCase = true)) {
+                NetworkUtils.getSubDomainOrNull(origin) ?: "#"
+            } else {
+                // host补http://前缀再提取子域名,支持"www.example.com"→"example.com"归并
+                NetworkUtils.getSubDomainOrNull("http://$origin") ?: origin
+            }
+        }
     }
 
     override fun onResume() {
@@ -704,6 +742,31 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
 
     override fun upOrder() {
         viewModel.upOrder()
+    }
+
+    private fun checkRssSource() {
+        val dialog = alert(titleResource = R.string.search_book_key) {
+            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
+                editView.hint = "search word"
+                editView.setText(CheckRssSource.keyword)
+            }
+            customView { alertBinding.root }
+            okButton {
+                alertBinding.editView.text?.toString()?.let {
+                    if (it.isNotEmpty()) {
+                        CheckRssSource.keyword = it
+                    }
+                }
+                val selectItems = currentSelectionAdapter().selection
+                CheckRssSource.start(this@RssSourceActivity, selectItems)
+            }
+            neutralButton(R.string.check_rss_source_config)
+            cancelButton()
+        }
+        // 手动设置监听 避免点击打开校验设置后对话框关闭
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener {
+            showDialogFragment<CheckRssSourceConfig>()
+        }
     }
 
 }

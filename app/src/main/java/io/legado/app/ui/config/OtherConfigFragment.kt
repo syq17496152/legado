@@ -72,6 +72,8 @@ class OtherConfigFragment : PreferenceFragment(),
         upPreferenceSummary(PreferKey.userAgent, AppConfig.userAgent)
         upPreferenceSummary(PreferKey.preDownloadNum, AppConfig.preDownloadNum.toString())
         upPreferenceSummary(PreferKey.threadCount, AppConfig.threadCount.toString())
+        upPreferenceSummary(PreferKey.rssParseConcurrency, AppConfig.rssParseConcurrency.toString())
+        upPreferenceSummary(PreferKey.imageLoadConcurrency, AppConfig.imageLoadConcurrency.toString())
         upPreferenceSummary(PreferKey.webPort, AppConfig.webPort.toString())
         AppConfig.defaultBookTreeUri?.let {
             upPreferenceSummary(PreferKey.defaultBookTreeUri, it)
@@ -123,6 +125,24 @@ class OtherConfigFragment : PreferenceFragment(),
                 .setValue(AppConfig.threadCount)
                 .show {
                     AppConfig.threadCount = it
+                }
+
+            PreferKey.rssParseConcurrency -> NumberPickerDialog(requireContext())
+                .setTitle(getString(R.string.rss_parse_concurrency))
+                .setMaxValue(20)
+                .setMinValue(1)
+                .setValue(AppConfig.rssParseConcurrency)
+                .show {
+                    AppConfig.rssParseConcurrency = it
+                }
+
+            PreferKey.imageLoadConcurrency -> NumberPickerDialog(requireContext())
+                .setTitle(getString(R.string.image_load_concurrency))
+                .setMaxValue(20)
+                .setMinValue(1)
+                .setValue(AppConfig.imageLoadConcurrency)
+                .show {
+                    AppConfig.imageLoadConcurrency = it
                 }
 
             PreferKey.webPort -> NumberPickerDialog(requireContext())
@@ -186,6 +206,14 @@ class OtherConfigFragment : PreferenceFragment(),
             PreferKey.threadCount -> {
                 upPreferenceSummary(key, AppConfig.threadCount.toString())
                 postEvent(PreferKey.threadCount, "")
+            }
+
+            PreferKey.rssParseConcurrency -> {
+                upPreferenceSummary(key, AppConfig.rssParseConcurrency.toString())
+            }
+
+            PreferKey.imageLoadConcurrency -> {
+                upPreferenceSummary(key, AppConfig.imageLoadConcurrency.toString())
             }
 
             PreferKey.webPort -> {
@@ -261,6 +289,13 @@ class OtherConfigFragment : PreferenceFragment(),
                 getString(R.string.pre_download_s, value)
 
             PreferKey.threadCount -> preference.summary = getString(R.string.threads_num, value)
+
+            PreferKey.rssParseConcurrency -> preference.summary =
+                getString(R.string.rss_parse_concurrency_summary)
+
+            PreferKey.imageLoadConcurrency -> preference.summary =
+                getString(R.string.image_load_concurrency_summary)
+
             PreferKey.webPort -> preference.summary = getString(R.string.web_port_summary, value)
             PreferKey.bitmapCacheSize -> preference.summary =
                 getString(R.string.bitmap_cache_size_summary, value)

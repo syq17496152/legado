@@ -10,9 +10,9 @@ import kotlinx.coroutines.runBlocking
 
 
 @DatabaseView(
-    """select bookSourceUrl, bookSourceName, bookSourceGroup, customOrder, enabled, enabledExplore, 
-    (loginUrl is not null and trim(loginUrl) <> '') hasLoginUrl, lastUpdateTime, respondTime, weight, 
-    (exploreUrl is not null and trim(exploreUrl) <> '') hasExploreUrl, eventListener, bookSourceType
+    """select bookSourceUrl, bookSourceName, bookSourceGroup, customOrder, enabled, enabledExplore,
+    (loginUrl is not null and trim(loginUrl) <> '') hasLoginUrl, lastUpdateTime, respondTime, weight,
+    (exploreUrl is not null and trim(exploreUrl) <> '') hasExploreUrl, eventListener, bookSourceType, lastHost
     from book_sources""",
     viewName = "book_sources_part"
 )
@@ -42,7 +42,9 @@ data class BookSourcePart(
     // 是否启用事件监听
     var eventListener: Boolean = false,
     // 书源类型
-    var bookSourceType: Int = 0
+    var bookSourceType: Int = 0,
+    // AnalyzeUrl解析后的真实域名(host),校验时回填,UI分组用此字段优先于源URL截取
+    var lastHost: String? = null
 ) {
 
     override fun hashCode(): Int {

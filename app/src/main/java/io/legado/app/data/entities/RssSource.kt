@@ -112,7 +112,15 @@ data class RssSource(
     @ColumnInfo(defaultValue = "1")
     var cacheFirst: Boolean = true,
     /**搜索url**/
-    var searchUrl: String? = null
+    var searchUrl: String? = null,
+    /**解析并发数(0=使用全局配置)*/
+    @ColumnInfo(defaultValue = "0")
+    var parseConcurrency: Int = 0,
+    /**权重值(校验后回填,用于排序)*/
+    @ColumnInfo(defaultValue = "0")
+    var weight: Int = 0,
+    /**AnalyzeUrl解析后的真实域名(host),校验时回填,UI分组用此字段优先于源URL截取*/
+    var lastHost: String? = null
 ) : Parcelable, BaseSource {
 
     @JavascriptInterface
@@ -172,6 +180,8 @@ data class RssSource(
                 && preload == source.preload
                 && cacheFirst == source.cacheFirst
                 && equal(searchUrl, source.searchUrl)
+                && parseConcurrency == source.parseConcurrency
+                && weight == source.weight
     }
 
     private fun equal(a: String?, b: String?): Boolean {
@@ -201,6 +211,31 @@ data class RssSource(
             sourceGroup = TextUtils.join(",", it)
         }
         return this
+    }
+
+    /**
+     * 判断是否包含指定分组
+     * 参考 BookSource.hasGroup 实现
+     */
+    fun hasGroup(group: String): Boolean {
+        sourceGroup?.splitNotBlank(AppPattern.splitGroupRegex)?.toHashSet()?.let {
+            return it.indexOf(group) != -1
+        }
+        return false
+    }
+
+    /**
+     * 移除失效相关分组
+     * 参考 BookSource.removeInvalidGroups 实现
+     */
+    fun removeInvalidGroups() {
+        removeGroup(getInvalidGroupNames())
+    }
+
+    private fun getInvalidGroupNames(): String {
+        return sourceGroup?.splitNotBlank(AppPattern.splitGroupRegex)?.toHashSet()?.filter {
+            "失效" in it || it == "校验超时"
+        }?.joinToString() ?: ""
     }
 
     fun getDisplayVariableComment(otherComment: String): String {

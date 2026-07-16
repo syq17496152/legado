@@ -25,6 +25,7 @@ import io.legado.app.ui.book.read.HighlightStyleDialog
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleStore
 import io.legado.app.ui.font.FontSelectDialog
+import io.legado.app.ui.highlight.HighlightRuleActivity
 import io.legado.app.utils.GSON
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
@@ -136,6 +137,9 @@ class HighlightRuleEditDialog : BaseDialogFragment(R.layout.dialog_highlight_rul
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
+        // 修复：应用级暗色主题不激活 values-night 资源，需动态设置背景色
+        binding.vwBg.setBackgroundColor(io.legado.app.lib.theme.ThemeStore.backgroundColor())
+        binding.toolBar.setBackgroundColor(io.legado.app.lib.theme.ThemeStore.primaryColor())
         binding.btnStyle.setOnClickListener {
             val d = HighlightStyleDialog()
             styleDialog = d
@@ -231,6 +235,8 @@ class HighlightRuleEditDialog : BaseDialogFragment(R.layout.dialog_highlight_rul
             // 「批量」转化: 规则已接管该处文字, 删除发起的那条手动划线, 避免同段文字双份高亮
             val srcTime = arguments?.getLong("sourceHighlightTime", 0L) ?: 0L
             highlightToRemove(ReadBook.highlights, srcTime)?.let { ReadBook.removeHighlight(it) }
+            // 通知 Activity 刷新列表（修复：保存后列表不更新问题）
+            (activity as? HighlightRuleActivity)?.refreshList()
             dismiss()
         }
     }

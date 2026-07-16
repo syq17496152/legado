@@ -6,6 +6,7 @@ import io.legado.app.data.entities.RssSource
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.StrResponse
 import io.legado.app.help.http.warmUpConnection
+import io.legado.app.help.source.SourceLastHostHelper
 import io.legado.app.model.Debug
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
@@ -54,6 +55,8 @@ object Rss {
             coroutineContext = currentCoroutineContext(),
             hasLoginHeader = false
         )
+        // 回填 lastHost
+        SourceLastHostHelper.fillBack(rssSource, analyzeUrl)
         val checkJs = rssSource.loginCheckJs
         val res = kotlin.runCatching {
             analyzeUrl.getStrResponseAwait().let {
@@ -124,6 +127,8 @@ object Rss {
             coroutineContext = currentCoroutineContext(),
             hasLoginHeader = false
         )
+        // 回填 lastHost
+        SourceLastHostHelper.fillBack(rssSource, analyzeUrl)
         val checkJs = rssSource.loginCheckJs
         val res = kotlin.runCatching {
             analyzeUrl.getStrResponseAwait().let {

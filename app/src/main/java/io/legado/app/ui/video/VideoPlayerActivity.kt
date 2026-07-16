@@ -377,6 +377,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         binding.root.setBackgroundColor(backgroundColor)
         // P0-1: 统一 ViewPager2 模式，旧版 UI 初始化全部移除
         // Fragment 自行管理播放器和控件，设置面板由 VideoSettingsPanel 提供
+        // Issue-4 修复：旧 titleBar 绑定返回按钮（attachToActivity=false 后需手动设置）
+        // 确保旧模式下点击左上角返回箭头能 finish Activity
+        binding.titleBar.toolbar.setNavigationIcon(R.drawable.ic_arrow_back)
+        binding.titleBar.setNavigationOnClickListener {
+            onBackPressedDispatcher.onBackPressed()
+        }
     }
 
     private fun showBook(book: Book) {
@@ -972,6 +978,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
         starMenuItem = menu.findItem(R.id.menu_rss_star)
         upStarMenu()
+        // menu_rss_refresh 只在 RSS 源时显示
+        menu.findItem(R.id.menu_rss_refresh)?.isVisible = VideoPlay.source is RssSource
         return super.onPrepareOptionsMenu(menu)
     }
 
@@ -1034,6 +1042,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             R.id.menu_rss_star -> viewModel.addFavorite {
                 VideoPlay.rssStar?.let { showDialogFragment(RssFavoritesDialog(it)) }
             }
+            R.id.menu_rss_refresh -> {
+                // 简化说明: refresh 通过 recreate 重启 Activity 重新加载 RSS 文章列表
+                // 已知上限: 会重置播放进度等运行时状态
+                // 升级路径: 后续可抽取 refreshRssArticles() 只重载列表不重启 Activity
+                recreate()
+            }
             R.id.menu_float_window -> startFloatingWindow()
             R.id.menu_config_settings -> showDialogFragment(SettingsDialog(this))
             R.id.menu_login -> VideoPlay.source?.let {s ->
@@ -1070,6 +1084,16 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                     ) {
                         sendToClip(url)
                     }
+                }
+            }
+            R.id.menu_browser_open -> {
+                // 浏览器打开：优先用视频URL，其次用 RSS 文章链接
+                val url = VideoPlay.videoUrl
+                    ?: VideoPlay.rssArticles?.getOrNull(VideoPlay.rssArticleIndex)?.link
+                if (url.isNullOrBlank()) {
+                    this.toastOnUi("暂无可用地址")
+                } else {
+                    openUrl(url)
                 }
             }
             R.id.menu_open_other_video_player -> {

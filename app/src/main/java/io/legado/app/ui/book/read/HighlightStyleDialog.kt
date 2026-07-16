@@ -1,12 +1,12 @@
 package io.legado.app.ui.book.read
 
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import androidx.core.view.ViewCompat
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import io.legado.app.R
 import io.legado.app.databinding.DialogHighlightStyleBinding
@@ -16,6 +16,7 @@ import io.legado.app.help.HighlightStyle.Deco
 import io.legado.app.help.HighlightStyle.Kind
 import io.legado.app.help.HighlightStyle.Underline
 import io.legado.app.help.HighlightStyles
+import io.legado.app.lib.theme.ThemeStore
 
 /**
  * F-P1-2 高亮规则系统（借鉴阅读T）
@@ -24,8 +25,8 @@ import io.legado.app.help.HighlightStyles
  * 取色委托 [StyleHost.pickHighlightColor],宿主写回后调 [refresh]。
  *
  * 适配说明：原阅读T 调用 applyAppSheetBackground()扩展函数,当前项目无此函数,
- * 改为直接设置 backgroundTintList=null 让 BottomSheet 用默认背景
- * 已知上限：无统一 sheet 背景主题 | 升级路径：后续抽取 applyAppSheetBackground 扩展函数
+ * 改为直接用 ThemeStore.backgroundColor() 动态设置 sheet 圆角背景,适配应用级暗色主题
+ * 已知上限：sheet 圆角固定值 | 升级路径：后续抽取 applyAppSheetBackground 扩展函数
  */
 class HighlightStyleDialog : BottomSheetDialogFragment() {
 
@@ -54,10 +55,18 @@ class HighlightStyleDialog : BottomSheetDialogFragment() {
 
     override fun onStart() {
         super.onStart()
-        // 简化适配：让 BottomSheet 使用默认背景, 不调 applyAppSheetBackground
+        // 修复：应用级暗色主题不激活 values-night 资源, 需动态设置 sheet 背景色
+        // 原版用 applyAppSheetBackground 扩展函数（AppColorScheme.current.surfaceContainerLow）
+        // 当前项目无此扩展, 改用 ThemeStore.backgroundColor() + 圆角背景
         dialog?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             ?.let { sheet ->
-                ViewCompat.setBackgroundTintList(sheet, null)
+                val radius = resources.getDimension(R.dimen.corner_large)
+                sheet.background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadii = floatArrayOf(radius, radius, radius, radius, 0f, 0f, 0f, 0f)
+                    setColor(ThemeStore.backgroundColor())
+                }
+                sheet.clipToOutline = true
             }
     }
 
@@ -69,7 +78,27 @@ class HighlightStyleDialog : BottomSheetDialogFragment() {
         buildPresets()
         buildChannels()
         bindFontRow()
+        // 修复：应用级暗色主题下 @color/primaryText/@color/secondaryText 返回浅色值
+        // 在动态 view 添加完成后, 递归设置文字颜色跟随主题
+        applyThemeColors(view)
         refresh()
+    }
+
+    /** 递归遍历 view 树, 给 TextView/CheckBox 设置主题文字颜色 */
+    private fun applyThemeColors(view: View) {
+        val primaryColor = ThemeStore.textColorPrimary(requireContext())
+        val secondaryColor = ThemeStore.textColorSecondary(requireContext())
+        if (view is TextView) {
+            // tv_extra 保留 accent 色（点击提示色）, 其他用 primary
+            if (view.id != R.id.tv_extra) {
+                view.setTextColor(primaryColor)
+            }
+        }
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                applyThemeColors(view.getChildAt(i))
+            }
+        }
     }
 
     override fun onDestroyView() {

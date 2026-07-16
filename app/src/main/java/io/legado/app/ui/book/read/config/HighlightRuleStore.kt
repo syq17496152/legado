@@ -318,6 +318,10 @@ object HighlightRuleStore {
             bgImage = bgImage,
             bgImageFit = runCatching { rule.bgImageFit }.getOrDefault(0).coerceIn(0, 2),
             bgImageScale = runCatching { rule.bgImageScale }.getOrDefault(1f).coerceIn(0.1f, 5f),
+            // 修复：补齐 F-P1-2 新增字段（isRegex/styleJson/timeoutMillisecond），否则保存后样式丢失
+            isRegex = runCatching { rule.isRegex }.getOrDefault(false),
+            styleJson = runCatching { rule.styleJson }.getOrNull(),
+            timeoutMillisecond = runCatching { rule.timeoutMillisecond }.getOrDefault(3000L),
         )
     }
 

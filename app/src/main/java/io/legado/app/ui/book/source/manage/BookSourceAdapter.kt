@@ -349,7 +349,11 @@ class BookSourceAdapter(
             }
 
             override fun getItemId(position: Int): BookSourcePart {
-                return getItem(position)!!
+                // 安全处理：position越界或item未加载时getItem返回null，抛IndexOutOfBoundsException
+                // 上层 DragSelectTouchHelper.AdvanceCallback.onSelectStart 已用 try-catch 保护
+                // 但 onSelectChange 中的 SelectAndUndo/ToggleAndUndo 模式调用未保护，故这里主动校验
+                return getItem(position)
+                    ?: throw IndexOutOfBoundsException("BookSource position=$position item is null")
             }
 
             override fun updateSelectState(position: Int, isSelected: Boolean): Boolean {

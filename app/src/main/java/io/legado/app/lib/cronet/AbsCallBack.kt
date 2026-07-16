@@ -63,7 +63,6 @@ abstract class AbsCallBack(
         }
         if (originalRequest.header(cookieJarHeader) != null) {
             enableCookieJar = true
-            android.util.Log.d("CronetCookie", "AbsCallBack: enableCookieJar=true, url=${originalRequest.url}")
             originalRequest = originalRequest.newBuilder()
                 .removeHeader(cookieJarHeader).build()
         }
@@ -145,7 +144,6 @@ abstract class AbsCallBack(
         }
 
         if (enableCookieJar) {
-            android.util.Log.d("CronetCookie", "onResponseStarted: code=${response.code}, url=${response.request.url}")
             CookieManager.saveResponse(response)
         }
 

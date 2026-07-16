@@ -36,6 +36,17 @@ output/
 # 异常文件
 nul
 
+# 防止再次提交废弃文件（repo-cleanup 2026/07/15）
+docs/temp-analysis/
+*.bak
+*.class
+avd.bat
+avd.sh
+ksp_info.txt
+
+# Skill 测试数据（含源数据，不应提交）
+.trae/skills/*/scripts/test_*.json
+
 # Skill 运行时产物
 .trae/skills/*/output/
 .trae/skills/*/scripts/reports/

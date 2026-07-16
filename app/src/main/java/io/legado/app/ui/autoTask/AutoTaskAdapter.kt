@@ -209,8 +209,14 @@ class AutoTaskAdapter(context: Context, private val callBack: CallBack) :
     }
 
     private fun upSelectStroke(binding: ItemManageBinding, task: AutoTaskRule) {
-        binding.rootCard.strokeColor = context.accentColor
-        binding.rootCard.strokeWidth = if (isSelected(task)) 2.dpToPx() else 0
+        // 简化说明: 原 MaterialCardView 的 strokeColor/strokeWidth 在迁移到 androidx.cardview.widget.CardView 后不可用
+        // 改用 setCardBackgroundColor 实现选中态视觉反馈
+        // 已知上限: 视觉效果与原 stroke 边框略有差异（背景填充 vs 边框）
+        // 升级路径: 若后续引入 Material 主题可恢复 stroke 方案
+        binding.rootCard.setCardBackgroundColor(
+            if (isSelected(task)) context.accentColor and 0x33FFFFFF.toInt()
+            else android.graphics.Color.TRANSPARENT
+        )
     }
 
     private fun buildSummary(task: AutoTaskRule): String {

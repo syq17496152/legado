@@ -8,6 +8,7 @@ import com.bumptech.glide.Registry
 import com.bumptech.glide.annotation.GlideModule
 import com.bumptech.glide.load.engine.cache.InternalCacheDiskCacheFactory
 import com.bumptech.glide.load.engine.cache.MemorySizeCalculator
+import com.bumptech.glide.load.engine.executor.GlideExecutor
 import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.module.AppGlideModule
 import io.legado.app.BuildConfig
@@ -45,6 +46,16 @@ class LegadoGlideModule : AppGlideModule() {
         builder.setMemorySizeCalculator(calculator)
         builder.setBitmapPool(bitmapPool)
         builder.setDiskCache(InternalCacheDiskCacheFactory(context, 1024 * 1024 * 1000))
+        // 配置图片加载线程数(仅启动时生效,修改后需重启App)
+        // 失败不影响启动,降级到Glide默认线程数
+        kotlin.runCatching {
+            val sourceExecutor = GlideExecutor.newSourceExecutor(
+                AppConfig.imageLoadConcurrency,
+                "legado-img",
+                GlideExecutor.UncaughtThrowableStrategy.DEFAULT
+            )
+            builder.setSourceExecutor(sourceExecutor)
+        }
         if (!BuildConfig.DEBUG && !AppConfig.recordLog) {
             builder.setLogLevel(Log.ERROR)
         }

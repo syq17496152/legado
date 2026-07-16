@@ -153,7 +153,7 @@
         <item name="android:paddingTop">6dp</item>
         <item name="android:paddingBottom">6dp</item>
         <item name="android:textSize">12sp</item>
-        <item name="android:textColor">#E6FFFFFF</item>
+        <item name="android:textColor">@color/primaryText</item>
         <item name="android:background">@drawable/bg_panel_button</item>
     </style>
 

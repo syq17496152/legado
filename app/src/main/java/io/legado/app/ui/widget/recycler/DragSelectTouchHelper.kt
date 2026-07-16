@@ -852,7 +852,12 @@ class DragSelectTouchHelper(
             if (selected != null) {
                 mOriginalSelection.addAll(selected)
             }
-            mFirstWasSelected = mOriginalSelection.contains(getItemId(start))
+            // 安全处理：position越界或item未加载时getItemId可能抛异常
+            try {
+                mFirstWasSelected = mOriginalSelection.contains(getItemId(start))
+            } catch (e: Exception) {
+                mFirstWasSelected = false
+            }
         }
 
         override fun onSelectEnd(end: Int) {
@@ -873,7 +878,7 @@ class DragSelectTouchHelper(
                     } else {
                         updateSelectState(
                             position,
-                            mOriginalSelection.contains(getItemId(position))
+                            safeContainsItemId(position)
                         )
                     }
                 }
@@ -893,7 +898,7 @@ class DragSelectTouchHelper(
                     } else {
                         updateSelectState(
                             position,
-                            mOriginalSelection.contains(getItemId(position))
+                            safeContainsItemId(position)
                         )
                     }
                 }
@@ -908,6 +913,19 @@ class DragSelectTouchHelper(
          * @return the currently selected item's id set.
          */
         abstract fun currentSelectedId(): Set<T>?
+
+        /**
+         * 安全调用 getItemId 并检查是否在原选中集合中。
+         * 解决 position 越界或 item 未加载导致 getItemId 抛异常的崩溃（如 BookSourceAdapter.getItemId NPE）。
+         */
+        private fun safeContainsItemId(position: Int): Boolean {
+            return try {
+                mOriginalSelection.contains(getItemId(position))
+            } catch (e: Exception) {
+                // 取消选中时若 item 已不可获取，视为未选中
+                false
+            }
+        }
 
         /**
          * Get the ID of the item.

@@ -105,6 +105,25 @@
                 android:theme="@style/Spinner"
                 tools:ignore="TouchTargetSizeCheck" />
 
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:layout_marginStart="12dp"
+                android:text="@string/parse_concurrency"
+                tools:ignore="RtlHardcoded,RtlSymmetry" />
+
+            <EditText
+                android:id="@+id/edit_parse_concurrency"
+                android:layout_width="60dp"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:hint="0"
+                android:inputType="number"
+                android:maxLength="2"
+                android:theme="@style/Spinner"
+                tools:ignore="TouchTargetSizeCheck,LabelFor" />
+
         </LinearLayout>
 
     </HorizontalScrollView>

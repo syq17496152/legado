@@ -230,6 +230,11 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
         }
     }
 
+    /** 供 RssSortActivity 登录后刷新当前列表 */
+    fun refreshAfterLogin() {
+        loadArticles(fullRefresh = true)
+    }
+
     private fun loadArticles(targetPage: Int) {
         fullRefresh = true
         activityViewModel.rssSource?.let {

@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- R3 阶段5：设置面板按钮背景（圆角 + 半透明白底 + 点击波纹） -->
+<!-- R3 阶段5：设置面板按钮背景（圆角 + 主题适配 + 点击波纹） -->
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
-    android:color="#33FFFFFF">
+    android:color="@color/panel_btn_ripple">
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#1AFFFFFF" />
+            <solid android:color="@color/panel_btn_bg" />
             <corners android:radius="8dp" />
         </shape>
     </item>

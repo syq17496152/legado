@@ -6,6 +6,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssSource
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.config.AppConfig
 import io.legado.app.model.Debug
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
@@ -78,12 +79,18 @@ object RssParserByRule {
             val ruleImage = analyzeRule.splitSourceRule(rssSource.ruleImage)
             val ruleLink = analyzeRule.splitSourceRule(rssSource.ruleLink)
             val variable = ruleData.getVariable()
-            // P1-1 并行化：for 循环改 async{}.awaitAll() + Semaphore(6) 限流
+            // P1-1 并行化：for 循环改 async{}.awaitAll() + Semaphore 限流
             // 🔴 硬性前提1：每item独立 AnalyzeRule 实例（getItem内setRuleData/setContent修改实例状态，复用会并发数据错乱；AnalyzeRule evalJSCallCount++/topScopeRef/scriptCache非线程安全）
             // 🔴 硬性前提2：articleList不在并行块内add（mutableListOf非线程安全），awaitAll后批量收集
             // 顺序保证：mapIndexed+awaitAll保持发起顺序，filterNotNull保持顺序，与原for循环结果一致
-            Debug.log(sourceUrl, "┌并行解析列表项(共${collections.size}项,限流6)")
-            val parseSemaphore = Semaphore(6)
+            // 并发数：源级parseConcurrency(>0)优先，否则使用全局配置rssParseConcurrency(默认3)
+            val parseConcurrency = if (rssSource.parseConcurrency > 0) {
+                rssSource.parseConcurrency
+            } else {
+                AppConfig.rssParseConcurrency
+            }
+            Debug.log(sourceUrl, "┌并行解析列表项(共${collections.size}项,限流${parseConcurrency})")
+            val parseSemaphore = Semaphore(parseConcurrency)
             val articleList = coroutineScope {
                 collections.mapIndexed { index, item ->
                     async(Dispatchers.IO) {

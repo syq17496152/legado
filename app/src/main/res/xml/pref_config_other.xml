@@ -225,6 +225,18 @@
             android:title="@string/threads_num_title"
             app:iconSpaceReserved="false" />
 
+        <io.legado.app.lib.prefs.Preference
+            android:key="rssParseConcurrency"
+            android:summary="@string/rss_parse_concurrency_summary"
+            android:title="@string/rss_parse_concurrency"
+            app:iconSpaceReserved="false" />
+
+        <io.legado.app.lib.prefs.Preference
+            android:key="imageLoadConcurrency"
+            android:summary="@string/image_load_concurrency_summary"
+            android:title="@string/image_load_concurrency"
+            app:iconSpaceReserved="false" />
+
         <io.legado.app.lib.prefs.SwitchPreference
             android:defaultValue="true"
             android:key="process_text"

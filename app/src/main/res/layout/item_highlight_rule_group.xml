@@ -40,27 +40,27 @@
             android:textSize="11sp" />
     </LinearLayout>
 
-    <com.google.android.material.button.MaterialButton
+    <Button
         android:id="@+id/tv_edit"
-        style="@style/Widget.Material3.Button.TextButton"
+        style="?attr/borderlessButtonStyle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:minWidth="0dp"
         android:paddingHorizontal="8dp"
         android:text="@string/edit"
-        android:textSize="11sp"
-        app:iconGravity="textStart" />
+        android:textColor="@color/primaryText"
+        android:textSize="11sp" />
 
-    <com.google.android.material.button.MaterialButton
+    <Button
         android:id="@+id/tv_more"
-        style="@style/Widget.Material3.Button.TextButton"
+        style="?attr/borderlessButtonStyle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="4dp"
         android:minWidth="0dp"
         android:paddingHorizontal="8dp"
         android:text="@string/more"
-        android:textSize="11sp"
-        app:iconGravity="textStart" />
+        android:textColor="@color/primaryText"
+        android:textSize="11sp" />
 
 </LinearLayout>

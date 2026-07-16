@@ -61,6 +61,7 @@ class HighlightRuleActivity :
         binding.recyclerView.layoutManager =
             androidx.recyclerview.widget.LinearLayoutManager(this)
         binding.recyclerView.applyNavigationBarPadding()
+        binding.recyclerView.adapter = adapter
         val callback = ItemTouchCallback(adapter).apply { isCanDrag = true }
         ItemTouchHelper(callback).attachToRecyclerView(binding.recyclerView)
     }
@@ -125,6 +126,16 @@ class HighlightRuleActivity :
         toastOnUi("已复制 ${rules.size} 条规则到剪贴板")
     }
 
+    override fun onResume() {
+        super.onResume()
+        adapter.upResumed(true)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        adapter.upResumed(false)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         ReadBook.upHighlightRules()
@@ -149,4 +160,9 @@ class HighlightRuleActivity :
     override fun toBottom(rule: HighlightRule) = viewModel.toBottom(rule)
 
     override fun upOrder(items: List<HighlightRule>) = viewModel.upOrder(items)
+
+    /** 供 HighlightRuleEditDialog 保存后刷新列表 */
+    fun refreshList() {
+        viewModel.loadRules()
+    }
 }

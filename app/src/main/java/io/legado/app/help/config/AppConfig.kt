@@ -432,6 +432,18 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.threadCount, value)
         }
 
+    var rssParseConcurrency: Int
+        get() = appCtx.getPrefInt(PreferKey.rssParseConcurrency, 3)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.rssParseConcurrency, value)
+        }
+
+    var imageLoadConcurrency: Int
+        get() = appCtx.getPrefInt(PreferKey.imageLoadConcurrency, 5)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.imageLoadConcurrency, value)
+        }
+
     var remoteServerId: Long
         get() = appCtx.getPrefLong(PreferKey.remoteServerId)
         set(value) {

@@ -33,8 +33,11 @@
         android:layout_height="match_parent"
         android:orientation="vertical">
 
+    <!-- Issue-4 修复：旧 TitleBar 设置 attachToActivity=false，避免与 title_bar_new 互相覆盖 setSupportActionBar
+         导致 ActionBar 引用混乱、返回按钮失效。旧模式返回按钮通过 setNavigationOnClickListener 直接绑定。 -->
     <io.legado.app.ui.widget.TitleBar
         android:id="@+id/title_bar"
+        app:attachToActivity="false"
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
 
