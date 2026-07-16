@@ -144,7 +144,7 @@ val okHttpClient: OkHttpClient by lazy {
             }
         } else {
             // P2-3.3: Cronet 加载失败，回退到 OkHttp
-            android.util.Log.d("AnalyzeUrl", "Cronet install failed, fallback to OkHttp")
+            AppLog.put("Cronet install failed, fallback to OkHttp")
         }
     }
     builder.addInterceptor(DecompressInterceptor)
@@ -274,7 +274,7 @@ private object RetryableDns : Dns {
                 throw UnknownHostException("Filtered local/invalid addresses: $hostname")
             } catch (e: UnknownHostException) {
                 lastException = e
-                android.util.Log.d(TAG, "DNS retry: host=${hostname.take(50)}, attempt=$attempt/$MAX_RETRY")
+                AppLog.put("DNS retry: host=${hostname.take(50)}, attempt=$attempt/$MAX_RETRY")
             }
         }
 
