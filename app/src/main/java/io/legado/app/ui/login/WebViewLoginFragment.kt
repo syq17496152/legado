@@ -18,7 +18,6 @@ import androidx.fragment.app.activityViewModels
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
 import io.legado.app.constant.AppConst
-import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.databinding.FragmentWebViewLoginBinding
 import io.legado.app.help.http.CookieStore
@@ -91,16 +90,12 @@ class WebViewLoginFragment : BaseFragment(R.layout.fragment_web_view_login) {
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 val cookie = cookieManager.getCookie(url)
-                // Issue-7 调试日志：追踪登录流程 cookie 保存（脱敏：只记录长度和路径前30字符）
-                AppLog.put("[CookieDebug] onPageStarted: urlPath=${url?.substringAfter("://")?.take(30)}, cookieLen=${cookie?.length ?: 0}")
                 CookieStore.setCookie(source.getKey(), cookie)
                 super.onPageStarted(view, url, favicon)
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 val cookie = cookieManager.getCookie(url)
-                // Issue-7 调试日志：追踪登录完成时 cookie 保存（脱敏：只记录长度和路径前30字符）
-                AppLog.put("[CookieDebug] onPageFinished: urlPath=${url?.substringAfter("://")?.take(30)}, cookieLen=${cookie?.length ?: 0}, checking=$checking, sourceKeyLen=${source.getKey().length}")
                 CookieStore.setCookie(source.getKey(), cookie)
                 if (checking) {
                     activity?.finish()

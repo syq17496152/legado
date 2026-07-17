@@ -733,8 +733,6 @@ class AnalyzeUrl(
             */
             CookieStore.getCookie(domain)
         }
-        // Issue-7 调试日志：追踪请求发起时 cookie 加载（脱敏：只记录长度和域名前3字符）
-        AppLog.put("[CookieDebug] AnalyzeUrl.setCookie: domainPrefix=${domain.take(3)}, domainLen=${domain.length}, cookieLen=${cookie.length}, enabledCookieJar=$enabledCookieJar, urlPath=${url.substringAfter("://").take(30)}")
         if (cookie.isNotEmpty()) {
             mergeCookies(cookie, headerMap["Cookie"])?.let {
                 headerMap.put("Cookie", it)

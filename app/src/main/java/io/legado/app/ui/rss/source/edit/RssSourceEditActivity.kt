@@ -300,15 +300,12 @@ class RssSourceEditActivity :
                 rs.articleStyle = 0
             }
             binding.lyType.setSelection(rs.articleStyle)
-            // Issue-1 修复：单源未配置时输入框为空，用 hint 显示继承的系统配置值
-            // 设计：parseConcurrency=0 表示未单独配置，应继承全局 AppConfig.rssParseConcurrency
-            // 显示：已配置显示具体值，未配置输入框为空+hint提示继承值
-            if (rs.parseConcurrency > 0) {
-                binding.editParseConcurrency.setText(rs.parseConcurrency.toString())
-            } else {
-                binding.editParseConcurrency.setText("")
-                binding.editParseConcurrency.hint = "继承全局（${AppConfig.rssParseConcurrency}）"
-            }
+            // Issue-1 修复：单源未配置时直接显示系统全局配置值
+            // 设计：parseConcurrency=0 表示未单独配置，应显示继承的全局 AppConfig.rssParseConcurrency 值
+            binding.editParseConcurrency.setText(
+                if (rs.parseConcurrency > 0) rs.parseConcurrency.toString()
+                else AppConfig.rssParseConcurrency.toString()
+            )
         }
         sourceEntities.clear()
         sourceEntities.apply {

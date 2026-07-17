@@ -87,7 +87,6 @@ class HighlightStyleDialog : BottomSheetDialogFragment() {
     /** 递归遍历 view 树, 给 TextView/CheckBox 设置主题文字颜色 */
     private fun applyThemeColors(view: View) {
         val primaryColor = ThemeStore.textColorPrimary(requireContext())
-        val secondaryColor = ThemeStore.textColorSecondary(requireContext())
         if (view is TextView) {
             // tv_extra 保留 accent 色（点击提示色）, 其他用 primary
             if (view.id != R.id.tv_extra) {
@@ -95,8 +94,13 @@ class HighlightStyleDialog : BottomSheetDialogFragment() {
             }
         }
         if (view is ViewGroup) {
-            for (i in 0 until view.childCount) {
-                applyThemeColors(view.getChildAt(i))
+            // Issue-2 修复：跳过预设色点容器，避免 applyThemeColors 覆盖预设色点的 setTextColor
+            // 根因：buildPresets() 用 setTextColor 设置了 ● 的颜色，但 applyThemeColors 递归覆盖为主题文字色
+            // 暗色主题下主题文字色为白色，导致六个预设色点全部显示白色
+            if (view.id != R.id.fl_presets) {
+                for (i in 0 until view.childCount) {
+                    applyThemeColors(view.getChildAt(i))
+                }
             }
         }
     }
