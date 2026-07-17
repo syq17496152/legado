@@ -273,7 +273,10 @@ object ReadBook : CoroutineScope by MainScope() {
     fun ruleMatchesOfChapter(
         textChapter: TextChapter
     ): List<HighlightRuleMatcher.RuleMatch> {
-        if (highlightRules.isEmpty()) return emptyList()
+        // Issue-3 修复：创建本地不可变副本，避免迭代时被其他线程修改触发 ConcurrentModificationException
+        // 根因：@Volatile 只保证引用可见性，不保证 ArrayList 内部数据线程安全
+        val rulesSnapshot = highlightRules.toList()
+        if (rulesSnapshot.isEmpty()) return emptyList()
         if (textChapter.highlightRuleMatchesVersion == highlightRulesVersion) {
             return textChapter.highlightRuleMatches ?: emptyList()
         }
@@ -285,7 +288,7 @@ object ReadBook : CoroutineScope by MainScope() {
             )
         }
         val text = HighlightTextBuilder.build(lines)
-        val rules = highlightRules.map {
+        val rules = rulesSnapshot.map {
             HighlightRuleMatcher.Rule(it.id, it.pattern, it.isRegex, it.toHighlightStyle(), it.timeoutMillisecond)
         }
         val matches = HighlightRuleMatcher.match(text, rules)

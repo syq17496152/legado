@@ -512,10 +512,27 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             flow.map { data ->
                 hostMap.clear()
                 if (groupSourcesByDomain) {
-                    data.sortedWith(
-                        compareBy<BookSourcePart> { getSourceHost(it.lastHost ?: it.bookSourceUrl) == "#" }
-                            .thenBy { getSourceHost(it.lastHost ?: it.bookSourceUrl) }
-                            .thenByDescending { it.lastUpdateTime })
+                    // Issue-5.3/5.4 修复：域名分组排序支持 Weight + sortAscending
+                    // 原逻辑：同组内按 lastUpdateTime 倒序，sortAscending 参数未传入 → 反序无效
+                    // 新逻辑：同组内按 Weight 降序（默认），支持 sortAscending 反序切换
+                    val hostComparator = compareBy<BookSourcePart> { getSourceHost(it.lastHost ?: it.bookSourceUrl) == "#" }
+                        .thenBy { getSourceHost(it.lastHost ?: it.bookSourceUrl) }
+                    val weighted = if (sort == BookSourceSort.Weight) {
+                        // 智能排序：同组内按 Weight 降序（默认）或升序（反序）
+                        if (sortAscending) {
+                            hostComparator.thenBy { it.weight }
+                        } else {
+                            hostComparator.thenByDescending { it.weight }
+                        }
+                    } else {
+                        // 其他排序模式：保持原有 lastUpdateTime 倒序逻辑
+                        if (sortAscending) {
+                            hostComparator.thenBy { it.lastUpdateTime }
+                        } else {
+                            hostComparator.thenByDescending { it.lastUpdateTime }
+                        }
+                    }
+                    data.sortedWith(weighted)
                 } else {
                     sortSources(data)
                 }
@@ -900,11 +917,18 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         return hostMap.getOrPut(origin) {
             // 兼容两种输入: 1)完整URL(http://...) 2)纯host(example.com或IP)
             // lastHost字段存储的是host,getSourceHost(it.lastHost ?: it.bookSourceUrl)调用
-            if (origin.startsWith("http", ignoreCase = true)) {
-                NetworkUtils.getSubDomainOrNull(origin) ?: "#"
+            // Issue-5.1 修复：异常输入（空、纯协议名"http"/"https"、无路径）返回 "#" 不作为分组名
+            val trimmed = origin.trim()
+            if (trimmed.isEmpty() || trimmed.equals("http", true) || trimmed.equals("https", true)
+                || trimmed.startsWith("http:///", true) || trimmed.startsWith("https:///", true)
+            ) {
+                return@getOrPut "#"
+            }
+            if (trimmed.startsWith("http", ignoreCase = true)) {
+                NetworkUtils.getSubDomainOrNull(trimmed) ?: "#"
             } else {
                 // host补http://前缀再提取子域名,支持"www.example.com"→"example.com"归并
-                NetworkUtils.getSubDomainOrNull("http://$origin") ?: origin
+                NetworkUtils.getSubDomainOrNull("http://$trimmed") ?: "#"
             }
         }
     }

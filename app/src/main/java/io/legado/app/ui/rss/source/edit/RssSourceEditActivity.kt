@@ -20,6 +20,7 @@ import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.data.entities.RssSource
 import io.legado.app.databinding.ActivityRssSourceEditBinding
+import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
@@ -299,10 +300,15 @@ class RssSourceEditActivity :
                 rs.articleStyle = 0
             }
             binding.lyType.setSelection(rs.articleStyle)
-            // Issue-5 修复：单源解析并发配置显示（0=用全局配置）
-            binding.editParseConcurrency.setText(
-                if (rs.parseConcurrency > 0) rs.parseConcurrency.toString() else ""
-            )
+            // Issue-1 修复：单源未配置时输入框为空，用 hint 显示继承的系统配置值
+            // 设计：parseConcurrency=0 表示未单独配置，应继承全局 AppConfig.rssParseConcurrency
+            // 显示：已配置显示具体值，未配置输入框为空+hint提示继承值
+            if (rs.parseConcurrency > 0) {
+                binding.editParseConcurrency.setText(rs.parseConcurrency.toString())
+            } else {
+                binding.editParseConcurrency.setText("")
+                binding.editParseConcurrency.hint = "继承全局（${AppConfig.rssParseConcurrency}）"
+            }
         }
         sourceEntities.clear()
         sourceEntities.apply {
@@ -320,7 +326,7 @@ class RssSourceEditActivity :
             add(EditEntity("header", rs.header, R.string.source_http_header))
             add(EditEntity("variableComment", rs.variableComment, R.string.variable_comment))
             add(EditEntity("concurrentRate", rs.concurrentRate, R.string.concurrent_rate))
-            add(EditEntity("parseConcurrency", rs.parseConcurrency.toString(), R.string.source_parse_concurrency))
+            add(EditEntity("parseConcurrency", if (rs.parseConcurrency > 0) rs.parseConcurrency.toString() else "", R.string.source_parse_concurrency))
             add(EditEntity("jsLib", rs.jsLib, "jsLib"))
         }
         startEntities.clear()

@@ -113,16 +113,20 @@ class HighlightRuleEditDialog : BaseDialogFragment(R.layout.dialog_highlight_rul
             listener: ColorPickerDialogListener
         ): ColorPickerDialog {
             val config = colorPickerConfig(dialogId, initial, withAlpha)
-            return bindColorPickerListener(
-                ColorPickerDialog.newBuilder()
-                    .setColor(config.color)
-                    .setShowAlphaSlider(config.withAlpha)
-                    .setDialogType(ColorPickerDialog.TYPE_PRESETS)
-                    .setPresets(config.presets)
-                    .setDialogId(config.dialogId)
-                    .create(),
-                listener
-            )
+            val dialog = ColorPickerDialog.newBuilder()
+                .setColor(config.color)
+                .setShowAlphaSlider(config.withAlpha)
+                .setDialogType(ColorPickerDialog.TYPE_PRESETS)
+                .setPresets(config.presets)
+                .setDialogId(config.dialogId)
+                .create()
+            // Issue-2 修复：强制 ColorPickerDialog 使用亮色主题，避免暗色主题下预设色块全显示白色
+            // 根因：ColorPickerDialog 在 onCreate 调用 setStyle(STYLE_NO_FRAME, 0)，0 表示用 Activity 主题
+            // 应用通过 setTheme(R.style.AppTheme_Dark) 设置暗色主题时，预设色块的渲染受暗色主题影响显示异常
+            // 方案：调用 DialogFragment.setStyle 强制使用 R.style.AppTheme_Light
+            // setStyle 是 androidx.fragment.app.DialogFragment 的 public 方法
+            dialog.setStyle(androidx.fragment.app.DialogFragment.STYLE_NO_FRAME, R.style.AppTheme_Light)
+            return bindColorPickerListener(dialog, listener)
         }
     }
 

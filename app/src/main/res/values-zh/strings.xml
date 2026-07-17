@@ -797,10 +797,10 @@
     <string name="local_tts">本地 TTS</string>
     <string name="thread_count">线程数</string>
     <string name="rss_parse_concurrency">RSS解析并发</string>
-    <string name="rss_parse_concurrency_summary">RSS文章解析并发数（默认3）</string>
+    <string name="rss_parse_concurrency_summary">RSS文章解析并发数（当前 %s，默认3）</string>
     <string name="parse_concurrency">解析并发</string>
     <string name="image_load_concurrency">图片加载并发</string>
-    <string name="image_load_concurrency_summary">图片加载线程数（默认5，需重启生效）</string>
+    <string name="image_load_concurrency_summary">图片加载线程数（当前 %s，默认5，需重启生效）</string>
     <string name="all_read_time">总阅读时间</string>
     <string name="un_select_all">全不选</string>
     <string name="import_str">导入</string>

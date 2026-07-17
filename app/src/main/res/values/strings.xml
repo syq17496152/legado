@@ -800,10 +800,10 @@
     <string name="local_tts">Local TTS</string>
     <string name="thread_count">Thread count</string>
     <string name="rss_parse_concurrency">RSS parse concurrency</string>
-    <string name="rss_parse_concurrency_summary">Number of concurrent RSS article parsing (default 3)</string>
+    <string name="rss_parse_concurrency_summary">Number of concurrent RSS article parsing (current %s, default 3)</string>
     <string name="parse_concurrency">Parse concurrency</string>
     <string name="image_load_concurrency">Image load concurrency</string>
-    <string name="image_load_concurrency_summary">Number of concurrent image loading threads (default 5, restart required)</string>
+    <string name="image_load_concurrency_summary">Number of concurrent image loading threads (current %s, default 5, restart required)</string>
     <string name="source_parse_concurrency">Source parse concurrency</string>
     <string name="source_parse_concurrency_summary">Parse concurrency override for this source (0 = use global config)</string>
     <string name="domain_check_socket">Socket quick check</string>

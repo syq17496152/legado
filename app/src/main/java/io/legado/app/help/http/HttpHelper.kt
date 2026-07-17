@@ -239,7 +239,6 @@ private object RetryableDns : Dns {
     private const val MAX_RETRY = 2
     private const val NEGATIVE_CACHE_TTL_MS = 60_000L
     private val negativeCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
-    private const val TAG = "RetryableDns"
 
     override fun lookup(hostname: String): List<InetAddress> {
         // 负缓存检查：失败过的域名 60 秒内直接抛异常，避免反复 DNS 查询

@@ -291,10 +291,10 @@ class OtherConfigFragment : PreferenceFragment(),
             PreferKey.threadCount -> preference.summary = getString(R.string.threads_num, value)
 
             PreferKey.rssParseConcurrency -> preference.summary =
-                getString(R.string.rss_parse_concurrency_summary)
+                getString(R.string.rss_parse_concurrency_summary, value)
 
             PreferKey.imageLoadConcurrency -> preference.summary =
-                getString(R.string.image_load_concurrency_summary)
+                getString(R.string.image_load_concurrency_summary, value)
 
             PreferKey.webPort -> preference.summary = getString(R.string.web_port_summary, value)
             PreferKey.bitmapCacheSize -> preference.summary =
