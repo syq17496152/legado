@@ -318,6 +318,13 @@ abstract class AbsCallBack(
             val keepEncodingAffectedHeaders = contentEncodingItems.isEmpty()
                     || !encodingsHandledByCronet.containsAll(contentEncodingItems)
 
+            // Issue7 调试日志：记录 Cronet 响应的内容编码处理（脱敏：只保留路径片段）
+            val urlPath = responseInfo.url?.substringAfter("://")?.substringAfter("/")?.take(40) ?: "unknown"
+            val httpCode = responseInfo.httpStatusCode
+            AppLog.put("[CronetDebug] createResponse: path=$urlPath, httpCode=$httpCode, " +
+                "contentEncoding=$contentEncodingItems, keepHeaders=$keepEncodingAffectedHeaders, " +
+                "hasBodySource=${bodySource != null}, negotiatedProtocol=${responseInfo.negotiatedProtocol}")
+
             val headers = headersFromResponse(responseInfo, keepEncodingAffectedHeaders)
             val contentLength = if (keepEncodingAffectedHeaders) {
                 responseInfo.allHeaders["Content-Length"]?.lastOrNull()

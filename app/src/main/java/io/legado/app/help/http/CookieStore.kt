@@ -57,16 +57,15 @@ object CookieStore : CookieManagerInterface {
     override fun setCookie(url: String, cookie: String?) {
         try {
             val domain = NetworkUtils.getSubDomain(url)
-            // 空值保护：不允许用 null/空字符串覆盖已有的有效 Cookie
-            // 根因：onPageFinished 中 CookieManager.getCookie 可能返回 null，
-            // 若直接 putMemory 会覆盖网络拦截器已保存的有效 session Cookie，
-            // 导致后续 refetch 请求不带 Cookie → 服务器拒绝 → "验证结果为空"
+            // Issue-7 调试日志：追踪 cookie 保存链路（脱敏：只记录长度和域名前3字符）
             if (cookie.isNullOrEmpty()) {
+                AppLog.put("[CookieDebug] setCookie skipped: domainPrefix=${domain.take(3)}, domainLen=${domain.length}, reason=nullOrEmpty")
                 return
             }
             CacheManager.putMemory("${domain}_cookie", cookie)
             val cookieBean = Cookie(domain, cookie)
             appDb.cookieDao.insert(cookieBean)
+            AppLog.put("[CookieDebug] setCookie saved: domainPrefix=${domain.take(3)}, domainLen=${domain.length}, cookieLen=${cookie.length}")
         } catch (e: Exception) {
             AppLog.put("保存Cookie失败\n$e", e)
         }
@@ -113,13 +112,17 @@ object CookieStore : CookieManagerInterface {
         val cookieMap = mergeCookiesToMap(cookie, sessionCookie)
 
         var ck = mapToCookie(cookieMap) ?: ""
+        var lruTriggered = false
         while (ck.length > 4096) {
+            lruTriggered = true
             // LRU 淘汰：优先 tracking Cookie，其次 key 长度降序，避免随机删除误伤登录态
             val removeKey = selectCookieKeyToRemove(cookieMap) ?: break
             CookieManager.removeCookie(url, removeKey)
             cookieMap.remove(removeKey)
             ck = mapToCookie(cookieMap) ?: ""
         }
+        // Issue-7 调试日志：追踪 cookie 读取链路（脱敏：只记录长度和域名前3字符）
+        AppLog.put("[CookieDebug] getCookie: domainPrefix=${domain.take(3)}, domainLen=${domain.length}, cookieLen=${ck.length}, sessionLen=${sessionCookie?.length ?: 0}, noSessionLen=${cookie.length}, lruTriggered=$lruTriggered, keyCount=${cookieMap.size}")
         return ck
     }
 

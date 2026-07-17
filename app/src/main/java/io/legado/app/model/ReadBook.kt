@@ -275,12 +275,18 @@ object ReadBook : CoroutineScope by MainScope() {
     ): List<HighlightRuleMatcher.RuleMatch> {
         // Issue-3 修复：创建本地不可变副本，避免迭代时被其他线程修改触发 ConcurrentModificationException
         // 根因：@Volatile 只保证引用可见性，不保证 ArrayList 内部数据线程安全
+        // 加强修复：highlightRules + textChapter.pages 都做 snapshot
+        //   - highlightRules：loadHighlightRules 可能在其他协程赋值新引用，迭代旧引用虽不会 CME 但为保险做副本
+        //   - textChapter.pages：TextChapter.textPages 是可变 ArrayList，TextChapterLayout.kt:172 textPages.add() 排版线程并发添加
+        //     若 UI 线程迭代 pages 时排版线程在 add，会触发 CME（崩溃日志 crash-2026-07-16-22-27-36 证实）
         val rulesSnapshot = highlightRules.toList()
         if (rulesSnapshot.isEmpty()) return emptyList()
-        if (textChapter.highlightRuleMatchesVersion == highlightRulesVersion) {
+        val versionSnapshot = highlightRulesVersion
+        if (textChapter.highlightRuleMatchesVersion == versionSnapshot) {
             return textChapter.highlightRuleMatches ?: emptyList()
         }
-        val lines = textChapter.pages.flatMap { it.lines }.map { line ->
+        val pagesSnapshot = textChapter.pages.toList()
+        val lines = pagesSnapshot.flatMap { it.lines }.map { line ->
             HighlightTextBuilder.LineInput(
                 line.columns.map { col -> (col as? TextColumn)?.charData ?: "" },
                 line.charSize,
@@ -294,7 +300,7 @@ object ReadBook : CoroutineScope by MainScope() {
         val matches = HighlightRuleMatcher.match(text, rules)
         if (textChapter.isCompleted) {
             textChapter.highlightRuleMatches = matches
-            textChapter.highlightRuleMatchesVersion = highlightRulesVersion
+            textChapter.highlightRuleMatchesVersion = versionSnapshot
         }
         return matches
     }

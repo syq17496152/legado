@@ -1,6 +1,7 @@
 package io.legado.app.lib.cronet
 
 import androidx.annotation.Keep
+import io.legado.app.constant.AppLog
 import io.legado.app.help.http.CookieManager
 import io.legado.app.help.http.CookieManager.cookieJarHeader
 import io.legado.app.utils.printOnDebug
@@ -29,6 +30,9 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
         val original: Request = chain.request()
         //Cronet未初始化
         return if (!CronetLoader.install() || cronetEngine == null) {
+            // Issue-7 调试日志：Cronet 未初始化，走 OkHttp（脱敏：只记录长度和路径前30字符）
+            val origCookieLen = original.header("Cookie")?.length ?: 0
+            AppLog.put("[CookieDebug] CronetInterceptor fallback OkHttp: cookieHeaderLen=$origCookieLen, urlPath=${original.url.toString().substringAfter("://").take(30)}")
             chain.proceed(original)
         } else try {
             val enableCookieJar = original.header(cookieJarHeader) != null
@@ -40,7 +44,11 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
             if (enableCookieJar) {
                 // 使用 CookieManager 体系加载 Cookie（与 WebView 登录保存的 Cookie 一致）
                 // 注意：不在此处移除 cookieJarHeader，由 AbsCallBack.init() 移除并处理响应 Cookie
+                val origCookieLen = original.header("Cookie")?.length ?: 0
                 val requestWithCookie = CookieManager.loadRequest(builder.build())
+                val newCookieLen = requestWithCookie.header("Cookie")?.length ?: 0
+                // Issue-7 调试日志：追踪 Cronet 请求 cookie 注入（脱敏：只记录长度和路径前30字符）
+                AppLog.put("[CookieDebug] CronetInterceptor cookieJar: origCookieLen=$origCookieLen, loadedCookieLen=$newCookieLen, urlPath=${original.url.toString().substringAfter("://").take(30)}")
                 val newBuilder = requestWithCookie.newBuilder()
                 // loadRequest 不会移除 cookieJarHeader，确保 AbsCallBack 能检测到
                 newBuilder.removeHeader("Keep-Alive")
