@@ -17,6 +17,8 @@ import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.databinding.ItemBookSourceBinding
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.source.sourceInitial
+import io.legado.app.help.source.sourceUrlHost
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.model.Debug
 import io.legado.app.ui.login.SourceLoginActivity
@@ -63,6 +65,7 @@ class BookSourceAdapter(
                     && oldItem.enabled == newItem.enabled
                     && oldItem.enabledExplore == newItem.enabledExplore
                     && oldItem.hasExploreUrl == newItem.hasExploreUrl
+                    && oldItem.lastHost == newItem.lastHost  // ADR-7: 追踪 lastHost 变化触发刷新
         }
 
         override fun getChangePayload(oldItem: BookSourcePart, newItem: BookSourcePart): Any? {
@@ -79,6 +82,10 @@ class BookSourceAdapter(
                 oldItem.hasExploreUrl != newItem.hasExploreUrl
             ) {
                 payload.putBoolean("upExplore", true)
+            }
+            // ADR-7: lastHost 变化时增加 upHost payload，触发 tv_book_source_url 增量刷新
+            if (oldItem.lastHost != newItem.lastHost) {
+                payload.putBoolean("upHost", true)
             }
             if (payload.isEmpty) {
                 return null
@@ -104,6 +111,10 @@ class BookSourceAdapter(
                 cbBookSource.text = item.getDisPlayNameGroup()
                 swtEnabled.isChecked = item.enabled
                 cbBookSource.isChecked = selected.contains(item)
+                // Issue-6 新增控件绑定
+                tvSourceInitial.text = item.sourceInitial()
+                tvBookSourceUrl.text = item.sourceUrlHost()
+                vEnabledDot.visibility = if (item.enabled) View.VISIBLE else View.GONE
                 upCheckSourceMessage(binding, item)
                 upShowExplore(ivExplore, item)
                 upSourceHost(binding, holder.layoutPosition)
@@ -112,8 +123,15 @@ class BookSourceAdapter(
                     val bundle = payloads[i] as Bundle
                     bundle.keySet().forEach {
                         when (it) {
-                            "enabled" -> swtEnabled.isChecked = bundle.getBoolean("enabled")
-                            "upName" -> cbBookSource.text = item.getDisPlayNameGroup()
+                            "enabled" -> {
+                                swtEnabled.isChecked = bundle.getBoolean("enabled")
+                                vEnabledDot.visibility = if (bundle.getBoolean("enabled")) View.VISIBLE else View.GONE
+                            }
+                            "upName" -> {
+                                cbBookSource.text = item.getDisPlayNameGroup()
+                                tvSourceInitial.text = item.sourceInitial()
+                            }
+                            "upHost" -> tvBookSourceUrl.text = item.sourceUrlHost()
                             "upExplore" -> upShowExplore(ivExplore, item)
                             "selected" -> cbBookSource.isChecked = selected.contains(item)
                             "checkSourceMessage" -> upCheckSourceMessage(binding, item)
@@ -234,15 +252,15 @@ class BookSourceAdapter(
         item: BookSourcePart
     ) = binding.run {
         val msg = Debug.debugMessageMap[item.bookSourceUrl] ?: ""
-        ivDebugText.text = msg
+        tvDebugText.text = msg
         val isEmpty = msg.isEmpty()
         var isFinalMessage = msg.contains(finalMessageRegex)
         if (!Debug.isChecking && !isFinalMessage) {
             Debug.updateFinalMessage(item.bookSourceUrl, "校验失败")
-            ivDebugText.text = Debug.debugMessageMap[item.bookSourceUrl] ?: ""
+            tvDebugText.text = Debug.debugMessageMap[item.bookSourceUrl] ?: ""
             isFinalMessage = true
         }
-        ivDebugText.visibility =
+        tvDebugText.visibility =
             if (!isEmpty) View.VISIBLE else View.GONE
         ivProgressBar.visibility =
             if (isFinalMessage || isEmpty || !Debug.isChecking) View.GONE else View.VISIBLE
@@ -298,7 +316,8 @@ class BookSourceAdapter(
 
     fun getHeaderText(position: Int): String {
         val source = getItem(position)!!
-        return callBack.getSourceHost(source.bookSourceUrl)
+        // ADR-11: 优先用 lastHost，与 sourceUrlHost() 逻辑一致，避免分组与显示不一致
+        return callBack.getSourceHost(source.lastHost ?: source.bookSourceUrl)
     }
 
     fun isItemHeader(position: Int): Boolean {

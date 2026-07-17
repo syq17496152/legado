@@ -10,6 +10,8 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.databinding.ItemBookSourceCompactBinding
+import io.legado.app.help.source.sourceInitial
+import io.legado.app.help.source.sourceUrlHost
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.utils.ColorUtils
@@ -56,6 +58,7 @@ class BookSourceAdapterCompact(
             oldItem.bookSourceName == newItem.bookSourceName
                     && oldItem.enabled == newItem.enabled
                     && oldItem.bookSourceType == newItem.bookSourceType
+                    && oldItem.lastHost == newItem.lastHost  // ADR-7/A5: Compact 无 getChangePayload，靠全量刷新
     }
 
     override fun getViewBinding(parent: android.view.ViewGroup): ItemBookSourceCompactBinding {
@@ -74,6 +77,10 @@ class BookSourceAdapterCompact(
                 cbBookSource.text = item.getDisPlayNameGroup()
                 swtEnabled.isChecked = item.enabled
                 cbBookSource.isChecked = selected.contains(item)
+                // Issue-6 新增控件绑定（紧凑模式无 getChangePayload，全量分支绑定即可，ADR-7/A5）
+                tvSourceInitial.text = item.sourceInitial()
+                tvBookSourceUrl.text = item.sourceUrlHost()
+                vEnabledDot.isVisible = item.enabled
                 // 类型徽章：0=文本, 1=音频, 2=图片, 3=文件, 4=视频
                 ivTypeBadge.text = when (item.bookSourceType) {
                     0 -> context.getString(R.string.type_text)

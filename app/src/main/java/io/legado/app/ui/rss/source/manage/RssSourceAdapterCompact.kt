@@ -10,6 +10,8 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.entities.RssSource
 import io.legado.app.databinding.ItemRssSourceCompactBinding
+import io.legado.app.help.source.sourceInitial
+import io.legado.app.help.source.sourceUrlHost
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.utils.ColorUtils
@@ -56,6 +58,7 @@ class RssSourceAdapterCompact(
             oldItem.sourceName == newItem.sourceName
                     && oldItem.enabled == newItem.enabled
                     && oldItem.type == newItem.type
+                    && oldItem.lastHost == newItem.lastHost  // ADR-7/A5: Compact 无 getChangePayload，靠全量刷新
     }
 
     override fun getViewBinding(parent: android.view.ViewGroup): ItemRssSourceCompactBinding {
@@ -75,6 +78,10 @@ class RssSourceAdapterCompact(
                 swtEnabled.isChecked = item.enabled
                 // M-02 修复：cb 显示选中状态
                 cbSource.isChecked = selected.contains(item)
+                // Issue-6 新增控件绑定（紧凑模式无 getChangePayload，全量分支绑定即可，ADR-7/A5）
+                tvSourceInitial.text = item.sourceInitial()
+                tvRssSourceUrl.text = item.sourceUrlHost()
+                vEnabledDot.isVisible = item.enabled
                 // 类型徽章：0=网页, 1=图片, 2=视频
                 ivTypeBadge.text = when (item.type) {
                     0 -> context.getString(R.string.type_web)

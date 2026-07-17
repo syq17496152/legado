@@ -1,30 +1,101 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- source-layout-deep-refactor 订阅源紧凑列表项：单行 名称+启用开关+类型徽章 -->
+<!-- Issue-6 重构：参考书架紧凑列表 item_bookshelf_list2.xml + item_book_source_compact.xml 字段映射 -->
+<!-- ADR-19: 紧凑列表约束链：iv_source_cover→cb_source/tv_rss_source_url→iv_type_badge→swt_enabled -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/cv_content"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="?android:attr/selectableItemBackground"
-    android:paddingStart="16dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:paddingStart="8dp"
     android:paddingTop="8dp"
-    android:paddingEnd="16dp"
-    android:paddingBottom="8dp">
+    android:paddingEnd="8dp"
+    android:paddingBottom="8dp"
+    android:scrollbars="none">
 
+    <!-- 左侧首字图标容器（48x64dp，主题色背景+首字+启用状态点） -->
+    <FrameLayout
+        android:id="@+id/iv_source_cover"
+        android:layout_width="48dp"
+        android:layout_height="64dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginBottom="4dp"
+        android:background="@drawable/bg_source_folder_cover"
+        android:contentDescription="@string/rss_source"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- 首字（居中，白色加粗 20sp） -->
+        <TextView
+            android:id="@+id/tv_source_initial"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:includeFontPadding="false"
+            android:textColor="@android:color/white"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            tools:ignore="TextContrastCheck"
+            tools:text="默" />
+
+        <!-- 启用状态指示点（左上角） -->
+        <View
+            android:id="@+id/v_enabled_dot"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_margin="6dp"
+            android:background="@drawable/bg_source_enabled_dot" />
+    </FrameLayout>
+
+    <!-- 订阅源名称（CheckBox，保留多选功能，16sp，ADR-18字号14sp→16sp） -->
     <io.legado.app.lib.theme.view.ThemeCheckBox
         android:id="@+id/cb_source"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginLeft="10dp"
+        android:includeFontPadding="false"
+        android:paddingLeft="2dp"
+        android:paddingBottom="4dp"
+        android:scrollbars="none"
         android:singleLine="true"
         android:textColor="@color/primaryText"
-        android:textSize="14sp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintLeft_toLeftOf="parent"
+        android:textSize="16sp"
+        app:layout_constraintBottom_toTopOf="@+id/tv_rss_source_url"
+        app:layout_constraintLeft_toRightOf="@+id/iv_source_cover"
         app:layout_constraintRight_toLeftOf="@id/iv_type_badge"
         app:layout_constraintTop_toTopOf="parent"
-        tools:ignore="TouchTargetSizeCheck"
-        tools:text="订阅源名称" />
+        tools:ignore="TouchTargetSizeCheck,RtlHardcoded,RtlSymmetry"
+        tools:text="@string/rss_source" />
 
+    <!-- 域名（13sp，drawableStart=ic_author） -->
+    <TextView
+        android:id="@+id/tv_rss_source_url"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:drawableStart="@drawable/ic_author"
+        android:drawablePadding="4dp"
+        android:drawableTint="@color/tv_text_summary"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:paddingEnd="6dp"
+        android:scrollbars="none"
+        android:singleLine="true"
+        android:textColor="@color/tv_text_summary"
+        android:textSize="13sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="@+id/cb_source"
+        app:layout_constraintRight_toLeftOf="@id/iv_type_badge"
+        app:layout_constraintTop_toBottomOf="@+id/cb_source"
+        tools:ignore="RtlSymmetry,TextContrastCheck,UseCompatTextViewDrawableXml"
+        tools:text="sourceUrl" />
+
+    <!-- 类型徽章（10sp，紧凑列表保留，ADR-6：0=网页/1=图片/2=视频） -->
     <TextView
         android:id="@+id/iv_type_badge"
         android:layout_width="wrap_content"
@@ -42,6 +113,7 @@
         tools:ignore="RtlHardcoded,SmallSp"
         tools:text="网页" />
 
+    <!-- 启用开关（保留原ID） -->
     <io.legado.app.lib.theme.view.ThemeSwitch
         android:id="@+id/swt_enabled"
         android:layout_width="wrap_content"
@@ -50,5 +122,16 @@
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         tools:ignore="RtlHardcoded,RtlSymmetry,TouchTargetSizeCheck" />
+
+    <!-- 前景触摸反馈（紧凑列表 root 点击/长按事件用） -->
+    <View
+        android:id="@+id/vw_foreground"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="?android:attr/selectableItemBackground"
+        android:scrollbars="none"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.0" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

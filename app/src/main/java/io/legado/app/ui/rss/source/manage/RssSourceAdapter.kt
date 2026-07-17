@@ -6,6 +6,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.PopupMenu
 import androidx.core.os.bundleOf
+import androidx.core.view.doOnLayout
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
@@ -13,10 +15,16 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.entities.RssSource
 import io.legado.app.databinding.ItemRssSourceBinding
+import io.legado.app.help.source.sourceInitial
+import io.legado.app.help.source.sourceUrlHost
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.utils.ColorUtils
+import io.legado.app.utils.buildMainHandler
+import io.legado.app.utils.gone
+import io.legado.app.utils.toTimeAgo
+import io.legado.app.utils.visible
 import java.util.Collections
 
 
@@ -26,6 +34,9 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
     RssSourceSelection {
 
     private val selected = linkedSetOf<RssSource>()
+    private val handler = buildMainHandler()
+    // Issue-6 ADR-15: 订阅源域名分组字段（参考 BookSourceAdapter）
+    var showSourceHost = false
 
     override val selection: List<RssSource>
         get() {
@@ -44,6 +55,7 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
             return oldItem.sourceName == newItem.sourceName
                     && oldItem.sourceGroup == newItem.sourceGroup
                     && oldItem.enabled == newItem.enabled
+                    && oldItem.lastHost == newItem.lastHost  // ADR-7: 追踪 lastHost 变化触发刷新
         }
 
         override fun getChangePayload(oldItem: RssSource, newItem: RssSource): Any? {
@@ -55,6 +67,10 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
             }
             if (oldItem.enabled != newItem.enabled) {
                 payload.putBoolean("enabled", newItem.enabled)
+            }
+            // ADR-7: lastHost 变化时增加 upHost payload，触发 tv_rss_source_url 增量刷新
+            if (oldItem.lastHost != newItem.lastHost) {
+                payload.putBoolean("upHost", true)
             }
             if (payload.isEmpty) {
                 return null
@@ -79,14 +95,35 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
                 cbSource.text = item.getDisplayNameGroup()
                 swtEnabled.isChecked = item.enabled
                 cbSource.isChecked = selected.contains(item)
+                // Issue-6 新增控件绑定
+                tvSourceInitial.text = item.sourceInitial()
+                tvRssSourceUrl.text = item.sourceUrlHost()
+                vEnabledDot.visibility = if (item.enabled) View.VISIBLE else View.GONE
+                // tv_last_update 显示最后更新时间（ADR-13: 替代书源的 tv_debug_text）
+                if (item.lastUpdateTime > 0) {
+                    tvLastUpdate.text = item.lastUpdateTime.toTimeAgo()
+                    tvLastUpdate.isVisible = true
+                } else {
+                    tvLastUpdate.text = ""
+                    tvLastUpdate.isVisible = false
+                }
+                upSourceHost(binding, holder.layoutPosition)
             } else {
                 for (i in payloads.indices) {
                     val bundle = payloads[i] as Bundle
                     bundle.keySet().forEach {
                         when (it) {
-                            "upName" -> cbSource.text = item.getDisplayNameGroup()
-                            "enabled" -> swtEnabled.isChecked = bundle.getBoolean("enabled")
+                            "enabled" -> {
+                                swtEnabled.isChecked = bundle.getBoolean("enabled")
+                                vEnabledDot.visibility = if (bundle.getBoolean("enabled")) View.VISIBLE else View.GONE
+                            }
+                            "upName" -> {
+                                cbSource.text = item.getDisplayNameGroup()
+                                tvSourceInitial.text = item.sourceInitial()
+                            }
+                            "upHost" -> tvRssSourceUrl.text = item.sourceUrlHost()
                             "selected" -> cbSource.isChecked = selected.contains(item)
+                            "upSourceHost" -> upSourceHost(binding, holder.layoutPosition)
                         }
                     }
                 }
@@ -125,6 +162,33 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
 
     override fun onCurrentListChanged() {
         callBack.upCountView()
+        // Issue-6 ADR-15: 列表变化时刷新域名分组标题（参考 BookSourceAdapter.onCurrentListChanged）
+        handler.post {
+            notifyItemRangeChanged(0, itemCount, bundleOf("upSourceHost" to null))
+        }
+    }
+
+    // Issue-6 ADR-15: 订阅源域名分组辅助方法（参考 BookSourceAdapter 实现）
+    private fun upSourceHost(binding: ItemRssSourceBinding, position: Int) = binding.run {
+        if (showSourceHost && isItemHeader(position)) {
+            tvHostText.text = getHeaderText(position)
+            tvHostText.visible()
+        } else {
+            tvHostText.gone()
+        }
+    }
+
+    fun getHeaderText(position: Int): String {
+        val source = getItem(position)!!
+        // ADR-11: 优先用 lastHost，与 sourceUrlHost() 逻辑一致
+        return callBack.getSourceHost(source.lastHost ?: source.sourceUrl)
+    }
+
+    fun isItemHeader(position: Int): Boolean {
+        if (position == 0) return true
+        val lastHost = getHeaderText(position - 1)
+        val curHost = getHeaderText(position)
+        return lastHost != curHost
     }
 
     override fun selectAll() {
@@ -249,6 +313,8 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
         fun toBottom(source: RssSource)
         fun upOrder()
         fun upCountView()
+        // Issue-6 ADR-15: 新增 getSourceHost 用于域名分组
+        fun getSourceHost(origin: String): String
     }
 }
 

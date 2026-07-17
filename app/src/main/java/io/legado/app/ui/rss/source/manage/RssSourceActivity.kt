@@ -244,6 +244,8 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
             R.id.menu_group_sources_by_domain -> {
                 item.isChecked = !item.isChecked
                 groupSourcesByDomain = item.isChecked
+                // Issue-6 ADR-15: 同步 adapter.showSourceHost（参考 BookSourceActivity）
+                adapter.showSourceHost = item.isChecked
                 upSourceFlow(searchView.query?.toString())
             }
 
@@ -595,15 +597,23 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     }
 
     // 域名分组辅助：提取源的真实host（参照 BookSourceActivity.getSourceHost）
-    private fun getSourceHost(origin: String): String {
+    // Issue-6 ADR-15: 修复异常输入处理（空/纯协议名"http"/"https"/"http:///"/"https:///" 返回 "#"），对齐 BookSourceActivity
+    override fun getSourceHost(origin: String): String {
         return hostMap.getOrPut(origin) {
             // 兼容两种输入: 1)完整URL(http://...) 2)纯host(example.com或IP)
             // lastHost字段存储的是host,getSourceHost(it.lastHost ?: it.sourceUrl)调用
-            if (origin.startsWith("http", ignoreCase = true)) {
-                NetworkUtils.getSubDomainOrNull(origin) ?: "#"
+            // ADR-15 修复：异常输入（空、纯协议名"http"/"https"、无路径）返回 "#" 不作为分组名
+            val trimmed = origin.trim()
+            if (trimmed.isEmpty() || trimmed.equals("http", true) || trimmed.equals("https", true)
+                || trimmed.startsWith("http:///", true) || trimmed.startsWith("https:///", true)
+            ) {
+                return@getOrPut "#"
+            }
+            if (trimmed.startsWith("http", ignoreCase = true)) {
+                NetworkUtils.getSubDomainOrNull(trimmed) ?: "#"
             } else {
                 // host补http://前缀再提取子域名,支持"www.example.com"→"example.com"归并
-                NetworkUtils.getSubDomainOrNull("http://$origin") ?: origin
+                NetworkUtils.getSubDomainOrNull("http://$trimmed") ?: "#"
             }
         }
     }
