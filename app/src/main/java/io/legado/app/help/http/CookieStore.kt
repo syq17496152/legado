@@ -57,15 +57,12 @@ object CookieStore : CookieManagerInterface {
     override fun setCookie(url: String, cookie: String?) {
         try {
             val domain = NetworkUtils.getSubDomain(url)
-            // Issue-7 调试日志：追踪 cookie 保存链路（脱敏：只记录长度和域名前3字符）
-            if (cookie.isNullOrEmpty()) {
-                AppLog.put("[CookieDebug] setCookie skipped: domainPrefix=${domain.take(3)}, domainLen=${domain.length}, reason=nullOrEmpty")
-                return
-            }
-            CacheManager.putMemory("${domain}_cookie", cookie)
-            val cookieBean = Cookie(domain, cookie)
+            // 恢复原版行为：null → ""，允许通过空串清除旧 cookie（issue7 回归修复）
+            val cookieStr = cookie ?: ""
+            CacheManager.putMemory("${domain}_cookie", cookieStr)
+            val cookieBean = Cookie(domain, cookieStr)
             appDb.cookieDao.insert(cookieBean)
-            AppLog.put("[CookieDebug] setCookie saved: domainPrefix=${domain.take(3)}, domainLen=${domain.length}, cookieLen=${cookie.length}")
+            AppLog.put("[CookieDebug] setCookie saved: domainPrefix=${domain.take(3)}, domainLen=${domain.length}, cookieLen=${cookieStr.length}")
         } catch (e: Exception) {
             AppLog.put("保存Cookie失败\n$e", e)
         }

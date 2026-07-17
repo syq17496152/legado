@@ -1,5 +1,6 @@
 package io.legado.app.help.http
 
+import io.legado.app.constant.AppLog
 import okhttp3.Interceptor
 import okhttp3.Response
 import okhttp3.ResponseBody
@@ -24,17 +25,40 @@ object DecompressInterceptor : Interceptor {
         val response = chain.proceed(requestBuilder.build())
         val body = response.body
 
+        // Issue7 调试日志：记录解压前的 Content-Encoding 和响应状态（脱敏：只记录路径片段和长度）
+        val reqAcceptEnc = request.header("Accept-Encoding") ?: "(added:gzip,deflate)"
+        val resContentEnc = response.header("Content-Encoding")?.lowercase()
+        val resContentType = response.header("Content-Type")?.take(40)
+        val hasCookieJar = request.header(CookieManager.cookieJarHeader) != null
+        // Issue7 缓存假设验证：记录 cacheResponse 和 networkResponse 状态
+        val cacheCode = response.cacheResponse?.code
+        val networkCode = response.networkResponse?.code
+        AppLog.put("[DecompressDebug] reqAcceptEnc=$reqAcceptEnc, resContentEnc=$resContentEnc, " +
+            "resContentType=$resContentType, httpCode=${response.code}, hasCookieJar=$hasCookieJar, " +
+            "transparentDecompress=$transparentDecompress, bodySize=${body?.contentLength() ?: -1}, " +
+            "cacheCode=$cacheCode, networkCode=$networkCode, " +
+            "urlPath=${request.url.encodedPath?.take(40)}")
+
         if (!transparentDecompress || !response.promisesBody() || body == ResponseBody.EMPTY) {
+            AppLog.put("[DecompressDebug] skip decompress: transparentDecompress=$transparentDecompress, " +
+                "promisesBody=${response.promisesBody()}, bodyEmpty=${body == ResponseBody.EMPTY}, " +
+                "resContentEnc=$resContentEnc")
             return response
         }
 
-        val encoding = response.header("Content-Encoding")?.lowercase()
+        val encoding = resContentEnc
         val source = when (encoding) {
             "gzip" -> GZIPInputStream(body.byteStream()).source().buffer()
             "deflate" -> InflaterInputStream(body.byteStream(), Inflater(true)).source().buffer()
-            else -> return response
+            else -> {
+                // 未知编码（如 br），记录警告
+                AppLog.put("[DecompressDebug] WARN: unknown encoding=$encoding, body will be raw bytes, " +
+                    "may cause parse failure")
+                return response
+            }
         }
 
+        AppLog.put("[DecompressDebug] decompressed: encoding=$encoding")
         return response.newBuilder()
             .removeHeader("Content-Encoding")
             .removeHeader("Content-Length")

@@ -134,7 +134,7 @@ object CookieManager {
         val domain = NetworkUtils.getSubDomain(url)
         val cacheCookie = CacheManager.getFromMemory("${domain}_cookie") as? String
 
-        return if (!cacheCookie.isNullOrEmpty()) {
+        return if (cacheCookie != null) {  // 恢复原版行为：cache 有值（含空串）即返回，避免读到数据库旧 cookie（issue7 回归修复）
             cacheCookie
         } else {
             val cookieBean = runBlocking(IO) { appDb.cookieDao.get(domain) }
