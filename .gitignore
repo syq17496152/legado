@@ -64,3 +64,8 @@ ai_tests/__pycache__/
 ai_tests/cases/*/preconditions/
 ai_tests/lib/source_map.json.bak
 extracted/com/shuyu/gsyvideoplayer/GSYBaseActivityDetail.class
+
+# ai_tests 临时脚本和产物（2026-07-17 清理，禁止再次提交）
+ai_tests/scripts/temp_*.py
+ai_tests/tmp_*
+build_temp.bat
