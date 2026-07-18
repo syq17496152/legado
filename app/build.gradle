@@ -141,7 +141,25 @@ android {
     android.applicationVariants.configureEach { variant ->
         variant.outputs.configureEach {
             def flavor = variant.productFlavors[0].name
-            outputFileName = "${name}_${flavor}_${defaultConfig.versionName}.apk"
+            def appId = variant.applicationId
+            // 从applicationId提取包名标识: io.legado.miss.app → miss, io.legado.app → legacy, 其他取最后一段
+            def appIdSuffix = ""
+            if (appId.startsWith("io.legado.miss.app")) {
+                appIdSuffix = "miss"
+            } else if (appId.startsWith("io.legado.app")) {
+                appIdSuffix = "legacy"
+            } else {
+                // 自定义包名取最后一段
+                def parts = appId.split("\\.")
+                appIdSuffix = parts.length > 0 ? parts[-1] : "custom"
+            }
+            outputFileName = "${name}_${appIdSuffix}_${flavor}_${defaultConfig.versionName}.apk"
+            // 不同包名输出到不同子目录，避免共存包覆盖测试包
+            // 默认: app/build/outputs/apk/app/miss/debug/
+            // 共存: app/build/outputs/apk/app/legacy/debug/
+            def originalDir = output.outputFile.parentFile
+            def appDir = new File(originalDir, appIdSuffix)
+            output.outputDirectory = appDir
         }
     }
 
