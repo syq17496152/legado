@@ -1,4 +1,4 @@
-# Legado（阅读Sigma）
+# Legado（阅读M）
 
 > Android 开源电子书阅读器，核心为自定义书源规则引擎（CSS/JSONPath/XPath/正则/JS 五种解析），用户编写规则即可将任意网页转化为结构化书籍资源。
 
