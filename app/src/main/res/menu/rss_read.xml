@@ -40,6 +40,13 @@
         android:title="@string/read_record"
         app:showAsAction="never" />
 
+    <!-- rss-unified-search 新增：换源菜单（仅搜索结果多源场景显示） -->
+    <item
+        android:id="@+id/menu_change_source"
+        android:title="@string/change_source"
+        android:visible="false"
+        app:showAsAction="never" />
+
     <item
         android:id="@+id/menu_edit_source"
         android:title="@string/edit_source"

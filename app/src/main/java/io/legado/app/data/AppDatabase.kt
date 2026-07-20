@@ -74,7 +74,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 98,
+    version = 99,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -137,6 +137,7 @@ val appDb by lazy {
         // rss-cache-first: 92→93 使用手动 Migration（DatabaseMigrations.migration_92_93），重建 rssSources 表将 cacheFirst 默认值 0→1
         // rss-concurrency: 93→94 使用手动 Migration（DatabaseMigrations.migration_93_94）
         // rss-weight: 94→95 使用手动 Migration（DatabaseMigrations.migration_94_95），rssSources 表新增 parseConcurrency + weight 字段
+        // rss-unified-search: 98→99 使用手动 Migration（DatabaseMigrations.migration_98_99），search_keywords 表改为复合主键(word, type)
     ]
 )
 abstract class AppDatabase : RoomDatabase() {

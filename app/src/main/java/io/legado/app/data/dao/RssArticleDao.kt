@@ -13,6 +13,20 @@ interface RssArticleDao {
     @Query("select * from rssArticles where origin = :origin and link = :link")
     fun getByLink(origin: String, link: String): RssArticle?
 
+    /**
+     * 批量查询指定 origin 下已读的 link 列表（rss-unified-search 新增）
+     *
+     * 用于订阅源统一搜索结果已读状态判断：
+     * - 搜索结果来自网络返回，read 字段默认 false
+     * - 通过此方法查询 rssArticles 表中已读的文章 link，批量判断已读状态
+     *
+     * @param origin 订阅源 sourceUrl
+     * @param links 搜索结果中的文章 link 列表
+     * @return 已读的 link 列表（子集）
+     */
+    @Query("SELECT link FROM rssArticles WHERE origin = :origin AND link IN (:links) AND read = 1")
+    fun getReadLinks(origin: String, links: List<String>): List<String>
+
     // R4.3 修复：去掉 t1.content 字段（大文章 content 超 CursorWindow 2MB 限制）
     // app-stability-round2 P1-1 修复：再去掉 t1.description 字段（部分源 description 也可能超大触发 SQLiteBlobTooBigException）
     // rss-parse-optimization P0 修复：再去掉 t1.variable 字段（部分源 variable JSON 超大导致 CursorWindow 溢出 30+次/会话）

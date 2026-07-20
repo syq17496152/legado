@@ -154,12 +154,6 @@ android {
                 appIdSuffix = parts.length > 0 ? parts[-1] : "custom"
             }
             outputFileName = "${name}_${appIdSuffix}_${flavor}_${defaultConfig.versionName}.apk"
-            // 不同包名输出到不同子目录，避免共存包覆盖测试包
-            // 默认: app/build/outputs/apk/app/miss/debug/
-            // 共存: app/build/outputs/apk/app/legacy/debug/
-            def originalDir = output.outputFile.parentFile
-            def appDir = new File(originalDir, appIdSuffix)
-            output.outputDirectory = appDir
         }
     }
 

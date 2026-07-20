@@ -49,6 +49,71 @@ object ReadRss {
         readNoHtml(activity, record, type)
     }
 
+    /**
+     * 订阅源统一搜索结果点击阅读（rss-unified-search 新增）
+     *
+     * 参考 [readRss] Fragment 版本的设计，使用 activity.lifecycleScope 替代 fragment.viewLifecycleOwner.lifecycleScope。
+     *
+     * 使用场景：[io.legado.app.ui.rss.search.RssArticleInfoActivity] 详情页点击"阅读"按钮或某源项后调用，
+     * 该 Activity 是 AppCompatActivity 而非 Fragment，无法调用 Fragment 版本的 readRss。
+     *
+     * 设计依据：rss-unified-search design.md §5
+     *
+     * @param activity 详情页所在的 Activity
+     * @param rssArticle 待阅读的文章（来自 RssSearchSourceHolder.articles 的某源对应 RssArticle）
+     * @param rssArticles 搜索结果列表转 RssArticle 列表（详情页从 RssSearchSourceHolder.rssArticles 传入，
+     *        支持播放页上/下一个切换文章；rss-unified-search 阶段10 废除 AD-07 简化原则）
+     * @param sortName 分类名称（搜索场景传 null）
+     * @param sortUrl 分类 URL（搜索场景传 null）
+     * @param nextPageUrl 下一页 URL（搜索场景传 null）
+     * @param page 当前页码（搜索场景传 1）
+     */
+    fun readRss(
+        activity: AppCompatActivity,
+        rssArticle: RssArticle,
+        rssArticles: List<RssArticle>? = null,
+        sortName: String? = null,
+        sortUrl: String? = null,
+        nextPageUrl: String? = null,
+        page: Int = 1
+    ) {
+        val rssReadRecord = rssArticle.toRecord()
+        activity.lifecycleScope.launch(IO) {
+            appDb.rssReadRecordDao.insertRecord(rssReadRecord)
+        }
+        val type = rssArticle.type
+        if (type == 0) {
+            // web网页
+            ReadRssActivity.start(
+                activity,
+                rssArticle.origin,
+                rssArticle.title,
+                link = rssArticle.link,
+                sort = rssArticle.sort
+            )
+            return
+        }
+        if (type == 2) {
+            // 视频播放：从详情页传入 rssArticles 支持播放页上/下一个切换文章（废除 AD-07 简化原则）
+            VideoPlay.rssArticles = rssArticles
+            // 计算 rssArticle 在列表中的索引，支持从中间文章进入播放页
+            VideoPlay.rssArticleIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link } ?: 0
+            VideoPlay.rssSortName = sortName
+            VideoPlay.rssSortUrl = sortUrl
+            VideoPlay.rssNextPageUrl = nextPageUrl
+            VideoPlay.rssArticlePage = page
+            VideoPlay.rssArticlesHasMore = !nextPageUrl.isNullOrBlank()
+            activity.startActivity<VideoPlayerActivity> {
+                putExtra("sourceKey", rssArticle.origin)
+                putExtra("sourceType", SourceType.rss)
+                putExtra("record", rssArticle.link)
+                putExtra("videoTitle", rssArticle.title)
+            }
+            return
+        }
+        readNoHtml(activity, rssReadRecord, type)
+    }
+
     fun readRss(
         fragment: Fragment,
         rssArticle: RssArticle,

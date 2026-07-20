@@ -739,6 +739,28 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefString("searchGroup", value)
         }
 
+    /**
+     * 订阅源统一搜索范围（rss-unified-search 新增）
+     *
+     * 格式与 [searchScope] 一致：
+     * - 空字符串：全部启用且 searchUrl 非空的订阅源
+     * - "分组1,分组2"：指定分组下的订阅源
+     */
+    var rssSearchScope: String
+        get() = appCtx.getPrefString("rssSearchScope") ?: ""
+        set(value) {
+            appCtx.putPrefString("rssSearchScope", value)
+        }
+
+    /**
+     * 订阅源统一搜索分组（单分组场景缓存，与 [rssSearchScope] 配合使用）
+     */
+    var rssSearchGroup: String
+        get() = appCtx.getPrefString("rssSearchGroup") ?: ""
+        set(value) {
+            appCtx.putPrefString("rssSearchGroup", value)
+        }
+
     var pageTouchSlop: Int
         get() = appCtx.getPrefInt(PreferKey.pageTouchSlop, 0)
         set(value) {

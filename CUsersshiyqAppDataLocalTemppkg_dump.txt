@@ -1,0 +1,879 @@
+Activity Resolver Table:
+  Full MIME Types:
+      application/epub+zip:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+      application/azw:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+      application/pdf:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+      application/azw3:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+      application/json:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+      application/mobi:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+      application/x-mobi8-ebook:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+      */*:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter a700247
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Authority: "": -1 WILD
+          Path: "PatternMatcher{GLOB: .*\.txt}"
+          Path: "PatternMatcher{GLOB: .*\.TXT}"
+          Path: "PatternMatcher{GLOB: .*\.json}"
+          Path: "PatternMatcher{GLOB: .*\.JSON}"
+          Path: "PatternMatcher{GLOB: .*\.epub}"
+          Path: "PatternMatcher{GLOB: .*\.EPUB}"
+          Path: "PatternMatcher{GLOB: .*\.pdf}"
+          Path: "PatternMatcher{GLOB: .*\.PDF}"
+          Path: "PatternMatcher{GLOB: .*\.mobi}"
+          Path: "PatternMatcher{GLOB: .*\.MOBI}"
+          Path: "PatternMatcher{GLOB: .*\.azw}"
+          Path: "PatternMatcher{GLOB: .*\.AZW}"
+          Path: "PatternMatcher{GLOB: .*\.azw3}"
+          Path: "PatternMatcher{GLOB: .*\.AZW3}"
+          Path: "PatternMatcher{GLOB: .*\.zip}"
+          Path: "PatternMatcher{GLOB: .*\.ZIP}"
+          Path: "PatternMatcher{GLOB: .*\.rar}"
+          Path: "PatternMatcher{GLOB: .*\.RAR}"
+          Path: "PatternMatcher{GLOB: .*\.7z}"
+          Path: "PatternMatcher{GLOB: .*\.7Z}"
+          Type: "*"
+          mPriority=0, mOrder=0, mHasPartialTypes=true
+      application/x-mobipocket-ebook:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+      text/plain:
+        649f115 io.legado.app.debug/io.legado.app.receiver.SharedReceiverActivity filter 4cb2a6b
+          Action: "android.intent.action.PROCESS_TEXT"
+          Category: "android.intent.category.DEFAULT"
+          Type: "text/plain"
+        649f115 io.legado.app.debug/io.legado.app.receiver.SharedReceiverActivity filter b2fd9c8
+          Action: "android.intent.action.SEND"
+          Category: "android.intent.category.DEFAULT"
+          Type: "text/plain"
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+      application/octet-stream:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+
+  Base MIME Types:
+      text:
+        649f115 io.legado.app.debug/io.legado.app.receiver.SharedReceiverActivity filter 4cb2a6b
+          Action: "android.intent.action.PROCESS_TEXT"
+          Category: "android.intent.category.DEFAULT"
+          Type: "text/plain"
+        649f115 io.legado.app.debug/io.legado.app.receiver.SharedReceiverActivity filter b2fd9c8
+          Action: "android.intent.action.SEND"
+          Category: "android.intent.category.DEFAULT"
+          Type: "text/plain"
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+      application:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+
+  Wild MIME Types:
+      *:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter a700247
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Authority: "": -1 WILD
+          Path: "PatternMatcher{GLOB: .*\.txt}"
+          Path: "PatternMatcher{GLOB: .*\.TXT}"
+          Path: "PatternMatcher{GLOB: .*\.json}"
+          Path: "PatternMatcher{GLOB: .*\.JSON}"
+          Path: "PatternMatcher{GLOB: .*\.epub}"
+          Path: "PatternMatcher{GLOB: .*\.EPUB}"
+          Path: "PatternMatcher{GLOB: .*\.pdf}"
+          Path: "PatternMatcher{GLOB: .*\.PDF}"
+          Path: "PatternMatcher{GLOB: .*\.mobi}"
+          Path: "PatternMatcher{GLOB: .*\.MOBI}"
+          Path: "PatternMatcher{GLOB: .*\.azw}"
+          Path: "PatternMatcher{GLOB: .*\.AZW}"
+          Path: "PatternMatcher{GLOB: .*\.azw3}"
+          Path: "PatternMatcher{GLOB: .*\.AZW3}"
+          Path: "PatternMatcher{GLOB: .*\.zip}"
+          Path: "PatternMatcher{GLOB: .*\.ZIP}"
+          Path: "PatternMatcher{GLOB: .*\.rar}"
+          Path: "PatternMatcher{GLOB: .*\.RAR}"
+          Path: "PatternMatcher{GLOB: .*\.7z}"
+          Path: "PatternMatcher{GLOB: .*\.7Z}"
+          Type: "*"
+          mPriority=0, mOrder=0, mHasPartialTypes=true
+
+  Schemes:
+      legado:
+        2e3c2a io.legado.app.debug/io.legado.app.ui.association.OnLineImportActivity filter 6ada61
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "legado"
+          Scheme: "yuedu"
+      app:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter a700247
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Authority: "": -1 WILD
+          Path: "PatternMatcher{GLOB: .*\.txt}"
+          Path: "PatternMatcher{GLOB: .*\.TXT}"
+          Path: "PatternMatcher{GLOB: .*\.json}"
+          Path: "PatternMatcher{GLOB: .*\.JSON}"
+          Path: "PatternMatcher{GLOB: .*\.epub}"
+          Path: "PatternMatcher{GLOB: .*\.EPUB}"
+          Path: "PatternMatcher{GLOB: .*\.pdf}"
+          Path: "PatternMatcher{GLOB: .*\.PDF}"
+          Path: "PatternMatcher{GLOB: .*\.mobi}"
+          Path: "PatternMatcher{GLOB: .*\.MOBI}"
+          Path: "PatternMatcher{GLOB: .*\.azw}"
+          Path: "PatternMatcher{GLOB: .*\.AZW}"
+          Path: "PatternMatcher{GLOB: .*\.azw3}"
+          Path: "PatternMatcher{GLOB: .*\.AZW3}"
+          Path: "PatternMatcher{GLOB: .*\.zip}"
+          Path: "PatternMatcher{GLOB: .*\.ZIP}"
+          Path: "PatternMatcher{GLOB: .*\.rar}"
+          Path: "PatternMatcher{GLOB: .*\.RAR}"
+          Path: "PatternMatcher{GLOB: .*\.7z}"
+          Path: "PatternMatcher{GLOB: .*\.7Z}"
+          Type: "*"
+          mPriority=0, mOrder=0, mHasPartialTypes=true
+      file:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter a700247
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Authority: "": -1 WILD
+          Path: "PatternMatcher{GLOB: .*\.txt}"
+          Path: "PatternMatcher{GLOB: .*\.TXT}"
+          Path: "PatternMatcher{GLOB: .*\.json}"
+          Path: "PatternMatcher{GLOB: .*\.JSON}"
+          Path: "PatternMatcher{GLOB: .*\.epub}"
+          Path: "PatternMatcher{GLOB: .*\.EPUB}"
+          Path: "PatternMatcher{GLOB: .*\.pdf}"
+          Path: "PatternMatcher{GLOB: .*\.PDF}"
+          Path: "PatternMatcher{GLOB: .*\.mobi}"
+          Path: "PatternMatcher{GLOB: .*\.MOBI}"
+          Path: "PatternMatcher{GLOB: .*\.azw}"
+          Path: "PatternMatcher{GLOB: .*\.AZW}"
+          Path: "PatternMatcher{GLOB: .*\.azw3}"
+          Path: "PatternMatcher{GLOB: .*\.AZW3}"
+          Path: "PatternMatcher{GLOB: .*\.zip}"
+          Path: "PatternMatcher{GLOB: .*\.ZIP}"
+          Path: "PatternMatcher{GLOB: .*\.rar}"
+          Path: "PatternMatcher{GLOB: .*\.RAR}"
+          Path: "PatternMatcher{GLOB: .*\.7z}"
+          Path: "PatternMatcher{GLOB: .*\.7Z}"
+          Type: "*"
+          mPriority=0, mOrder=0, mHasPartialTypes=true
+      yuedu:
+        2e3c2a io.legado.app.debug/io.legado.app.ui.association.OnLineImportActivity filter 6ada61
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "legado"
+          Scheme: "yuedu"
+      content:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter a700247
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Authority: "": -1 WILD
+          Path: "PatternMatcher{GLOB: .*\.txt}"
+          Path: "PatternMatcher{GLOB: .*\.TXT}"
+          Path: "PatternMatcher{GLOB: .*\.json}"
+          Path: "PatternMatcher{GLOB: .*\.JSON}"
+          Path: "PatternMatcher{GLOB: .*\.epub}"
+          Path: "PatternMatcher{GLOB: .*\.EPUB}"
+          Path: "PatternMatcher{GLOB: .*\.pdf}"
+          Path: "PatternMatcher{GLOB: .*\.PDF}"
+          Path: "PatternMatcher{GLOB: .*\.mobi}"
+          Path: "PatternMatcher{GLOB: .*\.MOBI}"
+          Path: "PatternMatcher{GLOB: .*\.azw}"
+          Path: "PatternMatcher{GLOB: .*\.AZW}"
+          Path: "PatternMatcher{GLOB: .*\.azw3}"
+          Path: "PatternMatcher{GLOB: .*\.AZW3}"
+          Path: "PatternMatcher{GLOB: .*\.zip}"
+          Path: "PatternMatcher{GLOB: .*\.ZIP}"
+          Path: "PatternMatcher{GLOB: .*\.rar}"
+          Path: "PatternMatcher{GLOB: .*\.RAR}"
+          Path: "PatternMatcher{GLOB: .*\.7z}"
+          Path: "PatternMatcher{GLOB: .*\.7Z}"
+          Type: "*"
+          mPriority=0, mOrder=0, mHasPartialTypes=true
+
+  Non-Data Actions:
+      com.samsung.android.support.REMOTE_ACTION:
+        c809a1b io.legado.app.debug/io.legado.app.ui.book.read.ReadBookActivity filter 53cd4e5
+          Action: "com.samsung.android.support.REMOTE_ACTION"
+        d9807b8 io.legado.app.debug/io.legado.app.ui.book.manga.ReadMangaActivity filter 1e29bba
+          Action: "com.samsung.android.support.REMOTE_ACTION"
+      android.intent.action.MAIN:
+        c658991 io.legado.app.debug/io.legado.app.ui.welcome.WelcomeActivity filter f262d2d
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+        e4bf0f6 io.legado.app.debug/io.legado.app.ui.welcome.Launcher1 filter 2d32262
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+        e04bcf7 io.legado.app.debug/io.legado.app.ui.welcome.Launcher2 filter 22baff3
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+        7a1e764 io.legado.app.debug/io.legado.app.ui.welcome.Launcher3 filter 52824b0
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+        fc82dcd io.legado.app.debug/io.legado.app.ui.welcome.Launcher4 filter d656f29
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+        fbe2682 io.legado.app.debug/io.legado.app.ui.welcome.Launcher5 filter ec502ae
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+        e3e3193 io.legado.app.debug/io.legado.app.ui.welcome.Launcher6 filter 147584f
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+        e4815d0 io.legado.app.debug/io.legado.app.ui.welcome.Launcher7 filter 462dbdc
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+
+  MIME Typed Actions:
+      android.intent.action.SEND:
+        649f115 io.legado.app.debug/io.legado.app.receiver.SharedReceiverActivity filter b2fd9c8
+          Action: "android.intent.action.SEND"
+          Category: "android.intent.category.DEFAULT"
+          Type: "text/plain"
+      android.intent.action.VIEW:
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter 40eb986
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Type: "text/plain"
+          Type: "application/json"
+          Type: "application/epub+zip"
+          Type: "application/pdf"
+          Type: "application/mobi"
+          Type: "application/x-mobipocket-ebook"
+          Type: "application/azw"
+          Type: "application/azw3"
+          Type: "application/x-mobi8-ebook"
+          Type: "application/octet-stream"
+        61f0acc io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity filter a700247
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "app"
+          Scheme: "content"
+          Scheme: "file"
+          Authority: "": -1 WILD
+          Path: "PatternMatcher{GLOB: .*\.txt}"
+          Path: "PatternMatcher{GLOB: .*\.TXT}"
+          Path: "PatternMatcher{GLOB: .*\.json}"
+          Path: "PatternMatcher{GLOB: .*\.JSON}"
+          Path: "PatternMatcher{GLOB: .*\.epub}"
+          Path: "PatternMatcher{GLOB: .*\.EPUB}"
+          Path: "PatternMatcher{GLOB: .*\.pdf}"
+          Path: "PatternMatcher{GLOB: .*\.PDF}"
+          Path: "PatternMatcher{GLOB: .*\.mobi}"
+          Path: "PatternMatcher{GLOB: .*\.MOBI}"
+          Path: "PatternMatcher{GLOB: .*\.azw}"
+          Path: "PatternMatcher{GLOB: .*\.AZW}"
+          Path: "PatternMatcher{GLOB: .*\.azw3}"
+          Path: "PatternMatcher{GLOB: .*\.AZW3}"
+          Path: "PatternMatcher{GLOB: .*\.zip}"
+          Path: "PatternMatcher{GLOB: .*\.ZIP}"
+          Path: "PatternMatcher{GLOB: .*\.rar}"
+          Path: "PatternMatcher{GLOB: .*\.RAR}"
+          Path: "PatternMatcher{GLOB: .*\.7z}"
+          Path: "PatternMatcher{GLOB: .*\.7Z}"
+          Type: "*"
+          mPriority=0, mOrder=0, mHasPartialTypes=true
+      android.intent.action.PROCESS_TEXT:
+        649f115 io.legado.app.debug/io.legado.app.receiver.SharedReceiverActivity filter 4cb2a6b
+          Action: "android.intent.action.PROCESS_TEXT"
+          Category: "android.intent.category.DEFAULT"
+          Type: "text/plain"
+
+Receiver Resolver Table:
+  Non-Data Actions:
+      androidx.profileinstaller.action.SAVE_PROFILE:
+        a36d9c9 io.legado.app.debug/androidx.profileinstaller.ProfileInstallReceiver filter 6d51557
+          Action: "androidx.profileinstaller.action.SAVE_PROFILE"
+      androidx.profileinstaller.action.INSTALL_PROFILE:
+        a36d9c9 io.legado.app.debug/androidx.profileinstaller.ProfileInstallReceiver filter f052f1
+          Action: "androidx.profileinstaller.action.INSTALL_PROFILE"
+      androidx.profileinstaller.action.SKIP_FILE:
+        a36d9c9 io.legado.app.debug/androidx.profileinstaller.ProfileInstallReceiver filter 6feeed6
+          Action: "androidx.profileinstaller.action.SKIP_FILE"
+      androidx.profileinstaller.action.BENCHMARK_OPERATION:
+        a36d9c9 io.legado.app.debug/androidx.profileinstaller.ProfileInstallReceiver filter d84c844
+          Action: "androidx.profileinstaller.action.BENCHMARK_OPERATION"
+      android.intent.action.MEDIA_BUTTON:
+        a2c28ce io.legado.app.debug/io.legado.app.receiver.MediaButtonReceiver filter 5949a98
+          Action: "android.intent.action.MEDIA_BUTTON"
+
+Service Resolver Table:
+  Non-Data Actions:
+      android.service.quicksettings.action.QS_TILE:
+        69053ef io.legado.app.debug/io.legado.app.service.WebTileService filter 1da2c7b permission android.permission.BIND_QUICK_SETTINGS_TILE
+          Action: "android.service.quicksettings.action.QS_TILE"
+
+Preferred Activities User 0:
+  Full MIME Types:
+      application/json:
+        af6eb4f io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity
+         mMatch=0x600000 mAlways=true
+          Selected from:
+            io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity
+            com.cyanogenmod.filemanager/.activities.EditorActivity
+            bin.mt.plus/.OpenFileActivity
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Type: "application/json"
+
+  Base MIME Types:
+      application:
+        af6eb4f io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity
+         mMatch=0x600000 mAlways=true
+          Selected from:
+            io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity
+            com.cyanogenmod.filemanager/.activities.EditorActivity
+            bin.mt.plus/.OpenFileActivity
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Type: "application/json"
+
+  MIME Typed Actions:
+      android.intent.action.VIEW:
+        af6eb4f io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity
+         mMatch=0x600000 mAlways=true
+          Selected from:
+            io.legado.app.debug/io.legado.app.ui.association.FileAssociationActivity
+            com.cyanogenmod.filemanager/.activities.EditorActivity
+            bin.mt.plus/.OpenFileActivity
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Type: "application/json"
+
+Permissions:
+  Permission [io.legado.app.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION] (ee0befc):
+    sourcePackage=io.legado.app.debug
+    uid=10060 gids=null type=0 prot=signature
+    perm=Permission{2ca4985 io.legado.app.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION}
+    packageSetting=PackageSetting{46603da io.legado.app.debug/10060}
+
+Registered ContentProviders:
+  io.legado.app.debug/androidx.core.content.FileProvider:
+    Provider{938400b io.legado.app.debug/androidx.core.content.FileProvider}
+  io.legado.app.debug/io.legado.app.api.ReaderProvider:
+    Provider{3f8cee8 io.legado.app.debug/io.legado.app.api.ReaderProvider}
+  io.legado.app.debug/com.google.firebase.provider.FirebaseInitProvider:
+    Provider{f6af901 io.legado.app.debug/com.google.firebase.provider.FirebaseInitProvider}
+  io.legado.app.debug/androidx.startup.InitializationProvider:
+    Provider{3083a6 io.legado.app.debug/androidx.startup.InitializationProvider}
+
+ContentProvider Authorities:
+  [io.legado.app.debug.readerProvider]:
+    Provider{3f8cee8 io.legado.app.debug/io.legado.app.api.ReaderProvider}
+      applicationInfo=ApplicationInfo{528d1e7 io.legado.app.debug}
+  [io.legado.app.debug.firebaseinitprovider]:
+    Provider{f6af901 io.legado.app.debug/com.google.firebase.provider.FirebaseInitProvider}
+      applicationInfo=ApplicationInfo{528d1e7 io.legado.app.debug}
+  [io.legado.app.debug.androidx-startup]:
+    Provider{3083a6 io.legado.app.debug/androidx.startup.InitializationProvider}
+      applicationInfo=ApplicationInfo{528d1e7 io.legado.app.debug}
+  [io.legado.app.debug.fileProvider]:
+    Provider{938400b io.legado.app.debug/androidx.core.content.FileProvider}
+      applicationInfo=ApplicationInfo{528d1e7 io.legado.app.debug}
+
+Key Set Manager:
+  [io.legado.app.debug]
+      Signing KeySets: 18
+
+Packages:
+  Package [io.legado.app.debug] (46603da):
+    userId=10060
+    pkg=Package{1fff194 io.legado.app.debug}
+    codePath=/data/app/io.legado.app.debug-aKz1Sdu1DnIul8apocdaKA==
+    resourcePath=/data/app/io.legado.app.debug-aKz1Sdu1DnIul8apocdaKA==
+    legacyNativeLibraryDir=/data/app/io.legado.app.debug-aKz1Sdu1DnIul8apocdaKA==/lib
+    primaryCpuAbi=arm64-v8a
+    secondaryCpuAbi=null
+    versionCode=10045 minSdk=23 targetSdk=36
+    versionName=3.26.071809debug
+    splits=[base]
+    apkSigningVersion=2
+    applicationInfo=ApplicationInfo{528d1e7 io.legado.app.debug}
+    flags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP ]
+    privateFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION PARTIALLY_DIRECT_BOOT_AWARE PRODUCT ]
+    dataDir=/data/user/0/io.legado.app.debug
+    supportsScreens=[small, medium, large, xlarge, resizeable, anyDensity]
+    usesOptionalLibraries:
+      android.ext.adservices
+      androidx.window.extensions
+      androidx.window.sidecar
+    timeStamp=2026-07-18 09:34:34
+    firstInstallTime=2026-07-16 13:02:57
+    lastUpdateTime=2026-07-18 09:34:34
+    signatures=PackageSignatures{20d243d version:2, signatures:[2ac7d536], past signatures:[]}
+    installPermissionsFixed=true
+    pkgFlags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP ]
+    declared permissions:
+      io.legado.app.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: prot=signature, INSTALLED
+    requested permissions:
+      android.permission.INTERNET
+      android.permission.WAKE_LOCK
+      android.permission.READ_PHONE_STATE
+      android.permission.ACCESS_NETWORK_STATE
+      android.permission.ACCESS_WIFI_STATE
+      android.permission.FOREGROUND_SERVICE
+      android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+      android.permission.DOWNLOAD_WITHOUT_NOTIFICATION
+      android.permission.MODIFY_AUDIO_SETTINGS
+      android.permission.POST_NOTIFICATIONS
+      android.permission.REQUEST_INSTALL_PACKAGES
+      android.permission.MANAGE_EXTERNAL_STORAGE
+      android.permission.READ_EXTERNAL_STORAGE
+      android.permission.WRITE_EXTERNAL_STORAGE
+      android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK
+      android.permission.FOREGROUND_SERVICE_DATA_SYNC
+      android.permission.SYSTEM_ALERT_WINDOW
+      com.google.android.gms.permission.AD_ID
+      android.permission.ACCESS_ADSERVICES_ATTRIBUTION
+      android.permission.ACCESS_ADSERVICES_AD_ID
+      android.permission.CAMERA
+      android.permission.VIBRATE
+      android.permission.FLASHLIGHT
+      com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE
+      io.legado.app.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+    install permissions:
+      android.permission.DOWNLOAD_WITHOUT_NOTIFICATION: granted=true
+      android.permission.MODIFY_AUDIO_SETTINGS: granted=true
+      android.permission.SYSTEM_ALERT_WINDOW: granted=true
+      android.permission.FOREGROUND_SERVICE: granted=true
+      android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: granted=true
+      android.permission.INTERNET: granted=true
+      android.permission.READ_EXTERNAL_STORAGE: granted=true
+      io.legado.app.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION: granted=true
+      android.permission.READ_PHONE_STATE: granted=true
+      android.permission.FLASHLIGHT: granted=true
+      android.permission.ACCESS_NETWORK_STATE: granted=true
+      android.permission.CAMERA: granted=true
+      android.permission.WRITE_EXTERNAL_STORAGE: granted=true
+      android.permission.VIBRATE: granted=true
+      android.permission.ACCESS_WIFI_STATE: granted=true
+      android.permission.REQUEST_INSTALL_PACKAGES: granted=true
+      android.permission.WAKE_LOCK: granted=true
+    User 0: ceDataInode=131870 installed=true hidden=false suspended=false stopped=false notLaunched=false enabled=0 instant=false virtual=false
+      gids=[3003]
+      runtime permissions:
+
+Package Changes:
+  Sequence number=3
+  User 0:
+    seq=1, package=com.xy.zjfm01.xyaz
+    seq=2, package=io.legado.miss.app.debug
+
+
+Dexopt state:
+  [io.legado.app.debug]
+    path: /data/app/io.legado.app.debug-aKz1Sdu1DnIul8apocdaKA==/base.apk
+      arm64: [status=run-from-apk] [reason=unknown]
+
+
+Compiler stats:
+  [io.legado.app.debug]
+    (No recorded stats)

@@ -393,8 +393,8 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         historyFlowJob?.cancel()
         historyFlowJob = lifecycleScope.launch {
             when {
-                key.isNullOrBlank() -> appDb.searchKeywordDao.flowByTime()
-                else -> appDb.searchKeywordDao.flowSearch(key)
+                key.isNullOrBlank() -> appDb.searchKeywordDao.flowByTime(0)
+                else -> appDb.searchKeywordDao.flowSearch(0, key)
             }.catch {
                 AppLog.put("搜索界面获取搜索历史数据失败\n${it.localizedMessage}", it)
             }.flowOn(IO).conflate().collect {

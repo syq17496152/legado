@@ -160,13 +160,23 @@ echo ============================================================
 echo.
 
 set "APK_FOUND=0"
-for /r "%APK_OUTPUT_DIR%" %%f in (*.apk) do (
+:: 根据包类型确定子目录名：customAppId=coexist, release=release, debug=test
+set "APK_SUBDIR=test"
+if "%BUILD_TYPE%"=="release" set "APK_SUBDIR=release"
+if not "%CUSTOM_APP_ID%"=="" set "APK_SUBDIR=coexist"
+set "DIST_DIR=%PROJECT_DIR%\output\apk\%APK_SUBDIR%"
+set "APK_BUILD_DIR=%APK_OUTPUT_DIR%\app\%BUILD_TYPE%"
+if not exist "%DIST_DIR%" mkdir "%DIST_DIR%"
+
+for %%f in ("%APK_BUILD_DIR%\*.apk") do (
     echo   %%f
     set "APK_FOUND=1"
+    copy /y "%%f" "%DIST_DIR%\" >nul 2>&1
+    echo   [COPY] %%f -^> %DIST_DIR%\
 )
 
-if "%APK_FOUND%"=="0" (
-    echo   [WARN] APK not found, check build log.
+if "!APK_FOUND!"=="0" (
+    echo   [WARN] APK not found in %APK_BUILD_DIR%, check build log.
 )
 
 echo.

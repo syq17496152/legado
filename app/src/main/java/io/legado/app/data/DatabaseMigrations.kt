@@ -23,7 +23,7 @@ object DatabaseMigrations {
             migration_39_40, migration_40_41, migration_41_42, migration_42_43,
             migration_89_90, migration_90_91, migration_91_92, migration_92_93,
             migration_93_94, migration_94_95, migration_95_96, migration_96_97,
-            migration_97_98
+            migration_97_98, migration_98_99
         )
     }
 
@@ -660,6 +660,51 @@ object DatabaseMigrations {
                 db.execSQL("ALTER TABLE $table ADD COLUMN $column $definition")
                 AppLog.put("AppDatabase Migration 97→98: $table 补加 $column 字段")
             }
+        }
+    }
+
+    /**
+     * rss-unified-search: 98→99
+     *
+     * search_keywords 表改为复合主键 (word, type)：
+     * - 原 schema：单字段主键 word + UNIQUE INDEX(word)
+     * - 新 schema：复合主键 (word, type)，无 UNIQUE INDEX
+     *
+     * 因 Room 不支持直接修改主键，采用 drop+create 重建表策略：
+     * 1. 创建新表 search_keywords_new（复合主键）
+     * 2. 从旧表迁移数据（type 默认为 0，兼容旧书源搜索历史）
+     * 3. 删除旧表
+     * 4. 重命名新表为 search_keywords
+     * 5. 创建索引（按 type + lastUseTime 查询优化）
+     *
+     * 注意：表名 search_keywords（带下划线），不是 searchKeywords
+     */
+    private val migration_98_99 = object : Migration(98, 99) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // 1. 创建新表（复合主键 word + type）
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS `search_keywords_new` (
+                    `word` TEXT NOT NULL,
+                    `usage` INTEGER NOT NULL DEFAULT 0,
+                    `lastUseTime` INTEGER NOT NULL DEFAULT 0,
+                    `type` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`word`, `type`)
+                )""".trimIndent()
+            )
+            // 2. 从旧表迁移数据（type 默认为 0，兼容旧书源搜索历史）
+            db.execSQL(
+                """INSERT INTO `search_keywords_new` (`word`, `usage`, `lastUseTime`, `type`)
+                   SELECT `word`, `usage`, `lastUseTime`, 0 FROM `search_keywords`""".trimIndent()
+            )
+            // 3. 删除旧表
+            db.execSQL("DROP TABLE `search_keywords`")
+            // 4. 重命名新表为 search_keywords
+            db.execSQL("ALTER TABLE `search_keywords_new` RENAME TO `search_keywords`")
+            // 5. 创建索引（按 type + lastUseTime 查询优化，用于 flowByTime(type) 查询）
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_search_keywords_type_lastUseTime` ON `search_keywords` (`type`, `lastUseTime`)"
+            )
+            AppLog.put("AppDatabase Migration 98→99: search_keywords 表改为复合主键(word, type) 成功")
         }
     }
 

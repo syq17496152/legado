@@ -127,24 +127,24 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
     }
 
     /**
-     * 保存搜索关键字
+     * 保存搜索关键字（书源搜索历史，type=0）
      */
     fun saveSearchKey(key: String) {
         execute {
-            appDb.searchKeywordDao.get(key)?.let {
+            appDb.searchKeywordDao.get(key, 0)?.let {
                 it.usage += 1
                 it.lastUseTime = System.currentTimeMillis()
                 appDb.searchKeywordDao.update(it)
-            } ?: appDb.searchKeywordDao.insert(SearchKeyword(key, 1))
+            } ?: appDb.searchKeywordDao.insert(SearchKeyword(word = key, usage = 1, type = 0))
         }
     }
 
     /**
-     * 清楚搜索关键字
+     * 清空书源搜索关键字（仅 type=0，不影响订阅源搜索历史 type=1）
      */
     fun clearHistory() {
         execute {
-            appDb.searchKeywordDao.deleteAll()
+            appDb.searchKeywordDao.deleteAll(0)
         }
     }
 

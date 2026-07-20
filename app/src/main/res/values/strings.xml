@@ -358,6 +358,7 @@
     <string name="need_more_time_load_content">When the body length is too long, it may take more time to load the text.</string>
     <string name="revert_selection">Inverse</string>
     <string name="search_book_key">Search book name/author</string>
+    <string name="rss_search_key">Search RSS content</string>
     <string name="debug_hint">Book name,Author,URL</string>
     <string name="faq">FAQ</string>
     <string name="pt_show_all_find">Display all Discovery</string>
@@ -1118,6 +1119,19 @@
     <string name="copy_rule">Copy Rule</string>
     <string name="paste_rule">Paste Rule</string>
     <string name="groups_or_source">Multi-group / book source</string>
+    <string name="change_source">Change source</string>
+    <string name="rss_article_info_title">Article Details</string>
+    <string name="rss_article_info_no_description">No description</string>
+    <string name="rss_article_info_no_pubdate">No publish date</string>
+    <string name="rss_article_info_pub_date">Publish date</string>
+    <string name="rss_article_type">Article type</string>
+    <string name="rss_article_type_web">Web</string>
+    <string name="rss_article_type_image">Image</string>
+    <string name="rss_article_type_video">Video</string>
+    <string name="rss_source_count">Source count</string>
+    <string name="rss_source_count_format">Total %1$d sources</string>
+    <string name="rss_all_sources">All Sources</string>
+    <string name="rss_source_selected">Selected source</string>
     <string name="replace_state_change">Replace (enable / disable)</string>
     <string name="show_last_update_time">Show last updated time</string>
     <string name="refresh_list">Refresh list</string>

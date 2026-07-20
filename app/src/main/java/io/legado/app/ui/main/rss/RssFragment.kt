@@ -31,6 +31,7 @@ import io.legado.app.ui.rss.article.ReadRecordDialog
 import io.legado.app.ui.rss.article.RssSortActivity
 import io.legado.app.ui.rss.favorites.RssFavoritesActivity
 import io.legado.app.ui.rss.read.ReadRssActivity
+import io.legado.app.ui.rss.search.RssSearchActivity
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
 import io.legado.app.ui.rss.subscription.RuleSubActivity
@@ -199,13 +200,23 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     private fun initSearchView() {
         searchView.applyTint(primaryTextColor)
         searchView.isSubmitButtonEnabled = true
-        searchView.queryHint = getString(R.string.rss)
+        // rss-unified-search: 搜索框 hint 改为"搜索订阅源内容"
+        searchView.queryHint = getString(R.string.rss_search_key)
         searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?): Boolean {
-                return false
+                // rss-unified-search: 提交搜索时跳转到 RssSearchActivity
+                query?.trim()?.let { key ->
+                    if (key.isNotEmpty()) {
+                        RssSearchActivity.start(requireContext(), key)
+                        searchView.setQuery("", false)
+                        searchView.clearFocus()
+                    }
+                }
+                return true
             }
 
             override fun onQueryTextChange(newText: String?): Boolean {
+                // 保留：按名称过滤订阅源列表
                 upRssFlowJob(newText)
                 return false
             }

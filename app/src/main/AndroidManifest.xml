@@ -296,6 +296,15 @@
         <activity
             android:name=".ui.rss.article.RssSortActivity"
             android:launchMode="singleTop" />
+        <!-- rss-unified-search: 订阅源统一搜索 -->
+        <activity
+            android:name=".ui.rss.search.RssSearchActivity"
+            android:launchMode="standard"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <!-- rss-unified-search: 订阅源文章详情页（搜索结果点击后进入） -->
+        <activity
+            android:name=".ui.rss.search.RssArticleInfoActivity"
+            android:launchMode="standard" />
         <!-- RSS阅读 -->
         <activity
             android:name=".ui.rss.read.ReadRssActivity"

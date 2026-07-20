@@ -75,6 +75,8 @@ import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.rss.favorites.RssFavoritesDialog
+import io.legado.app.ui.rss.search.ChangeRssArticleSourceDialog
+import io.legado.app.ui.rss.search.RssSearchSourceHolder
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
 import io.legado.app.ui.video.config.SettingsDialog
 import io.legado.app.ui.widget.dialog.PhotoDialog
@@ -980,6 +982,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         upStarMenu()
         // menu_rss_refresh 只在 RSS 源时显示
         menu.findItem(R.id.menu_rss_refresh)?.isVisible = VideoPlay.source is RssSource
+        // rss-unified-search: 仅当搜索结果多源场景（RssSearchSourceHolder.articles.size > 1）显示换源菜单
+        menu.findItem(R.id.menu_change_source)?.isVisible =
+            (RssSearchSourceHolder.articles?.size ?: 0) > 1
         return super.onPrepareOptionsMenu(menu)
     }
 
@@ -1119,6 +1124,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             }
 
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
+            // rss-unified-search: 弹出换源对话框
+            R.id.menu_change_source -> showDialogFragment(ChangeRssArticleSourceDialog())
         }
         return super.onCompatOptionsItemSelected(item)
     }
@@ -1505,6 +1512,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             playerView.getCurrentPlayer().release()
         }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // rss-unified-search: 清理换源 Holder，避免内存泄漏与跨文章串数据
+        RssSearchSourceHolder.clear()
     }
 
     private fun destroyWeb() {

@@ -51,6 +51,8 @@ import io.legado.app.ui.association.OnLineImportActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.rss.favorites.RssFavoritesDialog
+import io.legado.app.ui.rss.search.ChangeRssArticleSourceDialog
+import io.legado.app.ui.rss.search.RssSearchSourceHolder
 import io.legado.app.utils.ACache
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.gone
@@ -249,6 +251,9 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
         starMenuItem = menu.findItem(R.id.menu_rss_star)
         ttsMenuItem = menu.findItem(R.id.menu_aloud)
         upStarMenu()
+        // rss-unified-search: 仅当搜索结果多源场景（RssSearchSourceHolder.articles.size > 1）显示换源菜单
+        menu.findItem(R.id.menu_change_source)?.isVisible =
+            (RssSearchSourceHolder.articles?.size ?: 0) > 1
         return super.onPrepareOptionsMenu(menu)
     }
 
@@ -292,6 +297,8 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
             }
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
             R.id.menu_read_record -> showDialogFragment(ReadRecordDialog(viewModel.rssSource?.sourceUrl))
+            // rss-unified-search: 弹出换源对话框
+            R.id.menu_change_source -> showDialogFragment(ChangeRssArticleSourceDialog())
         }
         return super.onCompatOptionsItemSelected(item)
     }
@@ -496,6 +503,8 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
 
     override fun onDestroy() {
         WebViewPool.release(pooledWebView)
+        // rss-unified-search: 清理换源 Holder，避免内存泄漏与跨文章串数据
+        RssSearchSourceHolder.clear()
         super.onDestroy()
     }
 

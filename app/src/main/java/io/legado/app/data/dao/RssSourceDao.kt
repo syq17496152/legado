@@ -27,6 +27,12 @@ interface RssSourceDao {
     @get:Query("SELECT * FROM rssSources order by customOrder")
     val all: List<RssSource>
 
+    /**
+     * 所有启用的订阅源（同步，用于 RssSearchScope.getRssSources()）
+     */
+    @get:Query("SELECT * FROM rssSources where enabled = 1 order by customOrder")
+    val allEnabled: List<RssSource>
+
     @get:Query("select count(sourceUrl) from rssSources")
     val size: Int
 

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- rss-unified-search: 订阅源统一搜索页菜单
+     参考 book_search.xml，删除 menu_precision_search（订阅源搜索无精准搜索概念） -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="AlwaysShowAction">
+
+    <item
+        android:id="@+id/menu_source_manage"
+        android:title="@string/book_source_manage"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_search_scope"
+        android:title="@string/groups_or_source"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_log"
+        android:title="@string/log"
+        android:orderInCategory="9999"
+        app:showAsAction="never" />
+
+</menu>
