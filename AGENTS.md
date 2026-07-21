@@ -76,7 +76,7 @@
 | 4 | 文档同步已检查 | version-delivery-sync.md | issues-found/tasks/INDEX/project_memory 是否最新 |
 | 5 | 主动沉淀已完成 | spec-sedimentation-mechanism.md | 大型任务结束后自觉反思工作方法 |
 | 6 | 问题清单已记录 | real-device-test-reuse.md | issues-found.md 是否记录所有问题 |
-| 7 | AskUserQuestion已确认 | core-spec.md | 任务完成必须用AskUserQuestion确认 |
+| 7 | AskUserQuestion已确认 | core-spec.md | **任何任务类型**完成时回复的最后一个工具调用必须是AskUserQuestion，禁止文字总结后结束 |
 
 ---
 

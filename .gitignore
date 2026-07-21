@@ -33,6 +33,10 @@ tools/legado-jvm/.gradle/
 temp/
 output/
 
+# 签名密钥（不入 git，仅本地使用）
+*.jks
+*.keystore
+
 # 异常文件
 nul
 

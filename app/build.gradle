@@ -36,13 +36,21 @@ android {
         }
     }
 
+    // 签名配置读取顺序：gradle.properties / 命令行 -P → local.properties（不入 git）
+    // local.properties 用于本地开发，gradle.properties 用于 CI/CD
+    def localProps = new Properties()
+    def localPropsFile = rootProject.file('local.properties')
+    if (localPropsFile.exists()) {
+        localProps.load(new FileInputStream(localPropsFile))
+    }
     signingConfigs {
-        if (project.hasProperty("RELEASE_STORE_FILE")) {
+        def storeFilePath = project.findProperty("RELEASE_STORE_FILE") ?: localProps.getProperty("RELEASE_STORE_FILE")
+        if (storeFilePath != null) {
             myConfig {
-                storeFile file(RELEASE_STORE_FILE)
-                storePassword RELEASE_STORE_PASSWORD
-                keyAlias RELEASE_KEY_ALIAS
-                keyPassword RELEASE_KEY_PASSWORD
+                storeFile rootProject.file(storeFilePath)
+                storePassword project.findProperty("RELEASE_STORE_PASSWORD") ?: localProps.getProperty("RELEASE_STORE_PASSWORD")
+                keyAlias project.findProperty("RELEASE_KEY_ALIAS") ?: localProps.getProperty("RELEASE_KEY_ALIAS")
+                keyPassword project.findProperty("RELEASE_KEY_PASSWORD") ?: localProps.getProperty("RELEASE_KEY_PASSWORD")
                 enableV1Signing = true
                 enableV2Signing = true
                 enableV3Signing = true
