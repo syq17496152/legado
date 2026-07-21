@@ -5,12 +5,14 @@
 ## cronet版本: 149.0.7827.201
 
 **2026/07/21**
+- 修复正式包安装失败问题：正式包APK未签名导致安装时报"解析失败-无证书"错误（INSTALL_PARSE_FAILED_NO_CERTIFICATES），已配置本地签名密钥自动签名（v1+v2+v3+v4全启用），正式包可正常安装运行
+- 修复正式包桌面显示名缺少"M"的问题：中文系统下正式包桌面图标显示"阅读"而非"阅读M"，根因是values-zh/values-zh-rTW/values-zh-rHK的app_name缺"M"且buildTypes签名配置判断逻辑未读取local.properties导致重打包后APK未签名，已同步修复3个中文strings.xml并修正签名配置判断逻辑
 - 修复登录后列表时好时不好的问题：AnalyzeUrl 设置 Cookie 时会与 CookieManager.loadRequest 形成双重合并覆盖链（一处用 header 覆盖数据库值，另一处用数据库值覆盖 header），参数顺序相反导致数据库旧值永远赢，已改为仅补充 header 中缺失的 key，让 loadRequest 统一执行数据库值覆盖 header 的优先级
 - 修复 WebView 登录 Cookie 未就绪时覆盖有效 Cookie 的问题：WebViewModel 在 onPageStarted 提前调用 setCookie 时 cookie 可能为 null，原代码用 `cookie ?: ""` 将 null 转空串覆盖了已保存的有效 Cookie，导致 refetch 不带 Cookie 被服务器拒绝；现增加 null 判空跳过，保留空串清除语义兼容 issue7 回归修复
 - 修复服务端 Set-Cookie 过期标记无法清除旧 Cookie 的问题：cookieToMap 过滤空值导致服务端下发的 `key=; max-age=0` 删除标记被丢弃，旧 Cookie 残留无法清理；新增 cookieToMapWithEmpty 保留空值作为删除标记，空值时主动移除对应 key
 - 修复并发场景下 Cookie 读改写竞态丢失更新：replaceCookie 的读-改-写非原子操作，多线程并发调用可能丢失更新；现增加 synchronized 同步保护，粒度为整个 CookieStore object（Cookie 写入频率低可接受）
 - 修复订阅源搜索停止后按钮状态不刷新的问题：点击悬浮停止按钮后搜索虽已取消，但按钮仍显示"停止"不切回"开始"状态，用户感觉搜索时好时坏；现补全 isSearchLiveData 重置逻辑，停止后立即触发 UI 切换回开始状态
-- 修复订阅源搜索并发数被硬上限限制的问题：原代码 min(threadCount, MAX_THREAD=9) 导致用户在"其他设置→更新和搜索线程数"配置 32 实际只用 9，222 个源最坏需 740s 才能完成搜索；现已去掉硬上限，线程池大小完全跟随用户配置（用户配 32 实际并发 32，搜索耗时降低 3.5 倍）
+- 修复订阅源搜索并发数被硬上限限制的问题：原代码 min(threadCount, MAX_THREAD=9) 导致用户在"其他设置→更新和搜索线程数"配置 32 实际只用 9
 - 修复书源搜索并发数被硬上限限制的问题：与订阅源搜索同样的问题，书源 SearchModel 也使用 min(threadCount, MAX_THREAD=9) 限制了用户配置；现已同步去掉硬上限，书源搜索线程池大小也完全跟随用户配置
 - 修复订阅源文章详情页"阅读"按钮和多源列表选中色不响应主题切换的问题：AccentBgTextView 在 init 块静态读取 accentColor、Adapter 在 convert() 中读取 accentColor，均无法响应运行时主题切换；现添加 updateAccentColor()/updateThemeColors() 方法，在 applyThemeColors() 中统一调用，详情页所有元素完整跟随主题变动
 
@@ -19,8 +21,6 @@
 - 修复订阅源搜索时好时坏的问题：RssSearchModel 连续搜索时调用 close() 会将线程池置 null，下次 startSearch 抛 NPE 导致搜索失败；改为 cancelSearch() 仅取消旧任务不关闭线程池，搜索稳定性恢复正常
 - 新增订阅源搜索结果类型筛选：右上角菜单新增"搜索结果类型"选项，可按网页/图片/视频类型过滤搜索结果（与分组筛选独立可同时生效），筛选状态自动持久化
 - 订阅源搜索线程数现复用书源搜索线程数配置：用户在其他设置调整线程数后，下次搜索立即生效（无需重启 App）
-
-**2026/07/20**
 - 新增订阅源统一搜索功能：在订阅源页搜索框输入关键词即可跨所有订阅源搜索文章内容，搜索结果按相关度聚合展示
 - 搜索结果支持多源合并展示：相同标题的文章自动合并并显示来源数量角标，避免重复结果干扰
 - 搜索结果支持已读状态显示：已读文章标题变灰，便于区分未读内容
@@ -33,9 +33,7 @@
 - 订阅源文章详情页封面图改为完整展示：固定 220dp 高度区域内，宽图上下留白、高图左右留白都能完整显示完整图片，不再裁剪
 
 **2026/07/19**
-- 订阅源批量优化V5：基于V4的229源深度优化，新增99源（集成站拆分+导航站拆分）+ 修复135源（视频深度修复+缺字段补全+难点源处理+CF盾破盾）
 - 修复订阅源导入格式错误：JSON必须是纯数组格式（非对象包装），字段类型必须严格匹配RssSource.kt（BOOLEAN不能写0/1）
-- 订阅源批量优化V5.3最终修复：移除113个失效拆分子源（占位符未替换+套模板+header空），修复6个规则问题源，标记153个网络层失败源为enabled=false，保留71个可用源enabled=true
 
 **2026/07/17**
 - 重构书源紧凑列表布局：新增首字图标、源域名显示和启用状态指示点，与书架紧凑列表风格统一，字号从14sp调整为16sp提升可读性

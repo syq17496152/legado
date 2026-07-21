@@ -43,8 +43,8 @@ android {
     if (localPropsFile.exists()) {
         localProps.load(new FileInputStream(localPropsFile))
     }
+    def storeFilePath = project.findProperty("RELEASE_STORE_FILE") ?: localProps.getProperty("RELEASE_STORE_FILE")
     signingConfigs {
-        def storeFilePath = project.findProperty("RELEASE_STORE_FILE") ?: localProps.getProperty("RELEASE_STORE_FILE")
         if (storeFilePath != null) {
             myConfig {
                 storeFile rootProject.file(storeFilePath)
@@ -109,7 +109,7 @@ android {
     }
     buildTypes {
         release {
-            if (project.hasProperty("RELEASE_STORE_FILE")) {
+            if (storeFilePath != null) {
                 signingConfig signingConfigs.myConfig
             }
             applicationIdSuffix '.release'
@@ -126,7 +126,7 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
         }
         debug {
-            if (project.hasProperty("RELEASE_STORE_FILE")) {
+            if (storeFilePath != null) {
                 signingConfig signingConfigs.myConfig
             }
             manifestPlaceholders.put("app_name", "@string/app_name")
