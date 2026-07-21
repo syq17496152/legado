@@ -212,9 +212,7 @@
 - 修复Glide图片加载模块未注册：kapt错误使用glide-ksp替代glide-compiler，导致图片解密和Cookie传递全部失效
 - 修复Rhino引擎无法调用Java 8接口default方法：SymmetricCryptoAndroid显式覆写decrypt(InputStream)
 - 恢复数据库主线程查询支持：allowMainThreadQueries()在Glide等上下文中必需，改为按需处理
-- 图片解密流程还原为原始行为：直接传递InputStream给JS脚本，避免不必要的readBytes()
 - APK体积优化：仅打包ARM架构（arm64-v8a/armeabi-v7a），减少约5MB模拟器专用native库
-- 清理CronetCookie诊断日志：Cookie修复已验证，移除调试输出
 - 新增5个护眼主题：护眼绿、护眼黄、牛皮纸（浅色系）+ 暗夜护眼、暗夜墨绿（深色系）
 - 修复协程取消时可能触发错误回调导致ANR或异常弹窗的问题
 - 修复多线程并发访问书源时可能崩溃的问题（书源互斥锁改为线程安全实现）
@@ -244,7 +242,6 @@
 - OkHttp升级至5.4.0：消除4处内部API依赖，提升HTTP安全性
 - 全面修复Room数据库主线程访问崩溃（20+处调用点迁移至IO线程）
 - 排除Compose运行时传递依赖，DEX体积减少21%（约15MB）
-- 清理9处已废弃的版本兼容代码，提升代码可维护性
 - 修复订阅源加密封面图片无法显示：Rhino引擎无法识别Java 8接口default方法导致decrypt(InputStream)走错路径
 - 核心质量优化：修复内存泄漏、线程安全、数据库ANR等重大问题
 - 修复 IntentData 内存泄漏：改用 ConcurrentHashMap + TTL 自动清理 + Activity 作用域关联
@@ -255,9 +252,6 @@
 - 修复 LifecycleHelp ConcurrentModificationException：遍历中删除改为 removeAll
 - 修复 Cronet TODO() 崩溃：替换为 UnsupportedOperationException
 - 统一错误日志：27处 e.printStackTrace() 替换为 AppLog.put
-- 补充空 catch 块注释说明
-- 新增核心模块单元测试：规则解析器（CSS/JSONPath/Regex）12 用例、DAO 5 用例
-- 修复 MigrationTest：填充完整迁移链数组
 
 **2026/07/04**
 - 修复新主题未显示的问题：升级版本号触发主题合并逻辑，确保已有用户也能看到新增主题
