@@ -1,6 +1,5 @@
 package io.legado.app.model.webBook
 
-import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
@@ -29,7 +28,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import splitties.init.appCtx
 import java.util.concurrent.Executors
-import kotlin.math.min
 
 class SearchModel(private val scope: CoroutineScope, private val callBack: CallBack) {
     val threadCount = AppConfig.threadCount
@@ -45,8 +43,20 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
 
     private fun initSearchPool() {
         searchPool?.close()
+        // 阶段11.4 问题1 验收反馈修复：去掉 min(threadCount, AppConst.MAX_THREAD) 硬上限，
+        // 让线程池大小完全跟随用户在"其他设置→更新和搜索线程数"的配置。
+        //
+        // 用户反馈："配置的是32，应该使用系统配置呀，比如我手机性能好，
+        // 我根据系统配置线程数配到60，你还不让我配置了？"
+        //
+        // 原设计 MAX_THREAD=9 硬上限限制了用户配置（用户配 32 实际只用 9），
+        // 导致书源搜索并发数被限制，大量书源搜索时耗时成倍增加。
+        // 去掉上限后，用户配 32 则实际并发 32，搜索耗时显著降低。
+        //
+        // 注意：AppConfig.threadCount 在 UI 配置项已有合理范围限制（用户自行负责），
+        // 此处不再加额外上限，完全尊重用户配置。
         searchPool = Executors
-            .newFixedThreadPool(min(threadCount, AppConst.MAX_THREAD)).asCoroutineDispatcher()
+            .newFixedThreadPool(threadCount).asCoroutineDispatcher()
     }
 
     fun search(searchId: Long, key: String) {

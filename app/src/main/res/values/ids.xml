@@ -7,8 +7,15 @@
 
     <item name="menu_group_1" type="id" />
     <item name="menu_group_2" type="id" />
+    <item name="menu_group_3" type="id" />
 
     <item name="menu_1" type="id" />
+
+    <!-- 阶段11.4 问题3 新增：订阅源搜索结果类型筛选菜单项 -->
+    <item name="menu_type_all" type="id" />
+    <item name="menu_type_web" type="id" />
+    <item name="menu_type_image" type="id" />
+    <item name="menu_type_video" type="id" />
 
     <item name="fast_scroller" type="id" />
 

@@ -53,14 +53,23 @@ object CookieStore : CookieManagerInterface {
 
     /**
      *保存cookie到数据库，会自动识别url的二级域名
+     *
+     * P18 修复：null 跳过（WebView Cookie 未就绪时的误调用，防止覆盖有效 Cookie）
+     * "" 保留原版行为：允许通过空串清除旧 cookie（issue7 回归修复场景）
+     * WebViewModel.kt L135 注释佐证：根因是 setCookie 空值覆盖导致 refetch 不带 Cookie 被服务器拒绝
+     * 已知上限：无法区分"WebView未就绪null"和"主动清除null"，但 android.webkit.CookieManager.getCookie 返回 null 表示无 Cookie，不会主动清除 | 升级路径：新增 removeCookie(url) 方法分离清除语义
      */
     override fun setCookie(url: String, cookie: String?) {
         try {
             val domain = NetworkUtils.getSubDomain(url)
-            // 恢复原版行为：null → ""，允许通过空串清除旧 cookie（issue7 回归修复）
-            val cookieStr = cookie ?: ""
-            CacheManager.putMemory("${domain}_cookie", cookieStr)
-            val cookieBean = Cookie(domain, cookieStr)
+            // P18 修复：null 跳过，防止 WebView Cookie 未就绪时覆盖有效 Cookie
+            if (cookie == null) {
+                AppLog.put("setCookie: cookie为null，跳过覆盖 (domain=$domain)")
+                return
+            }
+            // "" 保留原版行为：允许通过空串清除旧 cookie（issue7 回归修复）
+            CacheManager.putMemory("${domain}_cookie", cookie)
+            val cookieBean = Cookie(domain, cookie)
             appDb.cookieDao.insert(cookieBean)
         } catch (e: Exception) {
             AppLog.put("保存Cookie失败\n$e", e)
@@ -81,19 +90,63 @@ object CookieStore : CookieManagerInterface {
         }
     }
 
+    /**
+     * P1+P6+P9 修复：replaceCookie 空值删除标记 + 同步保护
+     *
+     * P9: 读-改-写非原子，并发场景可能丢失更新 → synchronized 同步保护
+     * P6: cookieToMap 过滤空值，导致服务端 Set-Cookie: key=; max-age=0 无法删除旧值
+     *     修复：新增 cookieToMapWithEmpty 保留空值，空值视为删除标记
+     * P1: 过期 Cookie 清理通过 P6 的删除标记机制实现
+     *
+     * 已知上限：synchronized 粒度为整个 CookieStore object，并发性能下降但 Cookie 写入频率低可接受 | 升级路径：改用细粒度锁按 domain 加锁
+     */
     override fun replaceCookie(url: String, cookie: String) {
         if (TextUtils.isEmpty(url) || TextUtils.isEmpty(cookie)) {
             return
         }
-        val oldCookie = getCookieNoSession(url)
-        if (TextUtils.isEmpty(oldCookie)) {
-            setCookie(url, cookie)
-        } else {
-            val cookieMap = cookieToMap(oldCookie)
-            cookieMap.putAll(cookieToMap(cookie))
-            val newCookie = mapToCookie(cookieMap)
-            setCookie(url, newCookie)
+        // P9 修复：同步保护，防止并发读改写竞态
+        synchronized(this) {
+            val oldCookie = getCookieNoSession(url)
+            if (TextUtils.isEmpty(oldCookie)) {
+                setCookie(url, cookie)
+            } else {
+                val cookieMap = cookieToMap(oldCookie)
+                val newMap = cookieToMapWithEmpty(cookie)
+                // P6 修复：空值视为删除标记（服务端 Set-Cookie: key=; max-age=0）
+                newMap.forEach { (k, v) ->
+                    if (v.isBlank()) {
+                        cookieMap.remove(k)
+                    } else {
+                        cookieMap[k] = v
+                    }
+                }
+                val newCookie = mapToCookie(cookieMap)
+                setCookie(url, newCookie)
+            }
         }
+    }
+
+    /**
+     * 解析 cookie 字符串为 map，保留空值（用于检测删除标记）
+     * 与 cookieToMap 的区别：空值不会被过滤，用于 replaceCookie 检测服务端的删除标记
+     * 服务端通过 Set-Cookie: key=; max-age=0 标记 Cookie 过期，空值是删除指令
+     */
+    private fun cookieToMapWithEmpty(cookie: String): MutableMap<String, String> {
+        val cookieMap = mutableMapOf<String, String>()
+        if (cookie.isBlank()) {
+            return cookieMap
+        }
+        val pairArray = cookie.split(semicolonRegex).dropLastWhile { it.isEmpty() }.toTypedArray()
+        for (pair in pairArray) {
+            val pairs = pair.split(equalsRegex, 2).dropLastWhile { it.isEmpty() }.toTypedArray()
+            if (pairs.size <= 1) {
+                continue
+            }
+            val key = pairs[0].trim { it <= ' ' }
+            val value = pairs[1].trim { it <= ' ' }
+            cookieMap[key] = value
+        }
+        return cookieMap
     }
 
     /**

@@ -761,6 +761,20 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefString("rssSearchGroup", value)
         }
 
+    /**
+     * 阶段11.4 问题3 新增：订阅源统一搜索结果类型筛选
+     *
+     * - -1 = 全部（默认）
+     * - 0 = 网页（RssArticle.type == 0）
+     * - 1 = 图片（RssArticle.type == 1）
+     * - 2 = 视频（RssArticle.type == 2）
+     */
+    var rssSearchType: Int
+        get() = appCtx.getPrefInt("rssSearchType", -1)
+        set(value) {
+            appCtx.putPrefInt("rssSearchType", value)
+        }
+
     var pageTouchSlop: Int
         get() = appCtx.getPrefInt(PreferKey.pageTouchSlop, 0)
         set(value) {

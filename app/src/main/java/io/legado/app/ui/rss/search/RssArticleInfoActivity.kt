@@ -18,8 +18,11 @@ import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
+import io.legado.app.lib.theme.bottomBackground
+import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.rss.read.ReadRss
+import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyNavigationBarMargin
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.gone
@@ -63,10 +66,7 @@ class RssArticleInfoActivity :
     private var selectedOrigin: String? = null
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.titleBar.setBackgroundColor(primaryColor)
-        binding.titleBar.setTitle(R.string.rss_article_info_title)
-        binding.root.setBackgroundColor(backgroundColor)
-        binding.titleBar.applyTint(accentColor)
+        applyThemeColors()
         binding.rvSourceList.layoutManager = LinearLayoutManager(this)
         binding.rvSourceList.adapter = sourceAdapter
         binding.rvSourceList.applyNavigationBarMargin()
@@ -96,6 +96,48 @@ class RssArticleInfoActivity :
         }
 
         loadData()
+    }
+
+    /**
+     * 阶段11.4 问题1 修复：集中应用动态主题色（整体方案：详情页所有元素跟随主题变动）
+     *
+     * 参考书源 BookInfoActivity 的主题色设置：
+     * - TitleBar 背景色 = primaryColor
+     * - TitleBar tint = accentColor
+     * - 根布局/ArcView/CardView 背景色 = backgroundColor
+     * - 底部操作栏背景色 = bottomBackground（与书源 flAction 一致）
+     * - 底部"返回"按钮文字色 = getPrimaryTextColor(根据 bottomBackground 明暗)
+     * - SwipeRefresh 配色 = accentColor
+     * - "阅读"按钮（AccentBgTextView）背景色跟随 accentColor（init 块只读一次，需手动刷新）
+     * - 多源列表 Adapter 选中源文字色 + iv_checked tint 跟随 accentColor（需触发重新绑定）
+     *
+     * 必须在 onActivityCreated 和 onConfigurationChanged 中都调用，
+     * 确保初始化和主题切换后都能正确显示。
+     */
+    private fun applyThemeColors() {
+        binding.titleBar.setBackgroundColor(primaryColor)
+        binding.root.setBackgroundColor(backgroundColor)
+        binding.titleBar.applyTint(accentColor)
+        binding.arcView.setBgColor(backgroundColor)
+        // 阶段11.4 问题1 补全：CardView 背景色跟随主题（原默认白色，暗色模式显白块）
+        binding.ivCoverC.setCardBackgroundColor(backgroundColor)
+        // 阶段11.4 问题1 补全：底部操作栏背景色跟随主题（参考书源 flAction.setBackgroundColor(bottomBackground)）
+        binding.llAction.setBackgroundColor(bottomBackground)
+        // 阶段11.4 问题1 补全：底部"返回"按钮文字色根据 bottomBackground 明暗自动取色
+        binding.tvCancel.setTextColor(getPrimaryTextColor(ColorUtils.isColorLight(bottomBackground)))
+        // 阶段11.4 问题1 补全：SwipeRefresh 下拉刷新配色跟随主题强调色
+        binding.refreshLayout.setColorSchemeColors(accentColor)
+        // 阶段11.4 问题1 整体方案：AccentBgTextView "阅读"按钮响应主题切换（init 块静态读取，需手动刷新）
+        binding.tvRead.updateAccentColor()
+        // 阶段11.4 问题1 整体方案：多源列表 Adapter 选中色 + iv_checked tint 响应主题切换
+        // 注意：onActivityCreated 阶段调用时 itemCount=0 是 no-op；onConfigurationChanged 阶段触发重新绑定
+        sourceAdapter.updateThemeColors()
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // 阶段11.4 问题1 修复：用户在设置中切换 App 主题后回来，重新应用动态主题色
+        applyThemeColors()
     }
 
     /**

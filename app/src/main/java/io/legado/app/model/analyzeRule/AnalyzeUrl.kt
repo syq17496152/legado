@@ -720,6 +720,12 @@ class AnalyzeUrl(
     /**
      * 设置cookie 优先级
      * urlOption临时cookie > 数据库cookie
+     *
+     * P5 修复（方案B）：仅补充 header 中没有的 key，不覆盖已有 key
+     * 原代码 merge(CS, H) → H 覆盖 CS，与 CookieManager.loadRequest 的 merge(H, CS) → CS 覆盖 H 优先级相反
+     * 导致双重合并覆盖链：enabledCookieJar=true 时 CS 值永远赢，过期值无法被 header 正确值覆盖
+     * 修复后：AnalyzeUrl 仅补充 header 缺失的 key，loadRequest 仍按 CS 覆盖 H 执行
+     * 已知上限：header 中已有的 key 不会被 CS 覆盖，若 CS 中有更新值需依赖 loadRequest | 升级路径：无
      */
     private fun setCookie() {
         val cookie = kotlin.run {
@@ -734,8 +740,19 @@ class AnalyzeUrl(
             CookieStore.getCookie(domain)
         }
         if (cookie.isNotEmpty()) {
-            mergeCookies(cookie, headerMap["Cookie"])?.let {
-                headerMap.put("Cookie", it)
+            // P5 方案B：仅补充 header 中没有的 key，不覆盖已有 key
+            val headerCookie = headerMap["Cookie"]
+            if (headerCookie.isNullOrEmpty()) {
+                headerMap.put("Cookie", cookie)
+            } else {
+                val csMap = CookieStore.cookieToMap(cookie)
+                val headerMap_ = CookieStore.cookieToMap(headerCookie)
+                csMap.forEach { (k, v) ->
+                    if (!headerMap_.containsKey(k)) {
+                        headerMap_[k] = v
+                    }
+                }
+                headerMap.put("Cookie", CookieStore.mapToCookie(headerMap_) ?: cookie)
             }
         }
         if (enabledCookieJar) {

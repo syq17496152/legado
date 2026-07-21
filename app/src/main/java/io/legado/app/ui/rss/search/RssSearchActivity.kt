@@ -110,6 +110,24 @@ class RssSearchActivity :
         menu.transaction {
             menu.removeGroup(R.id.menu_group_1)
             menu.removeGroup(R.id.menu_group_2)
+            menu.removeGroup(R.id.menu_group_3)
+
+            // 阶段11.4 问题3 优化：类型筛选（menu_group_3）放在分组筛选上面
+            // 选项：全部类型(-1) / 网页(0) / 图片(1) / 视频(2)，单选
+            // 与分组筛选（menu_group_1/2）独立，可同时生效（先按分组限定源范围，再按类型过滤结果）
+            // "全部类型"改名避免与"全部书源"视觉重合（用户反馈"留一个全部就行了"）
+            val currentType = viewModel.searchTypeLiveData.value ?: -1
+            menu.add(R.id.menu_group_3, R.id.menu_type_all, Menu.NONE, getString(R.string.rss_search_type_all))
+                .apply { isChecked = currentType == -1 }
+            menu.add(R.id.menu_group_3, R.id.menu_type_web, Menu.NONE, getString(R.string.rss_article_type_web))
+                .apply { isChecked = currentType == 0 }
+            menu.add(R.id.menu_group_3, R.id.menu_type_image, Menu.NONE, getString(R.string.rss_article_type_image))
+                .apply { isChecked = currentType == 1 }
+            menu.add(R.id.menu_group_3, R.id.menu_type_video, Menu.NONE, getString(R.string.rss_article_type_video))
+                .apply { isChecked = currentType == 2 }
+            menu.setGroupCheckable(R.id.menu_group_3, true, true)
+
+            // 分组筛选（menu_group_1/2）放在类型筛选下面
             var hasChecked = false
             val searchScopeNames = viewModel.searchScope.displayNames
             if (!viewModel.searchScope.isAll()) {
@@ -152,8 +170,16 @@ class RssSearchActivity :
                 // 打开菜单（onMenuOpened 已处理分组展示），此处提示用户选择分组
                 // 也可考虑弹出一个独立的对话框，简化为打开菜单
             }
+            R.id.menu_search_type -> {
+                // 阶段11.4 问题3：类型筛选入口，实际选项在 onMenuOpened 的 menu_group_3 中显示
+            }
             R.id.menu_log -> showDialogFragment(AppLogDialog())
             R.id.menu_1 -> viewModel.searchScope.update("")
+            // 阶段11.4 问题3：类型筛选选项处理
+            R.id.menu_type_all -> viewModel.updateSearchType(-1)
+            R.id.menu_type_web -> viewModel.updateSearchType(0)
+            R.id.menu_type_image -> viewModel.updateSearchType(1)
+            R.id.menu_type_video -> viewModel.updateSearchType(2)
             else -> {
                 if (item.groupId == R.id.menu_group_1) {
                     viewModel.searchScope.remove(item.title.toString())

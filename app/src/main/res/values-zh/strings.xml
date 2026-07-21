@@ -357,6 +357,9 @@
     <string name="revert_selection">反选</string>
     <string name="search_book_key">搜索书名、作者</string>
     <string name="rss_search_key">搜索订阅源内容</string>
+    <string name="rss_source_manage">订阅源管理</string>
+    <string name="rss_search_type">搜索结果类型</string>
+    <string name="rss_search_type_all">全部类型</string>
     <string name="debug_hint">书名、作者、URL</string>
     <string name="faq">常见问题</string>
     <string name="pt_show_all_find">显示所有发现</string>

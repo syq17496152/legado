@@ -35,6 +35,18 @@ class RssSearchViewModel(application: Application) : BaseViewModel(application) 
     var searchKey: String = ""
     private var searchID = 0L
 
+    /**
+     * 阶段11.4 问题3 新增：搜索结果类型筛选 LiveData
+     *
+     * - -1 = 全部（默认）
+     * - 0 = 网页
+     * - 1 = 图片
+     * - 2 = 视频
+     *
+     * UI 通过 observe 在菜单中显示选中状态，通过 updateSearchType 触发变更
+     */
+    var searchTypeLiveData = MutableLiveData(AppConfig.rssSearchType)
+
     private val searchModel = RssSearchModel(viewModelScope, object : RssSearchModel.CallBack {
 
         override fun getSearchScope(): RssSearchScope {
@@ -63,6 +75,11 @@ class RssSearchViewModel(application: Application) : BaseViewModel(application) 
 
     })
 
+    init {
+        // 阶段11.4 问题3：初始化时同步用户上次的 searchType 设置到 searchModel
+        searchModel.setSearchType(AppConfig.rssSearchType)
+    }
+
     /**
      * 开始搜索
      */
@@ -83,9 +100,15 @@ class RssSearchViewModel(application: Application) : BaseViewModel(application) 
 
     /**
      * 停止搜索
+     *
+     * 阶段11.4 问题2 深度核实补充修复：
+     * cancelSearch() 只取消 Job 不通知 callback，导致 isSearchLiveData 保持 true，
+     * fb_start_stop 仍显示"停止"按钮，用户感觉"搜索时好时坏"（实际已停止但 UI 不刷新）。
+     * 修复：手动重置 isSearchLiveData，触发 searchFinally() 切换 UI 回"开始"状态。
      */
     fun stop() {
         searchModel.cancelSearch()
+        isSearchLiveData.postValue(false)
     }
 
     fun pause() {
@@ -94,6 +117,28 @@ class RssSearchViewModel(application: Application) : BaseViewModel(application) 
 
     fun resume() {
         searchModel.resume()
+    }
+
+    /**
+     * 阶段11.4 问题3 新增：更新搜索结果类型筛选
+     *
+     * @param type -1=全部, 0=网页, 1=图片, 2=视频
+     *
+     * 行为：
+     * 1. 持久化到 AppConfig（下次启动恢复）
+     * 2. 同步到 searchModel（影响下次 mergeItems 过滤）
+     * 3. 通知 UI 更新菜单选中状态
+     * 4. 若当前已有搜索关键词，触发重新搜索（让用户立即看到筛选效果）
+     */
+    fun updateSearchType(type: Int) {
+        if (AppConfig.rssSearchType == type) return
+        AppConfig.rssSearchType = type
+        searchModel.setSearchType(type)
+        searchTypeLiveData.postValue(type)
+        // 若已有搜索关键词，重新触发搜索让筛选立即生效
+        if (searchKey.isNotEmpty()) {
+            search(searchKey)
+        }
     }
 
     /**

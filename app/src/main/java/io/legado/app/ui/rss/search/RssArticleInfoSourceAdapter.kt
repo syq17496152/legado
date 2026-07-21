@@ -42,6 +42,19 @@ class RssArticleInfoSourceAdapter(context: Context) :
         notifyItemRangeChanged(0, itemCount)
     }
 
+    /**
+     * 阶段11.4 问题1 修复：响应主题切换，重新刷新所有可见 item 的主题色
+     *
+     * Adapter 在 convert() 中读取 context.accentColor 设置选中源文字色 + iv_checked tint，
+     * 但 convert() 仅在 item 创建/绑定时调用一次，无法响应运行时主题切换。
+     * 调用此方法触发所有可见 item 重新绑定，从而重新读取 accentColor 应用主题色。
+     *
+     * 使用场景：RssArticleInfoActivity.applyThemeColors() / onConfigurationChanged
+     */
+    fun updateThemeColors() {
+        notifyItemRangeChanged(0, itemCount)
+    }
+
     override fun getViewBinding(parent: ViewGroup): ItemRssArticleInfoSourceBinding {
         return ItemRssArticleInfoSourceBinding.inflate(inflater, parent, false)
     }

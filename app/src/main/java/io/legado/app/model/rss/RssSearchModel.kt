@@ -1,6 +1,5 @@
 package io.legado.app.model.rss
 
-import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssArticle
@@ -28,7 +27,6 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.concurrent.Executors
-import kotlin.math.min
 
 /**
  * 订阅源统一搜索并发调度核心（rss-unified-search 新增）
@@ -49,12 +47,35 @@ class RssSearchModel(
     private val scope: CoroutineScope,
     private val callBack: CallBack
 ) {
-    val threadCount = AppConfig.threadCount
+    // 阶段11.4 问题4 修复：threadCount 改为 var，initSearchPool 时重读 AppConfig.threadCount
+    // 这样用户在其他设置调整线程数后，下次搜索立即生效（无需重启 App）
+    var threadCount = AppConfig.threadCount
     private var searchPool: ExecutorCoroutineDispatcher? = null
     private var mSearchId = 0L
     private var searchKey: String = ""
     private var searchJob: Job? = null
     private var workingState = MutableStateFlow(true)
+
+    /**
+     * 阶段11.4 问题3 新增：搜索结果类型筛选
+     *
+     * - -1 = 全部（默认）
+     * - 0 = 网页（RssArticle.type == 0）
+     * - 1 = 图片（RssArticle.type == 1）
+     * - 2 = 视频（RssArticle.type == 2）
+     *
+     * 注意：RssSource 本身没有类型字段（一个源可输出多种类型文章），
+     * 所以无法在源头过滤，只能在结果层过滤。
+     * 类型筛选改变后，需要重新触发搜索才能生效。
+     */
+    var searchType: Int = -1
+        private set
+
+    fun setSearchType(type: Int) {
+        if (searchType != type) {
+            searchType = type
+        }
+    }
 
     /**
      * 已聚合的文章 Map（阻塞点 12 修复：使用成员变量保留去重信息，避免每次创建局部 Map 覆盖之前结果）
@@ -71,14 +92,32 @@ class RssSearchModel(
 
     private fun initSearchPool() {
         searchPool?.close()
+        // 阶段11.4 问题4 修复：重读 AppConfig.threadCount，响应用户设置变更
+        // 阶段11.4 问题1 验收反馈修复：去掉 min(threadCount, AppConst.MAX_THREAD) 硬上限，
+        // 让线程池大小完全跟随用户在"其他设置→更新和搜索线程数"的配置。
+        //
+        // 用户反馈："配置的是32，应该使用系统配置呀，比如我手机性能好，
+        // 我根据系统配置线程数配到60，你还不让我配置了？"
+        //
+        // 原设计 MAX_THREAD=9 硬上限限制了用户配置（用户配 32 实际只用 9），
+        // 导致 222 个源最坏需要 740s 才能完成搜索（9 并发 × 30s 超时 × 24.67 批次）。
+        // 去掉上限后，用户配 32 则实际并发 32，最坏 222/32×30s ≈ 208s（提升 3.5 倍）。
+        //
+        // 注意：AppConfig.threadCount 在 UI 配置项已有合理范围限制（用户自行负责），
+        // 此处不再加额外上限，完全尊重用户配置。
+        threadCount = AppConfig.threadCount
         searchPool = Executors
-            .newFixedThreadPool(min(threadCount, AppConst.MAX_THREAD)).asCoroutineDispatcher()
+            .newFixedThreadPool(threadCount).asCoroutineDispatcher()
     }
 
     /**
      * 搜索入口
      *
      * 阻塞点 11 修复：必须先调用 initSearchPool() 初始化线程池，否则 searchPool!! 会 NPE
+     *
+     * 阶段11.4 问题2 修复：原代码 searchId != mSearchId 分支中调用 close() 会将 searchPool 置 null，
+     * 随后 startSearch() 中 searchPool!! 抛 NPE，导致搜索"时好时坏"。
+     * 修复：改用 cancelSearch()，只取消旧 Job 不关闭线程池，线程池在下次 initSearchPool 时重建。
      */
     fun search(searchId: Long, key: String) {
         val rssSources = callBack.getSearchScope().getRssSources()
@@ -95,7 +134,8 @@ class RssSearchModel(
             }
             searchKey = key
             if (mSearchId != 0L) {
-                close()
+                // 阶段11.4 问题2 修复：cancelSearch() 仅取消 Job，不关闭线程池，避免后续 searchPool!! NPE
+                cancelSearch()
             }
             searchArticlesMap.clear()
             searchArticles = emptyList()
@@ -169,15 +209,23 @@ class RssSearchModel(
     private suspend fun mergeItems(newArticles: List<RssArticle>, searchKey: String) {
         if (newArticles.isEmpty()) return
 
+        // 阶段11.4 问题3 新增：按 searchType 过滤文章（-1=全部 不过滤）
+        val filteredArticles = if (searchType == -1) {
+            newArticles
+        } else {
+            newArticles.filter { it.type == searchType }
+        }
+        if (filteredArticles.isEmpty()) return
+
         // 阻塞点 15 修复：批量查询已读状态（按 origin 分组查询，避免 N 次单条查询）
         val readLinksByOrigin = mutableMapOf<String, HashSet<String>>()
-        newArticles.groupBy { it.origin }.forEach { (origin, articles) ->
+        filteredArticles.groupBy { it.origin }.forEach { (origin, articles) ->
             val links = articles.map { it.link }
             val readLinks = appDb.rssArticleDao.getReadLinks(origin, links).toHashSet()
             readLinksByOrigin[origin] = readLinks
         }
 
-        for (article in newArticles) {
+        for (article in filteredArticles) {
             currentCoroutineContext().ensureActive()
             val key = article.deduplicationKey()
 

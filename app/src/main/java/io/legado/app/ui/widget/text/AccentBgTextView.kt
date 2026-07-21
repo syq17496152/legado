@@ -30,6 +30,18 @@ class AccentBgTextView @JvmOverloads constructor(
         upBackground()
     }
 
+    /**
+     * 阶段11.4 问题1 修复：响应主题切换，重新应用 accentColor 背景色
+     *
+     * AccentBgTextView 默认在 init 块中读取一次 accentColor，无法响应运行时主题切换。
+     * 调用此方法可强制刷新背景色 + 文字色，使详情页等场景在用户切换主题后正确显示。
+     *
+     * 使用场景：RssArticleInfoActivity.applyThemeColors() / onConfigurationChanged
+     */
+    fun updateAccentColor() {
+        upBackground()
+    }
+
     private fun upBackground() {
         val accentColor = if (isInEditMode) {
             context.getCompatColor(R.color.accent)

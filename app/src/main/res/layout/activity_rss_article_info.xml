@@ -4,14 +4,19 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background"
     android:orientation="vertical">
 
+    <!--
+    阶段11.4 主题适配修复：
+    - 根布局不设 background，让 BaseActivity.onCreateView 动态设置 backgroundColor（跟随主题）
+    - TitleBar 加 app:title + app:themeMode="dark"（与书源 activity_book_info.xml 一致）
+    -->
     <io.legado.app.ui.widget.TitleBar
         android:id="@+id/title_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:opaque="true" />
+        app:themeMode="dark"
+        app:title="@string/rss_article_info_title" />
 
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/refresh_layout"
@@ -39,32 +44,44 @@
                     android:visibility="gone"
                     tools:visibility="visible">
 
+                    <!--
+                    阶段11.4 主题适配：
+                    - ArcView 删除 app:bgColor，在 Activity 中 setBgColor(backgroundColor) 动态跟随主题
+                    - CardView 删除 cardBackgroundColor + 调整 cornerRadius=5dp/elevation=8dp，与书源 activity_book_info.xml 一致
+                    - AppCompatImageView 删除 background，让透明继承 CardView 默认背景
+                    -->
                     <io.legado.app.ui.widget.image.ArcView
                         android:id="@+id/arc_view"
                         android:layout_width="match_parent"
                         android:layout_height="78dp"
-                        android:layout_marginTop="160dp"
+                        android:layout_marginTop="180dp"
                         app:arcDirectionTop="true"
-                        app:arcHeight="36dp"
-                        app:bgColor="@color/background" />
+                        app:arcHeight="36dp" />
 
                     <androidx.cardview.widget.CardView
                         android:id="@+id/iv_cover_c"
                         android:layout_width="match_parent"
-                        android:layout_height="200dp"
+                        android:layout_height="220dp"
                         android:layout_centerHorizontal="true"
                         android:layout_marginStart="16dp"
                         android:layout_marginTop="16dp"
                         android:layout_marginEnd="16dp"
-                        app:cardCornerRadius="8dp"
-                        app:cardElevation="4dp">
+                        app:cardCornerRadius="5dp"
+                        app:cardElevation="8dp">
 
-                        <io.legado.app.ui.widget.image.CoverImageView
+                        <!--
+                        使用 AppCompatImageView 而非 CoverImageView：
+                        - CoverImageView.onMeasure() 强制 4:3 宽高比 + load() 强制 centerCrop，
+                          会导致横版图片在 4:3 容器中裁剪。
+                        - AppCompatImageView 尊重 layout_height=match_parent(220dp) 与 scaleType=fitCenter，
+                          固定 220dp 区域内：宽图上下留白完整显示、高图左右留白完整显示。
+                        -->
+                        <androidx.appcompat.widget.AppCompatImageView
                             android:id="@+id/iv_cover"
                             android:layout_width="match_parent"
                             android:layout_height="match_parent"
                             android:contentDescription="@string/img_cover"
-                            android:scaleType="centerCrop"
+                            android:scaleType="fitCenter"
                             android:src="@drawable/image_rss_article" />
 
                     </androidx.cardview.widget.CardView>
@@ -258,16 +275,19 @@
 
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-    <!-- 底部操作栏：参考书源详情页 fl_action 设计 -->
+    <!-- 底部操作栏：参考书源详情页 fl_action 设计
+         阶段11.4 主题适配：删除 android:background="@color/background_menu"，
+         让底部栏透明继承根背景（ BaseActivity 动态设置的 backgroundColor，跟随应用内主题色切换）。
+         分隔线也用 transparent 替代静态 bg_divider_line，避免暗色模式下出现不一致色块。 -->
     <View
         android:layout_width="match_parent"
         android:layout_height="1px"
         android:background="@color/bg_divider_line" />
 
     <LinearLayout
+        android:id="@+id/ll_action"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/background_menu"
         android:orientation="horizontal">
 
         <TextView
