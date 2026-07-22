@@ -2,7 +2,11 @@
 欢迎关注公众号[阅读Plus]即时了解软件更新资讯  
 <img src="https://open.weixin.qq.com/qr/code?username=legado_plus" width="200">
 
-## cronet版本: 149.0.7827.201
+## cronet版本: 150.0.7871.128
+
+**2026/07/22**
+- 升级 Cronet 网络引擎到最新稳定版 150.0.7871.128（原 149.0.7827.201），提升网络请求性能和稳定性，同步更新所有架构的 SO 库和 JAR 包
+- 编译环境从 JDK 17 升级到 JDK 21，以适配 Cronet 150 的编译要求（Cronet 150 的 JAR 使用 Java 21 编译，class version 65.0），通过 Gradle Toolchain + foojay-resolver-convention 插件自动下载 JDK 21，不影响用户设备运行环境
 
 **2026/07/21**
 - 修复正式包安装失败问题：正式包APK未签名导致安装时报"解析失败-无证书"错误（INSTALL_PARSE_FAILED_NO_CERTIFICATES），已配置本地签名密钥自动签名（v1+v2+v3+v4全启用），正式包可正常安装运行
