@@ -27,27 +27,30 @@ import splitties.init.appCtx
 internal const val BUFFER_SIZE = 32 * 1024
 
 val cronetEngine: ExperimentalCronetEngine? by lazy {
-    CronetLoader.preDownload()
-    disableCertificateVerify()
-    val builder = ExperimentalCronetEngine.Builder(appCtx).apply {
-        if (CronetLoader.install()) {
-            setLibraryLoader(CronetLoader)//设置自定义so库加载
-        }
-        setStoragePath(appCtx.externalCache.absolutePath)//设置缓存路径
-        enableHttpCache(HTTP_CACHE_DISK, (1024 * 1024 * 50).toLong())//设置50M的磁盘缓存
-        enableQuic(true)//设置支持http/3
-        enableHttp2(true)  //设置支持http/2
-        enablePublicKeyPinningBypassForLocalTrustAnchors(true)
-        enableBrotli(true)//Brotli压缩
-        setExperimentalOptions(options)
-    }
+    // 防御性 try-catch：覆盖整个 lazy 块，确保任何异常（含 apply 块内方法抛出）都被捕获
+    // 铁证：真机日志显示 "All available Cronet providers are disabled" 异常从 lazy 块逃逸，
+    //   原因是 try 只包裹 builder.build()，apply 块中的方法异常未被捕获
     try {
+        CronetLoader.preDownload()
+        disableCertificateVerify()
+        val builder = ExperimentalCronetEngine.Builder(appCtx).apply {
+            if (CronetLoader.install()) {
+                setLibraryLoader(CronetLoader)//设置自定义so库加载
+            }
+            setStoragePath(appCtx.externalCache.absolutePath)//设置缓存路径
+            enableHttpCache(HTTP_CACHE_DISK, (1024 * 1024 * 50).toLong())//设置50M的磁盘缓存
+            enableQuic(true)//设置支持http/3
+            enableHttp2(true)  //设置支持http/2
+            enablePublicKeyPinningBypassForLocalTrustAnchors(true)
+            enableBrotli(true)//Brotli压缩
+            setExperimentalOptions(options)
+        }
         val engine = builder.build()
         DebugLog.d("Cronet Version:", engine.versionString)
-        return@lazy engine
+        engine
     } catch (e: Throwable) {
         AppLog.put("初始化cronetEngine出错", e)
-        return@lazy null
+        null
     }
 }
 

@@ -127,6 +127,22 @@
     public <init>(android.content.Context);
 }
 
+# Cronet 149+ providers 注册机制（CronetProviderInstaller.getAllProviderInfos）通过反射加载所有 providers
+# 缺失保留规则会导致 R8 在 release 包中移除这些类，运行时抛出
+# "All available Cronet providers are disabled" 异常
+# 铁证：mapping.txt 中 JavaCronetProvider 被 R8 完全移除（无映射），导致 release 包订阅源列表加载失败
+-keep class org.chromium.net.impl.JavaCronetProvider {
+    public <init>(android.content.Context);
+}
+-keep class org.chromium.net.impl.HttpEngineNativeProvider {
+    public <init>(android.content.Context);
+}
+# 保留 providers 注册入口（getAllProviderInfos 通过反射遍历所有 provider 类）
+-keep class org.chromium.net.impl.CronetProviderInstaller {
+    public static *** installProvider(...);
+    public static *** getAllProviderInfos(...);
+}
+
 # While Chrome doesn't need to keep these with their version of R8, some cronet
 # users may be on other optimizers which still require the annotation to be
 # kept in order for the keep rules to work.

@@ -1,6 +1,7 @@
 package io.legado.app.lib.cronet
 
 import androidx.annotation.Keep
+import io.legado.app.constant.AppLog
 import io.legado.app.help.http.CookieManager
 import io.legado.app.help.http.CookieManager.cookieJarHeader
 import io.legado.app.utils.printOnDebug
@@ -27,8 +28,15 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
             throw IOException("Canceled")
         }
         val original: Request = chain.request()
-        //Cronet未初始化
-        return if (!CronetLoader.install() || cronetEngine == null) {
+        //Cronet未初始化（try-catch 防御 lazy 初始化异常逃逸，与 CronetInterceptor.kt 保持一致）
+        val engine = try {
+            if (!CronetLoader.install()) null
+            else cronetEngine
+        } catch (e: Throwable) {
+            AppLog.put("getCronetEngine触发异常", e)
+            null
+        }
+        return if (engine == null) {
             chain.proceed(original)
         } else try {
             val enableCookieJar = original.header(cookieJarHeader) != null

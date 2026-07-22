@@ -15,6 +15,7 @@
 - 修复订阅源搜索并发数被硬上限限制的问题：原代码 min(threadCount, MAX_THREAD=9) 导致用户在"其他设置→更新和搜索线程数"配置 32 实际只用 9
 - 修复书源搜索并发数被硬上限限制的问题：与订阅源搜索同样的问题，书源 SearchModel 也使用 min(threadCount, MAX_THREAD=9) 限制了用户配置；现已同步去掉硬上限，书源搜索线程池大小也完全跟随用户配置
 - 修复订阅源文章详情页"阅读"按钮和多源列表选中色不响应主题切换的问题：AccentBgTextView 在 init 块静态读取 accentColor、Adapter 在 convert() 中读取 accentColor，均无法响应运行时主题切换；现添加 updateAccentColor()/updateThemeColors() 方法，在 applyThemeColors() 中统一调用，详情页所有元素完整跟随主题变动
+- 修复正式包订阅源列表加载失败的问题：正式包（release）安装后所有订阅源查看列表都报错"All available Cronet providers are disabled"，根因是 ProGuard 规则只保留了 NativeCronetProvider，未保留 JavaCronetProvider 和 HttpEngineNativeProvider，R8 混淆将 JavaCronetProvider 类完全移除，导致 Cronet 149+ providers 注册机制找不到可用的 provider；已补全 ProGuard 保留规则（保留所有 provider 类的构造函数和 CronetProviderInstaller 入口），同时加强 Cronet 初始化的异常捕获（try-catch 覆盖整个 lazy 块 + 拦截器防御性 try-catch），确保即使 provider 注册失败也能自动降级到 OkHttp 而非抛出异常
 
 **2026/07/20**
 - 修复订阅源文章详情页主题不跟随系统主题切换的问题：详情页内 ArcView、CardView、底部操作栏原先使用静态颜色，现已改为跟随应用内主题色动态变化，与书源详情页体验一致

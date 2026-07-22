@@ -50,8 +50,18 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
         if (degradedForSession) {
             return chain.proceed(original)
         }
-        //Cronet未初始化
-        if (!CronetLoader.install() || cronetEngine == null) {
+        //Cronet未初始化（try-catch 防御 lazy 初始化异常逃逸）
+        //铁证：真机日志显示 cronetEngine lazy 初始化抛出 RuntimeException 后直接逃逸到 intercept，
+        //  原代码 L54 不在 try 块内，异常未被捕获。即使 CronetHelper.kt 已扩展 try-catch，
+        //  此处仍保留防御性 try-catch，确保任何情况下都不会因 lazy 异常导致 intercept 抛出
+        val engine = try {
+            if (!CronetLoader.install()) null
+            else cronetEngine
+        } catch (e: Throwable) {
+            AppLog.put("getCronetEngine触发异常", e)
+            null
+        }
+        if (engine == null) {
             return chain.proceed(original)
         }
         val cronetException: Exception
