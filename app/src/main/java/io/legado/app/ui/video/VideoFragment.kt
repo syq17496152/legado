@@ -327,9 +327,16 @@ class VideoFragment : Fragment() {
         val wvp = webViewPlayer ?: return
         // 暂停 ExoPlayer
         pv.onVideoPause()
-        // 隐藏 ExoPlayer + 控件层
+        // 隐藏 ExoPlayer
         pv.visibility = View.GONE
-        controlsLayer?.visibility = View.GONE
+        // 修复：不隐藏整个controlsLayer，只隐藏右侧按钮和返回按钮
+        // 保留left_bottom_container（多线路多集UI）可见，让用户在WebView模式下也能切换线路/集数
+        rightButtons?.visibility = View.GONE
+        btnBackOverlay?.visibility = View.GONE
+        // 显式恢复left_bottom_container可见（可能被hideControlsAnimated隐藏为GONE）
+        leftBottomContainer?.visibility = View.VISIBLE
+        leftBottomContainer?.alpha = 1f
+        leftBottomContainer?.translationY = 0f
         // 显示 WebView 播放器 + 切换回按钮
         wvp.visibility = View.VISIBLE
         btnSwitchBack?.visibility = View.VISIBLE
@@ -366,6 +373,8 @@ class VideoFragment : Fragment() {
         btnSwitchBack?.visibility = View.GONE
         pv.visibility = View.VISIBLE
         controlsLayer?.visibility = View.VISIBLE
+        // 修复：恢复right_buttons可见性（switchToWebViewMode隐藏了它）
+        rightButtons?.visibility = View.VISIBLE
         isWebViewMode = false
         // 重置激活标志，让 activatePlayer 重新走完整 ExoPlayer 设置流程
         isActivated = false
@@ -636,7 +645,10 @@ class VideoFragment : Fragment() {
     private fun getOverlayControls(): List<View> {
         val list = mutableListOf<View>()
         // 左下角容器（包含标题、线路选择器、集数选择器）
-        leftBottomContainer?.let { list.add(it) }
+        // WebView模式下不参与自动隐藏（保持多线路多集UI可见，让用户能切换线路/集数）
+        if (!isWebViewMode) {
+            leftBottomContainer?.let { list.add(it) }
+        }
         // 右侧功能按钮容器（U1：现在包含全屏按钮作为第一个子控件）
         rightButtons?.let { list.add(it) }
         // B1+ 修复：全屏模式悬浮返回按钮参与自动隐藏（仅全屏时 visible）
@@ -724,13 +736,20 @@ class VideoFragment : Fragment() {
             popup.setOnMenuItemClickListener { item ->
                 val newIndex = item.itemId
                 if (newIndex != VideoPlay.rssRouteIndex) {
-                    val episode = VideoPlay.switchRssRoute(newIndex)
-                    if (episode != null) {
-                        updateRouteSelectorText()
-                        // 更新集数列表
-                        updateEpisodeList()
-                        // 通知 Activity 播放新集
-                        (activity as? VideoSettingsPanel.SettingsPanelCallback)?.onRouteChanged(episode)
+                    if (VideoPlay.isNewRoutesMode()) {
+                        // 新模式：异步按需采集新线路集数（switchToRoute 内部处理播放+UI更新）
+                        val player = _playerView?.currentPlayer
+                        if (player != null && VideoPlay.switchToRoute(newIndex, player)) {
+                            updateRouteSelectorText()
+                        }
+                    } else {
+                        // 旧模式：内存切换
+                        val episode = VideoPlay.switchRssRoute(newIndex)
+                        if (episode != null) {
+                            updateRouteSelectorText()
+                            updateEpisodeList()
+                            (activity as? VideoSettingsPanel.SettingsPanelCallback)?.onRouteChanged(episode)
+                        }
                     }
                 }
                 true
@@ -817,11 +836,20 @@ class VideoFragment : Fragment() {
                 popup.setOnMenuItemClickListener { item ->
                     val newIndex = item.itemId
                     if (newIndex != VideoPlay.rssRouteIndex) {
-                        val episode = VideoPlay.switchRssRoute(newIndex)
-                        if (episode != null) {
-                            updateRouteSelectorText()
-                            updateEpisodeList()
-                            (activity as? VideoSettingsPanel.SettingsPanelCallback)?.onRouteChanged(episode)
+                        if (VideoPlay.isNewRoutesMode()) {
+                            // 新模式：异步按需采集新线路集数
+                            val player = _playerView?.currentPlayer
+                            if (player != null && VideoPlay.switchToRoute(newIndex, player)) {
+                                updateRouteSelectorText()
+                            }
+                        } else {
+                            // 旧模式：内存切换
+                            val episode = VideoPlay.switchRssRoute(newIndex)
+                            if (episode != null) {
+                                updateRouteSelectorText()
+                                updateEpisodeList()
+                                (activity as? VideoSettingsPanel.SettingsPanelCallback)?.onRouteChanged(episode)
+                            }
                         }
                     }
                     true

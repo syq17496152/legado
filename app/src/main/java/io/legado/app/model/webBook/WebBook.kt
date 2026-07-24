@@ -60,6 +60,7 @@ object WebBook {
             throw NoStackTraceException("搜索url不能为空")
         }
         val ruleData = RuleData()
+        AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "搜索开始 page=$page keyLen=${key.length}", level = AppLog.Level.INFO)
         val analyzeUrl = AnalyzeUrl(
             mUrl = searchUrl,
             key = key,
@@ -133,6 +134,7 @@ object WebBook {
         page: Int? = 1,
     ): ArrayList<SearchBook> {
         val ruleData = RuleData()
+        AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "发现页请求开始 page=$page", level = AppLog.Level.INFO)
         val sourceUrl = bookSource.bookSourceUrl
         val exploreInfoMap = exploreInfoMapList[sourceUrl]
         val analyzeUrl = AnalyzeUrl(
@@ -204,6 +206,7 @@ object WebBook {
         book: Book,
         canReName: Boolean = true,
     ): Book {
+        AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "获取书籍信息开始", level = AppLog.Level.INFO)
         book.removeAllBookType()
         book.addType(bookSource.getBookType())
         if (!book.infoHtml.isNullOrEmpty()) {
@@ -301,6 +304,7 @@ object WebBook {
         runPerJs: Boolean = false,
         isFromBookInfo : Boolean = false
     ): Result<List<BookChapter>> {
+        AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "获取目录开始", level = AppLog.Level.INFO)
         book.removeAllBookType()
         book.addType(bookSource.getBookType())
         return kotlin.runCatching {
@@ -401,6 +405,7 @@ object WebBook {
         nextChapterUrl: String? = null,
         needSave: Boolean = true
     ): String {
+        AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "获取正文开始", level = AppLog.Level.INFO)
         val contentRule = bookSource.getContentRule()
         if (contentRule.content.isNullOrEmpty()) {
             Debug.log(bookSource.bookSourceUrl, "⇒正文规则为空,使用章节链接:${bookChapter.url}")

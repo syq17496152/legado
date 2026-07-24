@@ -25,6 +25,7 @@ data class EditEntity(
     object ViewType {
 
         const val checkBox = 1
+        const val textVideoOnly = 2
 
     }
 

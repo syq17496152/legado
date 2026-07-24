@@ -36,6 +36,7 @@ object RssParserByRule {
         ruleData: RuleData
     ): Pair<MutableList<RssArticle>, String?> {
         val sourceUrl = rssSource.sourceUrl
+        AppLog.putDebugWithTag(AppLog.TAG_RSS, "开始解析RSS XML sourceHash=${rssSource.sourceUrl.hashCode()} sortName=$sortName bodyLen=${body?.length ?: 0}", level = AppLog.Level.INFO)
         var nextUrl: String? = null
         if (body.isNullOrBlank()) {
             throw NoStackTraceException(
@@ -46,6 +47,7 @@ object RssParserByRule {
         var ruleArticles = rssSource.ruleArticles
         if (ruleArticles.isNullOrBlank()) {
             Debug.log(sourceUrl, "⇒列表规则为空, 使用默认规则解析")
+            AppLog.putDebugWithTag(AppLog.TAG_RSS, "RSS使用默认规则解析 sourceHash=${rssSource.sourceUrl.hashCode()}", level = AppLog.Level.INFO)
             return RssParserDefault.parseXML(sortName, body, sourceUrl)
         } else {
             // 循环外的 analyzeRule 用于获取列表集合/下一页/规则拆分（串行执行，结果不可变，可安全共享）
@@ -122,6 +124,7 @@ object RssParserByRule {
             if (reverse) {
                 articleList.reverse()
             }
+            AppLog.putDebugWithTag(AppLog.TAG_RSS, "RSS自定义规则解析完成 sourceHash=${rssSource.sourceUrl.hashCode()} 文章数=${articleList.size} 总数=${collections.size}", level = AppLog.Level.INFO)
             return Pair(articleList, nextUrl)
         }
     }
@@ -165,6 +168,7 @@ object RssParserByRule {
             }
             Debug.log(sourceUrl, "└${rssArticle.image ?: ""}", log)
         } catch (e: Exception) {
+            AppLog.putDebugWithTag(AppLog.TAG_RSS, "RSS文章图片解析失败 sourceUrlLen=${sourceUrl.length}", e)
             Debug.log(sourceUrl, "└${e.localizedMessage}", log)
         }
         Debug.log(sourceUrl, "┌获取文章链接", log)

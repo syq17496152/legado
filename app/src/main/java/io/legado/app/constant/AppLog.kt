@@ -9,6 +9,15 @@ import splitties.init.appCtx
 
 object AppLog {
 
+    // 模块 Tag 常量：统一命名规范，便于 ai_tests 按模块过滤日志（logcat -s WebBook:E）
+    const val TAG_WEB_BOOK = "WebBook"
+    const val TAG_ANALYZE = "AnalyzeRule"
+    const val TAG_HTTP = "HttpHelper"
+    const val TAG_WEB_VIEW = "BackstageWebView"
+    const val TAG_DATA = "DataLayer"
+    const val TAG_RSS = "Rss"
+    const val TAG_CONTENT = "ContentProcess"
+
     enum class Level { ERROR, WARN, INFO, DEBUG }
 
     data class LogEntry(
@@ -88,6 +97,33 @@ object AppLog {
     fun putDebug(message: String?, throwable: Throwable? = null) {
         if (AppConfig.recordLog) {
             putEntry(message, throwable, false, Level.DEBUG)
+        }
+    }
+
+    /**
+     * 带模块 Tag 的调试日志（recordLog 守卫）
+     * - recordLog 关闭时直接 return，零开销，不影响用户功能
+     * - recordLog 开启时写入文件（带 tag）+ 内存 mLogs + logcat（仅 DEBUG）
+     * - tag 透传给 LogUtils.d 和 Log.e，ai_tests 可通过 adb logcat -s <Tag>:E 过滤
+     * 用于：catch 块异常补全 + 关键操作成功/失败日志 + 关键参数日志
+     */
+    @Synchronized
+    fun putDebugWithTag(
+        tag: String,
+        message: String?,
+        throwable: Throwable? = null,
+        level: Level = Level.ERROR
+    ) {
+        if (!AppConfig.recordLog) return
+        message ?: return
+        val safeMsg = truncateSafely(message)
+        val fileMsg = if (throwable == null) safeMsg
+        else "$safeMsg\n${throwable.stackTraceToString()}"
+        LogUtils.d(tag, fileMsg)
+        if (mLogs.size > 100) mLogs.removeLastOrNull()
+        mLogs.add(0, LogEntry(System.currentTimeMillis(), safeMsg, throwable, level))
+        if (BuildConfig.DEBUG) {
+            Log.e(tag, safeMsg, throwable)
         }
     }
 

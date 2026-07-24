@@ -421,6 +421,8 @@
     <string name="login_check_js">登录检查 JS（loginCheckJs）</string>
     <string name="comment">源注释（sourceComment）</string>
     <string name="r_search_url">搜索地址（url）</string>
+    <string name="r_routes">多线路规则（ruleRoutes）</string>
+    <string name="r_episodes">多集规则（ruleEpisodes）</string>
     <string name="r_find_url">发现地址规则（url）</string>
     <string name="r_book_list">书籍列表规则（bookList）</string>
     <string name="r_book_name">书名规则（name）</string>

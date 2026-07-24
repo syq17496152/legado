@@ -120,6 +120,7 @@ class RssSearchModel(
      * 修复：改用 cancelSearch()，只取消旧 Job 不关闭线程池，线程池在下次 initSearchPool 时重建。
      */
     fun search(searchId: Long, key: String) {
+        AppLog.putDebugWithTag(AppLog.TAG_RSS, "开始RSS搜索 searchId=$searchId keyLen=${key.length}", level = AppLog.Level.INFO)
         val rssSources = callBack.getSearchScope().getRssSources()
         if (rssSources.isEmpty()) {
             callBack.onSearchCancel(NoStackTraceException("启用订阅源为空或无 searchUrl"))
@@ -145,6 +146,7 @@ class RssSearchModel(
     }
 
     private fun startSearch(rssSources: List<io.legado.app.data.entities.RssSource>) {
+        AppLog.putDebugWithTag(AppLog.TAG_RSS, "启动RSS搜索 源数量=${rssSources.size} 线程数=$threadCount", level = AppLog.Level.INFO)
         searchJob = scope.launch(searchPool!!) {
             flow {
                 for (source in rssSources) {
@@ -271,6 +273,7 @@ class RssSearchModel(
         otherData.sortByDescending { it.origins.size }
 
         searchArticles = equalData + containsData + otherData
+        AppLog.putDebugWithTag(AppLog.TAG_RSS, "RSS搜索结果合并完成 总数=${searchArticles.size} equal=${equalData.size} contains=${containsData.size} other=${otherData.size}", level = AppLog.Level.INFO)
     }
 
     /**

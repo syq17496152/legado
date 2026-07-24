@@ -106,11 +106,10 @@ fun Fragment.readUri(uri: Uri?, success: (fileDoc: FileDoc, inputStream: InputSt
 @Throws(Exception::class)
 fun Uri.readBytes(context: Context): ByteArray {
     return if (this.isContentScheme()) {
+        // 修复: available()不保证返回文件总大小,大文件会被截断导致JSON解析失败
+        // 改用InputStream.readBytes()循环读取直到EOF
         context.contentResolver.openInputStream(this)?.use {
-            val len: Int = it.available()
-            val buffer = ByteArray(len)
-            it.read(buffer)
-            buffer
+            it.readBytes()
         } ?: throw NoStackTraceException("打开文件失败\n${this}")
     } else {
         val path = RealPathUtil.getPath(context, this)
@@ -125,7 +124,8 @@ fun Uri.readBytes(context: Context): ByteArray {
 @Throws(Exception::class)
 fun Uri.readText(context: Context): String {
     readBytes(context).let {
-        return String(it)
+        // 修复: 显式指定UTF-8编码,避免平台默认编码导致乱码
+        return String(it, Charsets.UTF_8)
     }
 }
 

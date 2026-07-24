@@ -70,6 +70,10 @@ data class RssSource(
     var ruleLink: String? = null,
     /**正文规则**/
     var ruleContent: String? = null,
+    /**多线路规则：从详情页采集线路列表（线路名），仅type=2视频源使用，支持CSS/JSONPath/XPath/JS**/
+    var ruleRoutes: String? = null,
+    /**多集规则：从详情页采集集数列表（集数标题+播放页URL），仅type=2视频源使用，支持CSS/JSONPath/XPath/JS，支持{routeIndex}/{routeIndex+1}占位符**/
+    var ruleEpisodes: String? = null,
     /**正文url白名单**/
     var contentWhitelist: String? = null,
     /**正文url黑名单**/
@@ -182,6 +186,8 @@ data class RssSource(
                 && equal(searchUrl, source.searchUrl)
                 && parseConcurrency == source.parseConcurrency
                 && weight == source.weight
+                && equal(ruleRoutes, source.ruleRoutes)
+                && equal(ruleEpisodes, source.ruleEpisodes)
     }
 
     private fun equal(a: String?, b: String?): Boolean {

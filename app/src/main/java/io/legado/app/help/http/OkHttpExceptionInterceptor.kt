@@ -10,6 +10,7 @@ object OkHttpExceptionInterceptor : Interceptor {
 
     @Throws(IOException::class)
     override fun intercept(chain: Interceptor.Chain): Response {
+        AppLog.putDebugWithTag(AppLog.TAG_HTTP, "intercept 入口 path=${chain.request().url.encodedPath.take(50)}", level = AppLog.Level.INFO)
         try {
             return chain.proceed(chain.request())
         } catch (e: IOException) {
@@ -22,6 +23,7 @@ object OkHttpExceptionInterceptor : Interceptor {
         } catch (e: CancellationException) {
             throw e  // 守卫：协程取消异常必须重新抛出，不能包装成 IOException
         } catch (e: Throwable) {
+            AppLog.putDebugWithTag(AppLog.TAG_HTTP, "intercept 非IOException异常 type=${e.javaClass.simpleName}, path=${chain.request().url.encodedPath.take(50)}", e)
             throw IOException(e)
         }
     }

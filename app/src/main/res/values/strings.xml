@@ -462,6 +462,8 @@
     <string name="r_description">Rule description(ruleDescription)</string>
     <string name="r_image">Rule image(ruleImage)</string>
     <string name="r_content">Rule content(ruleContent)</string>
+    <string name="r_routes">Rule routes(ruleRoutes)</string>
+    <string name="r_episodes">Rule episodes(ruleEpisodes)</string>
     <string name="r_style">Style(style)</string>
     <string name="r_link">Rule link(ruleLink)</string>
     <string name="r_inject_js">Inject js(injectJs)</string>

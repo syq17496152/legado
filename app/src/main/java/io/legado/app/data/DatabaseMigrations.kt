@@ -23,7 +23,7 @@ object DatabaseMigrations {
             migration_39_40, migration_40_41, migration_41_42, migration_42_43,
             migration_89_90, migration_90_91, migration_91_92, migration_92_93,
             migration_93_94, migration_94_95, migration_95_96, migration_96_97,
-            migration_97_98, migration_98_99
+            migration_97_98, migration_98_99, migration_99_100
         )
     }
 
@@ -705,6 +705,29 @@ object DatabaseMigrations {
                 "CREATE INDEX IF NOT EXISTS `index_search_keywords_type_lastUseTime` ON `search_keywords` (`type`, `lastUseTime`)"
             )
             AppLog.put("AppDatabase Migration 98→99: search_keywords 表改为复合主键(word, type) 成功")
+        }
+    }
+
+    /**
+     * multiline-on-demand-extraction: 99→100
+     * rssSources 表新增 ruleRoutes (多线路规则) + ruleEpisodes (多集规则) 两个字段
+     * 仅 type=2 视频源使用,支持 CSS/JSONPath/XPath/JS 四种写法
+     * 用 runCatching 包裹防止重复执行报错(参考 v3.26.0717-bug-fix-batch 经验)
+     */
+    private val migration_99_100 = object : Migration(99, 100) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            kotlin.runCatching {
+                db.execSQL("ALTER TABLE rssSources ADD COLUMN ruleRoutes TEXT")
+                AppLog.put("AppDatabase Migration 99→100: rssSources 新增 ruleRoutes 字段成功")
+            }.onFailure { e ->
+                AppLog.put("AppDatabase Migration 99→100: ruleRoutes 已存在或失败: ${e.message}")
+            }
+            kotlin.runCatching {
+                db.execSQL("ALTER TABLE rssSources ADD COLUMN ruleEpisodes TEXT")
+                AppLog.put("AppDatabase Migration 99→100: rssSources 新增 ruleEpisodes 字段成功")
+            }.onFailure { e ->
+                AppLog.put("AppDatabase Migration 99→100: ruleEpisodes 已存在或失败: ${e.message}")
+            }
         }
     }
 

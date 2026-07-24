@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.AdapterView
 import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -265,6 +266,15 @@ class RssSourceEditActivity :
                 setEditEntities(tab?.position)
             }
         })
+        // 监听源类型切换：type=2 为视频源，刷新 Adapter 以显示/隐藏 textVideoOnly 项
+        binding.spType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                adapter.currentSourceType = position
+                adapter.notifyDataSetChanged()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
         binding.recyclerView.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
             val navigationBarHeight = windowInsets.navigationBarHeight
             val imeHeight = windowInsets.imeHeight
@@ -378,6 +388,8 @@ class RssSourceEditActivity :
                 )
             )
             add(EditEntity("ruleContent", rs.ruleContent, R.string.r_content))
+            add(EditEntity("ruleRoutes", rs.ruleRoutes, R.string.r_routes, EditEntity.ViewType.textVideoOnly))
+            add(EditEntity("ruleEpisodes", rs.ruleEpisodes, R.string.r_episodes, EditEntity.ViewType.textVideoOnly))
             add(EditEntity("style", rs.style, R.string.r_style))
             add(EditEntity("injectJs", rs.injectJs, R.string.r_inject_js))
             add(EditEntity("contentWhitelist", rs.contentWhitelist, R.string.c_whitelist))
@@ -468,6 +480,9 @@ class RssSourceEditActivity :
                 "cacheFirst" -> source.cacheFirst = it.value.isTrue()
                 "ruleContent" -> source.ruleContent =
                     viewModel.ruleComplete(it.value, source.ruleArticles)
+
+                "ruleRoutes" -> source.ruleRoutes = it.value
+                "ruleEpisodes" -> source.ruleEpisodes = it.value
 
                 "style" -> source.style = it.value
                 "injectJs" -> source.injectJs = it.value

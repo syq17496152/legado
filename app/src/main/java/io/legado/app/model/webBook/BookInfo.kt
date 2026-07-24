@@ -2,6 +2,7 @@ package io.legado.app.model.webBook
 
 import android.text.TextUtils
 import io.legado.app.R
+import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.exception.NoStackTraceException
@@ -92,6 +93,7 @@ object BookInfo {
             currentCoroutineContext().ensureActive()
             Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}")
             DebugLog.e("获取分类出错", e)
+            AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "获取分类出错", e)
         }
         currentCoroutineContext().ensureActive()
         Debug.log(bookSource.bookSourceUrl, "┌获取字数")
@@ -104,6 +106,7 @@ object BookInfo {
             currentCoroutineContext().ensureActive()
             Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}")
             DebugLog.e("获取字数出错", e)
+            AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "获取字数出错", e)
         }
         currentCoroutineContext().ensureActive()
         Debug.log(bookSource.bookSourceUrl, "┌获取最新章节")
@@ -116,6 +119,7 @@ object BookInfo {
             currentCoroutineContext().ensureActive()
             Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}")
             DebugLog.e("获取最新章节出错", e)
+            AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "获取最新章节出错", e)
         }
         currentCoroutineContext().ensureActive()
         Debug.log(bookSource.bookSourceUrl, "┌获取简介")
@@ -135,6 +139,7 @@ object BookInfo {
             currentCoroutineContext().ensureActive()
             Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}")
             DebugLog.e("获取简介出错", e)
+            AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "获取简介出错", e)
         }
         currentCoroutineContext().ensureActive()
         Debug.log(bookSource.bookSourceUrl, "┌获取封面链接")
@@ -150,6 +155,7 @@ object BookInfo {
             currentCoroutineContext().ensureActive()
             Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}")
             DebugLog.e("获取封面出错", e)
+            AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "获取封面出错", e)
         }
         currentCoroutineContext().ensureActive()
         if (!book.isWebFile) {

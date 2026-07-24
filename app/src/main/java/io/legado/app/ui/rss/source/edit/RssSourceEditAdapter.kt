@@ -28,9 +28,19 @@ class RssSourceEditAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             notifyDataSetChanged()
         }
 
+    // 当前源类型：type=2 为视频源，仅视频源显示 textVideoOnly 类型的项
+    var currentSourceType: Int = 0
+
+    // 过滤后的可见列表：当 currentSourceType != 2 时，隐藏 textVideoOnly 类型项
+    private val visibleEntities: List<EditEntity>
+        get() = if (currentSourceType == 2) {
+            editEntities
+        } else {
+            editEntities.filter { it.viewType != EditEntity.ViewType.textVideoOnly }
+        }
+
     override fun getItemViewType(position: Int): Int {
-        val item = editEntities[position]
-        return item.viewType
+        return visibleEntities[position].viewType
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -54,13 +64,13 @@ class RssSourceEditAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (holder) {
-            is CheckBoxViewHolder -> holder.bind(editEntities[position])
-            is EditTextViewHolder -> holder.bind(editEntities[position])
+            is CheckBoxViewHolder -> holder.bind(visibleEntities[position])
+            is EditTextViewHolder -> holder.bind(visibleEntities[position])
         }
     }
 
     override fun getItemCount(): Int {
-        return editEntities.size
+        return visibleEntities.size
     }
 
     inner class EditTextViewHolder(val binding: ItemSourceEditBinding) :

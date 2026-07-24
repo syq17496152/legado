@@ -445,6 +445,7 @@ class AnalyzeUrl(
     ): StrResponse {
         setCookie()
         val startTime = System.currentTimeMillis()
+        AppLog.putDebugWithTag(AppLog.TAG_HTTP, "executeStrRequest 入口 method=$method, path=${url.take(50)}, useWebView=${this.useWebView && useWebView}", level = AppLog.Level.INFO)
         val strResponse: StrResponse
         try {
             if (this.useWebView && useWebView) {
@@ -517,8 +518,10 @@ class AnalyzeUrl(
             }
             val connectionTime = System.currentTimeMillis() - startTime
             strResponse.putCallTime(connectionTime.toInt())
+            AppLog.putDebugWithTag(AppLog.TAG_HTTP, "executeStrRequest 成功 code=${strResponse.code()}, bodyLen=${strResponse.body?.length ?: 0}, cost=${connectionTime}ms", level = AppLog.Level.INFO)
             return strResponse
         } catch (e: Exception) {
+            AppLog.putDebugWithTag(AppLog.TAG_HTTP, "executeStrRequest 异常 type=${e.javaClass.simpleName}, path=${url.take(50)}", e)
             // P2-3.1: 网络重试机制（Connection reset/Timeout/DNS失败 自动重试1次，间隔1秒）
             // P2-B: 将 UnknownHostException 纳入重试（RetryableDns 已重试2次，此处再重试1次应对临时DNS故障）
             val isNetworkError = e is java.net.SocketTimeoutException

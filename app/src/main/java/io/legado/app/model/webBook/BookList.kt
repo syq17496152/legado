@@ -1,6 +1,7 @@
 package io.legado.app.model.webBook
 
 import io.legado.app.R
+import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.SearchBook
@@ -232,6 +233,7 @@ object BookList {
             } catch (e: Exception) {
                 currentCoroutineContext().ensureActive()
                 Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}", log)
+                AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "获取分类出错", e)
             }
             if (filter?.invoke(searchBook.name, searchBook.author, searchBook.kind) == false) {
                 return null
@@ -244,6 +246,7 @@ object BookList {
             } catch (e: Exception) {
                 currentCoroutineContext().ensureActive()
                 Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}", log)
+                AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "获取字数出错", e)
             }
             currentCoroutineContext().ensureActive()
             Debug.log(bookSource.bookSourceUrl, "┌获取最新章节", log)
@@ -253,6 +256,7 @@ object BookList {
             } catch (e: Exception) {
                 currentCoroutineContext().ensureActive()
                 Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}", log)
+                AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "获取最新章节出错", e)
             }
             currentCoroutineContext().ensureActive()
             Debug.log(bookSource.bookSourceUrl, "┌获取简介", log)
@@ -262,6 +266,7 @@ object BookList {
             } catch (e: Exception) {
                 currentCoroutineContext().ensureActive()
                 Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}", log)
+                AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "获取简介出错", e)
             }
             currentCoroutineContext().ensureActive()
             Debug.log(bookSource.bookSourceUrl, "┌获取封面链接", log)
@@ -275,6 +280,7 @@ object BookList {
             } catch (e: Exception) {
                 currentCoroutineContext().ensureActive()
                 Debug.log(bookSource.bookSourceUrl, "└${e.localizedMessage}", log)
+                AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "获取封面出错", e)
             }
             currentCoroutineContext().ensureActive()
             Debug.log(bookSource.bookSourceUrl, "┌获取详情页链接", log)

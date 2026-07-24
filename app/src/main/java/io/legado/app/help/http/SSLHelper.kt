@@ -2,6 +2,7 @@ package io.legado.app.help.http
 
 import android.annotation.SuppressLint
 import android.net.http.X509TrustManagerExtensions
+import io.legado.app.constant.AppLog
 import io.legado.app.utils.printOnDebug
 
 
@@ -58,6 +59,7 @@ object SSLHelper {
             sslContext.init(null, arrayOf(unsafeTrustManager), SecureRandom())
             sslContext.socketFactory
         } catch (e: Exception) {
+            AppLog.putDebugWithTag(AppLog.TAG_HTTP, "unsafeSSLSocketFactory 初始化失败 type=${e.javaClass.simpleName}", e)
             throw RuntimeException(e)
         }
     }
@@ -122,6 +124,7 @@ object SSLHelper {
         password: String?,
         vararg certificates: InputStream
     ): SSLParams? {
+        AppLog.putDebugWithTag(AppLog.TAG_HTTP, "getSslSocketFactoryBase 入口 hasTrustManager=${trustManager != null}, hasBks=${bksFile != null}, certCount=${certificates.size}", level = AppLog.Level.INFO)
         val sslParams = SSLParams()
         try {
             val keyManagers = prepareKeyManager(bksFile, password)
@@ -138,8 +141,10 @@ object SSLHelper {
             return sslParams
         } catch (e: NoSuchAlgorithmException) {
             e.printOnDebug()
+            AppLog.putDebugWithTag(AppLog.TAG_HTTP, "getSslSocketFactoryBase SSLContext算法不可用 type=${e.javaClass.simpleName}", e)
         } catch (e: KeyManagementException) {
             e.printOnDebug()
+            AppLog.putDebugWithTag(AppLog.TAG_HTTP, "getSslSocketFactoryBase SSL密钥管理失败 type=${e.javaClass.simpleName}", e)
         }
         return null
     }
@@ -154,6 +159,7 @@ object SSLHelper {
             return kmf.keyManagers
         } catch (e: Exception) {
             e.printOnDebug()
+            AppLog.putDebugWithTag(AppLog.TAG_HTTP, "prepareKeyManager 失败 type=${e.javaClass.simpleName}", e)
         }
         return null
     }
@@ -173,6 +179,7 @@ object SSLHelper {
                 certStream.close()
             } catch (e: IOException) {
                 e.printOnDebug()
+                AppLog.putDebugWithTag(AppLog.TAG_HTTP, "prepareTrustManager 证书流关闭失败 type=${e.javaClass.simpleName}", e, AppLog.Level.WARN)
             }
         }
         //我们创建一个默认类型的TrustManagerFactory

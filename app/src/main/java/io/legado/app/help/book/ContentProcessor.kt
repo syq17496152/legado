@@ -100,6 +100,7 @@ class ContentProcessor private constructor(
         chineseConvert: Boolean = true,
         reSegment: Boolean = true
     ): BookContent {
+        AppLog.putDebugWithTag(AppLog.TAG_CONTENT, "开始正文处理 bookNameLen=${book.name.length} chapterIndex=${chapter.index} contentLen=${content.length} includeTitle=$includeTitle useReplace=$useReplace chineseConvert=$chineseConvert reSegment=$reSegment", level = AppLog.Level.INFO)
         var mContent = content
         var sameTitleRemoved = false
         var effectiveReplaceRules: ArrayList<ReplaceRule>? = null
@@ -220,7 +221,9 @@ class ContentProcessor private constructor(
                 }
             }
         }
-        return BookContent(sameTitleRemoved, contents, effectiveReplaceRules)
+        val result = BookContent(sameTitleRemoved, contents, effectiveReplaceRules)
+        AppLog.putDebugWithTag(AppLog.TAG_CONTENT, "正文处理完成 bookNameLen=${book.name.length} chapterIndex=${chapter.index} 段落数=${contents.size} sameTitleRemoved=$sameTitleRemoved replaceRules=${effectiveReplaceRules?.size ?: 0}", level = AppLog.Level.INFO)
+        return result
     }
 
 }

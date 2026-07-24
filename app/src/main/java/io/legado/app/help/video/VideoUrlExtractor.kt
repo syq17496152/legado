@@ -2,6 +2,7 @@ package io.legado.app.help.video
 
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BaseSource
+import io.legado.app.data.entities.RssArticle
 import io.legado.app.help.http.BackstageWebView
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.utils.NetworkUtils
@@ -395,5 +396,106 @@ object VideoUrlExtractor {
      */
     fun resolvePlayerPageUrl(url: String): String {
         return extractPlayerPageUrl(url) ?: url
+    }
+
+    /**
+     * MacCMS 播放页检测：判断 URL 是否是 MacCMS 播放页（如 /vodplay/{id}-{r}-{e}.html）
+     *
+     * 场景：RSS 视频源 ruleContent 返回播放页 URL（非直接 m3u8），需在播放时按需解析
+     * 特征：路径含 vodplay/vod_play/play 等，且以 .html 结尾
+     *
+     * @param url 待检测的 URL
+     * @return true 表示是 MacCMS 播放页 URL
+     */
+    fun isMacCmsPlayPage(url: String): Boolean {
+        val lower = url.lowercase()
+        return (lower.contains("vodplay") || lower.contains("vod_play") || lower.contains("/play/")) &&
+                (lower.endsWith(".html") || lower.endsWith(".htm"))
+    }
+
+    /**
+     * 从 HTML 中提取 player_aaaa 变量的 url 字段（MacCMS 播放页视频流地址）
+     *
+     * MacCMS 播放页包含 JS 变量：var player_aaaa = {"flag":"play","encrypt":0,"url":"https://xxx.m3u8",...}
+     * 本方法用正则提取 url 字段值，处理转义斜杠 \\/
+     *
+     * @param html 播放页 HTML 内容
+     * @return 提取到的视频流 URL，提取失败返回 null
+     */
+    fun extractPlayerAaaaUrl(html: String): String? {
+        if (html.isBlank()) return null
+        // 匹配 player_aaaa = {..."url":"value"...}，容忍空格和单双引号
+        val pattern = Regex("""player_aaaa\s*=\s*\{[\s\S]*?"url"\s*:\s*"([^"]+)"""")
+        val match = pattern.find(html) ?: return null
+        val rawUrl = match.groupValues[1] ?: return null
+        // 处理 JSON 转义的斜杠 \/ → /
+        val url = rawUrl.replace("\\/", "/")
+        // 验证是 http(s) 开头的有效 URL
+        return if (url.startsWith("http")) url else null
+    }
+
+    /**
+     * 多线路多集按需采集统一入口：整合三层降级采集视频流 URL
+     *
+     * 三层降级链路：
+     * 1. MacCMS 播放页解析：检测播放页 URL → 请求 HTML → 提取 player_aaaa
+     * 2. DOM 解析（复用第一层 HTML）：用 extract() 从 HTML 中提取视频链接
+     * 3. 网络抓包拦截：用 extractWithWebView() 启动 WebView 拦截动态请求
+     *
+     * @param url 播放页 URL 或视频流 URL
+     * @param source 订阅源（用于构造 AnalyzeUrl 获取 headerMap）
+     * @param rssArticle 文章（用于 Referer 注入）
+     * @return 解析后的视频流 URL，三层均失败返回原 URL
+     */
+    suspend fun extractVideoUrlForEpisode(
+        url: String,
+        source: BaseSource?,
+        rssArticle: RssArticle?
+    ): String {
+        if (url.isBlank()) return url
+        // 构造 AnalyzeUrl（参考 VideoPlay.playRssEpisode 第1037-1041行）
+        val analyzeUrl = AnalyzeUrl(url, source = source, ruleData = rssArticle)
+        // 注入 Referer（参考 VideoPlay 第1043-1045行，模拟 WebView 行为解决 CDN 防盗链 404）
+        if (!analyzeUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
+            analyzeUrl.headerMap["Referer"] = rssArticle?.link ?: url
+        }
+        var resolvedUrl = resolvePlayerPageUrl(analyzeUrl.url)
+        val isMacCms = isMacCmsPlayPage(resolvedUrl)
+        AppLog.put("extractVideoUrlForEpisode: resolvedUrlEq=${resolvedUrl == analyzeUrl.url}, isMacCms=$isMacCms, urlEndsWithHtml=${resolvedUrl.endsWith(".html")}")
+        // 第一层 MacCMS 播放页解析
+        if (resolvedUrl == analyzeUrl.url && isMacCms) {
+            try {
+                val playPageHtml = analyzeUrl.getStrResponseAwait().body ?: ""
+                AppLog.put("extractVideoUrlForEpisode: playPageHtmlLen=${playPageHtml.length}, containsPlayerAaaa=${playPageHtml.contains("player_aaaa")}")
+                val m3u8Url = extractPlayerAaaaUrl(playPageHtml)
+                if (!m3u8Url.isNullOrBlank()) {
+                    AppLog.put("extractVideoUrlForEpisode: 第一层MacCMS解析成功, m3u8UrlLen=${m3u8Url.length}")
+                    return m3u8Url
+                }
+                // 第二层 DOM 解析（复用第一层 HTML，避免重复请求）
+                if (playPageHtml.isNotBlank()) {
+                    val domUrls = extract(playPageHtml, resolvedUrl)
+                    if (domUrls.isNotEmpty()) {
+                        AppLog.put("extractVideoUrlForEpisode: 第二层DOM解析成功, urlCount=${domUrls.size}")
+                        return domUrls[0]
+                    }
+                }
+            } catch (e: Exception) {
+                AppLog.put("extractVideoUrlForEpisode: 第一层MacCMS解析失败", e)
+            }
+        }
+        // 第三层 网络抓包拦截
+        return try {
+            val webViewUrl = extractWithWebView(url, source, delayTime = 3000L, timeout = 10000L)
+            if (!webViewUrl.isNullOrBlank() && webViewUrl != url) {
+                AppLog.put("extractVideoUrlForEpisode: 第三层网络抓包成功, urlLen=${webViewUrl.length}")
+                webViewUrl
+            } else {
+                resolvedUrl
+            }
+        } catch (e: Exception) {
+            AppLog.put("extractVideoUrlForEpisode: 第三层网络抓包失败", e)
+            resolvedUrl
+        }
     }
 }

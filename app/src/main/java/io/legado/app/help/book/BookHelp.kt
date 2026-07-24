@@ -164,10 +164,12 @@ object BookHelp {
         bookChapter: BookChapter,
         content: String
     ) {
+        AppLog.putDebugWithTag(AppLog.TAG_CONTENT, "开始保存章节内容 bookNameLen=${book.name.length} chapterIndex=${bookChapter.index} contentLen=${content.length}", level = AppLog.Level.INFO)
         try {
             saveText(book, bookChapter, content)
             //saveImages(bookSource, book, bookChapter, content)
             postEvent(EventBus.SAVE_CONTENT, Pair(book, bookChapter))
+            AppLog.putDebugWithTag(AppLog.TAG_CONTENT, "章节内容保存成功 bookNameLen=${book.name.length} chapterIndex=${bookChapter.index}", level = AppLog.Level.INFO)
         } catch (e: Exception) {
             AppLog.put("BookHelp: saveContent", e)
         }
@@ -224,6 +226,7 @@ object BookHelp {
         src: String,
         chapter: BookChapter? = null
     ) {
+        AppLog.putDebugWithTag(AppLog.TAG_CONTENT, "开始保存图片 bookNameLen=${book.name.length} srcLen=${src.length} chapterIndex=${chapter?.index ?: -1}", level = AppLog.Level.INFO)
         if (isImageExist(book, src)) {
             return
         }
@@ -400,6 +403,7 @@ object BookHelp {
      * 读取章节内容
      */
     fun getContent(book: Book, bookChapter: BookChapter): String? {
+        AppLog.putDebugWithTag(AppLog.TAG_CONTENT, "开始读取章节内容 bookNameLen=${book.name.length} chapterIndex=${bookChapter.index}", level = AppLog.Level.INFO)
         val file = downloadDir.getFile(
             cacheFolderName,
             book.getFolderName(),
@@ -410,6 +414,7 @@ object BookHelp {
             if (string.isEmpty()) {
                 return null
             }
+            AppLog.putDebugWithTag(AppLog.TAG_CONTENT, "章节内容读取成功(缓存) bookNameLen=${book.name.length} chapterIndex=${bookChapter.index} contentLen=${string.length}", level = AppLog.Level.INFO)
             return string
         }
         if (book.isLocal) {

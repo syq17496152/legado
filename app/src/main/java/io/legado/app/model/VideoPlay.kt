@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Context.MODE_PRIVATE
 import android.content.SharedPreferences
 import android.net.Uri
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
@@ -172,6 +173,8 @@ object VideoPlay : CoroutineScope by MainScope(){
     var rssRoutes: List<RssRoute>? = null
     /**  当前线路索引（R3 多线路支持）  **/
     var rssRouteIndex: Int = 0
+    /** switchToRoute 竞态守卫序号（每次切换递增，异步回调校验是否过期） **/
+    private var switchToRouteToken: Int = 0
     /**  订阅源文章列表（上下滑动切换文章，从 RssArticlesFragment 传入）  **/
     var rssArticles: List<RssArticle>? = null
     /**  当前订阅源文章索引（上下滑动切换文章）  **/
@@ -246,7 +249,9 @@ object VideoPlay : CoroutineScope by MainScope(){
                 return
             }
             val ruleContent = s.ruleContent
-            if (ruleContent.isNullOrBlank()) {
+            // 多线路多集按需采集新模式：ruleRoutes/ruleEpisodes非空时走Rss.getContent（getContentAwait内部走getRoutesContentAwait分支）
+            val hasNewRoutesMode = !s.ruleRoutes.isNullOrBlank() && !s.ruleEpisodes.isNullOrBlank()
+            if (ruleContent.isNullOrBlank() && !hasNewRoutesMode) {
                 // R5 自动视频链接抓取 + R3 title 修复
                 videoTitle = rssArticle.title
                 postEvent(EventBus.VIDEO_SUB_TITLE, "正在抓取视频链接...")
@@ -385,11 +390,12 @@ object VideoPlay : CoroutineScope by MainScope(){
                     AppLog.put("R5自动抓取视频链接失败", it, true)
                 }
             } else {
-                Rss.getContent(loadScope, rssArticle, ruleContent, s)
+                Rss.getContent(loadScope, rssArticle, ruleContent ?: "", s)
                     .onSuccess(IO) { content ->
                         val content = content.trim()
                         // R3 多线路支持：优先解析为多线路列表，兼容旧版扁平JSON/多行URL
                         val routes = parseRssRoutes(content, rssArticle.link)
+                        AppLog.putDebugWithTag(AppLog.TAG_RSS, "parseRssRoutes结果: routesNull=${routes == null}, routesSize=${routes?.size ?: 0}", level = AppLog.Level.DEBUG)
                         if (routes != null && routes.isNotEmpty()) {
                             rssRoutes = routes
                             rssRouteIndex = 0
@@ -809,7 +815,8 @@ object VideoPlay : CoroutineScope by MainScope(){
                     val firstObj = arr.getJSONObject(0)
                     if (firstObj.has("episodes")) {
                         // 嵌套 JSON 格式：解析为多线路
-                        return (0 until arr.length()).map { i ->
+                        // 按需采集模式：其他线路episodes为空是正常的（切换时才采集），保留所有线路
+                        val routes = (0 until arr.length()).map { i ->
                             val obj = arr.getJSONObject(i)
                             val epArr = obj.optJSONArray("episodes")
                             val episodes = if (epArr != null) {
@@ -827,7 +834,9 @@ object VideoPlay : CoroutineScope by MainScope(){
                                 name = obj.optString("name", "线路${i + 1}"),
                                 episodes = episodes
                             )
-                        }.filter { it.episodes.isNotEmpty() }
+                        }
+                        // 仅当所有线路episodes都为空时返回null，否则保留所有线路（含空episodes的）
+                        return if (routes.any { it.episodes.isNotEmpty() }) routes else null
                     }
                 }
                 // 扁平 JSON 数组（无 episodes 字段）：回退到 parseRssEpisodes，包装为单线路
@@ -871,6 +880,55 @@ object VideoPlay : CoroutineScope by MainScope(){
         rssEpisodeIndex = 0
         postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1))
         return route.episodes.firstOrNull()
+    }
+
+    /**
+     * 判断当前源是否为多线路多集按需采集新模式（type=2 + ruleRoutes/ruleEpisodes 非空）
+     * UI 层据此决定调用 switchToRoute（异步按需采集）还是 switchRssRoute（内存切换）
+     */
+    fun isNewRoutesMode(): Boolean {
+        val s = source as? RssSource ?: return false
+        return !s.ruleRoutes.isNullOrBlank() && !s.ruleEpisodes.isNullOrBlank()
+    }
+
+    /**
+     * 多线路多集按需采集：切换线路时重新执行 ruleEpisodes 采集新线路集数列表
+     * 仅用于 type=2 + ruleRoutes/ruleEpisodes 非空的新模式（废弃老模式 switchRssRoute）
+     *
+     * @param routeIndex 线路索引（0-based）
+     * @param player 播放器实例（与 playRssEpisode 一致用 GSYBaseVideoPlayer 父类）
+     * @return true 切换成功，false 切换失败
+     */
+    fun switchToRoute(routeIndex: Int, player: GSYBaseVideoPlayer): Boolean {
+        // source 是 BaseSource，需 cast 为 RssSource 才能访问 ruleEpisodes
+        val rssSource = source as? RssSource ?: return false
+        val ruleEpisodes = rssSource.ruleEpisodes ?: return false
+        val rssArticle = rssStar?.toRssArticle() ?: rssRecord?.toRssArticle()
+            ?: rssArticles?.getOrNull(rssArticleIndex) ?: return false
+        // 重置集数状态
+        rssRouteIndex = routeIndex
+        rssEpisodeIndex = 0
+        // 竞态守卫：记录切换序号，异步回调时校验是否过期
+        val switchToken = ++switchToRouteToken
+        Coroutine.async(loadScope, IO) {
+            // 执行 ruleEpisodes 采集新线路集数列表
+            val episodes = Rss.getEpisodesAwait(rssArticle, ruleEpisodes, routeIndex, rssSource)
+            withContext(Main) {
+                // 竞态守卫：若用户在采集期间又切换了线路，丢弃本次结果
+                if (switchToken != switchToRouteToken) {
+                    AppLog.put("switchToRoute 丢弃过期结果: token=$switchToken, current=$switchToRouteToken")
+                    return@withContext
+                }
+                rssEpisodes = episodes
+                // 更新 VideoFragment 集数列表 UI
+                postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1))
+                // 默认播放新线路第一集
+                episodes?.firstOrNull()?.let { playRssEpisode(player, it) }
+            }
+        }.onError {
+            AppLog.put("切换线路采集集数失败: routeIndex=$routeIndex", it, true)
+        }
+        return true
     }
 
     /**
@@ -990,8 +1048,9 @@ object VideoPlay : CoroutineScope by MainScope(){
             return
         }
         val rssSource = source as? RssSource ?: return
-        // ruleContent 不为空时走 Rss.getContent 而非 R5 抓取，无需预加载 HTML
+        // ruleContent 不为空 或 ruleRoutes/ruleEpisodes非空（多线路多集新模式）时走 Rss.getContent 而非 R5 抓取，无需预加载 HTML
         if (!rssSource.ruleContent.isNullOrBlank()) return
+        if (!rssSource.ruleRoutes.isNullOrBlank() && !rssSource.ruleEpisodes.isNullOrBlank()) return
 
         preloadedArticles.add(link)
 
@@ -1031,6 +1090,10 @@ object VideoPlay : CoroutineScope by MainScope(){
         videoUrl = episode.url
         videoTitle = episode.title
         Coroutine.async(loadScope, IO) {
+            // 接入三层降级采集：MacCMS播放页解析→DOM解析→网络抓包（统一由 VideoUrlExtractor.extractVideoUrlForEpisode 处理）
+            // 替代原手动 MacCMS 解析，增加 DOM 解析和网络抓包降级，提升视频播放成功率
+            val resolvedUrl = VideoUrlExtractor.extractVideoUrlForEpisode(episode.url, source, rssArticle)
+            // 构造 AnalyzeUrl 获取 headerMap（Referer 等，用于播放器防盗链）
             val analyzeUrl = AnalyzeUrl(
                 episode.url,
                 source = source,
@@ -1043,8 +1106,6 @@ object VideoPlay : CoroutineScope by MainScope(){
             withContext(Main) {
                 player.mapHeadData = analyzeUrl.headerMap
                 currentPlayHeaders = analyzeUrl.headerMap
-                // Bug8 修复：统一解析播放器页面 URL
-                val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(analyzeUrl.url)
                 player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), episode.title)
                 // R3 title 修复：TitleBar 统一显示文章标题（用户反馈：单URL/多行URL模式title用rssArticle.title）
                 postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)

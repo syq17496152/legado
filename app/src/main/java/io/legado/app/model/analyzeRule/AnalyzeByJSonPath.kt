@@ -3,6 +3,7 @@ package io.legado.app.model.analyzeRule
 import androidx.annotation.Keep
 import com.jayway.jsonpath.JsonPath
 import com.jayway.jsonpath.ReadContext
+import io.legado.app.constant.AppLog
 import io.legado.app.utils.printOnDebug
 
 
@@ -30,6 +31,7 @@ class AnalyzeByJSonPath(json: Any) {
      * */
     fun getString(rule: String): String? {
         if (rule.isEmpty()) return null
+        AppLog.putDebugWithTag(AppLog.TAG_ANALYZE, "getString 入口 expr=${rule.take(100)}", level = AppLog.Level.INFO)
         var result: String
         val ruleAnalyzes = RuleAnalyzer(rule, true) //设置平衡组为代码平衡
         val rules = ruleAnalyzes.splitRule("&&", "||")
@@ -50,6 +52,7 @@ class AnalyzeByJSonPath(json: Any) {
                     }
                 } catch (e: Exception) {
                     e.printOnDebug()
+                    AppLog.putDebugWithTag(AppLog.TAG_ANALYZE, "JSONPath getString 解析失败 expr=${rule.take(100)}", e)
                 }
             }
             return result
@@ -71,6 +74,7 @@ class AnalyzeByJSonPath(json: Any) {
     internal fun getStringList(rule: String): List<String> {
         val result = ArrayList<String>()
         if (rule.isEmpty()) return result
+        AppLog.putDebugWithTag(AppLog.TAG_ANALYZE, "getStringList 入口 expr=${rule.take(100)}", level = AppLog.Level.INFO)
         val ruleAnalyzes = RuleAnalyzer(rule, true) //设置平衡组为代码平衡
         val rules = ruleAnalyzes.splitRule("&&", "||", "%%")
 
@@ -87,6 +91,7 @@ class AnalyzeByJSonPath(json: Any) {
                     }
                 } catch (e: Exception) {
                     e.printOnDebug()
+                    AppLog.putDebugWithTag(AppLog.TAG_ANALYZE, "JSONPath getStringList 解析失败 expr=${rule.take(100)}", e)
                 }
             } else {
                 result.add(st)
@@ -129,6 +134,7 @@ class AnalyzeByJSonPath(json: Any) {
     internal fun getList(rule: String): ArrayList<Any>? {
         val result = ArrayList<Any>()
         if (rule.isEmpty()) return result
+        AppLog.putDebugWithTag(AppLog.TAG_ANALYZE, "getList 入口 expr=${rule.take(100)}", level = AppLog.Level.INFO)
         val ruleAnalyzes = RuleAnalyzer(rule, true) //设置平衡组为代码平衡
         val rules = ruleAnalyzes.splitRule("&&", "||", "%%")
         if (rules.size == 1) {
@@ -137,6 +143,7 @@ class AnalyzeByJSonPath(json: Any) {
                     return it.read<ArrayList<Any>>(rules[0])
                 } catch (e: Exception) {
                     e.printOnDebug()
+                    AppLog.putDebugWithTag(AppLog.TAG_ANALYZE, "JSONPath getList 解析失败 expr=${rules[0].take(100)}", e)
                 }
             }
         } else {

@@ -583,11 +583,18 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             val routeNames = routes.map { it.name }
             val adapter = RssRouteAdapter(routeNames, VideoPlay.rssRouteIndex) { _, index ->
                 if (index != VideoPlay.rssRouteIndex) {
-                    val episode = VideoPlay.switchRssRoute(index)
-                    if (episode != null) {
+                    if (VideoPlay.isNewRoutesMode()) {
+                        // 新模式：异步按需采集（switchToRoute 内部处理播放+UI更新）
+                        VideoPlay.switchToRoute(index, playerView)
                         upRssRoutesView()
-                        VideoPlay.playRssEpisode(playerView, episode)
-                        upRssEpisodesView()
+                    } else {
+                        // 旧模式：内存切换
+                        val episode = VideoPlay.switchRssRoute(index)
+                        if (episode != null) {
+                            upRssRoutesView()
+                            VideoPlay.playRssEpisode(playerView, episode)
+                            upRssEpisodesView()
+                        }
                     }
                 }
             }
