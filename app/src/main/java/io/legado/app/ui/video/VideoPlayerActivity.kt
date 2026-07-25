@@ -838,14 +838,19 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             orientation = requestedOrientation
             if (useViewPagerMode) {
                 // R3 阶段4：ViewPager2 模式直接旋转 Activity，不使用 GSY startWindowFullscreen
-                requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                // 用户需求：根据视频方向选择全屏方向（竖屏视频→竖屏全屏，横屏视频→横屏全屏）
+                requestedOrientation = if (VideoPlay.isPortraitVideo) {
+                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                } else {
+                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                }
                 // F1 真全屏修复：用 titleBarNew.gone() 替代 supportActionBar?.hide()
                 // 根因：supportActionBar?.hide() 只隐藏 ActionBar 内容显示，但 TitleBar（AppBarLayout）
                 // 作为 viewPagerContainer（LinearLayout）子控件仍占据布局空间，
                 // 导致 ViewPager2 高度 = 屏幕高度 - TitleBar高度，playerView 无法铺满全屏。
                 // gone() 释放布局空间，ViewPager2 可铺满整个屏幕实现真全屏。
                 binding.titleBarNew.gone()
-                Log.d("VideoFS", "enter fullscreen: titleBarNew gone, isFullScreen=$isFullScreen")
+                Log.d("VideoFS", "enter fullscreen: titleBarNew gone, isFullScreen=$isFullScreen, isPortraitVideo=${VideoPlay.isPortraitVideo}")
                 currentFragment?.onFullScreenChanged(true)
             } else {
                 requestedOrientation = if (VideoPlay.isPortraitVideo) {

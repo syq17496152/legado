@@ -525,22 +525,18 @@ class VideoFragment : Fragment() {
     /**
      * 4.3 根据视频宽高比显示/隐藏全屏按钮
      *
-     * 横屏视频（宽高比 > 1.2）显示全屏按钮，竖屏视频隐藏。
+     * 用户需求：横竖屏视频都展示全屏按钮。
      * 在 FULLSCREEN 状态下始终显示（用于退出全屏）。
+     * 竖屏视频点击全屏按钮进入竖屏全屏（由 Activity 的 toggleFullScreen 根据 isPortraitVideo 判断方向）。
      */
     fun updateFullscreenButtonVisibility(videoWidth: Int, videoHeight: Int) {
         if (currentState == PlayState.FULLSCREEN) {
-            // 4.8 横屏全屏态下始终显示全屏按钮
+            // 4.8 全屏态下始终显示全屏按钮
             btnFullscreen?.visible()
             return
         }
-        val isLandscape =
-            videoWidth > 0 && videoHeight > 0 && videoWidth.toFloat() / videoHeight.toFloat() > 1.2f
-        if (isLandscape) {
-            btnFullscreen?.visible()
-        } else {
-            btnFullscreen?.gone()
-        }
+        // 用户需求：横竖屏视频都展示全屏按钮
+        btnFullscreen?.visible()
     }
 
     // ==================== 状态切换 ====================
