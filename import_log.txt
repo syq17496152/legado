@@ -1,0 +1,35 @@
+  目标包名切换为: io.legado.miss.app.release
+============================================================
+Legado 订阅源导入工具（目标包: io.legado.miss.app.release）
+============================================================
+
+--- Pull legado.db (含WAL/SHM) ---
+  >>> "D:\Program Files\Microvirt\MEmu\adb.exe" -s 127.0.0.1:21513 shell su -c 'mkdir -p /data/data/io.legado.miss.app.release/databases/'
+  >>> "D:\Program Files\Microvirt\MEmu\adb.exe" -s 127.0.0.1:21513 shell su -c 'cp /data/data/io.legado.miss.app.release/databases/legado.db /sdcard/legado.db'
+  >>> "D:\Program Files\Microvirt\MEmu\adb.exe" -s 127.0.0.1:21513 shell su -c 'chmod 666 /sdcard/legado.db'
+  >>> "D:\Program Files\Microvirt\MEmu\adb.exe" -s 127.0.0.1:21513 shell su -c 'cp /data/data/io.legado.miss.app.release/databases/legado.db-wal /sdcard/legado.db-wal 2>/dev/null; chmod 666 /sdcard/legado.db-wal 2>/dev/null; true'
+  >>> "D:\Program Files\Microvirt\MEmu\adb.exe" -s 127.0.0.1:21513 shell su -c 'cp /data/data/io.legado.miss.app.release/databases/legado.db-shm /sdcard/legado.db-shm 2>/dev/null; chmod 666 /sdcard/legado.db-shm 2>/dev/null; true'
+  >>> "D:\Program Files\Microvirt\MEmu\adb.exe" -s 127.0.0.1:21513 pull /sdcard/legado.db C:\Users\shiyq\AppData\Local\Temp\tmp_kbclpnd.db
+  >>> "D:\Program Files\Microvirt\MEmu\adb.exe" -s 127.0.0.1:21513 pull /sdcard/legado.db-wal C:\Users\shiyq\AppData\Local\Temp\tmp_kbclpnd.db-wal
+  >>> "D:\Program Files\Microvirt\MEmu\adb.exe" -s 127.0.0.1:21513 pull /sdcard/legado.db-shm C:\Users\shiyq\AppData\Local\Temp\tmp_kbclpnd.db-shm
+✅ DB pulled to C:\Users\shiyq\AppData\Local\Temp\tmp_kbclpnd.db (主DB，WAL/SHM已清理避免malformed)
+
+--- 导入订阅源: temp/site_b_rss_source.json ---
+  JSON包含 1 个订阅源
+  WAL checkpoint: (0, 0, 0)
+  rssSources 表列: 49 列
+  Final WAL checkpoint: (0, 0, 0)
+  共导入 1 个订阅源, 跳过 0 个
+
+--- Push legado.db (清理WAL/SHM) ---
+  >>> "D:\Program Files\Microvirt\MEmu\adb.exe" -s 127.0.0.1:21513 push C:\Users\shiyq\AppData\Local\Temp\tmp_kbclpnd.db /sdcard/legado.db
+  >>> "D:\Program Files\Microvirt\MEmu\adb.exe" -s 127.0.0.1:21513 shell su -c 'cp /sdcard/legado.db /data/data/io.legado.miss.app.release/databases/legado.db'
+  >>> "D:\Program Files\Microvirt\MEmu\adb.exe" -s 127.0.0.1:21513 shell su -c 'stat -c %u /data/data/io.legado.miss.app.release/databases/'
+  >>> "D:\Program Files\Microvirt\MEmu\adb.exe" -s 127.0.0.1:21513 shell su -c 'chown u0_a0:u0_a0 /data/data/io.legado.miss.app.release/databases/legado.db'
+  >>> "D:\Program Files\Microvirt\MEmu\adb.exe" -s 127.0.0.1:21513 shell su -c 'chmod 660 /data/data/io.legado.miss.app.release/databases/legado.db'
+  >>> "D:\Program Files\Microvirt\MEmu\adb.exe" -s 127.0.0.1:21513 shell su -c 'rm -f /data/data/io.legado.miss.app.release/databases/legado.db-wal /data/data/io.legado.miss.app.release/databases/legado.db-shm'
+✅ DB pushed back (WAL/SHM已清理, owner已修复)
+
+============================================================
+✅ 订阅源导入完成: 1 个订阅源
+============================================================

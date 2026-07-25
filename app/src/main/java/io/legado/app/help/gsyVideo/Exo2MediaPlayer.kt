@@ -138,10 +138,14 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 // E1 原方案 createMediaItem 拼接 SPLIT_TAG(🚧headersJson) 破坏了 URL 后缀检测，
                 // 导致 m3u8 被误认为普通文件用 ProgressiveExtractor 解析，全部报 UnrecognizedInputFormatException(3003)
                 // Headers 注入改为通过 ExoPlayerHelper.setDefaultHeaders 在 prepare 前设置（ExoPlayerManager 已调用，此处双保险）
-                if (currentHeaders.isNotEmpty()) {
-                    ExoPlayerHelper.setDefaultHeaders(currentHeaders)
-                }
-                val mediaItem = MediaItem.Builder().setUri(currentUrl).build()
+                // P1-3b 修复（2026-07-25）：改用 ExoPlayerHelper.createMediaItem 替代裸 MediaItem.Builder()
+                // 根因：play.php 等动态 URL 不以 .m3u8 结尾，DefaultMediaSourceFactory 的 URL 后缀检测失败，
+                // 误用 ProgressiveMediaSource 解析 m3u8 内容报 UnrecognizedInputFormatException(3003)
+                // 证据：源[1] ruleContent 提取 https://m.892539.xyz/play.php?...&format=m3u8 返回标准 #EXTM3U m3u8，
+                // 但 ExoPlayer 报 3003 "None of the available extractors could read the stream"
+                // 方案：createMediaItem 内部调用 getMimeType 检测 format=m3u8 返回 APPLICATION_M3U8，
+                // setMimeType 让 DefaultMediaSourceFactory 正确创建 HlsMediaSource
+                val mediaItem = ExoPlayerHelper.createMediaItem(currentUrl, currentHeaders)
                 mInternalPlayer.setMediaItem(mediaItem)
             } else {
                 mInternalPlayer.setMediaSource(mMediaSource)
