@@ -213,7 +213,7 @@ object BookHelp {
         book: Book,
         bookChapter: BookChapter,
         content: String,
-        concurrency: Int = AppConfig.threadCount
+        concurrency: Int = AppConfig.updateCacheThreadCount
     ) = coroutineScope {
         flowImages(bookChapter, content).onEachParallel(concurrency) { mSrc ->
             saveImage(bookSource, book, mSrc, bookChapter)

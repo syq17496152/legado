@@ -232,6 +232,13 @@
     <string name="download_count">Downloaded %1$d/%2$d</string>
     <string name="import_select_book">Import selected book(s)</string>
     <string name="threads_num_title">Number of concurrent tasks</string>
+    <string name="search_thread_count_title">Search thread count</string>
+    <string name="search_thread_count_summary">Concurrency for book/RSS search, source change, cover change, manga search, reading page search, bookshelf search, source verification (current %s, default 32, max 128)</string>
+    <string name="update_cache_thread_count_title">Update and cache thread count</string>
+    <string name="update_cache_thread_count_summary">Concurrency for TOC update, cache download, chapter list fetch, content fetch, WebView pool size (current %s, default 16, max 64)</string>
+    <string name="search_thread_count_toast">Configuration saved, takes effect on next search</string>
+    <string name="update_cache_thread_count_toast">Configuration saved, takes effect immediately</string>
+    <string name="migrated_thread_count_toast">Migrated your previous thread count config to separate search / update+cache configs</string>
     <string name="change_icon">Change icon</string>
     <string name="remove_from_bookshelf">Remove</string>
     <string name="start_read">Start reading</string>
@@ -805,6 +812,8 @@
     <string name="read_record_summary">Read record summary</string>
     <string name="local_tts">Local TTS</string>
     <string name="thread_count">Thread count</string>
+    <string name="search_thread_count">Search thread count</string>
+    <string name="update_cache_thread_count">Update and cache thread count</string>
     <string name="rss_parse_concurrency">RSS parse concurrency</string>
     <string name="rss_parse_concurrency_summary">Number of concurrent RSS article parsing (current %s, default 3)</string>
     <string name="parse_concurrency">Parse concurrency</string>

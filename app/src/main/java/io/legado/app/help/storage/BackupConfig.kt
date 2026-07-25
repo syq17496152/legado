@@ -34,6 +34,8 @@ object BackupConfig {
         PreferKey.bookshelfLayout,
         PreferKey.showRss,
         PreferKey.threadCount,
+        PreferKey.searchThreadCount,
+        PreferKey.updateCacheThreadCount,
         localBookKey
     )
 
@@ -46,6 +48,8 @@ object BackupConfig {
         appCtx.getString(R.string.bookshelf_layout),
         appCtx.getString(R.string.show_rss),
         appCtx.getString(R.string.thread_count),
+        appCtx.getString(R.string.search_thread_count),
+        appCtx.getString(R.string.update_cache_thread_count),
         appCtx.getString(R.string.local_book)
     )
 
@@ -118,6 +122,8 @@ object BackupConfig {
             PreferKey.bookshelfLayout == key && ignoreBookshelfLayout -> false
             PreferKey.showRss == key && ignoreShowRss -> false
             PreferKey.threadCount == key && ignoreThreadCount -> false
+            PreferKey.searchThreadCount == key && ignoreSearchThreadCount -> false
+            PreferKey.updateCacheThreadCount == key && ignoreUpdateCacheThreadCount -> false
             else -> true
         }
     }
@@ -136,6 +142,10 @@ object BackupConfig {
         get() = ignoreConfig[PreferKey.showRss] == true
     private val ignoreThreadCount: Boolean
         get() = ignoreConfig[PreferKey.threadCount] == true
+    private val ignoreSearchThreadCount: Boolean
+        get() = ignoreConfig[PreferKey.searchThreadCount] == true
+    private val ignoreUpdateCacheThreadCount: Boolean
+        get() = ignoreConfig[PreferKey.updateCacheThreadCount] == true
     val ignoreLocalBook: Boolean
         get() = ignoreConfig[localBookKey] == true
 

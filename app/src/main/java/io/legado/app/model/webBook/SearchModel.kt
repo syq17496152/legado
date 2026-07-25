@@ -30,7 +30,7 @@ import splitties.init.appCtx
 import java.util.concurrent.Executors
 
 class SearchModel(private val scope: CoroutineScope, private val callBack: CallBack) {
-    val threadCount = AppConfig.threadCount
+    val threadCount = AppConfig.searchThreadCount
     private var searchPool: ExecutorCoroutineDispatcher? = null
     private var mSearchId = 0L
     private var searchPage = 1
@@ -53,7 +53,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
         // 导致书源搜索并发数被限制，大量书源搜索时耗时成倍增加。
         // 去掉上限后，用户配 32 则实际并发 32，搜索耗时显著降低。
         //
-        // 注意：AppConfig.threadCount 在 UI 配置项已有合理范围限制（用户自行负责），
+        // 注意：AppConfig.searchThreadCount 在 UI 配置项已有合理范围限制（用户自行负责），
         // 此处不再加额外上限，完全尊重用户配置。
         searchPool = Executors
             .newFixedThreadPool(threadCount).asCoroutineDispatcher()

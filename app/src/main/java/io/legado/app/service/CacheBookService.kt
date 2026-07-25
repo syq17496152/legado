@@ -41,9 +41,9 @@ class CacheBookService : BaseService() {
             private set
     }
 
-    private val threadCount = AppConfig.threadCount
+    private val threadCount = AppConfig.updateCacheThreadCount
     private var cachePool =
-        Executors.newFixedThreadPool(min(threadCount, AppConst.MAX_THREAD)).asCoroutineDispatcher()
+        Executors.newFixedThreadPool(threadCount).asCoroutineDispatcher()
     private var downloadJob: Job? = null
     private var notificationContent = appCtx.getString(R.string.service_starting)
     private var mutex = Mutex()

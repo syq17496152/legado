@@ -426,11 +426,42 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.enableReview, value)
         }
 
+    @Deprecated(
+        "Use searchThreadCount or updateCacheThreadCount instead",
+        level = DeprecationLevel.WARNING
+    )
     var threadCount: Int
         get() = appCtx.getPrefInt(PreferKey.threadCount, 32)
         set(value) {
             appCtx.putPrefInt(PreferKey.threadCount, value)
         }
+
+    /**
+     * 搜索类线程池并发数（书源/RSS 搜索、换源换封面、漫画搜索、阅读页搜索、书架搜索、书源校验等）
+     * 上限 128 防止 OOM；下限 1 保证至少单线程可用
+     */
+    var searchThreadCount: Int
+        get() = appCtx.getPrefInt(PreferKey.searchThreadCount, 32)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.searchThreadCount, value.coerceIn(1, 128))
+        }
+
+    /**
+     * 更新+缓存类线程池并发数（书籍目录更新、缓存下载、章节列表采集、正文内容采集、WebView 池容量等）
+     * 上限 64 防止 OOM；下限 1 保证至少单线程可用
+     */
+    var updateCacheThreadCount: Int
+        get() = appCtx.getPrefInt(PreferKey.updateCacheThreadCount, 16)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.updateCacheThreadCount, value.coerceIn(1, 64))
+        }
+
+    /**
+     * 老用户线程数配置迁移标志（内存态，仅迁移完成后的首次进入"其他设置"页时为 true，Toast 后清除）
+     * 由 App.onCreate 中 migrateThreadCountConfig() 设置
+     */
+    @Volatile
+    var migratedThreadCountJustDone: Boolean = false
 
     var rssParseConcurrency: Int
         get() = appCtx.getPrefInt(PreferKey.rssParseConcurrency, 3)

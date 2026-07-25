@@ -223,6 +223,17 @@
         <io.legado.app.lib.prefs.Preference
             android:key="threadCount"
             android:title="@string/threads_num_title"
+            app:iconSpaceReserved="false"
+            app:isPreferenceVisible="false" />
+
+        <io.legado.app.lib.prefs.Preference
+            android:key="searchThreadCount"
+            android:title="@string/search_thread_count_title"
+            app:iconSpaceReserved="false" />
+
+        <io.legado.app.lib.prefs.Preference
+            android:key="updateCacheThreadCount"
+            android:title="@string/update_cache_thread_count_title"
             app:iconSpaceReserved="false" />
 
         <io.legado.app.lib.prefs.Preference

@@ -56,15 +56,14 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URI
 import java.util.concurrent.Executors
-import kotlin.math.min
 
 /**
  * 校验书源
  */
 class CheckSourceService : BaseService() {
-    private var threadCount = AppConfig.threadCount
+    private var threadCount = AppConfig.searchThreadCount
     private var searchCoroutine =
-        Executors.newFixedThreadPool(min(threadCount, AppConst.MAX_THREAD)).asCoroutineDispatcher()
+        Executors.newFixedThreadPool(threadCount).asCoroutineDispatcher()
     private var notificationMsg = appCtx.getString(R.string.service_starting)
     private var checkJob: Job? = null
     private var originSize = 0

@@ -59,8 +59,10 @@ import io.legado.app.utils.ChineseUtils
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.getPrefBoolean
+import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.isDebuggable
+import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefInt
 import io.legado.app.utils.putPrefString
 import kotlinx.coroutines.launch
@@ -96,6 +98,8 @@ class App : Application() {
         applyDayNightInit(this)
         registerActivityLifecycleCallbacks(LifecycleHelp)
         defaultSharedPreferences.registerOnSharedPreferenceChangeListener(AppConfig)
+        // 线程池拆分配置迁移：必须在业务使用 threadCount 前执行
+        migrateThreadCountConfig()
         Coroutine.async(executeContext = IO) {
             LogUtils.init(this@App)
             LogUtils.d("App", "onCreate")
@@ -239,6 +243,49 @@ class App : Application() {
                 webChannel
             )
         )
+    }
+
+    /**
+     * 线程池拆分配置迁移：老用户首次升级到新版本时，将旧 threadCount 迁移为 searchThreadCount + updateCacheThreadCount
+     *
+     * 触发条件：pref_migrated_thread_count 标志位不存在（首次升级或备份恢复后重新迁移）
+     * 迁移规则：
+     * - 旧 threadCount != 32（用户修改过）→ 仅当新配置为默认值时才覆盖（避免覆盖备份恢复的值）
+     * - 旧 threadCount == 32（默认值）→ 保持新配置默认值（32/16）
+     * - 异常容错：SharedPreferences 读取失败不崩溃
+     */
+    private fun migrateThreadCountConfig() {
+        try {
+            if (getPrefBoolean(PreferKey.migratedThreadCount, false)) {
+                return // 已迁移过
+            }
+            @Suppress("DEPRECATION")
+            val legacyThreadCount = AppConfig.threadCount
+            var migrated = false
+            if (legacyThreadCount != 32) {
+                // 用户修改过旧配置，仅当新配置为默认值时才迁移（避免覆盖备份恢复的值）
+                if (AppConfig.searchThreadCount == 32) {
+                    AppConfig.searchThreadCount = legacyThreadCount
+                    migrated = true
+                }
+                if (AppConfig.updateCacheThreadCount == 16) {
+                    AppConfig.updateCacheThreadCount = legacyThreadCount
+                    migrated = true
+                }
+            }
+            appCtx.putPrefBoolean(PreferKey.migratedThreadCount, true)
+            if (migrated) {
+                AppConfig.migratedThreadCountJustDone = true
+            }
+            LogUtils.d("App", "线程池配置迁移完成: legacy=$legacyThreadCount, search=${AppConfig.searchThreadCount}, updateCache=${AppConfig.updateCacheThreadCount}, migrated=$migrated")
+        } catch (ex: Exception) {
+            AppLog.put("App: 线程池配置迁移失败\n${ex.localizedMessage}", ex)
+            // 即使失败也标记已迁移，避免每次启动都尝试
+            try {
+                appCtx.putPrefBoolean(PreferKey.migratedThreadCount, true)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private fun initRhino() {

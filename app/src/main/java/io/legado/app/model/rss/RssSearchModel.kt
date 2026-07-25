@@ -47,9 +47,9 @@ class RssSearchModel(
     private val scope: CoroutineScope,
     private val callBack: CallBack
 ) {
-    // 阶段11.4 问题4 修复：threadCount 改为 var，initSearchPool 时重读 AppConfig.threadCount
+    // 阶段11.4 问题4 修复：threadCount 改为 var，initSearchPool 时重读 AppConfig.searchThreadCount
     // 这样用户在其他设置调整线程数后，下次搜索立即生效（无需重启 App）
-    var threadCount = AppConfig.threadCount
+    var threadCount = AppConfig.searchThreadCount
     private var searchPool: ExecutorCoroutineDispatcher? = null
     private var mSearchId = 0L
     private var searchKey: String = ""
@@ -92,9 +92,9 @@ class RssSearchModel(
 
     private fun initSearchPool() {
         searchPool?.close()
-        // 阶段11.4 问题4 修复：重读 AppConfig.threadCount，响应用户设置变更
+        // 阶段11.4 问题4 修复：重读 AppConfig.searchThreadCount，响应用户设置变更
         // 阶段11.4 问题1 验收反馈修复：去掉 min(threadCount, AppConst.MAX_THREAD) 硬上限，
-        // 让线程池大小完全跟随用户在"其他设置→更新和搜索线程数"的配置。
+        // 让线程池大小完全跟随用户在"其他设置→搜索线程数"的配置。
         //
         // 用户反馈："配置的是32，应该使用系统配置呀，比如我手机性能好，
         // 我根据系统配置线程数配到60，你还不让我配置了？"
@@ -103,9 +103,9 @@ class RssSearchModel(
         // 导致 222 个源最坏需要 740s 才能完成搜索（9 并发 × 30s 超时 × 24.67 批次）。
         // 去掉上限后，用户配 32 则实际并发 32，最坏 222/32×30s ≈ 208s（提升 3.5 倍）。
         //
-        // 注意：AppConfig.threadCount 在 UI 配置项已有合理范围限制（用户自行负责），
+        // 注意：AppConfig.searchThreadCount 在 UI 配置项已有合理范围限制（用户自行负责），
         // 此处不再加额外上限，完全尊重用户配置。
-        threadCount = AppConfig.threadCount
+        threadCount = AppConfig.searchThreadCount
         searchPool = Executors
             .newFixedThreadPool(threadCount).asCoroutineDispatcher()
     }

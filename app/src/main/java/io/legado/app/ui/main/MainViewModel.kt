@@ -6,7 +6,6 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import androidx.recyclerview.widget.RecyclerView.RecycledViewPool
 import io.legado.app.base.BaseViewModel
-import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookType
 import io.legado.app.constant.EventBus
@@ -49,8 +48,9 @@ import io.legado.app.model.RuleUpdate
 import io.legado.app.model.SourceCallBack
 
 class MainViewModel(application: Application) : BaseViewModel(application) {
-    private var threadCount = AppConfig.threadCount
-    private var poolSize = min(threadCount, AppConst.MAX_THREAD)
+    // upTocPool 归更新+缓存类（书籍目录更新、缓存下载）
+    private var threadCount = AppConfig.updateCacheThreadCount
+    private var poolSize = threadCount
     private var upTocPool = Executors.newFixedThreadPool(poolSize).asCoroutineDispatcher()
     private val waitUpTocBooks = ConcurrentLinkedQueue<String>()
     private val onUpTocBooks = ConcurrentHashMap.newKeySet<String>()
@@ -79,17 +79,32 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
     }
 
     fun upPool() {
-        threadCount = AppConfig.threadCount
+        threadCount = AppConfig.updateCacheThreadCount
         if (upTocJob?.isActive == true || cacheBookJob?.isActive == true) {
             return
         }
-        val newPoolSize = min(threadCount, AppConst.MAX_THREAD)
+        val newPoolSize = threadCount
         if (poolSize == newPoolSize) {
             return
         }
         poolSize = newPoolSize
         upTocPool.close()
         upTocPool = Executors.newFixedThreadPool(poolSize).asCoroutineDispatcher()
+    }
+
+    /**
+     * 搜索线程数变更回调（仅记录日志，SearchModel 下次搜索自动重建 searchPool）
+     */
+    fun onSearchThreadCountChanged() {
+        AppLog.put("搜索线程数变更: ${AppConfig.searchThreadCount}（下次搜索生效）")
+    }
+
+    /**
+     * 更新+缓存线程数变更回调（重读配置并重建 upTocPool）
+     */
+    fun onUpdateCacheThreadCountChanged() {
+        AppLog.put("更新+缓存线程数变更: ${AppConfig.updateCacheThreadCount}")
+        upPool()
     }
 
     fun isUpdate(bookUrl: String): Boolean {

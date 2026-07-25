@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.View
+import android.widget.Toast
 import androidx.core.view.postDelayed
 import androidx.fragment.app.activityViewModels
 import androidx.preference.ListPreference
@@ -71,7 +72,10 @@ class OtherConfigFragment : PreferenceFragment(),
         addPreferencesFromResource(R.xml.pref_config_other)
         upPreferenceSummary(PreferKey.userAgent, AppConfig.userAgent)
         upPreferenceSummary(PreferKey.preDownloadNum, AppConfig.preDownloadNum.toString())
+        @Suppress("DEPRECATION")
         upPreferenceSummary(PreferKey.threadCount, AppConfig.threadCount.toString())
+        upPreferenceSummary(PreferKey.searchThreadCount, AppConfig.searchThreadCount.toString())
+        upPreferenceSummary(PreferKey.updateCacheThreadCount, AppConfig.updateCacheThreadCount.toString())
         upPreferenceSummary(PreferKey.rssParseConcurrency, AppConfig.rssParseConcurrency.toString())
         upPreferenceSummary(PreferKey.imageLoadConcurrency, AppConfig.imageLoadConcurrency.toString())
         upPreferenceSummary(PreferKey.webPort, AppConfig.webPort.toString())
@@ -92,6 +96,11 @@ class OtherConfigFragment : PreferenceFragment(),
         activity?.setTitle(R.string.other_setting)
         preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
         listView.setEdgeEffectColor(primaryColor)
+        // 老用户线程数配置迁移后首次进入提示
+        if (AppConfig.migratedThreadCountJustDone) {
+            AppConfig.migratedThreadCountJustDone = false
+            context?.let { Toast.makeText(it, R.string.migrated_thread_count_toast, Toast.LENGTH_LONG).show() }
+        }
     }
 
     override fun onDestroy() {
@@ -118,13 +127,36 @@ class OtherConfigFragment : PreferenceFragment(),
                     AppConfig.preDownloadNum = it
                 }
 
-            PreferKey.threadCount -> NumberPickerDialog(requireContext())
-                .setTitle(getString(R.string.threads_num_title))
-                .setMaxValue(999)
+            PreferKey.threadCount -> {
+                @Suppress("DEPRECATION")
+                val legacy = AppConfig.threadCount
+                NumberPickerDialog(requireContext())
+                    .setTitle(getString(R.string.threads_num_title))
+                    .setMaxValue(999)
+                    .setMinValue(1)
+                    .setValue(legacy)
+                    .show {
+                        @Suppress("DEPRECATION")
+                        AppConfig.threadCount = it
+                    }
+            }
+
+            PreferKey.searchThreadCount -> NumberPickerDialog(requireContext())
+                .setTitle(getString(R.string.search_thread_count_title))
+                .setMaxValue(128)
                 .setMinValue(1)
-                .setValue(AppConfig.threadCount)
+                .setValue(AppConfig.searchThreadCount)
                 .show {
-                    AppConfig.threadCount = it
+                    AppConfig.searchThreadCount = it
+                }
+
+            PreferKey.updateCacheThreadCount -> NumberPickerDialog(requireContext())
+                .setTitle(getString(R.string.update_cache_thread_count_title))
+                .setMaxValue(64)
+                .setMinValue(1)
+                .setValue(AppConfig.updateCacheThreadCount)
+                .show {
+                    AppConfig.updateCacheThreadCount = it
                 }
 
             PreferKey.rssParseConcurrency -> NumberPickerDialog(requireContext())
@@ -204,8 +236,22 @@ class OtherConfigFragment : PreferenceFragment(),
             }
 
             PreferKey.threadCount -> {
-                upPreferenceSummary(key, AppConfig.threadCount.toString())
+                @Suppress("DEPRECATION")
+                val legacySummary = AppConfig.threadCount.toString()
+                upPreferenceSummary(key, legacySummary)
                 postEvent(PreferKey.threadCount, "")
+            }
+
+            PreferKey.searchThreadCount -> {
+                upPreferenceSummary(key, AppConfig.searchThreadCount.toString())
+                postEvent(PreferKey.searchThreadCount, "")
+                context?.let { Toast.makeText(it, R.string.search_thread_count_toast, Toast.LENGTH_SHORT).show() }
+            }
+
+            PreferKey.updateCacheThreadCount -> {
+                upPreferenceSummary(key, AppConfig.updateCacheThreadCount.toString())
+                postEvent(PreferKey.updateCacheThreadCount, "")
+                context?.let { Toast.makeText(it, R.string.update_cache_thread_count_toast, Toast.LENGTH_SHORT).show() }
             }
 
             PreferKey.rssParseConcurrency -> {
@@ -289,6 +335,12 @@ class OtherConfigFragment : PreferenceFragment(),
                 getString(R.string.pre_download_s, value)
 
             PreferKey.threadCount -> preference.summary = getString(R.string.threads_num, value)
+
+            PreferKey.searchThreadCount -> preference.summary =
+                getString(R.string.search_thread_count_summary, value)
+
+            PreferKey.updateCacheThreadCount -> preference.summary =
+                getString(R.string.update_cache_thread_count_summary, value)
 
             PreferKey.rssParseConcurrency -> preference.summary =
                 getString(R.string.rss_parse_concurrency_summary, value)

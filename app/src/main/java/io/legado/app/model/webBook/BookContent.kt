@@ -106,7 +106,7 @@ object BookContent {
                 for (urlStr in contentData.second) {
                     emit(urlStr)
                 }
-            }.mapAsync(AppConfig.threadCount) { urlStr ->
+            }.mapAsync(AppConfig.updateCacheThreadCount) { urlStr ->
                 val analyzeUrl = AnalyzeUrl(
                     mUrl = urlStr,
                     source = bookSource,

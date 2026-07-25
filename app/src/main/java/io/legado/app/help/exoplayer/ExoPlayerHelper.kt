@@ -81,7 +81,15 @@ object ExoPlayerHelper {
             path.endsWith(".webm") -> MimeTypes.VIDEO_WEBM
             path.endsWith(".flv") -> "video/x-flv"
             path.endsWith(".ts") -> MimeTypes.VIDEO_MP2T
-            lower.contains("format=m3u8") || lower.contains("type=m3u8") -> MimeTypes.APPLICATION_M3U8
+            // HLS 检测增强：支持 query 参数中的 m3u8 标识
+            // 场景：部分站点 URL 结构为 /path?m3u8=1&xxx/index.m3u8，
+            //       substringBefore("?") 截断后 path 不以 .m3u8 结尾，原逻辑漏判
+            // 证据：站点B ruleContent 必须追加 format=m3u8 才能触发 HLS 检测
+            // 影响范围：仅增加 HLS 识别场景，不破坏原有 path 后缀检测
+            // 已知上限：URL 中含 index.m3u8 字符串但非 HLS 的极罕见场景会误判，
+            //           ExoPlayer 解析失败后会回退，风险可接受
+            lower.contains("format=m3u8") || lower.contains("type=m3u8") ||
+                lower.contains("m3u8") || lower.contains("index.m3u8") -> MimeTypes.APPLICATION_M3U8
             else -> null
         }
     }

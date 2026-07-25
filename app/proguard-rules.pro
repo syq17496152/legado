@@ -170,3 +170,9 @@ cn.hutool.core.util.**{*;}
     public <init>(android.content.Context, android.util.AttributeSet);
     public <init>(android.content.Context, android.util.AttributeSet, int);
 }
+
+# 线程池拆分：保留 AppConfig.threadCount 兼容字段（@Deprecated 但备份恢复仍需读写）
+# 防止 R8 在 release 构建中移除该字段导致旧版本备份恢复失败
+-keepclassmembers class io.legado.app.help.config.AppConfig {
+    var threadCount;
+}

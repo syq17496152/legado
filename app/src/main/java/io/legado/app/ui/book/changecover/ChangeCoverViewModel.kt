@@ -34,10 +34,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.Collections
 import java.util.concurrent.Executors
-import kotlin.math.min
 
 class ChangeCoverViewModel(application: Application) : BaseViewModel(application) {
-    private val threadCount = AppConfig.threadCount
+    private val threadCount = AppConfig.searchThreadCount
     private var searchPool: ExecutorCoroutineDispatcher? = null
     private var searchSuccess: ((SearchBook) -> Unit)? = null
     private var upAdapter: (() -> Unit)? = null
@@ -99,7 +98,7 @@ class ChangeCoverViewModel(application: Application) : BaseViewModel(application
 
     private fun initSearchPool() {
         searchPool = Executors
-            .newFixedThreadPool(min(threadCount, AppConst.MAX_THREAD)).asCoroutineDispatcher()
+            .newFixedThreadPool(threadCount).asCoroutineDispatcher()
     }
 
     private fun startSearch() {

@@ -381,6 +381,12 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         observeEvent<String>(PreferKey.threadCount) {
             viewModel.upPool()
         }
+        observeEvent<String>(PreferKey.searchThreadCount) {
+            viewModel.onSearchThreadCountChanged()
+        }
+        observeEvent<String>(PreferKey.updateCacheThreadCount) {
+            viewModel.onUpdateCacheThreadCountChanged()
+        }
     }
 
     private fun upBottomMenu() {

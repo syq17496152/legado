@@ -282,6 +282,9 @@ object Restore {
                 }
             }
             edit.apply()
+            // 线程池拆分：恢复后清除迁移标志位，触发下次启动时重新迁移
+            // 这样旧版本备份（只有 threadCount）恢复后能正确迁移，新版本备份（已有新配置）恢复后不会覆盖
+            appCtx.defaultSharedPreferences.edit().remove(PreferKey.migratedThreadCount).apply()
         }
         appCtx.getSharedPreferences(path, "videoConfig")?.all?.let { map ->
             appCtx.getSharedPreferences(VIDEO_PREF_NAME, Context.MODE_PRIVATE).edit().apply {

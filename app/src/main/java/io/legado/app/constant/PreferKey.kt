@@ -56,6 +56,10 @@ object PreferKey {
     const val backupPath = "backupUri"
     const val restoreIgnore = "restoreIgnore"
     const val threadCount = "threadCount"
+    // 线程池拆分：搜索类独立线程池 + 更新+缓存类独立线程池
+    const val searchThreadCount = "searchThreadCount"
+    const val updateCacheThreadCount = "updateCacheThreadCount"
+    const val migratedThreadCount = "migratedThreadCount" // 老用户迁移标志位（boolean）
     const val rssParseConcurrency = "rssParseConcurrency"
     const val imageLoadConcurrency = "imageLoadConcurrency"
     const val webPort = "webPort"

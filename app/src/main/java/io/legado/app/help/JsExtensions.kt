@@ -126,7 +126,7 @@ interface JsExtensions : JsEncodeUtils {
     }
     fun ajaxAll(urlList: Array<String>, skipRateLimit: Boolean): Array<StrResponse> {
         return runBlocking(context) {
-            urlList.asFlow().mapAsync(AppConfig.threadCount) { url ->
+            urlList.asFlow().mapAsync(AppConfig.searchThreadCount) { url ->
                 val analyzeUrl = AnalyzeUrl(
                     url,
                     source = getSource(),
@@ -145,7 +145,7 @@ interface JsExtensions : JsEncodeUtils {
     }
     fun ajaxTestAll(urlList: Array<String>, timeout: Int, skipRateLimit: Boolean): Array<StrResponse> {
         return runBlocking(context) {
-            urlList.asFlow().mapAsync(AppConfig.threadCount) { url ->
+            urlList.asFlow().mapAsync(AppConfig.searchThreadCount) { url ->
                 val analyzeUrl = AnalyzeUrl(
                     url,
                     source = getSource(),

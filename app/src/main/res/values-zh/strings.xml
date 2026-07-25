@@ -230,6 +230,13 @@
     <string name="download_count">已下载 %1$d/%2$d</string>
     <string name="import_select_book">导入选择书籍</string>
     <string name="threads_num_title">更新和搜索线程数（太多会卡顿）</string>
+    <string name="search_thread_count_title">搜索线程数</string>
+    <string name="search_thread_count_summary">控制书源/RSS 搜索、换源换封面、漫画搜索、阅读页搜索、书架搜索、发现页探索、书源校验等场景的并发数（当前 %s，默认 32，上限 128）</string>
+    <string name="update_cache_thread_count_title">更新和缓存线程数</string>
+    <string name="update_cache_thread_count_summary">控制书籍目录更新、缓存下载、章节列表采集、正文内容采集、WebView 池容量等场景的并发数（当前 %s，默认 16，上限 64）</string>
+    <string name="search_thread_count_toast">配置已保存，将在下次搜索时生效</string>
+    <string name="update_cache_thread_count_toast">配置已立即生效</string>
+    <string name="migrated_thread_count_toast">已根据您之前的线程数配置自动迁移为搜索/更新+缓存两个独立配置</string>
     <string name="change_icon">切换图标</string>
     <string name="remove_from_bookshelf">删除书籍</string>
     <string name="start_read">开始阅读</string>
@@ -802,6 +809,8 @@
     <string name="read_record_summary">阅读时间记录</string>
     <string name="local_tts">本地 TTS</string>
     <string name="thread_count">线程数</string>
+    <string name="search_thread_count">搜索线程数</string>
+    <string name="update_cache_thread_count">更新和缓存线程数</string>
     <string name="rss_parse_concurrency">RSS解析并发</string>
     <string name="rss_parse_concurrency_summary">RSS文章解析并发数（当前 %s，默认3）</string>
     <string name="parse_concurrency">解析并发</string>

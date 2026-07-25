@@ -145,7 +145,7 @@ object CacheBook {
             }
         }.onStart {
             postEvent(EventBus.UP_DOWNLOAD_STATE, "")
-        }.onEachParallel(AppConfig.threadCount) {
+        }.onEachParallel(AppConfig.updateCacheThreadCount) {
             coroutineScope {
                 it.download(this, context)
             }

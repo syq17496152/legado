@@ -41,7 +41,7 @@ object WebViewPool {
     @Volatile
     private var needInitialize = true
     private val poolLock = ReentrantLock()
-    private val CACHED_WEB_VIEW_MAX_NUM = max(AppConfig.threadCount / 10, 5) // 池子总容量（闲置+使用）
+    private val CACHED_WEB_VIEW_MAX_NUM = max(AppConfig.updateCacheThreadCount / 10, 5) // 池子总容量（闲置+使用）
     private const val IDLE_TIME_OUT: Long = 5 * 60 * 1000 // 闲置5分钟后销毁
     private const val IDLE_TIME_OUT_LAST: Long = 30 * 60 * 1000 // 最后一个闲置30分钟后销毁
     private val cleanupScope by lazy { CoroutineScope(Dispatchers.IO + SupervisorJob()) }
