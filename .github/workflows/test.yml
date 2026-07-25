@@ -169,9 +169,9 @@ jobs:
       - name: Release Apk Sign
         run: |
           echo "给apk增加签名"
-          echo "${{ secrets.SIGNING_KEY_BASE64 }}" | base64 -d > $GITHUB_WORKSPACE/app/legado.jks
+          echo "${{ secrets.SIGNING_KEY_BASE64 }}" | base64 -d > $GITHUB_WORKSPACE/app/legado_release.jks
           cat >> $GITHUB_WORKSPACE/gradle.properties << EOF
-          RELEASE_STORE_FILE=./legado.jks
+          RELEASE_STORE_FILE=./legado_release.jks
           RELEASE_KEY_ALIAS=${{ secrets.KEY_ALIAS }}
           RELEASE_STORE_PASSWORD=${{ secrets.KEY_STORE_PASSWORD }}
           RELEASE_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
