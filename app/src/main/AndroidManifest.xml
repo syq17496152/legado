@@ -179,6 +179,16 @@
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
             android:supportsPictureInPicture="true"
             android:launchMode="singleTask" />
+        <!-- 图片浏览器界面（image-gallery-activity spec） -->
+        <activity
+            android:name="io.legado.app.ui.image.ImageGalleryActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+            android:launchMode="singleTask" />
+        <!-- 图片大图模式（image-player-vertical-canvas-optimization spec，V4 Phase 1.3 新增） -->
+        <activity
+            android:name="io.legado.app.ui.image.ImageDetailActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+            android:theme="@style/AppTheme.ImageDetail" />
         <!-- 授权界面 -->
         <activity
             android:name="io.legado.app.lib.permission.PermissionActivity"

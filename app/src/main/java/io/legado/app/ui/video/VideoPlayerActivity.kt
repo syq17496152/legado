@@ -105,6 +105,7 @@ import io.noties.markwon.html.HtmlPlugin
 import io.noties.markwon.image.glide.GlideImagesPlugin
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -162,6 +163,25 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     internal var isFullScreen = false
     private var orientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     private var menuCustomBtn: MenuItem? = null
+
+    /**
+     * T2.8: initSource 协程 Job 引用（onPause 时取消，解决 Bug-25：onPause 后 initSource 仍运行导致资源泄漏）
+     */
+    private var initSourceJob: Job? = null
+
+    /**
+     * T1.13 方案B: VideoPlay 状态快照（解决 Bug-14 + Bug-24 + Bug-6：8 实例快速切换状态串扰）
+     *
+     * 思路：onActivityCreated 时保存 VideoPlay 单例的关键状态快照到 Activity 字段，
+     * 后续此 Activity 内部优先使用快照字段，避免被其他 Activity 实例修改 VideoPlay 单例后状态串扰。
+     *
+     * 注：本方案为"状态快照"（方案B），保留 VideoPlay object 单例不变，风险最低。
+     * 后续如需彻底解决，可升级为方案A（改为 class，每个 Activity 持有独立实例）。
+     */
+    private var snapshotVideoUrl: String? = null
+    private var snapshotVideoTitle: String? = null
+    private var snapshotSingleUrl: Boolean = false
+    private var snapshotInBookshelf: Boolean = true
     private val bookSourceEditResult =
         registerForActivityResult(StartActivityContract(BookSourceEditActivity::class.java)) {
             if (it.resultCode == RESULT_OK) {
@@ -214,7 +234,14 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             val bookUrl = intent.getStringExtra("bookUrl")
             val record = intent.getStringExtra("record")
             VideoPlay.inBookshelf = intent.getBooleanExtra("inBookshelf", true)
-            lifecycleScope.launch {
+            // T1.13 方案B: 保存 VideoPlay 状态快照到 Activity 字段（解决 8 实例快速切换状态串扰）
+            snapshotVideoUrl = VideoPlay.videoUrl
+            snapshotVideoTitle = VideoPlay.videoTitle
+            snapshotSingleUrl = VideoPlay.singleUrl
+            snapshotInBookshelf = VideoPlay.inBookshelf
+            AppLog.put("VideoPlayerActivity state snapshot saved: singleUrl=$snapshotSingleUrl, inBookshelf=$snapshotInBookshelf")
+            // T2.8: 保存 initSource 协程 Job 引用，onPause 时取消
+            initSourceJob = lifecycleScope.launch {
                 if (!VideoPlay.initSource(sourceKey, sourceType, bookUrl, record)) {
                     finish()
                     return@launch
@@ -230,6 +257,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         } else {
             // 非新建恢复：从悬浮窗返回，也用 ViewPager2 模式
             VideoPlay.isResumeFromFloat = true
+            // T1.13 方案B: 恢复场景也保存状态快照
+            snapshotVideoUrl = VideoPlay.videoUrl
+            snapshotVideoTitle = VideoPlay.videoTitle
+            snapshotSingleUrl = VideoPlay.singleUrl
+            snapshotInBookshelf = VideoPlay.inBookshelf
             switchToViewPagerMode()
             initView()
             upView()
@@ -240,6 +272,20 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 return@addCallback
             }
             finish()
+        }
+    }
+
+    /**
+     * T2.8: onPause 取消 initSource 协程（解决 Bug-25：onPause 后 initSource 仍运行导致资源泄漏）
+     *
+     * 场景：用户快速切 Activity 时，initSource 协程可能在 onPause 后仍在运行（如等待网络请求），
+     * 导致资源泄漏 + 状态污染。onPause 时主动取消。
+     */
+    override fun onPause() {
+        super.onPause()
+        if (initSourceJob?.isActive == true) {
+            initSourceJob?.cancel()
+            AppLog.put("VideoPlayerActivity onPause: initSourceJob cancelled")
         }
     }
 
@@ -1300,6 +1346,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             showVideoPlayErrorDialog(it)
         }
 
+        // exoplayer-resilience Layer 2：ExoPlayer 累计失败达阈值后自动切换到 WebView 模式
+        // 载荷：Triple<url, title, headers>
+        observeEvent<Triple<String, String, Map<String, String>>>(EventBus.VIDEO_FALLBACK_WEBVIEW) { (url, title, headers) ->
+            currentFragment?.switchToWebViewMode(url, title, headers)
+        }
+
     }
 
     /**
@@ -1500,6 +1552,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
     override fun onStop() {
         super.onStop()
+        // T2.12: Activity 切到后台时暂停视频播放（解决 Bug-26：onStop 后视频仍播放导致资源泄漏+音频泄漏）
+        // 注：deactivatePlayer 内部会判断 isActivated，仅在活跃时暂停
+        currentFragment?.deactivatePlayer()
         if (initGetter) {
             glideImageGetter.stop()
         }

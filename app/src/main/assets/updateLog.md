@@ -5,7 +5,30 @@
 ## cronet版本: 150.0.7871.128
 
 **2026/07/26**
+- 新增图片订阅源多图浏览器：图片类型订阅源（如漫画/图集站点）点击文章详情后，原仅弹框显示单张图片，现改为进入全屏图片浏览器 Activity，支持左右滑动切换图集内多张图片、上下滑动切换不同文章图集，双指缩放查看细节，底部工具栏支持顺时针旋转 90°、逆时针旋转 90°、重置视图（旋转+缩放恢复默认），单击切换沉浸式全屏，退出后列表自动滚动到之前浏览的文章位置
+- 重构图片浏览器为垂直画布架构：原外层 ViewPager2（切文章）+ 内层 ViewPager2（切图片）的嵌套结构改为单 RecyclerView 垂直画布，所有文章的图片缩略图按顺序流式展示在同一画布，文章间用"—— 下一篇 ——"分隔符区隔，缩略图宽度铺满屏幕、高度按图片实际宽高比动态调整（默认 60% 屏幕高），点击缩略图进入大图模式（PhotoView 双指缩放+旋转+平移），缩略图模式下预加载相邻图片到缓存，滑动时秒开
+- 新增图片浏览器分页加载：垂直画布滚动到剩余未可见项数 ≤ 3 时自动触发加载下一篇文章的图片列表，文章间用分隔符区分，底部 footer 显示加载中/失败重试/没有更多三种状态，支持跨文章连续浏览不中断，加载失败可点击重试按钮重新加载
+- 优化图片加载并发性能：图片加载线程数复用"其他设置"中"图片加载并发"配置（默认5），ViewModel 协程池大小复用"更新和缓存线程数"配置（默认16），用户调整配置后立即生效无需重启 App，协程池重建时安全关闭旧池子（awaitTermination 5秒超时保护）
+- 新增图片防盗链 WebView 预热：首次加载图片成功后提取所有图片 URL 的 CDN 域名，串行队列启动隐藏 WebView 加载各域名根页面获取 Cloudflare 等 JS 挑战 cookies，预热完成后图片请求自动携带 cookies 绕过防盗链，解决部分图集站点直接请求图片返回 403 的问题，Activity 销毁时主动调用 WebView.destroy 释放内存避免泄漏
+- 优化图片加载失败降级链：Glide 加载图片失败时按多级降级重试（Glide 重试跳过内存缓存→OkHttp 强制抓取跳过磁盘缓存→错误占位图），失败时日志记录 URL 哈希值和重试次数便于定位问题，避免单次网络抖动导致图片永久加载失败
+- 优化图片浏览器并发安全：图片 URL 列表使用 MutableStateFlow 封装避免多线程读写冲突，已加载文章索引集合和已预加载文章集合使用 ConcurrentHashMap.newKeySet 线程安全集合，所有状态修改方法加 @Synchronized 同步保护，解决快速滑动切换文章时偶发 ConcurrentModificationException 崩溃
 - 优化视频播放器全屏按钮：横屏视频和竖屏视频都展示全屏按钮，竖屏视频点击全屏按钮进入竖屏全屏模式（原来竖屏视频隐藏全屏按钮且强制横屏全屏导致黑边），提升竖屏视频的观看体验
+- 新增视频格式预嗅探机制：ExoPlayer 播放视频前通过 HTTP Range 请求读取前 1KB 数据匹配 magic number（MP4 ftyp/HLS #EXTM3U/FLV/TS/MKV EBML/DASH MPD）识别真实视频格式，避免依赖 URL 后缀误判（如 play.php?id=xxx 返回 mp4 但被误判为 m3u8）；嗅探结果 LRU 缓存（容量 100，1 小时 TTL），二次播放同 URL 0 延迟命中
+- 修复 ExoPlayer 3002 解析错误：原视频类型检测的 else 兜底强制返回 HLS 流类型，导致任何识别不出的 URL 被误判为 m3u8，ExoPlayer 用 HLS 解析器解析 mp4 二进制流抛 3002 PARSING_CONTAINER_MALFORMED；现改为返回 null 让 ExoPlayer 自动推断，并配合预嗅探机制精准识别
+- 新增 ExoPlayer 自动 WebView 降级：ExoPlayer 遇到不可恢复错误（解析错误/解码器初始化失败/解码失败）累计 3 次后，自动切换到 WebView 播放模式，避免用户卡在错误界面，切换时 Toast 提示用户已切换
+- 优化视频播放器嗅探能力对齐浏览器：ExoPlayer 播放视频前通过 7 维度交叉验证识别真实视频格式（Content-Type/最终URL后缀/初始URL后缀/Magic Number签名/主动下载清单内容验证#EXTM3U和<MPD>/MP4 moov位置/Accept-Ranges断点续传），识别能力从原 6 项签名扩展到 17 项（新增 WebM/AVI/WMV/MPEG-PS/OGG/MP3/ADTS/WAV/FLAC 等），AVI/WAV 二次校验 RIFF 容器偏移 8 内容，MPEG-TS 多次匹配避免单字节误判，Range 请求从 1KB 提升到 8KB，解决动态 URL（play.php?id=xxx）和重定向后 URL 变化导致的视频类型误判
+- 优化视频播放器 MediaSource 智能选择：原视频一律用 ProgressiveMediaSource 解析，HLS/DASH 流走错路径导致播放失败；现按嗅探结果自动选择 HlsMediaSource/DashMediaSource/SsMediaSource/ProgressiveMediaSource，HLS 流正确解析 m3u8 清单分片，DASH 流正确解析 mpd 清单
+- 新增视频播放器降级链：ExoPlayer 单一 MediaSource 播放失败时自动尝试下一个（HLS→DASH→Progressive 串行），解析错误（3002/3004/无法识别流格式）自动切换下一个 MediaSource 重试，全部失败才降级到 WebView，对齐浏览器渐进增强策略，解决"时好时坏，有的能播有的播不了"问题
+- 优化视频播放器请求头对齐浏览器：User-Agent 从 "Legado/1.0 (Linux; U; Android 13)" 替换为浏览器 UA（Chrome 120 移动版），解决部分站点 CDN 拒绝非浏览器 UA 返回 403/401；OkHttp 启用 followRedirects 跟随 HTTP↔HTTPS 跨协议重定向，记录重定向后的最终 URL 用于嗅探，解决 302 跳转后 Content-Type 变化未感知导致抓取失败
+- 优化视频播放器 AES-128 加密流支持：ExoPlayer 内置支持 #EXT-X-KEY:METHOD=AES-128 标签的 m3u8 加密流，resolvingDataSource 注入 Referer/Cookie/UA 防盗链头，ExoPlayer 内部用此 factory 获取密钥，解决加密 HLS 流播放黑屏问题
+- 修复视频地址获取卡死 60 秒问题：VideoUrlExtractor 三层降级采集新增超时控制——第一层 MacCMS 解析 6 秒超时、整个 extractVideoUrlForEpisode 12 秒总超时（withTimeoutOrNull），原累计超时可达 70 秒导致用户长时间等待黑屏，现超时后立即降级到下一层或 WebView 模式
+- 修复视频播放器协程取消不响应问题：嗅探协程在 execute() 返回后检查 isActive、readLimitedBytes 循环内检查 isActive、applyMediaSourceByType 入口检查 isReleased + scope.isActive，三重取消守卫确保 Activity 销毁后嗅探任务立即停止，避免资源泄漏和幽灵日志；CancellationException 严格重新抛出不被 runCatching 吞掉，保留协程结构化取消语义
+- 修复视频播放器状态串扰问题：Exo2MediaPlayer 新增 isReleased 标志位 + releaseSniffResources() 方法（VideoFragment.onDestroyView 调用），prepareAsyncInternal 重复初始化检测（同一 URL+headers 才跳过，避免误伤用户快速切集），状态变量重置（currentSniffResult/fallbackTypes/currentFallbackIndex），mInternalPlayer 显式 release 旧实例避免资源竞争，VideoPlayerActivity 保存 VideoPlay 状态快照（snapshotVideoUrl/snapshotVideoTitle 等）防止 8 实例快速切换时单例状态被覆盖
+- 修复视频播放器 BUFFERING 卡死问题：新增 12 秒 BUFFERING 超时检测（bufferingTimeoutHandler），超时后自动尝试下一个 MediaSource（tryNextFallback），避免弱网下用户长时间卡在缓冲界面无响应；onPause 取消 initSource 协程（initSourceJob）、onStop 暂停视频播放（deactivatePlayer），防止 Activity 切到后台后嗅探任务继续运行浪费电量
+- 修复视频播放器非视频流 URL 误传 ExoPlayer 问题：VideoUrlExtractor 第三层失败返回 null（不返回可能是非视频流的 resolvedUrl）、VideoPlay 兜底返回 null（不返回 rssArticle.link），ExoPlayer 不再加载非视频流 URL 触发 UnrecognizedInputFormatException，改为触发 VIDEO_FALLBACK_WEBVIEW 事件切换到 WebView 播放模式
+- 优化视频播放器嗅探缓存复用：sniffVideoType 集成 MimeSnifferCache（LRU 容量 100，1 小时 TTL），同一 URL 二次播放 0 延迟命中缓存，避免重复发起 Range 请求；VideoUrlExtractor 各阶段新增 putInfo 级别耗时日志（extractPrecise/R5 静态解析/R5 网络抓包），release 包可见便于定位抓取失败根因
+- 修复图片浏览器切换文章时崩溃问题：ImageGalleryActivity 快速滚动时 Glide.pauseRequests/resumeRequests 回调在 Activity 销毁过程中（onDetachedFromWindow→stopScroll→onScrollStateChanged）被触发，此时调用 Glide.with(activity) 抛 IllegalArgumentException: destroyed activity 导致崩溃；现增加 isDestroyed/isFinishing 守卫，销毁过程中跳过 Glide 调用
+- 修复视频播放器 m3u8 流地址误走 WebView 降级问题：VideoUrlExtractor.extractVideoUrlForEpisode 入口缺少"URL 已是视频流格式"快速路径判断，导致已解析出的 .m3u8/.mpd/.mp4 等视频流 URL 走完整三层解析（MacCMS+DOM+WebView 抓包），12 秒超时返回 null 触发 WebView 降级（WebView 不支持 HLS 播放同样失败）；现入口识别 .m3u8/.mpd/.mp4/.flv/.mkv/.webm 后缀直接返回 URL 跳过三层解析，秒级交给 ExoPlayer 播放，解决多线路多集播放回归问题
 
 **2026/07/25**
 - 新增书源线程池拆分配置：原"更新和搜索线程数"拆分为"搜索线程数"（默认32，上限128）和"更新和缓存线程数"（默认16，上限64）两个独立配置项，在"其他设置"中可分别自定义；搜索类业务（书源/RSS搜索、换源换封面、漫画搜索、阅读页搜索、书架搜索、发现页探索、书源校验）使用搜索线程池，更新+缓存类业务（目录更新、缓存下载、章节列表采集、正文内容采集、WebView池容量）使用更新+缓存线程池，两个线程池独立工作互不影响

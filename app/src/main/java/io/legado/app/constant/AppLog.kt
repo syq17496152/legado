@@ -17,6 +17,10 @@ object AppLog {
     const val TAG_DATA = "DataLayer"
     const val TAG_RSS = "Rss"
     const val TAG_CONTENT = "ContentProcess"
+    // V3 新增：图片垂直画布模块 Tag（对应 tasks.md §AOAdapt 日志模板）
+    const val TAG_IMAGE_CANVAS = "ImageCanvas"
+    const val TAG_IMAGE_DETAIL = "ImageDetail"
+    const val TAG_IMAGE_PLAY = "ImagePlay"
 
     enum class Level { ERROR, WARN, INFO, DEBUG }
 

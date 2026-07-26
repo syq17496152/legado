@@ -83,6 +83,15 @@ class OkHttpStreamFetcher(
 
         val requestBuilder = Request.Builder().url(analyzedUrl.toStringUrl())
         requestBuilder.addHeaders(analyzedUrl.headers)
+        // 修复（image-gallery）：图片防盗链失败，如果订阅源 header 未配置 Referer，用 refererOption 兜底
+        // 网页模式 WebView 会自动带文章页 URL 作为 Referer，图片模式需要手动注入
+        val referer = options.get(OkHttpModelLoader.refererOption)
+        if (!referer.isNullOrBlank() && analyzedUrl.headers["Referer"] == null
+            && analyzedUrl.headers["referer"] == null
+        ) {
+            requestBuilder.addHeader("Referer", referer)
+            Log.e(TAG, "inject Referer from refererOption: refererLen=${referer.length}")
+        }
         val request: Request = requestBuilder.build()
         this.callback = callback
         call = if (manga) {

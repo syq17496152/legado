@@ -24,6 +24,7 @@ import io.legado.app.databinding.ViewLoadMoreBinding
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.VideoPlay
+import io.legado.app.ui.image.ImagePlay
 import io.legado.app.ui.rss.read.ReadRss
 import io.legado.app.ui.widget.recycler.LoadMoreView
 import io.legado.app.ui.widget.recycler.VerticalDivider
@@ -210,6 +211,14 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
         // 阶段8 F11：位置记忆——从播放器返回时滚动到退出时正在看的文章位置
         VideoPlay.lastPlayedArticleLink?.let { link ->
             VideoPlay.lastPlayedArticleLink = null  // 一次性使用，清除标记
+            val position = adapter.getItems().indexOfFirst { it.link == link }
+            if (position >= 0) {
+                binding.recyclerView.scrollToPosition(position)
+            }
+        }
+        // image-gallery-activity: 从图片浏览器返回时滚动到退出时正在看的文章位置
+        ImagePlay.lastPlayedArticleLink?.let { link ->
+            ImagePlay.lastPlayedArticleLink = null  // 一次性使用，清除标记
             val position = adapter.getItems().indexOfFirst { it.link == link }
             if (position >= 0) {
                 binding.recyclerView.scrollToPosition(position)

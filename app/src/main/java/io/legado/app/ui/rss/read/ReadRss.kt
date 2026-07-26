@@ -3,19 +3,15 @@ package io.legado.app.ui.rss.read
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import io.legado.app.constant.AppLog
 import io.legado.app.constant.SourceType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssReadRecord
 import io.legado.app.data.entities.RssSource
-import io.legado.app.exception.ContentEmptyException
 import io.legado.app.model.VideoPlay
-import io.legado.app.model.rss.Rss
+import io.legado.app.ui.image.ImageGalleryActivity
+import io.legado.app.ui.image.ImagePlay
 import io.legado.app.ui.video.VideoPlayerActivity
-import io.legado.app.ui.widget.dialog.PhotoDialog
-import io.legado.app.utils.NetworkUtils
-import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
@@ -27,16 +23,6 @@ object ReadRss {
      */
     fun readRss(activity: AppCompatActivity, record: RssReadRecord) {
         val type = record.type
-        if (type == 0) {
-            ReadRssActivity.start(
-                activity,
-                record.origin,
-                record.title,
-                link = record.record,
-                sort = record.sort
-            )
-            return
-        }
         if (type == 2) {
             activity.startActivity<VideoPlayerActivity> {
                 putExtra("sourceKey", record.origin)
@@ -46,27 +32,28 @@ object ReadRss {
             }
             return
         }
-        readNoHtml(activity, record, type)
+        if (type == 1) {
+            // type=1 图片订阅源，直接走 ImageGalleryActivity
+            readNoHtml(activity, record, type)
+            return
+        }
+        // type=0 网页模式：走 ReadRssActivity
+        // 回退说明（用户2026-07-26 10:09 反馈）：
+        // 即使订阅源 articleStyle=2（图片列表样式），用户主动选择网页模式就必须走网页模式
+        // 禁止"自动识别为图片就转为图片查看器"，图片查看器入口改为用户主动选择
+        ReadRssActivity.start(
+            activity,
+            record.origin,
+            record.title,
+            link = record.record,
+            sort = record.sort
+        )
     }
 
     /**
      * 订阅源统一搜索结果点击阅读（rss-unified-search 新增）
      *
      * 参考 [readRss] Fragment 版本的设计，使用 activity.lifecycleScope 替代 fragment.viewLifecycleOwner.lifecycleScope。
-     *
-     * 使用场景：[io.legado.app.ui.rss.search.RssArticleInfoActivity] 详情页点击"阅读"按钮或某源项后调用，
-     * 该 Activity 是 AppCompatActivity 而非 Fragment，无法调用 Fragment 版本的 readRss。
-     *
-     * 设计依据：rss-unified-search design.md §5
-     *
-     * @param activity 详情页所在的 Activity
-     * @param rssArticle 待阅读的文章（来自 RssSearchSourceHolder.articles 的某源对应 RssArticle）
-     * @param rssArticles 搜索结果列表转 RssArticle 列表（详情页从 RssSearchSourceHolder.rssArticles 传入，
-     *        支持播放页上/下一个切换文章；rss-unified-search 阶段10 废除 AD-07 简化原则）
-     * @param sortName 分类名称（搜索场景传 null）
-     * @param sortUrl 分类 URL（搜索场景传 null）
-     * @param nextPageUrl 下一页 URL（搜索场景传 null）
-     * @param page 当前页码（搜索场景传 1）
      */
     fun readRss(
         activity: AppCompatActivity,
@@ -82,21 +69,9 @@ object ReadRss {
             appDb.rssReadRecordDao.insertRecord(rssReadRecord)
         }
         val type = rssArticle.type
-        if (type == 0) {
-            // web网页
-            ReadRssActivity.start(
-                activity,
-                rssArticle.origin,
-                rssArticle.title,
-                link = rssArticle.link,
-                sort = rssArticle.sort
-            )
-            return
-        }
         if (type == 2) {
             // 视频播放：从详情页传入 rssArticles 支持播放页上/下一个切换文章（废除 AD-07 简化原则）
             VideoPlay.rssArticles = rssArticles
-            // 计算 rssArticle 在列表中的索引，支持从中间文章进入播放页
             VideoPlay.rssArticleIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link } ?: 0
             VideoPlay.rssSortName = sortName
             VideoPlay.rssSortUrl = sortUrl
@@ -111,7 +86,21 @@ object ReadRss {
             }
             return
         }
-        readNoHtml(activity, rssReadRecord, type)
+        if (type == 1) {
+            // type=1 图片订阅源，直接走 ImageGalleryActivity
+            readNoHtml(
+                activity, rssReadRecord, type, rssArticles, sortName, sortUrl, nextPageUrl, page
+            )
+            return
+        }
+        // type=0 网页模式：走 ReadRssActivity（禁止自动转为图片查看器，回退说明见上）
+        ReadRssActivity.start(
+            activity,
+            rssArticle.origin,
+            rssArticle.title,
+            link = rssArticle.link,
+            sort = rssArticle.sort
+        )
     }
 
     fun readRss(
@@ -128,18 +117,9 @@ object ReadRss {
         fragment.viewLifecycleOwner.lifecycleScope.launch(IO) {
             appDb.rssReadRecordDao.insertRecord(rssReadRecord)
         }
-        val type = rssArticle.type
-        if (type == 0) {
-            //web网页
-            ReadRssActivity.start(
-                fragment.requireContext(),
-                rssArticle.origin,
-                rssArticle.title,
-                link = rssArticle.link,
-                sort = rssArticle.sort
-            )
-            return
-        }
+        // 优先用 rssSource.type（订阅源当前类型），rssArticle.type 作为兜底（旧缓存可能未更新）
+        // 修复场景：用户将图片源(type=1)改为网页模式(type=0)后，旧文章缓存 type 仍为 1 导致路由错误
+        val type = rssSource?.type ?: rssArticle.type
         if (type == 2) {
             //视频播放：设置文章列表到 VideoPlay 单例，支持上下滑动切换文章
             VideoPlay.rssArticles = rssArticles
@@ -158,55 +138,99 @@ object ReadRss {
             }
             return
         }
-        readNoHtml(fragment, rssArticle, rssSource, type)
+        if (type == 1) {
+            // type=1 图片订阅源，直接走 ImageGalleryActivity
+            readNoHtml(
+                fragment, rssArticle, rssSource, type, rssArticles, sortName, sortUrl, nextPageUrl, page
+            )
+            return
+        }
+        // type=0 网页模式：走 ReadRssActivity（禁止自动转为图片查看器，回退说明见上）
+        ReadRssActivity.start(
+            fragment.requireContext(),
+            rssArticle.origin,
+            rssArticle.title,
+            link = rssArticle.link,
+            sort = rssArticle.sort
+        )
     }
 
-    private fun readNoHtml(fragment: Fragment, rssArticle: RssArticle, rssSource: RssSource? = null, type: Int) {
+    /**
+     * 图片订阅源（type==1）入口：设置 ImagePlay 单例 + 启动 ImageGalleryActivity
+     *
+     * 改造说明（image-gallery-activity spec）：
+     * - 原：ruleContent 解析为单URL，用 PhotoDialog 显示单图
+     * - 新：设置 ImagePlay 单例，启动 ImageGalleryActivity，由 ViewModel.loadArticleContent 调用 Rss.getContentAwait
+     *       获取 body 并解析为图片URL列表（split 换行符），支持多图浏览
+     * - ruleContent 为空时：ImageGalleryViewModel 兜底用 article.link 作为单图URL
+     */
+    private fun readNoHtml(
+        fragment: Fragment,
+        rssArticle: RssArticle,
+        rssSource: RssSource? = null,
+        type: Int,
+        rssArticles: List<RssArticle>? = null,
+        sortName: String? = null,
+        sortUrl: String? = null,
+        nextPageUrl: String? = null,
+        page: Int = 1
+    ) {
         fragment.viewLifecycleOwner.lifecycleScope.launch {
             val rssSource = rssSource ?: withContext(IO) { appDb.rssSourceDao.getByKey(rssArticle.origin) }
             rssSource?.let { s ->
-                val ruleContent = s.ruleContent
-                if (ruleContent.isNullOrBlank()) {
-                    when (type) {
-                        1 -> fragment.showDialogFragment(PhotoDialog(rssArticle.link))
+                // 设置 ImagePlay 单例（参考 VideoPlay 机制，支持跨文章切换）
+                ImagePlay.rssArticles = rssArticles
+                ImagePlay.rssArticleIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link } ?: 0
+                ImagePlay.rssSource = s
+                ImagePlay.rssSortName = sortName
+                ImagePlay.rssSortUrl = sortUrl
+                ImagePlay.rssNextPageUrl = nextPageUrl
+                ImagePlay.rssArticlePage = page
+                ImagePlay.rssArticlesHasMore = !nextPageUrl.isNullOrBlank()
+                // 启动 ImageGalleryActivity（type==1 图片订阅源）
+                when (type) {
+                    1 -> fragment.startActivity<ImageGalleryActivity> {
+                        putExtra("sourceKey", rssArticle.origin)
+                        putExtra("record", rssArticle.link)
+                        putExtra("title", rssArticle.title)
                     }
-                } else {
-                    Rss.getContent(fragment.viewLifecycleOwner.lifecycleScope, rssArticle, ruleContent, s)
-                        .onSuccess(IO) { body ->
-                            if (body.isBlank()) {
-                                throw ContentEmptyException("正文为空")
-                            }
-                            val url = NetworkUtils.getAbsoluteURL(rssArticle.link, body)
-                            when (type) {
-                                1 -> fragment.showDialogFragment(PhotoDialog(url))
-                            }
-                        }.onError {
-                            AppLog.put("加载为链接的正文失败", it, true)
-                        }
                 }
             }
         }
     }
 
-    private fun readNoHtml(activity: AppCompatActivity, record: RssReadRecord, type: Int) {
+    /**
+     * 图片订阅源（type==1）入口：Activity 版本（从历史记录点击）
+     */
+    private fun readNoHtml(
+        activity: AppCompatActivity,
+        record: RssReadRecord,
+        type: Int,
+        rssArticles: List<RssArticle>? = null,
+        sortName: String? = null,
+        sortUrl: String? = null,
+        nextPageUrl: String? = null,
+        page: Int = 1
+    ) {
         activity.lifecycleScope.launch {
             val rssSource = withContext(IO) { appDb.rssSourceDao.getByKey(record.origin) }
             rssSource?.let { s ->
-                val ruleContent = s.ruleContent
-                if (ruleContent.isNullOrBlank()) {
-                    when (type) {
-                        1 -> activity.showDialogFragment(PhotoDialog(record.record))
+                // 设置 ImagePlay 单例
+                ImagePlay.rssArticles = rssArticles
+                ImagePlay.rssArticleIndex = rssArticles?.indexOfFirst { it.link == record.record } ?: 0
+                ImagePlay.rssSource = s
+                ImagePlay.rssSortName = sortName
+                ImagePlay.rssSortUrl = sortUrl
+                ImagePlay.rssNextPageUrl = nextPageUrl
+                ImagePlay.rssArticlePage = page
+                ImagePlay.rssArticlesHasMore = !nextPageUrl.isNullOrBlank()
+                // 启动 ImageGalleryActivity
+                when (type) {
+                    1 -> activity.startActivity<ImageGalleryActivity> {
+                        putExtra("sourceKey", record.origin)
+                        putExtra("record", record.record)
+                        putExtra("title", record.title)
                     }
-                } else {
-                    Rss.getContent(activity.lifecycleScope, record.toRssArticle(), ruleContent, s)
-                        .onSuccess(IO) { body ->
-                            val url = NetworkUtils.getAbsoluteURL(record.record, body)
-                            when (type) {
-                                1 -> activity.showDialogFragment(PhotoDialog(url))
-                            }
-                        }.onError {
-                            AppLog.put("加载为链接的正文失败", it, true)
-                        }
                 }
             }
         }

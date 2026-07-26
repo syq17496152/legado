@@ -42,5 +42,10 @@ object EventBus {
     const val REFRESH_BOOK_TOC = "refreshBookToc"
     const val UP_VIDEO_INFO = "upVideoInfo"
     const val VIDEO_PLAY_ERROR = "videoPlayError"
+    /**
+     * exoplayer-resilience Layer 2：ExoPlayer 失败次数达阈值 + 不可恢复错误时触发
+     * 载荷：Triple<url, title, headers>，供 VideoFragment.switchToWebViewMode 使用
+     */
+    const val VIDEO_FALLBACK_WEBVIEW = "videoFallbackWebview"
     const val ARTICLES_LOADED = "articlesLoaded"
 }

@@ -316,8 +316,8 @@ object VideoPlay : CoroutineScope by MainScope(){
                             val webViewUrl = VideoUrlExtractor.extractWithWebView(
                                 url = rssArticle.link,
                                 source = source,
-                                delayTime = 3000L,
-                                timeout = 10000L
+                                delayTime = VideoUrlExtractor.R5_DELAY_TIME,
+                                timeout = VideoUrlExtractor.R5_TIMEOUT
                             )
                             if (webViewUrl != null) {
                                 // R5 网络抓包命中：走单 URL 播放流程（复用单 URL 分支模式）
@@ -364,23 +364,18 @@ object VideoPlay : CoroutineScope by MainScope(){
                                         }
                                     }
                                 } else {
-                                    // 第四层降级：正则兜底也失败，回退文章链接交给 ExoPlayer
-                                    AppLog.putWarn("R5正则兜底未命中, 回退文章链接, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
-                                    val mUrl = rssArticle.link
-                                    videoUrl = mUrl
-                                    val fallbackUrl = AnalyzeUrl(mUrl, source = source, ruleData = rssArticle)
-                                    if (!fallbackUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
-                                        fallbackUrl.headerMap["Referer"] = rssArticle.link
-                                    }
+                                    // T2.10: 第四层降级——正则兜底也失败，不再回退文章链接给 ExoPlayer
+                                    // 原方案：回退 rssArticle.link（肯定非视频流URL）→ ExoPlayer 加载报 UnrecognizedInputFormatException
+                                    // 新方案：提示用户抓取失败 + 触发 WebView 降级（WebView 可加载文章页面播放）
+                                    // 解决 Bug-19：ExoPlayer 不再加载非视频流URL
+                                    AppLog.putWarn("R5全层降级失败, 触发WebView降级, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
                                     withContext(Main) {
-                                        player.mapHeadData = fallbackUrl.headerMap
-                                        currentPlayHeaders = fallbackUrl.headerMap
-                                        val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(fallbackUrl.url)
-                                        player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), rssArticle.title)
-                                        postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
-                                        if (autoPlay) {
-                                            player.startPlayLogic()
-                                        }
+                                        postEvent(EventBus.VIDEO_SUB_TITLE, "视频地址抓取失败，切换到 WebView 模式")
+                                        // 触发 WebView 降级：用文章链接作为 URL（WebView 可加载文章页面播放）
+                                        postEvent(
+                                            EventBus.VIDEO_FALLBACK_WEBVIEW,
+                                            Triple(rssArticle.link, rssArticle.title, currentPlayHeaders ?: emptyMap())
+                                        )
                                     }
                                 }
                             }
@@ -426,7 +421,8 @@ object VideoPlay : CoroutineScope by MainScope(){
                                 AppLog.putWarn("P3-1: ruleContent返回非视频URL, 降级R5嗅探, len=${resolved.length}, hasScript=${resolved.contains("<script", ignoreCase = true)}")
                                 val sniffUrl = VideoUrlExtractor.extractWithWebView(
                                     url = rssArticle.link, source = source,
-                                    delayTime = 3000L, timeout = 10000L
+                                    delayTime = VideoUrlExtractor.R5_DELAY_TIME,
+                                    timeout = VideoUrlExtractor.R5_TIMEOUT
                                 )
                                 if (sniffUrl != null) {
                                     AppLog.putInfo("P3-1降级R5嗅探命中, ${VideoUrlExtractor.sanitizeUrl(sniffUrl)}")
@@ -1093,6 +1089,18 @@ object VideoPlay : CoroutineScope by MainScope(){
             // 接入三层降级采集：MacCMS播放页解析→DOM解析→网络抓包（统一由 VideoUrlExtractor.extractVideoUrlForEpisode 处理）
             // 替代原手动 MacCMS 解析，增加 DOM 解析和网络抓包降级，提升视频播放成功率
             val resolvedUrl = VideoUrlExtractor.extractVideoUrlForEpisode(episode.url, source, rssArticle)
+            // T2.9/T2.10: 三层降级采集失败返回 null，触发 WebView 降级（避免非视频流URL传给 ExoPlayer）
+            if (resolvedUrl == null) {
+                AppLog.putWarn("extractVideoUrlForEpisode 返回null, 触发WebView降级, ${VideoUrlExtractor.sanitizeUrl(episode.url)}")
+                withContext(Main) {
+                    postEvent(EventBus.VIDEO_SUB_TITLE, "视频地址抓取失败，切换到 WebView 模式")
+                    postEvent(
+                        EventBus.VIDEO_FALLBACK_WEBVIEW,
+                        Triple(episode.url, episode.title, currentPlayHeaders ?: emptyMap())
+                    )
+                }
+                return@async
+            }
             // 构造 AnalyzeUrl 获取 headerMap（Referer 等，用于播放器防盗链）
             val analyzeUrl = AnalyzeUrl(
                 episode.url,

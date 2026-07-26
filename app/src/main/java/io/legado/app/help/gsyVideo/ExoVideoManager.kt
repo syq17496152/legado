@@ -91,4 +91,20 @@ class ExoVideoManager: GSYVideoBaseManager() {
         }
     }
 
+    /**
+     * T1.8: 释放嗅探资源（VideoFragment.onDestroyView 调用）
+     *
+     * 通过 ExoPlayerManager 获取 Exo2MediaPlayer 实例，调用 releaseSniffResources()
+     * 取消嗅探协程 + 设置 isReleased 标志位，避免 onDestroy 后嗅探协程回调 setMediaItem
+     */
+    @OptIn(UnstableApi::class)
+    fun releaseSniffResources() {
+        try {
+            val exoPlayer = (playerManager as? ExoPlayerManager)?.getMediaPlayer() as? Exo2MediaPlayer
+            exoPlayer?.releaseSniffResources()
+        } catch (e: Exception) {
+            // 忽略释放异常，避免影响 onDestroyView 流程
+        }
+    }
+
 }

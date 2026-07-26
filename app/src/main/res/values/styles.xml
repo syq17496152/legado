@@ -23,6 +23,11 @@
         <item name="android:windowNoTitle">true</item>
     </style>
 
+    <!-- 图片大图模式主题（W2：启用共享元素动画） -->
+    <style name="AppTheme.ImageDetail" parent="Base.AppTheme">
+        <item name="android:windowActivityTransitions">true</item>
+    </style>
+
     <!-- Base application theme. -->
     <style name="Base.AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="colorPrimary">@color/primary</item>

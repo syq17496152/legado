@@ -191,6 +191,9 @@ class VideoFragment : Fragment() {
         cancelAutoHide()  // F2: 清理自动隐藏 Handler
         stopBufferUpdate()  // F1: 停止缓冲进度更新
         stopProgressMonitor()  // 阶段8 F10：停止进度监听
+        // T1.8: 先释放嗅探资源（取消嗅探协程 + isReleased 标志位），再 releasePlayer（释放 mInternalPlayer）
+        // 顺序很重要：先取消嗅探协程，避免 releasePlayer 后嗅探协程回调 setMediaItem 操作已 release 的 mInternalPlayer
+        VideoPlay.videoManager.releaseSniffResources()
         releasePlayer()
         // P0-1.6: 释放 WebView 资源，防内存泄漏
         webViewPlayer?.release()
@@ -325,6 +328,11 @@ class VideoFragment : Fragment() {
     fun switchToWebViewMode(url: String, title: String, headers: Map<String, String>) {
         val pv = _playerView ?: return
         val wvp = webViewPlayer ?: return
+        // exoplayer-resilience Layer 2：自动降级时给用户 Toast 提示
+        // 区分手动降级（错误对话框点击 WebView）和自动降级（累计失败达阈值）
+        // 自动降级时 isWebViewMode 之前为 false，切换后变 true；手动降级时也是 false→true
+        // 简化：每次 switchToWebViewMode 都 Toast（用户感知"已切换"即可，无需区分手动/自动）
+        toastOnUi("ExoPlayer 多次失败，已切换到 WebView 模式")
         // 暂停 ExoPlayer
         pv.onVideoPause()
         // 隐藏 ExoPlayer

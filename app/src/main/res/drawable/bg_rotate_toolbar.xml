@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 旋转工具栏背景：与 bg_overlay_button 统一（半透明黑 + 12dp 圆角，对齐视频播放器圆角规范） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#80000000" />
+    <corners android:radius="12dp" />
+</shape>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    图片垂直画布 - 图片项布局（item_image_canvas）
+    - 宽度填满，高度动态调整（默认 60% 屏幕高，加载完成后按宽高比调整）
+    - PhotoView 支持缩放/旋转/平移（PhotoView 自带能力）
+    - 加载失败时显示错误图标 + 重试按钮（点击触发降级链）
+    - 降级链触发时显示"正在尝试备用方案 N/4..."提示（V4 6.1.5）
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@android:color/black">
+
+    <io.legado.app.ui.widget.image.PhotoView
+        android:id="@+id/photo_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitCenter" />
+
+    <!-- 降级链级别提示（V4 6.1.5：默认隐藏，降级链触发时显示） -->
+    <TextView
+        android:id="@+id/tv_fallback_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="12dp"
+        android:background="#80000000"
+        android:paddingStart="12dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="4dp"
+        android:textColor="#FFFFFF"
+        android:textSize="11sp"
+        android:visibility="gone" />
+
+</FrameLayout>

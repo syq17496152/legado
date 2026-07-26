@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    图片垂直画布 - 底部 Footer 布局（item_image_canvas_footer）
+    - 加载中（ProgressBar）
+    - 加载失败（错误文本 + 重试按钮）
+    - 没有更多了（文本提示）
+    通过代码根据 LoadState 切换子 View 可见性
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <!-- 加载中 -->
+    <ProgressBar
+        android:id="@+id/progress_loading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:indeterminateTint="@color/white"
+        android:visibility="gone" />
+
+    <!-- 加载失败 -->
+    <TextView
+        android:id="@+id/tv_error"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxWidth="280dp"
+        android:maxLines="3"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@+id/btn_retry"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="重试"
+        android:textColor="@android:color/white"
+        android:visibility="gone" />
+
+    <!-- 没有更多了 -->
+    <TextView
+        android:id="@+id/tv_no_more"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="—— 没有更多了 ——"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+</LinearLayout>

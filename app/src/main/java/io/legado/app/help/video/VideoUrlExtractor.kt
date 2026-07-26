@@ -6,6 +6,7 @@ import io.legado.app.data.entities.RssArticle
 import io.legado.app.help.http.BackstageWebView
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.utils.NetworkUtils
+import kotlinx.coroutines.withTimeoutOrNull
 import org.jsoup.Jsoup
 import java.net.URLDecoder
 
@@ -27,6 +28,18 @@ import java.net.URLDecoder
  * 详见 docs/specs/rss-video-player-enhancement/spec.md R5 节
  */
 object VideoUrlExtractor {
+
+    /**
+     * T1.10: R5 网络抓包参数常量（V2 修订）
+     *
+     * - R5_DELAY_TIME: 从 3000ms 降至 1000ms（解决 Bug-1，WebView 加载后 1 秒开始拦截）
+     * - R5_TIMEOUT: 从 10000ms 降至 6000ms（配合 delayTime 降低，总耗时控制在 6 秒内）
+     *
+     * 注意：3处调用方（extractWithWebView 默认值 + extractVideoUrlForEpisode L489 + VideoPlay.kt L319/L429）
+     * 必须统一引用此常量，禁止硬编码（V1 文档 T1.1/T1.2 关键漏洞：只改默认值无效）
+     */
+    const val R5_DELAY_TIME = 1000L
+    const val R5_TIMEOUT = 6000L
 
     // 视频URL正则：匹配 m3u8/mp4 结尾或含 format/type=m3u8 的 URL（忽略大小写）
     private val VIDEO_URL_REGEX =
@@ -123,6 +136,9 @@ object VideoUrlExtractor {
      */
     fun extractPrecise(html: String, baseUrl: String): List<String> {
         if (html.isBlank()) return emptyList()
+        // T2.5: extractPrecise 各阶段耗时日志（统一 putInfo 级别，release 包可见）
+        val startTime = System.currentTimeMillis()
+        AppLog.putInfo("extractPrecise: start, baseUrl=${sanitizeUrl(baseUrl)}")
         val result = LinkedHashSet<String>()
         // 按精确度优先级调用：标签 > Meta > JSON > JS变量
         result.addAll(extractFromVideoTags(html, baseUrl))
@@ -135,7 +151,8 @@ object VideoUrlExtractor {
             val actualUrl = extractPlayerPageUrl(url) ?: url
             resolved.add(actualUrl)
         }
-        AppLog.putDebug("extractPrecise: preciseCount=${resolved.size}, baseUrl=${sanitizeUrl(baseUrl)}")
+        val elapsed = System.currentTimeMillis() - startTime
+        AppLog.putInfo("extractPrecise: end, preciseCount=${resolved.size}, elapsed=${elapsed}ms, baseUrl=${sanitizeUrl(baseUrl)}")
         return resolved.distinct()
     }
 
@@ -168,15 +185,15 @@ object VideoUrlExtractor {
      *
      * @param url 文章页面 URL
      * @param source 订阅源（用于构造 AnalyzeUrl 获取 headerMap）
-     * @param delayTime 等待 JS 动态加载视频地址的时间（默认 3000ms，从 onPageFinished 开始计时）
-     * @param timeout 抓取超时时间（默认 10000ms，app-stability-round2 P2-2 从 15s 缩短为 10s，BackstageWebView 默认 60s 太长）
+     * @param delayTime 等待 JS 动态加载视频地址的时间（默认 R5_DELAY_TIME=1000ms，T1.10 从 3000ms 降至 1000ms 解决 Bug-1）
+     * @param timeout 抓取超时时间（默认 R5_TIMEOUT=6000ms，T1.10 从 10000ms 降至 6000ms 配合 delayTime 降低）
      * @return 视频 URL（已匹配 sourceRegex），失败返回 null
      */
     suspend fun extractWithWebView(
         url: String,
         source: BaseSource?,
-        delayTime: Long = 3000L,
-        timeout: Long = 10000L
+        delayTime: Long = R5_DELAY_TIME,
+        timeout: Long = R5_TIMEOUT
     ): String? {
         if (url.isBlank()) return null
         AppLog.putInfo("R5网络抓包: 启动, ${sanitizeUrl(url)}, delayTime=${delayTime}, timeout=${timeout}")
@@ -399,6 +416,30 @@ object VideoUrlExtractor {
     }
 
     /**
+     * Bug-fix 2026-07-26: 判断 URL 是否已是视频流格式（可直接交给 ExoPlayer 播放）
+     *
+     * 识别 .m3u8/.mpd/.mp4/.flv/.mkv/.webm 等视频流后缀（忽略 query 参数和锚点）
+     * 排除 .ts（HLS 分片，需配合 m3u8 主清单使用，不能单独播放）
+     *
+     * 使用场景：extractVideoUrlForEpisode 入口快速路径，避免已解析出的视频流 URL 走完整三层解析
+     * 铁证：logcat 显示 11 次 .m3u8 URL 因缺少快速路径走 12 秒 WebView 抓包超时返回 null 触发降级
+     *
+     * @param url 待检测的 URL
+     * @return true 表示 URL 后缀是视频流格式，可直接交给 ExoPlayer
+     */
+    private fun isDirectVideoStreamUrl(url: String): Boolean {
+        val lower = url.lowercase().substringBefore("?").substringBefore("#")
+        return lower.endsWith(".m3u8") ||
+            lower.endsWith(".mpd") ||
+            lower.endsWith(".mp4") ||
+            lower.endsWith(".flv") ||
+            lower.endsWith(".mkv") ||
+            lower.endsWith(".webm") ||
+            lower.contains("format=m3u8") ||
+            lower.contains("type=m3u8")
+    }
+
+    /**
      * MacCMS 播放页检测：判断 URL 是否是 MacCMS 播放页（如 /vodplay/{id}-{r}-{e}.html）
      *
      * 场景：RSS 视频源 ruleContent 返回播放页 URL（非直接 m3u8），需在播放时按需解析
@@ -445,57 +486,89 @@ object VideoUrlExtractor {
      * @param url 播放页 URL 或视频流 URL
      * @param source 订阅源（用于构造 AnalyzeUrl 获取 headerMap）
      * @param rssArticle 文章（用于 Referer 注入）
-     * @return 解析后的视频流 URL，三层均失败返回原 URL
+     * @return 解析后的视频流 URL，三层均失败或超时返回 null（T2.9 改造，避免非视频流URL传给 ExoPlayer）
      */
     suspend fun extractVideoUrlForEpisode(
         url: String,
         source: BaseSource?,
         rssArticle: RssArticle?
-    ): String {
-        if (url.isBlank()) return url
-        // 构造 AnalyzeUrl（参考 VideoPlay.playRssEpisode 第1037-1041行）
-        val analyzeUrl = AnalyzeUrl(url, source = source, ruleData = rssArticle)
-        // 注入 Referer（参考 VideoPlay 第1043-1045行，模拟 WebView 行为解决 CDN 防盗链 404）
-        if (!analyzeUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
-            analyzeUrl.headerMap["Referer"] = rssArticle?.link ?: url
+    ): String? {
+        if (url.isBlank()) return null
+        // Bug-fix 2026-07-26: URL 已是视频流格式时直接返回，跳过三层解析
+        // 铁证：logcat 11 次 .m3u8 URL 走完整 12 秒超时返回 null 触发 WebView 降级（WebView 也不支持 HLS）
+        // 回归原因：R4 T2.9 改造加入"超时返回 null"逻辑，但未补充"URL已是视频流"快速路径
+        // 修复：识别 .m3u8/.mpd/.mp4/.flv/.mkv/.webm/.ts(排除) 等视频流后缀，直接交给 ExoPlayer
+        if (isDirectVideoStreamUrl(url)) {
+            AppLog.putInfo("extractVideoUrlForEpisode: URL已是视频流, 跳过三层解析直接返回, ${sanitizeUrl(url)}")
+            return url
         }
-        var resolvedUrl = resolvePlayerPageUrl(analyzeUrl.url)
-        val isMacCms = isMacCmsPlayPage(resolvedUrl)
-        AppLog.put("extractVideoUrlForEpisode: resolvedUrlEq=${resolvedUrl == analyzeUrl.url}, isMacCms=$isMacCms, urlEndsWithHtml=${resolvedUrl.endsWith(".html")}")
-        // 第一层 MacCMS 播放页解析
-        if (resolvedUrl == analyzeUrl.url && isMacCms) {
-            try {
-                val playPageHtml = analyzeUrl.getStrResponseAwait().body ?: ""
-                AppLog.put("extractVideoUrlForEpisode: playPageHtmlLen=${playPageHtml.length}, containsPlayerAaaa=${playPageHtml.contains("player_aaaa")}")
-                val m3u8Url = extractPlayerAaaaUrl(playPageHtml)
-                if (!m3u8Url.isNullOrBlank()) {
-                    AppLog.put("extractVideoUrlForEpisode: 第一层MacCMS解析成功, m3u8UrlLen=${m3u8Url.length}")
-                    return m3u8Url
-                }
-                // 第二层 DOM 解析（复用第一层 HTML，避免重复请求）
-                if (playPageHtml.isNotBlank()) {
-                    val domUrls = extract(playPageHtml, resolvedUrl)
-                    if (domUrls.isNotEmpty()) {
-                        AppLog.put("extractVideoUrlForEpisode: 第二层DOM解析成功, urlCount=${domUrls.size}")
-                        return domUrls[0]
+        // T1.14: 整个三层降级采集总超时 12 秒（解决 Bug-15，避免累计 70 秒卡死）
+        // T2.9: 超时返回 null（不返回原 url，避免非视频流URL传给 ExoPlayer）
+        return withTimeoutOrNull(12000L) {
+            // 构造 AnalyzeUrl（参考 VideoPlay.playRssEpisode 第1037-1041行）
+            val analyzeUrl = AnalyzeUrl(url, source = source, ruleData = rssArticle)
+            // 注入 Referer（参考 VideoPlay 第1043-1045行，模拟 WebView 行为解决 CDN 防盗链 404）
+            if (!analyzeUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
+                analyzeUrl.headerMap["Referer"] = rssArticle?.link ?: url
+            }
+            var resolvedUrl = resolvePlayerPageUrl(analyzeUrl.url)
+            val isMacCms = isMacCmsPlayPage(resolvedUrl)
+            AppLog.put("extractVideoUrlForEpisode: resolvedUrlEq=${resolvedUrl == analyzeUrl.url}, isMacCms=$isMacCms, urlEndsWithHtml=${resolvedUrl.endsWith(".html")}")
+            // 第一层 MacCMS 播放页解析
+            if (resolvedUrl == analyzeUrl.url && isMacCms) {
+                try {
+                    // T1.11: 第一层 MacCMS 解析超时控制 6 秒（解决 Bug-12 + Bug-1 真正主因）
+                    // 用 withTimeoutOrNull 避免异常处理复杂性，超时返回 null 降级第三层
+                    val playPageHtmlResult = withTimeoutOrNull(6000L) { analyzeUrl.getStrResponseAwait().body }
+                    if (playPageHtmlResult == null) {
+                        AppLog.put("extractVideoUrlForEpisode: MacCMS parse timeout (6s), 降级第三层网络抓包")
                     }
+                    val playPageHtml = playPageHtmlResult ?: ""
+                    AppLog.put("extractVideoUrlForEpisode: playPageHtmlLen=${playPageHtml.length}, containsPlayerAaaa=${playPageHtml.contains("player_aaaa")}")
+                    val m3u8Url = extractPlayerAaaaUrl(playPageHtml)
+                    if (!m3u8Url.isNullOrBlank()) {
+                        AppLog.put("extractVideoUrlForEpisode: 第一层MacCMS解析成功, m3u8UrlLen=${m3u8Url.length}")
+                        return@withTimeoutOrNull m3u8Url
+                    }
+                    // 第二层 DOM 解析（复用第一层 HTML，避免重复请求）
+                    if (playPageHtml.isNotBlank()) {
+                        val domUrls = extract(playPageHtml, resolvedUrl)
+                        if (domUrls.isNotEmpty()) {
+                            AppLog.put("extractVideoUrlForEpisode: 第二层DOM解析成功, urlCount=${domUrls.size}")
+                            return@withTimeoutOrNull domUrls[0]
+                        }
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // T2.11: CancellationException 守卫（解决 Bug-17 + Bug-18：协程取消必须传播）
+                    throw e
+                } catch (e: Exception) {
+                    AppLog.put("extractVideoUrlForEpisode: 第一层MacCMS解析失败", e)
                 }
+            }
+            // 第三层 网络抓包拦截
+            try {
+                val webViewUrl = extractWithWebView(url, source, delayTime = R5_DELAY_TIME, timeout = R5_TIMEOUT)
+                if (!webViewUrl.isNullOrBlank() && webViewUrl != url) {
+                    AppLog.put("extractVideoUrlForEpisode: 第三层网络抓包成功, urlLen=${webViewUrl.length}")
+                    webViewUrl
+                } else {
+                    // T2.9: 第三层失败返回 null（解决 Bug-16：不返回非视频流URL给 ExoPlayer）
+                    // 原 resolvedUrl 可能是文章页 URL（非视频流），传给 ExoPlayer 会触发 UnrecognizedInputFormatException
+                    null
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // T2.11: CancellationException 守卫（解决 Bug-17 + Bug-18：协程取消必须传播）
+                throw e
             } catch (e: Exception) {
-                AppLog.put("extractVideoUrlForEpisode: 第一层MacCMS解析失败", e)
+                AppLog.put("extractVideoUrlForEpisode: 第三层网络抓包失败", e)
+                // T2.9: 第三层失败返回 null（解决 Bug-16：不返回非视频流URL给 ExoPlayer）
+                null
             }
-        }
-        // 第三层 网络抓包拦截
-        return try {
-            val webViewUrl = extractWithWebView(url, source, delayTime = 3000L, timeout = 10000L)
-            if (!webViewUrl.isNullOrBlank() && webViewUrl != url) {
-                AppLog.put("extractVideoUrlForEpisode: 第三层网络抓包成功, urlLen=${webViewUrl.length}")
-                webViewUrl
-            } else {
-                resolvedUrl
-            }
-        } catch (e: Exception) {
-            AppLog.put("extractVideoUrlForEpisode: 第三层网络抓包失败", e)
-            resolvedUrl
+        } ?: run {
+            // T2.9: 总超时也返回 null（原返回 url 会导致 ExoPlayer 加载非视频流URL）
+            // 调用方 VideoPlay.playRssEpisode 需处理 null（T2.10 配套改造）
+            AppLog.put("extractVideoUrlForEpisode timeout (12s), 返回null, ${sanitizeUrl(url)}")
+            null
         }
     }
 }
