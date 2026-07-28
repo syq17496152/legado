@@ -17,6 +17,19 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- 全屏横向浏览 ViewPager2 层（AD-05：初始 gone，点击图片时显示并定位） -->
+    <!-- z-order：覆盖 RecyclerView，位于 TitleBar 之下（TitleBar/页码/旋转工具栏保持可见） -->
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/view_pager_fullscreen"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <!-- 隐藏 WebView（1x1 像素）：用于预热图片 CDN 域名，获取 Cloudflare 验证 cookies -->
     <!-- 方案A：ImageGalleryActivity 启动时加载图片 CDN 域名，WebView 自动处理 JS 挑战 -->
     <!-- CookieStore 会自动保存 cookies，Glide 后续请求复用 cookies 解决防盗链 -->
@@ -144,5 +157,23 @@
             android:src="@drawable/ic_rotate_right"
             app:tint="@android:color/white" />
     </LinearLayout>
+
+    <!-- 垂直画布模式页码悬浮（右下角，显示当前文章图片索引/总数） -->
+    <TextView
+        android:id="@+id/tv_canvas_page_index"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="32dp"
+        android:background="@drawable/bg_image_page_index"
+        android:paddingStart="12dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="6dp"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

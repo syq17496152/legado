@@ -207,6 +207,16 @@ data class TextLine(
         if (textPaint.color != textColor) {
             textPaint.color = textColor
         }
+        // T-C1: 先画 fill 矩形（修复 R-P1-1c：fill-only 样式 needsPerColumnDraw=false，
+        // 不计入 styledColumnCount，TextLine.checkFastDraw 放行快绘，原快绘不画 fill 导致背景色高亮消失）
+        // 顺序对齐 TextColumn.draw:74-77（fill 在 drawText 之前，避免覆盖文字）
+        for (i in columns.indices) {
+            val column = columns[i] as TextColumn
+            val fill = column.highlightStyle?.fill ?: 0
+            if (fill != 0) {
+                canvas.drawRect(column.start, 0f, column.end, height, view.highlightPaint(fill))
+            }
+        }
         val paint = PaintPool.obtain()
         paint.set(textPaint)
         val letterSpacing = paint.letterSpacing * paint.textSize

@@ -28,6 +28,8 @@ import io.legado.app.data.entities.RssEpisode
 import io.legado.app.data.entities.RssReadRecord
 import io.legado.app.data.entities.RssRoute
 import io.legado.app.data.entities.RssSource
+import io.legado.app.help.exoplayer.FirstFramePreloader
+import io.legado.app.help.exoplayer.VideoPreloader
 import io.legado.app.data.entities.RssStar
 import io.legado.app.exception.ContentEmptyException
 import io.legado.app.help.CacheManager
@@ -147,7 +149,21 @@ object VideoPlay : CoroutineScope by MainScope(){
         }
     var inBookshelf = true
     var isResumeFromFloat = false  // P0-1: 从悬浮窗恢复标志，Fragment.activatePlayer 据此决定 clonePlayState 还是 startPlay
+    /**
+     * P0: 当前播放使用的源（IO 线程写：initSource/switchToArticle；Main 线程读：startPlay）
+     * B2 修复：加 @Volatile 保证跨线程可见性（避免 switchToArticle 在 IO 线程更新 source 后，Main 线程 startPlay 读到旧值）
+     */
+    @Volatile
     var source: BaseSource? = null
+    /**
+     * A2 修复：首次播放成功标志（CDN 冷启动场景判断）
+     * - initSource 时重置为 false（新源加载视为首次，BUFFERING 超时 25s）
+     * - Exo2MediaPlayer STATE_READY 时置 true（后续切换文章 BUFFERING 超时 12s）
+     * - 切换同源文章（switchToArticle）不重置，保持 true（CDN 已热，用 12s）
+     * @Volatile：IO 线程写（initSource）、Main 线程读（Exo2MediaPlayer bufferingTimeoutRunnable）
+     */
+    @Volatile
+    var hasPlayedSuccessfully: Boolean = false
     var book: Book? = null
     var toc: List<BookChapter>? =  null
     var chapter: BookChapter? = null
@@ -403,7 +419,23 @@ object VideoPlay : CoroutineScope by MainScope(){
                         }
                         // 单 URL（现有逻辑）
                         val mUrl = if (content.isEmpty()) {
-                            throw ContentEmptyException("正文为空")
+                            // T4.4: 视频型订阅源（有视频规则）正文为空走正常空分支，不抛异常
+                            // 日志实证：视频型订阅源正文解析 100% 走异常分支（ContentEmptyException），异常噪音大
+                            // 视频地址本就可由嗅探获取，正文为空属正常场景——降级 R5 嗅探（与 P3-1 无效 URL 降级路径一致）
+                            // 未配置视频规则的源（type=0 网页模式）保持 ReadRssViewModel 现有异常路径，便于发现真实解析故障
+                            AppLog.putInfo("T4.4: 视频型订阅源正文为空, 降级R5嗅探, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
+                            val sniffUrl = VideoUrlExtractor.extractWithWebView(
+                                url = rssArticle.link, source = source,
+                                delayTime = VideoUrlExtractor.R5_DELAY_TIME,
+                                timeout = VideoUrlExtractor.R5_TIMEOUT
+                            )
+                            if (sniffUrl != null) {
+                                AppLog.putInfo("T4.4降级R5嗅探命中, ${VideoUrlExtractor.sanitizeUrl(sniffUrl)}")
+                                sniffUrl
+                            } else {
+                                AppLog.putWarn("T4.4降级R5嗅探未命中, 回退文章链接, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
+                                rssArticle.link
+                            }
                         } else if (content.contains("<MPD", ignoreCase = true)) { //当作mpd文本（P1-A修复：精确判断DASH清单，避免HTML/XML误判）
                             val name = MD5Utils.md5Encode(content) + ".mpd"
                             val file = FileUtils.createFileIfNotExist(videoTempFile,name)
@@ -646,6 +678,8 @@ object VideoPlay : CoroutineScope by MainScope(){
 
     suspend fun initSource(sourceKey: String?, sourceType: Int?, bookUrl: String?, record:String?): Boolean = withContext(IO) {
         isLoading = true
+        // A2 修复：新源加载视为首次播放（CDN 冷启动场景，BUFFERING 超时 25s）
+        hasPlayedSuccessfully = false
         source = sourceKey?.let {
             when (sourceType) {
                 SourceType.book -> appDb.bookSourceDao.getBookSource(it)
@@ -673,6 +707,14 @@ object VideoPlay : CoroutineScope by MainScope(){
         }
         upEpisodes()
         if (source == null) {
+            // V-004-P0-2: initSource 失败记录详细原因（不静默返回 false）
+            // 根因：004 日志 18:48-19:16 期间 9 次 Activity 启动但播放器未初始化，
+            //   initSource 返回 false 时无日志，无法定位失败原因
+            AppLog.put(
+                "VideoPlay.initSource failed: source not found, " +
+                    "sourceKey=${sourceKey?.take(2)}***, sourceType=$sourceType, " +
+                    "bookUrl=${bookUrl?.take(2)}***, record=${record?.take(2)}***"
+            )
             withContext(Main) {
                 appCtx.toastOnUi("未找到源")
             }
@@ -689,7 +731,54 @@ object VideoPlay : CoroutineScope by MainScope(){
                 }
             }
         }
+        // A5 预热：initSource 完成后异步预加载当前文章 HTML，加速 startPlay 首帧
+        // 场景：用户点击视频列表项 → initSource → 预加载 HTML → startPlay 命中 preloadedHtmls 缓存跳过网络请求
+        prewarmCurrentArticleHtml(record)
         return@withContext true
+    }
+
+    /**
+     * A5：首个视频预热机制（预加载当前文章 HTML）
+     *
+     * 触发点：initSource 完成后（source 已就绪）
+     * 价值：startPlay 的 R5 分支会优先使用 preloadedHtmls 缓存跳过网络请求，
+     *      VideoUrlExtractor.extractPrecise 仍需执行但耗时极低，首帧延迟主要来自网络请求。
+     *
+     * 条件：
+     * - source 是 RssSource（订阅源视频）
+     * - ruleContent 为空（走 R5 抓取，非 Rss.getContent 模式）
+     * - ruleRoutes/ruleEpisodes 不同时非空（非多线路多集新模式）
+     * - preloadedHtmls 未缓存当前文章
+     *
+     * @param record 文章 link（rssArticle.link）
+     */
+    private fun prewarmCurrentArticleHtml(record: String?) {
+        val link = record ?: return
+        val rssSource = source as? RssSource ?: return
+        // ruleContent 不为空 或 ruleRoutes/ruleEpisodes非空（多线路多集新模式）时走 Rss.getContent 而非 R5 抓取，无需预加载 HTML
+        if (!rssSource.ruleContent.isNullOrBlank()) return
+        if (!rssSource.ruleRoutes.isNullOrBlank() && !rssSource.ruleEpisodes.isNullOrBlank()) return
+        // 已预加载过则跳过
+        if (preloadedArticles.contains(link) || preloadedHtmls.containsKey(link)) return
+
+        preloadedArticles.add(link)
+        AppLog.put("A5 prewarm: start prewarm current article HTML, linkPath=${link.take(2)}***")
+
+        Coroutine.async(loadScope, IO) {
+            val rssArticle = rssStar?.toRssArticle() ?: rssRecord?.toRssArticle()
+                ?: rssArticles?.getOrNull(rssArticleIndex)
+            val pageAnalyzeUrl = AnalyzeUrl(link, source = source, ruleData = rssArticle)
+            val res = pageAnalyzeUrl.getStrResponseAwait()
+            val html = res.body ?: ""
+            if (html.isNotEmpty()) {
+                preloadedHtmls[link] = html
+                AppLog.put("A5 prewarm: success, htmlLen=${html.length}, linkPath=${link.take(2)}***")
+            } else {
+                AppLog.put("A5 prewarm: empty html, linkPath=${link.take(2)}***")
+            }
+        }.onError {
+            AppLog.put("A5 prewarm: failed, linkPath=${link.take(2)}***", it)
+        }
     }
 
     fun upEpisodes() {
@@ -950,6 +1039,22 @@ object VideoPlay : CoroutineScope by MainScope(){
         videoTitle = article.title
         // 异步查询 rssStar/rssRecord（Room 禁止主线程查询）+ 加载视频信息
         Coroutine.async(loadScope, IO) {
+            // B2 修复：同步更新 source 以匹配 article.origin
+            // 铁证：switchToArticle 加载 rssArticles[index]，但 source 仍是 initSource 中加载的（用户选的源），
+            //   若 source 与 rssArticle 不匹配（不同源页面结构不同），ruleContent 解析失败 → 播放失败
+            val currentRssSource = source as? RssSource
+            if (currentRssSource == null || currentRssSource.sourceUrl != article.origin) {
+                val newSource = appDb.rssSourceDao.getByKey(article.origin)
+                if (newSource == null) {
+                    // null 处理：source 不存在时输出 ERROR 日志并停止播放（避免 startPlay 用 null source 崩溃）
+                    AppLog.put(
+                        "switchToArticle: source not found, origin=${article.origin.take(2)}***"
+                    )
+                    return@async
+                }
+                source = newSource
+                AppLog.put("switchToArticle: source 更新为 ${article.origin.take(2)}***")
+            }
             // 更新 rssStar/rssRecord 以匹配新文章（startPlay 依赖这些字段获取 rssArticle）
             rssStar = appDb.rssStarDao.get(article.origin, article.link)
             if (rssStar == null) {
@@ -1070,6 +1175,9 @@ object VideoPlay : CoroutineScope by MainScope(){
     fun clearPreloadCache() {
         preloadedHtmls.clear()
         preloadedArticles.clear()
+        // T2.2/T2.3: 退出播放器时同步清理预加载器缓存，释放内存
+        FirstFramePreloader.clearCache()
+        VideoPreloader.clearCache()
     }
 
     /**
@@ -1120,10 +1228,37 @@ object VideoPlay : CoroutineScope by MainScope(){
                 if (autoPlay) {
                     player.startPlayLogic()
                 }
+                // T2.2: 首帧预加载（对齐快手官方方案）——预加载当前位置 ±1 的视频首帧（1MB Range 请求）
+                // T2.3: 下一个视频预加载（对齐抖音官方方案）——预加载下一集前 256KB（WiFi 3 个/4G 1 个）
+                // 触发时机：当前视频开始播放时启动预加载（异步执行不阻塞播放）
+                triggerPreload(resolvedUrl, analyzeUrl.headerMap)
             }
         }.onError {
             AppLog.put("加载订阅源视频集失败: ${episode.title}", it, true)
         }
+    }
+
+    /**
+     * T2.2+T2.3: 当前视频开始播放时触发预加载（异步执行不阻塞播放）
+     *
+     * - T2.2 首帧预加载（对齐快手官方方案）：预加载当前位置 ±1 的视频首帧（1MB Range 请求）
+     * - T2.3 下一个视频预加载（对齐抖音官方方案）：预加载下一集前 256KB（WiFi 3 个/4G 1 个）
+     * - 两个预加载器内部均有 LRU 缓存去重，同一 URL 不重复下载
+     *
+     * @param currentUrl 当前播放的已解析视频 URL
+     * @param headers 请求头（Referer/Cookie/UA 防盗链）
+     */
+    private fun triggerPreload(currentUrl: String, headers: Map<String, String>) {
+        val episodes = rssEpisodes ?: return
+        if (episodes.size <= 1) return
+        val urls = episodes.map { it.url }
+        val index = rssEpisodeIndex.coerceIn(urls.indices)
+        // T2.2/T2.3 关键日志：预加载触发点（release 包可输出，真机验收依据）
+        AppLog.put("triggerPreload: episodeIndex=$index, totalEpisodes=${urls.size}, hasNext=${index + 1 < urls.size}")
+        // T2.2: 首帧预加载（当前位置 ±1）
+        FirstFramePreloader.preloadFirstFrame(urls, index, headers)
+        // T2.3: 下一集 256KB 预加载（网络感知：WiFi 3 个/4G 1 个）
+        VideoPreloader.preloadNextVideo(currentUrl, urls.getOrNull(index + 1), headers)
     }
 
     /**

@@ -55,6 +55,7 @@ import io.legado.app.help.TextViewTagHandler
 import io.legado.app.help.WebCacheManager
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.exoplayer.FirstFramePreloader
 import io.legado.app.help.gsyVideo.VideoPlayer
 import io.legado.app.help.webView.PooledWebView
 import io.legado.app.help.webView.WebJsExtensions
@@ -243,6 +244,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             // T2.8: 保存 initSource 协程 Job 引用，onPause 时取消
             initSourceJob = lifecycleScope.launch {
                 if (!VideoPlay.initSource(sourceKey, sourceType, bookUrl, record)) {
+                    // V-004-P0-2: initSource 失败记录日志（VideoPlay.initSource 内部已记录详细原因）
+                    // 根因：004 日志 18:48-19:16 期间 9 次 Activity 启动但播放器未初始化，原 finish() 无日志
+                    AppLog.put("VideoPlayerActivity initSource failed, finish activity, sourceKey=${sourceKey?.take(2)}***")
                     finish()
                     return@launch
                 }
@@ -287,6 +291,18 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             initSourceJob?.cancel()
             AppLog.put("VideoPlayerActivity onPause: initSourceJob cancelled")
         }
+        // A3 修复：onPause 延迟清理预加载缓存（30s 后清理，避免快速切回时缓存失效）
+        FirstFramePreloader.delayedClearCache()
+    }
+
+    /**
+     * A3 修复：onResume 取消延迟清理（保留预加载缓存）
+     *
+     * 场景：用户快速切回时取消延迟清理，缓存命中首帧秒开。
+     */
+    override fun onResume() {
+        super.onResume()
+        FirstFramePreloader.cancelDelayedClear()
     }
 
     // 修复：重写 onSupportNavigateUp，Toolbar 返回箭头委托给 onBackPressedDispatcher
@@ -1578,6 +1594,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         if (!useViewPagerMode) {
             playerView.getCurrentPlayer().release()
         }
+        // T5.1: Activity 销毁时清空播放器实例池（池生命周期=Activity 生命周期，
+        // 避免 App 后台时池内实例占用解码器/缓冲区资源）
+        io.legado.app.help.exoplayer.PlayerInstancePool.clear()
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // rss-unified-search: 清理换源 Holder，避免内存泄漏与跨文章串数据
         RssSearchSourceHolder.clear()

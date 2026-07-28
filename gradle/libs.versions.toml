@@ -39,6 +39,9 @@ collection = "1.5.0"
 
 zxingLite = "3.3.0"
 
+# SSIV 长图金字塔（BitmapRegionDecoder 区域解码防 OOM）
+ssiv = "3.10.0"
+
 #不要更新版本
 #noinspection NewerVersionAvailable
 hutool = "5.8.22"
@@ -212,6 +215,7 @@ mozilla-rhino = { module = "org.mozilla:rhino", version.ref = "rhino" }
 
 renderscript-intrinsics-replacement-toolkit = { module = "com.github.TomasValenta:renderscript-intrinsics-replacement-toolkit", version = "8eaa829ddd" }
 zxing-lite = { module = "com.github.jenly1314:zxing-lite", version.ref = "zxingLite" }
+subsampling-scale-image-view = { module = "com.davemorrissey.labs:subsampling-scale-image-view-androidx", version.ref = "ssiv" }
 
 [bundles]
 coroutines = ["kotlinx-coroutines-core", "kotlinx-coroutines-android"]

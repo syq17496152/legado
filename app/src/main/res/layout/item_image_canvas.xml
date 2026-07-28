@@ -17,6 +17,14 @@
         android:layout_height="match_parent"
         android:scaleType="fitCenter" />
 
+    <!-- 长图金字塔视图（Phase 3.2 AD-06：默认隐藏，检测到长图时替换 PhotoView 显示） -->
+    <!-- BitmapRegionDecoder 按需解码可视区域瓦片，内存占用与图片尺寸无关，长图防 OOM -->
+    <com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
+        android:id="@+id/ssiv_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <!-- 降级链级别提示（V4 6.1.5：默认隐藏，降级链触发时显示） -->
     <TextView
         android:id="@+id/tv_fallback_hint"

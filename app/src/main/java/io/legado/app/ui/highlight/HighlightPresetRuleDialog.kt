@@ -80,10 +80,11 @@ class HighlightPresetRuleDialog @JvmOverloads constructor(
             binding.ivAdd.setOnClickListener {
                 getItem(holder.layoutPosition)?.let { item ->
                     val groupToUse = defaultGroup ?: HighlightRuleGroupStore.DEFAULT_GROUP
-                    onAddRule(item.copy(
-                        id = System.currentTimeMillis().toString(),
-                        group = groupToUse
-                    ))
+                    // T-B4: 保留内置 id（去掉 System.currentTimeMillis() 覆盖）
+                    // 修复 R-P1-2 根因 b：原覆盖 id 后 ViewModel.update 走 idx>=0 替换分支
+                    // 但新 id 在 list 中必然 idx<0 被静默丢弃；现保留内置 id，配合 T-B3 upsert 语义
+                    // 重复添加走 replace 刷新防副本堆积
+                    onAddRule(item.copy(group = groupToUse))
                     dismiss()
                 }
             }

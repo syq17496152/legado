@@ -105,6 +105,8 @@ val okHttpClient: OkHttpClient by lazy {
         .followRedirects(true)
         .followSslRedirects(true)
         .addInterceptor(OkHttpExceptionInterceptor)
+        // T4.2: 302 重定向缓存（避免重复请求重定向链，提高抓取成功率）
+        .addInterceptor(RedirectCacheInterceptor)
         .addInterceptor { chain ->
             val request = chain.request()
             val builder = request.newBuilder()
@@ -136,7 +138,9 @@ val okHttpClient: OkHttpClient by lazy {
             networkResponse
         }
     // P2-B 修复：始终使用 RetryableDns，提供重试 + 负缓存 + addressCache 优先
-    builder.dns(RetryableDns)
+    // T4.1: 使用 DohDns 替代 RetryableDns，绕过本地 DNS 污染（SNI 阻断/本地 DNS 过滤）
+    // 已知上限：DoH 服务器不可用时会回退到系统 DNS，不影响正常解析 | 升级路径：可根据用户反馈调整 DoH 服务器优先级
+    builder.dns(DohDns)
     if (AppConfig.isCronet) {
         if (Cronet.loader?.install() == true) {
             Cronet.interceptor?.let {

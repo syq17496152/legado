@@ -1,29 +1,41 @@
 package io.legado.app.ui.image
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
+import android.view.ViewTreeObserver
 import android.view.WindowManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
-import androidx.core.app.ActivityOptionsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.databinding.ActivityImageGalleryBinding
+import io.legado.app.R
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.image.adapter.ImageCanvasAdapter
+import io.legado.app.ui.image.adapter.ImageDetailAdapter
+import io.legado.app.ui.image.adapter.ImageDetailViewPagerAdapter
+import io.legado.app.ui.image.ImageCanvasItem
+import io.legado.app.ui.image.ImagePlay
+import io.legado.app.ui.rss.favorites.RssFavoritesDialog
 import io.legado.app.utils.ACache
 import io.legado.app.utils.NetworkUtils
+import io.legado.app.utils.openUrl
 import io.legado.app.utils.sendToClip
+import io.legado.app.utils.showDialogFragment
+import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 /**
@@ -42,16 +54,16 @@ import io.legado.app.utils.viewbindingdelegate.viewBinding
  * 4. 分页加载（AD-04：滚动到底部自动加载下一篇）
  * 5. 文章分隔符（R2.7：跨文章图片混排时显示分隔条）
  * 6. WebView 串行预热（AD-05：复用 pendingPreheatDomains，多域名 CDN 逐个预热）
- * 7. 点击缩略图进入大图模式（ImageDetailActivity，共享元素动画）
- * 8. 大图模式返回保持点击位置可见（onActivityResult + scrollToPosition）
- * 9. 沉浸式全屏（点击切换显隐）
+ * 7. 点击缩略图进入横向浏览（Phase 3.1 AD-05：Activity 内嵌全屏 ViewPager2 层，无 Activity 切换断感）
+ * 8. 退出横向模式同步索引回垂直列表滚动位置（exitHorizontalMode）
+ * 9. 沉浸式全屏（横向模式下点击图片切换显隐）
  * 10. 位置记忆（onDestroy 记录 lastPlayedArticleLink）
  *
  * 数据流（design.md §3.1）：
  * - 入口：ReadRss.readNoHtml 启动，设置 ImagePlay 单例字段
  * - 加载：ImageCanvasViewModel.loadInitialArticle / loadNextArticle 协程加载
  * - 状态：loadState LiveData 通知 footer 切换（LOADING/SUCCESS/ERROR/NO_MORE）
- * - 大图：点击缩略图 → startActivityForResult → onActivityResult 滚动到位置
+ * - 大图：点击缩略图 → enterHorizontalMode 显示 ViewPager2 并定位 → 退出时 scrollToPosition
  */
 class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCanvasViewModel>() {
 
@@ -60,10 +72,27 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
 
     private var canvasAdapter: ImageCanvasAdapter? = null
 
+    /** 全屏横向浏览适配器（AD-05：每次进入横向模式时重建，保证数据源最新） */
+    private var detailViewPagerAdapter: ImageDetailViewPagerAdapter? = null
+    /** 横向浏览模式状态（true=ViewPager2 全屏显示中） */
+    private var isHorizontalMode = false
+
     /** 当前长按的图片URL（用于选择保存目录后回调） */
     private var currentImageUrl: String? = null
     /** 沉浸式状态（true=隐藏状态栏/导航栏/工具栏） */
     private var isImmersive = false
+
+    // ==================== Phase 3.4: 智能预加载（滚动速度判断） ====================
+    /** 上次滚动时间戳（用于计算滚动速度） */
+    private var lastScrollTime = 0L
+    /** 上次滚动 Y 偏移（用于计算滚动速度） */
+    private var lastScrollDy = 0
+    /** 滚动速度阈值（px/ms，超过此值视为快速滚动，跳过预加载） */
+    private val scrollSpeedThreshold = 2.0f
+    /** 预加载去抖延迟（ms，停止滚动后延迟触发预加载） */
+    private val preloadDebounceMs = 150L
+    /** 预加载待执行任务（用于去抖） */
+    private var preloadRunnable: Runnable? = null
 
     // ==================== 方案A：WebView 预热（Cloudflare 防护） ====================
     /** 待预热的图片 CDN 域名队列（V4 AD-05：复用源码现有字段，串行预热） */
@@ -72,6 +101,28 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
     private val preheatedDomains = mutableSetOf<String>()
     /** 是否已完成首次预热 */
     private var isFirstPreheatCompleted = false
+
+    /**
+     * 修复（image-canvas-scroll-fix-20260728）：首次插入图片项后是否已滚动到顶部
+     *
+     * 根因：item_image_canvas.xml root 是 wrap_content，图片未加载时高度为 0，
+     * notifyItemRangeInserted 插入 26 项后所有项都布局在一屏内，RecyclerView 滚动到最后。
+     * 即使 onCreateViewHolder 已设置默认高度，bind 方法重置高度仍可能触发 requestLayout
+     * 导致重新布局。此处兜底：首次插入后强制滚动到第一张图片。
+     */
+    private var isInitialScrollDone = false
+
+    /**
+     * I-P0-2: 降级预热待重载映射（域名 → 待重载 position 集合）
+     *
+     * 流程：onWebViewFallback 登记 position → 预热完成(onPageFinished)/5s超时 →
+     * triggerFallbackReload 取出集合并 remove → canvasAdapter.markPreheatReload 触发
+     * re-bind（bypass failUrl + skipMemory 强制重新拉取，此时 CookieManager 已 flush，
+     * enabledCookieJar 可携 WebView cookies）。
+     *
+     * 一个域名可能有多张 403 图，故 value 为 Set；remove 语义保证只触发一次（幂等）。
+     */
+    private val pendingFallbackReload = mutableMapOf<String, MutableSet<Int>>()
 
     /** 选择图片保存目录 */
     private val selectImageDir = registerForActivityResult(HandleFileContract()) {
@@ -83,30 +134,11 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
         }
     }
 
-    /** 启动 ImageDetailActivity 并接收返回结果（V2 R2.6） */
-    private val startImageDetail = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val currentIndex = result.data?.getIntExtra(ImageDetailActivity.EXTRA_CURRENT_INDEX, -1) ?: -1
-            if (currentIndex >= 0) {
-                // V3 B-7：图片索引转列表 position 后滚动到位置
-                val listPos = canvasAdapter?.imageIndexToListPosition(currentIndex) ?: -1
-                if (listPos >= 0) {
-                    binding.recyclerView.post {
-                        binding.recyclerView.smoothScrollToPosition(listPos)
-                    }
-                    AppLog.putDebugWithTag(
-                        AppLog.TAG_IMAGE_CANVAS,
-                        "onActivityResult: scroll to listPos=$listPos imageIdx=$currentIndex",
-                        level = AppLog.Level.INFO
-                    )
-                }
-            }
-        }
-    }
-
     override fun onSupportNavigateUp(): Boolean {
+        if (isHorizontalMode) {
+            exitHorizontalMode()
+            return true
+        }
         finish()
         return true
     }
@@ -120,8 +152,12 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
         initImmersion()
         initTitleBar()
         initRecyclerView()
+        initFullscreenViewPager()
+        initRotateToolbar()
+        initBackPressedHandler()
         initPreheatWebView()
         observeLoadState()
+        observeNewItems()  // 修复 regression：精准 notifyItemRangeInserted 替代 notifyDataSetChanged
         // 启动首篇文章加载
         viewModel.loadInitialArticle()
     }
@@ -147,8 +183,61 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
         supportActionBar?.setHomeButtonEnabled(true)
         binding.titleBar.title = title
         binding.titleBar.setNavigationOnClickListener {
-            finish()
+            if (isHorizontalMode) {
+                exitHorizontalMode()
+            } else {
+                finish()
+            }
         }
+    }
+
+    // ==================== B3-5.1: 工具栏菜单（收藏/刷新/浏览器打开/日志） ====================
+
+    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.image_gallery, menu)
+        return super.onCompatCreateOptionsMenu(menu)
+    }
+
+    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            R.id.menu_image_star -> {
+                // 收藏当前文章
+                val article = ImagePlay.rssArticles?.getOrNull(ImagePlay.rssArticleIndex)
+                if (article != null) {
+                    showDialogFragment(RssFavoritesDialog(article))
+                } else {
+                    toastOnUi("无当前文章")
+                }
+            }
+            R.id.menu_image_refresh -> {
+                // 刷新：清 Glide 内存缓存 + 重新加载
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_IMAGE_CANVAS,
+                    "menu_refresh: clear cache and reload",
+                    level = AppLog.Level.INFO
+                )
+                com.bumptech.glide.Glide.get(this).clearMemory()
+                canvasAdapter?.notifyDataSetChanged()
+                viewModel.loadInitialArticle()
+                toastOnUi("已刷新")
+            }
+            R.id.menu_image_browser_open -> {
+                // 浏览器打开原始详情页
+                val article = ImagePlay.rssArticles?.getOrNull(ImagePlay.rssArticleIndex)
+                val link = article?.link
+                if (!link.isNullOrBlank()) {
+                    openUrl(link)
+                } else {
+                    toastOnUi("无文章链接")
+                }
+            }
+            R.id.menu_image_log -> {
+                // 查看日志
+                io.legado.app.ui.about.AppLogDialog()
+                    .show(supportFragmentManager, "appLogDialog")
+            }
+        }
+        return super.onCompatOptionsItemSelected(item)
     }
 
     /**
@@ -168,28 +257,55 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
                 onCanvasItemClick(listPosition, sharedView)
             },
             onRetryClick = {
-                AppLog.putDebugWithTag(AppLog.TAG_IMAGE_CANVAS, "onRetryClick: retry loadNextArticle", level = AppLog.Level.INFO)
-                viewModel.loadNextArticle()
+                // V-004-P0-ImageRetry: 修复重试按钮无效（铁证：004 日志 19:01:14 进入 16 秒退出，重试无效）
+                // 根因：onRetryClick 原调用 loadNextArticle，但首次加载失败时 loadedArticleIndices 空，
+                // loadNextArticle 检查 maxOrNull()=null 直接 return，重试按钮无效
+                // 方案：检查 loadedArticleIndices 是否空，空则调用 loadInitialArticle（重试首次加载），非空调用 loadNextArticle
+                AppLog.putDebugWithTag(AppLog.TAG_IMAGE_CANVAS, "onRetryClick: retry, loadedArticleIndicesEmpty=${ImagePlay.loadedArticleIndices.isEmpty()}", level = AppLog.Level.INFO)
+                if (ImagePlay.loadedArticleIndices.isEmpty()) {
+                    viewModel.loadInitialArticle()
+                } else {
+                    viewModel.loadNextArticle()
+                }
             },
             onWebViewFallback = { url, position ->
                 // 降级3: WebView 即时预热（V4 6.1.3）
-                // 用 webviewPreheat 加载图片 URL，onPageFinished 后 CookieManager.flush() 同步 cookies
-                // 重试机制：用户滚动触发 onBindViewHolder 时自动重试 Glide（enabledCookieJar 已启用）
-                // 已知上限：用户不滚动时图片保持空白，需滚动或返回再进入触发重试
-                // 升级路径：后续可在 onPageFinished 中主动调用 notifyItemChanged 触发重试（需记录失败 position）
+                // I-P0-2 修复：本回调源自 Glide RequestListener（工作线程），
+                // WebView.loadUrl 必须 UI 线程——原实现直接调用，异常被 runCatching 吞掉，
+                // 预热从未执行（86 张 403 降级链断裂的直接根因）。
                 AppLog.putDebugWithTag(
                     AppLog.TAG_IMAGE_CANVAS,
-                    "onWebViewFallback: load url for preheat position=$position urlLen=${url.length}",
+                    "ImageFallback: webview preheat request position=$position url=/path/${url.hashCode()}",
                     level = AppLog.Level.INFO
                 )
-                kotlin.runCatching {
-                    binding.webviewPreheat.loadUrl(url)
-                }.onFailure { e ->
-                    AppLog.putDebugWithTag(
-                        AppLog.TAG_IMAGE_CANVAS,
-                        "onWebViewFallback failed: ${e.message}",
-                        level = AppLog.Level.ERROR
-                    )
+                runOnUiThread {
+                    if (isDestroyed || isFinishing) return@runOnUiThread
+                    kotlin.runCatching {
+                        // 登记 position → 域名映射，预热完成/超时后统一触发重载
+                        val domain = kotlin.runCatching { NetworkUtils.getSubDomain(url) }.getOrNull()
+                        if (domain != null) {
+                            pendingFallbackReload[domain]?.add(position)
+                                ?: pendingFallbackReload.put(domain, mutableSetOf(position))
+                        }
+                        binding.webviewPreheat.loadUrl(url)
+                        AppLog.putDebugWithTag(
+                            AppLog.TAG_IMAGE_CANVAS,
+                            "ImageFallback: webview preheat start, domain=***, position=$position",
+                            level = AppLog.Level.INFO
+                        )
+                        // 5s 超时兜底：onPageFinished 未触发也执行重载（弱网/WebView 卡住场景）
+                        binding.webviewPreheat.postDelayed({
+                            if (!isDestroyed && !isFinishing) {
+                                triggerFallbackReload(domain)
+                            }
+                        }, 5000)
+                    }.onFailure { e ->
+                        AppLog.putDebugWithTag(
+                            AppLog.TAG_IMAGE_CANVAS,
+                            "onWebViewFallback failed: ${e.message}",
+                            level = AppLog.Level.ERROR
+                        )
+                    }
                 }
             },
             onWebModeFallback = { articleIndex ->
@@ -229,13 +345,23 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
             // AD-13: 允许动态高度（图片高度自适应）
             setHasFixedSize(false)
 
-            // AD-04: 滚动监听触发分页加载 + 快速滚动暂停 Glide
+            // AD-04: 滚动监听触发分页加载 + 快速滚动暂停 Glide + Phase 3.4 智能预加载
             addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     super.onScrolled(recyclerView, dy, dy)
+                    // 修复（image-canvas-3fix-20260728 Q1修复3）：首次插入未完成时禁用 loadNextArticle
+                    // 根因：首次插入 24 项后 80ms 触发 loadNextArticle（铁证：008 日志 L107），
+                    // loadNextArticle 加载下一篇并插入，破坏初始滚动定位。
+                    // 修复：isInitialScrollDone=true 后才允许触发 loadNextArticle，
+                    // 确保初始滚动定位稳定。
+                    if (!isInitialScrollDone) {
+                        return
+                    }
                     val layoutManager = recyclerView.layoutManager as? LinearLayoutManager ?: return
                     val totalItemCount = layoutManager.itemCount
                     val lastVisible = layoutManager.findLastVisibleItemPosition()
+                    // 更新右下角画布页码悬浮（当前文章图片索引/总数）
+                    updateCanvasPageIndex(layoutManager)
                     val remaining = totalItemCount - lastVisible
                     // AD-04: 剩余项数 ≤ 阈值时触发下一篇加载
                     if (remaining <= ImageCanvasAdapter.PAGINATION_THRESHOLD) {
@@ -246,6 +372,39 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
                         )
                         viewModel.loadNextArticle()
                     }
+
+                    // ==================== Phase 3.4: 智能预加载（滚动速度判断） ====================
+                    val currentTime = System.currentTimeMillis()
+                    val timeDelta = currentTime - lastScrollTime
+                    // 计算滚动速度（px/ms）
+                    val scrollSpeed = if (timeDelta > 0) {
+                        kotlin.math.abs(dy).toFloat() / timeDelta.toFloat()
+                    } else {
+                        0f
+                    }
+                    lastScrollTime = currentTime
+                    lastScrollDy = dy
+
+                    // 快速滚动时跳过预加载（避免浪费带宽）
+                    if (scrollSpeed > scrollSpeedThreshold) {
+                        // 取消待执行的预加载任务
+                        preloadRunnable?.let { recyclerView.removeCallbacks(it) }
+                        preloadRunnable = null
+                        AppLog.putDebugWithTag(
+                            AppLog.TAG_IMAGE_CANVAS,
+                            "Scroll: fast scroll skip preload speed=${"%.2f".format(scrollSpeed)}px/ms dy=$dy",
+                            level = AppLog.Level.INFO
+                        )
+                        return
+                    }
+
+                    // 慢速/停止时：去抖延迟触发预加载
+                    preloadRunnable?.let { recyclerView.removeCallbacks(it) }
+                    preloadRunnable = Runnable {
+                        // 预加载当前可见位置前后各 1 张图片
+                        canvasAdapter?.preloadAround(lastVisible, range = 1)
+                    }
+                    recyclerView.postDelayed(preloadRunnable, preloadDebounceMs)
                 }
 
                 override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
@@ -261,23 +420,35 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
                         }
                         RecyclerView.SCROLL_STATE_IDLE -> {
                             com.bumptech.glide.Glide.with(this@ImageGalleryActivity).resumeRequests()
+                            // Phase 3.4: 滚动停止时立即触发预加载（无需去抖）
+                            val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
+                            val lastVisible = layoutManager?.findLastVisibleItemPosition() ?: return
+                            preloadRunnable?.let { recyclerView.removeCallbacks(it) }
+                            canvasAdapter?.preloadAround(lastVisible, range = 1)
                         }
                     }
                 }
             })
         }
+        // I-P0-1: 显式传入防盗链头（与 ImagePlay 全局态解耦，ImagePlay 仅作兜底）
+        // 文章 link 映射快照：articleIndex → link（link 为 null 的过滤）
+        canvasAdapter?.setAntiLeechHeaders(
+            sourceOrigin = ImagePlay.rssSource?.sourceUrl,
+            articleLinks = ImagePlay.rssArticles
+                ?.mapIndexedNotNull { idx, article -> article.link?.let { idx to it } }
+                ?.toMap()
+        )
         AppLog.putDebugWithTag(AppLog.TAG_IMAGE_CANVAS, "initRecyclerView done", level = AppLog.Level.INFO)
     }
 
     /**
-     * 列表项点击回调：启动 ImageDetailActivity（大图模式）
+     * 列表项点击回调：进入横向浏览模式（Phase 3.1 AD-05）
      *
-     * 流程（design.md §3.2 数据流 2）：
+     * 流程（design.md §3.2 数据流 2 修订）：
      * 1. 列表 position 转换为图片索引（listPositionToImageIndex，V3 B-7）
-     * 2. 准备共享元素动画（ActivityOptions.makeSceneTransitionAnimation）
-     * 3. 启动 ImageDetailActivity（startImageDetail.launch）
+     * 2. 显示全屏 ViewPager2 并定位到点击索引（替代启动 ImageDetailActivity）
      *
-     * V2 B-5：图片未加载完成时降级为普通 Activity 跳转（无共享元素动画）
+     * @param sharedView 保留参数（升级路径：后续手动实现共享元素过渡时使用）
      */
     private fun onCanvasItemClick(listPosition: Int, sharedView: View) {
         val imageIdx = canvasAdapter?.listPositionToImageIndex(listPosition) ?: -1
@@ -285,36 +456,230 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
             AppLog.putDebugWithTag(AppLog.TAG_IMAGE_CANVAS, "onCanvasItemClick: invalid imageIdx for listPos=$listPosition", level = AppLog.Level.WARN)
             return
         }
-        val intent = Intent(this, ImageDetailActivity::class.java).apply {
-            putExtra(ImageDetailActivity.EXTRA_START_INDEX, imageIdx)
+        AppLog.putDebugWithTag(
+            AppLog.TAG_IMAGE_CANVAS,
+            "onCanvasItemClick: enter horizontal mode listPos=$listPosition imageIdx=$imageIdx",
+            level = AppLog.Level.INFO
+        )
+        enterHorizontalMode(imageIdx)
+    }
+
+    // ==================== 横向浏览模式（Phase 3.1 AD-05：Activity 内嵌全屏 ViewPager2 层） ====================
+
+    /**
+     * 初始化全屏 ViewPager2（一次性配置：方向 + 页码监听）
+     *
+     * - adapter 在每次进入横向模式时重建（setupFullscreenViewPager），保证数据源最新
+     * - OnPageChangeCallback 注册一次（重复注册会累积）
+     */
+    private fun initFullscreenViewPager() {
+        binding.viewPagerFullscreen.orientation = ViewPager2.ORIENTATION_HORIZONTAL
+        binding.viewPagerFullscreen.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                if (isHorizontalMode) {
+                    updatePageIndex(position)
+                }
+            }
+        })
+    }
+
+    /**
+     * 初始化旋转工具栏按钮（顺时针/逆时针/重置，复用布局已有 layout_rotate_toolbar）
+     */
+    private fun initRotateToolbar() {
+        binding.btnRotateRight.setOnClickListener {
+            detailViewPagerAdapter?.rotateCurrentClockwise()
         }
-        // V2 B-5：图片未加载完成时降级为普通跳转
-        val options = try {
-            ActivityOptionsCompat.makeSceneTransitionAnimation(
-                this, sharedView, "shared_image_$listPosition"
-            )
-        } catch (e: Exception) {
-            AppLog.putDebugWithTag(AppLog.TAG_IMAGE_CANVAS, "makeSceneTransitionAnimation failed: ${e.message}", level = AppLog.Level.WARN)
-            null
+        binding.btnRotateLeft.setOnClickListener {
+            detailViewPagerAdapter?.rotateCurrentCounterClockwise()
+        }
+        binding.btnReset.setOnClickListener {
+            detailViewPagerAdapter?.resetCurrentView()
+        }
+    }
+
+    /**
+     * 初始化返回键拦截（横向模式时优先退出横向模式，而非 finish Activity）
+     */
+    private fun initBackPressedHandler() {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (isHorizontalMode) {
+                    exitHorizontalMode()
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
+    }
+
+    /**
+     * 进入横向浏览模式：重建 adapter + 显示 ViewPager2 并定位
+     *
+     * 简化说明：同 Activity 内无法复用跨 Activity 共享元素动画（ActivityOptionsCompat），改用淡入淡出过渡
+     * 已知上限：失去从缩略图位置平滑放大到全屏的视觉效果
+     * 升级路径：后续可手动实现共享元素过渡（临时 ImageView 从点击位置 ChangeBounds 动画到全屏）
+     */
+    private fun enterHorizontalMode(imageIdx: Int) {
+        isHorizontalMode = true
+        setupFullscreenViewPager()
+        binding.viewPagerFullscreen.setCurrentItem(imageIdx, false)
+
+        // 淡入显示 ViewPager2
+        binding.viewPagerFullscreen.alpha = 0f
+        binding.viewPagerFullscreen.visibility = View.VISIBLE
+        binding.viewPagerFullscreen.animate().alpha(1f).setDuration(200).start()
+
+        // 显示旋转工具栏 + 页码
+        binding.layoutRotateToolbar.visibility = View.VISIBLE
+        updatePageIndex(imageIdx)
+        // 进入大图模式时隐藏画布页码（避免与 tvPageIndex 重叠）
+        binding.tvCanvasPageIndex.visibility = View.GONE
+        AppLog.putDebugWithTag(
+            AppLog.TAG_IMAGE_CANVAS,
+            "enterHorizontalMode: imageIdx=$imageIdx totalImages=${detailViewPagerAdapter?.getDataSize() ?: 0}",
+            level = AppLog.Level.INFO
+        )
+    }
+
+    /**
+     * 退出横向浏览模式：隐藏 ViewPager2 + 同步索引回垂直列表滚动位置
+     */
+    private fun exitHorizontalMode() {
+        val currentIdx = binding.viewPagerFullscreen.currentItem
+        isHorizontalMode = false
+
+        // 退出前恢复非沉浸式（确保 TitleBar 可见）
+        if (isImmersive) {
+            toggleImmersive()
+        }
+
+        // 淡出隐藏 ViewPager2
+        binding.viewPagerFullscreen.animate().alpha(0f).setDuration(150).withEndAction {
+            binding.viewPagerFullscreen.visibility = View.GONE
+        }.start()
+
+        // 隐藏旋转工具栏与页码（垂直模式不显示）
+        binding.layoutRotateToolbar.visibility = View.GONE
+        binding.tvPageIndex.visibility = View.GONE
+
+        // 同步索引回垂直列表滚动位置（imageIndexToListPosition，V3 B-7）
+        val listPos = canvasAdapter?.imageIndexToListPosition(currentIdx) ?: -1
+        if (listPos >= 0) {
+            binding.recyclerView.post {
+                binding.recyclerView.smoothScrollToPosition(listPos)
+            }
         }
         AppLog.putDebugWithTag(
             AppLog.TAG_IMAGE_CANVAS,
-            "onCanvasItemClick: listPos=$listPosition imageIdx=$imageIdx hasSharedElement=${options != null}",
+            "exitHorizontalMode: imageIdx=$currentIdx listPos=$listPos",
             level = AppLog.Level.INFO
         )
-        startImageDetail.launch(intent)
+    }
+
+    /**
+     * 重建全屏 ViewPager2 adapter（每次进入时调用，保证 ImagePlay.allImageUrls 快照最新）
+     *
+     * 回调：
+     * - 长按：保存/分享/复制URL菜单（复用 SAF 保存流程）
+     * - 单击：切换沉浸式
+     * - 页码变化：更新 tvPageIndex
+     */
+    private fun setupFullscreenViewPager() {
+        val sourceOrigin = ImagePlay.rssSource?.sourceUrl
+        val referer = ImagePlay.rssArticles?.getOrNull(ImagePlay.rssArticleIndex)?.link
+        val adapter = ImageDetailViewPagerAdapter(this, sourceOrigin, referer)
+        adapter.setCallback(object : ImageDetailAdapter.OnImageDetailCallback {
+            override fun onImageLongClick(imageUrl: String, view: View) {
+                showImageActionMenu(imageUrl)
+            }
+
+            override fun onImageClick() {
+                toggleImmersive()
+            }
+
+            override fun onPageChanged(position: Int, total: Int) {
+                if (isHorizontalMode) {
+                    updatePageIndex(position)
+                }
+            }
+        })
+        detailViewPagerAdapter = adapter
+        binding.viewPagerFullscreen.adapter = adapter
+    }
+
+    /**
+     * 更新页码显示（"当前 / 总数"，单图或非横向模式时隐藏）
+     */
+    private fun updatePageIndex(position: Int) {
+        val total = detailViewPagerAdapter?.getDataSize() ?: 0
+        if (total > 1 && isHorizontalMode && !isImmersive) {
+            binding.tvPageIndex.visibility = View.VISIBLE
+            binding.tvPageIndex.text = "${position + 1} / $total"
+        } else {
+            binding.tvPageIndex.visibility = View.GONE
+        }
+    }
+
+    /**
+     * 切换沉浸式全屏（横向模式下单击图片触发）
+     *
+     * - true：隐藏系统栏/TitleBar/旋转工具栏/页码，全屏看图
+     * - false：恢复显示
+     */
+    private fun toggleImmersive() {
+        isImmersive = !isImmersive
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        if (isImmersive) {
+            controller.hide(android.view.WindowInsets.Type.systemBars())
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            binding.titleBar.visibility = View.GONE
+            binding.layoutRotateToolbar.visibility = View.GONE
+            binding.tvPageIndex.visibility = View.GONE
+        } else {
+            controller.show(android.view.WindowInsets.Type.systemBars())
+            binding.titleBar.visibility = View.VISIBLE
+            if (isHorizontalMode) {
+                binding.layoutRotateToolbar.visibility = View.VISIBLE
+                updatePageIndex(binding.viewPagerFullscreen.currentItem)
+            }
+        }
+        AppLog.putDebugWithTag(AppLog.TAG_IMAGE_CANVAS, "toggleImmersive isImmersive=$isImmersive", level = AppLog.Level.INFO)
+    }
+
+    /**
+     * 长按图片菜单：保存/分享/复制URL（复用 SAF 保存流程，与 ImageDetailActivity 一致）
+     */
+    private fun showImageActionMenu(imageUrl: String) {
+        currentImageUrl = imageUrl
+        alert("图片操作") {
+            items(listOf("保存图片", "分享图片", "复制URL")) { _, which ->
+                when (which) {
+                    0 -> saveImage(imageUrl)
+                    1 -> shareImage(imageUrl)
+                    2 -> {
+                        sendToClip(imageUrl)
+                        toastOnUi("图片链接已复制")
+                    }
+                }
+            }
+        }
     }
 
     /**
      * 观察 ViewModel 加载状态（更新 Adapter footer）
      *
      * W11: 首次加载成功后提取图片 URL 域名调用 startPreheat（Cloudflare 防护预热）
+     *
+     * 修复 regression：移除原 notifyDataSetChanged，改由 observeNewItems 精准 notifyItemRangeInserted。
+     * notifyDataSetChanged 会触发所有可见 ViewHolder 重新 bind → Glide.clear 取消正在进行的
+     * downloadOnly 请求 → 图片永远加载不完的死循环。
      */
     private fun observeLoadState() {
         viewModel.loadState.observe(this) { state ->
             canvasAdapter?.setLoadState(state)
-            // 数据更新后刷新 Adapter
-            canvasAdapter?.notifyDataSetChanged()
             // W11: 首次加载成功后触发 WebView 预热（提取图片 URL 域名）
             if (state is ImageCanvasAdapter.LoadState.SUCCESS && !isFirstPreheatCompleted) {
                 val imageUrls = ImagePlay.allImageUrls.value
@@ -328,6 +693,118 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
                     startPreheat(imageUrls)
                 }
             }
+        }
+    }
+
+    /**
+     * 观察新增项事件，精准 notifyItemRangeInserted（修复 regression）
+     *
+     * 替代原 observeLoadState 中的 notifyDataSetChanged：
+     * - notifyDataSetChanged 触发所有可见 ViewHolder 重新 bind → Glide.clear 取消正在进行的 downloadOnly
+     * - notifyItemRangeInserted 只通知新增项的范围，RecyclerView 只 bind 新可见的 ViewHolder
+     * - 已可见的 ViewHolder 不受影响，正在进行的 Glide 请求不会被取消
+     */
+    private fun observeNewItems() {
+        viewModel.newItemsEvent.observe(this) { (startPos, itemCount) ->
+            AppLog.putDebugWithTag(
+                AppLog.TAG_IMAGE_CANVAS,
+                "observeNewItems: notifyItemRangeInserted startPos=$startPos itemCount=$itemCount",
+                level = AppLog.Level.INFO
+            )
+            canvasAdapter?.notifyItemRangeInserted(startPos, itemCount)
+            // 修复（image-canvas-3fix-20260728 Q1修复2）：首次插入后滚动到第一张图片（布局完成后执行）
+            // 根因：原 post 在布局完成前执行被后续布局覆盖（铁证：008 日志 L107 lastVisible=24，
+            // 80ms 后触发 loadNextArticle，scrollToPosition(0) 未生效或被覆盖）。
+            // 修复：使用 OnGlobalLayoutListener 等待 RecyclerView 完成布局后执行 scrollToPosition(0)，
+            // 此时高度已测量，滚动定位准确且不会被布局过程覆盖。
+            if (!isInitialScrollDone && startPos == 0 && itemCount > 0) {
+                isInitialScrollDone = true
+                binding.recyclerView.viewTreeObserver.addOnGlobalLayoutListener(
+                    object : ViewTreeObserver.OnGlobalLayoutListener {
+                        override fun onGlobalLayout() {
+                            binding.recyclerView.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                            binding.recyclerView.scrollToPosition(0)
+                            AppLog.putDebugWithTag(
+                                AppLog.TAG_IMAGE_CANVAS,
+                                "observeNewItems: initial scroll to position 0 (after layout)",
+                                level = AppLog.Level.INFO
+                            )
+                            // 初始滚动完成后更新页码
+                            val lm = binding.recyclerView.layoutManager as? LinearLayoutManager
+                            if (lm != null) updateCanvasPageIndex(lm)
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    /**
+     * 更新右下角画布页码悬浮（当前文章图片索引/总数）
+     *
+     * 需求：图片播放器右下角悬浮展示当前正文图片总个数 + 当前下拉查看的第几张。
+     * 实现：
+     * - 获取第一个可见的 ImageItem 的 position
+     * - 从 ImagePlay.allImageUrls 获取该 ImageItem 的 articleIndex
+     * - 计算该 articleIndex 的图片总数（筛选同 articleIndex 的 ImageItem 数量）
+     * - 计算当前图片在该 articleIndex 内的索引（当前 position 之前同 articleIndex 的 ImageItem 数量）
+     * - 显示 "{当前文章内索引+1} / {当前文章图片总数}"
+     */
+    private fun updateCanvasPageIndex(layoutManager: LinearLayoutManager) {
+        val snapshot = ImagePlay.allImageUrls.value
+        if (snapshot.isEmpty()) {
+            binding.tvCanvasPageIndex.visibility = View.GONE
+            return
+        }
+        val firstVisiblePos = layoutManager.findFirstVisibleItemPosition()
+        if (firstVisiblePos == RecyclerView.NO_POSITION || firstVisiblePos >= snapshot.size) {
+            binding.tvCanvasPageIndex.visibility = View.GONE
+            return
+        }
+        // 找到第一个可见的 ImageItem（跳过 ArticleDivider）
+        var currentPos = firstVisiblePos
+        var currentItem: ImageCanvasItem.ImageItem? = null
+        while (currentPos <= layoutManager.findLastVisibleItemPosition() && currentPos < snapshot.size) {
+            val item = snapshot[currentPos]
+            if (item is ImageCanvasItem.ImageItem) {
+                currentItem = item
+                break
+            }
+            currentPos++
+        }
+        if (currentItem == null) {
+            binding.tvCanvasPageIndex.visibility = View.GONE
+            return
+        }
+        val articleIndex = currentItem.articleIndex
+        // 计算该 articleIndex 的图片总数和当前图片在该 articleIndex 内的索引
+        var articleTotal = 0
+        var currentIndexInArticle = 0
+        for (i in 0..currentPos) {
+            val item = snapshot[i]
+            if (item is ImageCanvasItem.ImageItem && item.articleIndex == articleIndex) {
+                articleTotal++
+                if (i < currentPos) {
+                    currentIndexInArticle++
+                }
+            }
+        }
+        // 补全后续同 articleIndex 的图片数（currentPos 之后可能还有同 articleIndex 的图片）
+        for (i in (currentPos + 1) until snapshot.size) {
+            val item = snapshot[i]
+            if (item is ImageCanvasItem.ImageItem && item.articleIndex == articleIndex) {
+                articleTotal++
+            } else if (item is ImageCanvasItem.ArticleDivider) {
+                // 遇到下一个文章的分隔符，停止计数
+                break
+            }
+        }
+        if (articleTotal <= 1) {
+            // 单图时隐藏页码
+            binding.tvCanvasPageIndex.visibility = View.GONE
+        } else {
+            binding.tvCanvasPageIndex.visibility = View.VISIBLE
+            binding.tvCanvasPageIndex.text = "${currentIndexInArticle + 1} / $articleTotal"
         }
     }
 
@@ -368,6 +845,9 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
                     "Preheat: domain completed preheatedCount=${preheatedDomains.size} remaining=${pendingPreheatDomains.size}",
                     level = AppLog.Level.INFO
                 )
+                // I-P0-2: 降级预热完成触发待重载 position（cookies 已 flush，可携 WebView cookies 重新拉取）
+                // 与 onWebViewFallback 的 5s 超时兜底幂等（remove 语义，先触发者生效）
+                triggerFallbackReload(domain)
                 // V4 AD-05: 串行触发下一个域名
                 processNextPreheat()
             }
@@ -433,6 +913,27 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
         binding.webviewPreheat.loadUrl(preheatUrl)
     }
 
+    /**
+     * I-P0-2: 触发降级预热完成后的图片重载
+     *
+     * 调用时机（两处，幂等——remove 语义先触发者生效，后到者取 null 直接 return）：
+     * 1. onPageFinished 正常完成（cookies 已 flush）
+     * 2. onWebViewFallback 的 5s 超时兜底（弱网/WebView 卡住，onPageFinished 未触发）
+     *
+     * @param domain 预热完成的域名（null/blank 时防御性跳过）
+     */
+    private fun triggerFallbackReload(domain: String?) {
+        if (domain.isNullOrBlank()) return
+        val positions = pendingFallbackReload.remove(domain) ?: return
+        if (positions.isEmpty()) return
+        AppLog.putDebugWithTag(
+            AppLog.TAG_IMAGE_CANVAS,
+            "ImageFallback: trigger reload positionCount=${positions.size} positions=${positions.sorted()}",
+            level = AppLog.Level.INFO
+        )
+        canvasAdapter?.markPreheatReload(positions)
+    }
+
     // ==================== 私有方法 ====================
 
     /**
@@ -456,6 +957,9 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
 
     override fun onDestroy() {
         super.onDestroy()
+        // Phase 3.4: 清理预加载任务（避免 Activity 销毁后执行）
+        preloadRunnable?.let { binding.recyclerView.removeCallbacks(it) }
+        preloadRunnable = null
         // V2 O-3: 清理垂直画布状态（避免 Activity 销毁后再次进入继承上次 allImageUrls）
         val clearedSize = ImagePlay.allImageUrls.value.size
         ImagePlay.clearImageCanvasState()

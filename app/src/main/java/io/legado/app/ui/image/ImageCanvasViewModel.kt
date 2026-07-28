@@ -14,11 +14,9 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
-import io.legado.app.model.analyzeRule.AnalyzeRule
-import io.legado.app.model.rss.Rss
+import io.legado.app.help.image.ImageUrlExtractor
 import io.legado.app.ui.image.adapter.ImageCanvasAdapter
 import io.legado.app.utils.ACache
-import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.writeBytes
 import kotlinx.coroutines.currentCoroutineContext
@@ -56,6 +54,17 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
     /** 加载状态 LiveData（供 Activity 观察更新 footer） */
     private val _loadState = MutableLiveData<ImageCanvasAdapter.LoadState>(ImageCanvasAdapter.LoadState.IDLE)
     val loadState: MutableLiveData<ImageCanvasAdapter.LoadState> = _loadState
+
+    /**
+     * 新增项事件 LiveData（修复 regression：notifyDataSetChanged 导致 Glide 请求被取消）
+     *
+     * 触发时机：loadArticleInternal 成功后 postValue(startPos to itemCount)
+     * Activity 观察后调用 notifyItemRangeInserted(startPos, itemCount) 精准插入，
+     * 避免 notifyDataSetChanged 触发所有可见 ViewHolder 重新 bind → Glide.clear 取消
+     * 正在进行的 downloadOnly 请求 → 图片永远加载不完的死循环。
+     */
+    private val _newItemsEvent = MutableLiveData<Pair<Int, Int>>()
+    val newItemsEvent: MutableLiveData<Pair<Int, Int>> = _newItemsEvent
 
     /** 当前加载协程（AD-07：新加载前取消上一个） */
     private var loadJob: Coroutine<*>? = null
@@ -146,10 +155,10 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
         val rssSource = ImagePlay.rssSource
         val rssArticles = ImagePlay.rssArticles
         if (rssSource == null || rssArticles.isNullOrEmpty()) {
-            AppLog.putDebugWithTag(
-                AppLog.TAG_IMAGE_CANVAS,
-                "loadInitialArticle: rssSource or rssArticles is null, cannot load",
-                level = AppLog.Level.ERROR
+            // V-004-P0-ImageLog: 关键失败点改用 putError（无条件输出，不受 recordLog 守卫）
+            AppLog.putError(
+                "ImageCanvas loadInitialArticle failed: rssSource=${rssSource == null} rssArticles=${rssArticles?.size ?: 0}",
+                null
             )
             _loadState.postValue(ImageCanvasAdapter.LoadState.ERROR(
                 IllegalStateException("订阅源或文章列表为空")
@@ -158,10 +167,10 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
         }
         val initialIndex = ImagePlay.rssArticleIndex
         if (initialIndex !in rssArticles.indices) {
-            AppLog.putDebugWithTag(
-                AppLog.TAG_IMAGE_CANVAS,
-                "loadInitialArticle: initialIndex=$initialIndex outOfRange (0, ${rssArticles.size})",
-                level = AppLog.Level.ERROR
+            // V-004-P0-ImageLog: 关键失败点改用 putError
+            AppLog.putError(
+                "ImageCanvas loadInitialArticle failed: initialIndex=$initialIndex outOfRange (0, ${rssArticles.size})",
+                null
             )
             _loadState.postValue(ImageCanvasAdapter.LoadState.ERROR(
                 IndexOutOfBoundsException("初始文章索引越界")
@@ -263,43 +272,28 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
 
             val ruleContent = rssSource.ruleContent
             val ruleImage = rssSource.ruleImage
-            // ruleContent 为空时，用 body@html 获取文章详情页 HTML
-            val effectiveRule = if (ruleContent.isNullOrBlank()) "body@html" else ruleContent
 
             AppLog.putDebugWithTag(
                 AppLog.TAG_IMAGE_CANVAS,
-                "RssFetch: start articleIndex=$articleIndex ruleContentLen=${ruleContent?.length ?: 0} ruleImageLen=${ruleImage?.length ?: 0}",
+                "ImageUrlExtractor: start articleIndex=$articleIndex ruleContentLen=${ruleContent?.length ?: 0} ruleImageLen=${ruleImage?.length ?: 0}",
                 level = AppLog.Level.INFO
             )
             val startTime = System.currentTimeMillis()
 
-            val body = Rss.getContentAwait(article, effectiveRule, rssSource)
-            // 协程取消检查（网络请求后）
+            // 调用 ImageUrlExtractor 三层降级链路（L1 静态解析 → L2 WebView 嗅探 → L3 合并）
+            val imageUrls = ImageUrlExtractor.extractImageList(article, rssSource, ruleContent, ruleImage)
+            // 协程取消检查（嗅探后）
             currentCoroutineContext().ensureActive()
 
             val costMs = System.currentTimeMillis() - startTime
             AppLog.putDebugWithTag(
                 AppLog.TAG_IMAGE_CANVAS,
-                "RssFetch: end articleIndex=$articleIndex costMs=$costMs bodyLen=${body.length}",
-                level = AppLog.Level.INFO
-            )
-
-            if (body.isBlank()) {
-                throw IllegalStateException("body is blank")
-            }
-
-            val imageUrls = parseImageUrls(body, article.link ?: "", ruleImage, rssSource)
-            // 协程取消检查（解析后）
-            currentCoroutineContext().ensureActive()
-
-            AppLog.putDebugWithTag(
-                AppLog.TAG_IMAGE_CANVAS,
-                "parseImageUrls: articleIndex=$articleIndex imageCount=${imageUrls.size}",
+                "ImageUrlExtractor: end articleIndex=$articleIndex costMs=$costMs imageCount=${imageUrls.size}",
                 level = AppLog.Level.INFO
             )
 
             if (imageUrls.isEmpty()) {
-                throw IllegalStateException("parseImageUrls returned empty list")
+                throw IllegalStateException("ImageUrlExtractor returned empty list")
             }
 
             // 转换为 ImageCanvasItem.ImageItem 列表
@@ -310,6 +304,12 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
                     imageIndex = idx
                 )
             }
+
+            // 修复 regression：记录新增项的起始 position 和数量
+            // appendItems 前的 allImageUrls.size 即为新增项的起始 position
+            val startPos = ImagePlay.allImageUrls.value.size
+            val dividerCount = if (!isInitial) 1 else 0
+            val itemCount = dividerCount + imageItems.size
 
             // W5: 文章分隔符插入（首篇文章除外，isInitial=true 时由 Activity 直接展示无需分隔符）
             if (!isInitial) {
@@ -323,145 +323,34 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
 
             AppLog.putDebugWithTag(
                 AppLog.TAG_IMAGE_CANVAS,
-                "loadArticleInternal: success articleIndex=$articleIndex loadedCount=${imageItems.size} totalImages=${ImagePlay.allImageUrls.value.size}",
+                "loadArticleInternal: success articleIndex=$articleIndex loadedCount=${imageItems.size} totalImages=${ImagePlay.allImageUrls.value.size} newItemsStart=$startPos newItemsCount=$itemCount",
                 level = AppLog.Level.INFO
             )
 
-            ImageCanvasAdapter.LoadState.SUCCESS
-        }.onSuccess { state ->
+            // 修复 regression：返回新增项的范围，onSuccess 中 postValue 给 Activity
+            // Activity 调用 notifyItemRangeInserted 精准插入，避免 notifyDataSetChanged
+            // 触发所有可见 ViewHolder 重新 bind → Glide.clear 取消正在进行的 downloadOnly
+            startPos to itemCount
+        }.onSuccess { range ->
             isLaunching = false
-            _loadState.postValue(state)
+            _loadState.postValue(ImageCanvasAdapter.LoadState.SUCCESS)
+            _newItemsEvent.postValue(range)
         }.onError { e ->
             isLaunching = false
             // Coroutine 内部已守卫 CancellationException（重新抛出不触发 onError）
-            AppLog.putDebugWithTag(
-                AppLog.TAG_IMAGE_CANVAS,
-                "loadArticleInternal: failed articleIndex=$articleIndex e=${e::class.simpleName} msg=${e.message}",
-                level = AppLog.Level.ERROR
+            // V-004-P0-ImageLog: 关键失败点改用 putError（无条件输出，不受 recordLog 守卫）
+            AppLog.putError(
+                "ImageCanvas loadArticleInternal failed: articleIndex=$articleIndex e=${e::class.simpleName} msg=${e.message?.take(200)}",
+                e
             )
             _loadState.postValue(ImageCanvasAdapter.LoadState.ERROR(e))
         }
     }
 
-    /**
-     * 解析 body 为图片URL列表（复用 ImageGalleryViewModel 的多级兜底解析逻辑）
-     *
-     * 解析策略（4 级兜底）：
-     * 1. body 不含 HTML 标签时：split("\n") 解析纯 URL 列表
-     * 2. body 是 HTML 且 ruleImage 非空：用 AnalyzeRule + ruleImage 选择器提取
-     * 3. body 含 <img> 标签：正则提取所有 src/data-src/data-original 等属性
-     * 4. 最宽松兜底：提取所有 http/https URL
-     *
-     * @param body Rss.getContentAwait 返回的内容（URL列表 / HTML / JS结果）
-     * @param baseUrl 用于相对URL转绝对URL（文章link）
-     * @param ruleImage 图片选择器规则（CSS/XPath/JSONPath）
-     * @param rssSource 订阅源（用于 AnalyzeRule 上下文 + header/cookie 复用）
-     */
-    private fun parseImageUrls(
-        body: String,
-        baseUrl: String,
-        ruleImage: String?,
-        rssSource: io.legado.app.data.entities.RssSource
-    ): List<String> {
-        AppLog.putDebugWithTag(
-            AppLog.TAG_IMAGE_CANVAS,
-            "parseImageUrls: bodyLen=${body.length} bodyHasHtml=${body.contains("<")} ruleImageLen=${ruleImage?.length ?: 0}",
-            level = AppLog.Level.INFO
-        )
-
-        // 策略1：纯 URL 列表（body 不含 HTML 标签时 split("\n")）
-        if (!body.contains("<")) {
-            val urlList = body.split("\n")
-                .map { it.trim() }
-                .filter { it.startsWith("http://") || it.startsWith("https://") }
-                .map { NetworkUtils.getAbsoluteURL(baseUrl, it) }
-                .filter { it.startsWith("http://") || it.startsWith("https://") }
-                .distinct()
-            if (urlList.isNotEmpty()) {
-                AppLog.putDebugWithTag(
-                    AppLog.TAG_IMAGE_CANVAS,
-                    "parse strategy 1 (newline split) success: count=${urlList.size}",
-                    level = AppLog.Level.INFO
-                )
-                return urlList
-            }
-        }
-
-        // 策略2：HTML + ruleImage 选择器
-        if (body.contains("<") && !ruleImage.isNullOrBlank()) {
-            try {
-                val analyzeRule = AnalyzeRule(null, rssSource)
-                analyzeRule.setContent(body)
-                    .setBaseUrl(NetworkUtils.getAbsoluteURL(rssSource.sourceUrl, baseUrl))
-                val imgUrls = (analyzeRule.getStringList(ruleImage) ?: emptyList())
-                    .map { NetworkUtils.getAbsoluteURL(baseUrl, it.trim()) }
-                    .filter { it.startsWith("http://") || it.startsWith("https://") }
-                    .distinct()
-                if (imgUrls.isNotEmpty()) {
-                    AppLog.putDebugWithTag(
-                        AppLog.TAG_IMAGE_CANVAS,
-                        "parse strategy 2 (ruleImage selector) success: count=${imgUrls.size}",
-                        level = AppLog.Level.INFO
-                    )
-                    return imgUrls
-                }
-            } catch (e: Exception) {
-                AppLog.putDebugWithTag(
-                    AppLog.TAG_IMAGE_CANVAS,
-                    "parse strategy 2 (ruleImage selector) failed: ${e::class.simpleName} ${e.message}",
-                    level = AppLog.Level.ERROR
-                )
-            }
-        }
-
-        // 策略3：正则提取 <img> 标签的所有 src 属性
-        if (body.contains("<img")) {
-            val imgRegex = Regex(
-                """<img[^>]+(?:src|data-src|data-original|data-lazy-src|data-lazy|realsrc|data-srcset|srcset)\s*=\s*["']([^"']+)["']""",
-                RegexOption.IGNORE_CASE
-            )
-            val regexUrls = imgRegex.findAll(body)
-                .map { matchResult ->
-                    val url = matchResult.groupValues[1].trim()
-                    val cleanUrl = if (url.contains(" ")) url.split(" ")[0] else url
-                    NetworkUtils.getAbsoluteURL(baseUrl, cleanUrl)
-                }
-                .filter { it.startsWith("http://") || it.startsWith("https://") }
-                .distinct()
-                .toList()
-            if (regexUrls.isNotEmpty()) {
-                AppLog.putDebugWithTag(
-                    AppLog.TAG_IMAGE_CANVAS,
-                    "parse strategy 3 (regex img tag) success: count=${regexUrls.size}",
-                    level = AppLog.Level.INFO
-                )
-                return regexUrls
-            }
-        }
-
-        // 策略4：提取 body 中所有 http/https URL（最宽松兜底）
-        val allUrlRegex = Regex("""https?://[^\s"'<>\]\)]+""", RegexOption.IGNORE_CASE)
-        val allUrls = allUrlRegex.findAll(body)
-            .map { NetworkUtils.getAbsoluteURL(baseUrl, it.value.trim()) }
-            .filter { it.startsWith("http://") || it.startsWith("https://") }
-            .distinct()
-            .toList()
-        if (allUrls.isNotEmpty()) {
-            AppLog.putDebugWithTag(
-                AppLog.TAG_IMAGE_CANVAS,
-                "parse strategy 4 (all url regex) success: count=${allUrls.size}",
-                level = AppLog.Level.INFO
-            )
-            return allUrls
-        }
-
-        AppLog.putDebugWithTag(
-            AppLog.TAG_IMAGE_CANVAS,
-            "parse all strategies failed, no urls found, bodyLen=${body.length}",
-            level = AppLog.Level.ERROR
-        )
-        return emptyList()
-    }
+    // parseImageUrls 方法已迁移到 ImageUrlExtractor.enhancedParseImageUrls（三层降级链路 L1）
+    // 包含 9 策略：纯URL列表/ruleImage选择器/<img>标签/<picture><source>/CSS background-image/
+    // og:image Meta/Script JSON/JS变量/所有URL正则/单URL兜底
+    // 详见：app/src/main/java/io/legado/app/help/image/ImageUrlExtractor.kt
 
     /**
      * 保存图片到指定目录（用 Glide asFile 加载，支持 Referer/Cookie 注入）

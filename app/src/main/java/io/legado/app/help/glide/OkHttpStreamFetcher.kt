@@ -58,7 +58,10 @@ class OkHttpStreamFetcher(
     }
 
     override fun loadData(priority: Priority, callback: DataFetcher.DataCallback<in InputStream>) {
-        if (failUrl.get(url.toStringUrl()) != null) {
+        // I-P0-2: 降级链主动重试（bypassFailCacheOption=true）时绕过失败缓存短路，
+        // 否则同 URL 重试永不发请求（86 张 403 仅 1 张真实降级的根因）
+        val bypassFailCache = options.get(OkHttpModelLoader.bypassFailCacheOption) == true
+        if (!bypassFailCache && failUrl.get(url.toStringUrl()) != null) {
             callback.onLoadFailed(NoStackTraceException("跳过加载失败的图片"))
             return
         }
@@ -137,6 +140,10 @@ class OkHttpStreamFetcher(
             }
             callback?.onLoadFailed(HttpException(response.message, response.code))
             return
+        }
+        // I-P0-2: 降级重试成功后清除失败缓存旧记录，后续普通 bind 不再被短路
+        if (options.get(OkHttpModelLoader.bypassFailCacheOption) == true) {
+            failUrl.remove(url.toStringUrl())
         }
         val isCover = !manga
         val needDecode = !ImageUtils.skipDecode(source, isCover)

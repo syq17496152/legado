@@ -142,11 +142,14 @@ class ImageGalleryViewModel(application: Application) : BaseViewModel(applicatio
     ): List<String> {
         AppLog.put("[ImageGallery] parseImageUrls start: bodyLen=${body.length}, bodyHasHtml=${body.contains("<")}, ruleImageLen=${ruleImage?.length ?: 0}, baseUrlLen=${baseUrl.length}")
 
-        // 策略1：尝试 split("\n") 解析纯 URL 列表（ruleContent 返回换行分隔的URL）
+        // 策略1：尝试 split 解析纯 URL 列表（ruleContent 返回换行分隔的URL）
         // 仅当 body 不含 HTML 标签时执行（避免把 HTML 按行分割收集到非图片 URL）
         // 修复：放宽过滤条件，不强制要求图片扩展名（CDN URL 可能无扩展名），只过滤 http/https 开头的URL
+        // I-003-P1-2: 修复 %0A 残留导致 404（铁证：003 日志 33 次 404）
+        // 根因：body 中 URL 可能以 %0A（URL编码换行符）或 \n 混合分隔，split("\n") 无法分割 %0A
+        // 方案：统一按 \n / \r / %0A / %0a 分割，trim 后过滤
         if (!body.contains("<")) {
-            val urlList = body.split("\n")
+            val urlList = body.split("\n", "\r\n", "\r", "%0A", "%0a")
                 .map { it.trim() }
                 .filter { it.startsWith("http://") || it.startsWith("https://") }
                 .map { NetworkUtils.getAbsoluteURL(baseUrl, it) }

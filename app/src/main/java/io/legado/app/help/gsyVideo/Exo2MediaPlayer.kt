@@ -13,19 +13,15 @@ import androidx.media3.common.Timeline
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.ResolvingDataSource
-import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.DefaultRenderersFactory
-import androidx.media3.exoplayer.DefaultRenderersFactory.ExtensionRendererMode
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.smoothstreaming.SsMediaSource
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
-import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.source.BehindLiveWindowException
 import io.legado.app.help.exoplayer.ExoPlayerHelper
+import io.legado.app.help.exoplayer.PlayerInstancePool
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.model.VideoPlay
@@ -45,7 +41,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         private const val TAG = "GSYExo2MediaPlayer"
         private const val MAX_POSITION_FOR_SEEK_TO_PREVIOUS: Long = 3000
         // E2 优化：网络错误自动重试次数（避免临时网络抖动直接降级 WebView）
-        private const val MAX_RETRY = 1
+        // T2.4: 指数退避重试策略（对齐 hls.js）：最多重试 5 次（1s/2s/4s/8s/16s）
+        private const val MAX_RETRY = 5
         // exoplayer-resilience Layer 2：自动 WebView 降级阈值
         // 累计失败次数 >= 此值 + 不可恢复错误类型时触发 VIDEO_FALLBACK_WEBVIEW 事件
         private const val FALLBACK_RETRY_THRESHOLD = 3
@@ -74,6 +71,17 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      * - 避免 onDestroy 后嗅探协程回调 setMediaItem 操作已 release 的 mInternalPlayer
      */
     private var isReleased = false
+
+    /**
+     * V-003-P0-2: prepareAsyncInternal 重入保护
+     *
+     * 根因：R5 网络抓包命中后可能多次回调 prepareAsyncInternal（003 日志 9~16ms 内重入），
+     * 导致 PlayerInstancePool.acquire 被调用两次，创建多个 ExoPlayer 实例竞争 + TrackSelector 崩溃。
+     *
+     * 方案：AtomicBoolean CAS 守卫，第一次进入设置 true，post Runnable 完成后重置 false。
+     * 重入时跳过并记录日志。
+     */
+    private val isPreparing = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /**
      * E2 优化：网络错误重试计数（prepareAsyncInternal 时重置）
@@ -111,8 +119,14 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      */
     private val bufferingTimeoutHandler = Handler(Looper.getMainLooper())
     private val bufferingTimeoutRunnable = Runnable {
+        // A2 修复：首次 BUFFERING 超时 25s（CDN 冷启动），后续 12s
+        // isFirstPlay = !VideoPlay.hasPlayedSuccessfully（initSource 重置 false，STATE_READY 置 true）
+        // 关键：switchToArticle 不重置 hasPlayedSuccessfully（切换同源文章时 CDN 已热，用 12s）
+        // 注意：postDelayed 时已根据 isFirstPlay 设置超时时间，此处仅记录日志
+        val isFirstPlay = !VideoPlay.hasPlayedSuccessfully
         AppLog.put(
-            "ExoPlayer BUFFERING timeout (12s), trigger fallback, " +
+            "ExoPlayer BUFFERING timeout, trigger fallback, " +
+                "isFirstPlay=$isFirstPlay, " +
                 "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}, " +
                 "fallbackIndex=$currentFallbackIndex/${fallbackTypes.size}"
         )
@@ -160,28 +174,53 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
     private var currentSniffResult: ExoPlayerHelper.SniffResult = ExoPlayerHelper.SniffResult.UNKNOWN
 
     /**
+     * T1.1: 播放成功埋点 - 双标志位防同一 URL 重复埋点（对齐 ExoPlayer 官方事件指南）
+     *
+     * AD-01 决策：STATE_READY 判定播放成功（统计成功率），onRenderedFirstFrame 统计首帧耗时
+     * - hasReportedReadySuccess: STATE_READY 已上报标志位
+     * - hasReportedFirstFrame: onRenderedFirstFrame 已上报标志位
+     * - playbackStartTime: 播放开始时间（prepareAsyncInternal 时记录），用于计算首帧耗时
+     */
+    private var hasReportedReadySuccess = false
+    private var hasReportedFirstFrame = false
+    private var playbackStartTime = 0L
+
+    /**
      * R4-T8: 构建降级链类型列表
      *
      * T1.5 V2重构：按嗅探结果排序降级链（解决 Bug-7：降级链默认HLS优先与MP4直链不匹配）
+     * V-003-P1-1: 清单类型降级链移除 Progressive（清单→Progressive 必然 3003）
      *
      * 优先级策略：
-     * - 嗅探成功（HLS）：[HLS, Progressive, DASH] —— HLS 失败后优先试 Progressive（MP4直链），
-     *   因 DASH 与 HLS 同为清单格式，HLS 失败 DASH 大概率也失败
-     * - 嗅探成功（DASH）：[DASH, HLS, Progressive]
-     * - 嗅探成功（SS）：[SS, HLS, DASH, Progressive]
+     * - 嗅探成功（HLS）：[HLS, DASH] —— 清单互降，Progressive 对 m3u8 必然 3003
+     * - 嗅探成功（DASH）：[DASH, HLS] —— 清单互降
+     * - 嗅探成功（SS）：[SS, HLS, DASH] —— 清单互降
      * - 嗅探成功（Progressive）：[Progressive, HLS, DASH] —— MP4直链优先 Progressive
-     * - 嗅探失败（UNKNOWN）：[HLS, DASH, Progressive] —— HLS 优先（最常见场景）
+     * - 嗅探失败（UNKNOWN）：按 URL 后缀启发式，直链保留 Progressive，清单移除 Progressive
      *
      * @param sniff 嗅探结果
      * @return 降级链 contentType 列表
      */
     private fun buildFallbackTypes(sniff: ExoPlayerHelper.SniffResult): List<Int> {
         return when (sniff.contentType) {
-            C.TYPE_HLS -> listOf(C.TYPE_HLS, C.TYPE_OTHER, C.TYPE_DASH)
-            C.TYPE_DASH -> listOf(C.TYPE_DASH, C.TYPE_HLS, C.TYPE_OTHER)
-            C.TYPE_SS -> listOf(C.TYPE_SS, C.TYPE_HLS, C.TYPE_DASH, C.TYPE_OTHER)
-            C.TYPE_OTHER -> listOf(C.TYPE_OTHER, C.TYPE_HLS, C.TYPE_DASH)
-            else -> listOf(C.TYPE_HLS, C.TYPE_DASH, C.TYPE_OTHER)  // UNKNOWN: HLS 优先（最常见场景）
+            // V-003-P1-1: 清单类型（HLS/DASH/SS）降级链移除 Progressive，避免清单格式降级到 Progressive 必然 3003
+        // 铁证：003 日志 3 次 HLS BUFFERING 12s 超时 → Progressive → 21 Extractor 全失败 → 3003
+        // 修复：前 2 项保持相同 contentType（同 contentType 重试），第 3 项兼容 contentType
+        // 铁证：BUFFERING 12s 超时后切换到不兼容 contentType（HLS→DASH）导致 3003/3002 解析失败
+        // 同 contentType 重试给 BUFFERING 更多恢复时间（ExoPlayer 可能已缓存部分数据）
+        C.TYPE_HLS -> listOf(C.TYPE_HLS, C.TYPE_HLS, C.TYPE_DASH)  // 前2项HLS重试，第3项DASH兼容
+        C.TYPE_DASH -> listOf(C.TYPE_DASH, C.TYPE_DASH, C.TYPE_HLS)  // 前2项DASH重试，第3项HLS兼容
+        C.TYPE_SS -> listOf(C.TYPE_SS, C.TYPE_SS, C.TYPE_HLS)  // 前2项SS重试，第3项HLS兼容
+        C.TYPE_OTHER -> listOf(C.TYPE_OTHER, C.TYPE_OTHER, C.TYPE_HLS)  // 前2项Progressive重试，第3项HLS兼容
+        else -> {
+            // UNKNOWN: 按 URL 后缀启发式排序（保留现有逻辑），前 2 项相同 contentType
+            when (ExoPlayerHelper.guessTypeByUrl(currentUrl)) {
+                C.TYPE_OTHER -> listOf(C.TYPE_OTHER, C.TYPE_OTHER, C.TYPE_HLS)
+                C.TYPE_DASH -> listOf(C.TYPE_DASH, C.TYPE_DASH, C.TYPE_HLS)
+                C.TYPE_SS -> listOf(C.TYPE_SS, C.TYPE_SS, C.TYPE_HLS)
+                else -> listOf(C.TYPE_HLS, C.TYPE_HLS, C.TYPE_DASH)
+            }
+        }
         }
     }
 
@@ -284,9 +323,13 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      */
     private fun tryNextFallback() {
         if (currentFallbackIndex < fallbackTypes.size - 1) {
+            val beforeContentType = fallbackTypes[currentFallbackIndex]
             currentFallbackIndex++
+            val afterContentType = fallbackTypes[currentFallbackIndex]
             AppLog.put(
-                "ExoFallback: switch to next MediaSource " +
+                "ExoFallback: trigger reason=BUFFERING_TIMEOUT, " +
+                    "before contentType=$beforeContentType, after contentType=$afterContentType, " +
+                    "sameContentType=${beforeContentType == afterContentType}, " +
                     "(${currentFallbackIndex + 1}/${fallbackTypes.size}), " +
                     "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
             )
@@ -323,6 +366,57 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         // T2.3: 清除 BUFFERING 超时回调，避免 onDestroy 后误触发 tryNextFallback 操作已 release 的 mInternalPlayer
         bufferingTimeoutHandler.removeCallbacks(bufferingTimeoutRunnable)
         AppLog.put("ExoPlayer scope cancelled, isReleased=true, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
+    }
+
+    /**
+     * T5.1: 将本实例的 listener 挂到播放器实例上（acquire 后调用）
+     */
+    private fun attachToPlayer(player: ExoPlayer) {
+        player.addListener(this@Exo2MediaPlayer)
+        player.addAnalyticsListener(this@Exo2MediaPlayer)
+        mEventLogger?.let { player.addListener(it) }
+    }
+
+    /**
+     * T5.1: 将本实例的 listener 从播放器实例上解绑（recycle 前调用）
+     *
+     * 池化复用前提：旧 Exo2MediaPlayer 的回调不得残留在池内实例上，
+     * 否则后续 acquire 方会收到串扰事件（A Fragment 的播放事件回调到已释放的 B 对象）
+     */
+    private fun detachFromPlayer(player: ExoPlayer) {
+        kotlin.runCatching {
+            player.removeListener(this@Exo2MediaPlayer)
+            player.removeAnalyticsListener(this@Exo2MediaPlayer)
+            mEventLogger?.let { player.removeListener(it) }
+        }.onFailure {
+            AppLog.put("detachFromPlayer failed", it)
+        }
+    }
+
+    /**
+     * T5.1: 重写 release——mInternalPlayer 归还实例池而非销毁
+     *
+     * 父类行为（IjkExo2MediaPlayer 11.3.0 字节码实证）：
+     * - release() 仅在 mInternalPlayer != null 时调 reset() + mEventLogger = null
+     * - reset() 内 mInternalPlayer.release() + ExoSourceManager.release() + surface/尺寸字段清理
+     *
+     * 拦截策略：先 detach + recycle + 置 null，再调 super.reset()——
+     * reset() 见 mInternalPlayer == null 跳过实例销毁，ExoSourceManager/字段清理正常执行，
+     * 与父类 release() 行为完全等效（仅实例销毁替换为归还池）
+     */
+    override fun release() {
+        releaseSniffResources()  // 双保险（内部 isReleased 防重复）
+        mInternalPlayer?.let { player ->
+            detachFromPlayer(player)
+            PlayerInstancePool.recycle(player)
+            mInternalPlayer = null
+            AppLog.put(
+                "ExoPlayer release: instance recycled to pool, " +
+                    "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+            )
+        }
+        super.reset()
+        mEventLogger = null
     }
 
     /**
@@ -383,54 +477,40 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             currentSniffResult = ExoPlayerHelper.SniffResult.UNKNOWN
             fallbackTypes = buildFallbackTypes(currentSniffResult)
             currentFallbackIndex = 0
+            // T1.1: 重置播放成功埋点标志位，记录播放开始时间（用于首帧耗时统计）
+            hasReportedReadySuccess = false
+            hasReportedFirstFrame = false
+            playbackStartTime = System.currentTimeMillis()
             AppLog.put("ExoPlayer state reset: currentSniffResult=UNKNOWN, fallbackTypesSize=${fallbackTypes.size}, currentFallbackIndex=0")
-            if (mTrackSelector == null) {
-                mTrackSelector = DefaultTrackSelector(mAppContext)
-            }
-            mEventLogger = EventLogger(mTrackSelector)
-            val preferExtensionDecoders = true
-            val useExtensionRenderers = true //是否开启扩展
-            val extensionRendererMode: @ExtensionRendererMode Int =
-                if (useExtensionRenderers) (if (preferExtensionDecoders) DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER else DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON) else DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
+            // T5.1: 三件套改为实例池全局共享（池实例构建参数兼容的前提）
+            // - V-P0-1 修正：TrackSelector 每实例独立（共享单例并发二次 init 崩溃 ×5 FATAL），
+            //   mTrackSelector/mEventLogger 移至 acquire 后按 player 实例获取（见下方）
+            // - sharedRendererFactory：无状态（EXTENSION_RENDERER_MODE_PREFER 与原配置一致）
+            // - LoadControl：池内每实例新建（共享同一 allocator 内存池），档位在实例创建时按当前带宽刷新
             if (mRendererFactory == null) {
-                mRendererFactory = DefaultRenderersFactory(mAppContext)
-                mRendererFactory.setExtensionRendererMode(extensionRendererMode)
+                mRendererFactory = PlayerInstancePool.sharedRendererFactory
             }
             if (mLoadControl == null) {
-                // 首屏缓冲优化：bufferForPlayback 从默认 2500ms 降至 250ms，rebuffer 从 5000ms 降至 500ms
-                // 复用 ExoPlayerHelper.createHttpExoPlayer 的优化策略，首屏启动延迟降至 1/10
-                mLoadControl = DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(
-                        DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
-                        DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
-                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS / 10,      // 250ms（默认 2500ms）
-                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS / 10  // 500ms（默认 5000ms）
-                    ).build()
+                mLoadControl = PlayerInstancePool.createLoadControl()
             }
-            // T1.13: 显式 release 旧 mInternalPlayer 实例（解决 Bug-14 + Bug-24 + Bug-6 核心根因）
-            // 理由：原代码直接覆盖 mInternalPlayer 引用，旧实例的 ExoPlayer 内部线程/资源不会被及时回收，
-            // 导致 8 实例快速切换时资源泄漏 + 状态污染
+            // T5.1: 旧实例归还实例池（替代 T1.13 显式 release）——池内状态重置后供后续复用，
+            // 避免快速滑动时反复销毁/重建 ExoPlayer 实例（渲染器初始化+解码器查询约 30-100ms）
+            // 同时保留 T1.13 修复精神：旧实例不得直接覆盖引用（先 detach + recycle + 置 null）
             mInternalPlayer?.let { oldPlayer ->
-                AppLog.put("mInternalPlayer released old instance before create new")
-                try {
-                    oldPlayer.release()
-                } catch (e: Exception) {
-                    AppLog.put("mInternalPlayer release old instance failed", e)
-                }
+                AppLog.put("mInternalPlayer recycled to pool before acquire")
+                detachFromPlayer(oldPlayer)
+                PlayerInstancePool.recycle(oldPlayer)
+                mInternalPlayer = null
             }
-            mInternalPlayer =
-                ExoPlayer.Builder(mAppContext, mRendererFactory).setLooper(Looper.myLooper()!!)
-                    .setTrackSelector(mTrackSelector).setLoadControl(mLoadControl)
-                    .setMediaSourceFactory(
-                        // E1 优化：改用 resolvingDataSource（支持 SPLIT_TAG per-request Header 注入）
-                        // 原 no-op resolver { it } 不处理 Header，导致防盗链失败（60% 根因）
-                        DefaultMediaSourceFactory(ExoPlayerHelper.resolvingDataSource)
-                            .setLiveTargetOffsetMs(5000) //直播时延5秒
-                    )
-                    .build()
-            mInternalPlayer.addListener(this@Exo2MediaPlayer)
-            mInternalPlayer.addAnalyticsListener(this@Exo2MediaPlayer)
-            mInternalPlayer.addListener(mEventLogger)
+            // T5.1: 从实例池获取（命中复用/未命中新建，构建参数与原逻辑一致：
+            // resolvingDataSource 支持 SPLIT_TAG per-request Header 注入 + 直播时延 5 秒）
+            mInternalPlayer = PlayerInstancePool.acquire(Looper.myLooper()!!)
+            // V-P0-1: TrackSelector 每实例独立——acquire 后从池映射取与本 player 绑定的 selector，
+            // EventLogger 必须与 player 使用同一 selector 实例才能追踪轨道选择事件。
+            // 复用实例沿用其创建时登记的 selector（recycle 不移除映射，player 存活期间映射有效）。
+            mTrackSelector = PlayerInstancePool.trackSelectorOf(mInternalPlayer)
+            mEventLogger = mTrackSelector?.let { EventLogger(it) }
+            attachToPlayer(mInternalPlayer)
             if (mSpeedPlaybackParameters != null) {
                 mInternalPlayer.playbackParameters = mSpeedPlaybackParameters
             }
@@ -466,6 +546,10 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 currentSniffJob = scope.launch {
                     // T2.4: 嗅探协程生命周期日志 - started 态
                     AppLog.put("ExoFallback: sniff job started, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
+                    // V-004-P0-1: 嗅探前 DNS 预解析（异步预热系统 DNS 缓存，降低嗅探耗时）
+                    // 根因：004 日志嗅探耗时 3123ms，DNS 解析占主导（DoH 冷启动失败期间等待 2-3s）
+                    // 方案：异步预解析域名，Range 请求发起时 DNS 命中缓存（0ms）
+                    ExoPlayerHelper.preResolveDns(currentUrl)
                     // R4-T8: 用 sniffVideoType 替代 sniffMimeType，获取完整 SniffResult
                     // SniffResult 含 contentType + mimeType + moovPosition + supportsRange + finalUrl
                     // finalUrl 用于 createMediaSource（重定向后的最终 URL，避免再次重定向）
@@ -619,18 +703,37 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
 
         // E2 优化：网络错误自动重试（减少不必要的降级到 WebView）
         // 根因分析：临时网络抖动（弱信号/DNS 抖动/服务器瞬时 503）占 ExoPlayer 失败的 10%，
-        // 这类错误不应直接降级 WebView，给予 1 次重试机会：seekToDefaultPosition + prepare 重新加载
+        // 这类错误不应直接降级 WebView，给予重试机会：seekToDefaultPosition + prepare 重新加载
         // 覆盖错误码：IO_NETWORK_CONNECTION_FAILED / IO_NETWORK_CONNECTION_TIMEOUT / IO_UNSPECIFIED
+        //
+        // T2.4: 指数退避重试策略（对齐 hls.js）：1s/2s/4s/8s/16s
+        // - 第 1 次重试：延迟 1s
+        // - 第 2 次重试：延迟 2s
+        // - 第 3 次重试：延迟 4s
+        // - 第 4 次重试：延迟 8s
+        // - 第 5 次重试：延迟 16s
+        // 设计理由：立即重试可能在网络未恢复时再次失败，指数退避给网络恢复时间
         val isNetworkError = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
             || error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
             || error.errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED
         if (isNetworkError && retryCount < MAX_RETRY) {
             retryCount++
-            AppLog.put("ExoPlayer 网络错误自动重试($retryCount/$MAX_RETRY): errorCode=${error.errorCodeName}, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
-            mInternalPlayer?.let { player ->
-                player.seekToDefaultPosition()
-                player.prepare()
-            }
+            // T2.4: 指数退避延迟（1s/2s/4s/8s/16s）
+            val delayMs = (1L shl (retryCount - 1)) * 1000L // 2^(n-1) * 1000ms
+            AppLog.put(
+                "ExoPlayer 网络错误自动重试($retryCount/$MAX_RETRY): " +
+                    "errorCode=${error.errorCodeName}, delay=${delayMs}ms, " +
+                    "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+            )
+            // T2.4: 延迟后重试（给网络恢复时间）
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (!isReleased) {
+                    mInternalPlayer?.let { player ->
+                        player.seekToDefaultPosition()
+                        player.prepare()
+                    }
+                }
+            }, delayMs)
             return
         }
 
@@ -638,12 +741,15 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         // 触发条件：unrecoverableFailCount >= FALLBACK_RETRY_THRESHOLD(3) + 不可恢复错误类型
         // 不可恢复错误类型（参考 design.md AD-03）：
         // - 3002 PARSING_CONTAINER_MALFORMED：m3u8/mp4 解析错误（格式不兼容）
+        // - 3003 PARSING_CONTAINER_UNSUPPORTED：容器格式不支持（V-P1-2 补入白名单）
         // - 3004 PARSING_MANIFEST_MALFORMED：清单格式错误
         // - ERROR_CODE_DECODER_INIT_FAILED：解码器初始化失败
         // - ERROR_CODE_DECODING_FAILED：解码失败
         // 设计理由：可恢复错误（网络抖动）重试即可，不可恢复错误重试无意义，达阈值后切换 WebView
-        // 注：PlaybackException 无 ERROR_CODE_PARSING_BITSTREAM_MALFORMED 常量（3003 未使用），已移除
+        // V-P1-2 修正：3003 ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED 真实存在（原注释误判"3003 未使用已移除"），
+        // 缺失导致 3003 逃逸白名单 → isParsingError 对 3003 成死代码 → 降级末端失败双触发路径全死
         val isUnrecoverableError = error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
+            || error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED
             || error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED
             || error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED
             || error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED
@@ -663,6 +769,7 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             // - 浏览器会渐进尝试多种方式，ExoPlayer 单一失败即整体失败
             // - R4 降级链对齐浏览器渐进增强策略，解析失败时自动尝试下一个 MediaSource
             val isParsingError = error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
+                || error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED
                 || error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED
                 || error.cause?.javaClass?.simpleName == "UnrecognizedInputFormatException"
 
@@ -676,9 +783,44 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 return
             }
 
-            if (unrecoverableFailCount >= FALLBACK_RETRY_THRESHOLD) {
-                // 触发自动 WebView 降级
+            // V-P1-2: 末端解析失败（currentFallbackIndex 已在末端）——直接 WebView 兜底 + 错误提示，
+            // 不等 unrecoverableFailCount 累计阈值（否则末端失败陷入空转：既不降级也不 WebView 兜底）
+            if (isParsingError && currentFallbackIndex >= fallbackTypes.size - 1) {
                 val title = VideoPlay.videoTitle ?: ""
+                AppLog.put(
+                    "ExoFallback: terminal fallback failed (${error.errorCodeName}), trigger WebView, " +
+                        "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+                )
+                val errorInfo = buildString {
+                    appendLine("播放失败：视频格式不支持或地址已失效")
+                    appendLine("错误码: ${error.errorCode} (${error.errorCodeName})")
+                    appendLine("播放地址: ${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
+                    appendLine("建议: 正在切换到 WebView 播放...")
+                }
+                postEvent(EventBus.VIDEO_PLAY_ERROR, errorInfo)
+                postEvent(
+                    EventBus.VIDEO_FALLBACK_WEBVIEW,
+                    Triple(currentUrl, title, currentHeaders)
+                )
+                return
+            }
+
+            if (unrecoverableFailCount >= FALLBACK_RETRY_THRESHOLD) {
+                // T1.2: 重试耗尽后先发送 VIDEO_PLAY_ERROR 事件（UI 错误提示），再触发 VIDEO_FALLBACK_WEBVIEW 降级
+                // AD-02: 所有失败场景必须有 UI 提示，不能静默降级
+                val title = VideoPlay.videoTitle ?: ""
+                val errorInfo = buildString {
+                    appendLine("播放失败（已重试 $unrecoverableFailCount 次）")
+                    appendLine("错误码: ${error.errorCode} (${error.errorCodeName})")
+                    appendLine("错误信息: ${error.message ?: "无"}")
+                    appendLine("播放地址: ${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
+                    appendLine("原因: ${error.cause?.toString() ?: "未知"}")
+                    appendLine("建议: 视频格式不兼容或地址已失效，正在切换到 WebView 播放...")
+                }
+                AppLog.put(errorInfo, error)
+                postEvent(EventBus.VIDEO_PLAY_ERROR, errorInfo)
+
+                // 触发自动 WebView 降级
                 AppLog.put(
                     "ExoPlayer 累计失败 $unrecoverableFailCount 次（不可恢复错误 ${error.errorCodeName}），" +
                         "自动切换到 WebView 模式"
@@ -776,11 +918,29 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             else -> "UNKNOWN($state)"
         }
         AppLog.put("ExoPlayer state: $stateName, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
+
+        // T1.1: STATE_READY 播放成功埋点（统计播放成功率）
+        // AD-01: 双标志位防同一 URL 重复埋点（seek/rebuffer 后重复 READY 不重复统计）
+        if (state == Player.STATE_READY && !hasReportedReadySuccess) {
+            hasReportedReadySuccess = true
+            // A2 修复：首帧渲染成功，置 VideoPlay.hasPlayedSuccessfully = true
+            // 后续切换文章 BUFFERING 超时用 12s（CDN 已热），切换源（initSource）时重置为 false
+            VideoPlay.hasPlayedSuccessfully = true
+            AppLog.put(
+                "ExoPlayer play success (STATE_READY): urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}, " +
+                    "contentType=${currentSniffResult.contentType}, fallbackIndex=$currentFallbackIndex/${fallbackTypes.size}"
+            )
+        }
+
         // T2.3: BUFFERING 超时 12 秒触发 tryNextFallback（解决 Bug-8 + Bug-9：弱网卡死无法自动降级）
         when (state) {
             Player.STATE_BUFFERING -> {
-                // 进入 BUFFERING：12 秒后若仍未 READY，触发降级尝试下一个 MediaSource
-                bufferingTimeoutHandler.postDelayed(bufferingTimeoutRunnable, 12000L)
+                // A2 修复：首次 BUFFERING 超时 25s（CDN 冷启动），后续 12s
+                // isFirstPlay = !VideoPlay.hasPlayedSuccessfully（initSource 重置，STATE_READY 置 true）
+                // 铁证：原硬编码 12000L 导致首次播放也只等 12s 就降级，25s 逻辑未生效
+                val isFirstPlay = !VideoPlay.hasPlayedSuccessfully
+                val timeoutMs = if (isFirstPlay) 25_000L else 12_000L
+                bufferingTimeoutHandler.postDelayed(bufferingTimeoutRunnable, timeoutMs)
             }
             Player.STATE_READY, Player.STATE_IDLE, Player.STATE_ENDED -> {
                 // 离开 BUFFERING：清除超时回调，避免误降级
@@ -789,6 +949,25 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 // - ENDED：播放结束，无需降级
                 bufferingTimeoutHandler.removeCallbacks(bufferingTimeoutRunnable)
             }
+        }
+    }
+
+    /**
+     * T1.1: onRenderedFirstFrame 首帧渲染埋点（统计首帧耗时）
+     *
+     * AD-01 决策：用于验收 Phase 2 首帧预加载效果（目标命中率 ≥80%）
+     * - 首帧耗时 = onRenderedFirstFrame 时间 - playbackStartTime
+     * - 双标志位防同一 URL 重复埋点
+     */
+    override fun onRenderedFirstFrame() {
+        super.onRenderedFirstFrame()
+        if (!hasReportedFirstFrame) {
+            hasReportedFirstFrame = true
+            val firstFrameLatency = System.currentTimeMillis() - playbackStartTime
+            AppLog.put(
+                "ExoPlayer first frame rendered: latency=${firstFrameLatency}ms, " +
+                    "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+            )
         }
     }
 

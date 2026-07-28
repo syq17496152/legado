@@ -43,7 +43,9 @@ object HighlightRuleStore {
         cachedRules?.let { return it.toMutableList() }
         val stored = context.getPrefString(PreferKey.highlightRuleItems)
         if (stored.isNullOrBlank()) {
-            return mutableListOf()
+            // T-B1: 空值播种默认规则（修复 R-P1-2 根因 a：首启/清空存储后无内置规则）
+            // 注意："[]" 不入此分支（非 blank），用户清空全部规则后重启列表保持为空，符合 spec §1.2-5
+            return reset(context)
         }
         val rules = GSON.fromJsonArray<HighlightRule>(stored).getOrNull()?.toMutableList()
         if (rules != null) {
@@ -134,6 +136,7 @@ object HighlightRuleStore {
                 pattern = "“[^”\n]{1,120}”|\"[^\"\n]{1,120}\"|「[^」\n]{1,120}」|『[^』\n]{1,120}』",
                 sampleText = "她轻声说：“今晚就出发。”",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
                 enabled = context.getPrefBoolean(PreferKey.highlightRuleDialog, true),
                 textColor = 0xFFFF8C00.toInt()
             ),
@@ -143,6 +146,7 @@ object HighlightRuleStore {
                 pattern = "《[^》\n]{1,80}》",
                 sampleText = "最近在重读《百年孤独》，节奏依然很稳。",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
                 enabled = context.getPrefBoolean(PreferKey.highlightRuleBookTitle, true),
                 underlineMode = 3,
                 underlineWidth = 0.5f,
@@ -154,6 +158,7 @@ object HighlightRuleStore {
                 pattern = "（[^（）\n]{1,80}）|\\([^()\n]{1,80}\\)|【[^】\n]{1,80}】|\\[[^\\]\n]{1,80}]",
                 sampleText = "他停了一下（像是忽然想起了什么）。",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
                 enabled = context.getPrefBoolean(PreferKey.highlightRuleBracketNote, true),
                 textColor = 0xFF8F959E.toInt(),
                 underlineMode = 2,
@@ -166,6 +171,7 @@ object HighlightRuleStore {
                 pattern = "(?m)^\\s{0,2}(?:第[0-9零〇一二两三四五六七八九十百千万IVXLCDMivxlcdm]{1,12}[章节卷回部篇集幕]|序章|楔子|引子|终章|尾声|后记|番外)[^\n]{0,40}$",
                 sampleText = "第一章 雨夜来客",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
                 targetScope = HighlightRule.TARGET_TITLE,
                 enabled = true,
                 textColor = 0xFF333333.toInt(),
@@ -178,6 +184,7 @@ object HighlightRuleStore {
                 pattern = "（[^）\n]{0,40}(?:心想|暗道|心道|想到|寻思着|琢磨|嘀咕)[^）\n]{0,40}）",
                 sampleText = "她心中一紧（暗道不对，这里一定有问题）。",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
                 enabled = false,
                 textColor = 0xFF9370DB.toInt(),
                 underlineMode = 1,
@@ -190,6 +197,7 @@ object HighlightRuleStore {
                 pattern = "(?:未完待续|待续|下文再表|按：?|注：?)[^\n]{0,40}|（(?:注|旁白|作者有话说)[:：][^）\n]{0,40}）",
                 sampleText = "（注：此处时间线与前文同步）",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
                 enabled = false,
                 textColor = 0xFF708090.toInt()
             ),
@@ -199,6 +207,7 @@ object HighlightRuleStore {
                 pattern = "(?:\\*\\*|__)[^\n*_]{1,40}(?:\\*\\*|__)|(?:!!!|！？|\\?!)[^\n]{0,20}",
                 sampleText = "**这是重点内容**，需要特别注意。",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
                 enabled = false,
                 textColor = 0xFFDC143C.toInt(),
                 underlineMode = 1,
@@ -210,6 +219,7 @@ object HighlightRuleStore {
                 pattern = "(?m)^[\\p{IsHan}，。！？；：、]{5,24}$",
                 sampleText = "床前明月光，\n疑是地上霜。",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
                 enabled = false,
                 textColor = 0xFF2F4F4F.toInt(),
                 underlineMode = 3,
@@ -222,6 +232,7 @@ object HighlightRuleStore {
                 pattern = "…{2,}|\\.{3,}|—{2,}|-{3,}",
                 sampleText = "他沉默了很久……最后还是点了头。",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
                 enabled = false,
                 textColor = 0xFF8B8B8B.toInt()
             ),
@@ -231,6 +242,7 @@ object HighlightRuleStore {
                 pattern = "(?:¥|￥)?\\d+(?:\\.\\d+)?(?:元|块|万|千|百|亿|%|％)|[零〇一二两三四五六七八九十百千万亿]+(?:元|块|万|千|百|亿)",
                 sampleText = "原价100元，现在只要50元。",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
                 enabled = false,
                 textColor = 0xFF4169E1.toInt()
             ),
@@ -240,6 +252,7 @@ object HighlightRuleStore {
                 pattern = "\\b[A-Za-z]{2,}[A-Za-z0-9'-]*\\b",
                 sampleText = "Hello World，你好世界。",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
                 enabled = false,
                 textColor = 0xFF4169E1.toInt()
             ),
@@ -249,6 +262,7 @@ object HighlightRuleStore {
                 pattern = "(?:\\d{2,4}|[零〇一二两三四五六七八九十]{2,4})年(?:\\d{1,2}|[正一二三四五六七八九十冬腊])月(?:\\d{1,2}|[一二三四五六七八九十廿三])?[日号]?|\\b\\d{1,2}:\\d{2}\\b|(?:[0-1]?\\d|2[0-3])点(?:[0-5]?\\d分?)?",
                 sampleText = "2024年8月12日，上午10:30出发。",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
                 enabled = false,
                 textColor = 0xFF20B2AA.toInt()
             )
@@ -368,6 +382,8 @@ object HighlightRuleStore {
 
     private fun shouldRefreshBuiltin(rule: HighlightRule): Boolean {
         if (rule.id !in builtinIds) return false
+        // T-A2: 内置规则 isRegex=false 视为旧数据，触发刷新到 isRegex=true（修复 R-P1-1/R-P1-2 根因）
+        if (!rule.isRegex) return true
         val inspectText = buildString {
             append(rule.name)
             append(rule.pattern)

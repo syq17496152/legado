@@ -17,6 +17,7 @@ import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.upstream.DefaultAllocator
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.dash.DashMediaSource
@@ -26,6 +27,7 @@ import androidx.media3.exoplayer.source.ConcatenatingMediaSource2
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
 import androidx.media3.extractor.DefaultExtractorsFactory
 import com.google.gson.reflect.TypeToken
 import io.legado.app.constant.AppLog
@@ -34,10 +36,14 @@ import io.legado.app.model.VideoPlay
 import io.legado.app.utils.GSON
 import io.legado.app.utils.externalCache
 import io.legado.app.utils.fromJsonArray
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
 import okhttp3.CacheControl
 import okhttp3.Request
@@ -64,6 +70,86 @@ object ExoPlayerHelper {
 
     private val mapType by lazy {
         object : TypeToken<Map<String, String>>() {}.type
+    }
+
+    /**
+     * T2.1: DefaultBandwidthMeter 全局单例（持续测量有效带宽）
+     *
+     * AD-04 决策：BandwidthMeter 动态调整缓冲参数（prepare 前分档，非运行时热切换）
+     * - 滑动窗口算法测量有效带宽（ExoPlayer 内置）
+     * - 按测量带宽分三档：弱网（<1Mbps）/ 中网（1-5Mbps）/ 好网（≥5Mbps）
+     * - 每档对应一组 DefaultLoadControl 参数（弱网：小 buffer 快起播省流量；好网：大 buffer 防 rebuffer）
+     * - 工程折中：LoadControl 只能在 player 构建时设置，运行时不可热切换，
+     *   因此档位决策放在 prepare 前——每次 prepareAsyncInternal 时读取当前档位构建 player；
+     *   网络切换后新档位在下一次 prepare 生效
+     *
+     * 成熟方案参考：developer.android.com ABR 官方指南（AdaptiveTrackSelection + BandwidthMeter）
+     */
+    val bandwidthMeter: DefaultBandwidthMeter by lazy {
+        DefaultBandwidthMeter.Builder(appCtx).build()
+    }
+
+    /**
+     * T2.1: 带宽档位枚举（弱网/中网/好网）
+     */
+    enum class BandwidthTier {
+        WEAK,   // <1Mbps：小 buffer 快起播省流量
+        MEDIUM, // 1-5Mbps：中 buffer 平衡
+        GOOD    // ≥5Mbps：大 buffer 防 rebuffer
+    }
+
+    /**
+     * T2.1: 获取当前带宽档位
+     *
+     * @return 当前带宽档位（WEAK/MEDIUM/GOOD）
+     */
+    fun getCurrentBandwidthTier(): BandwidthTier {
+        val bitrateEstimate = bandwidthMeter.bitrateEstimate
+        return when {
+            bitrateEstimate < 1_000_000 -> BandwidthTier.WEAK   // <1Mbps
+            bitrateEstimate < 5_000_000 -> BandwidthTier.MEDIUM // 1-5Mbps
+            else -> BandwidthTier.GOOD                          // ≥5Mbps
+        }
+    }
+
+    /**
+     * T2.1: 按带宽档位构建 LoadControl
+     *
+     * 分档策略：
+     * - 弱网（<1Mbps）：小 buffer 快起播省流量（minBuffer=5s, maxBuffer=15s, bufferForPlayback=250ms, bufferForPlaybackAfterRebuffer=500ms）
+     * - 中网（1-5Mbps）：中 buffer 平衡（minBuffer=10s, maxBuffer=30s, bufferForPlayback=500ms, bufferForPlaybackAfterRebuffer=1000ms）
+     * - 好网（≥5Mbps）：大 buffer 防 rebuffer（minBuffer=15s, maxBuffer=50s, bufferForPlayback=1000ms, bufferForPlaybackAfterRebuffer=2000ms）
+     *
+     * @param tier 带宽档位
+     * @param allocator 共享内存分配器（T5.1 实例池场景传入共享 allocator，多实例共用同一缓冲内存池；null 则各实例独立）
+     * @return 对应档位的 DefaultLoadControl
+     */
+    fun createLoadControlByTier(tier: BandwidthTier, allocator: DefaultAllocator? = null): DefaultLoadControl {
+        val builder = DefaultLoadControl.Builder()
+        allocator?.let { builder.setAllocator(it) }
+        return when (tier) {
+            BandwidthTier.WEAK -> builder
+                .setBufferDurationsMs(
+                    5_000,   // minBufferMs: 5s（弱网小 buffer 快起播）
+                    15_000,  // maxBufferMs: 15s（省流量）
+                    250,     // bufferForPlaybackMs: 250ms（快起播）
+                    500      // bufferForPlaybackAfterRebufferMs: 500ms
+                ).build()
+            BandwidthTier.MEDIUM -> builder
+                .setBufferDurationsMs(
+                    10_000,  // minBufferMs: 10s
+                    30_000,  // maxBufferMs: 30s
+                    500,     // bufferForPlaybackMs: 500ms
+                    1_000    // bufferForPlaybackAfterRebufferMs: 1s
+                ).build()
+            BandwidthTier.GOOD -> builder
+                .setBufferDurationsMs(
+                    15_000,  // minBufferMs: 15s（好网大 buffer 防 rebuffer）
+                    50_000,  // maxBufferMs: 50s
+                    1_000,   // bufferForPlaybackMs: 1s
+                    2_000    // bufferForPlaybackAfterRebufferMs: 2s
+                ).build()
+        }
     }
 
     /**
@@ -132,18 +218,47 @@ object ExoPlayerHelper {
     }
 
     /**
-     * R4-T5: 7 维度交叉验证嗅探视频类型（对齐浏览器五层架构）
+     * V-004-P0-1: 嗅探前 DNS 预解析（异步预热系统 DNS 缓存）
      *
-     * 7 维度：
-     * 1. Content-Type 提示（弱信号）
-     * 2. 最终 URL 后缀提示（弱信号，重定向后）
-     * 3. 初始 URL 后缀提示（弱信号）
-     * 4. Magic Number 匹配（强信号，17 项完整签名表）
-     * 5. 主动 Probe 清单内容（强信号，HLS/DASH）
-     * 6. MP4 moov 位置检测（FRONT/BACK/UNKNOWN）
-     * 7. Accept-Ranges 检测（断点续传支持）
+     * 根因：004 日志显示嗅探耗时 3123ms，其中 DNS 解析占主导（DoH 冷启动失败期间
+     * Range 请求等待 DNS 解析 2-3s）。系统 DNS 解析是阻塞调用，首次解析新域名需 1-3s。
      *
-     * 优先级：强信号（4/5）> 弱信号（1/2/3）> 兜底（返回 UNKNOWN）
+     * 方案：在 sniffVideoType 启动前异步预解析域名，让系统 DNS 缓存预热，
+     * Range 请求实际发起时 DNS 解析命中缓存（0ms），降低嗅探耗时。
+     *
+     * - 异步执行：不阻塞主线程，不等待结果（仅预热缓存）
+     * - 独立 scope：SupervisorJob 避免父协程取消影响预解析
+     * - 容错：任何异常静默吞掉（预解析失败不影响主流程，Range 请求会自行解析）
+     * - 脱敏：日志只输出 host 前 2 字符 + hashCode，不输出完整域名
+     *
+     * @param url 视频 URL（提取 host 进行预解析）
+     */
+    fun preResolveDns(url: String) {
+        val host = kotlin.runCatching { Uri.parse(url).host }.getOrNull() ?: return
+        if (host.isBlank()) return
+        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            kotlin.runCatching { java.net.InetAddress.getAllByName(host) }
+                .onSuccess { ips ->
+                    AppLog.putDebug("preResolveDns: success host=${host.take(2)}***/${host.hashCode()}, ips=${ips.size}")
+                }
+                .onFailure { e ->
+                    AppLog.putDebug("preResolveDns: failed host=${host.take(2)}***/${host.hashCode()}, error=${e.javaClass.simpleName}")
+                }
+        }
+    }
+
+    /**
+     * R4-T5: 三级内容证据交叉验证嗅探视频类型（T5.2 术语修正：原"7 维度/五级识别链"）
+     *
+     * 识别架构（对齐 WHATWG MIMESNIFF 规范 + 浏览器嗅探策略）：
+     * - 三级内容证据（Range 请求成功后，优先且排他）：
+     *   1. 主动 Probe 清单内容（强信号，#EXTM3U/MPD 检测）
+     *   2. Magic Number 匹配（强信号，17 项完整签名表）
+     *   3. Content-Type 提示（服务器声明）
+     *   内容证据未识别 → UNKNOWN，由降级链（HLS→DASH→Progressive）渐进接管
+     * - URL 后缀兜底（T5.3：仅在 Range 失败/超时/空 body/HTTP 错误时）：
+     *   URL 后缀可被伪造或动态化，不作为内容证据，仅网络层失败时给起始方向
+     * - 附加维度（不参与类型判定）：MP4 moov 位置检测 + Accept-Ranges 检测 + finalUrl 重定向感知
      *
      * @param url 视频 URL（完整，含 query）
      * @param headers 请求头（如 Referer/User-Agent/Cookie）
@@ -151,14 +266,29 @@ object ExoPlayerHelper {
      */
     suspend fun sniffVideoType(url: String, headers: Map<String, String>): SniffResult {
         val startTime = System.currentTimeMillis()
+        // T1.3: AtomicBoolean 防双回调竞态（withTimeoutOrNull 超时后 sniffWithRangeRequestR4 仍在执行）
+        // 场景：超时返回 UNKNOWN 后，sniffWithRangeRequestR4 的 OkHttp execute() 完成，又返回一个结果
+        // 修复：只有第一个结果被使用，后续结果被丢弃
+        val hasResult = AtomicBoolean(false)
         return withTimeoutOrNull(SNIFF_TIMEOUT_MS) {
             withContext(Dispatchers.IO) {
-                sniffWithRangeRequestR4(url, headers)
+                val result = sniffWithRangeRequestR4(url, headers)
+                // T1.3: 只有第一个结果被使用（如果已超时，hasResult 已被设置为 true，此结果被丢弃）
+                if (hasResult.compareAndSet(false, true)) {
+                    result
+                } else {
+                    AppLog.putDebug("sniffVideoType: duplicate result discarded (timeout already returned), urlPath=${sanitizeUrl(url)}")
+                    SniffResult.UNKNOWN
+                }
             }
         } ?: run {
             val elapsed = System.currentTimeMillis() - startTime
-            AppLog.putDebug("sniffVideoType: timeout (${elapsed}ms), urlPath=${sanitizeUrl(url)}")
-            SniffResult.UNKNOWN
+            // T1.3: 超时后设置 hasResult 为 true，丢弃 sniffWithRangeRequestR4 后续可能返回的结果
+            hasResult.set(true)
+            // T1.4: 关键日志改为 AppLog.put（release 包可输出，ai_test 可分析）
+            AppLog.put("sniffVideoType: timeout (${elapsed}ms), urlPath=${sanitizeUrl(url)}")
+            // T5.3: 超时无内容证据 → URL 后缀兜底
+            sniffByExtensionFallback(url, "timeout ${elapsed}ms")
         }
     }
 
@@ -188,12 +318,15 @@ object ExoPlayerHelper {
                 // 注意：execute() 本身无法中断，isActive 检查只能在其返回后生效
                 // use 块内 this 变为 Response，需用 coroutineContext.isActive 显式访问协程上下文
                 if (!coroutineContext.isActive) {
-                    AppLog.putDebug("sniffWithRangeRequestR4 cancelled after execute, urlPath=${sanitizeUrl(url)}")
+                    // T1.4: 关键日志改为 AppLog.put（release 包可输出）
+                    AppLog.put("sniffWithRangeRequestR4 cancelled after execute, urlPath=${sanitizeUrl(url)}")
                     return@use SniffResult.UNKNOWN
                 }
                 if (!response.isSuccessful && response.code != 206 && response.code != 200) {
-                    AppLog.putDebug("sniffVideoType: non-200 response: code=${response.code}, urlPath=${sanitizeUrl(url)}")
-                    return@use SniffResult.UNKNOWN
+                    // T1.4: 关键日志改为 AppLog.put（release 包可输出）
+                    AppLog.put("sniffVideoType: non-200 response: code=${response.code}, urlPath=${sanitizeUrl(url)}")
+                    // T5.3: HTTP 错误无内容证据 → URL 后缀兜底
+                    return@use sniffByExtensionFallback(url, "http ${response.code}")
                 }
 
                 val finalUrl = response.request.url.toString()
@@ -201,19 +334,18 @@ object ExoPlayerHelper {
                 val acceptRanges = response.header("Accept-Ranges")
                 val supportsRange = acceptRanges?.equals("bytes", ignoreCase = true) == true
 
-                // 维度1: Content-Type 提示（弱信号）
+                // 维度1: Content-Type 提示（内容证据，WHATWG MIMESNIFF 权威信号之一）
+                // T5.3: URL 后缀提示已从 Range 成功路径移除（原维度2/3）——
+                // URL 后缀可被伪造（.php 返回 m3u8）或动态化（play.php?id=xxx 返回 mp4），
+                // 仅在 Range 请求失败/超时时作最后兜底（见 sniffByExtensionFallback）
                 val hintByCt = parseContentTypeToContentType(contentType)
 
-                // 维度2: 最终 URL 后缀提示（弱信号，重定向后）
-                val hintByFinalExt = inferContentTypeByExtension(finalUrl)
-
-                // 维度3: 初始 URL 后缀提示（弱信号）
-                val hintByInitExt = inferContentTypeByExtension(url)
-
-                // L3: magic number 检测（强信号，读 body 前 8KB）
+                // 维度2: magic number 检测（强信号，读 body 前 8KB）
                 val body = response.body ?: run {
-                    AppLog.putDebug("sniffVideoType: empty body, urlPath=${sanitizeUrl(url)}")
-                    return@use SniffResult.UNKNOWN
+                    // T1.4: 关键日志改为 AppLog.put（release 包可输出）
+                    AppLog.put("sniffVideoType: empty body, urlPath=${sanitizeUrl(url)}")
+                    // T5.3: 空 body 无内容证据 → URL 后缀兜底
+                    return@use sniffByExtensionFallback(url, "empty body")
                 }
                 val bodyBytes = readLimitedBytes(body, MimeSniffer.SNIFF_LENGTH)
 
@@ -234,25 +366,25 @@ object ExoPlayerHelper {
                     MoovPosition.UNKNOWN
                 }
 
-                // 综合判定：强信号优先
+                // 综合判定：内容证据优先且排他（WHATWG MIMESNIFF：probe > magic > Content-Type）
+                // T5.3: Range 成功后不再使用 URL 后缀——内容证据未识别即返回 UNKNOWN，
+                // 由 Exo2MediaPlayer 降级链（HLS→DASH→Progressive）渐进接管（对齐浏览器渐进增强），
+                // 避免"200 但 body 是 HTML 错误页 + URL 含 .mp4"场景下后缀误判误导 MediaSource 选择
                 val (finalContentType, finalMimeType) = when {
                     // 强信号1：主动 Probe 清单内容
                     probedContentType == C.TYPE_HLS -> C.TYPE_HLS to MimeTypes.APPLICATION_M3U8
                     probedContentType == C.TYPE_DASH -> C.TYPE_DASH to MimeTypes.APPLICATION_MPD
                     // 强信号2：Magic Number 匹配
                     magicMime != null -> inferContentTypeByMimeType(magicMime) to magicMime
-                    // 弱信号1：Content-Type 提示
+                    // 内容证据3：Content-Type 提示
                     hintByCt != null -> hintByCt to contentType
-                    // 弱信号2：最终 URL 后缀提示（重定向后）
-                    hintByFinalExt != null -> hintByFinalExt to null
-                    // 弱信号3：初始 URL 后缀提示
-                    hintByInitExt != null -> hintByInitExt to null
-                    // 全部失败
+                    // 全部未识别 → UNKNOWN（降级链接管）
                     else -> SniffResult.TYPE_UNKNOWN to null
                 }
 
                 val elapsed = System.currentTimeMillis() - startTime
-                AppLog.putDebug(
+                // T1.4: 关键日志改为 AppLog.put（release 包可输出，ai_test 可分析嗅探成功率）
+                AppLog.put(
                     "sniffVideoType: success, contentType=$finalContentType, mimeType=$finalMimeType, " +
                         "moov=$moovPosition, range=$supportsRange, magic=$magicMime, " +
                         "ct=$contentType, elapsed=${elapsed}ms, urlPath=${sanitizeUrl(url)}"
@@ -270,8 +402,38 @@ object ExoPlayerHelper {
             throw e  // 重新抛出，保留协程取消语义（项目铁证）
         } catch (e: java.io.IOException) {
             AppLog.put("sniffVideoType: range request io failed: ${e.javaClass.simpleName}, urlPath=${sanitizeUrl(url)}")
-            SniffResult.UNKNOWN
+            // T5.3: 网络层失败无内容证据 → URL 后缀兜底
+            sniffByExtensionFallback(url, "io failed")
         }
+    }
+
+    /**
+     * T5.3: URL 后缀兜底嗅探（仅在 Range 请求失败/超时/无内容证据时使用）
+     *
+     * WHATWG MIMESNIFF 规范精神：资源类型由 Content-Type + 内容 sniffing（magic number/probe）确定，
+     * 不应依赖 URL 后缀。URL 后缀仅在无法获取任何内容证据（网络层失败/超时/空 body/HTTP 错误）时
+     * 作为最后手段——此时给 ExoPlayer 一个明确的起始 MediaSource 方向，仍优于直接 UNKNOWN。
+     *
+     * @param url 视频 URL（原始 URL，未重定向）
+     * @param reason 兜底触发原因（日志用）
+     * @return 后缀命中的 SniffResult（含标准 mimeType），未命中返回 UNKNOWN
+     */
+    private fun sniffByExtensionFallback(url: String, reason: String): SniffResult {
+        val byExt = guessTypeByUrl(url)
+        if (byExt == null) {
+            AppLog.put("sniffVideoType: extension fallback miss ($reason), urlPath=${sanitizeUrl(url)}")
+            return SniffResult.UNKNOWN
+        }
+        val mime = when (byExt) {
+            C.TYPE_HLS -> MimeTypes.APPLICATION_M3U8
+            C.TYPE_DASH -> MimeTypes.APPLICATION_MPD
+            else -> null
+        }
+        AppLog.put(
+            "sniffVideoType: extension fallback hit ($reason), contentType=$byExt, " +
+                "urlPath=${sanitizeUrl(url)}"
+        )
+        return SniffResult(contentType = byExt, mimeType = mime, finalUrl = url)
     }
 
     /**
@@ -291,19 +453,32 @@ object ExoPlayerHelper {
     }
 
     /**
-     * R4-T5: 根据 URL 后缀推断 ExoPlayer contentType
+     * R4-T5 / V-P1-1: 根据 URL 后缀启发式推断 ExoPlayer contentType（公共入口）
      *
+     * 清单类：
      * .m3u8 → C.TYPE_HLS
      * .mpd → C.TYPE_DASH
      * .ism/.ismv → C.TYPE_SS（Smooth Streaming）
+     *
+     * 直链类（V-P1-1 补齐，UNKNOWN 降级链首试 Progressive，避免 MANIFEST_MALFORMED 试错）：
+     * 视频 .mp4/.mkv/.webm/.flv/.avi/.mov/.ts/.m2ts + 音频 .mp3/.m4a/.aac/.flac → C.TYPE_OTHER
+     *
      * 其他 → null（未识别）
+     *
+     * 调用方：sniffByExtensionFallback（兜底识别）、buildFallbackTypes（UNKNOWN 降级链排序），
+     * 单一逻辑源避免两处后缀表漂移。
      */
-    private fun inferContentTypeByExtension(url: String): Int? {
+    fun guessTypeByUrl(url: String): Int? {
         val path = url.lowercase().substringBefore("?").substringBefore("#")
         return when {
             path.endsWith(".m3u8") -> C.TYPE_HLS
             path.endsWith(".mpd") -> C.TYPE_DASH
             path.endsWith(".ism") || path.endsWith(".ismv") -> C.TYPE_SS
+            path.endsWith(".mp4") || path.endsWith(".mkv") || path.endsWith(".webm")
+                || path.endsWith(".flv") || path.endsWith(".avi") || path.endsWith(".mov")
+                || path.endsWith(".ts") || path.endsWith(".m2ts")
+                || path.endsWith(".mp3") || path.endsWith(".m4a") || path.endsWith(".aac")
+                || path.endsWith(".flac") -> C.TYPE_OTHER
             else -> null
         }
     }
@@ -394,7 +569,8 @@ object ExoPlayerHelper {
         if (sniffedMime != null) {
             MimeSnifferCache.put(url, sniffedMime)
             val elapsed = System.currentTimeMillis() - startTime
-            AppLog.putDebug("SniffingMime: sniffed mimeType=$sniffedMime, elapsed=${elapsed}ms, urlPath=${sanitizeUrl(url)}")
+            // T1.4: 关键日志改为 AppLog.put（release 包可输出，ai_test 可分析嗅探成功率）
+            AppLog.put("SniffingMime: sniffed mimeType=$sniffedMime, elapsed=${elapsed}ms, urlPath=${sanitizeUrl(url)}")
             return sniffedMime
         }
 
@@ -405,7 +581,8 @@ object ExoPlayerHelper {
             // P0-2 修复（2026-07-26）：URL 后缀兜底结果不缓存
             // 原因：前置帧分析失败可能是临时网络问题，若缓存 URL 后缀结果，1小时内即使网络恢复也不会重新嗅探
             // 权衡：确实无法识别的视频每次都走 URL 后缀兜底，但避免临时失败后错误缓存导致无法播放
-            AppLog.putDebug("SniffingMime: suffix fallback (range failed/timeout), mimeType=$suffixMime, urlPath=${sanitizeUrl(url)}")
+            // T1.4: 关键日志改为 AppLog.put（release 包可输出）
+            AppLog.put("SniffingMime: suffix fallback (range failed/timeout), mimeType=$suffixMime, urlPath=${sanitizeUrl(url)}")
             return suffixMime
         }
 
@@ -413,7 +590,8 @@ object ExoPlayerHelper {
         // P0-2 修复（2026-07-26）：不缓存 null，避免临时网络失败后1小时内无法重试嗅探
         // 用户核心诉求是"能播放"，宁可多嗅探一次也不要因缓存null导致无法播放
         val elapsed = System.currentTimeMillis() - startTime
-        AppLog.putDebug("SniffingMime: sniff failed (null), elapsed=${elapsed}ms, urlPath=${sanitizeUrl(url)}")
+        // T1.4: 关键日志改为 AppLog.put（release 包可输出，ai_test 可分析嗅探失败原因）
+        AppLog.put("SniffingMime: sniff failed (null), elapsed=${elapsed}ms, urlPath=${sanitizeUrl(url)}")
         return null
     }
 

@@ -34,7 +34,7 @@ import io.legado.app.ui.widget.image.PhotoView
  * @param sourceOrigin 订阅源 URL（用于 Referer 注入防盗链）
  * @param referer 文章页 URL（用于 Referer 注入）
  */
-class ImageDetailAdapter(
+open class ImageDetailAdapter(
     private val context: Context,
     private val sourceOrigin: String?,
     private val referer: String? = null

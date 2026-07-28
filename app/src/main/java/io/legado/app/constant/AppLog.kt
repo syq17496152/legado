@@ -21,6 +21,8 @@ object AppLog {
     const val TAG_IMAGE_CANVAS = "ImageCanvas"
     const val TAG_IMAGE_DETAIL = "ImageDetail"
     const val TAG_IMAGE_PLAY = "ImagePlay"
+    // 图片嗅探模块 Tag（ImageUrlExtractor + ImageSnifferWebView 共用，对应 image-sniffer-optimization spec）
+    const val TAG_IMAGE_SNIFF = "ImageSniff"
 
     enum class Level { ERROR, WARN, INFO, DEBUG }
 
@@ -106,10 +108,14 @@ object AppLog {
 
     /**
      * 带模块 Tag 的调试日志（recordLog 守卫）
-     * - recordLog 关闭时直接 return，零开销，不影响用户功能
-     * - recordLog 开启时写入文件（带 tag）+ 内存 mLogs + logcat（仅 DEBUG）
+     * - recordLog 关闭时：ERROR/WARN 级别仍输出到 logcat（确保关键日志可采集），其他级别直接 return
+     * - recordLog 开启时：写入文件（带 tag）+ 内存 mLogs + logcat（仅 DEBUG）
      * - tag 透传给 LogUtils.d 和 Log.e，ai_tests 可通过 adb logcat -s <Tag>:E 过滤
      * 用于：catch 块异常补全 + 关键操作成功/失败日志 + 关键参数日志
+     *
+     * V-004-P0-ImageLog: 修复图片播放器日志缺失（铁证：004 日志 19:01:14 ImageGalleryActivity 启动后 0 日志）
+     * 根因：recordLog 关闭时 putDebugWithTag 直接 return，所有图片日志消失，无法定位"图片不显示"根因
+     * 方案：recordLog 关闭时 ERROR/WARN 级别仍输出到 logcat（不写文件，不存 mLogs），其他级别 return
      */
     @Synchronized
     fun putDebugWithTag(
@@ -118,15 +124,22 @@ object AppLog {
         throwable: Throwable? = null,
         level: Level = Level.ERROR
     ) {
-        if (!AppConfig.recordLog) return
         message ?: return
         val safeMsg = truncateSafely(message)
+        // V-004-P0-ImageLog: recordLog 关闭时，ERROR/WARN 级别仍输出到 logcat（确保关键日志可采集）
+        if (!AppConfig.recordLog) {
+            if (level == Level.ERROR || level == Level.WARN) {
+                Log.e(tag, safeMsg, throwable)
+            }
+            return
+        }
         val fileMsg = if (throwable == null) safeMsg
         else "$safeMsg\n${throwable.stackTraceToString()}"
         LogUtils.d(tag, fileMsg)
         if (mLogs.size > 100) mLogs.removeLastOrNull()
         mLogs.add(0, LogEntry(System.currentTimeMillis(), safeMsg, throwable, level))
-        if (BuildConfig.DEBUG) {
+        // V-004-P0-ImageLog: ERROR/WARN/INFO 级别在 release 包也输出到 logcat（DEBUG 保留守卫避免噪音）
+        if (BuildConfig.DEBUG || level == Level.ERROR || level == Level.WARN || level == Level.INFO) {
             Log.e(tag, safeMsg, throwable)
         }
     }
@@ -153,7 +166,10 @@ object AppLog {
             LogUtils.d("AppLog", "$safeMsg\n${throwable.stackTraceToString()}")
         }
         mLogs.add(0, LogEntry(System.currentTimeMillis(), safeMsg, throwable, level))
-        if (BuildConfig.DEBUG) {
+        // V-004-P0-2: ERROR 级别日志在 release 包也输出到 logcat（确保关键日志可采集）
+        // 根因：004 日志 18:48-19:16 期间 AppLog 未输出，原 BuildConfig.DEBUG 守卫导致 release 包 Log.e 不输出
+        // 方案：ERROR 级别日志无条件 Log.e 输出，DEBUG/INFO/WARN 保留 DEBUG 守卫（避免 release 包 logcat 噪音）
+        if (BuildConfig.DEBUG || level == Level.ERROR) {
             val stackTrace = Thread.currentThread().stackTrace
             Log.e(stackTrace[3].className, safeMsg, throwable)
         }

@@ -72,3 +72,10 @@ ai_tests/scripts/temp_*.py
 ai_tests/tmp_*
 build_temp.bat
 !DIST_DIR!/legado_miss_app_3.26.071910.apk
+
+# === AI 独立记忆系统（memory-mechanism-redesign AD-20）===
+# .trae/memory/ 纳入 Git 管理（可追溯、可回滚），但排除临时文件和缓存
+.trae/memory/cache/
+.trae/memory/_raw_migration.md
+.trae/memory/*.bak
+# 注：ai_memory_main.md + archived/ 纳入 Git（项目记忆需可追溯）

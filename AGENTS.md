@@ -6,26 +6,6 @@
 
 本项目 fork 自原版 [legado-E](https://github.com/Luoyacheng/legado-E)，在此基础上建立了私有化仓库（`https://github.com/syq17496152/legado.git`），并进行了私有化改造。遇到与原版行为不一致的问题时，应优先对比原版代码定位回归原因。
 
-## 全局规范引用索引
-
-> 以下通用规范已迁移到 `~/.trae-cn/user_rules/` 目录，AI 根据任务类型按需用 Read 工具加载。
-
-| 规范文件 | 内容 | 触发场景 |
-|---------|------|---------|
-| user_rules.md | 基础规则（中文/Windows/叫爸爸/驱动入口） | 系统自动注入 |
-| danger-ops.md | 危险操作安全规则 | 系统自动注入 |
-| rule-1782963384927.md | AskUserQuestion 强制规范 | 系统自动注入 |
-| output-safety.md | 输出安全与违禁词规避规范 | 系统自动注入 |
-| core-spec.md | 全局规范索引 | 系统自动注入 |
-| context-recovery.md | 上下文压缩恢复规范 | 压缩恢复后加载 |
-| coding-philosophy.md | 编码哲学规范 | 编码任务加载 |
-| openspec-workflow.md | OpenSpec 工作流规范 | OpenSpec任务加载 |
-| complex-task.md | 复杂任务处理规范 | 50+文件任务加载 |
-| concurrent-editing.md | 并发文件修改规范 | 多Agent并行加载 |
-| budget-management.md | 输出预算管理规范 | 规避思考上限加载 |
-| git-commit-workflow.md | Git多远程仓库提交规范（私仓/公仓隔离） | Git提交任务加载（项目特定） |
-
----
 
 ## 🔴🔴🔴 子规范强制加载硬约束
 
@@ -66,7 +46,6 @@
 ## 🔴 任务完成前强制检查清单
 
 > **任何代码变更任务完成前，必须逐项核对以下检查清单，未完成不得声称任务完成。**
-> **来源**：2026-07-17 用户批评"犯了已有规范约束但没遵守的错误"
 
 | # | 检查项 | 规范来源 | 检查方法 |
 |---|--------|---------|---------|
@@ -145,12 +124,22 @@
 >
 > **何时必须加载全局规范**：上下文压缩恢复时（强制）、AskUserQuestion 响应后（强制）、每个 Phase 完成后（持久化决策）。
 >
-> **项目特定配置**（供全局规范引用）：
-> - 项目主规范：`./AGENTS.md`
-> - 项目记忆：`c:\Users\shiyq\.trae-cn\memory\projects\-f-myself-github-WeAgentChat-temp-legado\project_memory.md`
-> - 经验索引：basic-memory（project=legado）
 
----
+### 🔴 项目特定配置：AI 独立记忆系统（memory-mechanism-redesign）
+
+> **本项目已启用 AI 独立记忆系统（AD-11，2026-07-27 实施完成）**。项目记忆从 C盘迁移到项目目录，AI 完全自主管理。
+
+| 配置项 | 值 |
+|--------|-----|
+| **项目记忆路径（权威源）** | `.trae/memory/ai_memory_main.md`（Edit/Write 可编辑） |
+| **C盘 project_memory.md** | Deprecated，AI 不读不写（铁证：Read 报错 "File path is not within allowed workspace"） |
+| **conv_id 机制** | **已废弃**（2026-07-27 22:51 用户决策，原因：闭环漏洞） |
+| **多任务并发处理** | 压缩恢复后 Read ai_memory_main.md → 检查"当前活跃任务列表" → 若多个活跃任务则 AskUserQuestion 询问用户当前窗口处理哪个 |
+| **时间戳工具** | `date '+%Y-%m-%d %H:%M:%S'`（gitbash）或 `Get-Date -Format 'yyyy-MM-dd HH:mm:ss'`（PowerShell），24H制，禁 mcp_Time |
+| **归档规则** | 用户反馈超7天 → `.trae/memory/archived/feedback/YYYYMM.md`；ai_memory_main.md > 50KB → `archived/main_history_{YYYYMMDD}.md` |
+| **设计文档** | [docs/specs/memory-mechanism-redesign/](./docs/specs/memory-mechanism-redesign/) |
+| **全局规范补充条款** | context-recovery.md / core-spec.md / user_rules.md / concurrent-editing.md / budget-management.md / danger-ops.md 末尾追加 `[memory-mechanism-redesign 补充 - 2026-07-27]` 段落 |
+
 
 ## 🔴🔴🔴 强制规则：书源/订阅源自测交付
 

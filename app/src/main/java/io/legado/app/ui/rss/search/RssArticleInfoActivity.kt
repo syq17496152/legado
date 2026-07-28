@@ -11,6 +11,7 @@ import com.bumptech.glide.request.RequestOptions
 import com.bumptech.glide.request.target.Target
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.databinding.ActivityRssArticleInfoBinding
@@ -211,8 +212,13 @@ class RssArticleInfoActivity :
             }.into(binding.ivCover)
         }
 
-        // 默认选中第一个源
-        selectedOrigin = articlesMap.keys.firstOrNull()
+        // B1 修复：默认选中源用 searchArticle.origins.firstOrNull()（LinkedHashSet 插入顺序）
+        // 铁证：articlesMap 是 HashMap，keys 顺序由哈希值决定，不保证与 origins（LinkedHashSet）一致
+        //   当 HashMap.keys.firstOrNull() != origins.firstOrNull() 时：
+        //   - 默认选中的源 ≠ rssArticles[0] 的源（rssArticles 用 origins.firstOrNull() 生成）
+        //   - VideoPlay.switchToArticle(0) 加载 rssArticles[0]，但 source 是默认选中源 → 不匹配 → 播放失败
+        selectedOrigin = searchArticle?.origins?.firstOrNull() ?: articlesMap.keys.firstOrNull()
+        AppLog.put("RssArticleInfo: selectedOrigin=${selectedOrigin?.take(2)}***, source=origins")
 
         lifecycleScope.launch {
             val items = withContext(IO) {

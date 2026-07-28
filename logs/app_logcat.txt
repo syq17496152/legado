@@ -1,0 +1,1 @@
+﻿07-28 14:14:21.474  6732  6732 I Legado  : AppLog FirstFramePreloader: cache cleared (delayed)

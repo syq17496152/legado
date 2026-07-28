@@ -3,6 +3,7 @@ package io.legado.app.ui.rss.read
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.SourceType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssArticle
@@ -72,7 +73,20 @@ object ReadRss {
         if (type == 2) {
             // 视频播放：从详情页传入 rssArticles 支持播放页上/下一个切换文章（废除 AD-07 简化原则）
             VideoPlay.rssArticles = rssArticles
-            VideoPlay.rssArticleIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link } ?: 0
+            // B3 修复：分离 null 兜底与 -1 兜底，-1 时输出 WARN 并兜底为 0（配合 B2 source 同步更新）
+            val matchedIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link }
+            VideoPlay.rssArticleIndex = if (matchedIndex == null) {
+                0
+            } else if (matchedIndex < 0) {
+                // 文章不在列表中（如聚合搜索结果与文章列表源不一致），WARN 日志 + 兜底为 0
+                AppLog.put(
+                    "ReadRss: source mismatch WARN, rssArticle.origin=${rssArticle.origin.take(2)}***, " +
+                        "rssArticles[0].origin=${rssArticles.firstOrNull()?.origin?.take(2)}***, fallback index=0"
+                )
+                0
+            } else {
+                matchedIndex
+            }
             VideoPlay.rssSortName = sortName
             VideoPlay.rssSortUrl = sortUrl
             VideoPlay.rssNextPageUrl = nextPageUrl
@@ -123,7 +137,19 @@ object ReadRss {
         if (type == 2) {
             //视频播放：设置文章列表到 VideoPlay 单例，支持上下滑动切换文章
             VideoPlay.rssArticles = rssArticles
-            VideoPlay.rssArticleIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link } ?: 0
+            // B3 修复：分离 null 兜底与 -1 兜底，-1 时输出 WARN 并兜底为 0（配合 B2 source 同步更新）
+            val matchedIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link }
+            VideoPlay.rssArticleIndex = if (matchedIndex == null) {
+                0
+            } else if (matchedIndex < 0) {
+                AppLog.put(
+                    "ReadRss: source mismatch WARN, rssArticle.origin=${rssArticle.origin.take(2)}***, " +
+                        "rssArticles[0].origin=${rssArticles.firstOrNull()?.origin?.take(2)}***, fallback index=0"
+                )
+                0
+            } else {
+                matchedIndex
+            }
             // 阶段8 F9：传递分页上下文给 VideoPlay，支持播放器内分页加载
             VideoPlay.rssSortName = sortName
             VideoPlay.rssSortUrl = sortUrl
@@ -178,6 +204,12 @@ object ReadRss {
         fragment.viewLifecycleOwner.lifecycleScope.launch {
             val rssSource = rssSource ?: withContext(IO) { appDb.rssSourceDao.getByKey(rssArticle.origin) }
             rssSource?.let { s ->
+                // V-004-Image-Regress: 进入前先清理垂直画布状态（防止 Activity 异常退出后残留旧数据）
+                // 根因：ImageGalleryActivity.onDestroy 调用 clearImageCanvasState 正常流程会清理，
+                //      但 Activity 异常崩溃/被系统杀死时 onDestroy 不执行，下次进入残留旧 allImageUrls/loadedArticleIndices，
+                //      导致 ImageCanvasAdapter 展示旧图 + loadNextArticle 误跳过索引。
+                // 方案：进入前显式清理，保证每次进入都是干净状态。
+                ImagePlay.clearImageCanvasState()
                 // 设置 ImagePlay 单例（参考 VideoPlay 机制，支持跨文章切换）
                 ImagePlay.rssArticles = rssArticles
                 ImagePlay.rssArticleIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link } ?: 0
@@ -215,6 +247,8 @@ object ReadRss {
         activity.lifecycleScope.launch {
             val rssSource = withContext(IO) { appDb.rssSourceDao.getByKey(record.origin) }
             rssSource?.let { s ->
+                // V-004-Image-Regress: 进入前先清理垂直画布状态（同 Fragment 版本理由）
+                ImagePlay.clearImageCanvasState()
                 // 设置 ImagePlay 单例
                 ImagePlay.rssArticles = rssArticles
                 ImagePlay.rssArticleIndex = rssArticles?.indexOfFirst { it.link == record.record } ?: 0

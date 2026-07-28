@@ -5,6 +5,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
+import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleStore
 
@@ -36,12 +37,17 @@ class HighlightRuleViewModel(application: Application) : BaseViewModel(applicati
             val list = HighlightRuleStore.load(context).toMutableList()
             for (rule in rules) {
                 val idx = list.indexOfFirst { it.id == rule.id }
-                if (idx >= 0) list[idx] = rule
+                // T-B3: upsert 语义（对齐 HighlightRuleEditDialog.kt:229-236 先例）
+                // 修复 R-P1-2 根因 b：原实现 idx<0 静默丢弃，导致预设添加后规则未入库
+                if (idx >= 0) list[idx] = rule else list.add(rule)
             }
             HighlightRuleStore.save(context, list)
             list
         }.onSuccess {
             _rulesLiveData.postValue(it)
+            // T-B5: 即时生效（修复 R-P1-2 即时性缺陷：原仅依赖 Activity.onDestroy 触发）
+            // 对标 HighlightRuleEditDialog.kt:238 既有模式
+            ReadBook.upHighlightRules()
         }
     }
 

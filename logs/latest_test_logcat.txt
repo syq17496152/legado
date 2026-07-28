@@ -1,0 +1,1 @@
+﻿07-28 14:55:26.210   576   576 W StaticLayout: maxLineHeight should not be -1.  maxLines:1 lineCount:1
