@@ -34,6 +34,7 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import com.google.gson.reflect.TypeToken
 import io.legado.app.constant.AppLog
 import io.legado.app.help.http.okHttpClient
+import io.legado.app.help.http.videoStreamClient
 import io.legado.app.model.VideoPlay
 import io.legado.app.utils.GSON
 import io.legado.app.utils.externalCache
@@ -414,7 +415,8 @@ object ExoPlayerHelper {
             }
             val request = requestBuilder.build()
 
-            okHttpClient.newCall(request).execute().use { response ->
+            // FR-3: Range 嗅探请求改用 videoStreamClient（强制 HTTP/1.1），规避 ERR_HTTP2_PROTOCOL_ERROR
+            videoStreamClient.newCall(request).execute().use { response ->
                 // T1.4: execute() 返回后检查 isActive，协程取消时立即返回 UNKNOWN（解决 Bug-3）
                 // 注意：execute() 本身无法中断，isActive 检查只能在其返回后生效
                 // use 块内 this 变为 Response，需用 coroutineContext.isActive 显式访问协程上下文
@@ -737,7 +739,8 @@ object ExoPlayerHelper {
             }
             val request = requestBuilder.build()
 
-            okHttpClient.newCall(request).execute().use { response ->
+            // FR-3: Range 嗅探请求改用 videoStreamClient（强制 HTTP/1.1），规避 ERR_HTTP2_PROTOCOL_ERROR
+            videoStreamClient.newCall(request).execute().use { response ->
                 // T1.4: execute() 返回后检查 isActive，协程取消时立即返回 null
                 // use 块内 this 变为 Response，需用 coroutineContext.isActive 显式访问协程上下文
                 if (!coroutineContext.isActive) {

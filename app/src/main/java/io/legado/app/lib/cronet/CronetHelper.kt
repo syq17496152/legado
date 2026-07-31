@@ -123,12 +123,45 @@ val cronetEngine: ExperimentalCronetEngine? by lazy {
  */
 fun preInitCronetEngine() {
     try {
+        // JNI 崩溃监控（初始化标志法）：SIGABRT 是 native 崩溃，Java 层无法捕获
+        // 方案：初始化前写入标志，初始化成功后清除；下次启动检测标志判断是否崩溃
+        val prefs = appCtx.getSharedPreferences("cronet_safety", android.content.Context.MODE_PRIVATE)
+
+        // 1. 检查上次初始化是否崩溃（"cronet_initializing"=true 意味着上次崩溃了）
+        if (prefs.getBoolean("cronet_initializing", false)) {
+            val crashCount = prefs.getInt("cronet_crash_count", 0) + 1
+            prefs.edit().putInt("cronet_crash_count", crashCount).putBoolean("cronet_initializing", false).apply()
+            AppLog.put("CronetHelper: 检测到上次初始化崩溃(SIGABRT), crashCount=$crashCount")
+
+            if (crashCount >= 3) {
+                // 累计崩溃达阈值，本次启动降级到 OkHttp，跳过 Cronet 初始化
+                AppLog.put("CronetHelper: JNI崩溃次数达阈值3, 本次启动降级到OkHttp")
+                return
+            }
+        }
+
+        // 2. 设置初始化标志（如果初始化过程中 SIGABRT 崩溃，标志不会被清除，下次启动可检测）
+        prefs.edit().putBoolean("cronet_initializing", true).apply()
+
         val startMs = System.currentTimeMillis()
         // 触发 cronetEngine lazy 初始化（在调用线程执行，App.onCreate 中应在 IO 线程调用）
         val engine = cronetEngine
         val costMs = System.currentTimeMillis() - startMs
+
+        // 3. 初始化成功，清除初始化标志
+        prefs.edit().putBoolean("cronet_initializing", false).apply()
+
+        // 4. 初始化成功后重置 crash_count（如果之前有崩溃记录，初始化成功说明问题已解决）
+        if (prefs.getInt("cronet_crash_count", 0) > 0) {
+            prefs.edit().putInt("cronet_crash_count", 0).apply()
+            AppLog.put("CronetHelper: 初始化成功, 重置crashCount=0")
+        }
+
         AppLog.put("CronetHelper: preInitCronetEngine done, engine=${engine?.javaClass?.simpleName}, costMs=$costMs")
     } catch (e: Throwable) {
+        // 初始化失败（非 SIGABRT，如 Java 异常），清除初始化标志
+        appCtx.getSharedPreferences("cronet_safety", android.content.Context.MODE_PRIVATE)
+            .edit().putBoolean("cronet_initializing", false).apply()
         AppLog.put("CronetHelper: preInitCronetEngine failed", e)
     }
 }

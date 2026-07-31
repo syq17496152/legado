@@ -6,6 +6,7 @@ import androidx.annotation.Keep
 import io.legado.app.constant.AppLog
 import io.legado.app.help.http.CookieManager
 import io.legado.app.help.http.CookieManager.cookieJarHeader
+import io.legado.app.help.http.DohDns
 import io.legado.app.utils.printOnDebug
 import okhttp3.Call
 import okhttp3.CookieJar
@@ -64,9 +65,92 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
         @Volatile private var lastLoggedErrorTime = 0L
         private const val LOG_DEDUP_INTERVAL_MS = 60_000L
 
+        // V3-FR-6: 独立常量，仅用于恢复探测触发检查（L96 currentIntervalMs 计算）
+        // 原因：RECOVERY_PROBE_INTERVAL_MS 被 L96/L239/L261/L277 共4处使用
+        // 修改会影响所有非HTTP/2、非震荡的降级时长，弱网下加剧乒乓
+        // 方案：新增独立常量仅用于恢复探测触发检查，保持 RECOVERY_PROBE_INTERVAL_MS 不变
+        private const val RECOVERY_PROBE_CHECK_INTERVAL_MS = 3 * 60 * 1000L  // 3分钟
+
+        // V3-FR-2: 证书错误单独去重状态（不与协议错误共享 lastLoggedError）
+        // 原因：证书错误降级 OkHttp 后不累计降级计数，日志频率可能与协议错误不同
+        @Volatile private var lastCertError: String? = null
+        @Volatile private var lastCertErrorTime = 0L
+
         // BUG6-V2 fix: 记录最近一次协议错误对应的 host（路径模式化存储，仅保留域名哈希前缀）
         // 恢复探测时优先放行该 host 的请求，避免可达 host 探测成功但失败 host 仍不可达导致震荡
         @Volatile private var lastFailedHostHint: String? = null
+
+        // sniff-result-pipeline-fix FR-4: lastFailedHostHint 超时清除
+        // 根因：lastFailedHostHint 对应 host 长时间无请求时，探测永远不触发，降级状态持续
+        // 铁证：263 次"探测跳过非失败 host"日志，全部针对同一对 host，10 秒内重复 15+ 次
+        // 方案：hint 赋值 5 分钟后自动清除，允许任意 host 探测
+        @Volatile private var lastFailedHostHintTimeMs = 0L
+        private const val HINT_TIMEOUT_MS = 5 * 60 * 1000L  // 5 分钟超时
+
+        // FR-6: 探测跳过日志采样计数器（每 10 次输出 1 次汇总，减少日志噪声）
+        // 根因：152 次"探测跳过非失败 host"日志噪声，全部是相同 host 的重复跳过
+        private val probeSkipCount = java.util.concurrent.atomic.AtomicInteger(0)
+        private const val PROBE_SKIP_LOG_INTERVAL = 10  // 每 10 次输出 1 次
+
+        // FR-7: 证书错误记忆缓存（5 分钟内同 host 不重复 Cronet 尝试，直接走 OkHttp）
+        // 根因：证书错误降级后无缓存，每次请求都先走 Cronet 失败再降级，浪费往返
+        // 方案：证书错误时缓存 host + 过期时间戳（5 分钟），命中直接走 OkHttp
+        private val certErrorCache = java.util.concurrent.ConcurrentHashMap<String, Long>()
+        private const val CERT_ERROR_CACHE_TTL_MS = 5 * 60 * 1000L  // 5 分钟
+
+        /**
+         * V3-FR-2: 证书错误判定（前缀匹配，覆盖20+错误码）
+         *
+         * 覆盖范围：
+         * - ERR_CERT_AUTHORITY_INVALID/ERR_CERT_COMMON_NAME_INVALID/ERR_CERT_DATE_INVALID 等
+         * - ERR_SSL_PROTOCOL_ERROR/ERR_SSL_DECRYPT_ERROR 等
+         *
+         * 注意：此分支必须在 isProtocolError/isHttp2ProtocolError 判定之前插入并 return
+         * 原因：ERR_SSL_PROTOCOL_ERROR 含 PROTOCOL_ERROR 会匹配 isHttp2ProtocolError
+         */
+        private fun isCertificateError(errorMsg: String): Boolean =
+            errorMsg.contains("ERR_CERT_", true) || errorMsg.contains("ERR_SSL_", true)
+
+        /**
+         * V3-FR-3: NAME_NOT_RESOLVED 判定（DoH 失败导致，非 Cronet 问题）
+         *
+         * 此类错误降级 OkHttp 也会因相同 DNS 失败，不累计降级计数
+         * 同时清理 DoH 负缓存 + 熔断状态，下次请求重新尝试 DoH
+         */
+        private fun isNameNotResolvedError(errorMsg: String): Boolean =
+            errorMsg.contains("ERR_NAME_NOT_RESOLVED", true)
+
+        /**
+         * V3-FR-2: 证书错误日志去重（60s 内相同错误只记一次）
+         *
+         * 使用 lastCertError/lastCertErrorTime（不与协议错误共享 lastLoggedError）
+         * 日志明确标识"证书错误降级 OkHttp（复用 SSLHelper 信任所有证书），不累计降级计数"
+         */
+        private fun logCertError(errMsg: String) {
+            val now = System.currentTimeMillis()
+            val errorKey = "CERT:${errMsg.take(50)}"
+            if (errorKey != lastCertError || now - lastCertErrorTime > LOG_DEDUP_INTERVAL_MS) {
+                AppLog.put("Cronet 证书错误, 降级 OkHttp (复用 SSLHelper 信任所有证书), 不累计降级计数: error=${errMsg.take(80)}")
+                lastCertError = errorKey
+                lastCertErrorTime = now
+            }
+        }
+
+        /**
+         * V3-FR-3: NAME_NOT_RESOLVED 日志去重（60s 内相同 host 只记一次）
+         *
+         * 复用 lastLoggedError/lastLoggedErrorTime（与协议错误共享，因为 NAME_NOT_RESOLVED 不累计降级计数）
+         * 日志明确标识"DoH failure, not Cronet issue"
+         */
+        private fun logNameNotResolved(errMsg: String, host: String) {
+            val now = System.currentTimeMillis()
+            val errorKey = "NAME_NOT_RESOLVED:$host"
+            if (errorKey != lastLoggedError || now - lastLoggedErrorTime > LOG_DEDUP_INTERVAL_MS) {
+                AppLog.put("Cronet NAME_NOT_RESOLVED (DoH failure, not Cronet issue), 降级 OkHttp, 不累计降级计数: host=${host.take(3)}***, error=${errMsg.take(60)}")
+                lastLoggedError = errorKey
+                lastLoggedErrorTime = now
+            }
+        }
 
         /**
          * 降级状态查询（供 HttpHelper 等外部诊断使用）
@@ -93,21 +177,44 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
             ) {
                 EXTENDED_DEGRADE_INTERVAL_MS
             } else {
-                RECOVERY_PROBE_INTERVAL_MS
+                // V3-FR-6: 用独立常量 RECOVERY_PROBE_CHECK_INTERVAL_MS（3分钟）
+                // 原因：RECOVERY_PROBE_INTERVAL_MS 被 L239/L261/L277 共3处降级时长计算使用
+                // 修改会影响所有非HTTP/2、非震荡的降级时长，弱网下加剧乒乓
+                RECOVERY_PROBE_CHECK_INTERVAL_MS
             }
             if (elapsed < currentIntervalMs) {
                 return chain.proceed(original)
             }
             // BUG6-V2: 如果有失败 host 提示，优先放行该 host 的请求（避免可达 host 探测成功但失败 host 仍不可达）
             val requestHost = original.url.host
+            // sniff-result-pipeline-fix FR-4: hint 超时清除
+            // 根因：hint 对应 host 长时间无请求时，探测永远不触发，降级状态持续
+            if (lastFailedHostHint != null && System.currentTimeMillis() - lastFailedHostHintTimeMs > HINT_TIMEOUT_MS) {
+                AppLog.put("Cronet hint 超时清除 (${HINT_TIMEOUT_MS / 60000} 分钟), 放行任意 host 探测")
+                lastFailedHostHint = null
+                lastFailedHostHintTimeMs = 0L
+            }
             val hint = lastFailedHostHint
             if (hint != null && requestHost != hint) {
                 // 当前请求不是失败 host，跳过探测走 OkHttp，等待失败 host 的请求到来
-                AppLog.putDebug("Cronet 探测跳过非失败host: requestHost=${requestHost.take(3)}***, hintHost=${hint.take(3)}***")
+                // FR-6: 采样输出（每 10 次输出 1 次），减少日志噪声
+                val skipCount = probeSkipCount.incrementAndGet()
+                if (skipCount % PROBE_SKIP_LOG_INTERVAL == 0) {
+                    AppLog.putDebug("Cronet 探测跳过非失败host (采样 1/$PROBE_SKIP_LOG_INTERVAL, 累计 $skipCount 次): requestHost=${requestHost.take(3)}***, hintHost=${hint.take(3)}***")
+                }
                 return chain.proceed(original)
             }
             isRecoveryProbe = true
             AppLog.put("Cronet 降级满 ${currentIntervalMs / 60000} 分钟, 放行失败host请求探测恢复")
+        }
+        // FR-7: 证书错误记忆缓存检查（5 分钟内同 host 不重复 Cronet 尝试，直接走 OkHttp）
+        // W5 整改：检查位置在 degradedForSession 检查之后、Cronet 执行之前
+        val requestHostForCert = original.url.host
+        certErrorCache[requestHostForCert]?.let { expiry ->
+            if (System.currentTimeMillis() < expiry) {
+                return chain.proceed(original)
+            }
+            certErrorCache.remove(requestHostForCert)  // 过期清除
         }
         //Cronet未初始化（try-catch 防御 lazy 初始化异常逃逸）
         //铁证：真机日志显示 cronetEngine lazy 初始化抛出 RuntimeException 后直接逃逸到 intercept，
@@ -192,6 +299,35 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
                 }
             }
 
+            // V3-FR-2: 证书错误降级 OkHttp（复用 SSLHelper 信任所有证书），不累计降级计数
+            // 必须在 isProtocolError 之前插入并 return（避免 ERR_SSL_PROTOCOL_ERROR 误匹配 isHttp2ProtocolError）
+            // OkHttp 的 okHttpClient 已配置 SSLHelper.unsafeSSLSocketFactory + unsafeTrustManager + unsafeHostnameVerifier
+            if (isCertificateError(errMsg)) {
+                logCertError(errMsg)
+                // FR-7: 写入证书错误记忆缓存（5 分钟内同 host 不重复 Cronet 尝试）
+                certErrorCache[original.url.host] = System.currentTimeMillis() + CERT_ERROR_CACHE_TTL_MS
+                try {
+                    return chain.proceed(original)
+                } catch (e2: Exception) {
+                    e2.addSuppressed(cronetException)
+                    throw e2
+                }
+            }
+
+            // V3-FR-3: NAME_NOT_RESOLVED 降级 OkHttp（DoH 失败导致，非 Cronet 问题），不累计降级计数
+            // 同时清理 DoH 负缓存 + 熔断状态，下次请求重新尝试 DoH
+            if (isNameNotResolvedError(errMsg)) {
+                val failedHost = original.url.host
+                logNameNotResolved(errMsg, failedHost)
+                DohDns.clearNegativeCache(failedHost)
+                try {
+                    return chain.proceed(original)
+                } catch (e2: Exception) {
+                    e2.addSuppressed(cronetException)
+                    throw e2
+                }
+            }
+
             // 协议错误判断：扩展覆盖连接层失败（protocol=unknown 对应 QUIC/连接被拒/Socket 异常）
             val isProtocolError = errMsg.contains("PROTOCOL_ERROR", true)
                 || errMsg.contains("StreamReset", true)
@@ -205,11 +341,9 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
             val isHttp2ProtocolError = errMsg.contains("ERR_HTTP2_PROTOCOL_ERROR", true)
                 || errMsg.contains("PROTOCOL_ERROR", true)
             val isConnectionRefused = errMsg.contains("ERR_CONNECTION_REFUSED", true)
-            if (!errMsg.contains("ERR_CERT_", true)
-                && !errMsg.contains("ERR_SSL_", true)
-            ) {
-                e.printOnDebug()
-            }
+            // V3-FR-2: 证书错误已在 isCertificateError 分支前置 return，不会到达此处
+            // 原 ERR_CERT_/ERR_SSL_ 跳过 printOnDebug 判断已删除（冗余代码）
+            e.printOnDebug()
             // P1-2: 连接拒绝错误不累计降级计数（DoH 失败导致，降级 OkHttp 也会因相同 DNS 失败）
             if (isConnectionRefused) {
                 AppLog.putDebug("Cronet 连接拒绝(可能是DoH失败), 不累计降级: error=${errMsg.take(80)}")
@@ -219,6 +353,8 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
                 val failedHost = original.url.host
                 if (failedHost != lastFailedHostHint) {
                     lastFailedHostHint = failedHost
+                    // sniff-result-pipeline-fix FR-4: 记录赋值时间戳
+                    lastFailedHostHintTimeMs = now
                 }
                 // T4.3: 启动 300ms 宽限期内的协议错误不累计降级计数（冷启动失败属正常，日志实证误降级）
                 val inStartupGrace = now - classLoadTimeMs < STARTUP_GRACE_MS

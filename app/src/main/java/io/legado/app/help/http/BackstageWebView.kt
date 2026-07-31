@@ -345,18 +345,23 @@ class BackstageWebView(
                 // isVideoFormat 第2层：sourceRegex 匹配
                 sourceRegex?.let { regex ->
                     if (resUrl.matches(regex.toRegex())) {
-                        try {
-                            val response = StrResponse(url!!, resUrl)
-                            callback?.onResult(response)
-                        } catch (e: Exception) {
-                            callback?.onError(e)
+                        // sniff-result-pipeline-fix FR-2: 命中后切 UI 线程同步 resume
+                        // 根因：shouldInterceptRequest 在 chromium 工作线程调用，block.resume 需要 Dispatcher 调度到 IO 线程
+                        // 调度延迟 1-15ms，与内层超时竞争（外层超时已由 FR-1 移除）
+                        // 方案：将 callback?.onResult + destroy 合并到同一个 UI 线程 post，同步执行
+                        // 优势：UI 线程 Handler 优先级高，调度延迟 <1ms；resume 与 destroy 顺序保证
+                        // 原崩溃修复（shouldInterceptRequest 在工作线程调用，destroy 必须 UI 线程）仍保留：
+                        // destroy() 内部 WebViewPool.release 操作 webView.setLayoutParams 等 View 方法
+                        AppLog.putInfo("R5网络抓包命中(切UI线程), post到UI线程执行resume+destroy")
+                        mHandler.post {
+                            try {
+                                val response = StrResponse(url!!, resUrl)
+                                callback?.onResult(response)
+                            } catch (e: Exception) {
+                                callback?.onError(e)
+                            }
+                            destroy()
                         }
-                        // 修复P0崩溃：shouldInterceptRequest 在工作线程调用（chromium 设计），
-                        // destroy() 内部 WebViewPool.release 操作 webView.setLayoutParams 等 View 方法，
-                        // 必须切到 UI 线程执行，否则抛 IllegalStateException: Calling View methods on another thread than the UI thread
-                        // 崩溃证据：crash-2026-07-13-14-53-47 + logcat L4258 shouldInterceptRequest(BackstageWebView.kt:354)
-                        AppLog.putInfo("R5网络抓包命中(工作线程), post到UI线程执行destroy")
-                        mHandler.post { destroy() }
                     }
                 }
             }
@@ -467,9 +472,14 @@ class BackstageWebView(
                         AppLog.putInfo("R5网络抓包: window.__videoUrls__ 为空, 等待 shouldInterceptRequest 或超时")
                         return@evaluateJavascript
                     }
+                    // FR-9: 先用 GSON 解析（源码原有方式），失败时正则提取容错
                     val urls = GSON.fromJsonArray<String>(result).getOrNull()
-                    if (urls == null) {
-                        AppLog.putWarn("R5网络抓包: 解析 window.__videoUrls__ 失败")
+                        ?: run {
+                            AppLog.putWarn("R5网络抓包: GSON 解析 window.__videoUrls__ 失败, 尝试正则提取")
+                            extractUrlsByRegex(result)
+                        }
+                    if (urls.isNullOrEmpty()) {
+                        AppLog.putWarn("R5网络抓包: window.__videoUrls__ 解析失败（GSON + 正则均失败）")
                         return@evaluateJavascript
                     }
                     for (url in urls) {
@@ -486,6 +496,14 @@ class BackstageWebView(
             }
         }
 
+        // FR-9（I2 整改）: 正则提取容错，覆盖 m3u8/mp4/mkv/flv/mp3/m4a/aac/mpd（与 VIDEO_SOURCE_REGEX 对齐）
+        private fun extractUrlsByRegex(jsonStr: String): List<String> {
+            val urlRegex = Regex(
+                """https?://[^\s"'<>]+\.(?:m3u8|mp4|mkv|flv|mp3|m4a|aac|mpd)(?:\?[^\s"'<>]*)?""",
+                RegexOption.IGNORE_CASE
+            )
+            return urlRegex.findAll(jsonStr).map { it.value }.toList()
+        }
     }
 
     companion object {

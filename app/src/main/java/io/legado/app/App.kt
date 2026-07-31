@@ -110,6 +110,8 @@ class App : Application() {
             // 铁证: cronetEngine lazy 在主线程触发 syncEnsureSoFile+manualLoad+build 耗时>5s 导致 ANR
             // 修复: App启动时在IO线程预触发 cronetEngine lazy，后续主线程访问直接返回已初始化实例
             io.legado.app.lib.cronet.preInitCronetEngine()
+            // FR-2: 启动时预热 DoH 服务器（探测延迟+选择更优为主），提前初始化 dohClients
+            io.legado.app.help.http.DohDns.preheatDohServers()
             createNotificationChannels()
             LiveEventBus.config()
                 .lifecycleObserverAlwaysActive(true)

@@ -29,7 +29,7 @@ import java.net.InetAddress
 
 @Suppress("MemberVisibilityCanBePrivate", "ConstPropertyName")
 object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
-    val isCronet = appCtx.getPrefBoolean(PreferKey.cronet)
+    val isCronet = appCtx.getPrefBoolean(PreferKey.cronet, true)
     var useAntiAlias = appCtx.getPrefBoolean(PreferKey.antiAlias)
     var userAgent: String = getPrefUserAgent()
     var customHosts = appCtx.getPrefString(PreferKey.customHosts)

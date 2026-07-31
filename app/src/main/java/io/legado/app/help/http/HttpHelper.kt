@@ -19,6 +19,7 @@ import okhttp3.Credentials
 import okhttp3.Dns
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
+import okhttp3.ResponseBody.Companion.toResponseBody
 import splitties.init.appCtx
 import java.io.File
 import java.net.InetAddress
@@ -104,6 +105,39 @@ val okHttpClient: OkHttpClient by lazy {
         .cache(httpCache)
         .followRedirects(true)
         .followSslRedirects(true)
+        // FR-4: favicon.ico 缓存拦截器（必须放在拦截器链最前面，缓存命中直接返回）
+        // 根因：137 次 favicon.ico 请求，每次 400-600ms，无缓存机制
+        // 方案：内存 LruCache + 磁盘 24h + 并行请求合并
+        .addInterceptor { chain ->
+            val request = chain.request()
+            // 仅缓存 GET /favicon.ico 请求
+            if (request.method == "GET" && request.url.encodedPath == "/favicon.ico") {
+                val host = request.url.host
+                // 缓存命中直接返回
+                FaviconCache.getCachedResponse(request)?.let { return@addInterceptor it }
+                // 缓存未命中：放行请求，响应写入缓存（并行请求合并）
+                synchronized(FaviconCache.getLock(host)) {
+                    // 双重检查：等待锁期间可能已被其他请求缓存
+                    FaviconCache.getCachedResponse(request)?.let { return@synchronized it }
+                    val response = chain.proceed(request)
+                    if (response.isSuccessful && response.body != null) {
+                        try {
+                            val bodyBytes = response.body!!.bytes()
+                            FaviconCache.put(host, bodyBytes)
+                            // 重新构建 Response（body 已消费，需用缓存数据重建）
+                            return@synchronized response.newBuilder()
+                                .body(bodyBytes.toResponseBody(response.body?.contentType()))
+                                .build()
+                        } catch (e: Exception) {
+                            AppLog.putDebug("FaviconCache: cache write failed, host=${host.take(3)}***")
+                        }
+                    }
+                    return@synchronized response
+                }
+            } else {
+                chain.proceed(request)
+            }
+        }
         .addInterceptor(OkHttpExceptionInterceptor)
         // T4.2: 302 重定向缓存（避免重复请求重定向链，提高抓取成功率）
         .addInterceptor(RedirectCacheInterceptor)
@@ -152,6 +186,11 @@ val okHttpClient: OkHttpClient by lazy {
         }
     }
     builder.addInterceptor(DecompressInterceptor)
+    // sniff-result-pipeline-fix FR-3: HTTP/2 StreamReset 容错
+    // 根因：OkHttp retryOnConnectionFailure(true) 对 HTTP/2 流重置无效
+    // 服务端发送 RST_STREAM 帧 → OkHttp 抛 StreamResetException → 连接池连接未淘汰 → 下次复用仍失败
+    // 方案：捕获 StreamResetException → 淘汰连接池连接 → 重试一次
+    builder.addInterceptor(StreamResetRetryInterceptor)
     builder.build().apply {
         val okHttpName =
             OkHttpClient::class.java.name.removePrefix("okhttp3.").removeSuffix("Client")
@@ -184,6 +223,26 @@ val okHttpClientManga by lazy {
         }
         build()
     }
+}
+
+/**
+ * FR-3: 视频流专用 OkHttpClient（强制 HTTP/1.1）
+ *
+ * 根因：ExoPlayerHelper L417/L740 Range 嗅探请求用 okHttpClient（含 CronetInterceptor），
+ *   Cronet 引擎走 HTTP/2 可能触发 ERR_HTTP2_PROTOCOL_ERROR（日志铁证 3 次）
+ *
+ * 方案：新增 videoStreamClient 强制 HTTP/1.1，ExoPlayerHelper Range 嗅探改用此 client
+ *   - 基于 okHttpClient.newBuilder() 继承所有拦截器（SSLHelper/DohDns/缓存等）
+ *   - protocols=listOf(Protocol.HTTP_1_1) 强制 HTTP/1.1，规避 HTTP/2 协议错误
+ *   - 仍含 CronetInterceptor：但 Cronet 失败会降级到 OkHttp（HTTP/1.1），不会触发 HTTP/2 错误
+ *
+ * 已知上限：HTTP/1.1 不支持多路复用，并发性能略低于 HTTP/2
+ * 升级路径：如需 HTTP/2 可改为按 host 记忆协议错误，仅对失败 host 降级 HTTP/1.1
+ */
+val videoStreamClient: OkHttpClient by lazy {
+    okHttpClient.newBuilder()
+        .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
+        .build()
 }
 
 /**

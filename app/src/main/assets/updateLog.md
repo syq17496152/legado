@@ -6,11 +6,16 @@
 
 **2026/07/31**
 ### 修复
+- 修复视频嗅探成功率下降问题：嗅探外层超时（12秒）会在内层R5网络抓包命中后15毫秒内抢占取消结果，导致已抓到的视频地址被丢弃并误判为嗅探失败；现移除外层超时抢占，让内层各阶段超时自然累计，嗅探命中后结果不再丢失
+- 修复嗅探结果回调延迟问题：R5网络抓包命中后在 worker 线程回调结果，需经调度器切换到 UI 线程（1-15毫秒延迟），极端情况下切换期间被外层超时抢占；现将回调合并到 UI 线程 post 执行，消除调度延迟
+- 修复图片加载偶发失败问题：OkHttp 处理 HTTP/2 请求时服务端发送 RST_STREAM 流重置帧导致 StreamResetException，连接池中故障连接未淘汰，后续请求复用仍失败；新增 StreamResetRetryInterceptor 拦截器自动淘汰故障连接并重试一次，图片加载和所有 OkHttp 请求均受益
+- 修复 Cronet 降级后恢复探测卡死问题：lastFailedHostHint 限制只有失败 host 的请求才能触发恢复探测，当该 host 长时间无请求时探测永远不触发，Cronet 一直停留在降级状态；现为 hint 增加 5 分钟超时自动清除，超时后任意 host 都可触发探测恢复
 - 修复正式包打开视频订阅源闪退（根因修正V3）：Cronet 150+版本JNI注册机制变更，JNI方法总入口类从org.chromium.base.XxxJni迁移到internal.org.jni_zero包（GEN_JNI），R8混淆移除了internal.org.jni_zero.GEN_JNI类，导致libcronet.so的JNI_OnLoad通过FindClass查找该类时抛ClassNotFoundException返回null，触发GetStaticMethodID(null,...) SIGABRT崩溃；现补充ProGuard规则保留整个internal.org.jni_zero包，确保Cronet 150+新JNI注册机制的所有入口类不被移除
 - 修复正式包Cronet ProGuard规则不完整（V2）：R8混淆移除了16个org.chromium.base和org.chromium.net下的JNI类（CommandLineJni/TraceEventJni/HttpUtilJni/NetworkChangeNotifierJni等），这些类不在org.chromium.net.impl包内，现保留整个org.chromium包确保所有JNI反射调用的类不被移除
 - 修复正式包Cronet内部实现类被移除（V1）：R8混淆移除了CronetLibraryLoaderJni等内部实现类，现保留整个org.chromium.net.impl包
 - 修复打开视频播放时偶发无响应（ANR）：视频播放器初始化时在主线程触发Cronet引擎的懒加载（含so文件下载校验+加载+引擎构建，耗时超过5秒），导致主线程被阻塞触发系统ANR杀进程；现改为应用启动时在后台线程预初始化Cronet引擎，后续打开视频时直接使用已初始化的引擎，不再阻塞主线程
 ### 优化
+- 精简DoH服务器列表：移除国内不可达的3个国外DoH服务器（Cloudflare/Google/Quad9），保留阿里DNS和腾讯DNS双保险，消除国外服务器 UnknownHostException 日志噪音，DoH熔断后仍自动回退系统DNS
 - 优化Cronet native库加载方案：从打包到APK改为运行时动态下载，减少APK体积6.37MB（正式包从26.12MB降至19.75MB），so文件在首次使用Cronet时同步下载到应用私有目录，三包（测试/正式/共存）均不再内置libcronet.so
 - 大幅提升视频嗅探成功率（10维度协同优化）：
   - DNS解析增加国内服务器（阿里/腾讯）并优先使用，域名解析更快更稳（国外DoH作为备用）
@@ -24,6 +29,23 @@
   - HLS加密流密钥请求自动注入防盗链头，提升加密视频播放成功率
   - 缓存302重定向映射，避免同一URL重复302往返延迟
   - 补充新增类的ProGuard keep规则，确保release包正常运行
+- Cronet默认启用：isCronet开关默认值从false改为true，新安装用户自动享受Cronet的反爬与弱网收益（已存在用户的偏好值不受影响，保留开关用于紧急关闭）
+- 新增Cronet JNI崩溃自动降级：采用初始化标志法检测SIGABRT崩溃（native崩溃Java层无法捕获），应用启动时检查上次初始化是否异常崩溃，累计3次崩溃后自动降级到OkHttp，初始化成功后重置计数
+- 扩展Cronet网络引擎覆盖范围：视频播放预检（m3u8 URL可达性验证）和文件名获取（下载文件名解析）从HttpURLConnection改为走OkHttp+Cronet网络引擎，获得浏览器级TLS指纹和QUIC协议支持，提升反爬CDN场景的预检成功率和文件名获取成功率；Glide图片加载和WebDav文件上传/下载已通过OkHttp间接接入Cronet，无需额外改动
+- 修复302重定向缓存失效问题：原缓存逻辑因OkHttp自动跟随重定向导致永远无法捕获302响应，缓存实际未生效；现改为从最终响应获取重定向后的URL，缓存真正生效，减少重复重定向往返延迟
+- 修复证书错误误触发Cronet降级：CDN证书错误（如证书颁发机构无效/SSL协议错误）被误判为协议错误累计降级计数，导致Cronet能力丧失；现证书错误直接降级OkHttp（复用SSLHelper信任所有证书）不累计降级计数，避免误降级
+- 修复DNS解析失败误触发Cronet降级：域名解析失败错误（DoH失败导致）被累计降级计数，DoH临时故障导致Cronet长期降级；现清理DoH负缓存和熔断状态后降级OkHttp不累计降级计数，下次请求重新尝试DoH解析
+- 优化Cronet恢复探测频率：恢复探测触发间隔从5分钟缩短到3分钟（独立常量不影响其他降级时长），Cronet降级后更快恢复探测，减少OkHttp降级时长
+- 增强302重定向缓存支持多层重定向：从仅缓存第一层重定向改为缓存跟随所有重定向后的最终URL（A→B→C多层重定向直接缓存A→C映射），减少多级重定向的累计延迟
+- 修复视频嗅探重复请求问题：同一视频URL在短时间内被重复嗅探2-3次（浪费率41%），现对同一URL的嗅探请求自动去重复用，避免重复嗅探
+- 修复HTTP/2流重置重试失效问题：原重试逻辑会取消整个请求导致重试必然失败，现改为清理故障连接池，重试可正常执行
+- 优化DoH域名解析健康度：负缓存时长从30秒缩短到10秒，应用启动时主动探测DoH服务器延迟选择更优服务器
+- 优化视频流加载稳定性：视频流请求强制使用HTTP/1.1协议，规避部分CDN的HTTP/2协议错误
+- 优化网页图标加载：新增favicon.ico缓存（内存+磁盘24小时），消除重复网络请求
+- 优化Cronet日志输出：探测跳过日志从每次输出改为每10次汇总，减少日志噪音
+- 优化证书错误处理：证书错误站点5分钟内不再重复尝试Cronet，直接走OkHttp
+- 优化视频首帧延迟：播放页URL解析结果缓存5分钟，降低首帧延迟方差
+- 优化视频嗅探容错：JSON解析失败时自动降级为正则提取，提升特定源嗅探成功率
 
 **2026/07/30**
 ### 优化

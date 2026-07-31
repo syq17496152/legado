@@ -4,9 +4,9 @@ import io.legado.app.BuildConfig
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern.semicolonRegex
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.http.okHttpClient
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.CustomUrl
-import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLDecoder
 
@@ -67,71 +67,65 @@ object UrlUtil {
         url: URL,
         headerMap: Map<String, String>? = null
     ): String? {
-        // HEAD方式获取链接响应头信息
-        val conn: HttpURLConnection = url.openConnection() as HttpURLConnection
-        conn.requestMethod = "HEAD"
-        // 下载链接可能还需要header才能成功访问
-        headerMap?.forEach { (key, value) ->
-            conn.setRequestProperty(key, value)
-        }
-        // 禁止重定向 否则获取不到响应头返回的Location
-        conn.instanceFollowRedirects = false
-        conn.connect()
-
-        if (AppConfig.recordLog || BuildConfig.DEBUG) {
-            val headers = conn.headerFields
-            val headersString = buildString {
-                headers.forEach { (key, value) ->
-                   value.forEach {
-                       append(key)
-                       append(": ")
-                       append(it)
-                       append("\n")
-                   }
-               }
+        // P1-3 (2026-07-31): 使用 OkHttp API 替换 HttpURLConnection，走 CronetInterceptor 接入 Cronet
+        // 获得 BoringSSL TLS 指纹 + QUIC 能力，提升反爬 CDN 场景文件名获取成功率
+        val request = okhttp3.Request.Builder()
+            .url(url.toString())
+            .head()
+            .apply {
+                headerMap?.forEach { (key, value) -> addHeader(key, value) }
             }
-            AppLog.put("$url response header:\n$headersString")
-        }
-
-        // val fileSize = conn.getContentLengthLong() / 1024
-        /** Content-Disposition 存在三种情况 文件名应该用引号 有些用空格
-         * filename="filename"
-         * filename*="charset''filename"
-         */
-        val raw: String? = conn.getHeaderField("Content-Disposition")
-        // Location跳转到实际链接
-        val redirectUrl: String? = conn.getHeaderField("Location")
-
-        return if (raw != null) {
-            val fileNames = raw.split(semicolonRegex).filter { it.contains("filename") }
-            val names = hashSetOf<String>()
-            fileNames.forEach {
-                val fileName = it.substringAfter("=")
-                    .trim()
-                    .replace("^\"".toRegex(), "")
-                    .replace("\"$".toRegex(), "")
-                if (it.contains("filename*")) {
-                    val data = fileName.split("''")
-                    names.add(URLDecoder.decode(data[1], data[0]))
-                } else {
-                    names.add(fileName)
-                    /* 好像不用这样
-                    names.add(
-                            String(
-                            fileName.toByteArray(StandardCharsets.ISO_8859_1),
-                            StandardCharsets.UTF_8
-                        )
-                    )
-                    */
+            .build()
+        // 禁用自动重定向，否则获取不到响应头返回的 Location
+        val client = okHttpClient.newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+        val response = client.newCall(request).execute()
+        response.use { resp ->
+            if (AppConfig.recordLog || BuildConfig.DEBUG) {
+                val headersString = buildString {
+                    for (i in 0 until resp.headers.size) {
+                        append(resp.headers.name(i))
+                        append(": ")
+                        append(resp.headers.value(i))
+                        append("\n")
+                    }
                 }
-           }
-           names.firstOrNull()
-        } else if (redirectUrl != null) {
-            val newUrl= URL(URLDecoder.decode(redirectUrl, "UTF-8"))
-            getFileNameFromPath(newUrl)
-        } else {
-            AppLog.put("Cannot obtain URL file name, enable recordLog for response header")
-            null
+                AppLog.put("$url response header:\n$headersString")
+            }
+
+            /** Content-Disposition 存在三种情况 文件名应该用引号 有些用空格
+             * filename="filename"
+             * filename*="charset''filename"
+             */
+            val raw: String? = resp.header("Content-Disposition")
+            // Location跳转到实际链接
+            val redirectUrl: String? = resp.header("Location")
+
+            return if (raw != null) {
+                val fileNames = raw.split(semicolonRegex).filter { it.contains("filename") }
+                val names = hashSetOf<String>()
+                fileNames.forEach {
+                    val fileName = it.substringAfter("=")
+                        .trim()
+                        .replace("^\"".toRegex(), "")
+                        .replace("\"$".toRegex(), "")
+                    if (it.contains("filename*")) {
+                        val data = fileName.split("''")
+                        names.add(URLDecoder.decode(data[1], data[0]))
+                    } else {
+                        names.add(fileName)
+                    }
+                }
+                names.firstOrNull()
+            } else if (redirectUrl != null) {
+                val newUrl = URL(URLDecoder.decode(redirectUrl, "UTF-8"))
+                getFileNameFromPath(newUrl)
+            } else {
+                AppLog.put("Cannot obtain URL file name, enable recordLog for response header")
+                null
+            }
         }
     }
     

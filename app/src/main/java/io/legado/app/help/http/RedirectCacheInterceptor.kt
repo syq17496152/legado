@@ -7,19 +7,25 @@ import okhttp3.Interceptor
 import okhttp3.Response
 
 /**
- * P1-5: 302 重定向缓存拦截器（2026-07-31）
+ * P1-5: 302 重定向缓存拦截器（2026-07-31，V3 修订 2026-07-31）
  *
- * 作用：缓存 302/301 重定向映射（原 URL → finalUrl），避免同一 URL 重复 302 往返延迟。
+ * 作用：缓存重定向映射（原 URL → finalUrl），避免同一 URL 重复重定向往返延迟。
  *
  * 成熟方案参考：
  * - Chrome RedirectHistoryCache：浏览器缓存重定向映射，相同 URL 直接跳转 finalUrl
  * - OkHttp 内部 retryAndFollowUpInterceptor：默认每次请求都重新跟随重定向，无跨请求缓存
  *
+ * V3 修订（FR-1）：
+ * - 原实现用 response.header("Location") 仅获取第一层重定向且永远不成立
+ *   （OkHttp followRedirects=true 自动跟随重定向后，应用拦截器看不到 302 响应）
+ * - V3 改用 response.request.url 获取跟随所有重定向后的最终URL
+ * - 支持多层重定向（A→B→C 缓存 A→C 映射，非仅第一层）
+ *
  * 实现策略：
  * - LruCache 500 条 + TTL 10 分钟（平衡命中率与 finalUrl 时效性）
  * - 缓存 key 带 Referer/Cookie 维度（防盗链场景 finalUrl 可能随 header 变化）
- * - 命中时改写请求 URL 为 finalUrl，跳过 302 往返
- * - 响应 302/301 时缓存原 URL → finalUrl 映射
+ * - 命中时改写请求 URL 为 finalUrl，跳过重定向往返
+ * - 比较 request.url 与 response.request.url，不同则缓存映射
  *
  * 安全规范：
  * - 日志只输出技术结论（命中/未命中/缓存大小），不输出 URL/Referer/Cookie 值
@@ -60,28 +66,19 @@ object RedirectCacheInterceptor : Interceptor {
             }
         }
 
-        // 缓存未命中：正常发起请求
+        // 缓存未命中：正常发起请求（OkHttp followRedirects=true 会自动跟随重定向）
         val response = chain.proceed(request)
 
-        // 响应 302/301 时缓存映射
-        if (response.code in 300..399) {
-            val location = response.header("Location")
-            if (!location.isNullOrBlank()) {
-                // 处理相对路径重定向（如 Location: /path/xxx.m3u8）
-                val finalUrl = if (location.startsWith("http")) {
-                    location
-                } else {
-                    val base = request.url
-                    base.newBuilder()
-                        .encodedPath(location)
-                        .build()
-                        .toString()
-                }
-                synchronized(cache) {
-                    cache.put(cacheKey, RedirectEntry(finalUrl, System.currentTimeMillis() + CACHE_TTL_MS))
-                }
-                AppLog.putDebug("RedirectCache: cached 302 mapping, code=${response.code}, cacheSize=${cache.size()}")
+        // V3-FR-1: 使用 response.request.url 获取跟随所有重定向后的最终URL（多层重定向 A→B→C 缓存 A→C 映射）
+        // 原实现用 response.header("Location") 仅获取第一层重定向且永远不成立
+        // （OkHttp followRedirects=true 自动跟随重定向后，应用拦截器看不到 302 响应）
+        val finalUrl = response.request.url.toString()
+        if (originalUrl != finalUrl) {
+            // 发生重定向：缓存原始 URL → 最终 URL 映射
+            synchronized(cache) {
+                cache.put(cacheKey, RedirectEntry(finalUrl, System.currentTimeMillis() + CACHE_TTL_MS))
             }
+            AppLog.putDebug("RedirectCache: cached redirect mapping, cacheSize=${cache.size()}")
         }
         return response
     }

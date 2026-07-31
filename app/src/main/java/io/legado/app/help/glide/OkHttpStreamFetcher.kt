@@ -13,6 +13,7 @@ import io.legado.app.data.entities.BaseSource
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.addHeaders
+import io.legado.app.help.http.StreamResetRetryInterceptor
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.okHttpClientManga
 import io.legado.app.help.source.SourceHelp
@@ -129,6 +130,13 @@ class OkHttpStreamFetcher(
 
     override fun onFailure(call: Call, e: IOException) {
         Log.e(TAG, "onFailure: url=${url.toStringUrl().take(80)}, error=${e.message}")
+        // sniff-result-pipeline-fix FR-3: StreamResetException 不写入 failUrl
+        // 根因：StreamReset 是 HTTP/2 流重置，连接池连接未淘汰，下次复用仍失败
+        // 方案：StreamResetException 不写入 failUrl，允许后续请求重试（配合 StreamResetRetryInterceptor）
+        // 注：原 onFailure 未写入 failUrl，只有 onResponse 非 2xx 才写入，此处保持原逻辑
+        if (StreamResetRetryInterceptor.isStreamResetException(e)) {
+            AppLog.put("Glide onFailure StreamReset (HTTP/2 流重置, 已由 StreamResetRetryInterceptor 重试)")
+        }
         callback?.onLoadFailed(e)
     }
 
