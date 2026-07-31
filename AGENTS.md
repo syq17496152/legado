@@ -206,6 +206,7 @@
 | [书源/订阅源自测交付](./.trae/skills/legado-source-creator/SKILL.md) | 新生成/优化书源或订阅源任务（79条陷阱+5阶段闭环+JVM仿真器） |
 | [改造过程日志记录](./docs/project-rules/logging-during-refactoring.md) | 代码优化/改造/Bug修复实施过程（10类场景必加日志） |
 | [包名规范](./docs/project-rules/package-naming.md) | 构建APK/包名配置/与原版共存 |
+| [APK发布流程规范](./docs/project-rules/apk-publish-workflow.md) | APK发布/版本发布/token配置/发布脚本维护（三包上传到Gitee/GitHub Release+gh CLI备选+SSL问题处理） |
 
 ---
 

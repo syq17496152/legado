@@ -7,6 +7,7 @@ import android.os.Build
 import android.text.TextUtils
 import androidx.annotation.Keep
 import io.legado.app.BuildConfig
+import io.legado.app.constant.AppLog
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.Cronet
 import io.legado.app.utils.DebugLog
@@ -46,9 +47,14 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
     private var cacheInstall = false
 
     init {
-        soUrl = ("https://storage.googleapis.com/chromium-cronet/android/"
-                + soVersion + "/Release/cronet/libs/"
-                + getCpuAbi(appCtx) + "/" + soName)
+        // P0-fix(2026-07-31): 切换 SO 下载源到 GitHub Releases（国内可访问）
+        // - 根因：Google Storage（storage.googleapis.com）在国内网络环境不稳定，
+        //   虽然当前成功但未来可能失败，导致 so 下载失败→Cronet 降级 JavaCronetEngine→TLS 指纹被 CDN 拒绝
+        // - 方案：切换到 GitHub Releases（本项目私有仓库 Release 资产），国内可通过 jsDelivr/ghproxy 加速
+        // - 注意：当前仅上传 arm64-v8a 版本，x86_64 设备下载会失败走降级路径（JavaCronetEngine，预期行为）
+        soUrl = ("https://github.com/syq17496152/legado/releases/download/"
+                + "cronet-" + soVersion + "/"
+                + soName)
         md5 = getMd5(appCtx)
         val dir = appCtx.getDir("cronet", Context.MODE_PRIVATE)
         soFile = File(dir.toString() + "/" + getCpuAbi(appCtx), soName)
@@ -75,6 +81,96 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
         }
         cacheInstall = soFile.exists()
         return cacheInstall
+    }
+
+    /** 供日志调试：so 文件是否存在 */
+    fun soFileExists(): Boolean = soFile.exists()
+
+    /** 供日志调试：md5 值（assets 中 cronet.json 配置的期望值） */
+    fun md5Value(): String = md5
+
+    /**
+     * P0: 同步确保 so 文件已下载到本地（解决 preDownload 异步下载未完成时 cronetEngine 降级 JavaCronetEngine 问题）
+     *
+     * 根因：preDownload() 用 Coroutine.async 异步下载，so 文件下载需要数秒，
+     *   但 cronetEngine lazy 初始化时 so 文件还没下载完，导致 install()=false + manualLoad()=false，
+     *   cronetEngine 降级到 JavaCronetEngine（使用 OkHttp/Conscrypt），TLS 指纹被 CDN 检测拒绝。
+     *
+     * 铁证：日志显示 install()=false, soFile=false, manualLoad: soFile not exists，
+     *   后续 SSLHandshakeException: Connection reset by peer（Conscrypt TLS 被 CDN 拒绝）
+     *
+     * 解决：cronetEngine lazy 初始化前同步下载 so 文件，确保 install()=true + manualLoad()=true
+     */
+    fun syncEnsureSoFile(): Boolean {
+        // 已存在且 md5 匹配，直接返回
+        if (soFile.exists()) {
+            val fileMD5 = getFileMD5(soFile)
+            if (fileMD5 != null && fileMD5.equals(md5, ignoreCase = true)) {
+                return true
+            }
+            // md5 不匹配，删除重新下载
+            soFile.delete()
+        }
+
+        if (md5.length != 32 || soUrl.isEmpty()) {
+            AppLog.put("CronetLoader.syncEnsureSoFile: invalid md5 or url, md5Len=${md5.length}, urlEmpty=${soUrl.isEmpty()}")
+            return false
+        }
+
+        return try {
+            AppLog.put("CronetLoader.syncEnsureSoFile: downloading so file...")
+            // 同步下载到临时文件（P0-fix: 传入 md5 校验已存在文件完整性）
+            val downloadOk = downloadFileIfNotExist(soUrl, downloadFile, md5)
+            if (!downloadOk) {
+                AppLog.put("CronetLoader.syncEnsureSoFile: downloadFileIfNotExist failed")
+                return false
+            }
+            // 校验下载文件 md5
+            val downloadMD5 = getFileMD5(downloadFile)
+            if (downloadMD5 == null || !downloadMD5.equals(md5, ignoreCase = true)) {
+                AppLog.put("CronetLoader.syncEnsureSoFile: md5 mismatch after download, expected=${md5.take(8)}, actual=${downloadMD5?.take(8)}")
+                downloadFile.delete()
+                return false
+            }
+            // 拷贝到目标位置
+            val copyOk = copyFile(downloadFile, soFile)
+            AppLog.put("CronetLoader.syncEnsureSoFile: copyFile=$copyOk, soFileExists=${soFile.exists()}")
+            copyOk
+        } catch (e: Throwable) {
+            AppLog.put("CronetLoader.syncEnsureSoFile: failed", e)
+            false
+        }
+    }
+
+    /**
+     * P0: 手动加载 native cronet so（在 CronetEngine.Builder.build() 前调用）
+     *
+     * 根因：NativeCronetProvider.isAvailable() 检查 native so 是否已加载到内存，
+     *   但 loadLibrary 只在 build() 选择 NativeCronetProvider 后才调用，形成死循环：
+     *   isAvailable() 需要 so 已加载 → loadLibrary 需要 NativeCronetProvider 被选中 → NativeCronetProvider 需要 isAvailable()=true
+     *   解决：build() 前手动 System.load(soFile)，让 isAvailable() 返回 true
+     *
+     * 铁证：日志显示 install()=true + soFile=true + md5 匹配，但 build() 仍降级 JavaCronetEngine
+     *       警告 "using the fallback Cronet Engine implementation"
+     */
+    fun manualLoad(): Boolean {
+        return try {
+            if (!soFile.exists()) {
+                AppLog.put("CronetLoader.manualLoad: soFile not exists")
+                return false
+            }
+            val fileMD5 = getFileMD5(soFile)
+            if (fileMD5 == null || !fileMD5.equals(md5, ignoreCase = true)) {
+                AppLog.put("CronetLoader.manualLoad: md5 mismatch, expected=${md5.take(8)}, actual=${fileMD5?.take(8)}")
+                return false
+            }
+            System.load(soFile.absolutePath)
+            AppLog.put("CronetLoader.manualLoad: success, loaded ${soFile.absolutePath}")
+            true
+        } catch (e: Throwable) {
+            AppLog.put("CronetLoader.manualLoad: failed", e)
+            false
+        }
     }
 
 
@@ -210,16 +306,34 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
 
     /**
      * 下载文件
+     *
+     * P0-fix(2026-07-31): 增加 md5 校验参数，文件存在但 md5 不匹配时删除重新下载
+     * - 根因：原逻辑文件存在直接返回 true，不校验完整性，部分下载/存储异常导致文件损坏时
+     *   后续 md5 校验失败但不会重新下载（downloadFile 残留损坏文件）
+     * - 方案：文件存在时校验 md5（如果传入了 md5），不匹配时删除重新下载
      */
-    private fun downloadFileIfNotExist(url: String, destFile: File): Boolean {
+    private fun downloadFileIfNotExist(url: String, destFile: File, expectedMd5: String? = null): Boolean {
         var inputStream: InputStream? = null
         var outputStream: OutputStream? = null
         try {
+            // P0-fix: 文件存在时校验 md5，不匹配则删除重新下载
+            if (destFile.exists()) {
+                if (expectedMd5.isNullOrEmpty()) {
+                    // 未传入 md5，保持原逻辑（直接返回 true）
+                    return true
+                }
+                val existingMd5 = getFileMD5(destFile)
+                if (existingMd5 != null && existingMd5.equals(expectedMd5, ignoreCase = true)) {
+                    return true
+                }
+                // md5 不匹配，删除损坏文件重新下载
+                AppLog.put("CronetLoader.downloadFileIfNotExist: file exists but md5 mismatch, re-downloading, expected=${expectedMd5.take(8)}, actual=${existingMd5?.take(8)}")
+                if (!destFile.delete()) {
+                    destFile.deleteOnExit()
+                }
+            }
             val connection = URL(url).openConnection() as HttpURLConnection
             inputStream = connection.inputStream
-            if (destFile.exists()) {
-                return true
-            }
             destFile.parentFile!!.mkdirs()
             destFile.createNewFile()
             outputStream = FileOutputStream(destFile)
@@ -271,7 +385,7 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
         download = true
 
         Coroutine.async {
-            val result = downloadFileIfNotExist(url, downloadTempFile)
+            val result = downloadFileIfNotExist(url, downloadTempFile, md5)
             DebugLog.d(javaClass.simpleName, "download result:$result")
             //文件md5再次校验
             val fileMD5 = getFileMD5(downloadTempFile)

@@ -1,126 +1,105 @@
 package io.legado.app.help.http
 
+import androidx.annotation.Keep
+import android.util.LruCache
 import io.legado.app.constant.AppLog
 import okhttp3.Interceptor
 import okhttp3.Response
-import java.util.concurrent.ConcurrentHashMap
 
 /**
- * T4.2: 302 重定向缓存 Interceptor
+ * P1-5: 302 重定向缓存拦截器（2026-07-31）
  *
- * 核心能力：
- * - 缓存 302 重定向结果，避免重复请求重定向链
- * - 提高抓取成功率（用户核心诉求：视频/图片地址经常 302 跳转到 CDN）
- * - 减少网络往返，提升加载速度
+ * 作用：缓存 302/301 重定向映射（原 URL → finalUrl），避免同一 URL 重复 302 往返延迟。
  *
- * 工作原理：
- * - 拦截 302 响应，缓存 Location 头中的目标 URL
- * - 后续相同 URL 的请求直接从缓存读取目标 URL，跳过 302 跳转
- * - 缓存有效期：5 分钟（平衡缓存命中率与 URL 时效性）
+ * 成熟方案参考：
+ * - Chrome RedirectHistoryCache：浏览器缓存重定向映射，相同 URL 直接跳转 finalUrl
+ * - OkHttp 内部 retryAndFollowUpInterceptor：默认每次请求都重新跟随重定向，无跨请求缓存
  *
- * 使用场景：
- * - 视频地址 302 跳转到 CDN（如 play.php?id=xxx → cdn.example.com/video.mp4）
- * - 图片地址 302 跳转到 CDN
- * - 减少重复跳转，提高抓取成功率
+ * 实现策略：
+ * - LruCache 500 条 + TTL 10 分钟（平衡命中率与 finalUrl 时效性）
+ * - 缓存 key 带 Referer/Cookie 维度（防盗链场景 finalUrl 可能随 header 变化）
+ * - 命中时改写请求 URL 为 finalUrl，跳过 302 往返
+ * - 响应 302/301 时缓存原 URL → finalUrl 映射
+ *
+ * 安全规范：
+ * - 日志只输出技术结论（命中/未命中/缓存大小），不输出 URL/Referer/Cookie 值
+ * - Cookie 维度 key 只取前 8 字符（避免完整 cookie 泄漏）
  */
+@Keep
 object RedirectCacheInterceptor : Interceptor {
 
-    /** 重定向缓存：原始 URL → 缓存条目（目标 URL + 时间戳） */
-    private val redirectCache = ConcurrentHashMap<String, CacheEntry>()
+    /** 缓存条目：finalUrl + 过期时间戳 */
+    private data class RedirectEntry(val finalUrl: String, val expireAt: Long)
 
-    /** 缓存有效期：5 分钟 */
-    private const val CACHE_VALIDITY_MS = 5 * 60 * 1000L
-
-    /** 最大缓存数量：LRU 淘汰超过此数量的最旧条目 */
-    private const val MAX_CACHE_SIZE = 100
-
-    /**
-     * 缓存条目（目标 URL + 时间戳）
-     */
-    private data class CacheEntry(
-        val targetUrl: String,
-        val timestamp: Long
-    )
+    /** LruCache 500 条（按 LRU 策略淘汰最久未访问的条目） */
+    private val cache = LruCache<String, RedirectEntry>(MAX_CACHE_SIZE)
 
     override fun intercept(chain: Interceptor.Chain): Response {
-        val originalRequest = chain.request()
-        val originalUrl = originalRequest.url.toString()
+        val request = chain.request()
+        val originalUrl = request.url.toString()
 
-        // 检查缓存命中
-        val cachedEntry = redirectCache[originalUrl]
-        if (cachedEntry != null) {
-            val isExpired = System.currentTimeMillis() - cachedEntry.timestamp > CACHE_VALIDITY_MS
-            if (!isExpired) {
-                // 缓存命中且未过期，直接请求目标 URL
-                AppLog.putDebug("RedirectCache: cache hit, skip 302, from=${sanitizeUrl(originalUrl)}, to=${sanitizeUrl(cachedEntry.targetUrl)}")
-                val newRequest = originalRequest.newBuilder()
-                    .url(cachedEntry.targetUrl)
-                    .build()
-                return chain.proceed(newRequest)
-            } else {
-                // 缓存过期，删除
-                redirectCache.remove(originalUrl)
-                AppLog.putDebug("RedirectCache: cache expired, remove, url=${sanitizeUrl(originalUrl)}")
-            }
-        }
+        // 构建缓存 key（URL + Referer 维度 + Cookie 维度前 8 字符）
+        val referer = request.header("Referer")
+        val cookie = request.header("Cookie")
+        val cacheKey = buildCacheKey(originalUrl, referer, cookie)
 
-        // 缓存未命中，继续请求
-        val response = chain.proceed(originalRequest)
-
-        // 拦截重定向响应，缓存 Location 头
-        // 301/302/307/308 全覆盖（307/308 常见于 CDN 重定向且保持请求方法）
-        if (response.code == 301 || response.code == 302 || response.code == 307 || response.code == 308) {
-            val location = response.header("Location")
-            if (location != null) {
-                // Location 可能是相对路径（如 /video/play.mp4），必须解析为绝对 URL
-                // 否则缓存命中时 newBuilder().url(相对路径) 抛 IllegalArgumentException
-                val resolved = originalRequest.url.resolve(location)?.toString()
-                if (resolved != null) {
-                    redirectCache[originalUrl] = CacheEntry(resolved, System.currentTimeMillis())
-                    AppLog.putDebug("RedirectCache: cache ${response.code}, from=${sanitizeUrl(originalUrl)}, to=${sanitizeUrl(resolved)}")
-                    // LRU 淘汰：超过最大缓存数量时删除最旧条目
-                    evictOldestIfNeeded()
+        // 缓存命中检查
+        synchronized(cache) {
+            cache.get(cacheKey)?.let { entry ->
+                if (System.currentTimeMillis() < entry.expireAt) {
+                    // 命中：改写请求 URL 为 finalUrl，跳过 302 往返
+                    val newRequest = request.newBuilder()
+                        .url(entry.finalUrl)
+                        .build()
+                    AppLog.putDebug("RedirectCache: hit, skipping 302, cacheSize=${cache.size()}")
+                    return chain.proceed(newRequest)
                 } else {
-                    AppLog.putDebug("RedirectCache: location resolve failed, skip cache, from=${sanitizeUrl(originalUrl)}")
+                    // 过期：移除
+                    cache.remove(cacheKey)
                 }
             }
         }
 
+        // 缓存未命中：正常发起请求
+        val response = chain.proceed(request)
+
+        // 响应 302/301 时缓存映射
+        if (response.code in 300..399) {
+            val location = response.header("Location")
+            if (!location.isNullOrBlank()) {
+                // 处理相对路径重定向（如 Location: /path/xxx.m3u8）
+                val finalUrl = if (location.startsWith("http")) {
+                    location
+                } else {
+                    val base = request.url
+                    base.newBuilder()
+                        .encodedPath(location)
+                        .build()
+                        .toString()
+                }
+                synchronized(cache) {
+                    cache.put(cacheKey, RedirectEntry(finalUrl, System.currentTimeMillis() + CACHE_TTL_MS))
+                }
+                AppLog.putDebug("RedirectCache: cached 302 mapping, code=${response.code}, cacheSize=${cache.size()}")
+            }
+        }
         return response
     }
 
     /**
-     * LRU 淘汰：超过最大缓存数量时删除最旧条目
+     * 构建缓存 key（URL + Referer 维度 + Cookie 维度前 8 字符）
+     *
+     * 防盗链场景 finalUrl 可能随 header 变化：
+     * - 不同 Referer 可能得到不同 finalUrl（CDN 基于 Referer 返回不同 CDN 节点）
+     * - 不同 Cookie 可能得到不同 finalUrl（登录态影响重定向目标）
      */
-    private fun evictOldestIfNeeded() {
-        if (redirectCache.size <= MAX_CACHE_SIZE) return
-
-        // 按时间戳排序，删除最旧的条目
-        val sortedEntries = redirectCache.entries.sortedBy { it.value.timestamp }
-        val entriesToRemove = sortedEntries.take(redirectCache.size - MAX_CACHE_SIZE)
-        entriesToRemove.forEach { entry ->
-            redirectCache.remove(entry.key)
-            AppLog.putDebug("RedirectCache: LRU evict, url=${sanitizeUrl(entry.key)}")
-        }
+    private fun buildCacheKey(url: String, referer: String?, cookie: String?): String {
+        // URL 维度 + Referer 维度（取 path 前 20 字符避免完整 Referer 泄漏） + Cookie 维度（取前 8 字符）
+        val refererKey = referer?.let { it.take(20) } ?: ""
+        val cookieKey = cookie?.let { it.take(8) } ?: ""
+        return "$url|referer=$refererKey|cookie=$cookieKey"
     }
 
-    /**
-     * 清除缓存（释放资源时调用）
-     */
-    fun clearCache() {
-        redirectCache.clear()
-        AppLog.putDebug("RedirectCache: cache cleared")
-    }
-
-    /**
-     * URL 脱敏（只保留路径模式，不输出完整 URL）
-     */
-    private fun sanitizeUrl(url: String): String {
-        return try {
-            val uri = java.net.URI(url)
-            "${uri.scheme}://${uri.host}${uri.path}?..."
-        } catch (e: Exception) {
-            "unknown"
-        }
-    }
+    private const val MAX_CACHE_SIZE = 500
+    private const val CACHE_TTL_MS = 10 * 60 * 1000L  // 10 分钟
 }

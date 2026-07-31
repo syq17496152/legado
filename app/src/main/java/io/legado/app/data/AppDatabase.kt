@@ -21,6 +21,7 @@ import io.legado.app.data.dao.CoverGalleryDao
 import io.legado.app.data.dao.DictRuleDao
 import io.legado.app.data.dao.HttpTTSDao
 import io.legado.app.data.dao.KeyboardAssistsDao
+import io.legado.app.data.dao.PlayHistoryDao
 import io.legado.app.data.dao.ReadRecordDao
 import io.legado.app.data.dao.ReplaceRuleDao
 import io.legado.app.data.dao.RssArticleDao
@@ -46,6 +47,7 @@ import io.legado.app.data.entities.CoverGalleryImage
 import io.legado.app.data.entities.DictRule
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.data.entities.KeyboardAssist
+import io.legado.app.data.entities.PlayHistory
 import io.legado.app.data.entities.ReadRecord
 import io.legado.app.data.entities.ReadRecordDetail
 import io.legado.app.data.entities.ReplaceRule
@@ -74,7 +76,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 100,
+    version = 101,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -82,7 +84,7 @@ val appDb by lazy {
         RssStar::class, TxtTocRule::class, ReadRecord::class, HttpTTS::class, Cache::class,
         RuleSub::class, DictRule::class, KeyboardAssist::class, Server::class,
         CoverGalleryGroup::class, CoverGalleryImage::class, ReadRecordDetail::class,
-        AutoTaskRule::class, BookHighlight::class],
+        AutoTaskRule::class, BookHighlight::class, PlayHistory::class],
     views = [BookSourcePart::class],
     autoMigrations = [
         AutoMigration(from = 43, to = 44),
@@ -166,6 +168,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract val coverGalleryDao: CoverGalleryDao
     abstract val autoTaskRuleDao: AutoTaskRuleDao
     abstract val bookHighlightDao: BookHighlightDao
+    abstract val playHistoryDao: PlayHistoryDao
 
     companion object {
 

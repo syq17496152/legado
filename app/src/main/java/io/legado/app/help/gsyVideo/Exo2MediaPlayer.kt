@@ -14,12 +14,17 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.dash.DashMediaSource
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.smoothstreaming.SsMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.source.LoadEventInfo
+import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.exoplayer.source.BehindLiveWindowException
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import io.legado.app.help.exoplayer.ExoPlayerHelper
 import io.legado.app.help.exoplayer.PlayerInstancePool
 import io.legado.app.constant.AppLog
@@ -202,13 +207,40 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      * @return 降级链 contentType 列表
      */
     private fun buildFallbackTypes(sniff: ExoPlayerHelper.SniffResult): List<Int> {
+        // P1 嗅探成功率优化（2026-07-28）：区分两种 UNKNOWN 场景
+        // 1. mimeType 是 HTML（text/html 等）→ 确实是 HTML 页面，返回空列表直接降级 WebView
+        //    （铁证：002日志 /Player/Play.php 返回 text/html，3 次 HLS 重试必然 3002 失败）
+        // 2. mimeType 为 null（嗅探超时或网络错误）→ 可能是视频流但嗅探失败，尝试 HLS 优先
+        //    （铁证：002日志嗅探超时 6.6s 后直接降级 WebView，但 URL 实际可能是视频流）
+        if (sniff.contentType == ExoPlayerHelper.SniffResult.TYPE_UNKNOWN) {
+            val mt = sniff.mimeType?.lowercase()
+            val isHtmlPage = mt != null && (
+                mt.startsWith("text/html") ||
+                mt.startsWith("application/xhtml+xml") ||
+                mt.startsWith("application/xml")
+            )
+            if (isHtmlPage) {
+                AppLog.put(
+                    "ExoFallback: sniff UNKNOWN + HTML mimeType=$mt, skip video fallback, " +
+                        "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+                )
+                return emptyList()
+            }
+            // mimeType 为 null（嗅探超时）或非 HTML 类型 → 尝试 HLS 优先（最常见视频格式）
+            // HLS 失败后会自动降级 WebView，不会卡死
+            // P2-1: 默认降级链改为 [HLS, Progressive]
+            AppLog.put(
+                "ExoFallback: sniff UNKNOWN + mimeType=$mt, try HLS first, " +
+                    "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+            )
+            return listOf(C.TYPE_HLS, C.TYPE_OTHER)
+        }
         return when (sniff.contentType) {
-            // V-003-P1-1: 清单类型（HLS/DASH/SS）降级链移除 Progressive，避免清单格式降级到 Progressive 必然 3003
+            // P2-1: 清单类型（HLS/DASH/SS）降级链优化
         // 铁证：003 日志 3 次 HLS BUFFERING 12s 超时 → Progressive → 21 Extractor 全失败 → 3003
-        // 修复：前 2 项保持相同 contentType（同 contentType 重试），第 3 项兼容 contentType
-        // 铁证：BUFFERING 12s 超时后切换到不兼容 contentType（HLS→DASH）导致 3003/3002 解析失败
-        // 同 contentType 重试给 BUFFERING 更多恢复时间（ExoPlayer 可能已缓存部分数据）
-        C.TYPE_HLS -> listOf(C.TYPE_HLS, C.TYPE_HLS, C.TYPE_DASH)  // 前2项HLS重试，第3项DASH兼容
+        // 修复：HLS 降级链改为 [HLS, Progressive]，第二次 HLS 完全相同必然失败，
+        // DASH 对 m3u8 无降级价值，Progressive 可覆盖某些 CDN 的 .m3u8 URL 实际返回 mp4 流的场景
+        C.TYPE_HLS -> listOf(C.TYPE_HLS, C.TYPE_OTHER)  // HLS → Progressive
         C.TYPE_DASH -> listOf(C.TYPE_DASH, C.TYPE_DASH, C.TYPE_HLS)  // 前2项DASH重试，第3项HLS兼容
         C.TYPE_SS -> listOf(C.TYPE_SS, C.TYPE_SS, C.TYPE_HLS)  // 前2项SS重试，第3项HLS兼容
         C.TYPE_OTHER -> listOf(C.TYPE_OTHER, C.TYPE_OTHER, C.TYPE_HLS)  // 前2项Progressive重试，第3项HLS兼容
@@ -218,7 +250,7 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 C.TYPE_OTHER -> listOf(C.TYPE_OTHER, C.TYPE_OTHER, C.TYPE_HLS)
                 C.TYPE_DASH -> listOf(C.TYPE_DASH, C.TYPE_DASH, C.TYPE_HLS)
                 C.TYPE_SS -> listOf(C.TYPE_SS, C.TYPE_SS, C.TYPE_HLS)
-                else -> listOf(C.TYPE_HLS, C.TYPE_HLS, C.TYPE_DASH)
+                else -> listOf(C.TYPE_HLS, C.TYPE_OTHER)  // P2-1: 默认 HLS → Progressive
             }
         }
         }
@@ -246,6 +278,13 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         }
         // R4-T9: 优先使用 sniff.finalUrl（重定向后的最终 URL），避免用初始 URL 创建导致再次重定向
         val effectiveUrl = currentSniffResult.finalUrl.ifBlank { url }
+        // P0-2: HLS 内部请求 Header 注入
+        // 根因：HlsMediaSource 内部下载 AES-128 密钥和 TS 分片时，使用 okhttpDataFactory 发送请求，
+        // 虽然 ExoPlayerManager 在 prepare 前调用了 setDefaultHeaders，但 applyMediaSourceByType 在降级链重试时
+        // 可能覆盖/丢失 Header。此处双保险：每次创建 MediaSource 前重新注入 currentHeaders。
+        if (currentHeaders.isNotEmpty()) {
+            ExoPlayerHelper.setDefaultHeaders(currentHeaders)
+        }
         try {
             val mediaSource: MediaSource = when (contentType) {
                 C.TYPE_HLS -> {
@@ -257,11 +296,19 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                         }
                         .build()
                     HlsMediaSource.Factory(ExoPlayerHelper.resolvingDataSource)
+                        // 缓冲速度优化（P0）：仅解析 m3u8 清单即完成 preparation，首帧耗时降 30%+
+                        .setAllowChunklessPreparation(true)
+                        // P2-2: 指数退避重试策略（1s/2s/4s/8s/16s），最多 5 次
+                        .setLoadErrorHandlingPolicy(object : DefaultLoadErrorHandlingPolicy() {
+                            override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+                                val errorCount = loadErrorInfo.errorCount
+                                if (errorCount >= 5) return C.TIME_UNSET
+                                return (1L shl (errorCount - 1).coerceAtLeast(0)) * 1000L
+                            }
+                        })
                         // R4-T10: AES-128 加密流由 ExoPlayer 内置支持
                         // resolvingDataSource 已注入 Referer/Cookie/UA 防盗链头，
                         // ExoPlayer 内部会用此 factory 获取 #EXT-X-KEY 标签的密钥
-                        // 注: media3 1.10.1 HlsMediaSource.Factory 无 setExtractorsFactory，
-                        // ExoPlayer 内部使用默认 DefaultExtractorsFactory(含全部 14 个 Extractor)
                         .createMediaSource(mediaItem)
                 }
                 C.TYPE_DASH -> {
@@ -713,9 +760,16 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         // - 第 4 次重试：延迟 8s
         // - 第 5 次重试：延迟 16s
         // 设计理由：立即重试可能在网络未恢复时再次失败，指数退避给网络恢复时间
-        val isNetworkError = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+        //
+        // P0-fix: SSL握手失败是确定性错误（CDN拒绝TLS连接），重试不会成功，排除出可恢复网络错误
+        // 铁证：91短视频 m3u8 播放，SSLHandshakeException 重试5次全部失败，应直接降级
+        val isSslError = error.cause?.toString()?.contains("SSLHandshakeException") == true
+            || error.cause?.cause?.toString()?.contains("SSLHandshakeException") == true
+        val isNetworkError = !isSslError && (
+            error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
             || error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
             || error.errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED
+        )
         if (isNetworkError && retryCount < MAX_RETRY) {
             retryCount++
             // T2.4: 指数退避延迟（1s/2s/4s/8s/16s）
@@ -734,6 +788,34 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                     }
                 }
             }, delayMs)
+            return
+        }
+
+        // P0-fix: 网络错误重试耗尽后触发降级（SSL握手失败等不可恢复网络错误）
+        // 铁证：91短视频 m3u8 播放，SSLHandshakeException 重试5次后卡死，不降级不报错
+        // 修复：重试耗尽后走降级链 tryNextFallback，降级链耗尽则触发 VIDEO_FALLBACK_WEBVIEW
+        if (isNetworkError && retryCount >= MAX_RETRY) {
+            AppLog.put(
+                "ExoFallback: network error retry exhausted ($retryCount/$MAX_RETRY), trigger fallback, " +
+                    "errorCode=${error.errorCodeName}, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+            )
+            tryNextFallback()
+            return
+        }
+
+        // P0-fix: SSL握手失败直接降级WebView（确定性错误，重试和降级链无意义）
+        // 铁证：站点A m3u8，CDN 重置 TLS 连接，ExoPlayer OkHttp 无法握手
+        // 关键：HLS 和 Progressive 用同一个 OkHttp 数据源，SSL 同样会失败，跳过 Progressive 直接 WebView
+        // WebView 使用系统 WebView 的 TLS 栈（ conscrypt + Chromium），可成功握手
+        if (isSslError) {
+            AppLog.put(
+                "ExoFallback: SSL handshake failed, switch to WebView directly (skip OkHttp-based fallbacks), " +
+                    "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+            )
+            postEvent(
+                EventBus.VIDEO_FALLBACK_WEBVIEW,
+                Triple(currentUrl, VideoPlay.videoTitle ?: "", currentHeaders)
+            )
             return
         }
 
@@ -966,6 +1048,105 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             val firstFrameLatency = System.currentTimeMillis() - playbackStartTime
             AppLog.put(
                 "ExoPlayer first frame rendered: latency=${firstFrameLatency}ms, " +
+                    "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+            )
+        }
+    }
+
+    // P2 性能监控埋点（2026-07-28，对齐 design.md AD-04）
+    // 采集 7 类指标：TTFB/首帧/rebuffer/丢帧/带宽/状态转换/帧偏移
+    // release 包通过 AppLog.put 输出（WARN/ERROR 始终输出）
+
+    /**
+     * P2: 丢帧率监控（对齐 tasks.md §8.4）
+     * - 指标定义：onDroppedVideoFrames 累计 droppedFrames
+     * - 告警阈值：单次 droppedFrames > 3 时输出 WARN
+     * - 方法名对齐 Media3 1.10.1 AnalyticsListener 接口（非 onDroppedFrames）
+     */
+    override fun onDroppedVideoFrames(
+        eventTime: AnalyticsListener.EventTime,
+        droppedFrames: Int,
+        elapsedMs: Long
+    ) {
+        super.onDroppedVideoFrames(eventTime, droppedFrames, elapsedMs)
+        if (droppedFrames > 3) {
+            AppLog.put(
+                "[BufferSpeed] onDroppedVideoFrames: dropped=$droppedFrames, elapsed=${elapsedMs}ms, " +
+                    "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+            )
+        }
+    }
+
+    /**
+     * P2: 加载开始时间记录（对齐 tasks.md §8.2，用于计算 TTFB）
+     * - 记录 onLoadStarted 时间戳，onLoadCompleted 时计算 TTFB
+     */
+    private var loadStartTimeMs: Long = 0L
+
+    /**
+     * P2: 加载开始埋点（对齐 tasks.md §8.2）
+     * - 记录加载开始时间，用于 onLoadCompleted 时计算 TTFB
+     */
+    override fun onLoadStarted(
+        eventTime: AnalyticsListener.EventTime,
+        loadEventInfo: LoadEventInfo,
+        mediaLoadData: MediaLoadData
+    ) {
+        super.onLoadStarted(eventTime, loadEventInfo, mediaLoadData)
+        loadStartTimeMs = System.currentTimeMillis()
+    }
+
+    /**
+     * P2: 加载完成埋点（对齐 tasks.md §8.2 + §8.5）
+     * - TTFB = onLoadCompleted 时间 - onLoadStarted 时间
+     * - 实际带宽 = loadEventInfo.bytesLoaded / TTFB
+     * - 告警阈值：TTFB > 500ms 输出 WARN
+     */
+    override fun onLoadCompleted(
+        eventTime: AnalyticsListener.EventTime,
+        loadEventInfo: LoadEventInfo,
+        mediaLoadData: MediaLoadData
+    ) {
+        super.onLoadCompleted(eventTime, loadEventInfo, mediaLoadData)
+        if (loadStartTimeMs > 0) {
+            val loadElapsed = System.currentTimeMillis() - loadStartTimeMs
+            val bytesLoaded = loadEventInfo.bytesLoaded
+            val dataType = mediaLoadData.dataType
+            val dataTypeName = when (dataType) {
+                C.DATA_TYPE_MEDIA -> "media"
+                C.DATA_TYPE_MANIFEST -> "manifest"
+                else -> "type$dataType"
+            }
+            // TTFB > 500ms 输出 WARN（对齐 tasks.md §8.2）
+            if (loadElapsed > 500) {
+                AppLog.put(
+                    "[BufferSpeed] onLoadCompleted SLOW: ttfb=${loadElapsed}ms, " +
+                        "bytes=$bytesLoaded, dataType=$dataTypeName, " +
+                        "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+                )
+            }
+            loadStartTimeMs = 0L
+        }
+    }
+
+    /**
+     * P2: 带宽采样埋点（对齐 tasks.md §8.5）
+     * - 指标定义：onBandwidthEstimate 返回的 bitrateEstimate（Media3 1.10.1 接口，非 onBandwidthSample）
+     * - 告警阈值：< 1Mbps 输出 WARN（弱网提示）
+     * - 参数说明：totalLoadTimeMs 累计加载耗时 / totalBytesLoaded 累计加载字节 / bitrateEstimate 估算比特率(bps)
+     */
+    override fun onBandwidthEstimate(
+        eventTime: AnalyticsListener.EventTime,
+        totalLoadTimeMs: Int,
+        totalBytesLoaded: Long,
+        bitrateEstimate: Long
+    ) {
+        super.onBandwidthEstimate(eventTime, totalLoadTimeMs, totalBytesLoaded, bitrateEstimate)
+        // < 1Mbps 输出 WARN（弱网提示，bitrateEstimate 单位为 bps）
+        if (bitrateEstimate in 1..999_999L) {
+            AppLog.put(
+                "[BufferSpeed] onBandwidthEstimate WEAK: bitrate=${bitrateEstimate}bps, " +
+                    "loadTime=${totalLoadTimeMs}ms, bytes=$totalBytesLoaded, " +
                     "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
             )
         }

@@ -79,3 +79,8 @@ build_temp.bat
 .trae/memory/_raw_migration.md
 .trae/memory/*.bak
 # 注：ai_memory_main.md + archived/ 纳入 Git（项目记忆需可追溯）
+.trae/memory/archived/feedback/legacy_20260727.md
+.trae/memory/ai_memory_main.md
+
+# === APK 发布脚本配置（含 API token，禁止提交）===
+scripts/publish_config.json

@@ -8,6 +8,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleStore
+import io.legado.app.ui.book.read.config.RestoreMode
 
 /**
  * F-P1-2 高亮规则管理 ViewModel（借鉴阅读T，适配 SharedPreferences 存储）
@@ -97,6 +98,21 @@ class HighlightRuleViewModel(application: Application) : BaseViewModel(applicati
             items
         }.onSuccess {
             _rulesLiveData.postValue(it)
+        }
+    }
+
+    /**
+     * 恢复默认规则
+     * - MERGE：保留用户自定义规则，补充缺失的内置规则
+     * - OVERWRITE：删除所有规则，重置为内置规则
+     */
+    fun restoreDefaults(mode: RestoreMode) {
+        execute {
+            HighlightRuleStore.restoreDefaults(context, mode)
+        }.onSuccess {
+            _rulesLiveData.postValue(it)
+            // 即时生效（对齐 update 方法的 ReadBook.upHighlightRules() 模式）
+            ReadBook.upHighlightRules()
         }
     }
 }

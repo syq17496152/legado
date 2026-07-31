@@ -1,0 +1,34 @@
+{
+  "gitee": {
+    "owner": "Chinashitou",
+    "repo": "legado",
+    "token": "<your-gitee-personal-access-token>",
+    "api_base": "https://gitee.com/api/v5",
+    "target_commitish": "main"
+  },
+  "github": {
+    "owner": "syq17496152",
+    "repo": "legado",
+    "token": "<your-github-personal-access-token>",
+    "api_base": "https://api.github.com",
+    "upload_base": "https://uploads.github.com",
+    "target_commitish": "master"
+  },
+  "apk_dirs": {
+    "test": "output/apk/test",
+    "release": "output/apk/release",
+    "coexist": "output/apk/coexist"
+  },
+  "apk_patterns": {
+    "test": "legado_miss_app_*.apk",
+    "release": "legado_miss_app_*.apk",
+    "coexist": "legado_legacy_app_*.apk"
+  },
+  "update_log_path": "app/src/main/assets/updateLog.md",
+  "version_pattern": "3\\.\\d{2}\\.\\d{6}",
+  "retry": {
+    "max_attempts": 3,
+    "backoff_base": 2,
+    "timeout": 300
+  }
+}

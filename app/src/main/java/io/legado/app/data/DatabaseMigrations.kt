@@ -23,7 +23,7 @@ object DatabaseMigrations {
             migration_39_40, migration_40_41, migration_41_42, migration_42_43,
             migration_89_90, migration_90_91, migration_91_92, migration_92_93,
             migration_93_94, migration_94_95, migration_95_96, migration_96_97,
-            migration_97_98, migration_98_99, migration_99_100
+            migration_97_98, migration_98_99, migration_99_100, migration_100_101
         )
     }
 
@@ -727,6 +727,30 @@ object DatabaseMigrations {
                 AppLog.put("AppDatabase Migration 99→100: rssSources 新增 ruleEpisodes 字段成功")
             }.onFailure { e ->
                 AppLog.put("AppDatabase Migration 99→100: ruleEpisodes 已存在或失败: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * AD-04: 100→101 新增 playHistories 表（播放历史跨会话进度恢复）
+     */
+    private val migration_100_101 = object : Migration(100, 101) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            kotlin.runCatching {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS playHistories(
+                        articleUrl TEXT NOT NULL,
+                        videoUrl TEXT NOT NULL,
+                        position INTEGER NOT NULL DEFAULT 0,
+                        duration INTEGER NOT NULL DEFAULT 0,
+                        lastPlayTime INTEGER NOT NULL DEFAULT 0,
+                        rssSourceId TEXT NOT NULL DEFAULT '',
+                        PRIMARY KEY(articleUrl, videoUrl)
+                    )"""
+                )
+                AppLog.put("AppDatabase Migration 100→101: playHistories 表创建成功")
+            }.onFailure { e ->
+                AppLog.put("AppDatabase Migration 100→101: playHistories 表创建失败: ${e.message}")
             }
         }
     }

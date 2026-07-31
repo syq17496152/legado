@@ -1,14 +1,17 @@
 package io.legado.app.help.exoplayer
 
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import androidx.media3.common.C
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.cache.CacheDataSink
 import io.legado.app.constant.AppLog
-import io.legado.app.help.http.okHttpClient
+import io.legado.app.model.VideoPlay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import okhttp3.Request
 import splitties.init.appCtx
 import java.util.concurrent.ConcurrentHashMap
 
@@ -29,17 +32,51 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object FirstFramePreloader {
 
-    /** 预加载字节数：前 ~1MB（含 MP4 moov box + 第一个 I-frame） */
-    private const val PRELOAD_BYTES = 1_048_575 // 1MB - 1
-
     /** A5 预热字节数：前 64KB（首个视频点击瞬间预热，建立 TCP+DNS，加速后续 ExoPlayer 请求） */
     private const val PREWARM_BYTES = 65_535 // 64KB - 1
+
+    /**
+     * R3: 动态计算预加载字节数
+     *
+     * - 用户配置 >0 时优先使用用户配置（MB 转 bytes）
+     * - 用户配置 =0 时按设备档位自动：HIGH=10MB / MID=5MB
+     * - 上限 20MB（防止 OOM）
+     */
+    private fun getPreloadBytes(): Int {
+        val userConfig = VideoPlay.videoPreloadBytesMB
+        val bytes = if (userConfig > 0) {
+            userConfig * 1024 * 1024
+        } else {
+            when (DeviceInfoHelper.getDeviceTier()) {
+                DeviceInfoHelper.DeviceTier.HIGH -> 10 * 1024 * 1024  // 10MB
+                DeviceInfoHelper.DeviceTier.MID -> 5 * 1024 * 1024    // 5MB
+            }
+        }
+        return bytes.coerceAtMost(20 * 1024 * 1024)  // 上限 20MB 防 OOM
+    }
 
     /** 预加载缓存：URL → 预加载时间戳（用于 LRU 淘汰） */
     private val preloadCache = ConcurrentHashMap<String, Long>()
 
-    /** 最大缓存数量：LRU 淘汰超过此数量的最旧条目 */
-    private const val MAX_CACHE_SIZE = 10
+    /**
+     * R3: 动态计算最大预加载数量
+     *
+     * - 用户配置 >0 时优先使用用户配置
+     * - 用户配置 =0 时按设备档位自动：HIGH=10 / MID=7
+     * - 上限 20（防止过多预加载消耗带宽和磁盘）
+     */
+    private fun getPreloadCount(): Int {
+        val userConfig = VideoPlay.videoPreloadCount
+        val count = if (userConfig > 0) {
+            userConfig
+        } else {
+            when (DeviceInfoHelper.getDeviceTier()) {
+                DeviceInfoHelper.DeviceTier.HIGH -> 10
+                DeviceInfoHelper.DeviceTier.MID -> 7
+            }
+        }
+        return count.coerceAtMost(20)
+    }
 
     /** 协程作用域：预加载任务在 IO 线程执行 */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -61,6 +98,11 @@ object FirstFramePreloader {
      * @param headers 请求头（如 Referer/User-Agent/Cookie，用于防盗链场景）
      */
     fun prewarmCurrentVideo(url: String, headers: Map<String, String>) {
+        // AD-01: 首帧预加载开关检查，关闭时不预热（WEAK 档行为）
+        if (!VideoPlay.playerFirstFramePreload) {
+            AppLog.putDebug("FirstFramePreloader: prewarm disabled by playerFirstFramePreload=false")
+            return
+        }
         if (preloadCache.containsKey(url)) {
             AppLog.putDebug("FirstFramePreloader: prewarm cache hit, skip, urlPath=${ExoPlayerHelper.sanitizeUrl(url)}")
             return
@@ -79,41 +121,45 @@ object FirstFramePreloader {
     }
 
     /**
-     * A5：预加载单个 URL 的前 64KB 数据（预热专用，字节数小于 preloadUrl）
+     * A5：预加载单个 URL 的前 64KB 数据（预热专用，写入 SimpleCache 复用缓存）
+     *
+     * R3 改造：从 OkHttp Request + readBytes 改为 ExoPlayer DataSource + CacheDataSink
+     * - 数据写入 SimpleCache，播放时命中缓存（原实现只读取后丢弃，浪费带宽）
+     * - 用 DataSpec 限制读取字节数，防止 OOM
+     * - cacheKey 为纯 URL（与播放器 resolvingDataSource 解析后一致）
      *
      * @param url 视频 URL
      * @param headers 请求头
      */
     private fun prewarmUrl(url: String, headers: Map<String, String>) {
-        val requestBuilder = Request.Builder()
-            .url(url)
-            .header("Range", "bytes=0-$PREWARM_BYTES")
-            .header("Accept", "video/*, application/x-mpegURL, application/dash+xml, */*")
-            .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+        val dataSpec = DataSpec(Uri.parse(url), 0, (PREWARM_BYTES + 1).toLong(), null)
+        val upstream = ExoPlayerHelper.createPreloadDataSource(headers)
+        val cacheSink = CacheDataSink(ExoPlayerHelper.cache, CacheDataSink.DEFAULT_FRAGMENT_SIZE)
 
-        headers.forEach { (key, value) ->
-            requestBuilder.header(key, value)
-        }
-
-        val request = requestBuilder.build()
-        okHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful && response.code != 206 && response.code != 200) {
-                AppLog.put("FirstFramePreloader: prewarm non-200 response: code=${response.code}, urlPath=${ExoPlayerHelper.sanitizeUrl(url)}")
-                return
+        var totalRead = 0
+        try {
+            upstream.open(dataSpec)
+            cacheSink.open(dataSpec)
+            val buffer = ByteArray(8 * 1024)  // 8KB buffer
+            while (totalRead <= PREWARM_BYTES) {
+                val toRead = minOf(buffer.size, PREWARM_BYTES + 1 - totalRead)
+                val read = upstream.read(buffer, 0, toRead)
+                if (read == C.RESULT_END_OF_INPUT || read <= 0) break
+                cacheSink.write(buffer, 0, read)
+                totalRead += read
             }
-
-            val body = response.body ?: run {
-                AppLog.put("FirstFramePreloader: prewarm empty body, urlPath=${ExoPlayerHelper.sanitizeUrl(url)}")
-                return
+        } finally {
+            try { cacheSink.close() } catch (e: Exception) {
+                AppLog.put("FirstFramePreloader: prewarm cacheSink close failed, error=${e.javaClass.simpleName}")
             }
-
-            val bytes = body.byteStream().readBytes()
-            val prewarmSize = minOf(bytes.size, PREWARM_BYTES + 1)
-            AppLog.put(
-                "FirstFramePreloader: prewarm success, size=${prewarmSize}bytes, " +
-                    "urlPath=${ExoPlayerHelper.sanitizeUrl(url)}"
-            )
+            try { upstream.close() } catch (e: Exception) {
+                AppLog.put("FirstFramePreloader: prewarm upstream close failed, error=${e.javaClass.simpleName}")
+            }
         }
+        AppLog.put(
+            "FirstFramePreloader: prewarm success, size=${totalRead}bytes, " +
+                "urlPath=${ExoPlayerHelper.sanitizeUrl(url)}"
+        )
     }
 
     /**
@@ -126,9 +172,22 @@ object FirstFramePreloader {
     fun preloadFirstFrame(urls: List<String>, currentIndex: Int, headers: Map<String, String>) {
         if (urls.isEmpty()) return
 
-        // 预加载当前位置 ±1 的视频
-        val indicesToPreload = listOf(currentIndex - 1, currentIndex + 1)
-            .filter { it in urls.indices }
+        // AD-01: 分档位预加载深度（WEAK=0/MEDIUM=1/GOOD=3）
+        val precacheDepth = getPrecacheDepth()
+        if (precacheDepth <= 0) {
+            AppLog.putDebug("FirstFramePreloader: preload disabled by precacheDepth=0")
+            return
+        }
+
+        // 预加载当前位置 ±precacheDepth 的视频
+        val indicesToPreload = mutableListOf<Int>()
+        for (offset in 1..precacheDepth) {
+            listOf(currentIndex - offset, currentIndex + offset).forEach { index ->
+                if (index in urls.indices && index !in indicesToPreload) {
+                    indicesToPreload.add(index)
+                }
+            }
+        }
 
         indicesToPreload.forEach { index ->
             val url = urls[index]
@@ -153,57 +212,75 @@ object FirstFramePreloader {
     }
 
     /**
-     * 预加载单个 URL 的首帧数据
+     * AD-01: 分档位预加载深度
+     * - playerFirstFramePreload=false → 0（WEAK 档，不预加载）
+     * - playerPrecacheRange > 0 → 用户配置值（1/2/3，上限5防过多消耗带宽）
+     * - playerPrecacheRange = 0 → 按设备档位自动（HIGH=3 GOOD档/MID=1 MEDIUM档）
+     */
+    private fun getPrecacheDepth(): Int {
+        if (!VideoPlay.playerFirstFramePreload) return 0
+        val userConfig = VideoPlay.playerPrecacheRange
+        if (userConfig > 0) return userConfig.coerceAtMost(5)
+        return when (DeviceInfoHelper.getDeviceTier()) {
+            DeviceInfoHelper.DeviceTier.HIGH -> 3  // GOOD 档：预加载 ±3
+            DeviceInfoHelper.DeviceTier.MID -> 1   // MEDIUM 档：预加载 ±1
+        }
+    }
+
+    /**
+     * R3: 预加载单个 URL 的首帧数据（写入 SimpleCache，播放时命中缓存）
+     *
+     * 改造点：
+     * - 从 OkHttp Request + readBytes 改为 ExoPlayer DataSource + CacheDataSink
+     * - 数据写入 SimpleCache，播放时通过 CacheDataSource 命中缓存
+     * - 用 DataSpec 限制读取字节数（getPreloadBytes() 动态计算），防止 OOM
+     * - cacheKey 为纯 URL（与播放器 resolvingDataSource 解析后一致）
      *
      * @param url 视频 URL
      * @param headers 请求头
      */
     private fun preloadUrl(url: String, headers: Map<String, String>) {
-        val requestBuilder = Request.Builder()
-            .url(url)
-            .header("Range", "bytes=0-$PRELOAD_BYTES")
-            .header("Accept", "video/*, application/x-mpegURL, application/dash+xml, */*")
-            .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+        val preloadBytes = getPreloadBytes()
+        val dataSpec = DataSpec(Uri.parse(url), 0, preloadBytes.toLong(), null)
+        val upstream = ExoPlayerHelper.createPreloadDataSource(headers)
+        val cacheSink = CacheDataSink(ExoPlayerHelper.cache, CacheDataSink.DEFAULT_FRAGMENT_SIZE)
 
-        // 注入用户请求头（如 Referer/User-Agent/Cookie，用于防盗链场景）
-        headers.forEach { (key, value) ->
-            requestBuilder.header(key, value)
-        }
-
-        val request = requestBuilder.build()
-        okHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful && response.code != 206 && response.code != 200) {
-                AppLog.put("FirstFramePreloader: non-200 response: code=${response.code}, urlPath=${ExoPlayerHelper.sanitizeUrl(url)}")
-                return
+        var totalRead = 0
+        try {
+            upstream.open(dataSpec)
+            cacheSink.open(dataSpec)
+            val buffer = ByteArray(8 * 1024)  // 8KB buffer
+            while (totalRead < preloadBytes) {
+                val toRead = minOf(buffer.size, preloadBytes - totalRead)
+                val read = upstream.read(buffer, 0, toRead)
+                if (read == C.RESULT_END_OF_INPUT || read <= 0) break
+                cacheSink.write(buffer, 0, read)
+                totalRead += read
             }
-
-            val body = response.body ?: run {
-                AppLog.put("FirstFramePreloader: empty body, urlPath=${ExoPlayerHelper.sanitizeUrl(url)}")
-                return
+        } finally {
+            try { cacheSink.close() } catch (e: Exception) {
+                AppLog.put("FirstFramePreloader: cacheSink close failed, error=${e.javaClass.simpleName}")
             }
-
-            // 读取预加载数据（最多 1MB）
-            val bytes = body.byteStream().readBytes()
-            val preloadSize = minOf(bytes.size, PRELOAD_BYTES + 1)
-
-            // 写入 ExoPlayer 缓存层（通过 CacheDataSink 写入 SimpleCache）
-            // 注：此处仅下载数据到本地，ExoPlayer 播放时会通过 CacheDataSource 命中缓存
-            AppLog.put(
-                "FirstFramePreloader: preload success, size=${preloadSize}bytes, " +
-                    "urlPath=${ExoPlayerHelper.sanitizeUrl(url)}"
-            )
+            try { upstream.close() } catch (e: Exception) {
+                AppLog.put("FirstFramePreloader: upstream close failed, error=${e.javaClass.simpleName}")
+            }
         }
+        AppLog.put(
+            "FirstFramePreloader: preload success, size=${totalRead}bytes, " +
+                "urlPath=${ExoPlayerHelper.sanitizeUrl(url)}"
+        )
     }
 
     /**
-     * LRU 淘汰：超过最大缓存数量时删除最旧条目
+     * LRU 淘汰：超过最大缓存数量时删除最旧条目（R3: 动态数量）
      */
     private fun evictOldestIfNeeded() {
-        if (preloadCache.size <= MAX_CACHE_SIZE) return
+        val maxSize = getPreloadCount()
+        if (preloadCache.size <= maxSize) return
 
         // 按时间戳排序，删除最旧的条目
         val sortedEntries = preloadCache.entries.sortedBy { it.value }
-        val entriesToRemove = sortedEntries.take(preloadCache.size - MAX_CACHE_SIZE)
+        val entriesToRemove = sortedEntries.take(preloadCache.size - maxSize)
         entriesToRemove.forEach { entry ->
             preloadCache.remove(entry.key)
             AppLog.putDebug("FirstFramePreloader: LRU evict, urlPath=${ExoPlayerHelper.sanitizeUrl(entry.key)}")

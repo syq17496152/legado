@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.read.config
 
 import android.content.Context
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
@@ -18,6 +19,13 @@ import java.io.File
  * 已知上限：不支持背景图迁移到内部目录
  * 升级路径：后续移植 TextLine 扩展后可恢复背景图迁移逻辑
  */
+/**
+ * 恢复默认模式
+ * - MERGE：保留用户自定义规则，补充缺失的内置规则
+ * - OVERWRITE：删除所有规则，重置为内置规则
+ */
+enum class RestoreMode { MERGE, OVERWRITE }
+
 object HighlightRuleStore {
 
     const val backupFileName = "highlightRule.json"
@@ -42,23 +50,20 @@ object HighlightRuleStore {
     fun load(context: Context): MutableList<HighlightRule> {
         cachedRules?.let { return it.toMutableList() }
         val stored = context.getPrefString(PreferKey.highlightRuleItems)
-        if (stored.isNullOrBlank()) {
-            // T-B1: 空值播种默认规则（修复 R-P1-2 根因 a：首启/清空存储后无内置规则）
-            // 注意："[]" 不入此分支（非 blank），用户清空全部规则后重启列表保持为空，符合 spec §1.2-5
+        // T-B3: 空值或空数组"[]"都走 reset 恢复12条内置规则
+        // 修复 T-B2 一次性标志位缺陷：用户清空规则或覆盖安装后规则丢失时应恢复内置规则
+        if (stored.isNullOrBlank() || stored.trim() == "[]") {
             return reset(context)
         }
         val rules = GSON.fromJsonArray<HighlightRule>(stored).getOrNull()?.toMutableList()
-        if (rules != null) {
+        if (rules != null && rules.isNotEmpty()) {
             val normalized = normalizeRules(rules, context)
-            if (normalized != rules) {
-                save(context, normalized)
-            } else {
-                HighlightRuleGroupStore.ensureFromRules(context, normalized)
-            }
+            save(context, normalized)
             cachedRules = normalized
             return normalized.toMutableList()
         }
-        return mutableListOf()
+        // T-B3: 解析失败或空列表也走 reset（防止损坏 JSON 或空列表导致内置规则缺失）
+        return reset(context)
     }
 
     fun loadEnabled(context: Context): List<HighlightRule> {
@@ -82,6 +87,31 @@ object HighlightRuleStore {
         val defaults = createDefaultRules(context)
         save(context, defaults)
         return defaults.toMutableList()
+    }
+
+    /**
+     * 恢复默认规则
+     * - MERGE：保留用户自定义规则，补充缺失的内置规则
+     * - OVERWRITE：删除所有规则，重置为内置规则
+     */
+    fun restoreDefaults(context: Context, mode: RestoreMode): List<HighlightRule> {
+        val defaults = createDefaultRules(context)
+        return when (mode) {
+            RestoreMode.MERGE -> {
+                val current = load(context)
+                val existingIds = current.map { it.id }.toSet()
+                val toAdd = defaults.filter { it.id !in existingIds }
+                (current + toAdd).also {
+                    save(context, it)
+                    AppLog.put("高亮规则：恢复默认（合并模式），新增 ${toAdd.size} 条内置规则")
+                }
+            }
+            RestoreMode.OVERWRITE -> {
+                save(context, defaults)
+                AppLog.put("高亮规则：恢复默认（覆盖模式），重置为 ${defaults.size} 条内置规则")
+                defaults
+            }
+        }
     }
 
     fun createBackupData(context: Context): BackupData {
@@ -278,10 +308,14 @@ object HighlightRuleStore {
             val safeRule = sanitizeRule(rule)
             val normalizedGroup = safeRule.group
             val builtin = builtins[safeRule.id]
-            val base = if (builtin != null && shouldRefreshBuiltin(safeRule)) {
+            val base = if (builtin != null && shouldRefreshBuiltin(safeRule, builtin)) {
                 builtin.copy(
                     enabled = safeRule.enabled,
                     group = normalizedGroup,
+                    // R-1 修复：保留用户改过的 pattern/sampleText/name（仅当用户改过时）
+                    pattern = safeRule.pattern.takeIf { it != builtin.pattern } ?: builtin.pattern,
+                    sampleText = safeRule.sampleText.takeIf { it.isNotBlank() } ?: builtin.sampleText,
+                    name = safeRule.name.takeIf { it.isNotBlank() } ?: builtin.name,
                     targetScope = normalizeTargetScope(safeRule.targetScope, builtin.targetScope),
                     textColor = safeRule.textColor ?: builtin.textColor,
                     underlineMode = safeRule.underlineMode.takeIf { it != 0 } ?: builtin.underlineMode,
@@ -380,10 +414,11 @@ object HighlightRuleStore {
         return targetFile.absolutePath
     }
 
-    private fun shouldRefreshBuiltin(rule: HighlightRule): Boolean {
+    private fun shouldRefreshBuiltin(rule: HighlightRule, builtin: HighlightRule): Boolean {
         if (rule.id !in builtinIds) return false
-        // T-A2: 内置规则 isRegex=false 视为旧数据，触发刷新到 isRegex=true（修复 R-P1-1/R-P1-2 根因）
-        if (!rule.isRegex) return true
+        // R-1 修复：isRegex=false 仅在 pattern 与内置一致时才触发愈合（用户未改 pattern）
+        // 用户改过 pattern 的内置规则不触发愈合，保留用户修改
+        if (!rule.isRegex && rule.pattern == builtin.pattern) return true
         val inspectText = buildString {
             append(rule.name)
             append(rule.pattern)

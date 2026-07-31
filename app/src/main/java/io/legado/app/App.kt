@@ -106,6 +106,10 @@ class App : Application() {
             LogUtils.logDeviceInfo()
             //预下载Cronet so
             Cronet.preDownload()
+            // P0-ANR-fix(2026-07-31): 后台预初始化 cronetEngine，避免主线程 lazy 触发导致 ANR
+            // 铁证: cronetEngine lazy 在主线程触发 syncEnsureSoFile+manualLoad+build 耗时>5s 导致 ANR
+            // 修复: App启动时在IO线程预触发 cronetEngine lazy，后续主线程访问直接返回已初始化实例
+            io.legado.app.lib.cronet.preInitCronetEngine()
             createNotificationChannels()
             LiveEventBus.config()
                 .lifecycleObserverAlwaysActive(true)

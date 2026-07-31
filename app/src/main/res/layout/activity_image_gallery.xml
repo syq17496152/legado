@@ -7,10 +7,12 @@
     android:background="@android:color/black">
 
     <!-- 垂直长画布 RecyclerView（V4 重构：替换原 ViewPager2 双层嵌套） -->
+    <!-- BUG1 fix: clipToPadding=false + paddingTop 允许内容在 padding 区域绘制，第一张图不被 TitleBar 遮挡 -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:clipToPadding="false"
         android:overScrollMode="never"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"

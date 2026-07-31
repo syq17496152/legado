@@ -1297,8 +1297,18 @@
     <string name="highlight_rule_preset_subtitle">点右侧加号，只把这一条预置规则加入当前列表。</string>
     <string name="import_highlight_rule">导入规则</string>
     <string name="export_highlight_rule">导出规则</string>
+    <string name="highlight_rule_restore_default">恢复默认规则</string>
+    <string name="highlight_rule_restore_title">恢复默认规则</string>
+    <string name="highlight_rule_restore_message">选择恢复模式：\n\n合并模式：保留你的自定义规则，补充缺失的内置规则\n覆盖模式：删除所有规则，重置为 12 条内置规则</string>
+    <string name="highlight_rule_restore_merge">合并模式（推荐）</string>
+    <string name="highlight_rule_restore_overwrite">覆盖模式（删除自定义）</string>
+    <string name="highlight_rule_restore_overwrite_confirm_title">警告</string>
+    <string name="highlight_rule_restore_overwrite_confirm_message">覆盖模式将删除所有自定义规则！确定继续？</string>
+    <string name="highlight_rule_restore_overwrite_confirm_ok">确定覆盖</string>
+    <string name="highlight_rule_restore_merged_toast">已恢复默认规则（合并模式）</string>
+    <string name="highlight_rule_restore_overwritten_toast">已重置为默认规则</string>
     <!-- F-P1-8 文件夹视图配置 -->
-    <string name="source_folder_config">文件夹配置</string>
+    <string name="source_folder_config">布局设置</string>
     <string name="source_folder_group_by_group">按分组</string>
     <string name="source_folder_group_by_type">按类型</string>
     <!-- F-P1-8 源类型分类（书源: 文本/音频/图片/文件/视频；订阅源: 网页/图片/视频） -->

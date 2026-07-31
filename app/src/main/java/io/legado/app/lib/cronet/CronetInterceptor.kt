@@ -46,10 +46,27 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
         // N-P1-1: 探测请求超时收紧 ≤3s，避免 Cronet 卡死时探测阻塞正常请求过久
         private const val RECOVERY_PROBE_TIMEOUT_MS = 3000
 
+        // BUG6-V2 fix: 恢复后震荡抑制——切回 Cronet 后短时间内再次降级，说明 Cronet 仍不稳定
+        // 方案：记录最近一次切回 Cronet 的时间，如果 30 秒内再次降级，延长降级间隔（5min→15min）
+        // 铁证：真机日志显示 5 轮"降级→恢复探测→切回→又降级"震荡，根因是部分 host 可达部分不可达
+        @Volatile private var lastRecoveryTimeMs = 0L
+        private const val UNSTABLE_RECOVERY_WINDOW_MS = 30_000L // 30秒内再次降级视为震荡
+        private const val EXTENDED_DEGRADE_INTERVAL_MS = 15 * 60 * 1000L // 震荡后延长到15分钟
+
+        // P1-2（2026-07-31）：HTTP/2 协议错误降级优化
+        // 根因：HTTP/2 协议错误（ERR_HTTP2_PROTOCOL_ERROR）通常是服务端 HTTP/2 实现问题，
+        //   非 Cronet 本身故障，1 分钟后重试可能已恢复（服务端重启/负载均衡切换）
+        // 方案：HTTP/2 协议错误降级时长从 5 分钟缩短到 1 分钟，其他协议错误保持 5 分钟
+        private const val HTTP2_PROTOCOL_ERROR_DEGRADE_INTERVAL_MS = 60 * 1000L // 1 分钟
+
         // 日志去重：相同错误消息 60 秒内只记一次，避免高频失败刷屏
         @Volatile private var lastLoggedError: String? = null
         @Volatile private var lastLoggedErrorTime = 0L
         private const val LOG_DEDUP_INTERVAL_MS = 60_000L
+
+        // BUG6-V2 fix: 记录最近一次协议错误对应的 host（路径模式化存储，仅保留域名哈希前缀）
+        // 恢复探测时优先放行该 host 的请求，避免可达 host 探测成功但失败 host 仍不可达导致震荡
+        @Volatile private var lastFailedHostHint: String? = null
 
         /**
          * 降级状态查询（供 HttpHelper 等外部诊断使用）
@@ -67,13 +84,30 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
         // N-P1-1: 标记本次是否为恢复探测请求（探测时超时收紧 ≤3s + 连续成功门槛计数）
         var isRecoveryProbe = false
         if (degradedForSession) {
-            // T4.3: 半开恢复探测——降级满 5 分钟放行一次真实请求走 Cronet，成功自动恢复
+            // T4.3: 半开恢复探测——降级满间隔时间放行一次真实请求走 Cronet，成功自动恢复
+            // BUG6-V2 fix: 间隔时间动态计算——震荡抑制后延长到 15 分钟，正常 5 分钟
             val elapsed = System.currentTimeMillis() - degradedTimeMs
-            if (elapsed < RECOVERY_PROBE_INTERVAL_MS) {
+            // 判断是否处于震荡抑制期：如果有 lastRecoveryTimeMs 且最近降级与恢复间隔很短
+            val currentIntervalMs = if (lastRecoveryTimeMs > 0
+                && (degradedTimeMs - lastRecoveryTimeMs) < UNSTABLE_RECOVERY_WINDOW_MS
+            ) {
+                EXTENDED_DEGRADE_INTERVAL_MS
+            } else {
+                RECOVERY_PROBE_INTERVAL_MS
+            }
+            if (elapsed < currentIntervalMs) {
+                return chain.proceed(original)
+            }
+            // BUG6-V2: 如果有失败 host 提示，优先放行该 host 的请求（避免可达 host 探测成功但失败 host 仍不可达）
+            val requestHost = original.url.host
+            val hint = lastFailedHostHint
+            if (hint != null && requestHost != hint) {
+                // 当前请求不是失败 host，跳过探测走 OkHttp，等待失败 host 的请求到来
+                AppLog.putDebug("Cronet 探测跳过非失败host: requestHost=${requestHost.take(3)}***, hintHost=${hint.take(3)}***")
                 return chain.proceed(original)
             }
             isRecoveryProbe = true
-            AppLog.put("Cronet 降级满 ${RECOVERY_PROBE_INTERVAL_MS / 60000} 分钟, 放行一次请求探测恢复")
+            AppLog.put("Cronet 降级满 ${currentIntervalMs / 60000} 分钟, 放行失败host请求探测恢复")
         }
         //Cronet未初始化（try-catch 防御 lazy 初始化异常逃逸）
         //铁证：真机日志显示 cronetEngine lazy 初始化抛出 RuntimeException 后直接逃逸到 intercept，
@@ -126,6 +160,8 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
                     degradedForSession = false
                     protocolErrorCount = 0
                     recoverySuccessCount = 0
+                    lastRecoveryTimeMs = System.currentTimeMillis() // BUG6-V2: 记录切回时间
+                    lastFailedHostHint = null // BUG6-V2: 切回后清除失败 host 提示
                     AppLog.put("Cronet 恢复探测连续成功 $RECOVERY_SUCCESS_THRESHOLD 次, 自动切回 Cronet")
                 } else {
                     // 首次成功：保持降级态，刷新降级计时期待下次探测确认（防单点抖动误判恢复）
@@ -163,13 +199,27 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
                 || errMsg.contains("ERR_QUIC", true)
                 || errMsg.contains("ERR_CONNECTION", true)
                 || errMsg.contains("ERR_SOCKET", true)
+            // P1-2（2026-07-31）：细分错误类型，差异化降级策略
+            // - HTTP/2 协议错误：服务端 HTTP/2 实现问题，1 分钟后重试可能已恢复
+            // - 连接拒绝错误：可能是 DoH 失败导致 DNS 解析到不可达 IP，降级无意义（OkHttp 也会失败）
+            val isHttp2ProtocolError = errMsg.contains("ERR_HTTP2_PROTOCOL_ERROR", true)
+                || errMsg.contains("PROTOCOL_ERROR", true)
+            val isConnectionRefused = errMsg.contains("ERR_CONNECTION_REFUSED", true)
             if (!errMsg.contains("ERR_CERT_", true)
                 && !errMsg.contains("ERR_SSL_", true)
             ) {
                 e.printOnDebug()
             }
-            if (isProtocolError) {
+            // P1-2: 连接拒绝错误不累计降级计数（DoH 失败导致，降级 OkHttp 也会因相同 DNS 失败）
+            if (isConnectionRefused) {
+                AppLog.putDebug("Cronet 连接拒绝(可能是DoH失败), 不累计降级: error=${errMsg.take(80)}")
+            } else if (isProtocolError) {
                 val now = System.currentTimeMillis()
+                // BUG6-V2: 记录失败 host 提示，恢复探测时优先放行该 host 的请求
+                val failedHost = original.url.host
+                if (failedHost != lastFailedHostHint) {
+                    lastFailedHostHint = failedHost
+                }
                 // T4.3: 启动 300ms 宽限期内的协议错误不累计降级计数（冷启动失败属正常，日志实证误降级）
                 val inStartupGrace = now - classLoadTimeMs < STARTUP_GRACE_MS
                 if (inStartupGrace) {
@@ -185,14 +235,37 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
                     if (degradedForSession) {
                         // T4.3: 恢复探测失败——刷新降级计时，下一个 5 分钟再探测（half-open → open）
                         // N-P1-1: 失败即清零连续成功计数（重新累计 2 次才切回）
+                        // P1-2: HTTP/2 协议错误用 1 分钟降级时长，其他用 5 分钟
+                        val recoveryIntervalMs = if (isHttp2ProtocolError) HTTP2_PROTOCOL_ERROR_DEGRADE_INTERVAL_MS else RECOVERY_PROBE_INTERVAL_MS
                         degradedTimeMs = now
                         recoverySuccessCount = 0
-                        AppLog.put("Cronet 恢复探测失败, 继续降级 OkHttp (${RECOVERY_PROBE_INTERVAL_MS / 60000} 分钟后再探测)")
+                        AppLog.put("Cronet 恢复探测失败, 继续降级 OkHttp (${recoveryIntervalMs / 60000} 分钟后再探测, isHttp2=$isHttp2ProtocolError)")
                     } else if (protocolErrorCount >= DEGRADE_THRESHOLD) {
                         // 达阈值降级：避免后续请求继续无效 Cronet 往返
                         degradedForSession = true
+                        // BUG6-V2 fix: 震荡抑制——如果距离上次切回 Cronet 不到 30 秒就再次降级，
+                        // 说明 Cronet 仍不稳定（部分 host 可达部分不可达），延长降级间隔到 15 分钟
+                        val now = System.currentTimeMillis()
+                        val isUnstableRecovery = lastRecoveryTimeMs > 0 && (now - lastRecoveryTimeMs) < UNSTABLE_RECOVERY_WINDOW_MS
+                        // P1-2: 降级时长按错误类型区分（HTTP/2 协议错误 1 分钟，其他 5 分钟，震荡 15 分钟）
+                        val intervalMs = when {
+                            isUnstableRecovery -> {
+                                AppLog.put("Cronet 恢复后 ${UNSTABLE_RECOVERY_WINDOW_MS / 1000} 秒内再次降级, 延长降级间隔到 ${EXTENDED_DEGRADE_INTERVAL_MS / 60000} 分钟 (震荡抑制)")
+                                EXTENDED_DEGRADE_INTERVAL_MS
+                            }
+                            isHttp2ProtocolError -> {
+                                AppLog.put("Cronet HTTP/2 协议错误达 $DEGRADE_THRESHOLD 次, 降级到 OkHttp (${HTTP2_PROTOCOL_ERROR_DEGRADE_INTERVAL_MS / 1000} 秒后自动探测恢复)")
+                                HTTP2_PROTOCOL_ERROR_DEGRADE_INTERVAL_MS
+                            }
+                            else -> {
+                                RECOVERY_PROBE_INTERVAL_MS
+                            }
+                        }
                         degradedTimeMs = now
-                        AppLog.put("Cronet 连续协议错误达 $DEGRADE_THRESHOLD 次, 降级到 OkHttp (${RECOVERY_PROBE_INTERVAL_MS / 60000} 分钟后自动探测恢复)")
+                        lastRecoveryTimeMs = 0 // 清除恢复时间，避免误判
+                        if (!isUnstableRecovery && !isHttp2ProtocolError) {
+                            AppLog.put("Cronet 连续协议错误达 $DEGRADE_THRESHOLD 次, 降级到 OkHttp (${intervalMs / 60000} 分钟后自动探测恢复)")
+                        }
                     }
                 }
             } else if (degradedForSession) {

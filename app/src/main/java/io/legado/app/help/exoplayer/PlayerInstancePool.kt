@@ -94,20 +94,22 @@ object PlayerInstancePool {
      * 不用每次新建的原因：同 tier 重复创建浪费资源。
      * 折中：按 tier.name 缓存，不同 tier 不同实例，同 tier 复用。
      */
-    private val loadControlCache = java.util.concurrent.ConcurrentHashMap<String, DefaultLoadControl>()
+    // BUG5 fix: 移除 LoadControl 缓存，每实例独立创建
+    // 原因：ConcurrentHashMap 按 tier 缓存导致同 tier 多实例共享同一 LoadControl，
+    // 但 ExoPlayer 约束"共享 LoadControl 的 Player 必须共享同一个 playback thread"，
+    // 视频滑动切换时 acquire(looper) 传入不同 looper 违反此约束，抛出 IllegalStateException。
+    // 修复：每次调用 createLoadControl() 都新建实例，保留 sharedAllocator 实现内存池共享。
 
     /**
-     * LoadControl 工厂：按当前带宽档位获取（同 tier 缓存复用，共享 allocator）
+     * LoadControl 工厂：按当前带宽档位新建实例（共享 allocator 内存池，实例不共享避免线程冲突）
      */
     fun createLoadControl(): DefaultLoadControl {
         val tier = ExoPlayerHelper.getCurrentBandwidthTier()
-        return loadControlCache.computeIfAbsent(tier.name) {
-            AppLog.put(
-                "PlayerPool: createLoadControl (new), tier=$tier, " +
-                    "bitrateEstimate=${ExoPlayerHelper.bandwidthMeter.bitrateEstimate}bps"
-            )
-            ExoPlayerHelper.createLoadControlByTier(tier, sharedAllocator)
-        }
+        AppLog.put(
+            "PlayerPool: createLoadControl (new instance), tier=$tier, " +
+                "bitrateEstimate=${ExoPlayerHelper.bandwidthMeter.bitrateEstimate}bps"
+        )
+        return ExoPlayerHelper.createLoadControlByTier(tier, sharedAllocator)
     }
 
     /**

@@ -126,9 +126,10 @@ object AppLog {
     ) {
         message ?: return
         val safeMsg = truncateSafely(message)
-        // V-004-P0-ImageLog: recordLog 关闭时，ERROR/WARN 级别仍输出到 logcat（确保关键日志可采集）
+        // V-004-P0-ImageLog: recordLog 关闭时，ERROR/WARN/INFO 级别仍输出到 logcat（确保关键日志可采集）
+        // R3-P0: 新增 INFO 级别输出（视频预缓冲埋点需要 INFO 级别日志在 release 包可采集）
         if (!AppConfig.recordLog) {
-            if (level == Level.ERROR || level == Level.WARN) {
+            if (level == Level.ERROR || level == Level.WARN || level == Level.INFO) {
                 Log.e(tag, safeMsg, throwable)
             }
             return
@@ -166,10 +167,11 @@ object AppLog {
             LogUtils.d("AppLog", "$safeMsg\n${throwable.stackTraceToString()}")
         }
         mLogs.add(0, LogEntry(System.currentTimeMillis(), safeMsg, throwable, level))
-        // V-004-P0-2: ERROR 级别日志在 release 包也输出到 logcat（确保关键日志可采集）
-        // 根因：004 日志 18:48-19:16 期间 AppLog 未输出，原 BuildConfig.DEBUG 守卫导致 release 包 Log.e 不输出
-        // 方案：ERROR 级别日志无条件 Log.e 输出，DEBUG/INFO/WARN 保留 DEBUG 守卫（避免 release 包 logcat 噪音）
-        if (BuildConfig.DEBUG || level == Level.ERROR) {
+        // R3-P0: ERROR/WARN/INFO 级别日志在 release 包也输出到 logcat（确保关键日志可采集）
+        // 根因：原 BuildConfig.DEBUG 守卫导致 release 包 putWarn/putInfo 不输出 logcat，
+        //       视频预缓冲埋点日志在正式包丢失，无法定位线上问题
+        // 方案：ERROR/WARN/INFO 级别无条件 Log.e 输出，DEBUG 保留 DEBUG 守卫（避免 release 包 logcat 噪音）
+        if (BuildConfig.DEBUG || level == Level.ERROR || level == Level.WARN || level == Level.INFO) {
             val stackTrace = Thread.currentThread().stackTrace
             Log.e(stackTrace[3].className, safeMsg, throwable)
         }

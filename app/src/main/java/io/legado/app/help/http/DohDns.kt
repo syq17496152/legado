@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * N-P1-2 增强（真机日志根因：DoH 0/249 成功率、avg 244s 串行等待）：
  * - IDN 旁路：punycode（xn--）域名公共 DoH 收录率极低，直接走系统 DNS
- * - 三服务器并行查询：首个成功返回（对齐浏览器 HostResolver 并行 probe），整体 ≤3s
+ * - 五服务器并行查询：首个成功返回（对齐浏览器 HostResolver 并行 probe），整体 ≤3s
  * - 负缓存：DoH 解析失败的域名 30s 内直接走系统 DNS（对齐 Chromium HostResolver negative caching）
  * - 成功优先：最近一次成功服务器置顶出发，减少冷启动域名解析延迟
  *
@@ -46,8 +46,20 @@ object DohDns : Dns {
     /** DoH 服务器配置（查询 URL + bootstrap IP，bootstrap 用 IP 字面量无需 DNS 解析） */
     private data class DohServer(val url: String, val bootstrapIps: List<String>)
 
-    /** DoH 服务器列表（按优先级排序） */
+    /**
+     * DoH 服务器列表（按优先级排序）
+     *
+     * P0-fix(2026-07-31): 增加国内 DoH 服务器（阿里/腾讯）并置顶，国外服务器作为备用
+     * - 根因：真机日志显示 cloudflare/google/quad9 的 bootstrap IP（1.1.1.1/8.8.8.8/9.9.9.9）
+     *   在国内网络环境全部 UnknownHostException，导致 DoH 解析成功率 0%
+     * - 方案：增加阿里 DNS（223.5.5.5/223.6.6.6）和腾讯 DNS（119.29.29.29/119.28.28.28），
+     *   国内优先解析，国外作为境外 CDN 域名备用
+     */
     private val DOH_SERVERS = listOf(
+        // 国内 DoH 服务器优先（国内网络环境可达性最高）
+        DohServer("https://dns.alidns.com/dns-query", listOf("223.5.5.5", "223.6.6.6")),
+        DohServer("https://doh.pub/dns-query", listOf("119.29.29.29", "119.28.28.28")),
+        // 国外 DoH 服务器备用（国内可能不可达，保留作为境外 CDN 域名解析备用）
         DohServer("https://cloudflare-dns.com/dns-query", listOf("1.1.1.1", "1.0.0.1")),
         DohServer("https://dns.google/dns-query", listOf("8.8.8.8", "8.8.4.4")),
         DohServer("https://dns.quad9.net/dns-query", listOf("9.9.9.9", "149.112.112.112"))
@@ -163,11 +175,14 @@ object DohDns : Dns {
             dnsCache.remove(key)
         }
         // 2. N-P1-2: 负缓存命中直接走系统 DNS（30s 内不为该域名重复尝试 DoH）
+        // BUG7-V2: 校验 TTL 上限——过期时间距今超过 NEGATIVE_CACHE_TTL_MS 视为异常，清除并走 DoH
         negativeCache[key]?.let { expiry ->
-            if (now < expiry) {
+            val ttlRemaining = expiry - now
+            if (ttlRemaining in 1..NEGATIVE_CACHE_TTL_MS) {
                 AppLog.putDebug("DohDns: negative cache hit, host=${maskHost(hostname)}")
                 return Dns.SYSTEM.lookup(hostname)
             }
+            // 过期或 TTL 异常（>30s），清除负缓存允许重新尝试 DoH
             negativeCache.remove(key)
         }
         // 3. 熔断期直接走系统 DNS（DoH 整体不可达时避免无效等待）
@@ -181,6 +196,17 @@ object DohDns : Dns {
         }
         val result = parallelLookup(clients, hostname)
         if (result != null) {
+            // BUG9-V2: 过滤回环/保留地址（0.0.0.0/[::]/127.x），这些地址无意义且可能导致连接失败
+            val validAddresses = result.addresses.filter { addr ->
+                val hostAddr = addr.hostAddress ?: return@filter false
+                !(hostAddr == "0.0.0.0" || hostAddr == "::" || hostAddr.startsWith("127.") || hostAddr == "::1")
+            }
+            if (validAddresses.isEmpty()) {
+                AppLog.put("DohDns: DoH returned only loopback/reserved addresses, fallback system DNS, host=${maskHost(hostname)}")
+                // 视为 DoH 解析失败，走负缓存 + 系统DNS
+                negativeCachePut(key)
+                return Dns.SYSTEM.lookup(hostname)
+            }
             globalFailCount.set(0)
             // V-004-P0-1: 首次 DoH 成功，退出冷启动模式
             if (isColdStart) {
@@ -189,12 +215,12 @@ object DohDns : Dns {
             }
             lastSuccessServer.set(result.serverIndex)
             negativeCache.remove(key)
-            cachePut(key, result.addresses)
+            cachePut(key, validAddresses)
             AppLog.putDebug(
                 "DohDns: parallel success server#${result.serverIndex + 1}, " +
-                    "elapsed=${result.elapsedMs}ms, host=${maskHost(hostname)}, ips=${result.addresses.size}"
+                    "elapsed=${result.elapsedMs}ms, host=${maskHost(hostname)}, ips=${validAddresses.size}"
             )
-            return result.addresses
+            return validAddresses
         }
         // 5. 全服务器失败：写负缓存 30s + 累计熔断计数，达阈值暂停 DoH 5 分钟
         negativeCachePut(key)

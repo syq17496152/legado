@@ -1,16 +1,15 @@
 package io.legado.app.help.exoplayer
 
-import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
+import android.net.Uri
+import androidx.media3.common.C
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.cache.CacheDataSink
 import io.legado.app.constant.AppLog
-import io.legado.app.help.http.okHttpClient
+import io.legado.app.model.VideoPlay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import okhttp3.Request
-import splitties.init.appCtx
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -30,23 +29,61 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object VideoPreloader {
 
-    /** 预加载字节数：前 256KB（约 1-2 秒数据） */
-    private const val PRELOAD_BYTES = 262_143 // 256KB - 1
-
     /** 预加载缓存：URL → 预加载时间戳（用于 LRU 淘汰） */
     private val preloadCache = ConcurrentHashMap<String, Long>()
 
-    /** WiFi 下最大缓存数量：3 个（当前+下 2） */
-    private const val MAX_CACHE_SIZE_WIFI = 3
+    /**
+     * R3: 动态计算预加载字节数
+     *
+     * - 用户配置 >0 时优先使用用户配置（MB 转 bytes）
+     * - 用户配置 =0 时按设备档位自动：HIGH=10MB / MID=5MB
+     * - 上限 20MB（防止 OOM）
+     */
+    private fun getPreloadBytes(): Int {
+        val userConfig = VideoPlay.videoPreloadBytesMB
+        val bytes = if (userConfig > 0) {
+            userConfig * 1024 * 1024
+        } else {
+            when (DeviceInfoHelper.getDeviceTier()) {
+                DeviceInfoHelper.DeviceTier.HIGH -> 10 * 1024 * 1024  // 10MB
+                DeviceInfoHelper.DeviceTier.MID -> 5 * 1024 * 1024    // 5MB
+            }
+        }
+        return bytes.coerceAtMost(20 * 1024 * 1024)
+    }
 
-    /** 4G 下最大缓存数量：1 个（省流量） */
-    private const val MAX_CACHE_SIZE_MOBILE = 1
+    /**
+     * R3: 动态计算最大预加载数量
+     *
+     * - 用户配置 >0 时优先使用用户配置
+     * - 用户配置 =0 时按设备档位自动：HIGH=10 / MID=7
+     * - 上限 20
+     * - R3 移除 WiFi/4G 区分（用户要求激进策略，用户可手动调低 videoPreloadCount 控制流量）
+     */
+    private fun getPreloadCount(): Int {
+        val userConfig = VideoPlay.videoPreloadCount
+        val count = if (userConfig > 0) {
+            userConfig
+        } else {
+            when (DeviceInfoHelper.getDeviceTier()) {
+                DeviceInfoHelper.DeviceTier.HIGH -> 10
+                DeviceInfoHelper.DeviceTier.MID -> 7
+            }
+        }
+        return count.coerceAtMost(20)
+    }
 
     /** 协程作用域：预加载任务在 IO 线程执行 */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
-     * 当前视频播放进度达 50% 时触发预加载下一个视频
+     * R3: 预加载下一个视频（写入 SimpleCache，播放时命中缓存）
+     *
+     * 改造点：
+     * - 移除 WiFi/4G 网络感知区分（用户要求激进策略，用户可手动调低 videoPreloadCount 控制流量）
+     * - 使用 CacheDataSink 写入 SimpleCache（原实现只读取后丢弃，浪费带宽）
+     * - 用 DataSpec 限制读取字节数（getPreloadBytes() 动态计算），防止 OOM
+     * - cacheKey 为纯 URL（与播放器 resolvingDataSource 解析后一致）
      *
      * @param currentUrl 当前播放视频 URL
      * @param nextUrl 下一个视频 URL（可能为 null，表示无下一个）
@@ -58,17 +95,10 @@ object VideoPreloader {
             return
         }
 
-        // 已预加载过则跳过（LRU 缓存命中）
+        // R3 URL 去重：已预加载过则跳过（LRU 缓存命中）
         if (preloadCache.containsKey(nextUrl)) {
             AppLog.putDebug("VideoPreloader: cache hit, skip preload, urlPath=${ExoPlayerHelper.sanitizeUrl(nextUrl)}")
             return
-        }
-
-        // 根据网络类型决定预加载策略
-        val maxCacheSize = when {
-            isWifi() -> MAX_CACHE_SIZE_WIFI
-            isMobile() -> MAX_CACHE_SIZE_MOBILE
-            else -> MAX_CACHE_SIZE_MOBILE // 未知网络默认 4G 策略（省流量）
         }
 
         scope.launch {
@@ -77,11 +107,10 @@ object VideoPreloader {
                 // 记录预加载时间戳（用于 LRU 淘汰）
                 preloadCache[nextUrl] = System.currentTimeMillis()
                 // LRU 淘汰：超过最大缓存数量时删除最旧条目
-                evictOldestIfNeeded(maxCacheSize)
+                evictOldestIfNeeded()
                 AppLog.put(
                     "VideoPreloader: preload next video success, " +
-                        "networkType=${if (isWifi()) "WiFi" else "Mobile"}, " +
-                        "maxCacheSize=$maxCacheSize, " +
+                        "maxCacheSize=${getPreloadCount()}, " +
                         "urlPath=${ExoPlayerHelper.sanitizeUrl(nextUrl)}"
                 )
             } catch (e: Exception) {
@@ -91,89 +120,63 @@ object VideoPreloader {
     }
 
     /**
-     * 预加载单个 URL 的前 256KB 数据
+     * R3: 预加载单个 URL 数据（写入 SimpleCache，播放时命中缓存）
+     *
+     * 改造点：
+     * - 从 OkHttp Request + readBytes 改为 ExoPlayer DataSource + CacheDataSink
+     * - 数据写入 SimpleCache，播放时通过 CacheDataSource 命中缓存
+     * - 用 DataSpec 限制读取字节数（getPreloadBytes() 动态计算），防止 OOM
+     * - cacheKey 为纯 URL（与播放器 resolvingDataSource 解析后一致）
      *
      * @param url 视频 URL
      * @param headers 请求头
      */
     private fun preloadUrl(url: String, headers: Map<String, String>) {
-        val requestBuilder = Request.Builder()
-            .url(url)
-            .header("Range", "bytes=0-$PRELOAD_BYTES")
-            .header("Accept", "video/*, application/x-mpegURL, application/dash+xml, */*")
-            .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+        val preloadBytes = getPreloadBytes()
+        val dataSpec = DataSpec(Uri.parse(url), 0, preloadBytes.toLong(), null)
+        val upstream = ExoPlayerHelper.createPreloadDataSource(headers)
+        val cacheSink = CacheDataSink(ExoPlayerHelper.cache, CacheDataSink.DEFAULT_FRAGMENT_SIZE)
 
-        // 注入用户请求头（如 Referer/User-Agent/Cookie，用于防盗链场景）
-        headers.forEach { (key, value) ->
-            requestBuilder.header(key, value)
-        }
-
-        val request = requestBuilder.build()
-        okHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful && response.code != 206 && response.code != 200) {
-                AppLog.put("VideoPreloader: non-200 response: code=${response.code}, urlPath=${ExoPlayerHelper.sanitizeUrl(url)}")
-                return
+        var totalRead = 0
+        try {
+            upstream.open(dataSpec)
+            cacheSink.open(dataSpec)
+            val buffer = ByteArray(8 * 1024)  // 8KB buffer
+            while (totalRead < preloadBytes) {
+                val toRead = minOf(buffer.size, preloadBytes - totalRead)
+                val read = upstream.read(buffer, 0, toRead)
+                if (read == C.RESULT_END_OF_INPUT || read <= 0) break
+                cacheSink.write(buffer, 0, read)
+                totalRead += read
             }
-
-            val body = response.body ?: run {
-                AppLog.put("VideoPreloader: empty body, urlPath=${ExoPlayerHelper.sanitizeUrl(url)}")
-                return
+        } finally {
+            try { cacheSink.close() } catch (e: Exception) {
+                AppLog.put("VideoPreloader: cacheSink close failed, error=${e.javaClass.simpleName}")
             }
-
-            // 读取预加载数据（最多 256KB）
-            val bytes = body.byteStream().readBytes()
-            val preloadSize = minOf(bytes.size, PRELOAD_BYTES + 1)
-
-            // 写入 ExoPlayer 缓存层（通过 CacheDataSink 写入 SimpleCache）
-            // 注：此处仅下载数据到本地，ExoPlayer 播放时会通过 CacheDataSource 命中缓存
-            AppLog.putDebug(
-                "VideoPreloader: preload success, size=${preloadSize}bytes, " +
-                    "urlPath=${ExoPlayerHelper.sanitizeUrl(url)}"
-            )
+            try { upstream.close() } catch (e: Exception) {
+                AppLog.put("VideoPreloader: upstream close failed, error=${e.javaClass.simpleName}")
+            }
         }
+        AppLog.put(
+            "VideoPreloader: preload success, size=${totalRead}bytes, " +
+                "urlPath=${ExoPlayerHelper.sanitizeUrl(url)}"
+        )
     }
 
     /**
-     * LRU 淘汰：超过最大缓存数量时删除最旧条目
-     *
-     * @param maxCacheSize 最大缓存数量（WiFi 3 个 / 4G 1 个）
+     * LRU 淘汰：超过最大缓存数量时删除最旧条目（R3: 动态数量）
      */
-    private fun evictOldestIfNeeded(maxCacheSize: Int) {
-        if (preloadCache.size <= maxCacheSize) return
+    private fun evictOldestIfNeeded() {
+        val maxSize = getPreloadCount()
+        if (preloadCache.size <= maxSize) return
 
         // 按时间戳排序，删除最旧的条目
         val sortedEntries = preloadCache.entries.sortedBy { it.value }
-        val entriesToRemove = sortedEntries.take(preloadCache.size - maxCacheSize)
+        val entriesToRemove = sortedEntries.take(preloadCache.size - maxSize)
         entriesToRemove.forEach { entry ->
             preloadCache.remove(entry.key)
             AppLog.putDebug("VideoPreloader: LRU evict, urlPath=${ExoPlayerHelper.sanitizeUrl(entry.key)}")
         }
-    }
-
-    /**
-     * 判断当前网络是否为 WiFi
-     *
-     * @return true=WiFi，false=非 WiFi
-     */
-    private fun isWifi(): Boolean {
-        val connectivityManager = appCtx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        val network = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-    }
-
-    /**
-     * 判断当前网络是否为移动数据（4G/5G）
-     *
-     * @return true=移动数据，false=非移动数据
-     */
-    private fun isMobile(): Boolean {
-        val connectivityManager = appCtx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        val network = connectivityManager.activeNetwork ?: return false
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
     }
 
     /**

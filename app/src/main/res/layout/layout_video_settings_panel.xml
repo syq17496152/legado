@@ -434,6 +434,140 @@
 
             </LinearLayout>
 
+            <!-- ====== BUG2 fix: 播放器优化5项配置 ====== -->
+
+            <!-- 分隔线 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="8dp"
+                android:background="@color/divider" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="播放器优化"
+                android:textColor="@color/primaryText"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:paddingBottom="4dp" />
+
+            <!-- 首帧预加载 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/player_first_frame_preload"
+                    android:textColor="@color/primaryText"
+                    android:textSize="14sp" />
+
+                <CheckBox
+                    android:id="@+id/cb_first_frame_preload"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
+            <!-- 缓冲策略 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/player_buffer_strategy"
+                    android:textColor="@color/primaryText"
+                    android:textSize="14sp" />
+
+                <Spinner
+                    android:id="@+id/sp_buffer_strategy"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
+            <!-- 播放历史 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/player_history_enabled"
+                    android:textColor="@color/primaryText"
+                    android:textSize="14sp" />
+
+                <CheckBox
+                    android:id="@+id/cb_history_enabled"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
+            <!-- 播放错误提示 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/player_error_tip"
+                    android:textColor="@color/primaryText"
+                    android:textSize="14sp" />
+
+                <CheckBox
+                    android:id="@+id/cb_error_tip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
+            <!-- 自动重连 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/player_auto_reconnect"
+                    android:textColor="@color/primaryText"
+                    android:textSize="14sp" />
+
+                <CheckBox
+                    android:id="@+id/cb_auto_reconnect"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+            </LinearLayout>
+
         </LinearLayout>
 
     </androidx.core.widget.NestedScrollView>

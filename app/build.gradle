@@ -187,6 +187,13 @@ android {
     }
     packaging {
         resources.excludes.add('META-INF/*')
+        // P0: libcronet.so 动态下载模式（2026-07-31 优化，APK 不再内置 so，减少 6.37MB）
+        // so 文件在运行时由 CronetLoader.syncEnsureSoFile() 同步下载到应用私有目录
+        // pickFirsts 保留作为兜底（用户手动放入 jniLibs 时仍可工作）
+        // 详见 docs/project-rules/package-naming.md "libcronet.so 动态下载规范"
+        jniLibs {
+            pickFirsts.add('**/libcronet.so')
+        }
     }
 
     sourceSets {
@@ -275,10 +282,16 @@ dependencies {
     implementation(libs.media.media)
     // For media playback using ExoPlayer
     implementation(libs.media3.exoplayer)
-    //implementation(libs.media3.exoplayer.hls)
+    // R3: 显式声明 HLS 依赖（ExoPlayerHelper 使用 HlsMediaSource 处理 m3u8 格式）
+    implementation(libs.media3.exoplayer.hls)
     //implementation(libs.media3.ui)
     // For loading data using the OkHttp network stack
     implementation(libs.media3.datasource.okhttp)
+    // P0: Cronet DataSource（TLS 指纹与 Chrome 一致，解决 CDN TLS 指纹检测导致 m3u8 播放失败）
+    // 排除 cronet-api 传递依赖：项目已有 cronetlib/cronet_api.jar，避免 Duplicate class 冲突
+    implementation(libs.media3.datasource.cronet) {
+        exclude group: 'org.chromium.net', module: 'cronet-api'
+    }
     // For exposing and controlling media sessions
     //implementation "androidx.media3:media3-session:$media3_version"
 

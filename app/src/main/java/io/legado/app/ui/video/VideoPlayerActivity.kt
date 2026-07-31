@@ -43,6 +43,7 @@ import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookType
 import io.legado.app.constant.EventBus
+import io.legado.app.data.PlayHistoryStore
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
@@ -57,6 +58,7 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.exoplayer.FirstFramePreloader
 import io.legado.app.help.gsyVideo.VideoPlayer
+import io.legado.app.help.player.ErrorMapper
 import io.legado.app.help.webView.PooledWebView
 import io.legado.app.help.webView.WebJsExtensions
 import io.legado.app.help.webView.WebJsExtensions.Companion.getInjectionString
@@ -85,6 +87,7 @@ import io.legado.app.ui.widget.text.ScrollTextView
 import io.legado.app.utils.StartActivityContract
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.gone
+import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.invisible
 import io.legado.app.utils.longSnackbar
 import io.legado.app.utils.observeEvent
@@ -107,6 +110,7 @@ import io.noties.markwon.image.glide.GlideImagesPlugin
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -169,6 +173,67 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      * T2.8: initSource 协程 Job 引用（onPause 时取消，解决 Bug-25：onPause 后 initSource 仍运行导致资源泄漏）
      */
     private var initSourceJob: Job? = null
+
+    /**
+     * AD-04: 播放历史定时保存 Job（每10s保存一次，onPause取消）
+     */
+    private var historySaveJob: Job? = null
+
+    /**
+     * AD-04: 获取当前文章URL（用于PlayHistory复合主键）
+     * 订阅源模式返回当前文章link，单URL模式返回空字符串
+     */
+    private fun getCurrentArticleUrl(): String {
+        return VideoPlay.rssArticles?.getOrNull(VideoPlay.rssArticleIndex)?.link ?: ""
+    }
+
+    /**
+     * AD-04: 保存当前播放进度到PlayHistoryStore
+     * 失败不影响主播放链路（PlayHistoryStore内部runCatching包裹）
+     */
+    private fun savePlayHistory() {
+        val videoUrl = VideoPlay.videoUrl ?: return
+        if (videoUrl.isBlank()) return
+        val position = VideoPlay.videoManager.currentPosition
+        val duration = VideoPlay.videoManager.duration
+        if (position <= 0) return
+        PlayHistoryStore.save(
+            articleUrl = getCurrentArticleUrl(),
+            videoUrl = videoUrl,
+            position = position,
+            duration = duration
+        )
+    }
+
+    /**
+     * AD-04: 恢复播放进度（initSource成功后调用）
+     * 异步加载PlayHistory，若position>10s则延迟2s后seekTo+Toast提示
+     * 失败不影响主播放链路
+     */
+    private fun restorePlayHistory() {
+        val videoUrl = VideoPlay.videoUrl ?: return
+        if (videoUrl.isBlank()) return
+        val articleUrl = getCurrentArticleUrl()
+        lifecycleScope.launch {
+            val history = PlayHistoryStore.load(articleUrl, videoUrl)
+            if (history != null && history.position > 10_000) {
+                // 延迟2s给ExoPlayer prepare时间
+                delay(2_000)
+                withContext(Main) {
+                    try {
+                        val player = playerView.getCurrentPlayer()
+                        player.seekTo(history.position)
+                        val minutes = history.position / 60_000
+                        val seconds = (history.position % 60_000) / 1_000
+                        toastOnUi(String.format(getString(R.string.player_history_resume), minutes, seconds))
+                        AppLog.put("PlayHistoryStore: resume to ${history.position}ms")
+                    } catch (e: Exception) {
+                        AppLog.put("PlayHistoryStore: resume failed, error=${e.javaClass.simpleName}")
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * T1.13 方案B: VideoPlay 状态快照（解决 Bug-14 + Bug-24 + Bug-6：8 实例快速切换状态串扰）
@@ -257,6 +322,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 switchToViewPagerMode()
                 initView()
                 upView()
+                // AD-04: 恢复播放进度
+                restorePlayHistory()
             }
         } else {
             // 非新建恢复：从悬浮窗返回，也用 ViewPager2 模式
@@ -291,6 +358,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             initSourceJob?.cancel()
             AppLog.put("VideoPlayerActivity onPause: initSourceJob cancelled")
         }
+        // AD-04: 取消定时保存 + 保存最后一次播放进度
+        historySaveJob?.cancel()
+        savePlayHistory()
         // A3 修复：onPause 延迟清理预加载缓存（30s 后清理，避免快速切回时缓存失效）
         FirstFramePreloader.delayedClearCache()
     }
@@ -303,6 +373,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     override fun onResume() {
         super.onResume()
         FirstFramePreloader.cancelDelayedClear()
+        // AD-04: 启动定时保存播放进度（每10s）
+        historySaveJob = lifecycleScope.launch {
+            while (true) {
+                delay(10_000)
+                savePlayHistory()
+            }
+        }
     }
 
     // 修复：重写 onSupportNavigateUp，Toolbar 返回箭头委托给 onBackPressedDispatcher
@@ -1401,7 +1478,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
         // P0-1.7: EXO_PLAYER 强制模式(1) 不提供 WebView 选项；AUTO(0) 根据错误信息判断
         val canUseWebView = errorInfo.contains("WebView") && VideoPlay.playerType != 1
-        errorDialog = alert(title = getString(R.string.video_play_error_title), message = errorInfo) {
+        // AD-03: 接入 ErrorMapper 获取用户友好错误提示（保留 errorInfo 用于降级判断）
+        val userError = ErrorMapper.map(errorInfo)
+        errorDialog = alert(title = getString(userError.titleResId), message = getString(userError.messageResId)) {
             if (canUseWebView) {
                 // AUTO 模式可降级：positive=WebView, neutral=重试, negative=系统浏览器（Back 可取消）
                 positiveButton(getString(R.string.use_webview_play)) {

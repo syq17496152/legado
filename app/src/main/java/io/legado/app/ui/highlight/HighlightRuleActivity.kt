@@ -12,6 +12,7 @@ import io.legado.app.databinding.ActivityHighlightRuleBinding
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleStore
+import io.legado.app.ui.book.read.config.RestoreMode
 import io.legado.app.ui.highlight.edit.HighlightRuleEditDialog
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.utils.GSON
@@ -51,6 +52,7 @@ class HighlightRuleActivity :
                 showDialogFragment(HighlightRuleEditDialog.create(pattern = ""))
             R.id.menu_group_manage -> showGroupManageDialog()
             R.id.menu_preset_rule -> showPresetRuleDialog()
+            R.id.menu_restore_default -> showRestoreDefaultDialog()
             R.id.menu_import_highlight_rule -> importRules()
             R.id.menu_export_highlight_rule -> exportRules()
         }
@@ -85,6 +87,31 @@ class HighlightRuleActivity :
                 toastOnUi("已添加预设规则：${rule.name}")
             }
         ))
+    }
+
+    private fun showRestoreDefaultDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.highlight_rule_restore_title)
+            .setMessage(R.string.highlight_rule_restore_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setNeutralButton(R.string.highlight_rule_restore_overwrite) { _, _ -> confirmOverwrite() }
+            .setPositiveButton(R.string.highlight_rule_restore_merge) { _, _ ->
+                viewModel.restoreDefaults(RestoreMode.MERGE)
+                toastOnUi(R.string.highlight_rule_restore_merged_toast)
+            }
+            .show()
+    }
+
+    private fun confirmOverwrite() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.highlight_rule_restore_overwrite_confirm_title)
+            .setMessage(R.string.highlight_rule_restore_overwrite_confirm_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.highlight_rule_restore_overwrite_confirm_ok) { _, _ ->
+                viewModel.restoreDefaults(RestoreMode.OVERWRITE)
+                toastOnUi(R.string.highlight_rule_restore_overwritten_toast)
+            }
+            .show()
     }
 
     private fun importRules() {

@@ -26,9 +26,13 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.RssEpisode
 import io.legado.app.help.gsyVideo.VideoPlayer
 import io.legado.app.model.VideoPlay
+import io.legado.app.data.PlayHistoryStore
 import io.legado.app.utils.gone
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.visible
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import splitties.init.appCtx
 
 /**
  * R3 抖音风格视频播放 Fragment
@@ -169,7 +173,9 @@ class VideoFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         _playerView = view.findViewById(R.id.playerView)
         // F1: 获取 GSY 底部进度条引用（用于更新 secondaryProgress 显示缓冲进度）
+        // 诊断日志：确认 playerView 和 bottomProgressbar 初始化状态（排查进度条消失问题）
         bottomProgressbar = _playerView?.findViewById(R.id.bottom_progressbar)
+        AppLog.put("VideoFragment onViewCreated: episode=$episodeIndex, playerView=${_playerView != null}, bottomProgressbar=${bottomProgressbar != null}")
 
         // P0-1.6: 初始化 WebView 降级播放器 + 切换回内置播放器按钮
         webViewPlayer = view.findViewById(R.id.webViewPlayer)
@@ -221,6 +227,7 @@ class VideoFragment : Fragment() {
     // ==================== 播放器生命周期控制 ====================
 
     fun activatePlayer() {
+        AppLog.put("VideoFragment.activatePlayer called: isActivated=$isActivated, _playerView=${_playerView != null}, isWebViewMode=$isWebViewMode, singleUrl=${VideoPlay.singleUrl}")
         if (isActivated) return
         val pv = _playerView ?: return
         isActivated = true
@@ -258,6 +265,20 @@ class VideoFragment : Fragment() {
                 if (currentState == PlayState.NORMAL) {
                     pv.setGsyControlVisibility(true)  // F2 修复：显示 GSY 原始控件 + 取消 GSY 的 dismissControlViewTimer，用我们的 scheduleAutoHide 统一管理
                     scheduleAutoHide()
+                }
+                // AD-04: 恢复播放历史（跨会话进度恢复，仅新播放时触发，悬浮窗恢复走 clonePlayState）
+                if (!VideoPlay.isResumeFromFloat) {
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        val articleUrl = VideoPlay.rssArticles?.getOrNull(VideoPlay.rssArticleIndex)?.link ?: ""
+                        val videoUrl = VideoPlay.videoUrl ?: return@launch
+                        val history = PlayHistoryStore.load(articleUrl, videoUrl)
+                        if (history != null && history.position > 10000) {
+                            pv.seekTo(history.position)
+                            val minutes = history.position / 60000
+                            val seconds = (history.position % 60000) / 1000
+                            appCtx.toastOnUi("已从 ${minutes}:${seconds.toString().padStart(2, '0')} 继续播放")
+                        }
+                    }
                 }
             }
         })
@@ -454,14 +475,36 @@ class VideoFragment : Fragment() {
      *
      * GSY 框架只更新 progress（播放进度），不更新 secondaryProgress（缓冲进度），
      * 需手动调用 ExoPlayerManager.getBufferedPercentage() 更新 secondaryProgress。
+     *
+     * 健壮性处理（修复预缓存进度条消失问题）：
+     * - bottomProgressbar 可能在 onViewCreated 时为 null（GSY 控制器布局延迟加载）
+     * - 每次 run 时尝试从 _playerView 重新获取引用
+     * - 添加诊断日志确认 bufferedPercentage 返回值
      */
     private fun startBufferUpdate() {
         stopBufferUpdate()
+        // 健壮性：onPrepared 时 GSY 控制器布局可能才加载，重新获取引用
+        if (bottomProgressbar == null) {
+            bottomProgressbar = _playerView?.findViewById(R.id.bottom_progressbar)
+            AppLog.put("startBufferUpdate: re-acquire bottomProgressbar=${bottomProgressbar != null}")
+        }
         bufferUpdateRunnable = object : Runnable {
             override fun run() {
-                val bp = bottomProgressbar ?: return
+                // 健壮性：每次 run 时确认 bp 引用（防止 onViewCreated 时为 null）
+                var bp = bottomProgressbar
+                if (bp == null) {
+                    bp = _playerView?.findViewById(R.id.bottom_progressbar)
+                    if (bp != null) {
+                        bottomProgressbar = bp
+                        AppLog.put("bufferUpdate: re-acquire bottomProgressbar in run")
+                    } else {
+                        // playerView 为 null 或控制器布局未加载，停止轮询
+                        AppLog.put("bufferUpdate: bottomProgressbar still null, stop polling")
+                        return
+                    }
+                }
                 val percentage = VideoPlay.videoManager.bufferedPercentage
-                if (percentage >= 0) {
+                if (percentage >= 0 && percentage <= 100) {
                     bp.secondaryProgress = percentage
                 }
                 bufferUpdateHandler.postDelayed(this, 500)

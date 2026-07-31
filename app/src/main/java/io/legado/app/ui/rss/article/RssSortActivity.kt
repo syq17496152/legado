@@ -27,6 +27,7 @@ import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.databinding.ActivityRssArtivlesBinding
+import io.legado.app.help.source.getSearchUrl
 import io.legado.app.help.source.sortUrls
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.ui.login.SourceLoginActivity
@@ -217,6 +218,7 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
         // 重新初始化数据，复用时重建
         viewModel.initData(intent) {
             upFragments()
+            invalidateOptionsMenu()
         }
     }
 
@@ -229,6 +231,7 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
         })
         viewModel.initData(intent) {
             upFragments()
+            invalidateOptionsMenu()
         }
         onBackPressedDispatcher.addCallback(this) { //监听返回
             if (viewModel.searchKey != null) {
@@ -369,7 +372,11 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
             if (viewModel.searchKey != null) {
                 sortList.apply {
                     val name = "搜索"
-                    val url = source.searchUrl ?: return@apply
+                    var url = source.searchUrl ?: return@apply
+                    // 如果 searchUrl 是 JS，在独立线程预执行避免协程死锁
+                    if (url.startsWith("<js>", true) || url.startsWith("@js:", true)) {
+                        url = source.getSearchUrl(viewModel.searchKey!!) ?: url
+                    }
                     clear()
                     add(Pair(name, url))
                 }

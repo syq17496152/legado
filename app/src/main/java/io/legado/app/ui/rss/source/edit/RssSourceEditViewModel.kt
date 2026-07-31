@@ -11,6 +11,7 @@ import io.legado.app.help.AppCacheManager
 import io.legado.app.help.ConcurrentRateLimiter.Companion.concurrentRecordMap
 import io.legado.app.help.RuleComplete
 import io.legado.app.help.http.CookieStore
+import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.source.removeSortCache
 import io.legado.app.model.SharedJsScope
 import io.legado.app.utils.GSON
@@ -107,7 +108,28 @@ class RssSourceEditViewModel(application: Application) : BaseViewModel(applicati
 
     fun clearCookie(url: String) {
         execute {
+            // BUG3 fix: 清除cookie时同步清理多层缓存
+            // 1. 清除CookieStore中的cookie
             CookieStore.removeCookie(url)
+            // 2. 清除OkHttp DiskCache（缓存了530等错误响应）
+            kotlin.runCatching {
+                okHttpClient.cache?.evictAll()
+            }.onFailure {
+                io.legado.app.constant.AppLog.putDebug("clearCookie: OkHttp cache evictAll failed: ${it.message}")
+            }
+            // 3. 清除WebView cookie
+            kotlin.runCatching {
+                android.webkit.CookieManager.getInstance().flush()
+            }
+            // 4. 清除ACache内存缓存
+            kotlin.runCatching {
+                io.legado.app.utils.ACache.get().remove(url)
+            }
+            io.legado.app.constant.AppLog.putDebugWithTag(
+                "RssSourceEdit",
+                "clearCookie: removed cookie+cache for url=/path/${url.hashCode()}",
+                level = io.legado.app.constant.AppLog.Level.INFO
+            )
         }
     }
 

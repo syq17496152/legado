@@ -59,6 +59,7 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import org.json.JSONArray
+import io.legado.app.data.PlayHistoryStore
 import java.io.File
 
 object VideoPlay : CoroutineScope by MainScope(){
@@ -114,6 +115,86 @@ object VideoPlay : CoroutineScope by MainScope(){
         set(value) {
             videoPrefs.edit { putInt("videoCacheSize", value) }
         }
+
+    /**
+     * R3 视频预缓冲用户可配置参数（默认 HIGH 档位激进值，用户可往下调）
+     *
+     * 设计决策（AD-12 R3）：
+     * - 默认值对齐 HIGH 档位激进策略（用户要求"默认中高端机参数"）
+     * - 用户可通过设置界面往下调（如 MID 档位参数或更低）
+     * - 0 表示使用 DeviceInfoHelper 检测的档位默认值（动态适配）
+     */
+
+    /** R3 最大缓冲时长（秒），默认 0=按设备档位自动（HIGH=120s/MID=90s），用户可往下调 */
+    var videoMaxBufferSec: Int
+        get() = videoPrefs.getInt("videoMaxBufferSec", 0)
+        set(value) {
+            videoPrefs.edit { putInt("videoMaxBufferSec", value) }
+        }
+
+    /** R3 预加载数量（个），默认 0=按设备档位自动（HIGH=10/MID=7），用户可往下调 */
+    var videoPreloadCount: Int
+        get() = videoPrefs.getInt("videoPreloadCount", 0)
+        set(value) {
+            videoPrefs.edit { putInt("videoPreloadCount", value) }
+        }
+
+    /** R3 预加载字节数（MB），默认 0=按设备档位自动（HIGH=10/MID=5），用户可往下调 */
+    var videoPreloadBytesMB: Int
+        get() = videoPrefs.getInt("videoPreloadBytesMB", 0)
+        set(value) {
+            videoPrefs.edit { putInt("videoPreloadBytesMB", value) }
+        }
+
+    /** R3 预加载触发进度（百分比），默认 10（播放进度达10%时触发预加载下一集），用户可往下调 */
+    var videoPreloadTriggerProgress: Int
+        get() = videoPrefs.getInt("videoPreloadTriggerProgress", 10)
+        set(value) {
+            videoPrefs.edit { putInt("videoPreloadTriggerProgress", value) }
+        }
+
+    /** AD-01 首帧预加载开关（默认true，关闭时不预加载首帧，WEAK 档行为） */
+    var playerFirstFramePreload: Boolean
+        get() = videoPrefs.getBoolean("playerFirstFramePreload", true)
+        set(value) {
+            videoPrefs.edit { putBoolean("playerFirstFramePreload", value) }
+        }
+
+    /** AD-01 预缓存范围 0=关闭(按设备档位自动)/1/2/3（默认1，上限5防过多消耗带宽） */
+    var playerPrecacheRange: Int
+        get() = videoPrefs.getInt("playerPrecacheRange", 1)
+        set(value) {
+            videoPrefs.edit { putInt("playerPrecacheRange", value) }
+        }
+
+    /** AD-02 缓冲策略 0=自动/1=GOOD/2=MEDIUM/3=WEAK（默认0自动，首次播放按网络类型选择档位） */
+    var playerBufferStrategy: Int
+        get() = videoPrefs.getInt("playerBufferStrategy", 0)
+        set(value) {
+            videoPrefs.edit { putInt("playerBufferStrategy", value) }
+        }
+
+    /** AD-04 播放历史开关（默认true，关闭时不保存播放进度） */
+    var playerHistoryEnabled: Boolean
+        get() = videoPrefs.getBoolean("playerHistoryEnabled", true)
+        set(value) {
+            videoPrefs.edit { putBoolean("playerHistoryEnabled", value) }
+        }
+
+    /** AD-03 播放错误提示开关（默认true，关闭时不显示ErrorMapper错误提示） */
+    var playerErrorTip: Boolean
+        get() = videoPrefs.getBoolean("playerErrorTip", true)
+        set(value) {
+            videoPrefs.edit { putBoolean("playerErrorTip", value) }
+        }
+
+    /** 自动重连开关（默认true，播放失败时自动重试） */
+    var playerAutoReconnect: Boolean
+        get() = videoPrefs.getBoolean("playerAutoReconnect", true)
+        set(value) {
+            videoPrefs.edit { putBoolean("playerAutoReconnect", value) }
+        }
+
     /**  默认静音（播放时默认关闭声音，用户可手动开启）  **/
     var muteOnStart
         get() = videoPrefs.getBoolean("muteOnStart", true)
@@ -225,12 +306,20 @@ object VideoPlay : CoroutineScope by MainScope(){
      * 开始播放
      */
     fun startPlay(player: StandardGSYVideoPlayer) {
-        if (source == null) return
+        // P0: singleUrl 模式（直接传 videoUrl 播放）不需要 source，跳过 source == null 检查
+        // 根因：adb am start 传 videoUrl 直接播放 m3u8 时，source 为 null，
+        //   原 `if (source == null) return` 导致 singleUrl 分支永远不执行，播放器无法启动
+        AppLog.put("VideoPlay.startPlay called: singleUrl=$singleUrl, source=${source?.getKey()?.take(2)}, videoUrl=${videoUrl?.take(2)}")
+        if (source == null && !singleUrl) {
+            AppLog.put("VideoPlay.startPlay early return: source=null and !singleUrl")
+            return
+        }
         danmakuStr = null
         danmakuFile = null
         val player = player.getCurrentPlayer()
         if (singleUrl) {
             val mUrl = videoUrl ?: return
+            AppLog.put("VideoPlay.startPlay entering singleUrl branch, mUrl=${mUrl.take(2)}")
             Coroutine.async(loadScope, IO) {
                 CacheManager.getLong(VIDEO_POS_NAME + mUrl)?.let {
                     player.seekOnStart = it
@@ -242,12 +331,14 @@ object VideoPlay : CoroutineScope by MainScope(){
                     ruleData = book,
                     chapter = null
                 )
+                AppLog.put("VideoPlay.startPlay AnalyzeUrl ok, headerMap.size=${analyzeUrl.headerMap.size}, url=${analyzeUrl.url.take(2)}")
                 withContext(Main) {
                     player.mapHeadData = analyzeUrl.headerMap
                     currentPlayHeaders = analyzeUrl.headerMap
                     // Bug8 修复：统一解析播放器页面 URL，避免 3003 错误
                     val url = VideoUrlExtractor.resolvePlayerPageUrl(analyzeUrl.url)
                     player.setUp(url, cachePlay, File(appCtx.externalCache, "exoplayer"), videoTitle)
+                    AppLog.put("VideoPlay.startPlay setUp done, autoPlay=$autoPlay, starting playLogic")
                     if (autoPlay) {
                         player.startPlayLogic()
                     }
@@ -261,7 +352,9 @@ object VideoPlay : CoroutineScope by MainScope(){
         (source as? RssSource)?.let { s ->
             val rssArticle = rssStar?.toRssArticle() ?: rssRecord?.toRssArticle() ?: rssArticles?.getOrNull(rssArticleIndex)
             if (rssArticle == null) {
-                appCtx.toastOnUi("未找到订阅")
+                // BUG4 fix: 正常滑动退出时rssArticle变null属正常流程，toast干扰用户体验
+                // 改为静默日志，保留问题可追溯性
+                AppLog.putWarn("VideoPlay: rssArticle is null in startPlay, rssArticleIndex=$rssArticleIndex")
                 return
             }
             val ruleContent = s.ruleContent
@@ -706,7 +799,10 @@ object VideoPlay : CoroutineScope by MainScope(){
             }
         }
         upEpisodes()
-        if (source == null) {
+        // P0: singleUrl 模式（直接传 videoUrl 播放）不需要源，跳过 source == null 检查
+        // 根因：adb am start 传 videoUrl 直接播放 m3u8 时，sourceKey 为 null 导致 source == null，
+        //   initSource 返回 false → VideoPlayerActivity finish() 退出，无法测试播放
+        if (source == null && !singleUrl) {
             // V-004-P0-2: initSource 失败记录详细原因（不静默返回 false）
             // 根因：004 日志 18:48-19:16 期间 9 次 Activity 启动但播放器未初始化，
             //   initSource 返回 false 时无日志，无法定位失败原因
@@ -987,7 +1083,7 @@ object VideoPlay : CoroutineScope by MainScope(){
     fun switchToRoute(routeIndex: Int, player: GSYBaseVideoPlayer): Boolean {
         // source 是 BaseSource，需 cast 为 RssSource 才能访问 ruleEpisodes
         val rssSource = source as? RssSource ?: return false
-        val ruleEpisodes = rssSource.ruleEpisodes ?: return false
+        val ruleEpisodes = rssSource.ruleEpisodes?.takeIf { it.isNotBlank() } ?: return false
         val rssArticle = rssStar?.toRssArticle() ?: rssRecord?.toRssArticle()
             ?: rssArticles?.getOrNull(rssArticleIndex) ?: return false
         // 重置集数状态
@@ -1188,7 +1284,9 @@ object VideoPlay : CoroutineScope by MainScope(){
     fun playRssEpisode(player: GSYBaseVideoPlayer, episode: RssEpisode) {
         val rssArticle = rssStar?.toRssArticle() ?: rssRecord?.toRssArticle() ?: rssArticles?.getOrNull(rssArticleIndex)
         if (rssArticle == null) {
-            appCtx.toastOnUi("未找到订阅")
+            // BUG4 fix: 正常滑动退出时rssArticle变null属正常流程，toast干扰用户体验
+            // 改为静默日志，保留问题可追溯性
+            AppLog.putWarn("VideoPlay: rssArticle is null in playRssEpisode, rssArticleIndex=$rssArticleIndex")
             return
         }
         videoUrl = episode.url
@@ -1255,10 +1353,10 @@ object VideoPlay : CoroutineScope by MainScope(){
         val index = rssEpisodeIndex.coerceIn(urls.indices)
         // T2.2/T2.3 关键日志：预加载触发点（release 包可输出，真机验收依据）
         AppLog.put("triggerPreload: episodeIndex=$index, totalEpisodes=${urls.size}, hasNext=${index + 1 < urls.size}")
-        // T2.2: 首帧预加载（当前位置 ±1）
-        FirstFramePreloader.preloadFirstFrame(urls, index, headers)
-        // T2.3: 下一集 256KB 预加载（网络感知：WiFi 3 个/4G 1 个）
-        VideoPreloader.preloadNextVideo(currentUrl, urls.getOrNull(index + 1), headers)
+        // 方案B: 预加载器已禁用（FirstFramePreloader/VideoPreloader 存在 NPE bug，待修复）
+        // 当前优先优化"当前视频快速缓冲"（LoadControl 激进策略），预加载器后续再修复
+        // FirstFramePreloader.preloadFirstFrame(urls, index, headers)
+        // VideoPreloader.preloadNextVideo(currentUrl, urls.getOrNull(index + 1), headers)
     }
 
     /**
@@ -1289,6 +1387,16 @@ object VideoPlay : CoroutineScope by MainScope(){
         val rssRecord = rssRecord
         val durPos = durPos ?: videoManager.currentPosition.toInt()
         durChapterPos = durPos
+        // AD-04: 同时保存到 PlayHistoryStore（跨会话进度恢复）
+        videoUrl?.let { url ->
+            val articleUrl = rssArticles?.getOrNull(rssArticleIndex)?.link ?: ""
+            PlayHistoryStore.save(
+                articleUrl = articleUrl,
+                videoUrl = url,
+                position = durPos.toLong(),
+                duration = videoManager.duration
+            )
+        }
         if (book == null && rssStar == null && rssRecord == null) {
             videoUrl?.let { videoUrl ->
                 CacheManager.put(VIDEO_POS_NAME + videoUrl, durPos, VIDEO_POS_SAVE_TIME)

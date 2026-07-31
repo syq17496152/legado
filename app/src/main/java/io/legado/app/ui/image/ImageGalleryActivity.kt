@@ -338,6 +338,35 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
             }
         )
         binding.recyclerView.apply {
+            // BUG1 fix V2: 使用 OnGlobalLayoutListener 确保在布局完成后获取准确高度
+            // V1 的 titleBar.post 在某些时机 titleBar.height=0（尚未完成 layout），导致 paddingTop 不够
+            // V2 改用 OnGlobalLayoutListener 回调，此时所有 View 已完成 measure/layout
+            binding.titleBar.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+                override fun onGlobalLayout() {
+                    val titleBarHeight = binding.titleBar.height
+                    if (titleBarHeight <= 0) return // 高度仍为0则等待下次回调
+                    val statusBarHeight = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        windowManager.currentWindowMetrics.windowInsets
+                            .getInsets(android.view.WindowInsets.Type.statusBars()).top
+                    } else {
+                        @Suppress("DEPRECATION")
+                        val rect = android.graphics.Rect()
+                        window.decorView.getWindowVisibleDisplayFrame(rect)
+                        rect.top
+                    }
+                    val totalTopPadding = titleBarHeight + statusBarHeight
+                    if (totalTopPadding > 0 && paddingTop != totalTopPadding) {
+                        setPadding(paddingLeft, totalTopPadding, paddingRight, paddingBottom)
+                        AppLog.putDebugWithTag(
+                            AppLog.TAG_IMAGE_CANVAS,
+                            "BUG1 fix V2: set paddingTop=$totalTopPadding (titleBar=$titleBarHeight + statusBar=$statusBarHeight)",
+                            level = AppLog.Level.INFO
+                        )
+                    }
+                    // 只需执行一次，移除监听
+                    binding.titleBar.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                }
+            })
             layoutManager = LinearLayoutManager(this@ImageGalleryActivity)
             adapter = canvasAdapter
             // AD-08: 离屏缓存 2 个 ViewHolder（默认 2，显式设置明确意图）

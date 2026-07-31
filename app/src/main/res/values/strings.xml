@@ -1362,9 +1362,9 @@
     <string name="history">历史记录</string>
     <string name="app_name_sigma">阅读M</string>
     <string name="about_description_sigma">\u3000\u3000阅读Sigma继承自legado，旨在原版基础上完善和增加功能，欢迎您的加入。</string>
-    <string name="contributors_summary_sigma">gedoor、Luoyacheng、Horis和 Xwite 等，详情请在 GitHub 中查看</string>
+    <string name="contributors_summary_sigma">syq17496152、gedoor、Luoyacheng、Horis和 Xwite 等，详情请在 GitHub 中查看</string>
     <string name="app_share_description_sigma">
-        阅读 Sigma 下载地址：\nhttps://github.com/Luoyacheng/legado/releases
+        阅读 Sigma 下载地址：\nhttps://github.com/syq17496152/legado/releases
     </string>
     <string name="sure_cache_book">是否确认开始缓存？</string>
     <string name="non_printable_set">不可视字符设定</string>
@@ -1610,6 +1610,16 @@
     <string name="highlight_rule_preset_subtitle">Tap the + icon to add a preset rule to the current list.</string>
     <string name="import_highlight_rule">Import Rules</string>
     <string name="export_highlight_rule">Export Rules</string>
+    <string name="highlight_rule_restore_default">恢复默认规则</string>
+    <string name="highlight_rule_restore_title">恢复默认规则</string>
+    <string name="highlight_rule_restore_message">选择恢复模式：\n\n合并模式：保留你的自定义规则，补充缺失的内置规则\n覆盖模式：删除所有规则，重置为 12 条内置规则</string>
+    <string name="highlight_rule_restore_merge">合并模式（推荐）</string>
+    <string name="highlight_rule_restore_overwrite">覆盖模式（删除自定义）</string>
+    <string name="highlight_rule_restore_overwrite_confirm_title">警告</string>
+    <string name="highlight_rule_restore_overwrite_confirm_message">覆盖模式将删除所有自定义规则！确定继续？</string>
+    <string name="highlight_rule_restore_overwrite_confirm_ok">确定覆盖</string>
+    <string name="highlight_rule_restore_merged_toast">已恢复默认规则（合并模式）</string>
+    <string name="highlight_rule_restore_overwritten_toast">已重置为默认规则</string>
     <!-- F-P1-8 文件夹视图配置 -->
     <string name="source_folder_config">Folder Config</string>
     <string name="source_folder_group_by_group">By Group</string>
@@ -1645,5 +1655,30 @@
     <string name="player_type">播放器类型</string>
     <string name="player_type_auto">自动</string>
     <string name="player_type_exo">内置播放器</string>
+
+    <!-- AD-03: 播放错误用户友好提示文案（ErrorMapper 映射） -->
+    <string name="player_error_network_title">网络错误</string>
+    <string name="player_error_network_message">网络连接失败，请检查网络后重试</string>
+    <string name="player_error_dns_title">域名解析失败</string>
+    <string name="player_error_dns_message">无法解析服务器地址，可能网络异常或地址已变更</string>
+    <string name="player_error_decoder_title">解码错误</string>
+    <string name="player_error_decoder_message">视频格式不支持解码，请尝试切换源或使用WebView播放</string>
+    <string name="player_error_drm_title">受版权保护</string>
+    <string name="player_error_drm_message">此视频受版权保护，无法在内置播放器中播放</string>
+    <string name="player_error_source_title">视频源无效</string>
+    <string name="player_error_source_message">视频源已失效或不可用，请尝试切换其他源</string>
+    <string name="player_error_unknown_title">播放失败</string>
+    <string name="player_error_unknown_message">播放遇到问题，请重试或切换源</string>
+    <string name="player_history_resume">已从 %1$d:%2$02d 继续播放</string>
     <string name="player_type_webview">WebView播放器</string>
+    <!-- BUG2 fix: 播放器优化5项配置 -->
+    <string name="player_first_frame_preload">首帧预加载</string>
+    <string name="player_buffer_strategy">缓冲策略</string>
+    <string name="player_buffer_strategy_auto">自动</string>
+    <string name="player_buffer_strategy_aggressive">激进</string>
+    <string name="player_buffer_strategy_balanced">平衡</string>
+    <string name="player_buffer_strategy_conservative">保守</string>
+    <string name="player_history_enabled">播放历史</string>
+    <string name="player_error_tip">播放错误提示</string>
+    <string name="player_auto_reconnect">自动重连</string>
 </resources>

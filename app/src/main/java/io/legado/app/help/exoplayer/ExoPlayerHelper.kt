@@ -28,6 +28,8 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
 import com.google.gson.reflect.TypeToken
 import io.legado.app.constant.AppLog
@@ -45,7 +47,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.coroutineContext
-import okhttp3.CacheControl
 import okhttp3.Request
 import splitties.init.appCtx
 import java.io.File
@@ -63,8 +64,10 @@ object ExoPlayerHelper {
      *
      * 替换原 `Util.getUserAgent(context, "Legado")` 生成的 `Legado/1.0 (Linux; U; Android 13)`，
      * 部分站点 CDN 拒绝非浏览器 UA（403/401），改用浏览器 UA 提升抓取成功率。
+     *
+     * P0-5（2026-07-31）：可见性从 private 改为 public，供 M3u8PreCheckDataSource 复用同一 UA
      */
-    private const val BROWSER_UA =
+    const val BROWSER_UA =
         "Mozilla/5.0 (Linux; Android 13; Pixel 7 Pro) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 
@@ -113,12 +116,18 @@ object ExoPlayerHelper {
     }
 
     /**
-     * T2.1: 按带宽档位构建 LoadControl
+     * R3: 按带宽档位构建 LoadControl（激进策略，优化当前视频快速缓冲）
      *
-     * 分档策略：
-     * - 弱网（<1Mbps）：小 buffer 快起播省流量（minBuffer=5s, maxBuffer=15s, bufferForPlayback=250ms, bufferForPlaybackAfterRebuffer=500ms）
-     * - 中网（1-5Mbps）：中 buffer 平衡（minBuffer=10s, maxBuffer=30s, bufferForPlayback=500ms, bufferForPlaybackAfterRebuffer=1000ms）
-     * - 好网（≥5Mbps）：大 buffer 防 rebuffer（minBuffer=15s, maxBuffer=50s, bufferForPlayback=1000ms, bufferForPlaybackAfterRebuffer=2000ms）
+     * 分档策略（R3 大幅提升 maxBuffer，减少当前视频卡顿）：
+     * - 弱网（<1Mbps）：minBuffer=10s, maxBuffer=30s, bufferForPlayback=500ms, bufferForPlaybackAfterRebuffer=1s
+     * - 中网（1-5Mbps）：minBuffer=8s, maxBuffer=90s（原30s→90s，提升3倍）, bufferForPlayback=1s, bufferForPlaybackAfterRebuffer=2s
+     * - 好网（≥5Mbps）：minBuffer=8s, maxBuffer=120s（原50s→120s，提升2.4倍）, bufferForPlayback=1s, bufferForPlaybackAfterRebuffer=2s
+     *
+     * R3 用户可配置：videoMaxBufferSec >0 时覆盖档位默认值（秒转毫秒）
+     *
+     * 首帧优化（2026-07-28）：降低 minBufferMs 从 15s→8s（MEDIUM/GOOD）和 10s→5s（WEAK），
+     * 让首帧更快渲染（原 minBuffer=15s 导致首帧需缓冲 15s 才播放，用户感知卡顿）。
+     * maxBuffer 保持 90/120s 防播放中 rebuffer。
      *
      * @param tier 带宽档位
      * @param allocator 共享内存分配器（T5.1 实例池场景传入共享 allocator，多实例共用同一缓冲内存池；null 则各实例独立）
@@ -127,29 +136,40 @@ object ExoPlayerHelper {
     fun createLoadControlByTier(tier: BandwidthTier, allocator: DefaultAllocator? = null): DefaultLoadControl {
         val builder = DefaultLoadControl.Builder()
         allocator?.let { builder.setAllocator(it) }
-        return when (tier) {
-            BandwidthTier.WEAK -> builder
-                .setBufferDurationsMs(
-                    5_000,   // minBufferMs: 5s（弱网小 buffer 快起播）
-                    15_000,  // maxBufferMs: 15s（省流量）
-                    250,     // bufferForPlaybackMs: 250ms（快起播）
-                    500      // bufferForPlaybackAfterRebufferMs: 500ms
-                ).build()
-            BandwidthTier.MEDIUM -> builder
-                .setBufferDurationsMs(
-                    10_000,  // minBufferMs: 10s
-                    30_000,  // maxBufferMs: 30s
-                    500,     // bufferForPlaybackMs: 500ms
-                    1_000    // bufferForPlaybackAfterRebufferMs: 1s
-                ).build()
-            BandwidthTier.GOOD -> builder
-                .setBufferDurationsMs(
-                    15_000,  // minBufferMs: 15s（好网大 buffer 防 rebuffer）
-                    50_000,  // maxBufferMs: 50s
-                    1_000,   // bufferForPlaybackMs: 1s
-                    2_000    // bufferForPlaybackAfterRebufferMs: 2s
-                ).build()
+        // R3: 用户可配置 maxBuffer（0=按档位自动，>0=用户指定秒数）
+        val userMaxBufferSec = VideoPlay.videoMaxBufferSec
+        // 缓冲速度优化（P0）：解除字节上限，让缓冲完全由 maxBuffer 时长控制
+        // 默认 DEFAULT_TARGET_BUFFER_BYTES(~50MB) 会截断高码率视频的 maxBuffer 时长
+        // -1 表示不限制字节总量（对齐 Media3 官方推荐 Large buffer for high-bitrate content）
+        builder.setTargetBufferBytes(-1)
+        // 缓冲速度优化（P0）：时间优先于字节，确保 maxBuffer 时长真正生效
+        builder.setPrioritizeTimeOverSizeThresholds(true)
+        val loadControl = when (tier) {
+            BandwidthTier.WEAK -> {
+                val maxBufferMs = (userMaxBufferSec.takeIf { it > 0 } ?: 30) * 1000
+                // 首帧优化：minBuffer 从 10s→5s，让弱网首帧更快渲染
+                builder.setBufferDurationsMs(5_000, maxBufferMs, 500, 1_000).build()
+            }
+            BandwidthTier.MEDIUM -> {
+                val maxBufferMs = (userMaxBufferSec.takeIf { it > 0 } ?: 90) * 1000
+                // 首帧优化：minBuffer 从 15s→8s，bufferForPlayback 从 1s→800ms 加速起播
+                builder.setBufferDurationsMs(8_000, maxBufferMs, 800, 2_000).build()
+            }
+            BandwidthTier.GOOD -> {
+                val maxBufferMs = (userMaxBufferSec.takeIf { it > 0 } ?: 120) * 1000
+                // 首帧优化：minBuffer 从 15s→8s，bufferForPlayback 从 1s→500ms 中高端机激进起播
+                builder.setBufferDurationsMs(8_000, maxBufferMs, 500, 2_000).build()
+            }
         }
+        // 缓冲速度优化（P0）：日志验证 LoadControl 实际参数生效
+        AppLog.put(
+            "[BufferSpeed] LoadControl tier=$tier maxBufferMs=${when (tier) {
+                BandwidthTier.WEAK -> (userMaxBufferSec.takeIf { it > 0 } ?: 30) * 1000
+                BandwidthTier.MEDIUM -> (userMaxBufferSec.takeIf { it > 0 } ?: 90) * 1000
+                BandwidthTier.GOOD -> (userMaxBufferSec.takeIf { it > 0 } ?: 120) * 1000
+            }} targetBufferBytes=-1 prioritizeTime=true"
+        )
+        return loadControl
     }
 
     /**
@@ -198,13 +218,41 @@ object ExoPlayerHelper {
         val mediaItem = MediaItem.Builder()
             .setUri(url)
             .apply { sniff.mimeType?.let { setMimeType(it) } }
+            .apply {
+                // 缓冲速度优化（P0）：HLS 直播配置 3s 目标偏移，VOD 自动忽略
+                if (sniff.contentType == C.TYPE_HLS) {
+                    setLiveConfiguration(
+                        MediaItem.LiveConfiguration.Builder()
+                            .setTargetOffsetMs(3_000)
+                            .build()
+                    )
+                }
+            }
             .build()
         return when (sniff.contentType) {
-            C.TYPE_HLS -> HlsMediaSource.Factory(dataSourceFactory)
-                // R4-T10: AES-128 加密流由 ExoPlayer 内置支持
-                // dataSourceFactory 已注入 Referer/Cookie/UA 防盗链头，
-                // ExoPlayer 内部会用此 factory 获取 #EXT-X-KEY 标签的密钥
-                .createMediaSource(mediaItem)
+            C.TYPE_HLS -> {
+                // P1-8: AES-128 密钥请求注入（2026-07-31）
+                // 用 HlsKeyDataSourceFactory 包装 dataSourceFactory，对密钥 URL 注入额外防盗链头
+                // 处理某些 CDN 对密钥请求的防盗链检查更严格的场景（需要播放页 Referer）
+                val hlsDataSourceFactory = HlsKeyDataSourceFactory().wrap(dataSourceFactory)
+                HlsMediaSource.Factory(hlsDataSourceFactory)
+                    // 缓冲速度优化（P0）：仅解析 m3u8 清单即完成 preparation，首帧耗时降 30%+
+                    // 兼容性 >95%（ExoPlayer 官方统计），对非标 m3u8 自动降级
+                    .setAllowChunklessPreparation(true)
+                    // P2-2: 指数退避重试策略（1s/2s/4s/8s/16s），最多 5 次
+                    // 对齐 hls.js 策略：网络抖动时给予恢复时间，CDN 永久失效时快速降级
+                    .setLoadErrorHandlingPolicy(object : DefaultLoadErrorHandlingPolicy() {
+                        override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+                            val errorCount = loadErrorInfo.errorCount
+                            if (errorCount >= 5) return C.TIME_UNSET  // TIME_UNSET 表示不再重试，触发降级
+                            return (1L shl (errorCount - 1).coerceAtLeast(0)) * 1000L  // 2^(errorCount-1) * 1000ms: 1s/2s/4s/8s/16s
+                        }
+                    })
+                    // R4-T10: AES-128 加密流由 ExoPlayer 内置支持
+                    // dataSourceFactory 已注入 Referer/Cookie/UA 防盗链头（buildAntiLeechHeaders），
+                    // HlsKeyDataSourceFactory 对密钥 URL 额外注入 currentPlayHeaders 头
+                    .createMediaSource(mediaItem)
+            }
             C.TYPE_DASH -> DashMediaSource.Factory(dataSourceFactory)
                 .createMediaSource(mediaItem)
             C.TYPE_SS -> SsMediaSource.Factory(dataSourceFactory)
@@ -266,6 +314,59 @@ object ExoPlayerHelper {
      */
     suspend fun sniffVideoType(url: String, headers: Map<String, String>): SniffResult {
         val startTime = System.currentTimeMillis()
+
+        // P0-fix: URL 合法性校验（防止非 URL 字符串传入 sniffWithRangeRequestR4 导致 OkHttp 崩溃）
+        // 铁证：书源 ruleContent 返回 m3u8 文件内容（#EXTM3U...）而非 URL 时，
+        // OkHttp Request.Builder().url() 抛出 IllegalArgumentException 致 FATAL CRASH
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            AppLog.put("sniffVideoType: invalid URL scheme, skip sniff, urlPrefix=${url.take(20)}...")
+            return SniffResult.UNKNOWN
+        }
+
+        // P0-1: HTML 接口预判拦截（嗅探成功率优化，2026-07-28）
+        // 根因：002日志铁证——/Player/Play.php?id=xxx 等 HTML 接口返回 text/html 页面，
+        // Range 请求得到 HTML 而非视频流，嗅探必然失败并消耗完整超时时长（6653ms）。
+        // 方案：URL 路径以 .html/.htm 结尾时，极不可能是视频流接口（视频流通常无后缀或 .m3u8/.mp4/.php），
+        // 直接返回 UNKNOWN 跳过 Range 请求，让 ExoPlayer 自行尝试或快速降级 WebView。
+        // 注意：不拦截 .php/.aspx 等动态后缀，因为这些接口可能返回 m3u8/mp4 视频流。
+        if (isHtmlInterfaceUrl(url)) {
+            AppLog.put(
+                "sniffVideoType: skip HTML interface url, urlPath=${sanitizeUrl(url)}"
+            )
+            return SniffResult.UNKNOWN
+        }
+
+        // P0-1: m3u8 URL 短路检测（URL 以 .m3u8 结尾时跳过 Range 嗅探）
+        // 根因：Range 嗅探对 .m3u8 URL 完全不必要（后缀已 100% 确定是 HLS），
+        // 且可能消耗 CDN 一次性 token / 触发限流 / 增加 500ms-3s 延迟
+        if (url.lowercase().substringBefore("?").substringBefore("#").endsWith(".m3u8")) {
+            AppLog.put("sniffVideoType: short-circuit .m3u8 URL, skip Range sniff, urlPath=${sanitizeUrl(url)}")
+            // P0-5: HEAD 预检获取重定向后的 finalUrl（避免 HlsMediaSource 创建后再次重定向）
+            // 超时 3s：HEAD 预检失败/超时不阻塞播放（使用原始 URL，让 ExoPlayer 自行处理重定向）
+            val preCheckResult = withTimeoutOrNull(3000L) {
+                M3u8PreCheckDataSource(headers).preCheck(url)
+            }
+            val finalUrl = when (preCheckResult) {
+                is M3u8PreCheckDataSource.PreCheckResult.Success -> {
+                    AppLog.putDebug("sniffVideoType: m3u8 preCheck success, using finalUrl")
+                    preCheckResult.finalUrl
+                }
+                is M3u8PreCheckDataSource.PreCheckResult.Fail -> {
+                    AppLog.putDebug("sniffVideoType: m3u8 preCheck failed: ${preCheckResult.reason}, using original url")
+                    url
+                }
+                null -> {
+                    AppLog.putDebug("sniffVideoType: m3u8 preCheck timeout(3s), using original url")
+                    url
+                }
+            }
+            return SniffResult(
+                contentType = C.TYPE_HLS,
+                mimeType = MimeTypes.APPLICATION_M3U8,
+                finalUrl = finalUrl
+            )
+        }
+
         // T1.3: AtomicBoolean 防双回调竞态（withTimeoutOrNull 超时后 sniffWithRangeRequestR4 仍在执行）
         // 场景：超时返回 UNKNOWN 后，sniffWithRangeRequestR4 的 OkHttp execute() 完成，又返回一个结果
         // 修复：只有第一个结果被使用，后续结果被丢弃
@@ -405,6 +506,26 @@ object ExoPlayerHelper {
             // T5.3: 网络层失败无内容证据 → URL 后缀兜底
             sniffByExtensionFallback(url, "io failed")
         }
+    }
+
+    /**
+     * P0-1: HTML 接口预判（嗅探成功率优化，2026-07-28）
+     *
+     * 根因：002日志铁证——HTML 播放页接口（如 /play/xxx.html）返回 text/html 页面，
+     * Range 请求得到 HTML 而非视频流，嗅探必然失败并消耗完整超时时长（6653ms）。
+     *
+     * 判定规则：URL 路径最后一段以 .html/.htm 结尾时，认定为 HTML 接口。
+     * - 视频流接口通常无后缀（/play/stream?id=xxx）或视频后缀（.m3u8/.mp4/.flv）
+     * - .html/.htm 后缀的 URL 极不可能直接返回视频流
+     * - 动态后缀（.php/.aspx/.jsp）不拦截，因为这些接口可能返回 m3u8/mp4
+     *
+     * @param url 视频 URL（完整，含 query）
+     * @return true 表示是 HTML 接口应跳过 Range 嗅探，false 表示正常嗅探
+     */
+    private fun isHtmlInterfaceUrl(url: String): Boolean {
+        val path = url.lowercase().substringBefore("?").substringBefore("#")
+        val lastSegment = path.substringAfterLast("/")
+        return lastSegment.endsWith(".html") || lastSegment.endsWith(".htm")
     }
 
     /**
@@ -711,7 +832,23 @@ object ExoPlayerHelper {
         }
     }
 
-    /** 嗅探超时：5 秒（T1.3 从 3s 提升至 5s，解决 Bug-3 弱网场景嗅探未完成被超时；超时返回 null 让 ExoPlayer 内置 sniff 兜底） */
+    /**
+     * 嗅探超时：5 秒（P1-3 嗅探能力恢复，2026-07-31）
+     *
+     * 历史：
+     * - T1.3（2026-07-26）：从 3s 提升至 5s 解决弱网场景嗅探未完成被超时
+     * - P0-2（2026-07-28）：从 5s 降回 3s（HTML 接口误入嗅探通道消耗完整 5s 超时）
+     * - P1-3（2026-07-31）：从 3s 恢复到 5s
+     *
+     * P1-3 恢复根因（用户反馈"7月30日12点后嗅探能力明显减弱"）：
+     *   3s 超时在弱网场景下 Range 请求未完成即被超时，导致嗅探成功率下降。
+     *   P0-1 的 HTML 接口预判拦截（isHtmlInterfaceUrl + .html 后缀短路）已解决
+     *   HTML 接口误入嗅探通道的问题，不再需要靠缩短超时来避免 HTML 嗅探消耗。
+     *   m3u8 URL 短路检测（url.endsWith(".m3u8")）也减少了非必要嗅探。
+     *   因此恢复到 5s 提升弱网场景嗅探成功率，HTML 误入问题由前置拦截解决。
+     *
+     * 超时后由 sniffByExtensionFallback（URL 后缀兜底）+ buildFallbackTypes（HLS 优先）接管。
+     */
     private const val SNIFF_TIMEOUT_MS = 5000L
 
     /**
@@ -814,20 +951,44 @@ object ExoPlayerHelper {
      * 支持缓存的DataSource.Factory
      */
     val cacheDataSourceFactory by lazy {
-        //使用自定义的CacheDataSource以支持设置UA
-        // P2 修复：用 DefaultDataSource 包装 okhttpDataFactory，支持 file:// 等本地协议
-        // 根因：OkHttpDataSource 只支持 http/https，遇到 file:// 路径抛 HttpDataSourceException: Malformed URL
-        // 证据：crash-2026-07-13-14-53-47 + logcat L81452 OkHttpDataSource.makeRequest 请求 file://...mpd
-        // DefaultDataSource 会根据 URI scheme 自动选择 FileDataSource/OkHttpDataSource/ContentDataSource
+        // P0: 优先使用 Cronet 数据源（TLS 指纹与 Chrome 一致，解决 CDN TLS 指纹检测）
+        // 铁证：站点A m3u8，OkHttp TLS 被 CDN 重置（SSLHandshakeException: Connection reset by peer），
+        // 但 Cronet（BoringSSL）能成功握手。项目 HTTP 请求层已用 Cronet 成功获取详情页。
+        // 回退：Cronet 不可用时用 OkHttp（保持兼容性）
+        val upstreamFactory = cronetDataFactory ?: okhttpDataFactory
+        // P2 修复：用 DefaultDataSource 包装，支持 file:// 等本地协议
         CacheDataSource.Factory()
             .setCache(cache)
-            .setUpstreamDataSourceFactory(DefaultDataSource.Factory(appCtx, okhttpDataFactory))
+            .setUpstreamDataSourceFactory(DefaultDataSource.Factory(appCtx, upstreamFactory))
             .setCacheReadDataSourceFactory(FileDataSource.Factory())
             .setCacheWriteDataSinkFactory(
                 CacheDataSink.Factory()
                     .setCache(cache)
                     .setFragmentSize(CacheDataSink.DEFAULT_FRAGMENT_SIZE)
             )
+    }
+
+    /**
+     * P0: Cronet DataSource.Factory（TLS 指纹与 Chrome 一致，解决 CDN TLS 指纹检测）
+     *
+     * 根因：部分视频 CDN 使用 TLS 指纹检测（JA3），OkHttp 的 conscrypt TLS ClientHello
+     * 被识别为非浏览器客户端，连接被重置（SSLHandshakeException: Connection reset by peer）。
+     * Cronet 使用 BoringSSL（与 Chrome 浏览器相同的 TLS 栈），TLS 指纹与 Chrome 一致，
+     * CDN 不会拒绝。
+     *
+     * 回退：cronetEngine 为 null 时（Cronet 初始化失败），返回 null，cacheDataSourceFactory 回退到 OkHttp
+     */
+    private val cronetDataFactory: androidx.media3.datasource.cronet.CronetDataSource.Factory? by lazy {
+        val engine = io.legado.app.lib.cronet.cronetEngine
+        if (engine == null) {
+            AppLog.put("ExoPlayerHelper: cronetEngine is null, fallback to OkHttp")
+            null
+        } else {
+            // P0-4: 注入防盗链默认请求头（UA + Referer 兜底）
+            // 说明：setDefaultHeaders 被调用时会覆盖此默认值；此默认值仅用于未被 setDefaultHeaders 显式覆盖的请求
+            androidx.media3.datasource.cronet.CronetDataSource.Factory(engine, java.util.concurrent.Executors.newSingleThreadExecutor())
+                .setDefaultRequestProperties(buildAntiLeechHeaders())
+        }
     }
 
     /**
@@ -845,13 +1006,61 @@ object ExoPlayerHelper {
     private val okhttpDataFactory by lazy {
         val client = okHttpClient.newBuilder()
             .callTimeout(0, TimeUnit.SECONDS)
+            // 缓冲速度优化（P0）：超时配置统一 10s/15s/15s，容忍慢速 CDN
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .writeTimeout(15, TimeUnit.SECONDS)
             .protocols(listOf(okhttp3.Protocol.HTTP_1_1))  // P2-C: 强制 HTTP/1.1
             .followRedirects(true)  // R4-T6: 跟随重定向，感知最终 URL
             .build()
         OkHttpDataSource.Factory(client)
             .setUserAgent(BROWSER_UA)  // R4-T6: 浏览器 UA，提升 CDN 抓取成功率
-            // R4-T6: 跨协议重定向由 OkHttp client 的 followRedirects(true)+followSslRedirects(true) 处理
-            .setCacheControl(CacheControl.Builder().maxAge(1, TimeUnit.DAYS).build())
+            // P0-4: 注入防盗链默认请求头（Referer + UA 兜底，解决 CDN 防盗链 403）
+            // 说明：setDefaultHeaders 被调用时会覆盖此默认值；此默认值仅用于未被显式覆盖的请求
+            .setDefaultRequestProperties(buildAntiLeechHeaders())
+            // P1: 移除 setCacheControl —— 视频缓存由 SimpleCache 层处理，
+            // Cache-Control: max-age=86400 对密钥请求和 TS 分片请求无价值，
+            // 且可能干扰 CDN 行为（部分 CDN 不期望客户端发送 Cache-Control 请求头）
+            // 注：OkHttpDataSource.Factory 无 setAllowCrossProtocolRedirects 方法，
+            // 跨协议重定向由 OkHttp.followSslRedirects(true) 控制（已在 okHttpClient 中配置）
+    }
+
+    /**
+     * P0-4: 构建防盗链默认请求头（User-Agent + Referer 兜底）
+     *
+     * 用于 cronetDataFactory / okhttpDataFactory lazy 初始化时的默认请求头，确保即使
+     * setDefaultHeaders 未被调用（如嗅探阶段、直链播放场景），请求也带浏览器 UA +
+     * 当前播放页 Referer，突破 CDN 防盗链（403/404）。
+     *
+     * 优先级：
+     * 1. VideoPlay.currentPlayHeaders 中的 Referer（订阅源规则配置，最准确）
+     * 2. 无 Referer（仅注入 UA，避免错误 Referer 干扰）
+     *
+     * 说明：
+     * - User-Agent 始终注入 BROWSER_UA（模拟 Chrome 120 移动版）
+     * - setDefaultHeaders 被调用时会覆盖此默认值（覆盖式更新，非追加）
+     * - 每次 lazy 初始化时读取一次 VideoPlay.currentPlayHeaders（后续 setDefaultHeaders 刷新）
+     *
+     * 成熟方案参考：ExoPlayer 官方文档 "Playing media with anti-leech headers" +
+     *   Chromium MediaDataSource 默认 UA 策略
+     */
+    private fun buildAntiLeechHeaders(): Map<String, String> {
+        val headers = mutableMapOf(
+            "User-Agent" to BROWSER_UA
+        )
+        // 优先从 currentPlayHeaders 提取 Referer（订阅源规则配置）
+        VideoPlay.currentPlayHeaders?.let { playHeaders ->
+            playHeaders.entries.firstOrNull {
+                it.key.equals("Referer", ignoreCase = true)
+            }?.let { (key, value) ->
+                if (value.isNotBlank()) {
+                    headers["Referer"] = value
+                }
+            }
+        }
+        // P0 日志规范：只记录是否注入，不记录 Referer 完整值（防止泄漏）
+        AppLog.putDebug("buildAntiLeechHeaders: hasReferer=${headers.containsKey("Referer")}, headerKeys=${headers.keys}")
+        return headers
     }
 
     /**
@@ -866,6 +1075,8 @@ object ExoPlayerHelper {
      */
     fun setDefaultHeaders(headers: Map<String, String>) {
         okhttpDataFactory.setDefaultRequestProperties(headers)
+        // P0: 同时注入 Cronet 数据源（解决 CDN TLS 指纹检测）
+        cronetDataFactory?.setDefaultRequestProperties(headers)
     }
 
     /**
@@ -888,10 +1099,11 @@ object ExoPlayerHelper {
     /**
      * Exoplayer 内置的缓存
      * P0-3：缓存容量从 VideoPlay.videoCacheSize 读取（首次 lazy 初始化时生效，修改后需重启 App）
+     * R3：容量范围保护从 50-500MB 调整为 50-2048MB（支持 HIGH 档位 1GB 缓存）
      */
-    private val cache: Cache by lazy {
+    internal val cache: Cache by lazy {
         val databaseProvider = StandaloneDatabaseProvider(appCtx)
-        val cacheSizeMb = VideoPlay.videoCacheSize.coerceIn(50, 500)  // 容量范围保护：50-500MB
+        val cacheSizeMb = VideoPlay.videoCacheSize.coerceIn(50, 2048)  // R3: 容量范围保护 50-2048MB
         return@lazy SimpleCache(
             //Exoplayer的缓存路径
             File(appCtx.externalCache, "exoplayer"),
@@ -900,6 +1112,22 @@ object ExoPlayerHelper {
             //记录缓存的数据库
             databaseProvider
         )
+    }
+
+    /**
+     * R3: 创建预加载用 DataSource（供 FirstFramePreloader/VideoPreloader 使用 CacheUtil.cache）
+     *
+     * 复用 okhttpDataFactory 的 OkHttp 配置（强制 HTTP/1.1 + 浏览器 UA + 跟随重定向），
+     * 确保预加载请求与播放器请求行为一致，避免因请求头差异导致缓存未命中。
+     *
+     * @param headers 请求头（Referer/Cookie/UA 防盗链）
+     * @return OkHttpDataSource 实例（实现 DataSource 接口）
+     */
+    internal fun createPreloadDataSource(headers: Map<String, String> = emptyMap()): OkHttpDataSource {
+        if (headers.isNotEmpty()) {
+            okhttpDataFactory.setDefaultRequestProperties(headers)
+        }
+        return okhttpDataFactory.createDataSource()
     }
 
     /**

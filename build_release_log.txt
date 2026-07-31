@@ -1,0 +1,348 @@
+﻿To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14.4/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+
+> Configure project :app
+========== PACKAGE INFO ==========
+Base applicationId: io.legado.miss.app
+Build type: release
+Custom package: false
+==================================
+
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preAppReleaseBuild UP-TO-DATE
+> Task :app:mergeAppReleaseJniLibFolders UP-TO-DATE
+> Task :modules:book:preBuild UP-TO-DATE
+> Task :modules:book:preReleaseBuild UP-TO-DATE
+> Task :modules:book:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :modules:book:mergeReleaseNativeLibs NO-SOURCE
+> Task :modules:book:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :modules:rhino:preBuild UP-TO-DATE
+> Task :modules:rhino:preReleaseBuild UP-TO-DATE
+> Task :modules:rhino:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :modules:rhino:mergeReleaseNativeLibs NO-SOURCE
+> Task :modules:rhino:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :app:mergeAppReleaseNativeLibs UP-TO-DATE
+> Task :app:stripAppReleaseDebugSymbols UP-TO-DATE
+> Task :app:extractAppReleaseNativeSymbolTables UP-TO-DATE
+> Task :app:mergeAppReleaseNativeDebugMetadata NO-SOURCE
+> Task :modules:book:prepareReleaseArtProfile UP-TO-DATE
+> Task :modules:rhino:prepareReleaseArtProfile UP-TO-DATE
+> Task :app:mergeAppReleaseArtProfile UP-TO-DATE
+> Task :app:expandAppReleaseL8ArtProfileWildcards UP-TO-DATE
+> Task :modules:book:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :modules:book:generateReleaseResources UP-TO-DATE
+> Task :modules:book:packageReleaseResources UP-TO-DATE
+> Task :modules:book:processReleaseNavigationResources UP-TO-DATE
+> Task :modules:book:parseReleaseLocalResources UP-TO-DATE
+> Task :modules:book:generateReleaseRFile UP-TO-DATE
+> Task :modules:book:compileReleaseKotlin NO-SOURCE
+> Task :modules:book:javaPreCompileRelease UP-TO-DATE
+> Task :modules:book:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :modules:book:mergeReleaseGeneratedProguardFiles UP-TO-DATE
+> Task :modules:book:exportReleaseConsumerProguardFiles UP-TO-DATE
+> Task :modules:rhino:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :modules:rhino:generateReleaseResources UP-TO-DATE
+> Task :modules:rhino:packageReleaseResources UP-TO-DATE
+> Task :modules:rhino:processReleaseNavigationResources UP-TO-DATE
+> Task :modules:rhino:parseReleaseLocalResources UP-TO-DATE
+> Task :modules:rhino:generateReleaseRFile UP-TO-DATE
+> Task :modules:rhino:compileReleaseKotlin UP-TO-DATE
+> Task :modules:rhino:javaPreCompileRelease UP-TO-DATE
+> Task :modules:rhino:compileReleaseJavaWithJavac NO-SOURCE
+> Task :modules:rhino:mergeReleaseGeneratedProguardFiles UP-TO-DATE
+> Task :modules:rhino:exportReleaseConsumerProguardFiles UP-TO-DATE
+> Task :app:buildKotlinToolingMetadata UP-TO-DATE
+> Task :app:checkAppReleaseDuplicateClasses UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:dataBindingMergeDependencyArtifactsAppRelease UP-TO-DATE
+> Task :app:generateAppReleaseResources UP-TO-DATE
+> Task :app:mergeAppReleaseResources UP-TO-DATE
+> Task :app:packageAppReleaseResources UP-TO-DATE
+> Task :app:processAppReleaseNavigationResources UP-TO-DATE
+> Task :app:parseAppReleaseLocalResources UP-TO-DATE
+> Task :app:dataBindingGenBaseClassesAppRelease UP-TO-DATE
+> Task :app:generateAppReleaseBuildConfig UP-TO-DATE
+> Task :modules:book:writeReleaseAarMetadata UP-TO-DATE
+> Task :modules:rhino:writeReleaseAarMetadata UP-TO-DATE
+> Task :app:checkAppReleaseAarMetadata UP-TO-DATE
+> Task :app:compileAppReleaseNavigationResources UP-TO-DATE
+> Task :app:mapAppReleaseSourceSetPaths UP-TO-DATE
+> Task :app:createAppReleaseCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksAppRelease UP-TO-DATE
+> Task :modules:book:extractDeepLinksRelease UP-TO-DATE
+> Task :modules:book:processReleaseManifest UP-TO-DATE
+> Task :modules:rhino:extractDeepLinksRelease UP-TO-DATE
+> Task :modules:rhino:processReleaseManifest UP-TO-DATE
+> Task :app:processAppReleaseMainManifest UP-TO-DATE
+> Task :app:processAppReleaseManifest UP-TO-DATE
+> Task :app:processAppReleaseManifestForPackage UP-TO-DATE
+> Task :app:processAppReleaseResources UP-TO-DATE
+> Task :modules:book:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :modules:rhino:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :app:javaPreCompileAppRelease UP-TO-DATE
+> Task :modules:book:bundleLibRuntimeToJarRelease UP-TO-DATE
+> Task :modules:rhino:bundleLibRuntimeToJarRelease UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :modules:book:processReleaseJavaRes UP-TO-DATE
+> Task :modules:rhino:processReleaseJavaRes UP-TO-DATE
+> Task :app:mergeAppReleaseStartupProfile UP-TO-DATE
+> Task :app:generateAppReleaseAssets UP-TO-DATE
+> Task :modules:book:generateReleaseAssets UP-TO-DATE
+> Task :modules:book:mergeReleaseAssets UP-TO-DATE
+> Task :modules:rhino:generateReleaseAssets UP-TO-DATE
+> Task :modules:rhino:mergeReleaseAssets UP-TO-DATE
+> Task :app:mergeAppReleaseAssets UP-TO-DATE
+> Task :app:compressAppReleaseAssets UP-TO-DATE
+> Task :app:extractAppReleaseVersionControlInfo UP-TO-DATE
+> Task :modules:book:createFullJarRelease UP-TO-DATE
+> Task :modules:book:extractProguardFiles UP-TO-DATE
+> Task :modules:book:generateReleaseLintModel UP-TO-DATE
+> Task :modules:book:prepareLintJarForPublish UP-TO-DATE
+> Task :modules:rhino:createFullJarRelease UP-TO-DATE
+> Task :modules:rhino:extractProguardFiles UP-TO-DATE
+> Task :modules:rhino:generateReleaseLintModel UP-TO-DATE
+> Task :modules:rhino:prepareLintJarForPublish UP-TO-DATE
+> Task :modules:book:checkReleaseAarMetadata UP-TO-DATE
+> Task :modules:book:stripReleaseDebugSymbols NO-SOURCE
+> Task :modules:book:copyReleaseJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :modules:book:extractDeepLinksForAarRelease UP-TO-DATE
+> Task :modules:book:extractReleaseAnnotations UP-TO-DATE
+> Task :modules:book:mergeReleaseConsumerProguardFiles UP-TO-DATE
+> Task :modules:book:mergeReleaseJavaResource UP-TO-DATE
+> Task :modules:book:syncReleaseLibJars UP-TO-DATE
+> Task :modules:book:bundleReleaseLocalLintAar UP-TO-DATE
+> Task :modules:rhino:checkReleaseAarMetadata UP-TO-DATE
+> Task :modules:rhino:stripReleaseDebugSymbols NO-SOURCE
+> Task :modules:rhino:copyReleaseJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :modules:rhino:extractDeepLinksForAarRelease UP-TO-DATE
+> Task :modules:rhino:extractReleaseAnnotations UP-TO-DATE
+> Task :modules:rhino:mergeReleaseConsumerProguardFiles UP-TO-DATE
+> Task :modules:rhino:mergeReleaseJavaResource UP-TO-DATE
+> Task :modules:rhino:syncReleaseLibJars UP-TO-DATE
+> Task :modules:rhino:bundleReleaseLocalLintAar UP-TO-DATE
+> Task :modules:book:lintVitalAnalyzeRelease UP-TO-DATE
+> Task :modules:book:writeReleaseLintModelMetadata UP-TO-DATE
+> Task :modules:rhino:lintVitalAnalyzeRelease UP-TO-DATE
+> Task :modules:rhino:writeReleaseLintModelMetadata UP-TO-DATE
+> Task :modules:book:generateReleaseLintVitalModel UP-TO-DATE
+> Task :modules:rhino:generateReleaseLintVitalModel UP-TO-DATE
+> Task :app:collectAppReleaseDependencies UP-TO-DATE
+> Task :app:sdkAppReleaseDependencyData UP-TO-DATE
+> Task :app:validateSigningAppRelease UP-TO-DATE
+> Task :app:writeAppReleaseAppMetadata UP-TO-DATE
+> Task :app:writeAppReleaseSigningConfigVersions UP-TO-DATE
+> Task :app:kspAppReleaseKotlin
+> Task :app:kaptGenerateStubsAppReleaseKotlin
+> Task :app:kaptAppReleaseKotlin UP-TO-DATE
+> Task :app:compileAppReleaseKotlin
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/IntentData.kt:22:86 'val id: Long' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/IntentData.kt:34:86 'val id: Long' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/config/AppConfig.kt:279:81 'val sourceSort: String' is deprecated. C-01 �޸������� bookSourceSort����Դ���� rssSort������Դ������ key ������Ǩ�Ƽ��ݶ�ȡ.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/config/ThemeConfig.kt:132:13 'when' is exhaustive so 'else' is redundant here.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:223:44 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:233:15 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:256:15 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:258:15 'static field TYPE_SS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:260:15 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:364:33 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:445:42 Elvis operator (?:) always returns the left operand of non-nullable type 'ResponseBody'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:458:62 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:459:61 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:460:31 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:476:44 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:476:58 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:477:44 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:477:59 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:549:15 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:550:15 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:570:45 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:571:44 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:572:23 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:595:41 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:596:40 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:597:66 'static field TYPE_SS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:602:48 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:617:95 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:618:50 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:619:75 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/ExoPlayerHelper.kt:759:42 Elvis operator (?:) always returns the left operand of non-nullable type 'ResponseBody'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/FirstFramePreloader.kt:135:24 'constructor(p0: Uri, p1: Long, p2: Long, p3: String?): DataSpec' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/FirstFramePreloader.kt:244:24 'constructor(p0: Uri, p1: Long, p2: Long, p3: String?): DataSpec' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/exoplayer/VideoPreloader.kt:136:24 'constructor(p0: Uri, p1: Long, p2: Long, p3: String?): DataSpec' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/glide/LegadoGlideModule.kt:52:48 'static fun newSourceExecutor(p0: Int, p1: String!, p2: GlideExecutor.UncaughtThrowableStrategy!): GlideExecutor!' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/BiliDanmukuParser.kt:237:33 Condition is always 'true'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:89:17 This property hides Java field 'field isPreparing: Boolean' thus making it inaccessible.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:236:29 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:236:41 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:243:11 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:243:32 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:243:44 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:244:11 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:244:33 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:244:46 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:244:59 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:245:11 'static field TYPE_SS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:245:31 'static field TYPE_SS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:245:42 'static field TYPE_SS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:245:53 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:246:11 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:246:34 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:246:48 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:246:62 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:250:19 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:250:42 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:250:56 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:250:70 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:251:19 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:251:41 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:251:54 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:251:67 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:252:19 'static field TYPE_SS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:252:39 'static field TYPE_SS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:252:50 'static field TYPE_SS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:252:61 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:253:34 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:253:46 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:290:19 'static field TYPE_HLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:314:19 'static field TYPE_DASH: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:322:19 'static field TYPE_SS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:330:19 'static field TYPE_OTHER: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:1090:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/gsyVideo/Exo2MediaPlayer.kt:1095:15 'fun onLoadStarted(p0: AnalyticsListener.EventTime, p1: LoadEventInfo, p2: MediaLoadData): Unit' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/storage/Backup.kt:306:42 Elvis operator (?:) always returns the left operand of non-nullable type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/video/VideoUrlExtractor.kt:386:47 Elvis operator (?:) always returns the left operand of non-nullable type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/video/VideoUrlExtractor.kt:471:43 Elvis operator (?:) always returns the left operand of non-nullable type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/webView/WebViewPool.kt:76:13 Return in function with expression body and without explicit return type. Use block body '{...}' or add an explicit return type. This will become an error in language version 2.4. See https://youtrack.jetbrains.com/issue/KTLC-288.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/help/webView/WebViewPool.kt:101:17 Return in function with expression body and without explicit return type. Use block body '{...}' or add an explicit return type. This will become an error in language version 2.4. See https://youtrack.jetbrains.com/issue/KTLC-288.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/VideoPlay.kt:340:39 'var cachePlay: Boolean' is deprecated. ExoPlayer SimpleCache ��Ĭ�Ͻӹܻ��棬�˿��ز�����Ч.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/VideoPlay.kt:396:59 'var cachePlay: Boolean' is deprecated. ExoPlayer SimpleCache ��Ĭ�Ͻӹܻ��棬�˿��ز�����Ч.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/VideoPlay.kt:445:63 'var cachePlay: Boolean' is deprecated. ExoPlayer SimpleCache ��Ĭ�Ͻӹܻ��棬�˿��ز�����Ч.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/VideoPlay.kt:469:67 'var cachePlay: Boolean' is deprecated. ExoPlayer SimpleCache ��Ĭ�Ͻӹܻ��棬�˿��ز�����Ч.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/VideoPlay.kt:577:55 'var cachePlay: Boolean' is deprecated. ExoPlayer SimpleCache ��Ĭ�Ͻӹܻ��棬�˿��ز�����Ч.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/VideoPlay.kt:644:47 'var cachePlay: Boolean' is deprecated. ExoPlayer SimpleCache ��Ĭ�Ͻӹܻ��棬�˿��ز�����Ч.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/VideoPlay.kt:1107:25 Unnecessary safe call on a non-null receiver of type 'List<RssEpisode>'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/VideoPlay.kt:1323:43 'var cachePlay: Boolean' is deprecated. ExoPlayer SimpleCache ��Ĭ�Ͻӹܻ��棬�˿��ز�����Ч.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/rss/Rss.kt:136:171 Unnecessary safe call on a non-null receiver of type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/rss/Rss.kt:235:63 Elvis operator (?:) always returns the left operand of non-nullable type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/service/AudioPlayService.kt:516:32 'static field FLAG_HANDLES_MEDIA_BUTTONS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/service/AudioPlayService.kt:517:40 'static field FLAG_HANDLES_TRANSPORT_CONTROLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/service/VideoPlayService.kt:244:32 'static field FLAG_HANDLES_MEDIA_BUTTONS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/service/VideoPlayService.kt:245:40 'static field FLAG_HANDLES_TRANSPORT_CONTROLS: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/autoTask/AutoTaskAdapter.kt:173:49 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/autoTask/AutoTaskAdapter.kt:183:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/autoTask/AutoTaskAdapter.kt:197:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/autoTask/AutoTaskAdapter.kt:217:70 Redundant call of conversion method.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/autoTask/ImportAutoTaskDialog.kt:76:69 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/changesource/ChangeBookSourceDialog.kt:468:17 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/changesource/ChangeChapterSourceDialog.kt:404:17 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/explore/ExploreShowActivity.kt:86:66 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/manage/BookAdapter.kt:151:56 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/manage/BookAdapter.kt:218:49 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/search/SearchActivity.kt:436:66 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt:621:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt:859:17 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt:879:29 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceActivity.kt:885:29 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapter.kt:179:54 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapter.kt:282:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapter.kt:294:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapter.kt:313:56 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapter.kt:385:49 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapterCompact.kt:45:49 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapterCompact.kt:139:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapterCompact.kt:147:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapterCompact.kt:163:56 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapterGrid.kt:42:49 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapterGrid.kt:106:62 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapterGrid.kt:116:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapterGrid.kt:124:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/source/manage/BookSourceAdapterGrid.kt:140:56 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/toc/rule/TxtTocRuleAdapter.kt:155:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/toc/rule/TxtTocRuleAdapter.kt:167:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/toc/rule/TxtTocRuleAdapter.kt:215:49 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/book/toc/rule/TxtTocRuleDialog.kt:286:55 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/debug/CurlTestScreen.kt:50:28 'val LocalClipboardManager: ProvidableCompositionLocal<ClipboardManager>' is deprecated. Use LocalClipboard instead which supports suspend functions.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/debug/CurlTestScreen.kt:421:76 'val Icons.Filled.FormatAlignLeft: ImageVector' is deprecated. Use the AutoMirrored version at Icons.AutoMirrored.Filled.FormatAlignLeft.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/debug/PingTestScreen.kt:55:28 'val LocalClipboardManager: ProvidableCompositionLocal<ClipboardManager>' is deprecated. Use LocalClipboard instead which supports suspend functions.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/dict/rule/DictRuleAdapter.kt:67:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/dict/rule/DictRuleAdapter.kt:79:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/dict/rule/DictRuleAdapter.kt:193:49 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/image/ImageArticlePagerAdapter.kt:92:117 Unnecessary safe call on a non-null receiver of type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/image/ImageArticlePagerAdapter.kt:92:166 Unnecessary safe call on a non-null receiver of type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/image/ImageArticlePagerAdapter.kt:92:202 Unnecessary safe call on a non-null receiver of type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/image/ImageArticlePagerAdapter.kt:92:247 Unnecessary safe call on a non-null receiver of type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/image/ImageGalleryActivity.kt:467:67 Unnecessary safe call on a non-null receiver of type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/image/ImageGalleryActivity.kt:853:41 'var databaseEnabled: Boolean' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/image/ImageGalleryViewModel.kt:58:91 Unnecessary safe call on a non-null receiver of type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/image/ImageGalleryViewModel.kt:58:140 Unnecessary safe call on a non-null receiver of type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/image/ImageGalleryViewModel.kt:85:62 Elvis operator (?:) always returns the left operand of non-nullable type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/image/ImageGalleryViewModel.kt:108:70 Elvis operator (?:) always returns the left operand of non-nullable type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/image/ImageGalleryViewModel.kt:274:95 Unnecessary safe call on a non-null receiver of type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/image/ImageGalleryViewModel.kt:283:62 Elvis operator (?:) always returns the left operand of non-nullable type 'String'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/image/adapter/ImageCanvasAdapter.kt:762:18 'fun thumbnail(p0: Float): RequestBuilder<Drawable!>' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/main/bookshelf/style1/books/BaseBooksAdapter.kt:80:38 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/main/bookshelf/style1/books/BaseBooksAdapter.kt:87:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/main/bookshelf/style2/BaseBooksAdapter.kt:135:42 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/main/explore/ExploreFragment.kt:166:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/main/explore/ExploreFragment.kt:167:15 'fun onPrepareOptionsMenu(p0: Menu): Unit' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/main/rss/RssFragment.kt:168:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/main/rss/RssFragment.kt:169:15 'fun onPrepareOptionsMenu(p0: Menu): Unit' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/replace/ReplaceRuleAdapter.kt:75:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/replace/ReplaceRuleAdapter.kt:87:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/replace/ReplaceRuleAdapter.kt:217:49 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/search/RssArticleInfoActivity.kt:220:39 Unnecessary safe call on a non-null receiver of type 'SearchRssArticle'.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceActivity.kt:669:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapter.kt:167:50 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapter.kt:198:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapter.kt:210:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapter.kt:231:56 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapter.kt:300:49 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapterCompact.kt:45:49 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapterCompact.kt:134:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapterCompact.kt:142:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapterCompact.kt:159:56 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapterGrid.kt:42:49 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapterGrid.kt:106:62 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapterGrid.kt:116:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapterGrid.kt:124:46 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/ui/rss/source/manage/RssSourceAdapterGrid.kt:141:56 'fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle' is deprecated. This method does not provide type safety at compile time. Use the platform `Bundle` class directly instead.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/utils/ActivityExtensions.kt:131:40 'var systemUiVisibility: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/utils/ActivityExtensions.kt:133:19 'var systemUiVisibility: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/utils/ActivityExtensions.kt:134:40 'static field SYSTEM_UI_FLAG_LIGHT_STATUS_BAR: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/utils/ActivityExtensions.kt:136:19 'var systemUiVisibility: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/utils/ActivityExtensions.kt:137:41 'static field SYSTEM_UI_FLAG_LIGHT_STATUS_BAR: Int' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/utils/BitmapUtils.kt:253:49 'static fun newInstance(p0: String, p1: Boolean): BitmapRegionDecoder' is deprecated. Deprecated in Java.
+w: file:///F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/utils/BitmapUtils.kt:253:77 Elvis operator (?:) always returns the left operand of non-nullable type 'BitmapRegionDecoder'.
+
+> Task :app:compileAppReleaseJavaWithJavac
+> Task :app:mergeAppReleaseGeneratedProguardFiles UP-TO-DATE
+> Task :app:processAppReleaseJavaRes UP-TO-DATE
+> Task :app:mergeAppReleaseJavaResource UP-TO-DATE
+> Task :app:copyRoomSchemas NO-SOURCE
+> Task :app:generateAppReleaseLintVitalReportModel
+> Task :app:expandAppReleaseArtProfileWildcards
+> Task :app:produceAppReleaseComposeMapping
+> Task :app:reportAppReleaseComposeMappingErrors
+> Task :app:lintVitalAnalyzeAppRelease
+> Task :app:minifyAppReleaseWithR8
+> Task :app:mergeAppReleaseComposeMapping
+> Task :app:convertShrunkResourcesToBinaryAppRelease
+> Task :app:optimizeAppReleaseResources
+> Task :app:l8DexDesugarLibAppRelease
+> Task :app:compileAppReleaseArtProfile
+> Task :app:lintVitalReportAppRelease UP-TO-DATE
+> Task :app:lintVitalAppRelease
+> Task :app:packageAppRelease
+> Task :app:createAppReleaseApkListingFileRedirect
+> Task :app:assembleAppRelease
+
+[Incubating] Problems report is available at: file:///F:/myself/github/WeAgentChat/temp/legado/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14.4/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 8m 20s
+127 actionable tasks: 18 executed, 109 up-to-date

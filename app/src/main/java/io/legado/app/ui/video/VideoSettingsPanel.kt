@@ -330,6 +330,55 @@ class VideoSettingsPanel : BottomSheetDialogFragment() {
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
+
+        // ====== BUG2 fix: 播放器优化5项配置 ======
+
+        // 首帧预加载
+        val cbFirstFramePreload = view.findViewById<android.widget.CheckBox>(R.id.cb_first_frame_preload)
+        cbFirstFramePreload?.isChecked = VideoPlay.playerFirstFramePreload
+        cbFirstFramePreload?.setOnCheckedChangeListener { _, isChecked ->
+            VideoPlay.playerFirstFramePreload = isChecked
+        }
+
+        // 缓冲策略 Spinner（0=自动/1=激进/2=平衡/3=保守）
+        val spBufferStrategy = view.findViewById<android.widget.Spinner>(R.id.sp_buffer_strategy)
+        val bufferStrategyLabels = listOf(
+            getString(R.string.player_buffer_strategy_auto),
+            getString(R.string.player_buffer_strategy_aggressive),
+            getString(R.string.player_buffer_strategy_balanced),
+            getString(R.string.player_buffer_strategy_conservative)
+        )
+        spBufferStrategy?.adapter = ArrayAdapter(
+            requireContext(), android.R.layout.simple_spinner_item, bufferStrategyLabels
+        )
+        spBufferStrategy?.setSelection(VideoPlay.playerBufferStrategy.coerceIn(0, 3))
+        spBufferStrategy?.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                VideoPlay.playerBufferStrategy = position
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        // 播放历史
+        val cbHistoryEnabled = view.findViewById<android.widget.CheckBox>(R.id.cb_history_enabled)
+        cbHistoryEnabled?.isChecked = VideoPlay.playerHistoryEnabled
+        cbHistoryEnabled?.setOnCheckedChangeListener { _, isChecked ->
+            VideoPlay.playerHistoryEnabled = isChecked
+        }
+
+        // 播放错误提示
+        val cbErrorTip = view.findViewById<android.widget.CheckBox>(R.id.cb_error_tip)
+        cbErrorTip?.isChecked = VideoPlay.playerErrorTip
+        cbErrorTip?.setOnCheckedChangeListener { _, isChecked ->
+            VideoPlay.playerErrorTip = isChecked
+        }
+
+        // 自动重连
+        val cbAutoReconnect = view.findViewById<android.widget.CheckBox>(R.id.cb_auto_reconnect)
+        cbAutoReconnect?.isChecked = VideoPlay.playerAutoReconnect
+        cbAutoReconnect?.setOnCheckedChangeListener { _, isChecked ->
+            VideoPlay.playerAutoReconnect = isChecked
+        }
     }
 
     private fun Float.toPressSpeedStr(): String {

@@ -31,7 +31,7 @@ setlocal
 
 :: ---------- Config ----------
 set "JAVA_HOME=C:\Program Files\AdoptOpenJDK\jdk-17.0.0.20-hotspot"
-set "ANDROID_HOME=F:\myself\github\WeAgentChat\temp\legado\temp\android-sdk"
+set "ANDROID_HOME=C:\Android\Sdk"
 set "PROJECT_DIR=F:\myself\github\WeAgentChat\temp\legado"
 set "APK_OUTPUT_DIR=%PROJECT_DIR%\app\build\outputs\apk"
 set "GRADLE_USER_HOME=F:\gh"
@@ -177,6 +177,37 @@ for %%f in ("%APK_BUILD_DIR%\*.apk") do (
 
 if "!APK_FOUND!"=="0" (
     echo   [WARN] APK not found in %APK_BUILD_DIR%, check build log.
+)
+
+:: ============================================================
+:: libcronet.so 打包验证（强制）
+:: 来源: 2026-07-30 用户决策，m3u8播放依赖Cronet Native引擎
+:: 详见: docs/project-rules/package-naming.md "libcronet.so 打包强制规范"
+:: ============================================================
+if "!APK_FOUND!"=="1" (
+    echo.
+    echo ============================================================
+    echo   Verifying libcronet.so in APK...
+    echo ============================================================
+    set "VERIFY_OK=0"
+    for %%f in ("%DIST_DIR%\*.apk") do (
+        powershell -NoProfile -Command "Expand-Archive -Path '%%f' -DestinationPath $env:TEMP\apk_check -Force; $so = Get-ChildItem -Path '$env:TEMP\apk_check\lib\arm64-v8a\libcronet.so' -ErrorAction SilentlyContinue; if ($so) { Write-Host '[OK] %%~nxf: libcronet.so packed' -ForegroundColor Green; exit 0 } else { Write-Host '[FAIL] %%~nxf: libcronet.so MISSING! m3u8 playback will fail!' -ForegroundColor Red; exit 1 }" && (
+            set "VERIFY_OK=1"
+        ) || (
+            set "VERIFY_OK=0"
+        )
+        powershell -NoProfile -Command "Remove-Item -Path $env:TEMP\apk_check -Recurse -Force -ErrorAction SilentlyContinue"
+    )
+    if "!VERIFY_OK!"=="0" (
+        echo.
+        echo ============================================================
+        echo   [FAIL] libcronet.so verification failed!
+        echo   m3u8 playback will NOT work. Do not release this APK.
+        echo   Check: app\src\main\jniLibs\arm64-v8a\libcronet.so
+        echo ============================================================
+        pause
+        exit /b 1
+    )
 )
 
 echo.

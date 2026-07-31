@@ -227,6 +227,8 @@ object PreferKey {
     const val highlightRuleItems = "highlightRuleItems"
     const val highlightRuleGroups = "highlightRuleGroups"
     const val highlightRuleCurrentGroup = "highlightRuleCurrentGroup"
+    // T-B2: 覆盖安装一次性内置规则补齐标志（首次升级到 V2 时自动 MERGE 缺失 builtinIds）
+    const val highlightRuleBuiltinMergedV2 = "highlightRuleBuiltinMergedV2"
 
     // F-P1-8 书源/订阅源文件夹视图模式（0=列表视图, 1=文件夹视图）—— 已废弃，保留兼容
     const val sourceViewMode = "sourceViewMode"
