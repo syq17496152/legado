@@ -38,6 +38,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 import tv.danmaku.ijk.media.exo2.IjkExo2MediaPlayer
 import tv.danmaku.ijk.media.exo2.demo.EventLogger
 
@@ -76,6 +77,17 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      * - 避免 onDestroy 后嗅探协程回调 setMediaItem 操作已 release 的 mInternalPlayer
      */
     private var isReleased = false
+
+    /**
+     * FR-3: scope 取消标志位（AtomicBoolean 保证多线程可见性）
+     *
+     * 与 isReleased 职责不同：
+     * - isReleased (L78)：用于 applyMediaSourceByType 入口检查（防止 setMediaItem）
+     * - isScopeCancelled（新增）：用于回调入口检查（防止 onPlaybackStateChanged/onPlayerError/onRenderedFirstFrame 触发业务逻辑）
+     *
+     * releaseSniffResources 中 set(true)，prepareAsyncInternal 成功后 set(false)
+     */
+    private val isScopeCancelled = AtomicBoolean(false)
 
     /**
      * V-003-P0-2: prepareAsyncInternal 重入保护
@@ -410,9 +422,20 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         isReleased = true
         currentSniffJob?.cancel()
         scope.cancel()
+        // FR-3: 标记 scope 已取消，后续 onPlaybackStateChanged/onPlayerError/onRenderedFirstFrame 回调忽略
+        isScopeCancelled.set(true)
+        // FR-2: 同步停止渲染管线——scope.cancel 只取消协程，不解码器/渲染器连接。
+        // mInternalPlayer 是父类 IjkExo2MediaPlayer 的 protected 字段，子类可访问。
+        // stop() 立即断开解码器/渲染器，防止 cancelled 后仍触发首帧渲染回调（铁证：scope cancelled 后 217ms 仍触发 first frame rendered）
+        kotlin.runCatching {
+            mInternalPlayer?.let { player ->
+                player.stop()
+                player.playWhenReady = false
+            }
+        }
         // T2.3: 清除 BUFFERING 超时回调，避免 onDestroy 后误触发 tryNextFallback 操作已 release 的 mInternalPlayer
         bufferingTimeoutHandler.removeCallbacks(bufferingTimeoutRunnable)
-        AppLog.put("ExoPlayer scope cancelled, isReleased=true, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
+        AppLog.put("ExoPlayer scope cancelled, isReleased=true, isScopeCancelled=true, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
     }
 
     /**
@@ -512,6 +535,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             }
             lastPrepareUrl = currentUrl
             lastPrepareHeaders = currentHeaders
+            // FR-3: 新播放会话开始，清除 scope cancelled 标志（确保回调正常触发）
+            isScopeCancelled.set(false)
             // T2.3: 进入新 prepare 时清除可能残留的 BUFFERING 超时回调（避免旧回调误触发降级）
             bufferingTimeoutHandler.removeCallbacks(bufferingTimeoutRunnable)
             // E2 优化：新播放重置重试计数
@@ -710,6 +735,9 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      */
     override fun onPlayerError(error: PlaybackException) {
         super.onPlayerError(error)
+
+        // FR-3: scope cancelled 后忽略回调，防止 cancelled 后仍触发重试/降级等业务逻辑
+        if (isScopeCancelled.get()) return
 
         // P1-3: 直播流 1002 BEHIND_LIVE_WINDOW 自动重试
         // 直播流播放时，如果播放器追直播落在直播窗口后面，ExoPlayer 抛出 BehindLiveWindowException
@@ -992,6 +1020,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      */
     override fun onPlaybackStateChanged(state: Int) {
         super.onPlaybackStateChanged(state)
+        // FR-3: scope cancelled 后忽略回调，防止 cancelled 后仍触发 BUFFERING 超时/首帧埋点等业务逻辑
+        if (isScopeCancelled.get()) return
         val stateName = when (state) {
             Player.STATE_IDLE -> "IDLE"
             Player.STATE_BUFFERING -> "BUFFERING"
@@ -1043,6 +1073,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      */
     override fun onRenderedFirstFrame() {
         super.onRenderedFirstFrame()
+        // FR-3: scope cancelled 后忽略回调，防止 cancelled 后仍触发首帧埋点业务逻辑
+        if (isScopeCancelled.get()) return
         if (!hasReportedFirstFrame) {
             hasReportedFirstFrame = true
             val firstFrameLatency = System.currentTimeMillis() - playbackStartTime
@@ -1082,6 +1114,19 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      * - 记录 onLoadStarted 时间戳，onLoadCompleted 时计算 TTFB
      */
     private var loadStartTimeMs: Long = 0L
+
+    /**
+     * FR-5: TTFB 降档统计字段
+     *
+     * - ttfbSlowCount: 连续慢 TTFB（>1000ms）计数，达到 3 次触发降档
+     * - ttfbFastCount: 连续快 TTFB（<500ms）计数，达到 3 次恢复自动档位
+     * - lastSwitchTime: 上次降档时间戳，最小切换间隔 30 秒（防抖动）
+     *
+     * 注意：只统计 DATA_TYPE_MEDIA（视频分片加载），不统计 manifest/密钥等
+     */
+    private var ttfbSlowCount = 0
+    private var ttfbFastCount = 0
+    private var lastSwitchTime = 0L
 
     /**
      * P2: 加载开始埋点（对齐 tasks.md §8.2）
@@ -1124,6 +1169,41 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                         "bytes=$bytesLoaded, dataType=$dataTypeName, " +
                         "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
                 )
+            }
+            // FR-5: 连续慢/快 TTFB 强制降档/恢复（只统计视频分片加载 DATA_TYPE_MEDIA）
+            if (dataType == C.DATA_TYPE_MEDIA) {
+                if (loadElapsed > 1000) {
+                    ttfbSlowCount++
+                    ttfbFastCount = 0
+                    if (ttfbSlowCount >= 3 && System.currentTimeMillis() - lastSwitchTime > 30_000) {
+                        val currentTier = ExoPlayerHelper.getCurrentBandwidthTier()
+                        val newTier = when (currentTier) {
+                            ExoPlayerHelper.BandwidthTier.GOOD -> ExoPlayerHelper.BandwidthTier.MEDIUM
+                            ExoPlayerHelper.BandwidthTier.MEDIUM -> ExoPlayerHelper.BandwidthTier.WEAK
+                            else -> null
+                        }
+                        if (newTier != null) {
+                            ExoPlayerHelper.forceTier = newTier
+                            lastSwitchTime = System.currentTimeMillis()
+                            AppLog.put(
+                                "FR-5: force downgrade to $newTier, ttfbSlowCount=$ttfbSlowCount, " +
+                                    "ttfb=${loadElapsed}ms, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+                            )
+                        }
+                        ttfbSlowCount = 0
+                    }
+                } else if (loadElapsed < 500) {
+                    ttfbFastCount++
+                    if (ttfbFastCount >= 3 && ExoPlayerHelper.forceTier != null) {
+                        ExoPlayerHelper.forceTier = null
+                        AppLog.put(
+                            "FR-5: recover to auto tier, ttfbFastCount=$ttfbFastCount, " +
+                                "ttfb=${loadElapsed}ms, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+                        )
+                        ttfbFastCount = 0
+                    }
+                    ttfbSlowCount = 0
+                }
             }
             loadStartTimeMs = 0L
         }

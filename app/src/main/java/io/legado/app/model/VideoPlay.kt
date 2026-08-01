@@ -55,6 +55,7 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
@@ -217,6 +218,13 @@ object VideoPlay : CoroutineScope by MainScope(){
     val videoManager by lazy { ExoVideoManager() }
     private var isLoading = false
     private val loadScope = CoroutineScope(SupervisorJob() + IO)
+    /** FR-4/FR-6: switchToArticle 异步任务引用（用于取消前一个异步任务，防止快速切换竞争） */
+    private var switchArticleJob: Coroutine<*>? = null
+    /** FR-4: playRssEpisode 异步任务引用（用于取消前一个异步任务，防止切集竞争） */
+    private var playEpisodeJob: Coroutine<*>? = null
+    /** FR-6: switchToArticle 状态标志（异步加载期间为 true，完成后清除；仅用于状态跟踪，不阻止入口） */
+    @Volatile
+    private var isSwitchingArticle = false
     var videoUrl: String? = null //播放链接
     var singleUrl = false
     var videoTitle: String? = null
@@ -1133,8 +1141,13 @@ object VideoPlay : CoroutineScope by MainScope(){
         rssEpisodeIndex = 0
         rssRouteIndex = 0
         videoTitle = article.title
+        // FR-4: 取消前一个 switchToArticle 异步任务，防止快速切换竞争
+        // FR-6: isSwitchingArticle 状态保护，异步加载期间为 true
+        switchArticleJob?.cancel()
+        isSwitchingArticle = true
+        AppLog.put("switchToArticle: debounce, cancel previous async task, index=$index")
         // 异步查询 rssStar/rssRecord（Room 禁止主线程查询）+ 加载视频信息
-        Coroutine.async(loadScope, IO) {
+        switchArticleJob = Coroutine.async(loadScope, IO) {
             // B2 修复：同步更新 source 以匹配 article.origin
             // 铁证：switchToArticle 加载 rssArticles[index]，但 source 仍是 initSource 中加载的（用户选的源），
             //   若 source 与 rssArticle 不匹配（不同源页面结构不同），ruleContent 解析失败 → 播放失败
@@ -1146,6 +1159,7 @@ object VideoPlay : CoroutineScope by MainScope(){
                     AppLog.put(
                         "switchToArticle: source not found, origin=${article.origin.take(2)}***"
                     )
+                    isSwitchingArticle = false
                     return@async
                 }
                 source = newSource
@@ -1157,6 +1171,8 @@ object VideoPlay : CoroutineScope by MainScope(){
                 rssRecord = appDb.rssReadRecordDao.getRecord(article.link, article.origin)
             }
             withContext(Main) {
+                // FR-6: 清除 isSwitchingArticle 标志（startPlay 调用前）
+                isSwitchingArticle = false
                 // 重新加载该文章的视频信息（复用 startPlay 的 RssSource 分支）
                 startPlay(player)
             }
@@ -1291,7 +1307,10 @@ object VideoPlay : CoroutineScope by MainScope(){
         }
         videoUrl = episode.url
         videoTitle = episode.title
-        Coroutine.async(loadScope, IO) {
+        // FR-4: 取消前一个 playRssEpisode 异步任务，防止快速切集竞争
+        playEpisodeJob?.cancel()
+        AppLog.put("playRssEpisode: debounce, cancel previous async task, episode=${episode.title}")
+        playEpisodeJob = Coroutine.async(loadScope, IO) {
             // 接入三层降级采集：MacCMS播放页解析→DOM解析→网络抓包（统一由 VideoUrlExtractor.extractVideoUrlForEpisode 处理）
             // 替代原手动 MacCMS 解析，增加 DOM 解析和网络抓包降级，提升视频播放成功率
             val resolvedUrl = VideoUrlExtractor.extractVideoUrlForEpisode(episode.url, source, rssArticle)

@@ -323,6 +323,14 @@ class ImageCanvasAdapter(
     fun preloadAround(centerPosition: Int, range: Int = 1) {
         val snapshot = ImagePlay.allImageUrls.value
         if (snapshot.isEmpty()) return
+        // FR-1: preloadAround 节流——距离上次预加载 < 300ms 跳过，避免"取消 5 个 + 新发 5 个"同时发生
+        // 根因：快速滑动时 onScrollStateChanged 频繁触发 preloadAround，每次发起 ±range 个下载请求，
+        // 与 cancelPendingDownload 节流配合，避免"取消旧下载+发起新下载"的震荡循环
+        val now = System.currentTimeMillis()
+        if (now - lastPreloadTimeMs < 300L) {
+            return
+        }
+        lastPreloadTimeMs = now
         // I-003-P0-1: Activity 销毁后不再触发 Glide 加载（铁证：crash-2026-07-26-21-52-34.log）
         // 根因：Activity onDestroy → RecyclerView.dispatchDetachedFromWindow → stopScroll →
         // onScrollStateChanged → preloadAround → Glide.with(context) 抛 IllegalArgumentException
@@ -375,6 +383,9 @@ class ImageCanvasAdapter(
 
     /** RecyclerView 弱引用（用于 preloadAround 获取 Context，避免内存泄漏） */
     private var recyclerViewRef: java.lang.ref.WeakReference<RecyclerView>? = null
+
+    /** FR-1: preloadAround 节流时间戳（避免快速滑动时频繁触发预加载，< 300ms 跳过） */
+    private var lastPreloadTimeMs: Long = 0L
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
         super.onAttachedToRecyclerView(recyclerView)
@@ -459,6 +470,9 @@ class ImageCanvasAdapter(
 
         /** Phase 3.2: downloadOnly 下载句柄（ViewHolder 复用/回收时取消，释放带宽） */
         private var downloadTarget: FutureTarget<File>? = null
+
+        /** FR-1: 取消节流时间戳（避免快速滑动时频繁取消下载，< 100ms 跳过取消让旧下载完成写入磁盘缓存） */
+        private var lastCancelTimeMs: Long = 0L
 
         /**
          * 绑定图片数据
@@ -545,8 +559,26 @@ class ImageCanvasAdapter(
 
         /**
          * 取消未完成的 downloadOnly 下载（ViewHolder 复用/回收时释放带宽）
+         *
+         * FR-1: 取消节流——距离上次取消 < 100ms 跳过取消，让正在进行的下载完成写入磁盘缓存。
+         * 根因：快速滑动时 bind 频繁触发 cancelPendingDownload（bind L495 + loadImage L600 两处），
+         * 新下载刚发起就被下一次 bind 取消，导致下载永远无法完成，图片显示空白。
+         * 节流让旧下载有足够时间完成（100ms 内的连续取消视为同一波次）。
+         *
+         * 安全性：
+         * - 节流跳过取消时，downloadTarget 保持旧值，旧下载继续在 Glide 队列中执行
+         * - 新 loadImage 调用会覆盖 downloadTarget 为新值，旧下载引用丢失但仍继续执行
+         * - 旧下载完成回调 onResourceReady 时，currentUrl != url 守卫会拦截（return false）
+         * - 旧下载的字节会写入磁盘缓存，下次滚动回来命中缓存直接显示
          */
         private fun cancelPendingDownload() {
+            // FR-1: 取消节流检查
+            val now = System.currentTimeMillis()
+            if (now - lastCancelTimeMs < 100L) {
+                // 节流跳过：保留旧 downloadTarget，让旧下载继续完成写入磁盘缓存
+                return
+            }
+            lastCancelTimeMs = now
             downloadTarget?.let { target ->
                 kotlin.runCatching { Glide.with(itemView.context).clear(target) }
             }

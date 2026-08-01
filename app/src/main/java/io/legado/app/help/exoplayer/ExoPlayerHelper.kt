@@ -103,11 +103,28 @@ object ExoPlayerHelper {
     }
 
     /**
+     * FR-5: 强制带宽档位（TTFB 降档机制）
+     *
+     * - 非 null 时 getCurrentBandwidthTier() 返回此值（跳过自动计算）
+     * - Exo2MediaPlayer.onLoadCompleted 中连续 3 次 TTFB>1000ms 设置降档
+     * - 连续 3 次 TTFB<500ms 清除（恢复自动档位）
+     * - 最小切换间隔 30 秒（防抖动）
+     *
+     * 注意：forceTier 只在下次 prepareAsyncInternal 时生效（LoadControl 不可运行时热切换）
+     */
+    @Volatile
+    var forceTier: BandwidthTier? = null
+
+    /**
      * T2.1: 获取当前带宽档位
+     *
+     * FR-5: 若 forceTier 非 null，优先返回 forceTier（TTFB 降档机制）
      *
      * @return 当前带宽档位（WEAK/MEDIUM/GOOD）
      */
     fun getCurrentBandwidthTier(): BandwidthTier {
+        // FR-5: 优先返回强制档位（TTFB 降档）
+        forceTier?.let { return it }
         val bitrateEstimate = bandwidthMeter.bitrateEstimate
         return when {
             bitrateEstimate < 1_000_000 -> BandwidthTier.WEAK   // <1Mbps
