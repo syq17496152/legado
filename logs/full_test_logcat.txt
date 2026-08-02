@@ -1,1 +1,0 @@
-﻿07-28 14:55:44.750   939 20488 I NetworkManagementSocketTagger: tagSocketFd(54, 32769, -1) failed with errno-115

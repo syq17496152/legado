@@ -1,1 +1,0 @@
-﻿07-28 15:04:12.987 V/FA      (  939): AppMeasurementService is shutting down.

@@ -1,1 +1,0 @@
-﻿07-28 14:30:45.041   926   926 D MediaScannerReceiver: action: android.intent.action.MEDIA_SCANNER_SCAN_FILE path: /storage/emulated/0/screen.png
