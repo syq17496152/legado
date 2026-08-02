@@ -55,14 +55,12 @@ object ImageUtils {
             AppLog.putDebug("图片文件头检测命中已知格式, 跳过解密, src=${src.take(60)}")
             return bytes
         }
-        // P2-A 修复：数据长度校验，非块对齐跳过解密
-        // 根因：RssSource 配置了图片解密规则但图片实际未加密，强制解密导致 IllegalBlockSizeException
-        // 证据：appLog 每个会话必现 "图片解密错误 src=...logo.png" + IllegalBlockSizeException DATA_NOT_MULTIPLE_OF_BLOCK_LENGTH
-        // 常见块大小：DES=8, AES=16, SM4=16；非块对齐大概率未加密，跳过解密避免异常
-        if (bytes.size % 8 != 0 && bytes.size % 16 != 0) {
-            return bytes
-        }
-        //解密库hutool.crypto ByteArray|InputStream -> ByteArray
+        // P2-A 修复：数据长度校验已移除
+        // 根因：块对齐校验（size%8!=0 && %16!=0 直接跳过解密）会拦截非块对齐的 base64 编码封面文本，
+        // 导致 coverDecodeJs 根本不执行。base64 文本长度任意（如 95884 字节 %8=4 %16=12），
+        // 被拦截后直接返回 base64 文本，Glide 收到无法解码的数据流（skia unimplemented）。
+        // 未加密图片的保护已由 isKnownImageFormat 文件头检测覆盖，块校验为冗余拦截。
+        // 兜底：evalJS 解密失败时返回原始 bytes（而非 null），避免 failUrl 永久短路导致图片永不再加载。
         return kotlin.runCatching {
             source?.evalJS(ruleJs) {
                 put("book", book)
@@ -78,7 +76,7 @@ object ImageUtils {
         }.getOrNull()?.also {
             // P1-2 缓存解密结果，列表刷新时直接命中
             decodeCache.put(src, it)
-        }
+        } ?: bytes
     }
 
     fun decode(
