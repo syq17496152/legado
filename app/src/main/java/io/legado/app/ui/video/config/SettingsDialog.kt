@@ -30,6 +30,7 @@ class SettingsDialog(private val context: Context, private val callBack: CallBac
             cbStartFull.isChecked = VideoPlay.startFull
             cbFullBottomProgress.isChecked = VideoPlay.fullBottomProgressBar
             cbMuteOnStart.isChecked = VideoPlay.muteOnStart
+            cbCachePlay.isChecked = VideoPlay.videoCache
         }
     }
 
@@ -48,6 +49,9 @@ class SettingsDialog(private val context: Context, private val callBack: CallBac
             }
             cbMuteOnStart.setOnCheckedChangeListener { _, isChecked ->
                 VideoPlay.muteOnStart = isChecked
+            }
+            cbCachePlay.setOnCheckedChangeListener { _, isChecked ->
+                VideoPlay.videoCache = isChecked
             }
             tvPressSpeed.setOnClickListener { _ ->
                 NumberPickerDialog(requireContext(), true)

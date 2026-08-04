@@ -970,22 +970,30 @@ object ExoPlayerHelper {
     /**
      * 支持缓存的DataSource.Factory
      */
-    val cacheDataSourceFactory by lazy {
+    val cacheDataSourceFactory: DataSource.Factory by lazy {
         // P0: 优先使用 Cronet 数据源（TLS 指纹与 Chrome 一致，解决 CDN TLS 指纹检测）
         // 铁证：站点A m3u8，OkHttp TLS 被 CDN 重置（SSLHandshakeException: Connection reset by peer），
         // 但 Cronet（BoringSSL）能成功握手。项目 HTTP 请求层已用 Cronet 成功获取详情页。
         // 回退：Cronet 不可用时用 OkHttp（保持兼容性）
         val upstreamFactory = cronetDataFactory ?: okhttpDataFactory
-        // P2 修复：用 DefaultDataSource 包装，支持 file:// 等本地协议
-        CacheDataSource.Factory()
-            .setCache(cache)
-            .setUpstreamDataSourceFactory(DefaultDataSource.Factory(appCtx, upstreamFactory))
-            .setCacheReadDataSourceFactory(FileDataSource.Factory())
-            .setCacheWriteDataSinkFactory(
-                CacheDataSink.Factory()
-                    .setCache(cache)
-                    .setFragmentSize(CacheDataSink.DEFAULT_FRAGMENT_SIZE)
-            )
+        // P0-3-cache-play 接线：视频缓存总开关（VideoPlay.videoCache，默认开启）
+        // 开启：走 CacheDataSource + SimpleCache 边下边缓存（回看重播零流量、可秒拖缓存区间）
+        // 关闭：仅直连播放，不写磁盘缓存（省存储）
+        // 注意：cacheDataSourceFactory 为 lazy 单例，修改开关需重启 App 生效
+        if (!VideoPlay.videoCache) {
+            // P2 修复：用 DefaultDataSource 包装，支持 file:// 等本地协议
+            DefaultDataSource.Factory(appCtx, upstreamFactory)
+        } else {
+            CacheDataSource.Factory()
+                .setCache(cache)
+                .setUpstreamDataSourceFactory(DefaultDataSource.Factory(appCtx, upstreamFactory))
+                .setCacheReadDataSourceFactory(FileDataSource.Factory())
+                .setCacheWriteDataSinkFactory(
+                    CacheDataSink.Factory()
+                        .setCache(cache)
+                        .setFragmentSize(CacheDataSink.DEFAULT_FRAGMENT_SIZE)
+                )
+        }
     }
 
     /**

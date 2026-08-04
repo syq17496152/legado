@@ -400,6 +400,29 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:text="@string/cache_play"
+                    android:textColor="@color/primaryText"
+                    android:textSize="14sp" />
+
+                <CheckBox
+                    android:id="@+id/cb_cache_play"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:text="@string/video_cache_size"
                     android:textColor="@color/primaryText"
                     android:textSize="14sp" />

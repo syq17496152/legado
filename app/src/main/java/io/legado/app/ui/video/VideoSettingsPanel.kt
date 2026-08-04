@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.CheckBox
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
@@ -311,6 +312,13 @@ class VideoSettingsPanel : BottomSheetDialogFragment() {
                 VideoPlay.videoCacheSize = cacheSizes[position]
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        // P0-3-cache-play 接线：边下边播缓存总开关（默认开启，修改后重启 App 生效）
+        val cbCachePlay = view.findViewById<CheckBox>(R.id.cb_cache_play)
+        cbCachePlay?.isChecked = VideoPlay.videoCache
+        cbCachePlay?.setOnCheckedChangeListener { _, isChecked ->
+            VideoPlay.videoCache = isChecked
         }
 
         // P0-1.8: 播放器类型 Spinner（0=自动 / 1=内置播放器 / 2=WebView）

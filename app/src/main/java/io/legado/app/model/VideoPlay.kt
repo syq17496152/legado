@@ -116,6 +116,16 @@ object VideoPlay : CoroutineScope by MainScope(){
         set(value) {
             videoPrefs.edit { putInt("videoCacheSize", value) }
         }
+    /**  视频缓存总开关（控制 ExoPlayer SimpleCache 边下边播缓存），默认开启
+     * P0-3-cache-play 接线：统一缓存由 ExoPlayerHelper.cacheDataSourceFactory 实现
+     * 关闭后播放请求直连不写入磁盘缓存（省存储）。修改需重启 App 生效
+     * （cacheDataSourceFactory 为 lazy 单例，首次访问时按当前值决定是否缓存）
+     */
+    var videoCache: Boolean
+        get() = videoPrefs.getBoolean("videoCache", true)
+        set(value) {
+            videoPrefs.edit { putBoolean("videoCache", value) }
+        }
 
     /**
      * R3 视频预缓冲用户可配置参数（默认 HIGH 档位激进值，用户可往下调）
