@@ -295,9 +295,25 @@ object ReadBook : CoroutineScope by MainScope() {
         }
         val text = HighlightTextBuilder.build(lines)
         val rules = rulesSnapshot.map {
-            HighlightRuleMatcher.Rule(it.id, it.pattern, it.isRegex, it.toHighlightStyle(), it.timeoutMillisecond)
+            HighlightRuleMatcher.Rule(
+                id = it.id,
+                pattern = it.pattern,
+                isRegex = it.isRegex,
+                style = it.toHighlightStyle(),
+                timeoutMs = it.timeoutMillisecond,
+                replacement = it.replacement,
+                isDotAll = it.isDotAll
+            )
         }
-        val matches = HighlightRuleMatcher.match(text, rules)
+        val startMs = System.currentTimeMillis()
+        val matches = HighlightRuleMatcher.matchWithTemplate(text, rules)
+        runCatching {
+            AppLog.putDebugWithTag(
+                AppLog.TAG_HIGHLIGHT_STYLE,
+                "匹配完成 规则${rules.size} 命中${matches.size} 耗时${System.currentTimeMillis() - startMs}ms",
+                level = AppLog.Level.INFO
+            )
+        }
         if (textChapter.isCompleted) {
             textChapter.highlightRuleMatches = matches
             textChapter.highlightRuleMatchesVersion = versionSnapshot
