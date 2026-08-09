@@ -152,13 +152,22 @@ class ContentProcessor private constructor(
             val useHtmlMap = mutableMapOf<String, String>()
             if (AppConfig.adaptSpecialStyle) { //html处理
                 mContent = AppPattern.useHtmlRegex.replace(mContent) { matchResult ->
-                    val placeholder = "特殊格式的占位不应该被看见${useHtmlMap.size}。"
+                    val placeholder = "${SpecialContentProtector.USEHTML_MARKER_PREFIX}${useHtmlMap.size}\uE001"
                     useHtmlMap[placeholder] = "\n${matchResult.value.replace("\n","")}\n"
                     placeholder
                 }
             }
             if (useReplace && book.getUseReplaceRule()) {
                 //替换
+                val protectedContent = SpecialContentProtector.protect(mContent)
+                mContent = protectedContent.content
+                if (protectedContent.useHtmlCount + protectedContent.imgCount + protectedContent.newPageCount > 0) {
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_SPECIAL_CONTENT,
+                        "protect useHtml=${protectedContent.useHtmlCount} img=${protectedContent.imgCount} newpage=${protectedContent.newPageCount}",
+                        level = AppLog.Level.INFO
+                    )
+                }
                 effectiveReplaceRules = arrayListOf()
                 mContent = mContent.lines().joinToString("\n") { it.trim() }
                 getContentReplaceRules().forEach { item ->
@@ -191,6 +200,27 @@ class ContentProcessor private constructor(
                         AppLog.put("替换净化: 规则 ${item.name}替换出错.\n${mContent}", e)
                         appCtx.toastOnUi("替换净化: 规则 ${item.name}替换出错")
                     }
+                }
+                mContent = try {
+                    val restored = protectedContent.restore(mContent)
+                    val residual = SpecialContentProtector.residualCount(restored)
+                    if (residual > 0) {
+                        AppLog.putDebugWithTag(
+                            AppLog.TAG_SPECIAL_CONTENT,
+                            "restore FAIL residual=$residual",
+                            level = AppLog.Level.ERROR
+                        )
+                    } else if (protectedContent.useHtmlCount + protectedContent.imgCount + protectedContent.newPageCount > 0) {
+                        AppLog.putDebugWithTag(
+                            AppLog.TAG_SPECIAL_CONTENT,
+                            "restore ok",
+                            level = AppLog.Level.INFO
+                        )
+                    }
+                    restored
+                } catch (e: Exception) {
+                    AppLog.putDebugWithTag(AppLog.TAG_SPECIAL_CONTENT, "restore 异常", e)
+                    mContent
                 }
             }
             useHtmlMap.forEach { (placeholder, originalContent) ->

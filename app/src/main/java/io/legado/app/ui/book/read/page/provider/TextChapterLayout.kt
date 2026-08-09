@@ -17,6 +17,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.book.BookContent
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.SpecialContentProtector
 import io.legado.app.help.book.getBookSource
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
@@ -326,6 +327,13 @@ class TextChapterLayout(
         var wordCount = 0
         contents.forEach { content ->
             currentCoroutineContext().ensureActive()
+            if (SpecialContentProtector.hasResidual(content)) {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_SPECIAL_CONTENT,
+                    "分段渲染兜底检测: 发现残留特殊内容占位符",
+                    level = AppLog.Level.ERROR
+                )
+            }
             if (adaptSpecialStyle) {
                 val text = content.trim()
                 if (text == "[newpage]") {
