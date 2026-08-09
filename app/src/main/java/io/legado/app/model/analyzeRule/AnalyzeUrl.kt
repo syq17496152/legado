@@ -9,6 +9,7 @@ import cn.hutool.core.codec.PercentCodec
 import cn.hutool.core.net.RFC3986
 import cn.hutool.core.util.HexUtil
 import com.bumptech.glide.load.model.GlideUrl
+import com.google.gson.annotations.SerializedName
 import com.script.buildScriptBindings
 import com.script.rhino.RhinoScriptEngine
 import com.script.rhino.runScriptWithContext
@@ -232,6 +233,13 @@ class AnalyzeUrl(
         }
         if (urlNoOption.length != ruleUrl.length) {
             val urlOptionStr = ruleUrl.substring(urlMatcher.end())
+            if (Regex("[\"']resolveIp[\"']").containsMatchIn(urlOptionStr)) {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_ANALYZE,
+                    "UrlOption: legacy alias resolveIp detected, legacy source compat active, path=${url.take(50)}",
+                    level = AppLog.Level.INFO
+                )
+            }
             var urlOption = GSONStrict.fromJsonObject<UrlOption>(urlOptionStr).getOrNull()
             if (urlOption == null) {
                 urlOption = GSON.fromJsonObject<UrlOption>(urlOptionStr).getOrNull()
@@ -263,6 +271,13 @@ class AnalyzeUrl(
                 webJs = option.getWebJs()
                 bodyJs = option.getBodyJs()
                 dnsIp = option.getDnsIp()
+                if (!dnsIp.isNullOrBlank()) {
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_ANALYZE,
+                        "UrlOption: dnsIp applied, value=${dnsIp!!.take(30)}",
+                        level = AppLog.Level.INFO
+                    )
+                }
                 option.getJs()?.let { jsStr ->
                     evalJS(jsStr, url)?.toString()?.let {
                         url = it
@@ -855,6 +870,7 @@ class AnalyzeUrl(
         /**
          * 自定义的域名ip
          **/
+        @SerializedName(value = "dnsIp", alternate = ["resolveIp"])
         private var dnsIp: String? = null,
         /**
          * 解析完url参数时执行的js
@@ -965,7 +981,7 @@ class AnalyzeUrl(
             return webJs
         }
         fun setDnsIp(value: String?) {
-            dnsIp = if (value.isNullOrBlank()) null else value
+            dnsIp = if (value.isNullOrBlank()) null else value.trim()
         }
 
         fun getDnsIp(): String? {

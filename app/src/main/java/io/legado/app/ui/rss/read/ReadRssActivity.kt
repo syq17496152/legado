@@ -38,6 +38,9 @@ import io.legado.app.constant.AppConst.imagePathKey
 import io.legado.app.constant.AppLog
 import io.legado.app.databinding.ActivityRssReadBinding
 import io.legado.app.help.WebCacheManager
+import io.legado.app.help.source.SourceCacheManager
+import io.legado.app.help.source.SourceContentFilter
+import io.legado.app.help.source.SourceWebViewController
 import io.legado.app.help.webView.WebJsExtensions
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.CookieManager
@@ -65,7 +68,6 @@ import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.setTintMutate
 import io.legado.app.utils.share
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.textArray
 import io.legado.app.utils.toastOnUi
@@ -76,7 +78,6 @@ import org.apache.commons.text.StringEscapeUtils
 import org.jsoup.Jsoup
 import splitties.views.bottomPadding
 import java.io.ByteArrayInputStream
-import java.util.regex.PatternSyntaxException
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.rss.article.ReadRecordDialog
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
@@ -425,7 +426,7 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
             currentWebView.settings.run {
                 userAgentString = userAgent ?: viewModel.headerMap[AppConst.UA_NAME] ?: AppConfig.userAgent
                 javaScriptEnabled = s.enableJs
-                cacheMode = if (s.cacheFirst) WebSettings.LOAD_CACHE_ELSE_NETWORK else WebSettings.LOAD_DEFAULT
+                cacheMode = if (SourceCacheManager.isCacheFirst(s)) WebSettings.LOAD_CACHE_ELSE_NETWORK else WebSettings.LOAD_DEFAULT
             }
         }
     }
@@ -645,32 +646,9 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
                     ByteArrayInputStream("(() => {$JS_INJECTION\n$preloadJs\n})();".toByteArray())
                 )
             }
-            val blacklist = source.contentBlacklist?.splitNotBlank(",")
-            if (!blacklist.isNullOrEmpty()) {
-                blacklist.forEach {
-                    try {
-                        if (url.startsWith(it) || url.matches(it.toRegex())) {
-                            return createEmptyResource()
-                        }
-                    } catch (e: PatternSyntaxException) {
-                        AppLog.put("黑名单规则正则语法错误 源名称:${source.sourceName} 正则:$it", e)
-                    }
-                }
-            } else {
-                val whitelist = source.contentWhitelist?.splitNotBlank(",")
-                if (!whitelist.isNullOrEmpty()) {
-                    whitelist.forEach {
-                        try {
-                            if (url.startsWith(it) || url.matches(it.toRegex())) {
-                                return super.shouldInterceptRequest(view, request)
-                            }
-                        } catch (e: PatternSyntaxException) {
-                            val msg = "白名单规则正则语法错误 源名称:${source.sourceName} 正则:$it"
-                            AppLog.put(msg, e)
-                        }
-                    }
-                    return createEmptyResource()
-                }
+            // M2 SourceContentFilter 统一 WebView 资源过滤（抽取原有黑名单/白名单逻辑为共享组件）
+            if (!SourceContentFilter.filterUrl(url, source)) {
+                return createEmptyResource()
             }
             return super.shouldInterceptRequest(view, request)
         }
@@ -733,9 +711,11 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
                     binding.titleBar.title = viewModel.upTitleData.value
                 }
             }
-            viewModel.rssSource?.injectJs?.let {
-                if (it.isNotBlank()) {
-                    view.evaluateJavascript(it, null)
+            viewModel.rssSource?.let { source ->
+                SourceWebViewController.getInjectJs(source)?.let {
+                    if (it.isNotBlank()) {
+                        view.evaluateJavascript(it, null)
+                    }
                 }
             }
         }

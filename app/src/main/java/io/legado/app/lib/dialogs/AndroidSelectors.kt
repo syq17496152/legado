@@ -53,6 +53,23 @@ fun Context.selector(
     }
 }
 
+fun Context.selector(
+    title: CharSequence,
+    items: List<CharSequence>,
+    onClick: (DialogInterface, Int) -> Unit,
+    onLongClick: (DialogInterface, Int) -> Unit
+) {
+    with(AndroidAlertBuilder(this)) {
+        this.setTitle(title)
+        items(items, onClick)
+        val dialog = show()
+        dialog.listView?.setOnItemLongClickListener { _, _, position, _ ->
+            onLongClick(dialog, position)
+            true
+        }
+    }
+}
+
 fun <T> Context.selector(
     title: CharSequence,
     items: List<T>,

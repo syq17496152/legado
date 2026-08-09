@@ -8,6 +8,8 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.StrResponse
 import io.legado.app.help.http.warmUpConnection
 import io.legado.app.help.source.SourceLastHostHelper
+import io.legado.app.help.source.SourceNetworkClient
+import io.legado.app.help.source.SourcePreconnectHelper
 import io.legado.app.model.Debug
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
@@ -59,51 +61,16 @@ object Rss {
             coroutineContext = currentCoroutineContext(),
             hasLoginHeader = false
         )
-        // 回填 lastHost
-        SourceLastHostHelper.fillBack(rssSource, analyzeUrl)
-        val checkJs = rssSource.loginCheckJs
-        val res = kotlin.runCatching {
-            analyzeUrl.getStrResponseAwait().let {
-                if (!checkJs.isNullOrBlank()) { //检测源是否已登录
-                    analyzeUrl.evalJS(checkJs, it) as StrResponse
-                } else {
-                    it
-                }
-            }
-        }.getOrElse { throwable ->
-            if (!checkJs.isNullOrBlank()) {
-                val errResponse = analyzeUrl.getErrStrResponse(throwable)
-                try {
-                    (analyzeUrl.evalJS(checkJs, errResponse) as StrResponse).also {
-                        if (it.code() == 500) {
-                            throw throwable
-                        }
-                    }
-                } catch (e: Throwable) {
-                    AppLog.putDebugWithTag(AppLog.TAG_RSS, "RSS源登录检测重试失败 sourceHash=${rssSource.sourceUrl.hashCode()}", e)
-                    throw throwable
-                }
-            } else {
-                throw throwable
-            }
-        }
-        checkRedirect(rssSource, res)
+        // M6 SourceNetworkClient 统一网络请求 + 登录检测 + 重定向检测 + lastHost 回填
+        val res = SourceNetworkClient.requestWithLoginCheck(
+            analyzeUrl = analyzeUrl,
+            source = rssSource,
+            checkJs = rssSource.loginCheckJs
+        )
         Debug.log(rssSource.sourceUrl, "≡获取成功:${analyzeUrl.ruleUrl}")
         val articles = RssParserByRule.parseXML(sortName, sortUrl, res.url, res.body, rssSource, ruleData)
-        // F-P1-F 预连接：列表加载完成后，对前 3 篇文章域名发起 HEAD 预连接，点击时减少 300-1000ms
-        // coroutineScope{}.async{}.awaitAll() 并行执行，kotlin.runCatching 捕获异常，失败不影响列表显示
-        kotlin.runCatching {
-            kotlinx.coroutines.coroutineScope {
-                articles.first.take(3).mapIndexed { index, article ->
-                    async(Dispatchers.IO) {
-                        if (!article.link.isNullOrBlank()) {
-                            AppLog.put("Rss 预连接: 第${index + 1}篇")
-                            warmUpConnection(article.link)
-                        }
-                    }
-                }.awaitAll()
-            }
-        }
+        // M4 SourcePreconnectHelper 统一预连接（F-P1-F 机制：列表加载后预连接前3篇）
+        SourcePreconnectHelper.preconnectTopN(articles.first.mapNotNull { it.link }, 3)
         AppLog.putDebugWithTag(AppLog.TAG_RSS, "获取RSS文章成功 sourceHash=${rssSource.sourceUrl.hashCode()} 文章数=${articles.first.size}", level = AppLog.Level.INFO)
         return articles
     }
@@ -133,7 +100,7 @@ object Rss {
             AppLog.putDebugWithTag(AppLog.TAG_RSS, "进入多线路多集按需采集模式 sourceHash=${rssSource.sourceUrl.hashCode()}", level = AppLog.Level.INFO)
             return getRoutesContentAwait(rssArticle, rssSource.ruleRoutes!!, rssSource.ruleEpisodes!!, rssSource)
         }
-        AppLog.putDebugWithTag(AppLog.TAG_RSS, "开始获取RSS内容 sourceHash=${rssSource.sourceUrl.hashCode()} articleHash=${rssArticle.link.hashCode()} linkLen=${rssArticle.link?.length ?: 0}", level = AppLog.Level.INFO)
+        AppLog.putDebugWithTag(AppLog.TAG_RSS, "开始获取RSS内容 sourceHash=${rssSource.sourceUrl.hashCode()} articleHash=${rssArticle.link.hashCode()} linkLen=${rssArticle.link.length}", level = AppLog.Level.INFO)
         val analyzeUrl = AnalyzeUrl(
             rssArticle.link,
             baseUrl = rssArticle.origin,
@@ -142,35 +109,12 @@ object Rss {
             coroutineContext = currentCoroutineContext(),
             hasLoginHeader = false
         )
-        // 回填 lastHost
-        SourceLastHostHelper.fillBack(rssSource, analyzeUrl)
-        val checkJs = rssSource.loginCheckJs
-        val res = kotlin.runCatching {
-            analyzeUrl.getStrResponseAwait().let {
-                if (!checkJs.isNullOrBlank()) { //检测源是否已登录
-                    analyzeUrl.evalJS(checkJs, it) as StrResponse
-                } else {
-                    it
-                }
-            }
-        }.getOrElse { throwable ->
-            if (!checkJs.isNullOrBlank()) {
-                val errResponse = analyzeUrl.getErrStrResponse(throwable)
-                try {
-                    (analyzeUrl.evalJS(checkJs, errResponse) as StrResponse).also {
-                        if (it.code() == 500) {
-                            throw throwable
-                        }
-                    }
-                } catch (e: Throwable) {
-                    AppLog.putDebugWithTag(AppLog.TAG_RSS, "RSS内容获取登录检测重试失败 sourceHash=${rssSource.sourceUrl.hashCode()}", e)
-                    throw throwable
-                }
-            } else {
-                throw throwable
-            }
-        }
-        checkRedirect(rssSource, res)
+        // M6 SourceNetworkClient 统一网络请求 + 登录检测 + 重定向检测 + lastHost 回填
+        val res = SourceNetworkClient.requestWithLoginCheck(
+            analyzeUrl = analyzeUrl,
+            source = rssSource,
+            checkJs = rssSource.loginCheckJs
+        )
         Debug.log(rssSource.sourceUrl, "≡获取成功:${rssSource.sourceUrl}")
         Debug.log(rssSource.sourceUrl, res.body ?: "", state = 20)
         val analyzeRule = AnalyzeRule(rssArticle, rssSource)

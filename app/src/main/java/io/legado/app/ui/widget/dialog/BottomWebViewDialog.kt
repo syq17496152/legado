@@ -23,6 +23,7 @@ import android.webkit.URLUtil
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -40,6 +41,9 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.databinding.DialogWebViewBinding
 import io.legado.app.help.WebCacheManager
+import io.legado.app.help.source.SourceCacheManager
+import io.legado.app.help.source.SourceContentFilter
+import io.legado.app.help.source.SourceWebViewController
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.webView.PooledWebView
 import io.legado.app.help.webView.WebJsExtensions
@@ -542,6 +546,9 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
         currentWebView.webViewClient = CustomWebViewClient()
         currentWebView.settings.userAgentString = headerMap.get(AppConst.UA_NAME, true)
         source?.let { source ->
+            // M3 SourceCacheManager 统一缓存策略（BookSource 视频源 WebView 获得缓存优先能力）
+            currentWebView.settings.cacheMode =
+                if (SourceCacheManager.isCacheFirst(source)) WebSettings.LOAD_CACHE_ELSE_NETWORK else WebSettings.LOAD_DEFAULT
             (activity as? AppCompatActivity)?.let { currentActivity ->
                 val webJsExtensions =
                     WebJsExtensions(source, currentActivity, currentWebView, bookType, callback = this)
@@ -778,6 +785,18 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
             currentWebView.evaluateJavascript(basicJs, null)
         }
 
+        override fun onPageFinished(view: WebView?, url: String?) {
+            super.onPageFinished(view, url)
+            // M5 SourceWebViewController 统一 JS 注入（BookSource 视频源 WebView 通过 AppConfig.bookSourceInjectJs 获得注入能力）
+            source?.let { src ->
+                SourceWebViewController.getInjectJs(src)?.let { js ->
+                    if (js.isNotBlank()) {
+                        view?.evaluateJavascript(js, null)
+                    }
+                }
+            }
+        }
+
         private fun shouldOverrideUrlLoading(url: Uri): Boolean {
             return when (url.scheme) {
                 "http", "https" -> false
@@ -827,6 +846,11 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
                     "utf-8",
                     ByteArrayInputStream("(() => {$JS_INJECTION\n$preloadJs\n})();".toByteArray())
                 )
+            }
+            // M2 SourceContentFilter 统一 WebView 资源过滤（BookSource 视频源通过 AppConfig 获得过滤能力）
+            val src = source
+            if (!request.isForMainFrame && src != null && !SourceContentFilter.filterUrl(url, src)) {
+                return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream("".toByteArray()))
             }
             return super.shouldInterceptRequest(view, request)
         }

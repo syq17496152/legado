@@ -10,8 +10,7 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.removeAllBookType
 import io.legado.app.help.coroutine.Coroutine
-import io.legado.app.help.http.StrResponse
-import io.legado.app.help.source.SourceLastHostHelper
+import io.legado.app.help.source.SourceNetworkClient
 import io.legado.app.help.source.getBookType
 import io.legado.app.model.Debug
 import io.legado.app.model.analyzeRule.AnalyzeRule
@@ -19,7 +18,6 @@ import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.RuleData
 import io.legado.app.ui.main.explore.ExploreAdapter.Companion.exploreInfoMapList
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -70,36 +68,12 @@ object WebBook {
             ruleData = ruleData,
             coroutineContext = currentCoroutineContext()
         )
-        // 回填 lastHost（变化才写 DB，内存缓存减少 DB 读）
-        SourceLastHostHelper.fillBack(bookSource, analyzeUrl)
-        val checkJs = bookSource.loginCheckJs
-        val res = kotlin.runCatching {
-            analyzeUrl.getStrResponseAwait().let {
-                if (!checkJs.isNullOrBlank()) { //检测书源是否已登录
-                    analyzeUrl.evalJS(checkJs, it) as StrResponse
-                } else {
-                    it
-                }
-            }
-        }.getOrElse { throwable ->
-            if (!checkJs.isNullOrBlank()) {
-                val errResponse = analyzeUrl.getErrStrResponse(throwable)
-                try {
-                    (analyzeUrl.evalJS(checkJs, errResponse) as StrResponse).also {
-                        if (it.code() == 500) {
-                            throw throwable
-                        }
-                    }
-                } catch (ce: CancellationException) {
-                    throw ce  // 守卫：协程取消异常必须重新抛出
-                } catch (_: Throwable) {
-                    throw throwable
-                }
-            } else {
-                throw throwable
-            }
-        }
-        checkRedirect(bookSource, res)
+        // M6 SourceNetworkClient 统一网络请求 + 登录检测 + 重定向检测 + lastHost 回填
+        val res = SourceNetworkClient.requestWithLoginCheck(
+            analyzeUrl = analyzeUrl,
+            source = bookSource,
+            checkJs = bookSource.loginCheckJs
+        )
         return BookList.analyzeBookList(
             bookSource = bookSource,
             ruleData = ruleData,
@@ -146,36 +120,12 @@ object WebBook {
             coroutineContext = currentCoroutineContext(),
             infoMap = exploreInfoMap
         )
-        // 回填 lastHost
-        SourceLastHostHelper.fillBack(bookSource, analyzeUrl)
-        val checkJs = bookSource.loginCheckJs
-        val res = kotlin.runCatching {
-            analyzeUrl.getStrResponseAwait().let {
-                if (!checkJs.isNullOrBlank()) { //检测书源是否已登录
-                    analyzeUrl.evalJS(checkJs, it) as StrResponse
-                } else {
-                    it
-                }
-            }
-        }.getOrElse { throwable ->
-            if (!checkJs.isNullOrBlank()) {
-                val errResponse = analyzeUrl.getErrStrResponse(throwable)
-                try {
-                    (analyzeUrl.evalJS(checkJs, errResponse) as StrResponse).also {
-                        if (it.code() == 500) {
-                            throw throwable
-                        }
-                    }
-                } catch (ce: CancellationException) {
-                    throw ce  // 守卫：协程取消异常必须重新抛出
-                } catch (_: Throwable) {
-                    throw throwable
-                }
-            } else {
-                throw throwable
-            }
-        }
-        checkRedirect(bookSource, res)
+        // M6 SourceNetworkClient 统一网络请求 + 登录检测 + 重定向检测 + lastHost 回填
+        val res = SourceNetworkClient.requestWithLoginCheck(
+            analyzeUrl = analyzeUrl,
+            source = bookSource,
+            checkJs = bookSource.loginCheckJs
+        )
         return BookList.analyzeBookList(
             bookSource = bookSource,
             ruleData = ruleData,
@@ -226,36 +176,12 @@ object WebBook {
                 ruleData = book,
                 coroutineContext = currentCoroutineContext()
             )
-            // 回填 lastHost
-            SourceLastHostHelper.fillBack(bookSource, analyzeUrl)
-            val checkJs = bookSource.loginCheckJs
-            val res = kotlin.runCatching {
-                analyzeUrl.getStrResponseAwait().let {
-                    if (!checkJs.isNullOrBlank()) { //检测书源是否已登录
-                        analyzeUrl.evalJS(checkJs, it) as StrResponse
-                    } else {
-                        it
-                    }
-                }
-            }.getOrElse { throwable ->
-                if (!checkJs.isNullOrBlank()) {
-                    val errResponse = analyzeUrl.getErrStrResponse(throwable)
-                    try {
-                        (analyzeUrl.evalJS(checkJs, errResponse) as StrResponse).also {
-                            if (it.code() == 500) {
-                                throw throwable
-                            }
-                        }
-                    } catch (ce: CancellationException) {
-                        throw ce  // 守卫：协程取消异常必须重新抛出
-                    } catch (_: Throwable) {
-                        throw throwable
-                    }
-                } else {
-                    throw throwable
-                }
-            }
-            checkRedirect(bookSource, res)
+            // M6 SourceNetworkClient 统一网络请求 + 登录检测 + 重定向检测 + lastHost 回填
+            val res = SourceNetworkClient.requestWithLoginCheck(
+                analyzeUrl = analyzeUrl,
+                source = bookSource,
+                checkJs = bookSource.loginCheckJs
+            )
             BookInfo.analyzeBookInfo(
                 bookSource = bookSource,
                 book = book,
@@ -328,36 +254,12 @@ object WebBook {
                     ruleData = book,
                     coroutineContext = currentCoroutineContext()
                 )
-                // 回填 lastHost
-                SourceLastHostHelper.fillBack(bookSource, analyzeUrl)
-                val checkJs = bookSource.loginCheckJs
-                val res = kotlin.runCatching {
-                    analyzeUrl.getStrResponseAwait().let {
-                        if (!checkJs.isNullOrBlank()) { //检测书源是否已登录
-                            analyzeUrl.evalJS(checkJs, it) as StrResponse
-                        } else {
-                            it
-                        }
-                    }
-                }.getOrElse { throwable ->
-                    if (!checkJs.isNullOrBlank()) {
-                        val errResponse = analyzeUrl.getErrStrResponse(throwable)
-                        try {
-                            (analyzeUrl.evalJS(checkJs, errResponse) as StrResponse).also {
-                                if (it.code() == 500) {
-                                    throw throwable
-                                }
-                            }
-                        } catch (ce: CancellationException) {
-                            throw ce  // 守卫：协程取消异常必须重新抛出
-                        } catch (_: Throwable) {
-                            throw throwable
-                        }
-                    } else {
-                        throw throwable
-                    }
-                }
-                checkRedirect(bookSource, res)
+                // M6 SourceNetworkClient 统一网络请求 + 登录检测 + 重定向检测 + lastHost 回填
+                val res = SourceNetworkClient.requestWithLoginCheck(
+                    analyzeUrl = analyzeUrl,
+                    source = bookSource,
+                    checkJs = bookSource.loginCheckJs
+                )
                 BookChapterList.analyzeChapterList(
                     bookSource = bookSource,
                     book = book,
@@ -435,39 +337,15 @@ object WebBook {
                 chapter = bookChapter,
                 coroutineContext = currentCoroutineContext()
             )
-            // 回填 lastHost
-            SourceLastHostHelper.fillBack(bookSource, analyzeUrl)
-            val checkJs = bookSource.loginCheckJs
-            val res = kotlin.runCatching {
-                analyzeUrl.getStrResponseAwait(
-                    jsStr = contentRule.webJs,
-                    sourceRegex = contentRule.sourceRegex
-                ).let {
-                    if (!checkJs.isNullOrBlank()) { //检测书源是否已登录
-                        analyzeUrl.evalJS(checkJs, it) as StrResponse
-                    } else {
-                        it
-                    }
-                }
-            }.getOrElse { throwable ->
-                if (!checkJs.isNullOrBlank()) {
-                    val errResponse = analyzeUrl.getErrStrResponse(throwable)
-                    try {
-                        (analyzeUrl.evalJS(checkJs, errResponse) as StrResponse).also {
-                            if (it.code() == 500) {
-                                throw throwable
-                            }
-                        }
-                    } catch (ce: CancellationException) {
-                        throw ce  // 守卫：协程取消异常必须重新抛出
-                    } catch (_: Throwable) {
-                        throw throwable
-                    }
-                } else {
-                    throw throwable
-                }
-            }
-            checkRedirect(bookSource, res)
+            // M6 SourceNetworkClient 统一网络请求 + 登录检测 + 重定向检测 + lastHost 回填
+            // 仅此处传入 jsStr/sourceRegex（contentRule.webJs/sourceRegex）
+            val res = SourceNetworkClient.requestWithLoginCheck(
+                analyzeUrl = analyzeUrl,
+                source = bookSource,
+                checkJs = bookSource.loginCheckJs,
+                jsStr = contentRule.webJs,
+                sourceRegex = contentRule.sourceRegex
+            )
             BookContent.analyzeContent(
                 bookSource = bookSource,
                 book = book,
@@ -522,19 +400,6 @@ object WebBook {
             throw NoStackTraceException("未搜索到 $name($author) 书籍")
         }.onFailure {
             currentCoroutineContext().ensureActive()
-        }
-    }
-
-    /**
-     * 检测重定向
-     */
-    private fun checkRedirect(bookSource: BookSource, response: StrResponse) {
-        response.raw.priorResponse?.let {
-            if (it.isRedirect) {
-                Debug.log(bookSource.bookSourceUrl, "≡检测到重定向(${it.code})")
-                Debug.log(bookSource.bookSourceUrl, "┌重定向后地址")
-                Debug.log(bookSource.bookSourceUrl, "└${response.url}")
-            }
         }
     }
 

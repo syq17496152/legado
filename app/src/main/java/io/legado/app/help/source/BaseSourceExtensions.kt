@@ -10,6 +10,7 @@ import kotlin.coroutines.CoroutineContext
 
 fun BaseSource.getShareScope(coroutineContext: CoroutineContext? = null): Scriptable? {
     return SharedJsScope.getScope(jsLib, coroutineContext)
+        ?: if (jsLib.isNullOrBlank()) SharedJsScope.getCryptoScope(coroutineContext) else null
 }
 
 fun BaseSource.getSourceType(): Int {

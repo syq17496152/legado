@@ -14,6 +14,7 @@ import io.legado.app.exception.TocEmptyException
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.source.SourcePreconnectHelper
 import io.legado.app.model.Debug
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
@@ -178,6 +179,8 @@ object BookChapterList {
                 )
         currentCoroutineContext().ensureActive()
         upChapterInfo(list, book)
+        // M4 SourcePreconnectHelper 统一预连接（目录加载后预连接前3章，借鉴 RssSource F-P1-F 机制）
+        SourcePreconnectHelper.preconnectTopN(list.map { it.url }, 3)
         return list
     }
 

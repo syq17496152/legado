@@ -124,6 +124,12 @@ object SourceHelp {
     }
 
     private fun deleteBookSourceInternal(key: String) {
+        // B7 回收站：删除前回收（开关关时 recycle 内部直接 return，不影响原行为；runCatching 防回收异常阻断删除）
+        kotlin.runCatching {
+            appDb.bookSourceDao.getBookSource(key)?.let {
+                SourceRecycleBinHelp.recycleBookSources(listOf(it))
+            }
+        }
         removeBookSourceCache(key)
         appDb.bookSourceDao.delete(key)
         appDb.cacheDao.deleteSourceVariables(key)
@@ -147,6 +153,12 @@ object SourceHelp {
     }
 
     private fun deleteRssSourceInternal(key: String) {
+        // B7 回收站：删除前回收（开关关时 recycle 内部直接 return，不影响原行为；runCatching 防回收异常阻断删除）
+        kotlin.runCatching {
+            appDb.rssSourceDao.getByKey(key)?.let {
+                SourceRecycleBinHelp.recycleRssSources(listOf(it))
+            }
+        }
         appDb.rssSourceDao.delete(key)
         appDb.rssArticleDao.delete(key)
         appDb.cacheDao.deleteSourceVariables(key)

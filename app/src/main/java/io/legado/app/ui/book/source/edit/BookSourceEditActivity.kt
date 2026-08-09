@@ -14,6 +14,7 @@ import com.google.android.material.tabs.TabLayout
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookSourceType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
@@ -162,12 +163,12 @@ class BookSourceEditActivity :
         when (item.itemId) {
             R.id.menu_fullscreen_edit -> onFullEditClicked()
 
-            R.id.menu_save -> viewModel.save(getSource()) {
+            R.id.menu_save -> saveSource(getSource()) {
                 setResult(RESULT_OK, Intent().putExtra("origin", it.bookSourceUrl))
                 finish()
             }
 
-            R.id.menu_debug_source -> viewModel.save(getSource()) { source ->
+            R.id.menu_debug_source -> saveSource(getSource()) { source ->
                 startActivity<BookSourceDebugActivity> {
                     putExtra("key", source.bookSourceUrl)
                 }
@@ -187,7 +188,7 @@ class BookSourceEditActivity :
 
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
             R.id.menu_help -> showHelp("ruleHelp")
-            R.id.menu_login -> viewModel.save(getSource()) { source ->
+            R.id.menu_login -> saveSource(getSource()) { source ->
                 startActivity<SourceLoginActivity> {
                     putExtra("type", "bookSource")
                     putExtra("key", source.bookSourceUrl)
@@ -195,7 +196,7 @@ class BookSourceEditActivity :
             }
 
             R.id.menu_set_source_variable -> setSourceVariable()
-            R.id.menu_search -> viewModel.save(getSource()) { source ->
+            R.id.menu_search -> saveSource(getSource()) { source ->
                 SearchActivity.start(this, source)
             }
 
@@ -722,6 +723,51 @@ class BookSourceEditActivity :
                         }
                     }
                 }
+            }
+        }
+    }
+
+    private fun saveSource(
+        source: BookSource,
+        onSuccess: ((BookSource) -> Unit)? = null
+    ) {
+        val oldUrl = viewModel.bookSource?.bookSourceUrl
+        val urlChanged = !oldUrl.isNullOrBlank() && oldUrl != source.bookSourceUrl
+        viewModel.save(source) { savedSource ->
+            if (urlChanged && oldUrl != null) {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_BOOK_ORIGIN_MIGRATE,
+                    "检测到书源URL变更: oldUrl=$oldUrl newUrl=${savedSource.bookSourceUrl} 将检查书架书籍迁移",
+                    level = AppLog.Level.INFO
+                )
+                lifecycleScope.launch {
+                    val hasBooks = withContext(IO) { appDb.bookDao.hasBookByOrigin(oldUrl) }
+                    if (hasBooks) {
+                        alert(R.string.migrate_book_origin_title) {
+                            setMessage(R.string.migrate_book_origin_msg)
+                            positiveButton(R.string.migrate_book_origin_yes) {
+                                lifecycleScope.launch {
+                                    val affected = withContext(IO) {
+                                        appDb.bookDao.updateOrigin(oldUrl, savedSource.bookSourceUrl)
+                                    }
+                                    AppLog.putDebugWithTag(
+                                        AppLog.TAG_BOOK_ORIGIN_MIGRATE,
+                                        "书源URL迁移完成: oldUrl=$oldUrl newUrl=${savedSource.bookSourceUrl} 受影响书籍=$affected",
+                                        level = AppLog.Level.INFO
+                                    )
+                                    onSuccess?.invoke(savedSource)
+                                }
+                            }
+                            negativeButton(R.string.migrate_book_origin_no) {
+                                onSuccess?.invoke(savedSource)
+                            }
+                        }
+                    } else {
+                        onSuccess?.invoke(savedSource)
+                    }
+                }
+            } else {
+                onSuccess?.invoke(savedSource)
             }
         }
     }
