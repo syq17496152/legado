@@ -23,7 +23,8 @@ object DatabaseMigrations {
             migration_39_40, migration_40_41, migration_41_42, migration_42_43,
             migration_89_90, migration_90_91, migration_91_92, migration_92_93,
             migration_93_94, migration_94_95, migration_95_96, migration_96_97,
-            migration_97_98, migration_98_99, migration_99_100, migration_100_101
+            migration_97_98, migration_98_99, migration_99_100, migration_100_101,
+            migration_101_102, migration_102_103
         )
     }
 
@@ -751,6 +752,65 @@ object DatabaseMigrations {
                 AppLog.put("AppDatabase Migration 100→101: playHistories 表创建成功")
             }.onFailure { e ->
                 AppLog.put("AppDatabase Migration 100→101: playHistories 表创建失败: ${e.message}")
+            }
+        }
+    }
+
+
+    /**
+     * B7: 101→102 新增 source_recycle_bin 表（规则回收站）
+     */
+    private val migration_101_102 = object : Migration(101, 102) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            kotlin.runCatching {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS source_recycle_bin(
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        type TEXT NOT NULL DEFAULT '',
+                        key TEXT NOT NULL DEFAULT '',
+                        name TEXT NOT NULL DEFAULT '',
+                        groupName TEXT,
+                        payload TEXT NOT NULL DEFAULT '',
+                        deletedAt INTEGER NOT NULL DEFAULT 0,
+                        expireAt INTEGER NOT NULL DEFAULT 0
+                    )"""
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_source_recycle_bin_type ON source_recycle_bin(type)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_source_recycle_bin_key ON source_recycle_bin(key)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_source_recycle_bin_expireAt ON source_recycle_bin(expireAt)")
+                AppLog.put("AppDatabase Migration 101→102: source_recycle_bin 表创建成功")
+            }.onFailure { e ->
+                AppLog.put("AppDatabase Migration 101→102: source_recycle_bin 表创建失败: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * precise-manage: 102→103 新增 url_records 表（网址记录）
+     */
+    private val migration_102_103 = object : Migration(102, 103) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            kotlin.runCatching {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS url_records(
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        url TEXT NOT NULL,
+                        domain TEXT NOT NULL,
+                        method TEXT NOT NULL,
+                        sourceName TEXT,
+                        sourceUrl TEXT,
+                        timestamp INTEGER NOT NULL,
+                        responseCode INTEGER NOT NULL,
+                        duration INTEGER NOT NULL,
+                        requestBody TEXT,
+                        errorMsg TEXT
+                    )"""
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_url_records_timestamp ON url_records(timestamp)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_url_records_domain ON url_records(domain)")
+                AppLog.put("AppDatabase Migration 102→103: url_records 表创建成功")
+            }.onFailure { e ->
+                AppLog.put("AppDatabase Migration 102→103: url_records 表创建失败: ${e.message}")
             }
         }
     }

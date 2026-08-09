@@ -12,6 +12,7 @@ object PreferKey {
     const val editThemeDark = "editThemeDark"
     const val editTemeAuto = "editTemeAuto"
     const val showUnread = "showUnread"
+    const val showBookshelfReadProgress = "showBookshelfReadProgress"
     const val showBooknameLayout = "showBooknameLayout"
     const val bookshelfMargin = "bookshelfMargin"
     const val bookGroupStyle = "bookGroupStyle"
@@ -49,6 +50,8 @@ object PreferKey {
     const val bookImportFileName = "bookImportFileName"
     const val episodeExportFileName = "episodeExportFileName"
     const val recordLog = "recordLog"
+    const val recordNetworkLog = "recordNetworkLog"
+    const val sourceRecycleBinEnabled = "sourceRecycleBinEnabled"
     const val processText = "process_text"
     const val cleanCache = "cleanCache"
     const val saveTabPosition = "saveTabPosition"
@@ -59,6 +62,17 @@ object PreferKey {
     // 线程池拆分：搜索类独立线程池 + 更新+缓存类独立线程池
     const val searchThreadCount = "searchThreadCount"
     const val updateCacheThreadCount = "updateCacheThreadCount"
+    // B12 缓存并发率（格式同书源：纯数字=间隔毫秒 / 次数/毫秒）
+    const val cacheConcurrentRate = "cacheConcurrentRate"
+    // B16 批注导出 Obsidian（0=API/1=本地文件）
+    const val obsidianExportMethod = "obsidianExportMethod"
+    const val obsidianApiUrl = "obsidianApiUrl"
+    const val obsidianApiKey = "obsidianApiKey"
+    const val obsidianVaultSubPath = "obsidianVaultSubPath"
+    const val obsidianLocalDirUri = "obsidianLocalDirUri"
+    const val obsidianAutoExport = "obsidianAutoExport"
+    // precise-manage: 网址记录开关（默认开启）
+    const val recordUrl = "recordUrl"
     const val migratedThreadCount = "migratedThreadCount" // 老用户迁移标志位（boolean）
     const val rssParseConcurrency = "rssParseConcurrency"
     const val imageLoadConcurrency = "imageLoadConcurrency"
@@ -250,4 +264,11 @@ object PreferKey {
     // 订阅源排序（C-01 启用，原为死代码 C-05）：0=手动/1=名称/2=启用/3=类型/4=分组/5=URL/6=更新时间（与 bookSourceSort 语义统一）
     const val rssSort = "rssSort"
     const val rssSortAscending = "rssSortAscending"
+    // M2 SourceContentFilter：BookSource 视频源 WebView 资源过滤（借鉴 RssSource contentWhitelist/contentBlacklist 机制）
+    const val bookSourceContentBlacklist = "bookSourceContentBlacklist"
+    const val bookSourceContentWhitelist = "bookSourceContentWhitelist"
+    // M3 SourceCacheManager：BookSource 视频源 WebView 缓存策略（借鉴 RssSource cacheFirst 机制）
+    const val bookSourceCacheFirst = "bookSourceCacheFirst"
+    // M5 SourceWebViewController：BookSource 视频源 WebView JS 注入（借鉴 RssSource injectJs 机制）
+    const val bookSourceInjectJs = "bookSourceInjectJs"
 }

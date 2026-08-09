@@ -134,6 +134,12 @@ interface BookDao {
     @get:Query("select max(`order`) from books")
     val maxOrder: Int
 
+    @Query("select exists(select 1 from books where origin = :origin)")
+    fun hasBookByOrigin(origin: String): Boolean
+
+    @Query("update books set origin = :newUrl where origin = :oldUrl")
+    fun updateOrigin(oldUrl: String, newUrl: String): Int
+
     @Query("select exists(select 1 from books where bookUrl = :bookUrl)")
     fun has(bookUrl: String): Boolean
 

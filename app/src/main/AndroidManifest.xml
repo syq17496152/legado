@@ -371,9 +371,29 @@
             android:name=".ui.dict.rule.DictRuleActivity"
             android:configChanges="orientation|screenSize"
             android:hardwareAccelerated="true" />
+        <!-- B7 规则回收站 -->
+        <activity
+            android:name=".ui.source.recycle.RecycleBinActivity"
+            android:launchMode="singleTop"
+            android:screenOrientation="behind" />
         <!-- 文件管理 -->
         <activity
             android:name=".ui.file.FileManageActivity"
+            android:configChanges="orientation|screenSize"
+            android:hardwareAccelerated="true" />
+        <!-- precise-manage: 下载管理 -->
+        <activity
+            android:name=".ui.download.DownloadManageActivity"
+            android:configChanges="orientation|screenSize"
+            android:hardwareAccelerated="true" />
+        <!-- precise-manage: 网址记录 -->
+        <activity
+            android:name=".ui.urlrecord.UrlRecordActivity"
+            android:configChanges="orientation|screenSize"
+            android:hardwareAccelerated="true" />
+        <!-- precise-manage: 存储管理 -->
+        <activity
+            android:name=".ui.book.storage.StorageManageActivity"
             android:configChanges="orientation|screenSize"
             android:hardwareAccelerated="true" />
         <!-- 选择文件 -->

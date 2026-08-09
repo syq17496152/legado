@@ -22,6 +22,7 @@ import io.legado.app.data.dao.DictRuleDao
 import io.legado.app.data.dao.HttpTTSDao
 import io.legado.app.data.dao.KeyboardAssistsDao
 import io.legado.app.data.dao.PlayHistoryDao
+import io.legado.app.data.dao.SourceRecycleBinDao
 import io.legado.app.data.dao.ReadRecordDao
 import io.legado.app.data.dao.ReplaceRuleDao
 import io.legado.app.data.dao.RssArticleDao
@@ -33,6 +34,7 @@ import io.legado.app.data.dao.SearchBookDao
 import io.legado.app.data.dao.SearchKeywordDao
 import io.legado.app.data.dao.ServerDao
 import io.legado.app.data.dao.TxtTocRuleDao
+import io.legado.app.data.dao.UrlRecordDao
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookGroup
@@ -48,6 +50,7 @@ import io.legado.app.data.entities.DictRule
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.data.entities.KeyboardAssist
 import io.legado.app.data.entities.PlayHistory
+import io.legado.app.data.entities.SourceRecycleBin
 import io.legado.app.data.entities.ReadRecord
 import io.legado.app.data.entities.ReadRecordDetail
 import io.legado.app.data.entities.ReplaceRule
@@ -56,6 +59,7 @@ import io.legado.app.data.entities.RssReadRecord
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.RssStar
 import io.legado.app.data.entities.RuleSub
+import io.legado.app.data.entities.UrlRecord
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.data.entities.SearchKeyword
 import io.legado.app.data.entities.Server
@@ -76,7 +80,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 101,
+    version = 103,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -84,7 +88,8 @@ val appDb by lazy {
         RssStar::class, TxtTocRule::class, ReadRecord::class, HttpTTS::class, Cache::class,
         RuleSub::class, DictRule::class, KeyboardAssist::class, Server::class,
         CoverGalleryGroup::class, CoverGalleryImage::class, ReadRecordDetail::class,
-        AutoTaskRule::class, BookHighlight::class, PlayHistory::class],
+        AutoTaskRule::class, BookHighlight::class, PlayHistory::class, SourceRecycleBin::class,
+        UrlRecord::class],
     views = [BookSourcePart::class],
     autoMigrations = [
         AutoMigration(from = 43, to = 44),
@@ -140,6 +145,7 @@ val appDb by lazy {
         // rss-concurrency: 93→94 使用手动 Migration（DatabaseMigrations.migration_93_94）
         // rss-weight: 94→95 使用手动 Migration（DatabaseMigrations.migration_94_95），rssSources 表新增 parseConcurrency + weight 字段
         // rss-unified-search: 98→99 使用手动 Migration（DatabaseMigrations.migration_98_99），search_keywords 表改为复合主键(word, type)
+        // precise-manage: 102→103 使用手动 Migration（DatabaseMigrations.migration_102_103），新增 url_records 表（网址记录）
     ]
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -169,6 +175,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract val autoTaskRuleDao: AutoTaskRuleDao
     abstract val bookHighlightDao: BookHighlightDao
     abstract val playHistoryDao: PlayHistoryDao
+    abstract val sourceRecycleBinDao: SourceRecycleBinDao
+    abstract val urlRecordDao: UrlRecordDao
 
     companion object {
 

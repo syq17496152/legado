@@ -17,12 +17,29 @@ object AppLog {
     const val TAG_DATA = "DataLayer"
     const val TAG_RSS = "Rss"
     const val TAG_CONTENT = "ContentProcess"
+    // 机制层互补组件 Tag（SourceNetworkClient/SourceConcurrencyController 等共用，对应 source-arch-mutual-borrow spec）
+    const val TAG_SOURCE_MECHANISM = "SourceMechanism"
     // V3 新增：图片垂直画布模块 Tag（对应 tasks.md §AOAdapt 日志模板）
     const val TAG_IMAGE_CANVAS = "ImageCanvas"
     const val TAG_IMAGE_DETAIL = "ImageDetail"
     const val TAG_IMAGE_PLAY = "ImagePlay"
     // 图片嗅探模块 Tag（ImageUrlExtractor + ImageSnifferWebView 共用，对应 image-sniffer-optimization spec）
     const val TAG_IMAGE_SNIFF = "ImageSniff"
+    // forks-ecosystem-analysis（Borrow 15 项）各功能点 Tag，供真机 adb logcat -s <TAG>:I 采集
+    const val TAG_CRYPTO_SCOPE = "CryptoScope"          // B1 内置 CryptoJS
+    const val TAG_DECOMPRESS = "Decompress"             // B2 Brotli 解压
+    const val TAG_NETWORK_LOG = "HttpLog"               // B4 网络日志（HttpLog 复用）
+    const val TAG_SEARCH_STORAGE = "SearchStorage"      // B5 搜索存储上限
+    const val TAG_BOOK_ORIGIN_MIGRATE = "BookOriginMigrate" // B6 书源 URL 迁移
+    const val TAG_SOURCE_RECYCLE_BIN = "SourceRecycleBin"   // B7 规则回收站
+    const val TAG_SPECIAL_CONTENT = "SpecialContent"    // B8 特殊内容保护
+    const val TAG_SHELF_PROGRESS = "ShelfProgress"      // B9 书架阅读进度
+    const val TAG_MEMORY_PRESSURE = "MemoryPressure"    // B13 内存压力监控
+    const val TAG_CACHE_STATS = "CacheStats"            // B11 缓存分项统计
+    const val TAG_CACHE_CONCURRENT = "CacheConcurrent"  // B12 缓存并发率
+    const val TAG_WEBDAV_BACKUP = "WebDavBackup"        // B14 WebDAV 删除/重命名
+    const val TAG_HIGHLIGHT_STYLE = "HighlightStyle"    // B15 高亮捕获组样式
+    const val TAG_THOUGHT_EXPORT = "ThoughtExport"      // B16 想法批注导出
 
     enum class Level { ERROR, WARN, INFO, DEBUG }
 

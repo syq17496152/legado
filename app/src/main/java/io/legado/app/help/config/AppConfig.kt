@@ -33,6 +33,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var useAntiAlias = appCtx.getPrefBoolean(PreferKey.antiAlias)
     var userAgent: String = getPrefUserAgent()
     var customHosts = appCtx.getPrefString(PreferKey.customHosts)
+    // M2 SourceContentFilter：BookSource 视频源 WebView 资源过滤（默认空=不过滤）
+    var bookSourceContentBlacklist = appCtx.getPrefString(PreferKey.bookSourceContentBlacklist)
+    var bookSourceContentWhitelist = appCtx.getPrefString(PreferKey.bookSourceContentWhitelist)
+    // M3 SourceCacheManager：BookSource 视频源 WebView 缓存优先（默认 false=沿用现有行为）
+    var bookSourceCacheFirst = appCtx.getPrefBoolean(PreferKey.bookSourceCacheFirst, false)
+    // M5 SourceWebViewController：BookSource 视频源 WebView JS 注入（默认空=不注入=沿用现有行为）
+    var bookSourceInjectJs = appCtx.getPrefString(PreferKey.bookSourceInjectJs)
     var editTheme = appCtx.getPrefInt(PreferKey.editTheme, 0)
     var editThemeDark = appCtx.getPrefInt(PreferKey.editThemeDark, 0)
     var editTemeAuto = appCtx.getPrefBoolean(PreferKey.editTemeAuto)
@@ -51,6 +58,8 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var optimizeRender = CanvasRecorderFactory.isSupport
             && appCtx.getPrefBoolean(PreferKey.optimizeRender, false)
     var recordLog = appCtx.getPrefBoolean(PreferKey.recordLog)
+    var recordNetworkLog = appCtx.getPrefBoolean(PreferKey.recordNetworkLog, false)
+    var sourceRecycleBinEnabled = appCtx.getPrefBoolean(PreferKey.sourceRecycleBinEnabled, false)
     var debugLogFloatingBall = appCtx.getPrefBoolean(PreferKey.debugLogFloatingBall, false)
     var editFontScale = appCtx.getPrefInt(PreferKey.editFontScale, 16)
     var editNonPrintable = appCtx.getPrefInt(PreferKey.editNonPrintable, 0)
@@ -129,6 +138,8 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
                     && appCtx.getPrefBoolean(PreferKey.optimizeRender, false)
 
             PreferKey.recordLog -> recordLog = appCtx.getPrefBoolean(PreferKey.recordLog)
+            PreferKey.recordNetworkLog -> recordNetworkLog = appCtx.getPrefBoolean(PreferKey.recordNetworkLog, false)
+            PreferKey.sourceRecycleBinEnabled -> sourceRecycleBinEnabled = appCtx.getPrefBoolean(PreferKey.sourceRecycleBinEnabled, false)
             PreferKey.debugLogFloatingBall -> debugLogFloatingBall = appCtx.getPrefBoolean(PreferKey.debugLogFloatingBall, false)
 
         }
@@ -194,6 +205,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.showUnread, true)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.showUnread, value)
+        }
+
+    var showBookshelfReadProgress: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.showBookshelfReadProgress, false)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.showBookshelfReadProgress, value)
         }
 
     var showLastUpdateTime: Boolean
@@ -454,6 +471,71 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefInt(PreferKey.updateCacheThreadCount, 16)
         set(value) {
             appCtx.putPrefInt(PreferKey.updateCacheThreadCount, value.coerceIn(1, 64))
+        }
+
+    /**
+     * B12 缓存并发率（格式同书源：纯数字=间隔毫秒 / 次数/毫秒；null/空=不限制）
+     * 缓存下载任务开始时注入到各书源并发率，任务结束恢复
+     */
+    var cacheConcurrentRate: String?
+        get() = appCtx.getPrefString(PreferKey.cacheConcurrentRate)
+        set(value) {
+            if (value.isNullOrBlank()) {
+                appCtx.removePref(PreferKey.cacheConcurrentRate)
+            } else {
+                appCtx.putPrefString(PreferKey.cacheConcurrentRate, value)
+            }
+        }
+
+    /**
+     * B16 批注导出 Obsidian：0=REST API，1=本地 vault 文件
+     */
+    var obsidianExportMethod: Int
+        get() = appCtx.getPrefInt(PreferKey.obsidianExportMethod, 0)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.obsidianExportMethod, value)
+        }
+
+    var obsidianApiUrl: String
+        get() = appCtx.getPrefString(PreferKey.obsidianApiUrl, "http://localhost:27124")
+            ?: "http://localhost:27124"
+        set(value) {
+            appCtx.putPrefString(PreferKey.obsidianApiUrl, value)
+        }
+
+    var obsidianApiKey: String
+        get() = appCtx.getPrefString(PreferKey.obsidianApiKey, "") ?: ""
+        set(value) {
+            appCtx.putPrefString(PreferKey.obsidianApiKey, value)
+        }
+
+    var obsidianVaultSubPath: String
+        get() = appCtx.getPrefString(PreferKey.obsidianVaultSubPath, "") ?: ""
+        set(value) {
+            appCtx.putPrefString(PreferKey.obsidianVaultSubPath, value)
+        }
+
+    var obsidianLocalDirUri: String?
+        get() = appCtx.getPrefString(PreferKey.obsidianLocalDirUri)
+        set(value) {
+            if (value.isNullOrEmpty()) {
+                appCtx.removePref(PreferKey.obsidianLocalDirUri)
+            } else {
+                appCtx.putPrefString(PreferKey.obsidianLocalDirUri, value)
+            }
+        }
+
+    var obsidianAutoExport: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.obsidianAutoExport, false)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.obsidianAutoExport, value)
+        }
+
+    // precise-manage: 网址记录开关（默认开启）
+    var recordUrl: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.recordUrl, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.recordUrl, value)
         }
 
     /**

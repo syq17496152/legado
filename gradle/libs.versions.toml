@@ -54,6 +54,9 @@ protobufJavalite = "4.26.1"
 #noinspection NewerVersionAvailable
 jsoup = "1.16.2"
 
+# brotli 解压（DecompressInterceptor 支持 br 编码）
+brotli = "0.1.2"
+
 # 新版本使用了 API 24 以下不可用的 Arrays.setAll 方法（desugaring 不覆盖此 API），导致进入阅读界面会崩溃
 #noinspection GradleDependency,NewerVersionAvailable
 commonsText = "1.13.1"
@@ -199,6 +202,7 @@ gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 json-path = { module = "com.jayway.jsonpath:json-path", version.ref = "jsonPath" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 jsoupxpath = { module = "cn.wanghaomiao:JsoupXpath", version.ref = "jsoupxpath" }
+brotli = { module = "org.brotli:dec", version.ref = "brotli" }
 junit = { module = "junit:junit", version = "4.13.2" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
