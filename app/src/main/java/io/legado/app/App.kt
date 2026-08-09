@@ -4,12 +4,14 @@ import android.app.Application
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.os.Build
 import androidx.core.graphics.toColorInt
+import com.bumptech.glide.Glide
 import com.github.liuyueyi.quick.transfer.constants.TransType
 import com.jeremyliao.liveeventbus.LiveEventBus
 import com.jeremyliao.liveeventbus.logger.DefaultLogger
@@ -34,10 +36,12 @@ import io.legado.app.data.entities.rule.ExploreRule
 import io.legado.app.data.entities.rule.SearchRule
 import io.legado.app.help.AppFreezeMonitor
 import io.legado.app.help.AppWebDav
+import io.legado.app.help.CacheManager
 import io.legado.app.help.CrashHandler
 import io.legado.app.help.DefaultData
 import io.legado.app.help.DispatchersMonitor
 import io.legado.app.help.LifecycleHelp
+import io.legado.app.help.MemoryPressure
 import io.legado.app.help.RuleBigDataHelp
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.config.AppConfig
@@ -46,6 +50,10 @@ import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.config.ThemeConfig.applyDayNight
 import io.legado.app.help.config.ThemeConfig.applyDayNightInit
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.webView.WebViewPool
+import io.legado.app.model.ImageProvider
+import io.legado.app.ui.widget.image.CoverImageView
+import io.legado.app.utils.buildMainHandler
 import kotlinx.coroutines.Dispatchers.IO
 import io.legado.app.help.http.Cronet
 import io.legado.app.help.http.ObsoleteUrlFactory
@@ -77,6 +85,18 @@ class App : Application() {
 
     private lateinit var oldConfig: Configuration
 
+    // B13 内存压力监控：定时轮询，小堆 3s / 大堆 10s
+    private val memoryTrimHandler by lazy { buildMainHandler() }
+    private val memoryTrimRunnable = object : Runnable {
+        override fun run() {
+            MemoryPressure.throttleTrim(::trimAppMemory)
+            memoryTrimHandler.postDelayed(
+                this,
+                if (MemoryPressure.isSmallHeap) 3_000L else 10_000L
+            )
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         CrashHandler(this)
@@ -100,6 +120,9 @@ class App : Application() {
         defaultSharedPreferences.registerOnSharedPreferenceChangeListener(AppConfig)
         // 线程池拆分配置迁移：必须在业务使用 threadCount 前执行
         migrateThreadCountConfig()
+        // B13 内存压力监控：注册降级回调 + 启动定时轮询
+        MemoryPressure.setTrimCallback(::trimAppMemory)
+        startMemoryPressureMonitor()
         Coroutine.async(executeContext = IO) {
             LogUtils.init(this@App)
             LogUtils.d("App", "onCreate")
@@ -168,6 +191,52 @@ class App : Application() {
             applyDayNight(this)
         }
         oldConfig = Configuration(newConfig)
+    }
+
+    // B13 内存压力监控：启动定时轮询（小堆 3s / 大堆 10s）
+    private fun startMemoryPressureMonitor() {
+        memoryTrimHandler.removeCallbacks(memoryTrimRunnable)
+        memoryTrimHandler.postDelayed(memoryTrimRunnable, 3_000L)
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        kotlin.runCatching {
+            val used = MemoryPressure.usedMemory() / (1024 * 1024)
+            val max = MemoryPressure.maxMemory / (1024 * 1024)
+            val avail = MemoryPressure.availableMemory() / (1024 * 1024)
+            AppLog.putDebugWithTag(
+                AppLog.TAG_MEMORY_PRESSURE,
+                "onTrimMemory level=$level avail=${avail}MB used=${used}MB max=${max}MB smallHeap=${MemoryPressure.isSmallHeap}",
+                level = AppLog.Level.INFO
+            )
+        }
+        trimAppMemory(level)
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onLowMemory() {
+        super.onLowMemory()
+        trimAppMemory(ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL)
+        kotlin.runCatching { Glide.get(this).clearMemory() }
+    }
+
+    // B13 内存压力降级：联动清空/缩小各内存缓存
+    private fun trimAppMemory(level: Int) {
+        kotlin.runCatching {
+            WebViewPool.trimMemory()
+            CacheManager.trimMemory(level)
+            ImageProvider.trimMemory(level)
+            CoverImageView.trimMemory(level)
+            Glide.get(this).trimMemory(level)
+        }
+        kotlin.runCatching {
+            AppLog.putDebugWithTag(
+                AppLog.TAG_MEMORY_PRESSURE,
+                "trim executed level=$level",
+                level = AppLog.Level.WARN
+            )
+        }
     }
 
     /**

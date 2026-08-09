@@ -1,5 +1,6 @@
 package io.legado.app.help
 
+import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.exception.ConcurrentException
 import io.legado.app.model.analyzeRule.AnalyzeUrl.ConcurrentRecord
@@ -52,32 +53,102 @@ class ConcurrentRateLimiter(source: BaseSource?) {
         fun clearRecord(key: String) {
             concurrentRecordMap.remove(key)
         }
+
+        /**
+         * B12 取更严格的并发率（吞吐更小者）
+         * 用于缓存限流注入时合并用户配置与书源自身并发率
+         */
+        fun effectiveRate(rate1: String?, rate2: String?): String? {
+            val t1 = throughput(rate1)
+            val t2 = throughput(rate2)
+            return if (t1 <= t2) rate1 else rate2
+        }
+
+        /**
+         * B12 校验并发率格式：null/空/纯数字/次数/毫秒 均合法
+         */
+        fun isValidRate(rate: String?): Boolean {
+            if (rate.isNullOrBlank()) return true
+            val regex = Regex("""^(\d+)(/(\d+))?$""")
+            val match = regex.matchEntire(rate.trim()) ?: return false
+            if (match.groupValues[1].toIntOrNull()?.let { it <= 0 } == true) return false
+            val interval = match.groupValues[3]
+            return interval.isEmpty() || (interval.toIntOrNull()?.let { it > 0 } == true)
+        }
+
+        /**
+         * B12 计算吞吐（每秒访问次数），越大限制越宽松
+         * 纯数字视为间隔毫秒（1/毫秒）；次数/毫秒 计算 次数*1000/毫秒
+         */
+        private fun throughput(rate: String?): Double {
+            if (rate.isNullOrBlank() || rate == "0") return Double.POSITIVE_INFINITY
+            return try {
+                val rateIndex = rate.indexOf("/")
+                if (rateIndex > 0) {
+                    val limit = rate.take(rateIndex).toInt()
+                    val ms = rate.substring(rateIndex + 1).toInt()
+                    if (limit <= 0 || ms <= 0) return Double.POSITIVE_INFINITY
+                    limit * 1000.0 / ms
+                } else {
+                    val ms = rate.toInt()
+                    if (ms <= 0) return Double.POSITIVE_INFINITY
+                    1000.0 / ms
+                }
+            } catch (_: NumberFormatException) {
+                Double.POSITIVE_INFINITY
+            }
+        }
+
+        private fun buildRecord(rate: String): ConcurrentRecord {
+            val rateIndex = rate.indexOf("/")
+            return if (rateIndex > 0) {
+                val accessLimit = rate.take(rateIndex).toIntOrNull() ?: 1
+                val interval = rate.substring(rateIndex + 1).toIntOrNull() ?: 0
+                ConcurrentRecord(System.currentTimeMillis(), accessLimit, interval, 1)
+            } else {
+                ConcurrentRecord(System.currentTimeMillis(), 1, rate.toIntOrNull() ?: 0, 1)
+            }
+        }
+
+        private fun recordToRate(record: ConcurrentRecord): String {
+            return if (record.accessLimit > 1) {
+                "${record.accessLimit}/${record.interval}"
+            } else {
+                record.interval.toString()
+            }
+        }
     }
 
-    private val concurrentRate = source?.concurrentRate
+    private val source: BaseSource? = source
     private val key = source?.getKey()
     /**
      * 开始访问,并发判断
+     * B12 实时读取 source.concurrentRate（非构造快照），缓存限流注入后可即时生效
      */
     @Throws(ConcurrentException::class)
     private fun fetchStart(): ConcurrentRecord? {
-        if (concurrentRate.isNullOrEmpty() || concurrentRate == "0") {
+        val sourceRate = source?.concurrentRate
+        if (sourceRate.isNullOrEmpty() || sourceRate == "0") {
             return null
         }
         val key = key ?: return null
         var isNewRecord = false
-        val fetchRecord = concurrentRecordMap.computeIfAbsent(key) {
-            isNewRecord = true
-            val rateIndex = concurrentRate.indexOf("/")
-            if (rateIndex > 0) {
-                val accessLimit = concurrentRate.take(rateIndex).toIntOrNull() ?: 1
-                val interval = concurrentRate.substring(rateIndex + 1).toIntOrNull() ?: 0
-                ConcurrentRecord(System.currentTimeMillis(), accessLimit, interval, 1)
+        val fetchRecord = concurrentRecordMap.compute(key) { _, record ->
+            if (record == null) {
+                isNewRecord = true
+                return@compute buildRecord(sourceRate)
             }
-            else {
-                ConcurrentRecord(System.currentTimeMillis(),1,concurrentRate.toIntOrNull() ?: 0, 1)
+            val recordRate = recordToRate(record)
+            if (recordRate != sourceRate) {
+                // 并发率已变更（如缓存限流注入），取更严格者平滑接管
+                val effective = effectiveRate(sourceRate, recordRate)
+                if (effective != recordRate) {
+                    isNewRecord = true
+                    return@compute buildRecord(effective ?: sourceRate)
+                }
             }
-        }
+            record
+        } ?: return null
         if (isNewRecord) return fetchRecord
         val waitTime: Long = synchronized(fetchRecord) {
             //并发控制为 次数/毫秒 , 非并发实际为1/毫秒
@@ -97,6 +168,13 @@ class ConcurrentRateLimiter(source: BaseSource?) {
             }
         }
         if (waitTime > 0) {
+            kotlin.runCatching {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_CACHE_CONCURRENT,
+                    "限流生效 key=$key 等待=${waitTime}ms",
+                    level = AppLog.Level.INFO
+                )
+            }
             throw ConcurrentException(
                 "根据并发率还需等待${waitTime}毫秒才可以访问",
                 waitTime = waitTime

@@ -12,9 +12,11 @@ import com.bumptech.glide.load.engine.executor.GlideExecutor
 import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.module.AppGlideModule
 import io.legado.app.BuildConfig
+import io.legado.app.help.MemoryPressure
 import io.legado.app.help.config.AppConfig
 import java.io.File
 import java.io.InputStream
+import kotlin.math.min
 
 
 @Suppress("unused")
@@ -41,8 +43,23 @@ class LegadoGlideModule : AppGlideModule() {
 
     override fun applyOptions(context: Context, builder: GlideBuilder) {
         super.applyOptions(context, builder)
-        val calculator = MemorySizeCalculator.Builder(context).build()
-        val bitmapPool = AsyncRecycleBitmapPool(calculator.bitmapPoolSize)
+        val calculatorBuilder = MemorySizeCalculator.Builder(context)
+        // B13: 小内存设备缩小 Glide 缓存池，减少 OOM 风险
+        if (MemoryPressure.isSmallHeap) {
+            calculatorBuilder
+                .setMemoryCacheScreens(1f)
+                .setBitmapPoolScreens(1f)
+                .setArrayPoolSize(1024 * 1024)
+                .setMaxSizeMultiplier(0.18f)
+                .setLowMemoryMaxSizeMultiplier(0.12f)
+        }
+        val calculator = calculatorBuilder.build()
+        val bitmapPoolSize = if (MemoryPressure.isSmallHeap) {
+            min(calculator.bitmapPoolSize, (MemoryPressure.maxMemory / 24).toInt())
+        } else {
+            calculator.bitmapPoolSize
+        }
+        val bitmapPool = AsyncRecycleBitmapPool(bitmapPoolSize)
         builder.setMemorySizeCalculator(calculator)
         builder.setBitmapPool(bitmapPool)
         builder.setDiskCache(InternalCacheDiskCacheFactory(context, 1024 * 1024 * 1000))

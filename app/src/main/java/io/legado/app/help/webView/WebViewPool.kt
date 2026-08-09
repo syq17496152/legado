@@ -128,6 +128,19 @@ object WebViewPool {
         }
     }
 
+    // B13: 内存压力时清空闲置 WebView 池
+    fun trimMemory() = poolLock.withLock {
+        if (idlePool.isEmpty()) return
+        val toRemove = idlePool.toList()
+        idlePool.clear()
+        needInitialize = true
+        cleanupJob?.cancel()
+        cleanupJob = null
+        toRemove.forEach { pooled ->
+            destroyWithRetry(pooled.realWebView)
+        }
+    }
+
     private fun createNewWebView(): PooledWebView {
         val webView = VisibleWebView(MutableContextWrapper(appCtx))
         preInitWebView(webView)

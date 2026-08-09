@@ -1,5 +1,6 @@
 package io.legado.app.help
 
+import android.content.ComponentCallbacks2
 import android.webkit.JavascriptInterface
 import androidx.annotation.Keep
 import androidx.collection.LruCache
@@ -13,10 +14,17 @@ import kotlinx.coroutines.runBlocking
 
 private val queryTTFMap = LruCache<String, QueryTTF>(4)
 
+private const val M = 1024 * 1024
+
+// B13: 内存缓存上限随堆大小动态调整，小内存设备减少 OOM 风险
+private fun memoryCacheSize(): Int {
+    return (MemoryPressure.maxMemory / 16).coerceIn(8L * M, 50L * M).toInt()
+}
+
 /**
- * 最多只缓存50M的数据,防止OOM
+ * 内存缓存数据,防止OOM（上限动态：maxMemory/16，范围 8M..50M）
  */
-private val memoryLruCache = object : LruCache<String, Any>(1024 * 1024 * 50) {
+private val memoryLruCache = object : LruCache<String, Any>(memoryCacheSize()) {
 
     override fun sizeOf(key: String, value: Any): Int {
         return value.toString().memorySize()
@@ -32,6 +40,12 @@ object AppCacheManager {
 
     fun getQueryTTF(key: String): QueryTTF? {
         return queryTTFMap[key]
+    }
+
+    // B13: 清空全部内存缓存
+    fun clearMemory() {
+        queryTTFMap.evictAll()
+        memoryLruCache.evictAll()
     }
 
     fun clearSourceVariables() {
@@ -152,6 +166,21 @@ object CacheManager {
         runBlocking(IO) { appDb.cacheDao.delete(key) }
         deleteMemory(key)
         ACache.get().remove(key)
+    }
+
+    // B13: 系统内存压力时降级内存缓存
+    @Suppress("DEPRECATION")
+    fun trimMemory(level: Int) {
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
+            || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW
+            || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
+        ) {
+            AppCacheManager.clearMemory()
+        } else if (level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
+            || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE
+        ) {
+            memoryLruCache.trimToSize(memoryLruCache.maxSize() / 2)
+        }
     }
 }
 

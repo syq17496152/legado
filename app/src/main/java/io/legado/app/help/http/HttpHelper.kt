@@ -139,6 +139,8 @@ val okHttpClient: OkHttpClient by lazy {
             }
         }
         .addInterceptor(OkHttpExceptionInterceptor)
+        // B4 网络日志（敏感头脱敏，开关 recordNetworkLog）
+        .addInterceptor(NetworkLogInterceptor)
         // T4.2: 302 重定向缓存（避免重复请求重定向链，提高抓取成功率）
         .addInterceptor(RedirectCacheInterceptor)
         .addInterceptor { chain ->
@@ -186,6 +188,8 @@ val okHttpClient: OkHttpClient by lazy {
         }
     }
     builder.addInterceptor(DecompressInterceptor)
+    // precise-manage: 网址记录采集（开关 AppConfig.recordUrl）
+    builder.addInterceptor(UrlRecordInterceptor)
     // sniff-result-pipeline-fix FR-3: HTTP/2 StreamReset 容错
     // 根因：OkHttp retryOnConnectionFailure(true) 对 HTTP/2 流重置无效
     // 服务端发送 RST_STREAM 帧 → OkHttp 抛 StreamResetException → 连接池连接未淘汰 → 下次复用仍失败

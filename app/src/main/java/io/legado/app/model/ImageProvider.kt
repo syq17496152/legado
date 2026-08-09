@@ -1,5 +1,6 @@
 package io.legado.app.model
 
+import android.content.ComponentCallbacks2
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Size
@@ -9,6 +10,7 @@ import io.legado.app.constant.AppLog.putDebug
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.MemoryPressure
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.isEpub
 import io.legado.app.help.book.isMobi
@@ -44,7 +46,10 @@ object ImageProvider {
             if (AppConfig.bitmapCacheSize !in 1..1024) {
                 AppConfig.bitmapCacheSize = 50
             }
-            return AppConfig.bitmapCacheSize * M
+            // B13: 缓存上限受堆大小约束，小内存设备避免 OOM
+            val userSize = AppConfig.bitmapCacheSize * M
+            val heapBound = (MemoryPressure.maxMemory / 8).coerceIn(8L * M, 64L * M).toInt()
+            return min(userSize, heapBound)
         }
 
     val bitmapLruCache = BitmapLruCache()
@@ -81,6 +86,8 @@ object ImageProvider {
     }
 
     fun put(key: String, bitmap: Bitmap) {
+        // B13: 内存紧张时先执行降级，再写入
+        MemoryPressure.trimIfNeeded()
         ensureLruCacheSize(bitmap)
         bitmapLruCache.put(key, bitmap)
     }
@@ -207,6 +214,21 @@ object ImageProvider {
 
     fun clear() {
         bitmapLruCache.evictAll()
+    }
+
+    // B13: 系统内存压力时降级图片缓存
+    @Suppress("DEPRECATION")
+    fun trimMemory(level: Int) {
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
+            || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW
+            || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
+        ) {
+            clear()
+        } else if (level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
+            || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE
+        ) {
+            bitmapLruCache.trimToSize(bitmapLruCache.maxSize() / 2)
+        }
     }
 
 }
