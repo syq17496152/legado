@@ -421,7 +421,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
 
         // P0-1: 书源/单URL模式禁用滑动（单 Fragment），订阅源模式保持垂直滑动
-        val isSinglePage = VideoPlay.book != null || VideoPlay.singleUrl
+        // 能力迁移：书源视频多集（episodes 非空且 >1）时放开滑动，支持上下滑动切换上/下集
+        val book = VideoPlay.book
+        val bookEpisodes = VideoPlay.episodes
+        val isSinglePage = VideoPlay.singleUrl ||
+            (book != null && (bookEpisodes.isNullOrEmpty() || bookEpisodes.size <= 1))
 
         // 配置 ViewPager2
         videoPagerAdapter = VideoPagerAdapter(this)
@@ -436,11 +440,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                     super.onPageSelected(position)
                     // 旧 Fragment 暂停
                     currentFragment?.deactivatePlayer()
-                    // 根据数据源更新索引（文章模式 vs 集数模式）
-                    if (!VideoPlay.rssArticles.isNullOrEmpty()) {
-                        VideoPlay.rssArticleIndex = position
-                    } else {
-                        VideoPlay.rssEpisodeIndex = position
+                    // 根据数据源更新索引（文章模式 vs 集数模式 vs 书源剧集模式）
+                    when {
+                        !VideoPlay.rssArticles.isNullOrEmpty() -> VideoPlay.rssArticleIndex = position
+                        VideoPlay.book != null && !VideoPlay.episodes.isNullOrEmpty() ->
+                            VideoPlay.chapterInVolumeIndex = position
+                        else -> VideoPlay.rssEpisodeIndex = position
                     }
                     // 获取新 Fragment
                     val fragment = getVideoFragment(position)
@@ -449,10 +454,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                     if (fragment?.playerView != null) {
                         fragment.activatePlayer()
                     }
-                    // 更新标题（适配文章模式/集数模式）
+                    // 更新标题（适配文章模式/集数模式/书源剧集模式）
                     binding.titleBarNew.title = when {
                         !VideoPlay.rssArticles.isNullOrEmpty() ->
                             VideoPlay.rssArticles?.getOrNull(position)?.title ?: ""
+                        VideoPlay.book != null && !VideoPlay.episodes.isNullOrEmpty() ->
+                            VideoPlay.episodes?.getOrNull(position)?.title ?: VideoPlay.videoTitle ?: ""
                         !VideoPlay.rssEpisodes.isNullOrEmpty() ->
                             VideoPlay.rssEpisodes?.getOrNull(position)?.title ?: VideoPlay.videoTitle ?: ""
                         else -> VideoPlay.videoTitle ?: ""
@@ -469,6 +476,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         // 文章列表模式：定位到用户点击的文章索引（非0时需设置）
         if (!VideoPlay.rssArticles.isNullOrEmpty() && VideoPlay.rssArticleIndex > 0) {
             binding.viewPager.setCurrentItem(VideoPlay.rssArticleIndex, false)
+        }
+        // 书源剧集模式：定位到历史播放的集数索引（非0时需设置）
+        if (VideoPlay.book != null &&
+            !VideoPlay.episodes.isNullOrEmpty() &&
+            VideoPlay.chapterInVolumeIndex > 0
+        ) {
+            binding.viewPager.setCurrentItem(VideoPlay.chapterInVolumeIndex, false)
         }
 
         // 设置标题

@@ -1,9 +1,13 @@
 package io.legado.app.help.image
 
 import io.legado.app.constant.AppLog
+import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssSource
 import io.legado.app.model.analyzeRule.AnalyzeRule
+import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.rss.Rss
 import io.legado.app.utils.NetworkUtils
 import kotlinx.coroutines.CancellationException
@@ -625,6 +629,76 @@ object ImageUrlExtractor {
             }
         }
     }
+
+    /**
+     * 图片书源（BookSourceType.image）章节图片嗅探兜底
+     *
+     * 复用 ImageSnifferWebView，将 RSS 图片源 L2 嗅探能力迁移到图片书源：
+     * - 触发条件：ReadManga.getManageChapter 静态解析（BookHelp.flowImages）0 图
+     * - headerMap 构造：AnalyzeUrl 按书源规则生成（UA/需要登录的 Cookie），Referer 缺省时补章节页 URL
+     * - 超时：L2_WEBVIEW_TIMEOUT_MS（6s），与 RSS L2 一致
+     * - 并发守卫：webviewMutex（同一时间仅 1 个 WebView 嗅探实例）
+     *
+     * @param chapter 当前章节（取 chapter.url 作为嗅探页面）
+     * @param book 书籍对象（作为 AnalyzeUrl ruleData/章节上下文，供书源变量）
+     * @param bookSource 书源（headerMap UA/Cookie 来源）
+     * @return List<String> 嗅探到的图片 URL（可能为空，不抛异常）
+     */
+    suspend fun sniffBookChapterImages(
+        chapter: BookChapter,
+        book: Book,
+        bookSource: BookSource
+    ): List<String> {
+        val url = chapter.url
+        if (url.isNullOrBlank()) {
+            AppLog.putDebugWithTag(
+                AppLog.TAG_IMAGE_SNIFF,
+                "book-chapter sniff skip: chapter.url is null or blank bookUrl=${sanitizeBookUrl(book.bookUrl)}",
+                level = AppLog.Level.WARN
+            )
+            return emptyList()
+        }
+        // 用书源规则构造 headerMap（UA/Cookie），Referer 缺省时用章节页 URL
+        val headerMap = runCatching {
+            AnalyzeUrl(url, source = bookSource, ruleData = book, chapter = chapter).headerMap
+        }.getOrElse {
+            AppLog.putDebugWithTag(
+                AppLog.TAG_IMAGE_SNIFF,
+                "bookChapter sniff header build error: ${it::class.simpleName} msg=${it.message?.take(150)}",
+                throwable = it,
+                level = AppLog.Level.WARN
+            )
+            LinkedHashMap<String, String>()
+        }
+        if (!headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
+            headerMap["Referer"] = url
+        }
+        return webviewMutex.withLock {
+            try {
+                ImageSnifferWebView(
+                    url = url,
+                    headerMap = headerMap,
+                    tag = "book-${bookSource.getKey()}",
+                    timeout = L2_WEBVIEW_TIMEOUT_MS,
+                    delayTime = 1500L
+                ).sniffImageUrls()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_IMAGE_SNIFF,
+                    "bookChapter webview sniff error: ${e::class.simpleName} msg=${e.message?.take(150)}",
+                    throwable = e,
+                    level = AppLog.Level.WARN
+                )
+                emptyList()
+            }
+        }
+    }
+
+    /** 日志脱敏：仅保留书 URL 末尾片段，不输出完整 bookUrl */
+    private fun sanitizeBookUrl(bookUrl: String?): String =
+        bookUrl?.takeLast(40) ?: "null"
 
     // ==================== 常量定义 ====================
 

@@ -2,9 +2,11 @@ package io.legado.app.help.video
 
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BaseSource
+import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.help.http.BackstageWebView
 import io.legado.app.model.analyzeRule.AnalyzeUrl
+import io.legado.app.model.analyzeRule.RuleDataInterface
 import io.legado.app.utils.NetworkUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -574,6 +576,23 @@ object VideoUrlExtractor {
         return if (url.startsWith("http")) url else null
     }
 
+/**
+     * 解析 Referer 注入源（RSS 文章 / 书源章节兼容）
+     *
+     * 能力迁移设计：extractVideoUrlForEpisode 第三参由 RssArticle 泛化为 RuleDataInterface
+     * （docs/specs/sniff-migration-booksource/design.md AD-06）
+     * - RssArticle 使用 link 属性
+     * - BookChapter 使用 url 属性（章节页 URL 作为 Referer）
+     * - 其他规则数据源无 URL 语义时回退到请求 URL 本身
+     */
+    private fun resolveReferer(ruleData: RuleDataInterface?, url: String): String {
+        return when (ruleData) {
+            is RssArticle -> ruleData.link
+            is BookChapter -> ruleData.url
+            else -> url
+        } ?: url
+    }
+
     /**
      * 多线路多集按需采集统一入口：整合三层降级采集视频流 URL
      *
@@ -584,13 +603,13 @@ object VideoUrlExtractor {
      *
      * @param url 播放页 URL 或视频流 URL
      * @param source 订阅源（用于构造 AnalyzeUrl 获取 headerMap）
-     * @param rssArticle 文章（用于 Referer 注入）
+     * @param ruleData 规则数据（RSS 文章 / 书源章节，用于 ruleData 变量与 Referer 注入）
      * @return 解析后的视频流 URL，三层均失败或超时返回 null（T2.9 改造，避免非视频流URL传给 ExoPlayer）
      */
     suspend fun extractVideoUrlForEpisode(
         url: String,
         source: BaseSource?,
-        rssArticle: RssArticle?
+        ruleData: RuleDataInterface?
     ): String? {
         if (url.isBlank()) return null
         // Bug-fix 2026-07-26: URL 已是视频流格式时直接返回，跳过三层解析
@@ -615,10 +634,10 @@ object VideoUrlExtractor {
         // 方案：移除外层超时，让内层各层超时自然累加（第一层 6s + 第三层 6s = 12s）
         // 已知上限：极端情况下总耗时可达 12s（第一层 6s 超时 + 第三层 6s 超时），与原设计一致
         // 构造 AnalyzeUrl（参考 VideoPlay.playRssEpisode 第1037-1041行）
-        val analyzeUrl = AnalyzeUrl(url, source = source, ruleData = rssArticle)
+        val analyzeUrl = AnalyzeUrl(url, source = source, ruleData = ruleData)
         // 注入 Referer（参考 VideoPlay 第1043-1045行，模拟 WebView 行为解决 CDN 防盗链 404）
         if (!analyzeUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
-            analyzeUrl.headerMap["Referer"] = rssArticle?.link ?: url
+            analyzeUrl.headerMap["Referer"] = resolveReferer(ruleData, url)
         }
         var resolvedUrl = resolvePlayerPageUrl(analyzeUrl.url)
         val isMacCms = isMacCmsPlayPage(resolvedUrl)

@@ -19,6 +19,7 @@ import io.legado.app.help.book.update
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.globalExecutor
+import io.legado.app.help.image.ImageUrlExtractor
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.ui.book.manga.entities.BaseMangaPage
 import io.legado.app.ui.book.manga.entities.MangaChapter
@@ -597,6 +598,23 @@ object ReadManga : CoroutineScope by MainScope() {
     }
 
     private suspend fun getManageChapter(chapter: BookChapter, content: String): MangaChapter {
+        val mangaPages = flowImagesToPages(chapter, content)
+        return buildManageChapter(chapter, mangaPages)
+    }
+
+    /**
+     * 静态解析章节正文图片 URL（能力迁移：图片书源静态解析 0 图时走 WebView 嗅探兜底）
+     *
+     * 设计参考：docs/specs/sniff-migration-booksource/design.md 子方案A
+     * - 静态解析：BookHelp.flowImages 纯正则提取 <img> 标签
+     * - 嗅探兜底：静态解析 0 图且非卷时，复用 ImageUrlExtractor.sniffBookChapterImages
+     *   （ImageSnifferWebView + IMAGE_SNIFF_JS 5 路 hook，6s 超时）
+     * - 卷（isVolume）不嗅探：卷无正文，避免无效 WebView 加载
+     */
+    private suspend fun flowImagesToPages(
+        chapter: BookChapter,
+        content: String
+    ): List<MangaPage> {
         val list = BookHelp.flowImages(chapter, content)
             .distinctUntilChanged().mapIndexed { index, src ->
                 MangaPage(
@@ -608,6 +626,31 @@ object ReadManga : CoroutineScope by MainScope() {
                 )
             }.toList()
 
+        if (list.isEmpty() && !chapter.isVolume) {
+            val book = book ?: return list
+            val bookSource = bookSource
+            if (bookSource != null) {
+                val sniffed = ImageUrlExtractor.sniffBookChapterImages(chapter, book, bookSource)
+                if (sniffed.isNotEmpty()) {
+                    return sniffed.mapIndexed { index, src ->
+                        MangaPage(
+                            chapterIndex = chapter.index,
+                            chapterSize = chapterSize,
+                            mImageUrl = src,
+                            index = index,
+                            mChapterName = chapter.title
+                        )
+                    }
+                }
+            }
+        }
+        return list
+    }
+
+    private fun buildManageChapter(
+        chapter: BookChapter,
+        list: List<MangaPage>
+    ): MangaChapter {
         val imageCount = list.size
 
         list.forEach {

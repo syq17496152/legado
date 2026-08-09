@@ -643,8 +643,16 @@ object VideoPlay : CoroutineScope by MainScope(){
                     content
                 }
                 videoUrl = mUrl
+                // 能力迁移：视频书源正文为播放页 URL 时接入三层嗅探链（design 子方案B）
+                // 非 MPD 文本且非本地文件时，用 extractVideoUrlForEpisode 解析真实流 URL，失败回退直连
+                val sniffedUrl = if (mUrl.startsWith("<") || mUrl.startsWith("file://")) {
+                    mUrl
+                } else {
+                    VideoUrlExtractor.extractVideoUrlForEpisode(mUrl, source, chapter) ?: mUrl
+                }
+                videoUrl = sniffedUrl
                 val analyzeUrl = AnalyzeUrl(
-                    mUrl,
+                    sniffedUrl,
                     source = source,
                     ruleData = book,
                     chapter = chapter
