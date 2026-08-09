@@ -8,12 +8,12 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookSource
 import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 
 @RunWith(AndroidJUnit4::class)
 class DaoTest {
@@ -38,7 +38,7 @@ class DaoTest {
         db.bookDao.insert(book)
         val result = db.bookDao.getBook("test://book1")
         assertNotNull(result)
-        assertEquals("测试书", result.name)
+        assertEquals("测试书", result!!.name)
         assertEquals("作者", result.author)
     }
 
@@ -50,7 +50,7 @@ class DaoTest {
         db.bookDao.update(updated)
         val result = db.bookDao.getBook("test://book3")
         assertNotNull(result)
-        assertEquals("更新名", result.name)
+        assertEquals("更新名", result!!.name)
     }
 
     @Test
@@ -71,7 +71,7 @@ class DaoTest {
         db.bookSourceDao.insert(source)
         val result = db.bookSourceDao.getBookSource("https://test.com")
         assertNotNull(result)
-        assertEquals("测试源", result.bookSourceName)
+        assertEquals("测试源", result!!.bookSourceName)
         assertEquals("测试", result.bookSourceGroup)
     }
 
@@ -81,6 +81,6 @@ class DaoTest {
         db.bookGroupDao.insert(group)
         val result = db.bookGroupDao.getByID(100L)
         assertNotNull(result)
-        assertEquals("测试分组", result.groupName)
+        assertEquals("测试分组", result!!.groupName)
     }
 }

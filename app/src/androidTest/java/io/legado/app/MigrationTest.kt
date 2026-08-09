@@ -49,4 +49,29 @@ class MigrationTest {
                 close()
             }
     }
+
+    @Test
+    @Throws(IOException::class)
+    fun migrate101To102() {
+        // B7: source_recycle_bin table added in 101 -> 102.
+        helper.createDatabase(TEST_DB, 101).apply {
+            close()
+        }
+        Room.databaseBuilder(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+            AppDatabase::class.java,
+            TEST_DB
+        ).addMigrations(*ALL_MIGRATIONS)
+            .build().apply {
+                // Verify the new table is present and usable after migration.
+                val db = openHelper.writableDatabase
+                val exists = db.query(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='source_recycle_bin'"
+                ).use { cursor ->
+                    cursor.moveToFirst() && cursor.count > 0
+                }
+                org.junit.Assert.assertTrue("source_recycle_bin table missing after 101->102", exists)
+                close()
+            }
+    }
 }
