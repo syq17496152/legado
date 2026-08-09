@@ -27,6 +27,8 @@ abstract class BaseBooksAdapter<VB : ViewBinding>(context: Context) :
                     oldItem.name != newItem.name -> false
                     oldItem.author != newItem.author -> false
                     oldItem.durChapterTitle != newItem.durChapterTitle -> false
+                    oldItem.durChapterIndex != newItem.durChapterIndex -> false
+                    oldItem.durChapterPos != newItem.durChapterPos -> false
                     oldItem.latestChapterTitle != newItem.latestChapterTitle -> false
                     oldItem.lastCheckCount != newItem.lastCheckCount -> false
                     oldItem.getDisplayCover() != newItem.getDisplayCover() -> false
@@ -61,6 +63,11 @@ abstract class BaseBooksAdapter<VB : ViewBinding>(context: Context) :
                 }
                 if (oldItem.latestChapterTime != newItem.latestChapterTime) {
                     bundle.putBoolean("lastUpdateTime", true)
+                }
+                if (oldItem.durChapterIndex != newItem.durChapterIndex
+                    || oldItem.durChapterPos != newItem.durChapterPos
+                ) {
+                    bundle.putBoolean("progress", true)
                 }
                 if (bundle.isEmpty) return null
                 return bundle

@@ -188,6 +188,39 @@
         app:layout_constraintTop_toBottomOf="@+id/tv_read"
         tools:ignore="TextContrastCheck" />
 
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/pb_read_progress"
+        android:layout_width="0dp"
+        android:layout_height="2dp"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="2dp"
+        android:visibility="gone"
+        app:indicatorColor="@color/accent"
+        app:trackThickness="2dp"
+        app:layout_constraintBottom_toTopOf="@+id/tv_last"
+        app:layout_constraintLeft_toLeftOf="@+id/tv_name"
+        app:layout_constraintRight_toLeftOf="@+id/tv_read_percent"
+        app:layout_constraintTop_toBottomOf="@+id/tv_read"
+        tools:ignore="UnusedAttribute"
+        tools:progress="60"
+        tools:visibility="visible" />
+
+    <TextView
+        android:id="@+id/tv_read_percent"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:includeFontPadding="false"
+        android:visibility="gone"
+        android:textColor="@color/tv_text_summary"
+        android:textSize="11sp"
+        app:layout_constraintBottom_toBottomOf="@+id/pb_read_progress"
+        app:layout_constraintLeft_toRightOf="@+id/pb_read_progress"
+        app:layout_constraintRight_toRightOf="@id/fl_has_new"
+        app:layout_constraintTop_toTopOf="@+id/pb_read_progress"
+        tools:text="60%"
+        tools:visibility="visible" />
+
     <View
         android:id="@+id/vw_foreground"
         android:layout_width="match_parent"

@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.ItemBookshelfGrid2Binding
@@ -11,7 +12,9 @@ import io.legado.app.databinding.ItemBookshelfGridBinding
 import io.legado.app.databinding.ItemBookshelfGridGroup2Binding
 import io.legado.app.databinding.ItemBookshelfGridGroupBinding
 import io.legado.app.help.book.isLocal
+import io.legado.app.help.book.readProgress
 import io.legado.app.help.config.AppConfig
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
 import io.legado.app.utils.visible
@@ -82,6 +85,7 @@ class BooksAdapterGrid(context: Context, callBack: CallBack) :
             }
             ivCover.load(item, false)
             upRefresh(this, item)
+            upReadProgress(this, item)
         }
 
         fun onBind(item: Book, position: Int, payloads: MutableList<Any>) = binding.run {
@@ -99,6 +103,7 @@ class BooksAdapterGrid(context: Context, callBack: CallBack) :
                             )
 
                             "refresh" -> upRefresh(this, item)
+                            "progress" -> upReadProgress(this, item)
                         }
                     }
                 }
@@ -129,6 +134,28 @@ class BooksAdapterGrid(context: Context, callBack: CallBack) :
             }
         }
 
+        private fun upReadProgress(binding: ItemBookshelfGridBinding, item: Book) {
+            if (!AppConfig.showBookshelfReadProgress) {
+                binding.pbReadProgress.gone()
+                return
+            }
+            val progress = kotlin.runCatching { item.readProgress() }.onFailure {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_SHELF_PROGRESS,
+                    "readProgress 计算异常",
+                    it,
+                    AppLog.Level.ERROR
+                )
+            }.getOrNull()
+            if (progress == null) {
+                binding.pbReadProgress.gone()
+            } else {
+                binding.pbReadProgress.setIndicatorColor(binding.pbReadProgress.context.accentColor)
+                binding.pbReadProgress.visible()
+                binding.pbReadProgress.progress = (progress * 100).toInt()
+            }
+        }
+
     }
 
     inner class BookViewHolder2(val binding: ItemBookshelfGrid2Binding) :
@@ -138,6 +165,7 @@ class BooksAdapterGrid(context: Context, callBack: CallBack) :
             tvName.text = item.name
             ivCover.load(item, false)
             upRefresh(this, item)
+            upReadProgress(this, item)
         }
 
         fun onBind(item: Book, position: Int, payloads: MutableList<Any>) = binding.run {
@@ -155,6 +183,7 @@ class BooksAdapterGrid(context: Context, callBack: CallBack) :
                             )
 
                             "refresh" -> upRefresh(this, item)
+                            "progress" -> upReadProgress(this, item)
                         }
                     }
                 }
@@ -182,6 +211,28 @@ class BooksAdapterGrid(context: Context, callBack: CallBack) :
                 } else {
                     binding.bvUnread.invisible()
                 }
+            }
+        }
+
+        private fun upReadProgress(binding: ItemBookshelfGrid2Binding, item: Book) {
+            if (!AppConfig.showBookshelfReadProgress) {
+                binding.pbReadProgress.gone()
+                return
+            }
+            val progress = kotlin.runCatching { item.readProgress() }.onFailure {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_SHELF_PROGRESS,
+                    "readProgress 计算异常",
+                    it,
+                    AppLog.Level.ERROR
+                )
+            }.getOrNull()
+            if (progress == null) {
+                binding.pbReadProgress.gone()
+            } else {
+                binding.pbReadProgress.setIndicatorColor(binding.pbReadProgress.context.accentColor)
+                binding.pbReadProgress.visible()
+                binding.pbReadProgress.progress = (progress * 100).toInt()
             }
         }
 

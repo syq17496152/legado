@@ -5,11 +5,14 @@ import android.os.Bundle
 import android.view.ViewGroup
 import androidx.viewbinding.ViewBinding
 import io.legado.app.base.adapter.ItemViewHolder
+import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.Book
 import io.legado.app.databinding.ItemBookshelfGrid2Binding
 import io.legado.app.databinding.ItemBookshelfGridBinding
 import io.legado.app.help.book.isLocal
+import io.legado.app.help.book.readProgress
 import io.legado.app.help.config.AppConfig
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
 import io.legado.app.utils.visible
@@ -42,6 +45,7 @@ class BooksAdapterGrid(context: Context, private val callBack: CallBack) :
                     }
                     ivCover.load(item, false)
                     upRefresh(binding, item)
+                    upReadProgress(binding, item)
                 } else {
                     for (i in payloads.indices) {
                         val bundle = payloads[i] as Bundle
@@ -54,6 +58,7 @@ class BooksAdapterGrid(context: Context, private val callBack: CallBack) :
                                 )
 
                                 "refresh" -> upRefresh(binding, item)
+                                "progress" -> upReadProgress(binding, item)
                             }
                         }
                     }
@@ -64,6 +69,7 @@ class BooksAdapterGrid(context: Context, private val callBack: CallBack) :
                     tvName.text = item.name
                     ivCover.load(item, false)
                     upRefresh(binding, item)
+                    upReadProgress(binding, item)
                 } else {
                     for (i in payloads.indices) {
                         val bundle = payloads[i] as Bundle
@@ -76,6 +82,7 @@ class BooksAdapterGrid(context: Context, private val callBack: CallBack) :
                                 )
 
                                 "refresh" -> upRefresh(binding, item)
+                                "progress" -> upReadProgress(binding, item)
                             }
                         }
                     }
@@ -113,6 +120,44 @@ class BooksAdapterGrid(context: Context, private val callBack: CallBack) :
                     } else {
                         bvUnread.invisible()
                     }
+                }
+            }
+        }
+    }
+
+    private fun upReadProgress(binding: ViewBinding, item: Book) {
+        if (!AppConfig.showBookshelfReadProgress) {
+            when (binding) {
+                is ItemBookshelfGridBinding -> binding.pbReadProgress.gone()
+                is ItemBookshelfGrid2Binding -> binding.pbReadProgress.gone()
+            }
+            return
+        }
+        val progress = kotlin.runCatching { item.readProgress() }.onFailure {
+            AppLog.putDebugWithTag(
+                AppLog.TAG_SHELF_PROGRESS,
+                "readProgress 计算异常",
+                it,
+                AppLog.Level.ERROR
+            )
+        }.getOrNull()
+        when (binding) {
+            is ItemBookshelfGridBinding -> binding.run {
+                if (progress == null) {
+                    pbReadProgress.gone()
+                } else {
+                    pbReadProgress.setIndicatorColor(pbReadProgress.context.accentColor)
+                    pbReadProgress.visible()
+                    pbReadProgress.progress = (progress * 100).toInt()
+                }
+            }
+            is ItemBookshelfGrid2Binding -> binding.run {
+                if (progress == null) {
+                    pbReadProgress.gone()
+                } else {
+                    pbReadProgress.setIndicatorColor(pbReadProgress.context.accentColor)
+                    pbReadProgress.visible()
+                    pbReadProgress.progress = (progress * 100).toInt()
                 }
             }
         }

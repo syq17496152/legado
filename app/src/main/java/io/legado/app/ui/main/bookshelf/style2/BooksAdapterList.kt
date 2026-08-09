@@ -4,13 +4,16 @@ import android.content.Context
 import android.os.Bundle
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.ItemBookshelfList2Binding
 import io.legado.app.databinding.ItemBookshelfListBinding
 import io.legado.app.databinding.ItemBookshelfListGroupBinding
 import io.legado.app.help.book.isLocal
+import io.legado.app.help.book.readProgress
 import io.legado.app.help.config.AppConfig
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
 import io.legado.app.utils.visible
@@ -68,6 +71,7 @@ class BooksAdapterList(context: Context, callBack: CallBack) :
             ivLast.visible()
             ivRead.visible()
             upRefresh(this, item)
+            upReadProgress(this, item)
         }
 
         fun onBind(item: Book, position: Int, payloads: MutableList<Any>) = binding.run {
@@ -88,6 +92,7 @@ class BooksAdapterList(context: Context, callBack: CallBack) :
                             )
 
                             "refresh" -> upRefresh(this, item)
+                            "progress" -> upReadProgress(this, item)
                         }
                     }
                 }
@@ -118,6 +123,32 @@ class BooksAdapterList(context: Context, callBack: CallBack) :
             }
         }
 
+        private fun upReadProgress(binding: ItemBookshelfListBinding, item: Book) {
+            if (!AppConfig.showBookshelfReadProgress) {
+                binding.pbReadProgress.gone()
+                binding.tvReadPercent.gone()
+                return
+            }
+            val progress = kotlin.runCatching { item.readProgress() }.onFailure {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_SHELF_PROGRESS,
+                    "readProgress 计算异常",
+                    it,
+                    AppLog.Level.ERROR
+                )
+            }.getOrNull()
+            if (progress == null) {
+                binding.pbReadProgress.gone()
+                binding.tvReadPercent.gone()
+            } else {
+                binding.pbReadProgress.setIndicatorColor(binding.pbReadProgress.context.accentColor)
+                binding.pbReadProgress.visible()
+                binding.pbReadProgress.progress = (progress * 100).toInt()
+                binding.tvReadPercent.visible()
+                binding.tvReadPercent.text = "${(progress * 100).toInt()}%"
+            }
+        }
+
     }
 
     /**
@@ -136,6 +167,7 @@ class BooksAdapterList(context: Context, callBack: CallBack) :
             ivAuthor.visible()
             ivLast.visible()
             upRefresh(this, item)
+            upReadProgress(this, item)
         }
 
         fun onBind(item: Book, position: Int, payloads: MutableList<Any>) = binding.run {
@@ -156,6 +188,7 @@ class BooksAdapterList(context: Context, callBack: CallBack) :
                             )
 
                             "refresh" -> upRefresh(this, item)
+                            "progress" -> upReadProgress(this, item)
                         }
                     }
                 }
@@ -183,6 +216,32 @@ class BooksAdapterList(context: Context, callBack: CallBack) :
                 } else {
                     binding.bvUnread.invisible()
                 }
+            }
+        }
+
+        private fun upReadProgress(binding: ItemBookshelfList2Binding, item: Book) {
+            if (!AppConfig.showBookshelfReadProgress) {
+                binding.pbReadProgress.gone()
+                binding.tvReadPercent.gone()
+                return
+            }
+            val progress = kotlin.runCatching { item.readProgress() }.onFailure {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_SHELF_PROGRESS,
+                    "readProgress 计算异常",
+                    it,
+                    AppLog.Level.ERROR
+                )
+            }.getOrNull()
+            if (progress == null) {
+                binding.pbReadProgress.gone()
+                binding.tvReadPercent.gone()
+            } else {
+                binding.pbReadProgress.setIndicatorColor(binding.pbReadProgress.context.accentColor)
+                binding.pbReadProgress.visible()
+                binding.pbReadProgress.progress = (progress * 100).toInt()
+                binding.tvReadPercent.visible()
+                binding.tvReadPercent.text = "${(progress * 100).toInt()}%"
             }
         }
 

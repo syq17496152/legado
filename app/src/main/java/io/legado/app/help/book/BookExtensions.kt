@@ -378,6 +378,13 @@ fun Book.readSimulating(): Boolean {
     return config.readSimulating
 }
 
+/** 阅读进度 0..1;null=未读(从未打开)。单章书(总章<=1)已读即 1f */
+fun Book.readProgress(): Float? {
+    if (durChapterIndex == 0 && durChapterPos == 0) return null
+    if (totalChapterNum <= 1) return 1f
+    return (durChapterIndex.toFloat() / (totalChapterNum - 1)).coerceIn(0f, 1f)
+}
+
 fun tryParesExportFileName(jsStr: String): Boolean {
     val bindings = buildScriptBindings { bindings ->
         bindings["name"] = "name"

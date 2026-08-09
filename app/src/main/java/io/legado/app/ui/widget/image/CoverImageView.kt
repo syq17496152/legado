@@ -1,5 +1,6 @@
 package io.legado.app.ui.widget.image
 
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -56,6 +57,21 @@ class CoverImageView @JvmOverloads constructor(
     companion object {
         private val nameBitmapCache by lazy { LruCache<String, Bitmap>(33) }
         private val needNameBitmap by lazy { LruCache<String, Boolean>(99) }
+
+        // B13: 系统内存压力时降级封面缓存
+        @Suppress("DEPRECATION")
+        fun trimMemory(level: Int) {
+            if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
+                || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW
+                || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
+            ) {
+                nameBitmapCache.evictAll()
+            } else if (level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
+                || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE
+            ) {
+                nameBitmapCache.trimToSize(nameBitmapCache.maxSize() / 2)
+            }
+        }
     }
     private var viewWidth: Float = 0f
     private var viewHeight: Float = 0f

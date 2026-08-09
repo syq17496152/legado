@@ -11,6 +11,7 @@ import androidx.lifecycle.LiveData
 import io.legado.app.R
 import io.legado.app.base.VMBaseFragment
 import io.legado.app.constant.EventBus
+import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
@@ -190,6 +191,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
                         }
                         spGroupStyle.setSelection(AppConfig.bookGroupStyle)
                         swShowUnread.isChecked = AppConfig.showUnread
+                        swShowReadProgress.isChecked = AppConfig.showBookshelfReadProgress
                         swShowLastUpdateTime.isChecked = AppConfig.showLastUpdateTime
                         swShowWaitUpBooks.isChecked = AppConfig.showWaitUpCount
                         swShowBookshelfFastScroller.isChecked = AppConfig.showBookshelfFastScroller
@@ -224,6 +226,17 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
                     }
                     if (AppConfig.showUnread != swShowUnread.isChecked) {
                         AppConfig.showUnread = swShowUnread.isChecked
+                        postEvent(EventBus.BOOKSHELF_REFRESH, "")
+                    }
+                    if (AppConfig.showBookshelfReadProgress != swShowReadProgress.isChecked) {
+                        AppConfig.showBookshelfReadProgress = swShowReadProgress.isChecked
+                        kotlin.runCatching {
+                            AppLog.putDebugWithTag(
+                                AppLog.TAG_SHELF_PROGRESS,
+                                "showBookshelfReadProgress switched -> ${swShowReadProgress.isChecked}",
+                                level = AppLog.Level.INFO
+                            )
+                        }
                         postEvent(EventBus.BOOKSHELF_REFRESH, "")
                     }
                     if (AppConfig.showLastUpdateTime != swShowLastUpdateTime.isChecked) {
