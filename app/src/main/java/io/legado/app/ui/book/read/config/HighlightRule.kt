@@ -33,6 +33,9 @@ data class HighlightRule(
     var isRegex: Boolean = false,
     var styleJson: String? = null,
     var timeoutMillisecond: Long = 3000L,
+    // B15 新增：捕获组样式模板（如 <b><font color="red">$1</font></b>）与点号匹配换行
+    var replacement: String = "",
+    var isDotAll: Boolean = false,
 ) {
 
     fun styleSummary(): String {

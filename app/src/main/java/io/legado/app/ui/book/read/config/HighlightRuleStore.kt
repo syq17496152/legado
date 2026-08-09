@@ -57,6 +57,12 @@ object HighlightRuleStore {
         }
         val rules = GSON.fromJsonArray<HighlightRule>(stored).getOrNull()?.toMutableList()
         if (rules != null && rules.isNotEmpty()) {
+            // H-1: 全部规则 name+pattern 均空 = 损坏数据，自动恢复内置规则
+            // 真机实测：用户设备 JSON 12 条 name/pattern 全空导致列表空+编辑空+不生效
+            if (rules.all { it.name.isNullOrBlank() && it.pattern.isNullOrBlank() }) {
+                AppLog.put("高亮规则：检测到全部规则为空数据，已自动恢复内置规则")
+                return reset(context)
+            }
             val normalized = normalizeRules(rules, context)
             save(context, normalized)
             cachedRules = normalized
@@ -324,7 +330,10 @@ object HighlightRuleStore {
                     underlineSvgPath = safeRule.underlineSvgPath ?: builtin.underlineSvgPath,
                     bgImage = safeRule.bgImage ?: builtin.bgImage,
                     bgImageFit = safeRule.bgImageFit.takeIf { it != 0 } ?: builtin.bgImageFit,
-                    bgImageScale = safeRule.bgImageScale.takeIf { it != 1f } ?: builtin.bgImageScale
+                    bgImageScale = safeRule.bgImageScale.takeIf { it != 1f } ?: builtin.bgImageScale,
+                    // B15: 保留用户的捕获组模板与 dotAll
+                    replacement = safeRule.replacement.ifBlank { builtin.replacement },
+                    isDotAll = safeRule.isDotAll || builtin.isDotAll
                 )
             } else {
                 safeRule.copy(
@@ -370,6 +379,9 @@ object HighlightRuleStore {
             isRegex = runCatching { rule.isRegex }.getOrDefault(false),
             styleJson = runCatching { rule.styleJson }.getOrNull(),
             timeoutMillisecond = runCatching { rule.timeoutMillisecond }.getOrDefault(3000L),
+            // B15: 保留捕获组样式模板与 dotAll 开关
+            replacement = runCatching { rule.replacement }.getOrNull().orEmpty(),
+            isDotAll = runCatching { rule.isDotAll }.getOrDefault(false),
         )
     }
 

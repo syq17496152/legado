@@ -121,10 +121,18 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
             val pageLen = page.lines.sumOf { it.charSize + if (it.isParagraphEnd) 1 else 0 }
             val pageEnd = pageBase + pageLen
             // 规则命中: 整章匹配(按 textChapter 缓存) → 只取落在本页坐标窗口者
+            // B15: 展开捕获组子样式段(按主命中在前、子段在后, resolve 逐通道 last-wins 让子段样式覆盖主样式)
             val ruleRanges = ReadBook.ruleMatchesOfChapter(textChapter)
                 .asSequence()
                 .filter { it.start < pageEnd && it.end > pageBase }
-                .map { HighlightMatcher.Range(it.start, it.end, it.style) }
+                .flatMap { m ->
+                    sequence {
+                        yield(HighlightMatcher.Range(m.start, m.end, m.style))
+                        for (sub in m.subSpans) {
+                            yield(HighlightMatcher.Range(sub.start, sub.end, sub.style))
+                        }
+                    }
+                }
                 .toList()
             // 手动高亮排在规则之后 → resolve 按列表序逐通道 merge, 手动压过规则
             val manualRanges = ReadBook.highlightsOfChapter(page.chapterIndex).map {

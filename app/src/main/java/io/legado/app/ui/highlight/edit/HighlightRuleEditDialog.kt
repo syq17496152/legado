@@ -195,6 +195,8 @@ class HighlightRuleEditDialog : BaseDialogFragment(R.layout.dialog_highlight_rul
         etName.setText(r.name)
         etPattern.setText(r.pattern)
         cbUseRegex.isChecked = r.isRegex
+        etReplacement.setText(r.replacement)
+        cbDotAll.isChecked = r.isDotAll
         editingStyle = r.toHighlightStyle()
         upPreview()
     }
@@ -204,6 +206,8 @@ class HighlightRuleEditDialog : BaseDialogFragment(R.layout.dialog_highlight_rul
         r.name = etName.text.toString()
         r.pattern = etPattern.text.toString()
         r.isRegex = cbUseRegex.isChecked
+        r.replacement = etReplacement.text.toString()
+        r.isDotAll = cbDotAll.isChecked
         r.styleJson = GSON.toJson(editingStyle)
         r
     }
