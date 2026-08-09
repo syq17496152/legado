@@ -17,6 +17,7 @@ import androidx.preference.Preference
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
+import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.config.AppConfig
@@ -32,6 +33,7 @@ import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.lib.prefs.fragment.PreferenceFragment
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.lib.webdav.WebDavException
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.widget.dialog.WaitDialog
@@ -41,6 +43,7 @@ import io.legado.app.utils.checkWrite
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.launch
+import io.legado.app.utils.requestInputMethod
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
@@ -354,17 +357,101 @@ class BackupConfigFragment : PreferenceFragment(),
             withContext(Main) {
                 context.selector(
                     title = context.getString(R.string.select_restore_file),
-                    items = names
-                ) { _, index ->
-                    if (index in 0 until names.size) {
-                        listView.post {
-                            restoreWebDav(names[index])
+                    items = names,
+                    onClick = { _, index ->
+                        if (index in 0 until names.size) {
+                            listView.post {
+                                restoreWebDav(names[index])
+                            }
+                        }
+                    },
+                    onLongClick = { _, index ->
+                        if (index in 0 until names.size) {
+                            showBackupNameOptions(names[index])
                         }
                     }
-                }
+                )
             }
         } else {
             throw NoStackTraceException("Web dav no back up file")
+        }
+    }
+
+    private fun showBackupNameOptions(name: String) {
+        context?.selector(
+            title = name,
+            items = arrayListOf(
+                getString(R.string.delete),
+                getString(R.string.rename)
+            )
+        ) { _, index ->
+            when (index) {
+                0 -> confirmDeleteBackup(name)
+                1 -> showRenameDialog(name)
+            }
+        }
+    }
+
+    private fun confirmDeleteBackup(name: String) {
+        alert(
+            title = getString(R.string.delete_alert),
+            message = getString(R.string.sure_del_any, name)
+        ) {
+            yesButton {
+                Coroutine.async {
+                    AppWebDav.deleteBackup(name)
+                }.onSuccess {
+                    appCtx.toastOnUi(getString(R.string.delete_backup_success))
+                }.onError {
+                    AppLog.put("删除备份失败\n${it.localizedMessage}", it)
+                    appCtx.toastOnUi("删除备份失败\n${it.localizedMessage}")
+                }
+            }
+            noButton()
+        }
+    }
+
+    private fun showRenameDialog(oldName: String) {
+        alert(title = getString(R.string.rename_backup)) {
+            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
+                editView.setHint(R.string.input_new_name)
+                editView.setText(oldName)
+            }
+            customView { alertBinding.root }
+            okButton {
+                val newName = alertBinding.editView.text?.toString()
+                if (!newName.isNullOrBlank() && newName != oldName) {
+                    renameBackup(oldName, newName)
+                }
+            }
+            cancelButton()
+        }.requestInputMethod()
+    }
+
+    private fun renameBackup(oldName: String, newName: String) {
+        Coroutine.async {
+            AppWebDav.renameBackup(oldName, newName)
+        }.onSuccess {
+            appCtx.toastOnUi(getString(R.string.rename_backup_success))
+        }.onError {
+            AppLog.put("重命名备份出错\n${it.localizedMessage}", it)
+            if (it is WebDavException) {
+                val msg = it.localizedMessage ?: ""
+                if (msg.contains("405") || msg.contains("501")
+                    || msg.contains("Method Not Allowed")
+                    || msg.contains("Not Implemented")
+                ) {
+                    appCtx.toastOnUi(R.string.webdav_move_not_supported)
+                } else {
+                    appCtx.toastOnUi(
+                        appCtx.getString(R.string.rename_backup_fail, it.localizedMessage)
+                    )
+                }
+            } else {
+                appCtx.toastOnUi(
+                    appCtx.getString(R.string.rename_backup_fail, it.localizedMessage)
+                )
+            }
         }
     }
 

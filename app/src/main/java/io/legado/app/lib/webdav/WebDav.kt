@@ -50,6 +50,13 @@ open class WebDav(
             return WebDav(path, authorization)
         }
 
+        /**
+         * davs:// 或 dav:// 转 https:// 或 http://
+         */
+        fun toHttpUrl(rawUrl: String): String = rawUrl
+            .replace("davs://", "https://")
+            .replace("dav://", "http://")
+
         @SuppressLint("DateTimeFormatter")
         private val dateTimeFormatter = DateTimeFormatter.RFC_1123_DATE_TIME
 
@@ -420,6 +427,30 @@ open class WebDav(
         }.onFailure {
             currentCoroutineContext().ensureActive()
             AppLog.put("WebDav删除失败\n${it.localizedMessage}", it)
+        }.isSuccess
+    }
+
+    /**
+     * 移动/重命名文件
+     * @param destUrl 目标完整 URL
+     */
+    @Throws(WebDavException::class)
+    suspend fun move(destUrl: String): Boolean {
+        val url = httpUrl ?: throw WebDavException("url为空")
+        //davs:// 或 dav:// 转 https:// 或 http://
+        val destHttpUrl = toHttpUrl(destUrl)
+        return kotlin.runCatching {
+            webDavClient.newCallResponse {
+                url(url)
+                method("MOVE", null)
+                addHeader("Destination", destHttpUrl)
+                addHeader("Overwrite", "F")
+            }.use {
+                checkResult(it)
+            }
+        }.onFailure {
+            currentCoroutineContext().ensureActive()
+            AppLog.put("WebDav移动失败\n${it.localizedMessage}", it)
         }.isSuccess
     }
 

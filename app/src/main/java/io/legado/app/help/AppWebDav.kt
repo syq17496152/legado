@@ -139,6 +139,47 @@ object AppWebDav {
         return false
     }
 
+    /**
+     * 删除云端备份文件
+     */
+    suspend fun deleteBackup(name: String): Boolean {
+        authorization?.let {
+            val webDav = WebDav(rootWebDavUrl + name, it)
+            val success = webDav.delete()
+            if (success) {
+                kotlin.runCatching {
+                    AppLog.putDebugWithTag("WebDavBackup", "删除备份成功 $name")
+                }
+            } else {
+                kotlin.runCatching {
+                    AppLog.putDebugWithTag("WebDavBackup", "删除备份失败 $name", level = AppLog.Level.ERROR)
+                }
+            }
+            return success
+        }
+        return false
+    }
+
+    /**
+     * 重命名云端备份文件
+     * @throws WebDavException 服务器不支持 MOVE 方法时抛出
+     */
+    @Throws(WebDavException::class)
+    suspend fun renameBackup(oldName: String, newName: String): Boolean {
+        authorization?.let {
+            val oldUrl = rootWebDavUrl + oldName
+            val newUrl = rootWebDavUrl + newName
+            val success = WebDav(oldUrl, it).move(newUrl)
+            if (success) {
+                kotlin.runCatching {
+                    AppLog.putDebugWithTag("WebDavBackup", "重命名备份成功 $oldName -> $newName")
+                }
+            }
+            return success
+        }
+        return false
+    }
+
     suspend fun lastBackUp(): Result<WebDavFile?> {
         return kotlin.runCatching {
             authorization?.let {
