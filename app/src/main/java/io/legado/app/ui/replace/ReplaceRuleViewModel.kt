@@ -5,6 +5,7 @@ import android.text.TextUtils
 import io.legado.app.base.BaseViewModel
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReplaceRule
+import io.legado.app.help.source.SourceRecycleBinHelp
 import io.legado.app.utils.splitNotBlank
 
 /**
@@ -21,6 +22,8 @@ class ReplaceRuleViewModel(application: Application) : BaseViewModel(application
 
     fun delete(rule: ReplaceRule) {
         execute {
+            // B7 回收站：删除前回收（开关关时 recycle 内部直接 return，不影响原行为）
+            kotlin.runCatching { SourceRecycleBinHelp.recycleReplaceRules(listOf(rule)) }
             appDb.replaceRuleDao.delete(rule)
         }
     }
@@ -89,6 +92,8 @@ class ReplaceRuleViewModel(application: Application) : BaseViewModel(application
 
     fun delSelection(rules: List<ReplaceRule>) {
         execute {
+            // B7 回收站：删除前回收（开关关时 recycle 内部直接 return，不影响原行为）
+            kotlin.runCatching { SourceRecycleBinHelp.recycleReplaceRules(rules) }
             appDb.replaceRuleDao.delete(*rules.toTypedArray())
         }
     }

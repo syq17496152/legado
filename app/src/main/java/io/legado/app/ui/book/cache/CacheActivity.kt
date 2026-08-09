@@ -2,9 +2,11 @@ package io.legado.app.ui.book.cache
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.text.InputType
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.EditText
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.PopupMenu
@@ -25,6 +27,7 @@ import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.ActivityCacheBookBinding
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.databinding.DialogSelectSectionExportBinding
+import io.legado.app.help.ConcurrentRateLimiter
 import io.legado.app.help.book.getExportFileName
 import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.tryParesExportFileName
@@ -74,6 +77,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
 
     override val binding by viewBinding(ActivityCacheBookBinding::inflate)
     override val viewModel by viewModels<CacheViewModel>()
+    private val cacheManageViewModel by viewModels<CacheManageViewModel>()
 
     private val exportBookPathKey = "exportBookPath"
     private val exportTypes = arrayListOf("txt", "epub")
@@ -153,6 +157,10 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             "${getString(R.string.export_type)}(${getTypeName()})"
         menu.findItem(R.id.menu_export_charset)?.title =
             "${getString(R.string.export_charset)}(${AppConfig.exportCharset})"
+        val cacheRate = AppConfig.cacheConcurrentRate
+        menu.findItem(R.id.menu_cache_rate)?.title =
+            getString(R.string.cache_concurrent_rate) +
+                if (cacheRate.isNullOrBlank()) "(${getString(R.string.text_default)})" else "($cacheRate)"
         return super.onMenuOpened(featureId, menu)
     }
 
@@ -216,7 +224,9 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             R.id.menu_export_file_name -> alertExportFileName()
             R.id.menu_export_type -> showExportTypeConfig()
             R.id.menu_export_charset -> showCharsetConfig()
+            R.id.menu_cache_rate -> showCacheRateDialog()
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
+            R.id.menu_cache_stats -> showCacheStatsDialog()
             else -> if (item.groupId == R.id.menu_group) {
                 binding.titleBar.subtitle = item.title
                 lifecycleScope.launch {
@@ -569,11 +579,83 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         }
     }
 
-    override val cacheChapters: HashMap<String, HashSet<String>>
+    /**
+     * B11 缓存分项统计对话框
+     */
+    private fun showCacheStatsDialog() {
+        cacheManageViewModel.buildStorageBreakdown().onSuccess { details ->
+            if (details.all { it.bytes <= 0L }) {
+                toastOnUi(R.string.cache_stats_empty)
+                return@onSuccess
+            }
+            val names = details.filter { it.bytes > 0L }.map { detail ->
+                val size = formatBytes(detail.bytes)
+                val name = getString(detail.nameRes)
+                "${name}: $size"
+            }.toMutableList()
+            val total = details.sumOf { it.bytes }
+            names.add("${getString(R.string.cache_stats_total)}: ${formatBytes(total)}")
+            selector(R.string.cache_stats, names) { _, index ->
+                val detail = details.filter { it.bytes > 0L }[index]
+                deleteStorageTarget(detail)
+            }
+        }
+    }
+
+    private fun deleteStorageTarget(detail: CacheStorageDetail) {
+        alert(R.string.cache_stats) {
+            setMessage(getString(R.string.cache_stats_delete_msg, getString(detail.nameRes)))
+            noButton()
+            yesButton {
+                cacheManageViewModel.deleteStorageTarget(detail).onSuccess { success ->
+                    if (success) {
+                        toastOnUi(R.string.cache_stats_delete_success)
+                    } else {
+                        toastOnUi(R.string.cache_stats_video_playing)
+                    }
+                }
+            }
+        }
+    }    override val cacheChapters: HashMap<String, HashSet<String>>
         get() = viewModel.cacheChapters
 
     override fun exportProgress(bookUrl: String): Int? {
         return ExportBookService.exportProgress[bookUrl]
+    }
+
+    /**
+     * B12 缓存并发率设置对话框
+     */
+    private fun showCacheRateDialog() {
+        var rateEdit: EditText? = null
+        val alertDialog = alert(R.string.cache_concurrent_rate) {
+            setMessage(getString(R.string.cache_rate_desc))
+            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
+                editView.hint = getString(R.string.cache_rate_hint)
+                editView.inputType = InputType.TYPE_CLASS_TEXT
+                AppConfig.cacheConcurrentRate?.let { editView.setText(it) }
+            }
+            rateEdit = alertBinding.editView
+            customView { alertBinding.root }
+            positiveButton(R.string.ok)
+            cancelButton()
+        }
+        alertDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            val value = rateEdit?.text?.toString()
+            if (!value.isNullOrBlank() && !ConcurrentRateLimiter.isValidRate(value)) {
+                toastOnUi(R.string.cache_rate_invalid)
+                return@setOnClickListener
+            }
+            AppConfig.cacheConcurrentRate = if (value.isNullOrBlank()) null else value
+            kotlin.runCatching {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_CACHE_CONCURRENT,
+                    "缓存并发率设置变更 -> $value",
+                    level = AppLog.Level.INFO
+                )
+            }
+            alertDialog.hide()
+        }
     }
 
     override fun exportMsg(bookUrl: String): String? {

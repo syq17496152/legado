@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:paddingLeft="12dp"
+    android:paddingTop="8dp"
+    android:paddingRight="12dp"
+    android:paddingBottom="8dp">
+
+    <TextView
+        android:id="@+id/tv_method"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="3dp"
+        android:textColor="@color/primaryText"
+        android:textSize="12sp"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="GET"
+        tools:ignore="RtlHardcoded" />
+
+    <TextView
+        android:id="@+id/tv_status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="6dp"
+        android:padding="3dp"
+        android:textColor="@color/secondaryText"
+        android:textSize="12sp"
+        app:layout_constraintLeft_toRightOf="@id/tv_method"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="200" />
+
+    <TextView
+        android:id="@+id/tv_duration"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="6dp"
+        android:padding="3dp"
+        android:textColor="@color/secondaryText"
+        android:textSize="12sp"
+        app:layout_constraintLeft_toRightOf="@id/tv_status"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="123ms" />
+
+    <TextView
+        android:id="@+id/tv_time"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:padding="3dp"
+        android:gravity="end"
+        android:textColor="@color/secondaryText"
+        android:textSize="12sp"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintLeft_toRightOf="@id/tv_duration"
+        tools:text="刚刚" />
+
+    <TextView
+        android:id="@+id/tv_url"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="3dp"
+        android:singleLine="true"
+        android:ellipsize="middle"
+        android:textColor="@color/primaryText"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tv_method"
+        tools:text="https://example.com/api/search?keyword=xxx" />
+
+    <TextView
+        android:id="@+id/tv_domain"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:padding="3dp"
+        android:singleLine="true"
+        android:textColor="@color/secondaryText"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tv_url"
+        app:layout_constraintRight_toLeftOf="@id/tv_source_name"
+        tools:text="example.com" />
+
+    <TextView
+        android:id="@+id/tv_source_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="3dp"
+        android:singleLine="true"
+        android:textColor="@color/accent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tv_url"
+        tools:text="书源A"
+        tools:visibility="gone" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

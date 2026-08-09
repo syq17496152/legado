@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <item
+        android:id="@+id/menu_url_record_enable"
+        android:checkable="true"
+        android:title="@string/record_url_switch"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_url_record_filter"
+        android:title="@string/url_record_filter"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_url_record_clear_7d"
+        android:title="@string/clear_7_days_ago"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_url_record_clear_30d"
+        android:title="@string/clear_30_days_ago"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_url_record_clear_all"
+        android:title="@string/clear_all_records"
+        app:showAsAction="never"
+        tools:ignore="UnusedAttribute" />
+
+</menu>

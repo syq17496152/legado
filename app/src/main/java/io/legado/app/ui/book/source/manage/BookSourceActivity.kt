@@ -46,6 +46,7 @@ import io.legado.app.ui.adapter.SourceFolderAdapter
 import io.legado.app.ui.config.CheckSourceConfig
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
+import io.legado.app.ui.source.recycle.RecycleBinActivity
 import io.legado.app.ui.widget.SelectActionBar
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
@@ -304,6 +305,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             }
 
             R.id.menu_help -> showHelp("SourceMBookHelp")
+            R.id.menu_recycle_bin -> startActivity<RecycleBinActivity>()
         }
         // source-layout-refactor 动态分组菜单：用隐藏字段，不回填搜索框
         if (item.groupId == R.id.source_group) {

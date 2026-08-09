@@ -109,6 +109,7 @@ class DownloadService : BaseService() {
             val downloadId = downloadManager.enqueue(request)
             downloads[downloadId] =
                 DownloadInfo(url, fileName, NotificationId.Download + downloads.size)
+            DownloadState.addTask(downloadId, url, fileName, System.currentTimeMillis())
             queryState()
             if (upStateJob == null) {
                 checkDownloadState()
@@ -134,6 +135,7 @@ class DownloadService : BaseService() {
         }
         downloads.remove(downloadId)
         completeDownloads.remove(downloadId)
+        DownloadState.removeTask(downloadId)
         notificationManager.cancel(downloadId.toInt())
     }
 
@@ -194,6 +196,15 @@ class DownloadService : BaseService() {
                         DownloadManager.STATUS_FAILED -> getString(R.string.download_error)
                         else -> getString(R.string.unknown_state)
                     }
+                    val taskStatus = when (cursor.getInt(statusIndex)) {
+                        DownloadManager.STATUS_PAUSED -> DownloadStatus.PAUSED
+                        DownloadManager.STATUS_PENDING -> DownloadStatus.WAITING
+                        DownloadManager.STATUS_RUNNING -> DownloadStatus.RUNNING
+                        DownloadManager.STATUS_SUCCESSFUL -> DownloadStatus.COMPLETED
+                        DownloadManager.STATUS_FAILED -> DownloadStatus.FAILED
+                        else -> DownloadStatus.WAITING
+                    }
+                    DownloadState.updateTask(id, taskStatus, progress, max, progress)
                     downloads[id]?.let { downloadInfo ->
                         upDownloadNotification(
                             id,

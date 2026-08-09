@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/menu_recycle_bin_empty"
+        android:icon="@drawable/ic_outline_delete"
+        android:title="@string/recycle_bin_empty"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/menu_recycle_bin_help"
+        android:icon="@drawable/ic_help"
+        android:title="@string/help"
+        app:showAsAction="never" />
+
+</menu>

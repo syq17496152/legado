@@ -333,6 +333,10 @@ class SpeakEngineDialog() : BaseDialogFragment(R.layout.dialog_recycler_view),
                             noButton()
                             yesButton {
                                 lifecycleScope.launch(IO) {
+                                    // B7 回收站：删除前回收（开关关时 recycle 内部直接 return，不影响原行为）
+                                    kotlin.runCatching {
+                                        io.legado.app.help.source.SourceRecycleBinHelp.recycleHttpTtsRules(listOf(httpTTS))
+                                    }
                                     appDb.httpTTSDao.delete(httpTTS)
                                 }
                             }

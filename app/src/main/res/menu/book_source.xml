@@ -185,6 +185,12 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/menu_recycle_bin"
+        android:icon="@drawable/ic_restore"
+        android:title="@string/menu_recycle_bin"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/menu_help"
         android:icon="@drawable/ic_help"
         android:title="@string/help"

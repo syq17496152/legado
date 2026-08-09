@@ -5,6 +5,7 @@ import io.legado.app.base.BaseViewModel
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.TxtTocRule
 import io.legado.app.help.DefaultData
+import io.legado.app.help.source.SourceRecycleBinHelp
 
 class TxtTocRuleViewModel(app: Application) : BaseViewModel(app) {
 
@@ -16,6 +17,8 @@ class TxtTocRuleViewModel(app: Application) : BaseViewModel(app) {
 
     fun del(vararg txtTocRule: TxtTocRule) {
         execute {
+            // B7 回收站：删除前回收（开关关时 recycle 内部直接 return，不影响原行为）
+            kotlin.runCatching { SourceRecycleBinHelp.recycleTxtTocRules(txtTocRule.toList()) }
             appDb.txtTocRuleDao.delete(*txtTocRule)
         }
     }

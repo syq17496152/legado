@@ -11,6 +11,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.constant.IntentAction
 import io.legado.app.constant.NotificationId
 import io.legado.app.data.appDb
+import io.legado.app.help.ConcurrentRateLimiter
 import io.legado.app.help.book.update
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.CacheBook
@@ -47,6 +48,7 @@ class CacheBookService : BaseService() {
     private var downloadJob: Job? = null
     private var notificationContent = appCtx.getString(R.string.service_starting)
     private var mutex = Mutex()
+    private val sourceKeyOrder = mutableListOf<String>()
     private val notificationBuilder by lazy {
         val builder = NotificationCompat.Builder(this, AppConst.channelIdDownload)
             .setSmallIcon(R.drawable.ic_download)
@@ -93,6 +95,7 @@ class CacheBookService : BaseService() {
 
     override fun onDestroy() {
         isRun = false
+        restoreAllRates()
         cachePool.close()
         CacheBook.close()
         super.onDestroy()
@@ -103,6 +106,7 @@ class CacheBookService : BaseService() {
         bookUrl ?: return
         execute {
             val cacheBook = CacheBook.getOrCreate(bookUrl) ?: return@execute
+            applyRateToAll()
             val chapterCount = appDb.bookChapterDao.getChapterCount(bookUrl)
             val book = cacheBook.book
             if (chapterCount == 0) {
@@ -164,8 +168,57 @@ class CacheBookService : BaseService() {
     private fun download() {
         downloadJob?.cancel()
         downloadJob = lifecycleScope.launch(cachePool) {
+            sourceKeyOrder.clear()
+            applyRateToAll()
             CacheBook.startProcessJob(cachePool)
+            AppLog.put("缓存任务全部完成")
+            restoreAllRates()
             stopSelf()
+        }
+    }
+
+    /**
+     * B12 缓存限流注入：用户设置的缓存并发率与各书源自身并发率取更严格者生效
+     */
+    private fun applyRateToAll() {
+        val userRate = AppConfig.cacheConcurrentRate
+        if (userRate.isNullOrBlank()) return
+        CacheBook.cacheBookMap.forEach { (_, cacheBook) ->
+            val key = cacheBook.bookSource.bookSourceUrl
+            if (key !in sourceKeyOrder) {
+                sourceKeyOrder.add(key)
+            }
+            val oldRate = cacheBook.bookSource.concurrentRate
+            val effective = ConcurrentRateLimiter.effectiveRate(userRate, oldRate)
+            if (effective != null && effective != oldRate) {
+                cacheBook.bookSource.concurrentRate = effective
+                ConcurrentRateLimiter.updateConcurrentRate(key, effective)
+                kotlin.runCatching {
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_CACHE_CONCURRENT,
+                        "限流注入 source=$key 原=$oldRate 生效=$effective",
+                        level = AppLog.Level.INFO
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * B12 恢复缓存任务期间注入的限流记录，避免污染书源后续访问
+     */
+    private fun restoreAllRates() {
+        val count = sourceKeyOrder.size
+        sourceKeyOrder.forEach { key ->
+            ConcurrentRateLimiter.concurrentRecordMap.remove(key)
+        }
+        sourceKeyOrder.clear()
+        kotlin.runCatching {
+            AppLog.putDebugWithTag(
+                AppLog.TAG_CACHE_CONCURRENT,
+                "已恢复 $count 个书源并发率",
+                level = AppLog.Level.INFO
+            )
         }
     }
 

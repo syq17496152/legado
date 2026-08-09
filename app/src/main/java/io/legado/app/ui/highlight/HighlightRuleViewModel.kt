@@ -5,6 +5,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
+import io.legado.app.help.source.SourceRecycleBinHelp
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleStore
@@ -53,6 +54,8 @@ class HighlightRuleViewModel(application: Application) : BaseViewModel(applicati
     }
 
     fun delete(rule: HighlightRule) {
+        // B7 回收站：删除前回收（开关关时 recycle 内部直接 return，不影响原行为）
+        kotlin.runCatching { SourceRecycleBinHelp.recycleHighlightRules(listOf(rule)) }
         execute {
             val list = HighlightRuleStore.load(context).filterNot { it.id == rule.id }
             HighlightRuleStore.save(context, list)

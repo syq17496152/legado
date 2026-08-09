@@ -269,6 +269,14 @@
             android:title="@string/debug_log_floating_ball"
             app:iconSpaceReserved="false" />
 
+        <!-- B7 规则回收站开关 -->
+        <io.legado.app.lib.prefs.SwitchPreference
+            android:defaultValue="false"
+            android:key="sourceRecycleBinEnabled"
+            android:summary="@string/source_recycle_bin_enabled_s"
+            android:title="@string/source_recycle_bin_enabled"
+            app:iconSpaceReserved="false" />
+
         <!-- F-P9-3 调试工具迁移：从"我的"主入口移至"其他设置" -->
         <io.legado.app.lib.prefs.Preference
             android:key="debug_tools"

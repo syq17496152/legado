@@ -173,6 +173,10 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config), MainFragmentInte
                 }
 
                 "fileManage" -> startActivity<FileManageActivity>()
+                "preciseManage" -> startActivity<ConfigActivity> {
+                    putExtra("configTag", ConfigTag.PRECISE_MANAGE)
+                }
+
                 "readRecord" -> startActivity<ReadRecordActivity>()
                 "autoTaskManage" -> startActivity<AutoTaskActivity>()
                 "about" -> startActivity<AboutActivity>()

@@ -127,6 +127,14 @@
             app:iconSpaceReserved="false" />
 
         <io.legado.app.lib.prefs.Preference
+            android:icon="@drawable/ic_storage_black_24dp"
+            android:key="preciseManage"
+            android:summary="@string/precise_manage_summary"
+            android:title="@string/precise_manage"
+            app:allowDividerBelow="false"
+            app:iconSpaceReserved="false" />
+
+        <io.legado.app.lib.prefs.Preference
             android:icon="@drawable/ic_cfg_about"
             android:key="about"
             android:title="@string/about"
