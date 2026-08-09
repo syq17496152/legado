@@ -90,6 +90,9 @@ scripts/publish_config.json
 /.trae/skills/legado-source-creator/references/source-analysis/*.md
 /.trae/skills/legado-source-creator/references/special-scenarios/*.md
 /ai_tests/scripts/*.py
+!/ai_tests/scripts/l2_verify_precise_manage.py
+# opencode 运行时产物
+.opencode/goals/
 /docs/specs/rss-image-decrypt-optimization/*.md
 /*.html
 /import_log.txt
