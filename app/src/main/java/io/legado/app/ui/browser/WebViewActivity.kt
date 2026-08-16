@@ -6,8 +6,6 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
@@ -20,12 +18,33 @@ import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.core.view.size
 import io.legado.app.R
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.OpenInBrowser
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Web
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppConst.imagePathKey
 import io.legado.app.databinding.ActivityWebViewBinding
-import io.legado.app.help.http.CookieStore
 import io.legado.app.help.source.SourceVerificationHelp
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.help.http.CookieStore
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
@@ -83,6 +102,10 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     private var isfullscreen = false
     private var wasScreenOff = false
     private var needClearHistory = true
+    private var menuExpanded by mutableStateOf(false)
+    private var titleState by mutableStateOf("")
+    private var subtitleState by mutableStateOf<String?>(null)
+    private var webLogChecked by mutableStateOf(sessionShowWebLog)
     private val saveImage = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
             ACache.get().put(imagePathKey, uri.toString())
@@ -101,8 +124,9 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         currentWebView.post {
             currentWebView.clearHistory()
         }
-        binding.titleBar.title = intent.getStringExtra("title") ?: getString(R.string.loading)
-        binding.titleBar.subtitle = intent.getStringExtra("sourceName")
+        titleState = intent.getStringExtra("title") ?: getString(R.string.loading)
+        subtitleState = intent.getStringExtra("sourceName")
+        initComposeTopBar()
         viewModel.initData(intent) {
             val url = viewModel.baseUrl
             val headerMap = viewModel.headerMap
@@ -169,59 +193,115 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.web_view, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        if (viewModel.sourceOrigin.isNotEmpty()) {
-            menu.findItem(R.id.menu_disable_source)?.isVisible = true
-            menu.findItem(R.id.menu_delete_source)?.isVisible = true
-        }
-        menu.findItem(R.id.menu_show_web_log)?.isChecked = sessionShowWebLog
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_web_refresh -> refresh()
-            R.id.menu_open_in_browser -> openUrl(viewModel.baseUrl)
-            R.id.menu_copy_url -> sendToClip(viewModel.baseUrl)
-            R.id.menu_ok -> {
-                if (viewModel.sourceVerificationEnable) {
-                    viewModel.saveVerificationResult(currentWebView) {
-                        finish()
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = titleState,
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = { finish() },
+                    actions = {
+                        // 常驻快捷按钮：刷新 / 完成
+                        IconButton(onClick = { refresh() }) {
+                            Icon(Icons.Outlined.Refresh, contentDescription = null)
+                        }
+                        IconButton(onClick = { onClickOk() }) {
+                            Icon(Icons.Filled.Check, contentDescription = null)
+                        }
+                        // 溢出菜单
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = null)
+                            }
+                            AppDropdownMenu(
+                                expanded = menuExpanded,
+                                onDismiss = { menuExpanded = false },
+                                actions = buildMenuActions()
+                            )
+                        }
                     }
-                } else {
-                    finish()
-                }
+                )
             }
+        }
+    }
 
-            R.id.menu_full_screen -> toggleFullScreen()
-            R.id.menu_show_web_log -> {
-                sessionShowWebLog = !sessionShowWebLog
-                item.isChecked = sessionShowWebLog
+    private fun onClickOk() {
+        if (viewModel.sourceVerificationEnable) {
+            viewModel.saveVerificationResult(currentWebView) {
+                finish()
             }
-            R.id.menu_disable_source -> {
-                viewModel.disableSource {
-                    finish()
-                }
-            }
+        } else {
+            finish()
+        }
+    }
 
-            R.id.menu_delete_source -> {
-                alert(R.string.draw) {
-                    setMessage(getString(R.string.sure_del) + "\n" + viewModel.sourceName)
-                    noButton()
-                    yesButton {
-                        viewModel.deleteSource {
+    private fun buildMenuActions(): List<MenuAction> = buildList {
+        // 浏览器打开 / 复制 URL
+        add(
+            MenuAction(
+                icon = Icons.Outlined.OpenInBrowser,
+                title = getString(R.string.open_in_browser),
+                onClick = { openUrl(viewModel.baseUrl) }
+            )
+        )
+        add(
+            MenuAction(
+                icon = Icons.Outlined.ContentCopy,
+                title = getString(R.string.copy_url),
+                onClick = { sendToClip(viewModel.baseUrl) }
+            )
+        )
+        // 全屏
+        add(
+            MenuAction(
+                icon = Icons.Outlined.Fullscreen,
+                title = getString(R.string.full_screen),
+                onClick = { toggleFullScreen() }
+            )
+        )
+        // 网页日志（勾选态）
+        add(
+            MenuAction(
+                icon = Icons.Outlined.Web,
+                title = getString(R.string.show_web_log),
+                checked = webLogChecked,
+                onClick = {
+                    webLogChecked = !webLogChecked
+                    sessionShowWebLog = webLogChecked
+                }
+            )
+        )
+        // 源操作（仅源验证模式可见）
+        if (viewModel.sourceOrigin.isNotEmpty()) {
+            add(
+                MenuAction(
+                    icon = Icons.Outlined.Delete,
+                    title = getString(R.string.disable_source),
+                    onClick = {
+                        viewModel.disableSource {
                             finish()
                         }
                     }
-                }
-            }
+                )
+            )
+            add(
+                MenuAction(
+                    icon = Icons.Outlined.DeleteForever,
+                    title = getString(R.string.delete_source),
+                    onClick = {
+                        alert(R.string.draw) {
+                            setMessage(getString(R.string.sure_del) + "\n" + viewModel.sourceName)
+                            noButton()
+                            yesButton {
+                                viewModel.deleteSource {
+                                    finish()
+                                }
+                            }
+                        }
+                    }
+                )
+            )
         }
-        return super.onCompatOptionsItemSelected(item)
     }
 
     //实现starBrowser调起页面全屏
@@ -477,9 +557,9 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
             }
             view?.title?.let { title ->
                 if (title != url && title != view.url && title.isNotBlank()) {
-                    binding.titleBar.title = title
+                    titleState = title
                 } else {
-                    binding.titleBar.title = intent.getStringExtra("title")
+                    titleState = intent.getStringExtra("title").orEmpty()
                 }
                 view.evaluateJavascript("!!window._cf_chl_opt") {
                     if (it == "true") {

@@ -1,9 +1,9 @@
 package io.legado.app.ui.debug
 
+// 豁免登记: 调试工具页私有卡片组件，见 audit-v10-consistency.md §3.1 E8
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -20,10 +20,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.help.http.StrResponse
 import io.legado.app.help.http.newCallStrResponse
+import io.legado.app.ui.widget.components.AppShapes
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
@@ -166,7 +166,7 @@ fun CurlTestScreen(
                 title = {
                     Text(
                         text = stringResource(R.string.debug_curl_test),
-                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp, fontWeight = FontWeight.Medium)
+                        style = MaterialTheme.typography.titleLarge
                     )
                 },
                 navigationIcon = {
@@ -214,7 +214,7 @@ fun CurlTestScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = AppShapes.Button
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
@@ -329,7 +329,7 @@ fun CurlTestScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = AppShapes.Button
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
@@ -358,8 +358,9 @@ fun CurlTestScreen(
                                 label = stringResource(R.string.debug_status_code),
                                 value = responseCode.toString(),
                                 valueColor = when {
-                                    responseCode in 200..299 -> Color(0xFF4CAF50)
-                                    responseCode in 300..399 -> Color(0xFFFF9800)
+                                    // 语义状态色：2xx 成功→primary，3xx 警告→tertiary，其他→error（M3 收敛，原 0xFF4CAF50/0xFFFF9800）
+                                    responseCode in 200..299 -> MaterialTheme.colorScheme.primary
+                                    responseCode in 300..399 -> MaterialTheme.colorScheme.tertiary
                                     else -> MaterialTheme.colorScheme.error
                                 }
                             )
@@ -382,7 +383,7 @@ fun CurlTestScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = AppShapes.Button
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(

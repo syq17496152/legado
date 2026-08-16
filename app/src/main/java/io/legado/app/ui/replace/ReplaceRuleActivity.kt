@@ -2,13 +2,14 @@ package io.legado.app.ui.replace
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.Menu
 import android.view.MenuItem
-import android.view.SubMenu
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.appcompat.widget.PopupMenu
-import androidx.appcompat.widget.SearchView
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -24,18 +25,17 @@ import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.association.ImportReplaceRuleDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.SelectActionBar
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
 import io.legado.app.utils.sendToClip
@@ -43,7 +43,6 @@ import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
-import io.legado.app.utils.transaction
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
@@ -55,9 +54,10 @@ import kotlinx.coroutines.launch
 
 /**
  * 替换规则管理
+ *
+ * L-C4 枝叶页：顶栏/搜索 Compose 化（ReplaceRuleTopBar），列表 View 内核保留（拖拽/滑选/多选批量）。
  */
 class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRuleViewModel>(),
-    SearchView.OnQueryTextListener,
     PopupMenu.OnMenuItemClickListener,
     SelectActionBar.CallBack,
     ReplaceRuleAdapter.CallBack {
@@ -65,13 +65,13 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
     override val viewModel by viewModels<ReplaceRuleViewModel>()
     private val importRecordKey = "replaceRuleRecordKey"
     private val adapter by lazy { ReplaceRuleAdapter(this, this) }
-    private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
-    private var groups = arrayListOf<String>()
-    private var groupMenu: SubMenu? = null
     private var replaceRuleFlowJob: Job? = null
     private var dataInit = false
+
+    // Compose 桥接状态（顶栏/搜索 Compose，列表 View 内核保留）
+    private var composeSearchQuery by mutableStateOf("")
+    private var composeSearchVisible by mutableStateOf(false)
+    private var composeGroups by mutableStateOf(listOf<String>())
     private val qrCodeResult = registerForActivityResult(QrCodeResult()) {
         it ?: return@registerForActivityResult
         showDialogFragment(ImportReplaceRuleDialog(it))
@@ -106,22 +106,56 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initComposeTopBar()
         initRecyclerView()
-        initSearchView()
         initSelectActionView()
         observeReplaceRuleData()
         observeGroupData()
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.replace_rule, menu)
-        return super.onCompatCreateOptionsMenu(menu)
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                ReplaceRuleTopBar(
+                    searchQuery = composeSearchQuery,
+                    searchVisible = composeSearchVisible,
+                    groups = composeGroups,
+                    onSearchQueryChange = { key ->
+                        composeSearchQuery = key
+                        observeReplaceRuleData(key)
+                    },
+                    onSearchVisibleChange = { visible ->
+                        composeSearchVisible = visible
+                        if (!visible) {
+                            composeSearchQuery = ""
+                            observeReplaceRuleData()
+                        }
+                    },
+                    onBack = { finish() },
+                    onAdd = { editActivity.launch(ReplaceEditActivity.startIntent(this)) },
+                    onGroupManage = { showDialogFragment<GroupManageDialog>() },
+                    onFilterEnabled = { setQueryFilter(getString(R.string.enabled)) },
+                    onFilterDisabled = { setQueryFilter(getString(R.string.disabled)) },
+                    onFilterNoGroup = { setQueryFilter(getString(R.string.no_group)) },
+                    onFilterGroup = { setQueryFilter("group:$it") },
+                    onImportOnline = { showImportDialog() },
+                    onImportLocal = {
+                        importDoc.launch {
+                            mode = HandleFileContract.FILE
+                            allowExtensions = arrayOf("txt", "json")
+                        }
+                    },
+                    onImportQr = { qrCodeResult.launch() },
+                    onHelp = { showHelp("replaceRuleHelp") }
+                )
+            }
+        }
     }
 
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        groupMenu = menu.findItem(R.id.menu_group)?.subMenu
-        upGroupMenu()
-        return super.onPrepareOptionsMenu(menu)
+    private fun setQueryFilter(key: String) {
+        composeSearchVisible = true
+        composeSearchQuery = key
+        observeReplaceRuleData(key)
     }
 
     private fun initRecyclerView() {
@@ -139,12 +173,6 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
 
         // Note: need judge selection first, so add ItemTouchHelper after it.
         ItemTouchHelper(itemTouchCallback).attachToRecyclerView(binding.recyclerView)
-    }
-
-    private fun initSearchView() {
-        searchView.applyTint(primaryTextColor)
-        searchView.queryHint = getString(R.string.replace_purify_search)
-        searchView.setOnQueryTextListener(this)
     }
 
     override fun selectAll(selectAll: Boolean) {
@@ -228,44 +256,9 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
     private fun observeGroupData() {
         lifecycleScope.launch {
             appDb.replaceRuleDao.flowGroups().flowOn(IO).collect {
-                groups.clear()
-                groups.addAll(it)
-                upGroupMenu()
+                composeGroups = it
             }
         }
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_add_replace_rule ->
-                editActivity.launch(ReplaceEditActivity.startIntent(this))
-
-            R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
-            R.id.menu_enabled_group -> {
-                searchView.setQuery(getString(R.string.enabled), true)
-            }
-
-            R.id.menu_disabled_group -> {
-                searchView.setQuery(getString(R.string.disabled), true)
-            }
-            R.id.menu_del_selection -> viewModel.delSelection(adapter.selection)
-            R.id.menu_import_onLine -> showImportDialog()
-            R.id.menu_import_local -> importDoc.launch {
-                mode = HandleFileContract.FILE
-                allowExtensions = arrayOf("txt", "json")
-            }
-
-            R.id.menu_import_qr -> qrCodeResult.launch()
-            R.id.menu_help -> showHelp("replaceRuleHelp")
-            R.id.menu_group_null -> {
-                searchView.setQuery(getString(R.string.no_group), true)
-            }
-
-            else -> if (item.groupId == R.id.replace_group) {
-                searchView.setQuery("group:${item.title}", true)
-            }
-        }
-        return super.onCompatOptionsItemSelected(item)
     }
 
     override fun onMenuItemClick(item: MenuItem?): Boolean {
@@ -284,13 +277,6 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
             }
         }
         return false
-    }
-
-    private fun upGroupMenu() = groupMenu?.transaction { menu ->
-        menu.removeGroup(R.id.replace_group)
-        groups.forEach {
-            menu.add(R.id.replace_group, Menu.NONE, Menu.NONE, it)
-        }
     }
 
     @SuppressLint("InflateParams")
@@ -324,15 +310,6 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
             }
             cancelButton()
         }
-    }
-
-    override fun onQueryTextChange(newText: String?): Boolean {
-        observeReplaceRuleData(newText)
-        return false
-    }
-
-    override fun onQueryTextSubmit(query: String?): Boolean {
-        return false
     }
 
     override fun onDestroy() {

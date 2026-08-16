@@ -22,11 +22,10 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@android:color/transparent"
         app:layout_constraintTop_toTopOf="parent" />
 
     <TextView
@@ -41,7 +40,7 @@
         android:paddingEnd="12dp"
         android:paddingBottom="6dp"
         android:textColor="@android:color/white"
-        android:textSize="14sp"
+        android:textSize="@dimen/text_14sp"
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />

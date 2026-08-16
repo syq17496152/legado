@@ -1,7 +1,6 @@
 package io.legado.app.ui.book.import
 
 import android.os.Bundle
-import androidx.appcompat.widget.SearchView
 import androidx.lifecycle.ViewModel
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -12,12 +11,10 @@ import io.legado.app.databinding.ActivityImportBookBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.ArchiveUtils
 import io.legado.app.utils.FileDoc
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -34,20 +31,12 @@ abstract class BaseImportBookActivity<VM : ViewModel> :
     final override val binding by viewBinding(ActivityImportBookBinding::inflate)
 
     private var localBookTreeSelectListener: ((Boolean) -> Unit)? = null
-    protected val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
 
     val localBookTreeSelect = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { treeUri ->
             AppConfig.defaultBookTreeUri = treeUri.toString()
             localBookTreeSelectListener?.invoke(true)
         } ?: localBookTreeSelectListener?.invoke(false)
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        initSearchView()
     }
 
     /**
@@ -149,21 +138,6 @@ abstract class BaseImportBookActivity<VM : ViewModel> :
             }
             noButton()
         }
-    }
-
-    private fun initSearchView() {
-        searchView.applyTint(primaryTextColor)
-        searchView.isSubmitButtonEnabled = true
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                return false
-            }
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                onSearchTextChange(newText)
-                return false
-            }
-        })
     }
 
 }

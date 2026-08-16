@@ -15,18 +15,11 @@
         android:orientation="vertical"
         tools:ignore="UselessParent">
 
-        <androidx.appcompat.widget.Toolbar
-            android:id="@+id/tool_bar"
+        <!-- L-C13 源登录：顶栏 Compose 化（GlassTopAppBar + 确定 + 更多菜单），动态表单 Flexbox 内核保留 -->
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/compose_top_bar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@color/background_menu"
-            android:elevation="5dp"
-            android:theme="?attr/actionBarStyle"
-            app:title="@string/login"
-            app:displayHomeAsUp="false"
-            app:fitStatusBar="false"
-            app:popupTheme="@style/AppTheme.PopupOverlay"
-            app:titleTextAppearance="@style/ToolbarTitle" />
+            android:layout_height="wrap_content" />
 
         <androidx.core.widget.NestedScrollView
             android:layout_width="match_parent"

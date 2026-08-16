@@ -9,6 +9,7 @@ import android.os.LocaleList
 import io.legado.app.constant.PreferKey
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
+import io.legado.app.utils.isNightMode
 import io.legado.app.utils.sysConfiguration
 import java.util.*
 
@@ -29,6 +30,26 @@ object AppContextWrapper {
             configuration.locale = targetLocale
         }
         configuration.fontScale = getFontScale(context)
+        // 修复主题模式：App 手动设置深/浅色（themeMode）时强制 uiMode 与 App 主题同步。
+        // 根因：BaseActivity.setTheme(AppTheme_Dark/Light) 不修改系统 uiMode，
+        // values-night/colors.xml 只随系统真实夜间模式生效，导致「App 深色+系统浅色」时
+        // @color/primaryText 等解析为 values 浅色版（黑色）→ View 页面样式不跟随 App 主题。
+        // 保留 type bit（UI_MODE_TYPE_*），仅翻转 night bit。
+        // ⚠️ 此处禁止访问 AppConfig（其静态初始化依赖 appCtx，而 wrap() 在 attachBaseContext
+        // 阶段 appCtx 尚未注入，会抛 ExceptionInInitializerError），直接用传入 context 读
+        // SharedPreferences，判定逻辑与 AppConfig.isNightTheme 保持一致（themeMode 默认 "2"=夜间）。
+        val themeMode = context.getPrefString(PreferKey.themeMode, "2")
+        val nightBit = when (themeMode) {
+            "1", "3" -> Configuration.UI_MODE_NIGHT_NO
+            "2" -> Configuration.UI_MODE_NIGHT_YES
+            else -> if (sysConfiguration.isNightMode) {
+                Configuration.UI_MODE_NIGHT_YES
+            } else {
+                Configuration.UI_MODE_NIGHT_NO
+            }
+        }
+        configuration.uiMode =
+            (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightBit
         return context.createConfigurationContext(configuration)
     }
 

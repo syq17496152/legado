@@ -27,7 +27,6 @@ import io.legado.app.data.entities.SearchKeyword
 import io.legado.app.data.entities.Server
 import io.legado.app.data.entities.TxtTocRule
 import io.legado.app.help.DirectLinkUpload
-import io.legado.app.help.LauncherIconHelp
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.upType
 import io.legado.app.help.config.LocalConfig
@@ -311,9 +310,6 @@ object Restore {
         appCtx.toastOnUi(R.string.restore_success)
         withContext(Main) {
             delay(100)
-            if (!BuildConfig.DEBUG) {
-                LauncherIconHelp.changeIcon(appCtx.getPrefString(PreferKey.launcherIcon))
-            }
             ThemeConfig.applyDayNight(appCtx)
         }
     }

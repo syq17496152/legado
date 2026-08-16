@@ -3,16 +3,21 @@ package io.legado.app.ui.rss.search
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View.GONE
 import android.view.View.VISIBLE
 import androidx.activity.viewModels
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.view.isVisible
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.flexbox.FlexboxLayoutManager
@@ -23,25 +28,27 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.SearchKeyword
 import io.legado.app.data.entities.SearchRssArticle
 import io.legado.app.databinding.ActivityRssSearchBinding
+import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.Selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.about.AppLogDialog
-import io.legado.app.ui.rss.read.ReadRss
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyNavigationBarMargin
 import io.legado.app.utils.applyNavigationBarPadding
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.transaction
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
@@ -50,7 +57,6 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 
 /**
  * 订阅源统一搜索 Activity（rss-unified-search 新增）
@@ -78,18 +84,18 @@ class RssSearchActivity :
             setHasStableIds(true)
         }
     }
-    private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
-    private var menu: Menu? = null
-    private var groups: List<String>? = null
+    // rss-search-compose 壳层化：Compose 顶栏搜索/菜单状态（替代原 SearchView + Menu）
+    private var composeSearchQuery by mutableStateOf("")
+    private var menuExpanded by mutableStateOf(false)
+    private var composeTypeChecked by mutableStateOf(AppConfig.rssSearchType)
+    private var composeGroups by mutableStateOf(listOf<String>())
     private var historyFlowJob: Job? = null
     private var isManualStopSearch = false
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         binding.llInputHelp.setBackgroundColor(backgroundColor)
         initRecyclerView()
-        initSearchView()
+        initComposeTopBar()
         initOtherView()
         initData()
         receiptIntent(intent)
@@ -100,129 +106,168 @@ class RssSearchActivity :
         receiptIntent(intent)
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.rss_search, menu)
-        this.menu = menu
-        return super.onCompatCreateOptionsMenu(menu)
+    // rss-search-compose 壳层化：顶栏（GlassTopAppBar + 搜索 SettingsSearchBar + 更多菜单 AppDropdownMenu）
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                Column {
+                    GlassTopAppBar(
+                        title = getString(R.string.search),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = {
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = null)
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = buildMenuActions()
+                                )
+                            }
+                        }
+                    )
+                    SettingsSearchBar(
+                        query = composeSearchQuery,
+                        onQueryChange = {
+                            composeSearchQuery = it
+                            // 输入变化：停止当前搜索，隐藏 FAB，更新搜索历史
+                            viewModel.stop()
+                            binding.fbStartStop.invisible()
+                            upHistory(it.trim())
+                            visibleInputHelp(true)
+                        },
+                        placeholder = getString(R.string.rss_search_key),
+                        onSearch = { submitSearch(composeSearchQuery) }
+                    )
+                }
+            }
+        }
     }
 
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.transaction {
-            menu.removeGroup(R.id.menu_group_1)
-            menu.removeGroup(R.id.menu_group_2)
-            menu.removeGroup(R.id.menu_group_3)
-
-            // 阶段11.4 问题3 优化：类型筛选（menu_group_3）放在分组筛选上面
-            // 选项：全部类型(-1) / 网页(0) / 图片(1) / 视频(2)，单选
-            // 与分组筛选（menu_group_1/2）独立，可同时生效（先按分组限定源范围，再按类型过滤结果）
-            // "全部类型"改名避免与"全部书源"视觉重合（用户反馈"留一个全部就行了"）
-            val currentType = viewModel.searchTypeLiveData.value ?: -1
-            menu.add(R.id.menu_group_3, R.id.menu_type_all, Menu.NONE, getString(R.string.rss_search_type_all))
-                .apply { isChecked = currentType == -1 }
-            menu.add(R.id.menu_group_3, R.id.menu_type_web, Menu.NONE, getString(R.string.rss_article_type_web))
-                .apply { isChecked = currentType == 0 }
-            menu.add(R.id.menu_group_3, R.id.menu_type_image, Menu.NONE, getString(R.string.rss_article_type_image))
-                .apply { isChecked = currentType == 1 }
-            menu.add(R.id.menu_group_3, R.id.menu_type_video, Menu.NONE, getString(R.string.rss_article_type_video))
-                .apply { isChecked = currentType == 2 }
-            menu.setGroupCheckable(R.id.menu_group_3, true, true)
-
-            // 分组筛选（menu_group_1/2）放在类型筛选下面
-            var hasChecked = false
-            val searchScopeNames = viewModel.searchScope.displayNames
+    // rss-search-compose 壳层化：更多菜单数据（类型筛选 + 分组筛选 + 管理）
+    private fun buildMenuActions(): List<MenuAction> {
+        val searchScopeNames = viewModel.searchScope.displayNames
+        return buildList {
+            // 类型筛选分组
+            add(MenuAction(Icons.Default.Category, getString(R.string.rss_search_type), header = true) {})
+            add(MenuAction(
+                Icons.Default.AllInclusive,
+                getString(R.string.rss_search_type_all),
+                checked = composeTypeChecked == -1,
+                onClick = { handleMenuAction(R.id.menu_type_all) }
+            ))
+            add(MenuAction(
+                Icons.Default.Language,
+                getString(R.string.rss_article_type_web),
+                checked = composeTypeChecked == 0,
+                onClick = { handleMenuAction(R.id.menu_type_web) }
+            ))
+            add(MenuAction(
+                Icons.Default.Image,
+                getString(R.string.rss_article_type_image),
+                checked = composeTypeChecked == 1,
+                onClick = { handleMenuAction(R.id.menu_type_image) }
+            ))
+            add(MenuAction(
+                Icons.Default.VideoLibrary,
+                getString(R.string.rss_article_type_video),
+                checked = composeTypeChecked == 2,
+                onClick = { handleMenuAction(R.id.menu_type_video) }
+            ))
+            // 分组筛选分组
+            add(MenuAction(Icons.Default.Folder, getString(R.string.groups_or_source), header = true) {})
             if (!viewModel.searchScope.isAll()) {
                 searchScopeNames.forEach { name ->
-                    menu.add(R.id.menu_group_1, Menu.NONE, Menu.NONE, name).apply {
-                        isChecked = true
-                        hasChecked = true
-                    }
+                    add(MenuAction(
+                        Icons.Default.Folder,
+                        name,
+                        checked = true,
+                        onClick = { handleGroupSelect(name, remove = true) }
+                    ))
                 }
             }
-            val allSourceMenu =
-                menu.add(R.id.menu_group_2, R.id.menu_1, Menu.NONE, getString(R.string.all_source))
-                    .apply {
-                        if (viewModel.searchScope.isAll()) {
-                            isChecked = true
-                            hasChecked = true
-                        }
-                    }
-            groups?.forEach {
-                if (searchScopeNames.contains(it)) {
-                    // 已在 group_1 显示，跳过
-                } else {
-                    menu.add(R.id.menu_group_2, Menu.NONE, Menu.NONE, it)
+            add(MenuAction(
+                Icons.Default.AllInclusive,
+                getString(R.string.all_source),
+                checked = viewModel.searchScope.isAll(),
+                onClick = { handleMenuAction(R.id.menu_1) }
+            ))
+            composeGroups.forEach { group ->
+                if (!searchScopeNames.contains(group)) {
+                    add(MenuAction(
+                        Icons.Default.Folder,
+                        group,
+                        onClick = { handleGroupSelect(group, remove = false) }
+                    ))
                 }
             }
-            if (!hasChecked) {
-                viewModel.searchScope.update("")
-                allSourceMenu.isChecked = true
-            }
-            menu.setGroupCheckable(R.id.menu_group_1, true, false)
-            menu.setGroupCheckable(R.id.menu_group_2, true, true)
+            // 管理分组
+            add(MenuAction(Icons.Default.Settings, getString(R.string.more), header = true) {})
+            add(MenuAction(
+                Icons.Default.ManageSearch,
+                getString(R.string.rss_source_manage),
+                onClick = { handleMenuAction(R.id.menu_source_manage) }
+            ))
+            add(MenuAction(
+                Icons.Default.Info,
+                getString(R.string.log),
+                onClick = { handleMenuAction(R.id.menu_log) }
+            ))
         }
-        return super.onMenuOpened(featureId, menu)
     }
 
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
+    // rss-search-compose 壳层化：菜单动作统一入口（原 onCompatOptionsItemSelected 逻辑迁移）
+    private fun handleMenuAction(actionId: Int) {
+        when (actionId) {
             R.id.menu_source_manage -> startActivity<RssSourceActivity>()
-            R.id.menu_search_scope -> {
-                // 打开菜单（onMenuOpened 已处理分组展示），此处提示用户选择分组
-                // 也可考虑弹出一个独立的对话框，简化为打开菜单
-            }
-            R.id.menu_search_type -> {
-                // 阶段11.4 问题3：类型筛选入口，实际选项在 onMenuOpened 的 menu_group_3 中显示
-            }
             R.id.menu_log -> showDialogFragment(AppLogDialog())
-            R.id.menu_1 -> viewModel.searchScope.update("")
-            // 阶段11.4 问题3：类型筛选选项处理
-            R.id.menu_type_all -> viewModel.updateSearchType(-1)
-            R.id.menu_type_web -> viewModel.updateSearchType(0)
-            R.id.menu_type_image -> viewModel.updateSearchType(1)
-            R.id.menu_type_video -> viewModel.updateSearchType(2)
-            else -> {
-                if (item.groupId == R.id.menu_group_1) {
-                    viewModel.searchScope.remove(item.title.toString())
-                } else if (item.groupId == R.id.menu_group_2) {
-                    viewModel.searchScope.update(item.title.toString())
-                }
+            R.id.menu_1 -> {
+                viewModel.searchScope.update("")
+                reSearchIfNeeded()
             }
+            // 类型筛选选项处理
+            R.id.menu_type_all -> updateSearchType(-1)
+            R.id.menu_type_web -> updateSearchType(0)
+            R.id.menu_type_image -> updateSearchType(1)
+            R.id.menu_type_video -> updateSearchType(2)
         }
-        return super.onCompatOptionsItemSelected(item)
     }
 
-    private fun initSearchView() {
-        searchView.applyTint(primaryTextColor)
-        searchView.isSubmitButtonEnabled = true
-        searchView.queryHint = getString(R.string.rss_search_key)
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String): Boolean {
-                searchView.clearFocus()
-                query.trim().let { searchKey ->
-                    isManualStopSearch = false
-                    viewModel.saveSearchKey(searchKey)
-                    viewModel.searchKey = ""
-                    viewModel.search(searchKey)
-                }
-                visibleInputHelp(false)
-                return true
-            }
+    // 类型筛选：更新状态并同步 ViewModel
+    private fun updateSearchType(type: Int) {
+        composeTypeChecked = type
+        viewModel.updateSearchType(type)
+    }
 
-            override fun onQueryTextChange(newText: String): Boolean {
-                viewModel.stop()
-                binding.fbStartStop.invisible()
-                upHistory(newText.trim())
-                return false
-            }
-        })
-        searchView.setOnQueryTextFocusChangeListener { _, hasFocus ->
-            if (binding.refreshProgressBar.isAutoLoading || (!hasFocus && adapter.isNotEmpty() && searchView.query.isNotBlank())) {
-                visibleInputHelp(false)
-            } else {
-                visibleInputHelp(true)
-            }
+    // 分组筛选：勾选态切换（remove=true 移除勾选，false 选中分组）
+    private fun handleGroupSelect(name: String, remove: Boolean) {
+        if (remove) {
+            viewModel.searchScope.remove(name)
+        } else {
+            viewModel.searchScope.update(name)
         }
-        visibleInputHelp(true)
+        reSearchIfNeeded()
+    }
+
+    // 分组/类型筛选变化后若已有搜索词则重新搜索
+    private fun reSearchIfNeeded() {
+        val query = composeSearchQuery.trim()
+        if (query.isNotEmpty()) {
+            viewModel.search(query)
+        }
+    }
+
+    // rss-search-compose 壳层化：提交搜索（原 SearchView onQueryTextSubmit 逻辑迁移）
+    private fun submitSearch(query: String) {
+        query.trim().let { searchKey ->
+            isManualStopSearch = false
+            viewModel.saveSearchKey(searchKey)
+            viewModel.searchKey = ""
+            viewModel.search(searchKey)
+        }
+        visibleInputHelp(false)
     }
 
     private fun initRecyclerView() {
@@ -274,8 +319,10 @@ class RssSearchActivity :
     private fun initData() {
         viewModel.searchScope.stateLiveData.observe(this) {
             if (!binding.llInputHelp.isVisible) {
-                searchView.query?.toString()?.trim()?.let {
-                    searchView.setQuery(it, true)
+                composeSearchQuery.trim().let { query ->
+                    if (query.isNotEmpty()) {
+                        submitSearch(query)
+                    }
                 }
             }
         }
@@ -292,7 +339,7 @@ class RssSearchActivity :
         // 订阅源分组数据（用于菜单显示）
         lifecycleScope.launch {
             appDb.rssSourceDao.flowEnabledGroups().flowOn(IO).collect {
-                groups = it
+                composeGroups = it
             }
         }
         // 订阅源搜索无分页概念（RssSearchModel 一次搜索所有源），不需要 repeatOnLifecycle resume/pause
@@ -308,11 +355,11 @@ class RssSearchActivity :
         }
         val key = intent?.getStringExtra("key")
         if (key.isNullOrBlank()) {
-            // 直接对 SearchView 内部的 EditText 请求焦点（参考 SearchActivity）
-            searchView.findViewById<android.widget.TextView>(androidx.appcompat.R.id.search_src_text)
-                .requestFocus()
+            // 无 key：聚焦搜索框（Compose 顶栏搜索框保持焦点状态）
+            binding.composeTopBar.requestFocus()
         } else {
-            searchView.setQuery(key, true)
+            composeSearchQuery = key
+            submitSearch(key)
         }
     }
 
@@ -321,7 +368,7 @@ class RssSearchActivity :
      */
     private fun visibleInputHelp(visible: Boolean) {
         if (visible) {
-            upHistory(searchView.query.toString())
+            upHistory(composeSearchQuery.trim())
             binding.llInputHelp.visibility = VISIBLE
         } else {
             binding.llInputHelp.visibility = GONE
@@ -410,7 +457,8 @@ class RssSearchActivity :
      * 点击历史关键字，直接发起搜索
      */
     override fun searchHistory(key: String) {
-        searchView.setQuery(key, true)
+        composeSearchQuery = key
+        submitSearch(key)
     }
 
     /**
@@ -430,11 +478,8 @@ class RssSearchActivity :
         }
     }
 
+    // rss-search-compose 壳层化：Compose 顶栏无 searchView 焦点拦截，直接退出
     override fun finish() {
-        if (searchView.hasFocus()) {
-            searchView.clearFocus()
-            return
-        }
         super.finish()
     }
 

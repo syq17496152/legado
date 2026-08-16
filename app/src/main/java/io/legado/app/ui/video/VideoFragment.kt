@@ -276,7 +276,7 @@ class VideoFragment : Fragment() {
                             pv.seekTo(history.position)
                             val minutes = history.position / 60000
                             val seconds = (history.position % 60000) / 1000
-                            appCtx.toastOnUi("已从 ${minutes}:${seconds.toString().padStart(2, '0')} 继续播放")
+                            appCtx.toastOnUi(getString(R.string.video_resume_from_format, minutes, seconds))
                         }
                     }
                 }
@@ -353,7 +353,7 @@ class VideoFragment : Fragment() {
         // 区分手动降级（错误对话框点击 WebView）和自动降级（累计失败达阈值）
         // 自动降级时 isWebViewMode 之前为 false，切换后变 true；手动降级时也是 false→true
         // 简化：每次 switchToWebViewMode 都 Toast（用户感知"已切换"即可，无需区分手动/自动）
-        toastOnUi("ExoPlayer 多次失败，已切换到 WebView 模式")
+        toastOnUi(getString(R.string.video_switch_to_webview_mode))
         // 暂停 ExoPlayer
         pv.onVideoPause()
         // 隐藏 ExoPlayer
@@ -808,7 +808,8 @@ class VideoFragment : Fragment() {
     private fun updateRouteSelectorText() {
         val routes = VideoPlay.rssRoutes ?: return
         val currentRoute = routes.getOrNull(VideoPlay.rssRouteIndex)
-        tvRouteSelector?.text = "线路：${currentRoute?.name ?: "未知"} ▼"
+        val routeName = currentRoute?.name ?: getString(R.string.video_unknown_route)
+        tvRouteSelector?.text = getString(R.string.video_route_format, routeName)
     }
 
     // ==================== 集数选择器（REQ-18） ====================

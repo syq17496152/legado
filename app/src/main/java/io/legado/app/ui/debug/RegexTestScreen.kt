@@ -34,11 +34,11 @@
  */
 package io.legado.app.ui.debug
 
+// 豁免登记: 调试工具页私有卡片组件，见 audit-v10-consistency.md §3.1 E8
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -61,8 +61,8 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.legado.app.R
+import io.legado.app.ui.widget.components.AppShapes
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
 import java.util.regex.PatternSyntaxException
@@ -206,7 +206,7 @@ fun RegexTestScreen(
             }
             
             // 构建高亮显示文本
-            val highlightColor = Color(0x40FFEB3B)  // 半透明黄色背景
+            val highlightColor = Color(0x40FFEB3B)  // 高亮语义色（匹配文本背景，豁免登记见 audit-v10-consistency.md §3.3）
             val highlightedText = buildAnnotatedString {
                 var lastIndex = 0
                 val sortedMatches = matches.sortedBy { it.start }
@@ -301,7 +301,7 @@ fun RegexTestScreen(
                 title = {
                     Text(
                         text = stringResource(R.string.debug_regex_test),
-                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp, fontWeight = FontWeight.Medium)
+                        style = MaterialTheme.typography.titleLarge
                     )
                 },
                 navigationIcon = {
@@ -327,7 +327,7 @@ fun RegexTestScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = AppShapes.Button
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     // 标题行：包含实时预览开关
@@ -443,7 +443,7 @@ fun RegexTestScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = AppShapes.Button
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
@@ -471,7 +471,7 @@ fun RegexTestScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = AppShapes.Button
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
@@ -642,18 +642,18 @@ private fun StatusCard(
     message: String,
     matchCount: Int
 ) {
-    // 根据状态选择颜色和图标
+    // 根据状态选择颜色和图标（成功→primary，失败→error，M3 语义色收敛，原 0xFF4CAF50/0xFFF44336）
     val backgroundColor = if (success) {
-        Color(0xFF4CAF50).copy(alpha = 0.15f)  // 绿色背景
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)  // 成功背景
     } else {
-        Color(0xFFF44336).copy(alpha = 0.15f)  // 红色背景
+        MaterialTheme.colorScheme.error.copy(alpha = 0.15f)  // 失败背景
     }
-    val iconColor = if (success) Color(0xFF4CAF50) else Color(0xFFF44336)
+    val iconColor = if (success) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
     val icon: ImageVector = if (success) Icons.Default.Check else Icons.Default.Error
     
     Surface(
         color = backgroundColor,
-        shape = RoundedCornerShape(12.dp)
+        shape = AppShapes.Button
     ) {
         Row(
             modifier = Modifier
@@ -708,7 +708,7 @@ private fun MatchInfoCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = AppShapes.Button
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // 标题行：包含复制按钮
@@ -755,7 +755,7 @@ private fun HighlightCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = AppShapes.Button
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -798,7 +798,7 @@ private fun ReplacePreviewCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = AppShapes.Button
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // 标题行：包含复制按钮

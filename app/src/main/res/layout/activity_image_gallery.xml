@@ -43,9 +43,9 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- 顶部标题栏：返回按钮 + 文章标题 -->
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <!-- 顶部顶栏（L-C15 S5 改造）：Compose GlassTopAppBar -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:layout_constraintTop_toTopOf="parent" />
@@ -63,7 +63,7 @@
         android:paddingEnd="12dp"
         android:paddingBottom="6dp"
         android:textColor="@android:color/white"
-        android:textSize="14sp"
+        android:textSize="@dimen/text_14sp"
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -101,7 +101,7 @@
             android:maxWidth="280dp"
             android:maxLines="3"
             android:textColor="@android:color/white"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_16sp"
             tools:text="加载失败" />
 
         <Button
@@ -173,7 +173,7 @@
         android:paddingEnd="12dp"
         android:paddingBottom="6dp"
         android:textColor="@android:color/white"
-        android:textSize="14sp"
+        android:textSize="@dimen/text_14sp"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />

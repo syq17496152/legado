@@ -4,8 +4,16 @@ import android.annotation.SuppressLint
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
-import android.view.Menu
-import android.view.MenuItem
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.view.isGone
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
@@ -20,6 +28,9 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.association.ImportReplaceRuleDialog
 import io.legado.app.ui.association.ImportRssSourceDialog
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.ConfirmDialog
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.showDialogFragment
@@ -34,6 +45,9 @@ import kotlinx.coroutines.withContext
 
 /**
  * 规则订阅界面
+ *
+ * L-D8 S2 改造：Compose 顶栏桥接（GlassTopAppBar + 添加按钮 + ConfirmDialog 删除确认），
+ * RecyclerView 列表 + DialogRuleSubEditBinding 编辑表单（独有联动逻辑）内核保留。
  */
 class RuleSubActivity : BaseActivity<ActivityRuleSubBinding>(),
     RuleSubAdapter.Callback {
@@ -41,28 +55,53 @@ class RuleSubActivity : BaseActivity<ActivityRuleSubBinding>(),
     override val binding by viewBinding(ActivityRuleSubBinding::inflate)
     private val adapter by lazy { RuleSubAdapter(this, this) }
 
+    // Compose 桥接状态：待删除确认
+    private var pendingDelete by mutableStateOf<RuleSub?>(null)
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initComposeTopBar()
         initView()
         initData()
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.source_subscription, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_add -> {
-                lifecycleScope.launch(IO) {
-                    val order = appDb.ruleSubDao.maxOrder + 1
-                    withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        editSubscription(RuleSub(customOrder = order))
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                Box {
+                    GlassTopAppBar(
+                        title = getString(R.string.rule_subscription),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = {
+                            IconButton(onClick = { onAddSubscription() }) {
+                                Icon(Icons.Default.Add, contentDescription = getString(R.string.add))
+                            }
+                        }
+                    )
+                    pendingDelete?.let { ruleSub ->
+                        ConfirmDialog(
+                            title = getString(R.string.draw),
+                            text = getString(R.string.sure_del) + "\n<" + ruleSub.name + ">",
+                            confirmText = getString(R.string.ok),
+                            cancelText = getString(R.string.cancel),
+                            destructive = true,
+                            onConfirm = { executeDelete(ruleSub) },
+                            onDismiss = { pendingDelete = null }
+                        )
                     }
                 }
             }
         }
-        return super.onCompatOptionsItemSelected(item)
+    }
+
+    /** 新增订阅：取最大排序后进入编辑（与旧版 menu_add 行为一致） */
+    private fun onAddSubscription() {
+        lifecycleScope.launch(IO) {
+            val order = appDb.ruleSubDao.maxOrder + 1
+            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                editSubscription(RuleSub(customOrder = order))
+            }
+        }
     }
 
     private fun initView() {
@@ -177,6 +216,11 @@ class RuleSubActivity : BaseActivity<ActivityRuleSubBinding>(),
     }
 
     override fun delSubscription(ruleSub: RuleSub) {
+        pendingDelete = ruleSub
+    }
+
+    private fun executeDelete(ruleSub: RuleSub) {
+        pendingDelete = null
         lifecycleScope.launch(IO) {
             appDb.ruleSubDao.delete(ruleSub)
         }

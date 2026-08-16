@@ -6,13 +6,10 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:contentInsetStartWithNavigation="0dp"
-        app:displayHomeAsUp="true"
-        app:title="@string/rss_source_edit" />
+        android:layout_height="wrap_content" />
 
     <HorizontalScrollView
         android:layout_width="match_parent"

@@ -2,16 +2,6 @@
 <androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <io.legado.app.lib.prefs.IconListPreference
-        android:defaultValue="ic_launcher"
-        android:entries="@array/icon_names"
-        android:entryValues="@array/icons"
-        android:key="launcherIcon"
-        android:summary="@string/change_icon_summary"
-        android:title="@string/change_icon"
-        app:iconSpaceReserved="false"
-        app:icons="@array/icons" />
-
     <io.legado.app.lib.prefs.Preference
         android:key="welcomeStyle"
         android:title="@string/welcome_style"

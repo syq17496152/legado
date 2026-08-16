@@ -1,14 +1,18 @@
 package io.legado.app.ui.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.ThemeStore
+import io.legado.app.ui.widget.components.ThemeSpec
+import io.legado.app.ui.widget.components.toM3Scheme
 import io.legado.app.utils.ColorUtils
 
 /**
@@ -16,7 +20,40 @@ import io.legado.app.utils.ColorUtils
  *
  * 将 Legado 原生 ThemeStore 的颜色配置映射到 Material3 ColorScheme，
  * 使 Compose 组件能跟随用户主题色。
+ *
+ * 色板推导统一收敛到 [ThemeSpec.toM3Scheme]（5 核心色→34 槽位，AD-18）。
+ *
+ * Typography：与 View 体系字号对齐（View ToolbarTitle=20sp / 正文 14-16sp），
+ * 消除 Compose 页与 View 页同屏时的字号不协调（主题统一 AD-19）。
  */
+val LegadoTypography = Typography(
+    // 顶栏/大标题：对齐 View ToolbarTitle 20sp（原 M3 默认 titleLarge=22sp）
+    titleLarge = TextStyle(
+        fontSize = 20.sp,
+        fontWeight = FontWeight.Medium
+    ),
+    titleMedium = TextStyle(
+        fontSize = 16.sp,
+        fontWeight = FontWeight.Medium
+    ),
+    titleSmall = TextStyle(
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Medium
+    ),
+    // 正文：对齐 View 14-16sp
+    bodyLarge = TextStyle(fontSize = 16.sp),
+    bodyMedium = TextStyle(fontSize = 14.sp),
+    bodySmall = TextStyle(fontSize = 12.sp),
+    // 标签/辅助文字
+    labelLarge = TextStyle(fontSize = 14.sp),
+    labelMedium = TextStyle(fontSize = 12.sp),
+    labelSmall = TextStyle(fontSize = 11.sp),
+    // 展示/标题族保持 M3 层级
+    displaySmall = TextStyle(fontSize = 36.sp),
+    headlineMedium = TextStyle(fontSize = 28.sp),
+    headlineSmall = TextStyle(fontSize = 24.sp)
+)
+
 @Composable
 fun LegadoTheme(
     content: @Composable () -> Unit
@@ -31,60 +68,26 @@ fun LegadoTheme(
     val textSecondaryColor = ThemeStore.textColorSecondary(context)
 
     val isLight = !isNightTheme && ColorUtils.isColorLight(bgColor)
-    val background = Color(bgColor)
-    val primary = Color(accentColor)
-    val secondary = Color(primaryColorValue)
-    val onBackground = Color(textPrimaryColor)
-    val onBackgroundVariant = Color(textSecondaryColor)
 
-    val surface = lerp(background, if (isLight) Color.White else Color.Black, if (isLight) 0.04f else 0.10f)
-    val surfaceVariant = lerp(background, onBackground, if (isLight) 0.05f else 0.14f)
-    val outline = lerp(background, onBackground, if (isLight) 0.12f else 0.24f)
-    val onSurfaceVariant = onBackgroundVariant
-
-    val colorScheme = if (isLight) {
-        lightColorScheme(
-            primary = primary,
-            secondary = secondary,
-            tertiary = secondary,
-            background = background,
-            surface = surface,
-            surfaceVariant = surfaceVariant,
-            secondaryContainer = surfaceVariant,
-            tertiaryContainer = surfaceVariant,
-            outline = outline,
-            outlineVariant = outline.copy(alpha = 0.75f),
-            onPrimary = if (ColorUtils.isColorLight(accentColor)) Color.Black else Color.White,
-            onSecondary = if (ColorUtils.isColorLight(primaryColorValue)) Color.Black else Color.White,
-            onBackground = onBackground,
-            onSurface = onBackground,
-            onSurfaceVariant = onSurfaceVariant,
-            error = Color(0xFFE53935),
-            onError = Color.White
-        )
-    } else {
-        darkColorScheme(
-            primary = primary,
-            secondary = secondary,
-            tertiary = secondary,
-            background = background,
-            surface = surface,
-            surfaceVariant = surfaceVariant,
-            secondaryContainer = surfaceVariant,
-            tertiaryContainer = surfaceVariant,
-            outline = outline,
-            outlineVariant = outline.copy(alpha = 0.8f),
-            onPrimary = if (ColorUtils.isColorLight(accentColor)) Color.Black else Color.White,
-            onSecondary = if (ColorUtils.isColorLight(primaryColorValue)) Color.Black else Color.White,
-            onBackground = onBackground,
-            onSurface = onBackground,
-            onSurfaceVariant = onSurfaceVariant,
-            error = Color(0xFFFF5252),
-            onError = Color.Black
-        )
+    val colorScheme = remember(
+        isNightTheme, primaryColorValue, accentColor, bgColor,
+        textPrimaryColor, textSecondaryColor
+    ) {
+        ThemeSpec(
+            primary = Color(accentColor),
+            secondary = Color(primaryColorValue),
+            accent = Color(accentColor),
+            background = Color(bgColor),
+            textPrimary = Color(textPrimaryColor),
+            textSecondary = Color(textSecondaryColor),
+            isLight = isLight
+        ).toM3Scheme()
     }
 
-    MaterialTheme(colorScheme = colorScheme) {
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = LegadoTypography
+    ) {
         content()
     }
 }

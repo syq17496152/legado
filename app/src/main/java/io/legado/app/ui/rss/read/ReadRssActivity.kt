@@ -10,8 +10,6 @@ import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
 import android.os.SystemClock
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
 import android.webkit.ConsoleMessage
@@ -65,7 +63,6 @@ import io.legado.app.utils.keepScreenOn
 import io.legado.app.utils.longSnackbar
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
-import io.legado.app.utils.setTintMutate
 import io.legado.app.utils.share
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
@@ -104,6 +101,32 @@ import java.lang.ref.WeakReference
 import splitties.systemservices.powerManager
 import java.net.URLDecoder
 import androidx.core.graphics.createBitmap
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
 
 /**
  * rss阅读界面
@@ -117,9 +140,14 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     private lateinit var pooledWebView: PooledWebView
     private lateinit var currentWebView: WebView
 
-    private var starMenuItem: MenuItem? = null
-    private var ttsMenuItem: MenuItem? = null
     private var isFullscreen = false
+
+    // Compose 顶栏状态（L-D6 S4 改造）：标题/收藏/朗读由 Compose 状态驱动
+    private var composeTitle by mutableStateOf("")
+    private var menuExpanded by mutableStateOf(false)
+    private var starVisible by mutableStateOf(false)
+    private var starChecked by mutableStateOf(false)
+    private var ttsPlaying by mutableStateOf(false)
     private var wasScreenOff = false
     private var customWebViewCallback: WebChromeClient.CustomViewCallback? = null
     private var interfaceInjected: String? = null
@@ -161,7 +189,8 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
         binding.webViewContainer.addView(currentWebView)
         viewModel.upStarMenuData.observe(this) { upStarMenu() }
         viewModel.upTtsMenuData.observe(this) { upTtsMenu(it) }
-        viewModel.upTitleData.observe(this) { binding.titleBar.title = it }
+        viewModel.upTitleData.observe(this) { composeTitle = it }
+        initComposeTopBar()
         initView()
         initWebView()
         initLiveData()
@@ -243,65 +272,120 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.rss_read, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        starMenuItem = menu.findItem(R.id.menu_rss_star)
-        ttsMenuItem = menu.findItem(R.id.menu_aloud)
-        upStarMenu()
-        // rss-unified-search: 仅当搜索结果多源场景（RssSearchSourceHolder.articles.size > 1）显示换源菜单
-        menu.findItem(R.id.menu_change_source)?.isVisible =
-            (RssSearchSourceHolder.articles?.size ?: 0) > 1
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_login)?.isVisible = !viewModel.rssSource?.loginUrl.isNullOrBlank()
-        return super.onMenuOpened(featureId, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_rss_refresh -> refresh()
-
-            R.id.menu_rss_star -> {
-                viewModel.addFavorite()
-                viewModel.rssArticle?.let {
-                    showDialogFragment(RssFavoritesDialog(it))
-                }
+    /**
+     * Compose 顶栏（L-D6 S4 改造）：GlassTopAppBar + 刷新/收藏图标按钮 + MoreVert 下拉菜单
+     */
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = composeTitle,
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = { finish() },
+                    actions = {
+                        IconButton(onClick = { refresh() }) {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = getString(R.string.refresh)
+                            )
+                        }
+                        if (starVisible) {
+                            IconButton(onClick = {
+                                viewModel.addFavorite()
+                                viewModel.rssArticle?.let {
+                                    showDialogFragment(RssFavoritesDialog(it))
+                                }
+                            }) {
+                                Icon(
+                                    imageVector = if (starChecked) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                    contentDescription = getString(R.string.favorite)
+                                )
+                            }
+                        }
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(
+                                    imageVector = Icons.Filled.MoreVert,
+                                    contentDescription = getString(R.string.more)
+                                )
+                            }
+                            AppDropdownMenu(
+                                expanded = menuExpanded,
+                                onDismiss = { menuExpanded = false },
+                                actions = buildMenuActions()
+                            )
+                        }
+                    }
+                )
             }
-
-            R.id.menu_share_it -> {
-                currentWebView.url?.let {
-                    share(it)
-                } ?: viewModel.rssArticle?.let {
-                    share(it.link)
-                } ?: toastOnUi(R.string.null_url)
-            }
-
-            R.id.menu_aloud -> readAloud()
-            R.id.menu_login -> startActivity<SourceLoginActivity> {
-                putExtra("type", "rssSource")
-                putExtra("key", viewModel.rssSource?.sourceUrl)
-            }
-
-            R.id.menu_browser_open -> currentWebView.url?.let {
-                openUrl(it)
-            } ?: toastOnUi("url null")
-            R.id.menu_edit_source -> viewModel.rssSource?.sourceUrl?.let {
-                editSourceResult.launch {
-                    putExtra("sourceUrl", it)
-                }
-            }
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-            R.id.menu_read_record -> showDialogFragment(ReadRecordDialog(viewModel.rssSource?.sourceUrl))
-            // rss-unified-search: 弹出换源对话框
-            R.id.menu_change_source -> showDialogFragment(ChangeRssArticleSourceDialog())
         }
-        return super.onCompatOptionsItemSelected(item)
+    }
+
+    private fun buildMenuActions(): List<MenuAction> {
+        val actions = mutableListOf<MenuAction>()
+        actions += MenuAction(
+            icon = Icons.Filled.Share,
+            title = getString(R.string.share),
+            onClick = {
+                currentWebView.url?.let { share(it) }
+                    ?: viewModel.rssArticle?.let { share(it.link) }
+                    ?: toastOnUi(R.string.null_url)
+            }
+        )
+        actions += MenuAction(
+            icon = if (ttsPlaying) Icons.Filled.Stop else Icons.Filled.VolumeUp,
+            title = getString(if (ttsPlaying) R.string.aloud_stop else R.string.read_aloud),
+            onClick = { readAloud() }
+        )
+        if (!viewModel.rssSource?.loginUrl.isNullOrBlank()) {
+            actions += MenuAction(
+                icon = Icons.Filled.Login,
+                title = getString(R.string.login),
+                onClick = {
+                    startActivity<SourceLoginActivity> {
+                        putExtra("type", "rssSource")
+                        putExtra("key", viewModel.rssSource?.sourceUrl)
+                    }
+                }
+            )
+        }
+        actions += MenuAction(
+            icon = Icons.Filled.OpenInBrowser,
+            title = getString(R.string.open_in_browser),
+            onClick = {
+                currentWebView.url?.let { openUrl(it) } ?: toastOnUi("url null")
+            }
+        )
+        actions += MenuAction(
+            icon = Icons.Filled.History,
+            title = getString(R.string.read_record),
+            onClick = {
+                showDialogFragment(ReadRecordDialog(viewModel.rssSource?.sourceUrl))
+            }
+        )
+        // rss-unified-search: 仅当搜索结果多源场景（RssSearchSourceHolder.articles.size > 1）显示换源菜单
+        if ((RssSearchSourceHolder.articles?.size ?: 0) > 1) {
+            actions += MenuAction(
+                icon = Icons.Filled.SwapVert,
+                title = getString(R.string.change_source),
+                onClick = { showDialogFragment(ChangeRssArticleSourceDialog()) }
+            )
+        }
+        actions += MenuAction(
+            icon = Icons.Filled.Edit,
+            title = getString(R.string.edit_source),
+            onClick = {
+                viewModel.rssSource?.sourceUrl?.let {
+                    editSourceResult.launch { putExtra("sourceUrl", it) }
+                }
+            }
+        )
+        actions += MenuAction(
+            icon = Icons.Filled.Info,
+            title = getString(R.string.log),
+            onClick = { showDialogFragment<AppLogDialog>() }
+        )
+        return actions
     }
 
     override fun updateFavorite(title: String?, group: String?) {
@@ -445,28 +529,12 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     }
 
     private fun upStarMenu() {
-        starMenuItem?.isVisible = viewModel.rssArticle != null
-        if (viewModel.rssStar != null) {
-            starMenuItem?.setIcon(R.drawable.ic_star)
-            starMenuItem?.setTitle(R.string.in_favorites)
-        } else {
-            starMenuItem?.setIcon(R.drawable.ic_star_border)
-            starMenuItem?.setTitle(R.string.out_favorites)
-        }
-        starMenuItem?.icon?.setTintMutate(primaryTextColor)
+        starVisible = viewModel.rssArticle != null
+        starChecked = viewModel.rssStar != null
     }
 
     private fun upTtsMenu(isPlaying: Boolean) {
-        lifecycleScope.launch {
-            if (isPlaying) {
-                ttsMenuItem?.setIcon(R.drawable.ic_stop_black_24dp)
-                ttsMenuItem?.setTitle(R.string.aloud_stop)
-            } else {
-                ttsMenuItem?.setIcon(R.drawable.ic_volume_up)
-                ttsMenuItem?.setTitle(R.string.read_aloud)
-            }
-            ttsMenuItem?.icon?.setTintMutate(primaryTextColor)
-        }
+        ttsPlaying = isPlaying
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -706,9 +774,9 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
                     && title.isNotBlank()
                     && url != BLANK_HTML
                     && !url.contains(title)) {
-                    binding.titleBar.title = title
+                    composeTitle = title
                 } else {
-                    binding.titleBar.title = viewModel.upTitleData.value
+                    composeTitle = viewModel.upTitleData.value ?: ""
                 }
             }
             viewModel.rssSource?.let { source ->

@@ -1,34 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
+<!-- L-C6 词典规则列表：S2 列表族 Compose 壳层（DictRuleScreen） -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    tools:context=".ui.replace.ReplaceRuleActivity">
+    android:layout_height="match_parent">
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_host"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:title="@string/dict_rule" />
+        android:layout_height="match_parent" />
 
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
-
-        <io.legado.app.ui.widget.recycler.scroller.FastScrollRecyclerView
-            android:id="@+id/recycler_view"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            tools:ignore="SpeakableTextPresentCheck" />
-
-    </FrameLayout>
-
-    <io.legado.app.ui.widget.SelectActionBar
-        android:id="@+id/select_action_bar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
-
-</LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

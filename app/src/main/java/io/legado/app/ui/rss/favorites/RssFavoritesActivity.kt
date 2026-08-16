@@ -3,9 +3,17 @@
 package io.legado.app.ui.rss.favorites
 
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
-import android.view.SubMenu
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentStatePagerAdapter
 import androidx.lifecycle.lifecycleScope
@@ -14,9 +22,14 @@ import io.legado.app.R
 import io.legado.app.base.BaseActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
+import io.legado.app.data.entities.RssStar
 import io.legado.app.databinding.ActivityRssFavoritesBinding
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.accentColor
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.ConfirmDialog
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.gone
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
@@ -29,16 +42,24 @@ import kotlinx.coroutines.launch
 
 /**
  * 收藏夹
+ *
+ * L-D7 S2 改造：Compose 顶栏桥接（GlassTopAppBar + AppDropdownMenu 分组/删除菜单，
+ * Compose ConfirmDialog 删除确认），ViewPager + TabLayout + 分组 Fragment 内核保留。
  */
 class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
 
     override val binding by viewBinding(ActivityRssFavoritesBinding::inflate)
     private val adapter by lazy { TabFragmentPageAdapter() }
     private var groupList = mutableListOf<String>()
-    private var groupsMenu: SubMenu? = null
-    private var currentGroup = ""
+
+    // Compose 桥接状态：分组列表 / 当前分组 / 菜单展开 / 待删除确认
+    private var composeGroups by mutableStateOf(listOf<String>())
+    private var currentGroup by mutableStateOf("")
+    private var menuExpanded by mutableStateOf(false)
+    private var pendingDelete by mutableStateOf<PendingDelete?>(null)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initComposeTopBar()
         initView()
         upFragments()
     }
@@ -59,6 +80,107 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
             lifecycleScope.launch {
                 delay(100)
                 binding.tabLayout.getTabAt(item)?.select()
+            }
+        }
+    }
+
+    /**
+     * L-D7 S2 改造：Compose 顶栏（GlassTopAppBar + 更多菜单 AppDropdownMenu），
+     * 删除整组/删除全部/条目删除确认统一走 Compose ConfirmDialog。
+     */
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                Box {
+                    GlassTopAppBar(
+                        title = getString(R.string.favorites),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = null)
+                            }
+                            AppDropdownMenu(
+                                expanded = menuExpanded,
+                                onDismiss = { menuExpanded = false },
+                                actions = buildMenuActions()
+                            )
+                        }
+                    )
+                    pendingDelete?.let { pending ->
+                        val deleteMessage = when (pending) {
+                            is PendingDelete.Group -> getString(R.string.sure_del) + "\n<" + pending.group + ">" + getString(R.string.group)
+                            is PendingDelete.All -> getString(R.string.sure_del) + "\n<" + getString(R.string.all) + ">" + getString(R.string.favorite)
+                            is PendingDelete.Star -> getString(R.string.sure_del) + "\n<" + pending.star.title + ">"
+                        }
+                        ConfirmDialog(
+                            title = getString(R.string.draw),
+                            text = deleteMessage,
+                            confirmText = getString(R.string.ok),
+                            cancelText = getString(R.string.cancel),
+                            destructive = true,
+                            onConfirm = { executeDelete(pending) },
+                            onDismiss = { pendingDelete = null }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 顶栏更多菜单：分组跳转（当前分组勾选态）+ 删除整组 + 删除全部
+     */
+    private fun buildMenuActions(): List<MenuAction> {
+        val actions = mutableListOf<MenuAction>()
+        composeGroups.forEachIndexed { index, group ->
+            actions += MenuAction(
+                icon = Icons.Default.Folder,
+                title = group,
+                checked = group == currentGroup,
+                onClick = {
+                    menuExpanded = false
+                    binding.viewPager.setCurrentItem(index)
+                }
+            )
+        }
+        actions += MenuAction(
+            icon = Icons.Default.DeleteSweep,
+            title = getString(R.string.delete_select_group),
+            onClick = {
+                menuExpanded = false
+                if (composeGroups.isNotEmpty()) {
+                    pendingDelete = PendingDelete.Group(composeGroups[binding.viewPager.currentItem])
+                }
+            }
+        )
+        actions += MenuAction(
+            icon = Icons.Default.DeleteSweep,
+            title = getString(R.string.delete_all),
+            onClick = {
+                menuExpanded = false
+                pendingDelete = PendingDelete.All
+            }
+        )
+        return actions
+    }
+
+    /** 条目删除确认：RssFavoritesFragment 长按收藏项时上抛（AD-20 内核桥接） */
+    fun confirmDeleteStar(star: RssStar) {
+        pendingDelete = PendingDelete.Star(star)
+    }
+
+    private fun executeDelete(pending: PendingDelete) {
+        pendingDelete = null
+        when (pending) {
+            is PendingDelete.Group -> lifecycleScope.launch(IO) {
+                appDb.rssStarDao.deleteByGroup(pending.group)
+            }
+            is PendingDelete.All -> lifecycleScope.launch(IO) {
+                appDb.rssStarDao.deleteAll()
+            }
+            is PendingDelete.Star -> lifecycleScope.launch(IO) {
+                appDb.rssStarDao.delete(pending.star.origin, pending.star.link)
             }
         }
     }
@@ -84,32 +206,6 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
         binding.tabLayout.setSelectedTabIndicatorColor(accentColor)
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.rss_favorites, menu)
-        groupsMenu = menu.findItem(R.id.menu_group)?.subMenu
-        upGroupsMenu()
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    private fun upGroupsMenu() = groupsMenu?.let { subMenu ->
-        subMenu.removeGroup(R.id.menu_group)
-        groupList.forEachIndexed { index, it ->
-            subMenu.add(R.id.menu_group, Menu.NONE, index, it)
-        }
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.groupId == R.id.menu_group) {
-            binding.viewPager.setCurrentItem(item.order)
-        } else {
-            when (item.itemId) {
-                R.id.menu_del_group -> deleteGroup()
-                R.id.menu_del_all -> deleteAll()
-            }
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
-
     private fun upFragments() {
         lifecycleScope.launch {
             appDb.rssStarDao.flowGroups().catch {
@@ -117,51 +213,22 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
             }.distinctUntilChanged().flowOn(IO).collect {
                 groupList.clear()
                 groupList.addAll(it)
+                composeGroups = it
                 if (groupList.size == 1) {
                     binding.tabLayout.gone()
                 } else {
                     binding.tabLayout.visible()
-                }
-                if (groupsMenu != null) {
-                    upGroupsMenu()
                 }
                 adapter.notifyDataSetChanged()
             }
         }
     }
 
-    private fun deleteGroup() {
-        if (groupList.isEmpty()) {
-            return
-        }
-        alert(R.string.draw) {
-            val item = binding.viewPager.currentItem
-            val group = groupList[item]
-            setMessage(
-                getString(R.string.sure_del) + "\n<" + group + ">" + getString(R.string.group)
-            )
-            noButton()
-            yesButton {
-                lifecycleScope.launch(IO) {
-                    appDb.rssStarDao.deleteByGroup(group)
-                }
-            }
-        }
-    }
-
-    private fun deleteAll() {
-        alert(R.string.draw) {
-            setMessage(
-                getString(R.string.sure_del) + "\n<" + getString(R.string.all) + ">"
-                        + getString(R.string.favorite)
-            )
-            noButton()
-            yesButton {
-                lifecycleScope.launch(IO) {
-                    appDb.rssStarDao.deleteAll()
-                }
-            }
-        }
+    /** 删除确认载荷 */
+    private sealed interface PendingDelete {
+        data class Group(val group: String) : PendingDelete
+        object All : PendingDelete
+        data class Star(val star: RssStar) : PendingDelete
     }
 
     private inner class TabFragmentPageAdapter :

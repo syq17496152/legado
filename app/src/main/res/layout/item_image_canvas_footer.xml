@@ -30,7 +30,7 @@
         android:maxWidth="280dp"
         android:maxLines="3"
         android:textColor="@android:color/white"
-        android:textSize="14sp"
+        android:textSize="@dimen/text_14sp"
         android:visibility="gone" />
 
     <Button
@@ -50,7 +50,7 @@
         android:layout_height="wrap_content"
         android:text="—— 没有更多了 ——"
         android:textColor="@android:color/white"
-        android:textSize="14sp"
+        android:textSize="@dimen/text_14sp"
         android:visibility="gone" />
 
 </LinearLayout>

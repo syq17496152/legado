@@ -7,14 +7,13 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <!-- L-D3 订阅源调试页：顶栏 Compose 化（GlassTopAppBar + 搜索 SettingsSearchBar + 更多菜单 AppDropdownMenu），
+         结果列表 + 辅助面板 View 内核保留（AD-20 内核桥接） -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:contentInsetStartWithNavigation="0dp"
-        app:contentLayout="@layout/view_search"
-        app:layout_constraintTop_toTopOf="parent"
-        app:title="@string/debug_source" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_view"
@@ -23,7 +22,7 @@
         android:clipToPadding="false"
         app:layoutManager="io.legado.app.ui.widget.recycler.NoChildScrollLinearLayoutManager"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/title_bar" />
+        app:layout_constraintTop_toBottomOf="@+id/compose_top_bar" />
 
     <io.legado.app.ui.widget.anima.RotateLoading
         android:id="@+id/rotate_loading"
@@ -33,7 +32,7 @@
         android:visibility="gone"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/title_bar"
+        app:layout_constraintTop_toBottomOf="@+id/compose_top_bar"
         app:loading_width="2dp" />
 
     <io.legado.app.ui.widget.NoChildScrollNestedScrollView
@@ -41,7 +40,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:visibility="gone"
-        app:layout_constraintTop_toBottomOf="@+id/title_bar"
+        app:layout_constraintTop_toBottomOf="@+id/compose_top_bar"
         tools:visibility="visible">
 
         <LinearLayout
@@ -54,9 +53,8 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="调试搜索>>输入关键字，如："
-                android:textColor="@color/secondaryText"
-                tools:ignore="HardcodedText" />
+                android:text="@string/debug_search_tip"
+                android:textColor="@color/secondaryText" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -76,10 +74,9 @@
                     android:paddingTop="4dp"
                     android:paddingRight="12dp"
                     android:paddingBottom="4dp"
-                    android:text="我的"
+                    android:text="@string/rss_debug_my"
                     android:textColor="@color/primaryText"
-                    android:textSize="14sp"
-                    tools:ignore="HardcodedText,UnusedAttribute" />
+                    android:textSize="@dimen/text_14sp" />
 
                 <TextView
                     android:id="@+id/text_xt"
@@ -94,19 +91,17 @@
                     android:paddingTop="4dp"
                     android:paddingRight="12dp"
                     android:paddingBottom="4dp"
-                    android:text="系统"
+                    android:text="@string/rss_debug_system"
                     android:textColor="@color/primaryText"
-                    android:textSize="14sp"
-                    tools:ignore="HardcodedText,UnusedAttribute" />
+                    android:textSize="@dimen/text_14sp" />
             </LinearLayout>
 
             <TextView
                 android:id="@+id/text_fl_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="调试分类>>输入分类URL，如："
-                android:textColor="@color/secondaryText"
-                tools:ignore="HardcodedText" />
+                android:text="@string/debug_kind_tip"
+                android:textColor="@color/secondaryText" />
 
             <TextView
                 android:id="@+id/text_fl"
@@ -121,17 +116,15 @@
                 android:paddingTop="4dp"
                 android:paddingRight="12dp"
                 android:paddingBottom="4dp"
-                android:text="系统::http://xxx"
+                android:text="@string/rss_debug_kind_default"
                 android:textColor="@color/primaryText"
-                android:textSize="14sp"
-                tools:ignore="HardcodedText,UnusedAttribute" />
+                android:textSize="@dimen/text_14sp" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="调试内容页>>输入内容页URL，如："
-                android:textColor="@color/secondaryText"
-                tools:ignore="HardcodedText" />
+                android:text="@string/debug_content_tip"
+                android:textColor="@color/secondaryText" />
 
             <TextView
                 android:id="@+id/text_content"
@@ -146,10 +139,9 @@
                 android:paddingTop="4dp"
                 android:paddingRight="12dp"
                 android:paddingBottom="4dp"
-                android:text="https://m.qidian.com/book/1015609210"
+                android:text="@string/rss_debug_content_default"
                 android:textColor="@color/primaryText"
-                android:textSize="14sp"
-                tools:ignore="HardcodedText,UnusedAttribute" />
+                android:textSize="@dimen/text_14sp" />
 
         </LinearLayout>
 

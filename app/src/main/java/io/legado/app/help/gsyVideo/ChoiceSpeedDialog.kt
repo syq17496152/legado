@@ -2,6 +2,7 @@ package io.legado.app.help.gsyVideo
 
 import android.app.Dialog
 import android.content.Context
+import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
@@ -133,9 +134,24 @@ class ChoiceSpeedDialog(private val mContext: Context) : Dialog(
                     if (value == currentSpeed) {
                         textView.setTextColor(ContextCompat.getColor(context, R.color.primary))
                         textView.setTypeface(textView.typeface, Typeface.BOLD)
-                        textView.setBackgroundColor(0x330277BD)
+                        // 选中高亮背景：主题 primary 色 20% 透明 + 圆角（对齐未选中卡片圆角，替代原直角 setBackgroundColor）
+                        val primaryColor = ContextCompat.getColor(context, R.color.primary)
+                        val radius = context.resources.getDimension(R.dimen.corner_small)
+                        val rounded = android.graphics.drawable.GradientDrawable().apply {
+                            cornerRadius = radius
+                            setColor(
+                                Color.argb(
+                                    0x33,
+                                    Color.red(primaryColor),
+                                    Color.green(primaryColor),
+                                    Color.blue(primaryColor)
+                                )
+                            )
+                        }
+                        textView.background = rounded
                     } else {
-                        textView.setTextColor(0xFFFFFFFF.toInt())
+                        // 未选中文字用主题文字色（日/夜自适应），避免日间亮底白字不可读
+                        textView.setTextColor(ContextCompat.getColor(context, R.color.primaryText))
                         textView.setTypeface(textView.typeface, Typeface.NORMAL)
                         textView.background =
                             ContextCompat.getDrawable(context, R.drawable.card_video_background)

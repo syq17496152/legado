@@ -12,7 +12,7 @@
         android:padding="18dp"
         android:text="@string/add_to_bookshelf"
         android:textColor="@color/primaryText"
-        android:textSize="16sp"
+        android:textSize="@dimen/text_16sp"
         android:textStyle="bold"
         app:layout_constraintTop_toTopOf="parent" />
 
@@ -28,7 +28,7 @@
             android:id="@+id/tv_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_16sp"
             app:layout_constraintTop_toTopOf="parent" />
 
         <ImageView

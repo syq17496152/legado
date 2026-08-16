@@ -44,7 +44,7 @@
             android:layout_gravity="center"
             android:text="重新加载"
             android:textColor="@color/white"
-            android:textSize="18sp"
+            android:textSize="@dimen/text_18sp"
             android:visibility="gone"
             app:backgroundTint="@color/white"
             app:cornerRadius="10dp"

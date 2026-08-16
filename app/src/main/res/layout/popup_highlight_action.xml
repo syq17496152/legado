@@ -20,7 +20,7 @@
         android:padding="5dp"
         android:text="@string/highlight_style"
         android:textColor="@color/primaryText"
-        android:textSize="14sp" />
+        android:textSize="@dimen/text_14sp" />
 
     <TextView
         android:id="@+id/tv_note"
@@ -32,7 +32,7 @@
         android:padding="5dp"
         android:text="@string/note_content"
         android:textColor="@color/primaryText"
-        android:textSize="14sp" />
+        android:textSize="@dimen/text_14sp" />
 
     <TextView
         android:id="@+id/tv_batch"
@@ -44,7 +44,7 @@
         android:padding="5dp"
         android:text="@string/highlight_batch"
         android:textColor="@color/primaryText"
-        android:textSize="14sp" />
+        android:textSize="@dimen/text_14sp" />
 
     <TextView
         android:id="@+id/tv_copy"
@@ -56,7 +56,7 @@
         android:padding="5dp"
         android:text="@android:string/copy"
         android:textColor="@color/primaryText"
-        android:textSize="14sp" />
+        android:textSize="@dimen/text_14sp" />
 
     <TextView
         android:id="@+id/tv_delete"
@@ -68,6 +68,6 @@
         android:padding="5dp"
         android:text="@string/delete"
         android:textColor="@color/error"
-        android:textSize="14sp" />
+        android:textSize="@dimen/text_14sp" />
 
 </com.google.android.flexbox.FlexboxLayout>

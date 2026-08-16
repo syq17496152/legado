@@ -60,7 +60,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/highlight_rule_preset"
                     android:textColor="@color/primaryText"
-                    android:textSize="20sp"
+                    android:textSize="@dimen/text_20sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -71,7 +71,7 @@
                     android:gravity="center"
                     android:text="@string/highlight_rule_preset_subtitle"
                     android:textColor="@color/secondaryText"
-                    android:textSize="12sp" />
+                    android:textSize="@dimen/text_12sp" />
             </LinearLayout>
 
             <View

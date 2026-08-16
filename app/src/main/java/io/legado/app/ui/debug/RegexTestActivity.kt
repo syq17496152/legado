@@ -4,8 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.runtime.Composable
-import io.legado.app.ui.theme.LegadoThemeWithBackground
 import io.legado.app.ui.theme.initLegadoComposeTheme
 import io.legado.app.ui.theme.setLegadoContent
 
@@ -42,22 +40,5 @@ class RegexTestActivity : AppCompatActivity() {
                 initialIsRegex = isRegex
             )
         }
-    }
-}
-
-@Composable
-fun RegexTestContent(
-    onBackClick: () -> Unit,
-    initialPattern: String = "",
-    initialReplacement: String = "",
-    initialIsRegex: Boolean = true
-) {
-    LegadoThemeWithBackground(backgroundDrawable = null) {
-        RegexTestScreen(
-            onBackClick = onBackClick,
-            initialPattern = initialPattern,
-            initialReplacement = initialReplacement,
-            initialIsRegex = initialIsRegex
-        )
     }
 }

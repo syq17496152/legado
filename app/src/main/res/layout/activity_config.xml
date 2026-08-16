@@ -5,12 +5,11 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <!-- 顶栏（L-E1/L-E2 S2 改造）：Compose GlassTopAppBar，标题/菜单由 ConfigActivity 状态 + Fragment setTopBarMenu 驱动 -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:layout_constraintTop_toTopOf="parent"
-        app:title="设置" />
+        android:layout_height="wrap_content" />
 
     <LinearLayout
         android:id="@+id/configFrameLayout"

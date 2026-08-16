@@ -2,11 +2,19 @@ package io.legado.app.ui.book.manage
 
 import android.content.Context
 import android.os.Bundle
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.widget.SearchView
-import androidx.appcompat.widget.Toolbar
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.view.setPadding
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -21,10 +29,12 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.databinding.DialogSourcePickerBinding
 import io.legado.app.databinding.Item1lineTextBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.ui.widget.number.NumberPickerDialog
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -40,16 +50,11 @@ import splitties.views.onClick
 /**
  * 书源选择
  */
-class SourcePickerDialog : BaseDialogFragment(R.layout.dialog_source_picker),
-    Toolbar.OnMenuItemClickListener {
+class SourcePickerDialog : BaseDialogFragment(R.layout.dialog_source_picker) {
 
     private val binding by viewBinding(DialogSourcePickerBinding::bind)
-    private val searchView: SearchView by lazy {
-        binding.toolBar.findViewById(R.id.search_view)
-    }
-    private val toolBar: Toolbar by lazy {
-        binding.toolBar.toolbar
-    }
+    private var composeSearchQuery by mutableStateOf("")
+    private var menuExpanded by mutableStateOf(false)
     private val adapter by lazy {
         SourceAdapter(requireContext())
     }
@@ -63,27 +68,62 @@ class SourcePickerDialog : BaseDialogFragment(R.layout.dialog_source_picker),
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         initView()
         initData()
-        initMenu()
+        initComposeTopBar()
     }
 
     private fun initView() {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        binding.toolBar.title = "选择书源"
         binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerView.adapter = adapter
-        searchView.applyTint(primaryTextColor)
-        searchView.isSubmitButtonEnabled = true
-        searchView.queryHint = getString(R.string.search_book_source)
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                return false
-            }
+    }
 
-            override fun onQueryTextChange(newText: String?): Boolean {
-                initData(newText)
-                return false
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                Column {
+                    GlassTopAppBar(
+                        title = getString(R.string.select_book_source),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { dismissAllowingStateLoss() },
+                        actions = {
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(
+                                        imageVector = Icons.Filled.MoreVert,
+                                        contentDescription = getString(R.string.more)
+                                    )
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = listOf(
+                                        MenuAction(
+                                            icon = Icons.Default.Settings,
+                                            title = getString(R.string.change_source_delay),
+                                            onClick = {
+                                                NumberPickerDialog(requireContext())
+                                                    .setTitle(getString(R.string.change_source_delay))
+                                                    .setMaxValue(9999)
+                                                    .setMinValue(0)
+                                                    .setValue(AppConfig.batchChangeSourceDelay)
+                                                    .show { AppConfig.batchChangeSourceDelay = it }
+                                            }
+                                        )
+                                    )
+                                )
+                            }
+                        }
+                    )
+                    SettingsSearchBar(
+                        query = composeSearchQuery,
+                        onQueryChange = { query ->
+                            composeSearchQuery = query
+                            initData(query)
+                        },
+                        placeholder = getString(R.string.search_book_source)
+                    )
+                }
             }
-        })
+        }
     }
 
     private fun initData(searchKey: String? = null) {
@@ -98,26 +138,6 @@ class SourcePickerDialog : BaseDialogFragment(R.layout.dialog_source_picker),
                 adapter.setItems(it)
             }
         }
-    }
-
-    private fun initMenu() {
-        toolBar.setOnMenuItemClickListener(this)
-        toolBar.inflateMenu(R.menu.source_picker)
-        toolBar.menu.applyTint(requireContext())
-    }
-
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_change_source_delay -> NumberPickerDialog(requireContext())
-                .setTitle(getString(R.string.change_source_delay))
-                .setMaxValue(9999)
-                .setMinValue(0)
-                .setValue(AppConfig.batchChangeSourceDelay)
-                .show {
-                    AppConfig.batchChangeSourceDelay = it
-                }
-        }
-        return true
     }
 
     inner class SourceAdapter(context: Context) :

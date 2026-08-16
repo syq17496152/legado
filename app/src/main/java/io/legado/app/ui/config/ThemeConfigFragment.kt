@@ -3,14 +3,11 @@ package io.legado.app.ui.config
 import android.annotation.SuppressLint
 import android.content.SharedPreferences
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuInflater
-import android.view.MenuItem
 import android.view.View
 import android.widget.SeekBar
-import androidx.core.view.MenuProvider
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
 import io.legado.app.R
@@ -20,7 +17,6 @@ import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.databinding.DialogImageBlurringBinding
-import io.legado.app.help.LauncherIconHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.http.addHeaders
@@ -33,12 +29,12 @@ import io.legado.app.lib.prefs.fragment.PreferenceFragment
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.MD5Utils
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
@@ -58,8 +54,7 @@ import java.io.FileOutputStream
 
 @Suppress("SameParameterValue")
 class ThemeConfigFragment : PreferenceFragment(),
-    SharedPreferences.OnSharedPreferenceChangeListener,
-    MenuProvider {
+    SharedPreferences.OnSharedPreferenceChangeListener {
 
     private val requestCodeBgLight = 121
     private val requestCodeBgDark = 122
@@ -79,9 +74,6 @@ class ThemeConfigFragment : PreferenceFragment(),
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         addPreferencesFromResource(R.xml.pref_config_theme)
-        if (Build.VERSION.SDK_INT < 26) {
-            preferenceScreen.removePreferenceRecursively(PreferKey.launcherIcon)
-        }
         upPreferenceSummary(PreferKey.bgImage, getPrefString(PreferKey.bgImage))
         upPreferenceSummary(PreferKey.bgImageN, getPrefString(PreferKey.bgImageN))
         upPreferenceSummary(PreferKey.barElevation, AppConfig.elevation.toString())
@@ -112,7 +104,19 @@ class ThemeConfigFragment : PreferenceFragment(),
         super.onViewCreated(view, savedInstanceState)
         activity?.setTitle(R.string.theme_setting)
         listView.setEdgeEffectColor(primaryColor)
-        activity?.addMenuProvider(this, viewLifecycleOwner)
+        // L-E2 S2 改造：菜单迁移至 ConfigActivity Compose 顶栏（原 MenuProvider menu_theme_config）
+        (activity as? ConfigActivity)?.setTopBarMenu(
+            listOf(
+                MenuAction(
+                    icon = Icons.Filled.DarkMode,
+                    title = getString(R.string.theme_mode),
+                    onClick = {
+                        AppConfig.isNightTheme = !AppConfig.isNightTheme
+                        ThemeConfig.applyDayNight(requireContext())
+                    }
+                )
+            )
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -125,26 +129,9 @@ class ThemeConfigFragment : PreferenceFragment(),
         preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(this)
     }
 
-    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-        menuInflater.inflate(R.menu.theme_config, menu)
-        menu.applyTint(requireContext())
-    }
-
-    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-        when (menuItem.itemId) {
-            R.id.menu_theme_mode -> {
-                AppConfig.isNightTheme = !AppConfig.isNightTheme
-                ThemeConfig.applyDayNight(requireContext())
-                return true
-            }
-        }
-        return false
-    }
-
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         sharedPreferences ?: return
         when (key) {
-            PreferKey.launcherIcon -> LauncherIconHelp.changeIcon(getPrefString(key))
             PreferKey.transparentStatusBar -> recreateActivities()
             PreferKey.immNavigationBar -> recreateActivities()
             PreferKey.cPrimary,

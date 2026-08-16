@@ -1,27 +1,34 @@
 package io.legado.app.ui.book.import.remote
 
-import android.annotation.SuppressLint
-import android.net.Uri
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
-import android.view.SubMenu
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.core.view.isGone
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
+import io.legado.app.constant.AppConst
 import io.legado.app.data.appDb
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.model.remote.RemoteBook
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.import.BaseImportBookActivity
+import io.legado.app.ui.book.import.ImportBookDisplayItem
+import io.legado.app.ui.book.import.ImportBookScreen
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.SelectActionBar
+import io.legado.app.ui.widget.components.MenuAction
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sort
 import io.legado.app.utils.ArchiveUtils
+import io.legado.app.utils.ConvertUtils
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.find
 import io.legado.app.utils.showDialogFragment
@@ -34,36 +41,43 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * 展示远程书籍
+ * 展示远程书籍（L-B9 S2 列表管理页）：Compose 内容区（ImportBookScreen）+
+ * View SelectActionBar 多选底栏混合接线。
  */
 class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
-    RemoteBookAdapter.CallBack,
     SelectActionBar.CallBack,
     ServersDialog.Callback {
 
     override val viewModel by viewModels<RemoteBookViewModel>()
-    private val adapter by lazy { RemoteBookAdapter(this, this) }
-    private var groupMenu: SubMenu? = null
+
+    // Compose 桥接状态
+    private var composeItems by mutableStateOf(listOf<ImportBookDisplayItem>())
+    private var composePath by mutableStateOf("")
+    private var composeCanGoBack by mutableStateOf(false)
+    private var composeIsLoading by mutableStateOf(false)
+    private var composeSearchQuery by mutableStateOf("")
+    // 当前列表原始数据 + 选中索引
+    private var currentItems = listOf<RemoteBook>()
+    private var selectedIndexes = linkedSetOf<Int>()
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        searchView.queryHint = getString(R.string.screen) + " • " + getString(R.string.remote_book)
         onBackPressedDispatcher.addCallback(this) {
             if (!goBackDir()) {
                 finish()
             }
         }
+        initSelectActionBar()
+        initComposeHost()
         lifecycleScope.launch {
             if (!setBookStorage()) {
                 finish()
                 return@launch
             }
-            initView()
-            initEvent()
             launch {
                 viewModel.dataFlow.conflate().collect { sortedRemoteBooks ->
-                    binding.refreshProgressBar.isAutoLoading = false
-                    binding.tvEmptyMsg.isGone = sortedRemoteBooks.isNotEmpty()
-                    adapter.setItems(sortedRemoteBooks)
+                    currentItems = sortedRemoteBooks
+                    selectedIndexes.retainAll(sortedRemoteBooks.indices)
+                    refreshComposeItems()
                     delay(500)
                 }
             }
@@ -81,16 +95,76 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
         }
     }
 
-    private fun initView() {
-        binding.layTop.setBackgroundColor(backgroundColor)
-        binding.recyclerView.layoutManager = LinearLayoutManager(this)
-        binding.recyclerView.adapter = adapter
+    private fun initSelectActionBar() {
         binding.selectActionBar.setMainActionText(R.string.add_to_bookshelf)
         binding.selectActionBar.setCallBack(this)
         if (!LocalConfig.webDavBookHelpVersionIsLast) {
             showHelp("webDavBookHelp")
         }
     }
+
+    private fun initComposeHost() {
+        binding.composeHost.setContent {
+            LegadoTheme {
+                ImportBookScreen(
+                    items = composeItems,
+                    currentPath = composePath,
+                    canGoBack = composeCanGoBack,
+                    isLoading = composeIsLoading,
+                    title = getString(R.string.remote_book),
+                    menuActions = buildMenuActions(),
+                    searchQuery = composeSearchQuery,
+                    onSearchQueryChange = { composeSearchQuery = it; onSearchTextChange(it) },
+                    onBack = { finish() },
+                    onGoBack = { goBackDir() },
+                    onItemClick = { onItemClick(it) },
+                    onItemLongClick = { onItemLongClick(it) },
+                    emptyMessage = getString(R.string.empty)
+                )
+            }
+        }
+    }
+
+    private fun buildMenuActions(): List<MenuAction> = listOf(
+        MenuAction(
+            icon = Icons.Default.Refresh,
+            title = getString(R.string.refresh),
+            onClick = { upPath() }
+        ),
+        MenuAction(
+            icon = Icons.Default.Sort,
+            title = getString(R.string.sort_by_name),
+            checked = viewModel.sortKey == RemoteBookSort.Name,
+            onClick = {
+                sortCheck(RemoteBookSort.Name)
+                upPath()
+            }
+        ),
+        MenuAction(
+            icon = Icons.Default.Sort,
+            title = getString(R.string.sort_by_lastUpdateTime),
+            checked = viewModel.sortKey == RemoteBookSort.Default,
+            onClick = {
+                sortCheck(RemoteBookSort.Default)
+                upPath()
+            }
+        ),
+        MenuAction(
+            icon = Icons.Default.Settings,
+            title = getString(R.string.server_config),
+            onClick = { showDialogFragment<ServersDialog>() }
+        ),
+        MenuAction(
+            icon = Icons.Default.HelpOutline,
+            title = getString(R.string.help),
+            onClick = { showHelp("webDavBookHelp") }
+        ),
+        MenuAction(
+            icon = Icons.Default.Info,
+            title = getString(R.string.log),
+            onClick = { showDialogFragment<AppLogDialog>() }
+        )
+    )
 
     private fun sortCheck(sortKey: RemoteBookSort) {
         if (viewModel.sortKey == sortKey) {
@@ -101,63 +175,63 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
         }
     }
 
-    private fun initEvent() {
-        binding.tvGoBack.setOnClickListener {
-            goBackDir()
+    private fun onItemClick(index: Int) {
+        val item = currentItems.getOrNull(index) ?: return
+        if (item.isDir) {
+            openDir(item)
+        } else if (!item.isOnBookShelf) {
+            toggleSelect(index)
+        } else {
+            startRead(item)
         }
     }
 
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.book_remote, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_refresh -> upPath()
-            R.id.menu_server_config -> showDialogFragment<ServersDialog>()
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-            R.id.menu_help -> showHelp("webDavBookHelp")
-            R.id.menu_sort_name -> {
-                item.isChecked = true
-                sortCheck(RemoteBookSort.Name)
-                upPath()
-            }
-            R.id.menu_sort_time -> {
-                item.isChecked = true
-                sortCheck(RemoteBookSort.Default)
-                upPath()
-            }
+    private fun onItemLongClick(index: Int) {
+        val item = currentItems.getOrNull(index) ?: return
+        if (item.isOnBookShelf) {
+            addToBookShelfAgain(item)
         }
-        return super.onCompatOptionsItemSelected(item)
     }
 
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        groupMenu = menu.findItem(R.id.menu_sort)?.subMenu
-        groupMenu?.setGroupCheckable(R.id.menu_group_sort, true, true)
-        groupMenu?.findItem(R.id.menu_sort_name)?.isChecked =
-            viewModel.sortKey == RemoteBookSort.Name
-        groupMenu?.findItem(R.id.menu_sort_time)?.isChecked =
-            viewModel.sortKey == RemoteBookSort.Default
-        return super.onPrepareOptionsMenu(menu)
+    private fun toggleSelect(index: Int) {
+        if (!selectedIndexes.remove(index)) {
+            selectedIndexes.add(index)
+        }
+        refreshComposeItems()
+        upCountView()
     }
 
     override fun revertSelection() {
-        adapter.revertSelection()
+        val checkable = currentItems.mapIndexedNotNull { index, item ->
+            if (!item.isDir && !item.isOnBookShelf) index else null
+        }
+        val selected = selectedIndexes
+        selectedIndexes = checkable.filter { !selected.contains(it) }.toCollection(linkedSetOf())
+        refreshComposeItems()
+        upCountView()
     }
 
     override fun selectAll(selectAll: Boolean) {
-        adapter.selectAll(selectAll)
+        selectedIndexes = if (selectAll) {
+            currentItems.mapIndexedNotNull { index, item ->
+                if (!item.isDir && !item.isOnBookShelf) index else null
+            }.toCollection(linkedSetOf())
+        } else {
+            linkedSetOf()
+        }
+        refreshComposeItems()
+        upCountView()
     }
 
-    @SuppressLint("NotifyDataSetChanged")
     override fun onClickSelectBarMainAction() {
-        binding.refreshProgressBar.isAutoLoading = true
-        viewModel.addToBookshelf(adapter.selected) {
-            adapter.selected.clear()
-            adapter.notifyDataSetChanged()
-            binding.refreshProgressBar.isAutoLoading = false
+        val selection = currentItems.filterIndexed { index, _ -> index in selectedIndexes }
+        if (selection.isEmpty()) return
+        composeIsLoading = true
+        viewModel.addToBookshelf(selection.toHashSet()) {
+            selectedIndexes.clear()
+            refreshComposeItems()
+            upCountView()
+            composeIsLoading = false
         }
     }
 
@@ -171,7 +245,17 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
     }
 
     private fun upPath() {
-        binding.tvGoBack.isEnabled = viewModel.dirList.isNotEmpty()
+        composeCanGoBack = viewModel.dirList.isNotEmpty()
+        composePath = buildPath()
+        selectedIndexes.clear()
+        viewModel.loadRemoteBookList(
+            viewModel.dirList.lastOrNull()?.path
+        ) { loading ->
+            composeIsLoading = loading
+        }
+    }
+
+    private fun buildPath(): String {
         var path = if (viewModel.isDefaultWebdav) {
             "books" + File.separator
         } else {
@@ -180,24 +264,33 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
         viewModel.dirList.forEach {
             path = path + it.filename + File.separator
         }
-        binding.tvPath.text = path
-        viewModel.dataCallback?.clear()
-        adapter.selected.clear()
-        viewModel.loadRemoteBookList(
-            viewModel.dirList.lastOrNull()?.path
-        ) {
-            binding.refreshProgressBar.isAutoLoading = it
+        return path
+    }
+
+    private fun refreshComposeItems() {
+        composeItems = currentItems.mapIndexed { index, item ->
+            ImportBookDisplayItem(
+                name = item.filename,
+                isDir = item.isDir,
+                isOnBookShelf = item.isOnBookShelf,
+                tag = item.contentType,
+                size = ConvertUtils.formatFileSize(item.size),
+                date = AppConst.dateFormat.format(item.lastModify),
+                isSelected = index in selectedIndexes
+            )
         }
     }
 
-    override fun openDir(remoteBook: RemoteBook) {
+    fun openDir(remoteBook: RemoteBook) {
         viewModel.dirList.add(remoteBook)
         upPath()
     }
 
-    override fun upCountView() {
-        binding.selectActionBar.upCountView(adapter.selected.size, adapter.checkableCount)
+    fun upCountView() {
+        binding.selectActionBar.upCountView(selectedIndexes.size, checkableCount())
     }
+
+    private fun checkableCount(): Int = currentItems.count { !it.isDir && !it.isOnBookShelf }
 
     override fun onDialogDismiss(tag: String) {
         viewModel.initData {
@@ -226,7 +319,7 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
         }
     }
 
-    override fun startRead(remoteBook: RemoteBook) {
+    fun startRead(remoteBook: RemoteBook) {
         val downloadFileName = remoteBook.filename
         if (!ArchiveUtils.isArchive(downloadFileName)) {
             lifecycleScope.launch {
@@ -236,8 +329,9 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
             }
         } else {
             AppConfig.defaultBookTreeUri ?: return
-            val downloadArchiveFileDoc = FileDoc.fromUri(Uri.parse(AppConfig.defaultBookTreeUri), true)
-                .find(downloadFileName)
+            val downloadArchiveFileDoc = FileDoc.fromUri(
+                android.net.Uri.parse(AppConfig.defaultBookTreeUri), true
+            ).find(downloadFileName)
             if (downloadArchiveFileDoc == null) {
                 showRemoteBookDownloadAlert(remoteBook) {
                     startRead(remoteBook)
@@ -248,12 +342,12 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
         }
     }
 
-    override fun addToBookShelfAgain(remoteBook: RemoteBook) {
-        alert(getString(R.string.sure), "是否重新加入书架？") {
+    fun addToBookShelfAgain(remoteBook: RemoteBook) {
+        alert(getString(R.string.sure), getString(R.string.re_add_to_bookshelf)) {
             yesButton {
-                binding.refreshProgressBar.isAutoLoading = true
+                composeIsLoading = true
                 viewModel.addToBookshelf(hashSetOf(remoteBook)) {
-                    binding.refreshProgressBar.isAutoLoading = false
+                    composeIsLoading = false
                 }
             }
             noButton()

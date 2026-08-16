@@ -2,12 +2,24 @@ package io.legado.app.ui.book.toc.rule
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import androidx.activity.viewModels
-import androidx.appcompat.widget.PopupMenu
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.Help
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.SettingsBackupRestore
+import androidx.compose.material.icons.filled.VerticalAlignBottom
+import androidx.compose.material.icons.filled.VerticalAlignTop
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.ItemTouchHelper
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppLog
@@ -17,20 +29,16 @@ import io.legado.app.databinding.ActivityTxtTocRuleBinding
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.association.ImportTxtTocRuleDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
-import io.legado.app.ui.widget.SelectActionBar
-import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
-import io.legado.app.ui.widget.recycler.ItemTouchCallback
-import io.legado.app.ui.widget.recycler.VerticalDivider
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
 import io.legado.app.utils.sendToClip
-import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
@@ -42,17 +50,19 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
 class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleViewModel>(),
-    TxtTocRuleAdapter.CallBack,
-    SelectActionBar.CallBack,
-    TxtTocRuleEditDialog.Callback,
-    PopupMenu.OnMenuItemClickListener {
+    TxtTocRuleEditDialog.Callback {
 
     override val viewModel by viewModels<TxtTocRuleViewModel>()
     override val binding by viewBinding(ActivityTxtTocRuleBinding::inflate)
-    private val adapter: TxtTocRuleAdapter by lazy {
-        TxtTocRuleAdapter(this, this)
-    }
+
     private val importTocRuleKey = "tocRuleUrl"
+
+    // Compose 桥接状态
+    private var composeItems by mutableStateOf(listOf<TxtTocRuleDisplayItem>())
+    private var composeSelectionCount by mutableStateOf(0)
+    private var currentRules = listOf<TxtTocRule>()
+    private val selectedIds = linkedSetOf<Long>()
+
     private val qrCodeResult = registerForActivityResult(QrCodeResult()) {
         it ?: return@registerForActivityResult
         showDialogFragment(ImportTxtTocRuleDialog(it))
@@ -81,31 +91,33 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initView()
-        initBottomActionBar()
+        initComposeHost()
         initData()
     }
 
-    private fun initView() = binding.run {
-        recyclerView.setEdgeEffectColor(primaryColor)
-        recyclerView.addItemDecoration(VerticalDivider(this@TxtTocRuleActivity))
-        recyclerView.adapter = adapter
-        // When this page is opened, it is in selection mode
-        val dragSelectTouchHelper =
-            DragSelectTouchHelper(adapter.dragSelectCallback).setSlideArea(16, 50)
-        dragSelectTouchHelper.attachToRecyclerView(binding.recyclerView)
-        dragSelectTouchHelper.activeSlideSelect()
-        // Note: need judge selection first, so add ItemTouchHelper after it.
-        val itemTouchCallback = ItemTouchCallback(adapter)
-        itemTouchCallback.isCanDrag = true
-        ItemTouchHelper(itemTouchCallback).attachToRecyclerView(binding.recyclerView)
-    }
-
-    private fun initBottomActionBar() {
-        binding.selectActionBar.setMainActionText(R.string.delete)
-        binding.selectActionBar.inflateMenu(R.menu.txt_toc_rule_sel)
-        binding.selectActionBar.setOnMenuItemClickListener(this)
-        binding.selectActionBar.setCallBack(this)
+    private fun initComposeHost() {
+        binding.composeHost.setContent {
+            LegadoTheme {
+                TxtTocRuleScreen(
+                    items = composeItems,
+                    isLoading = false,
+                    topMenuActions = buildTopMenuActions(),
+                    selMenuActions = buildSelMenuActions(),
+                    selectionCount = composeSelectionCount,
+                    onBack = { finish() },
+                    onItemClick = { editRule(it) },
+                    onItemLongClick = { delRule(it) },
+                    onToggleSelect = { index, checked -> toggleSelect(index, checked) },
+                    onSelectAll = { selectAll(it) },
+                    onRevertSelection = { revertSelection() },
+                    onDeleteSelection = { delSourceDialog() },
+                    onToggleEnable = { index, checked -> upEnable(index, checked) },
+                    onItemMenuActions = { buildItemMenuActions(it) },
+                    onMove = { _, _ -> },
+                    onOrderCommitted = { commitOrder(it) }
+                )
+            }
+        }
     }
 
     private fun initData() {
@@ -113,103 +125,204 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
             appDb.txtTocRuleDao.observeAll().catch {
                 AppLog.put("TXT目录规则界面获取数据失败\n${it.localizedMessage}", it)
             }.flowOn(IO).conflate().collect { tocRules ->
-                adapter.setItems(tocRules, adapter.diffItemCallBack)
+                currentRules = tocRules
+                selectedIds.retainAll(tocRules.map { it.id })
+                refreshComposeItems()
             }
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        adapter.upResumed(true)
-    }
-
-    override fun onPause() {
-        adapter.upResumed(false)
-        super.onPause()
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.txt_toc_rule, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_add -> showDialogFragment(TxtTocRuleEditDialog())
-            R.id.menu_import_local -> importDoc.launch {
-                mode = HandleFileContract.FILE
-                allowExtensions = arrayOf("txt", "json")
-            }
-
-            R.id.menu_import_onLine -> showImportDialog()
-            R.id.menu_import_qr -> qrCodeResult.launch()
-            R.id.menu_import_default -> viewModel.importDefault()
-            R.id.menu_help -> showHelp("txtTocRuleHelp")
-
+    private fun refreshComposeItems() {
+        composeItems = currentRules.map { rule ->
+            TxtTocRuleDisplayItem(
+                id = rule.id,
+                name = rule.name,
+                example = rule.example,
+                enable = rule.enable,
+                isSelected = rule.id in selectedIds
+            )
         }
-        return super.onCompatOptionsItemSelected(item)
+        composeSelectionCount = selectedIds.size
     }
 
-    override fun del(source: TxtTocRule) {
+    private val selectedRules: List<TxtTocRule>
+        get() = currentRules.filter { it.id in selectedIds }
+
+    private fun buildTopMenuActions(): List<MenuAction> = listOf(
+        MenuAction(
+            icon = Icons.Default.Add,
+            title = getString(R.string.add),
+            onClick = { showDialogFragment(TxtTocRuleEditDialog()) }
+        ),
+        MenuAction(
+            icon = Icons.Default.FileUpload,
+            title = getString(R.string.import_local),
+            onClick = {
+                importDoc.launch {
+                    mode = HandleFileContract.FILE
+                    allowExtensions = arrayOf("txt", "json")
+                }
+            }
+        ),
+        MenuAction(
+            icon = Icons.Default.Link,
+            title = getString(R.string.import_on_line),
+            onClick = { showImportDialog() }
+        ),
+        MenuAction(
+            icon = Icons.Default.QrCode,
+            title = getString(R.string.import_by_qr_code),
+            onClick = { qrCodeResult.launch() }
+        ),
+        MenuAction(
+            icon = Icons.Default.SettingsBackupRestore,
+            title = getString(R.string.import_default_rule),
+            onClick = { viewModel.importDefault() }
+        ),
+        MenuAction(
+            icon = Icons.Default.Help,
+            title = getString(R.string.help),
+            onClick = { showHelp("txtTocRuleHelp") }
+        )
+    )
+
+    private fun buildSelMenuActions(): List<MenuAction> {
+        val selection = selectedRules
+        return listOf(
+            MenuAction(
+                icon = Icons.Default.CheckCircle,
+                title = getString(R.string.enable_selection),
+                onClick = { viewModel.enableSelection(*selection.toTypedArray()) }
+            ),
+            MenuAction(
+                icon = Icons.Default.Cancel,
+                title = getString(R.string.disable_selection),
+                onClick = { viewModel.disableSelection(*selection.toTypedArray()) }
+            ),
+            MenuAction(
+                icon = Icons.Default.FileDownload,
+                title = getString(R.string.export_selection),
+                onClick = {
+                    exportResult.launch {
+                        mode = HandleFileContract.EXPORT
+                        fileData = HandleFileContract.FileData(
+                            "exportTxtTocRule.json",
+                            GSON.toJson(selection).toByteArray(),
+                            "application/json"
+                        )
+                    }
+                }
+            )
+        )
+    }
+
+    private fun buildItemMenuActions(index: Int): List<MenuAction> {
+        val rule = currentRules.getOrNull(index) ?: return emptyList()
+        return listOf(
+            MenuAction(
+                icon = Icons.Default.VerticalAlignTop,
+                title = getString(R.string.to_top),
+                onClick = { viewModel.toTop(rule) }
+            ),
+            MenuAction(
+                icon = Icons.Default.VerticalAlignBottom,
+                title = getString(R.string.to_bottom),
+                onClick = { viewModel.toBottom(rule) }
+            ),
+            MenuAction(
+                icon = Icons.Default.Delete,
+                title = getString(R.string.delete),
+                tint = androidx.compose.ui.graphics.Color.Unspecified,
+                onClick = { delRule(index) }
+            )
+        )
+    }
+
+    /** 点击行/编辑按钮 → 打开编辑对话框 */
+    private fun editRule(index: Int) {
+        currentRules.getOrNull(index)?.let {
+            showDialogFragment(TxtTocRuleEditDialog(it.id))
+        }
+    }
+
+    /** 长按行 → 删除确认 */
+    private fun delRule(index: Int) {
+        currentRules.getOrNull(index)?.let {
+            del(it)
+        }
+    }
+
+    private fun del(source: TxtTocRule) {
         alert(R.string.draw) {
             setMessage(getString(R.string.sure_del) + "\n" + source.name)
             noButton()
             yesButton {
+                selectedIds.remove(source.id)
                 viewModel.del(source)
             }
         }
     }
 
-    override fun edit(source: TxtTocRule) {
-        showDialogFragment(TxtTocRuleEditDialog(source.id))
-    }
-
-    override fun onClickSelectBarMainAction() {
-        delSourceDialog()
-    }
-
-    override fun revertSelection() {
-        adapter.revertSelection()
-    }
-
-    override fun selectAll(selectAll: Boolean) {
-        if (selectAll) {
-            adapter.selectAll()
+    private fun toggleSelect(index: Int, checked: Boolean) {
+        val rule = currentRules.getOrNull(index) ?: return
+        if (checked) {
+            selectedIds.add(rule.id)
         } else {
-            adapter.revertSelection()
+            selectedIds.remove(rule.id)
         }
+        refreshComposeItems()
     }
 
-    override fun saveTxtTocRule(txtTocRule: TxtTocRule) {
-        viewModel.save(txtTocRule)
+    private fun selectAll(selectAll: Boolean) {
+        if (selectAll) {
+            selectedIds.addAll(currentRules.map { it.id })
+        } else {
+            selectedIds.clear()
+        }
+        refreshComposeItems()
     }
 
-    override fun update(vararg source: TxtTocRule) {
-        viewModel.update(*source)
+    private fun revertSelection() {
+        val selectedSet = selectedIds.toSet()
+        selectedIds.clear()
+        currentRules.forEach { rule ->
+            if (rule.id !in selectedSet) {
+                selectedIds.add(rule.id)
+            }
+        }
+        refreshComposeItems()
     }
 
-    override fun toTop(source: TxtTocRule) {
-        viewModel.toTop(source)
-    }
-
-    override fun toBottom(source: TxtTocRule) {
-        viewModel.toBottom(source)
-    }
-
-    override fun upOrder() {
-        viewModel.upOrder()
-    }
-
-    override fun upCountView() {
-        binding.selectActionBar
-            .upCountView(adapter.selection.size, adapter.itemCount)
+    private fun upEnable(index: Int, checked: Boolean) {
+        currentRules.getOrNull(index)?.let {
+            viewModel.update(it.copy(enable = checked))
+        }
     }
 
     private fun delSourceDialog() {
+        val selection = selectedRules
+        if (selection.isEmpty()) return
         alert(titleResource = R.string.draw, messageResource = R.string.sure_del) {
-            yesButton { viewModel.del(*adapter.selection.toTypedArray()) }
+            yesButton {
+                selectedIds.clear()
+                viewModel.del(*selection.toTypedArray())
+            }
             noButton()
         }
+    }
+
+    /** 拖拽排序结束：按新顺序重排 serialNumber 并持久化 */
+    private fun commitOrder(ids: List<Long>) {
+        if (ids.size != currentRules.size) return
+        val currentIds = currentRules.map { it.id }
+        if (ids == currentIds) return
+        val idToRule = currentRules.associateBy { it.id }
+        val reordered = ids.mapNotNull { idToRule[it] }
+        if (reordered.size != currentRules.size) return
+        val updated = reordered.mapIndexed { index, rule ->
+            rule.copy(serialNumber = index + 1)
+        }
+        viewModel.update(*updated.toTypedArray())
     }
 
     @SuppressLint("InflateParams")
@@ -248,26 +361,8 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
         }
     }
 
-    override fun onMenuItemClick(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_enable_selection -> viewModel.enableSelection(
-                *adapter.selection.toTypedArray()
-            )
-
-            R.id.menu_disable_selection -> viewModel.disableSelection(
-                *adapter.selection.toTypedArray()
-            )
-
-            R.id.menu_export_selection -> exportResult.launch {
-                mode = HandleFileContract.EXPORT
-                fileData = HandleFileContract.FileData(
-                    "exportTxtTocRule.json",
-                    GSON.toJson(adapter.selection).toByteArray(),
-                    "application/json"
-                )
-            }
-        }
-        return true
+    override fun saveTxtTocRule(txtTocRule: TxtTocRule) {
+        viewModel.save(txtTocRule)
     }
 
 }

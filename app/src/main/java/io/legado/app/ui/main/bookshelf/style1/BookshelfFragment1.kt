@@ -1,43 +1,39 @@
-@file:Suppress("DEPRECATION")
-
 package io.legado.app.ui.main.bookshelf.style1
 
 import android.os.Bundle
 import android.view.View
-import android.view.ViewGroup
-import androidx.appcompat.widget.SearchView
-import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentManager
-import androidx.lifecycle.lifecycleScope
-import androidx.fragment.app.FragmentStatePagerAdapter
-import com.google.android.material.tabs.TabLayout
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+
 import io.legado.app.R
+import io.legado.app.constant.AppLog
+import io.legado.app.databinding.FragmentBookshelf1Binding
+import io.legado.app.help.config.AppConfig
+import io.legado.app.ui.book.group.GroupEditDialog
+import io.legado.app.ui.book.info.BookInfoActivity
+import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
+import io.legado.app.ui.main.bookshelf.BookshelfScreen
+import io.legado.app.ui.main.bookshelf.sortedByBook
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.utils.showDialogFragment
+import io.legado.app.utils.startActivity
+import io.legado.app.utils.startActivityForBook
+import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
-import io.legado.app.databinding.FragmentBookshelf1Binding
-import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.ui.book.group.GroupEditDialog
-import io.legado.app.ui.book.search.SearchActivity
-import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
-import io.legado.app.ui.main.bookshelf.style1.books.BooksFragment
-import io.legado.app.utils.isCreated
-import io.legado.app.utils.setEdgeEffectColor
-import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import kotlinx.coroutines.Dispatchers.IO
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlin.collections.set
 
-/**
- * 书架界面
- */
-class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1),
-    TabLayout.OnTabSelectedListener,
-    SearchView.OnQueryTextListener {
+class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1) {
 
     constructor(position: Int) : this() {
         val bundle = Bundle()
@@ -46,150 +42,127 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     }
 
     private val binding by viewBinding(FragmentBookshelf1Binding::bind)
-    private val adapter by lazy { TabFragmentPageAdapter(childFragmentManager) }
-    private val tabLayout: TabLayout by lazy {
-        binding.titleBar.findViewById(R.id.tab_layout)
-    }
-    private val bookGroups = mutableListOf<BookGroup>()
-    private val fragmentMap = hashMapOf<Long, BooksFragment>()
-    override val groupId: Long get() = selectedGroup?.groupId ?: 0
 
-    override val books: List<Book>
-        get() {
-            val fragment = fragmentMap[groupId]
-            return fragment?.getBooks() ?: emptyList()
-        }
+    private var groupList by mutableStateOf(listOf<BookGroup>())
+    private var selectedGroupId by mutableLongStateOf(BookGroup.IdAll)
+    private var currentBooks by mutableStateOf(listOf<Book>())
+    private var loading by mutableStateOf(true)
+    private var error by mutableStateOf(false)
+    private var topScrollTrigger by mutableLongStateOf(0L)
+    private var refreshing by mutableStateOf(false)
+    private var booksJob: Job? = null
+
+    private var bookSort: Int = 0
+
+    override val groupId: Long get() = selectedGroupId
+
+    override val books: List<Book> get() = currentBooks
 
     override var onlyUpdateRead = false
+
+    @Composable
+    private fun BookshelfContent() {
+        BookshelfScreen(
+            bookGroups = groupList,
+            books = currentBooks,
+            loading = loading,
+            error = error,
+            groupId = selectedGroupId,
+            isFolder = false,
+            topScrollTrigger = topScrollTrigger,
+            isRefreshing = refreshing,
+            onRefresh = {
+                refreshing = true
+                activityViewModel.upToc(currentBooks, onlyUpdateRead)
+                lifecycleScope.launch {
+                    delay(1000)
+                    refreshing = false
+                }
+            },
+            onRetry = { upConnect() },
+            onGroupSelected = { onGroupSelected(it) },
+            onGroupLongClick = { showDialogFragment(GroupEditDialog(it)) },
+            onBookClick = { book -> startActivityForBook(book) },
+            onBookLongClick = { book ->
+                startActivity<BookInfoActivity> {
+                    putExtra("name", book.name)
+                    putExtra("author", book.author)
+                }
+            },
+        )
+    }
+
+    override val composeTopBar: ComposeView get() = binding.composeTopBar
+
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        setSupportToolbar(binding.titleBar.toolbar)
-        initView()
+        initComposeTopBar()
         initBookGroupData()
-    }
-
-    private val selectedGroup: BookGroup?
-        get() = bookGroups.getOrNull(tabLayout.selectedTabPosition)
-
-    private fun initView() {
-        binding.viewPagerBookshelf.setEdgeEffectColor(primaryColor)
-        tabLayout.isTabIndicatorFullWidth = false
-        tabLayout.tabMode = TabLayout.MODE_SCROLLABLE
-        tabLayout.setSelectedTabIndicatorColor(requireContext().accentColor)
-        tabLayout.setupWithViewPager(binding.viewPagerBookshelf)
-        binding.viewPagerBookshelf.offscreenPageLimit = 1
-        binding.viewPagerBookshelf.adapter = adapter
-    }
-
-    override fun onQueryTextSubmit(query: String?): Boolean {
-        SearchActivity.start(requireContext(), query)
-        return false
-    }
-
-    override fun onQueryTextChange(newText: String?): Boolean {
-        return false
+        binding.viewPagerBookshelf.setContent {
+            LegadoTheme {
+                BookshelfContent()
+            }
+        }
     }
 
     @Synchronized
     override fun upGroup(data: List<BookGroup>) {
         if (data.isEmpty()) {
-            lifecycleScope.launch(IO) {
+            lifecycleScope.launch {
                 appDb.bookGroupDao.enableGroup(BookGroup.IdAll)
             }
-        } else {
-            if (data != bookGroups) {
-                bookGroups.clear()
-                bookGroups.addAll(data)
-                adapter.notifyDataSetChanged()
-                selectLastTab()
-                for (i in 0 until adapter.count) {
-                    tabLayout.getTabAt(i)?.view?.setOnLongClickListener {
-                        showDialogFragment(GroupEditDialog(bookGroups[i]))
-                        true
+        } else if (data != groupList) {
+            groupList = data
+            if (selectedGroupId == BookGroup.IdAll) {
+                selectedGroupId = data[0].groupId
+            }
+            upConnect()
+        }
+    }
+
+    private fun onGroupSelected(newGroupId: Long) {
+        if (selectedGroupId == newGroupId) return
+        selectedGroupId = newGroupId
+        val group = groupList.firstOrNull { it.groupId == newGroupId }
+        onlyUpdateRead = group?.onlyUpdateRead ?: false
+        AppConfig.saveTabPosition = groupList.indexOfFirst { it.groupId == newGroupId }
+            .coerceAtLeast(0)
+        upConnect()
+    }
+
+    private fun upConnect() {
+        loading = true
+        error = false
+        booksJob?.cancel()
+        booksJob = lifecycleScope.launch {
+            try {
+                val sortType = AppConfig.getBookSortByGroupId(selectedGroupId)
+                bookSort = sortType
+                appDb.bookDao.flowByGroup(selectedGroupId)
+                    .map { list -> list.sortedByBook(sortType) }
+                    .collect {
+                        currentBooks = it
+                        loading = false
                     }
-                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                error = true
+                loading = false
+                AppLog.putDebugWithTag(AppLog.TAG_DATA, "书架分组书籍加载失败", e)
             }
         }
     }
 
     override fun upSort() {
-        adapter.notifyDataSetChanged()
-    }
-
-    private fun selectLastTab() {
-        tabLayout.post {
-            tabLayout.removeOnTabSelectedListener(this)
-            tabLayout.getTabAt(AppConfig.saveTabPosition)?.select()
-            tabLayout.addOnTabSelectedListener(this)
-        }
-    }
-
-    override fun onTabReselected(tab: TabLayout.Tab) {
-        selectedGroup?.let { group ->
-            fragmentMap[group.groupId]?.let {
-                toastOnUi("${group.groupName}(${it.getBooksCount()})")
-            }
-        }
-    }
-
-    override fun onTabUnselected(tab: TabLayout.Tab) = Unit
-
-    override fun onTabSelected(tab: TabLayout.Tab) {
-        AppConfig.saveTabPosition = tab.position
+        upConnect()
     }
 
     override fun gotoTop() {
-        fragmentMap[groupId]?.gotoTop()
+        topScrollTrigger++
     }
 
-    private inner class TabFragmentPageAdapter(fm: FragmentManager) :
-        FragmentStatePagerAdapter(fm, BEHAVIOR_RESUME_ONLY_CURRENT_FRAGMENT) {
-
-        override fun getPageTitle(position: Int): CharSequence {
-            return bookGroups[position].groupName
-        }
-
-        /**
-         * 确定视图位置是否更改时调用
-         * @return POSITION_NONE 已更改,刷新视图. POSITION_UNCHANGED 未更改,不刷新视图
-         */
-        override fun getItemPosition(any: Any): Int {
-            val fragment = any as BooksFragment
-            val position = fragment.position
-            val group = bookGroups.getOrNull(position)
-            if (fragment.groupId != group?.groupId) {
-                return POSITION_NONE
-            }
-            val bookSort = group.getRealBookSort()
-            fragment.setEnableRefresh(group.enableRefresh)
-            if (fragment.bookSort != bookSort) {
-                fragment.upBookSort(bookSort)
-            }
-            return POSITION_UNCHANGED
-        }
-
-        override fun getItem(position: Int): Fragment {
-            val group = bookGroups[position]
-            onlyUpdateRead = group.onlyUpdateRead
-            return BooksFragment(position, group)
-        }
-
-        override fun getCount(): Int {
-            return bookGroups.size
-        }
-
-        override fun instantiateItem(container: ViewGroup, position: Int): Any {
-            var fragment = super.instantiateItem(container, position) as BooksFragment
-            val group = bookGroups[position]
-            /**
-             * Activity recreate 会复用之前的 Fragment，不正确的需要重新创建
-             */
-            if (fragment.isCreated && getItemPosition(fragment) == POSITION_NONE) {
-                destroyItem(container, position, fragment)
-                fragment = super.instantiateItem(container, position) as BooksFragment
-            }
-            fragmentMap[group.groupId] = fragment
-            return fragment
-        }
-
+    override fun onDestroyView() {
+        booksJob?.cancel()
+        super.onDestroyView()
     }
 }

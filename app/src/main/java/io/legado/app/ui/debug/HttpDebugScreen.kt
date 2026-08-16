@@ -22,9 +22,9 @@
  */
 package io.legado.app.ui.debug
 
+// 豁免登记: 调试工具页私有卡片组件，见 audit-v10-consistency.md §3.1 E8
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -38,13 +38,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import io.legado.app.BuildConfig
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.StrResponse
 import io.legado.app.help.http.newCallStrResponse
+import io.legado.app.ui.widget.components.AppShapes
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
@@ -206,7 +206,7 @@ fun HttpDebugScreen(
                 title = {
                     Text(
                         text = stringResource(R.string.debug_http_request),
-                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp, fontWeight = FontWeight.Medium)
+                        style = MaterialTheme.typography.titleLarge
                     )
                 },
                 navigationIcon = {
@@ -304,7 +304,7 @@ fun HttpDebugScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = AppShapes.Button
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -364,7 +364,7 @@ fun HttpDebugScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = AppShapes.Button
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     var uaExpanded by remember { mutableStateOf(false) }
@@ -422,7 +422,7 @@ fun HttpDebugScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = AppShapes.Button
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
@@ -452,7 +452,7 @@ fun HttpDebugScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = AppShapes.Button
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
@@ -551,7 +551,7 @@ fun HttpDebugScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = AppShapes.Button
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
@@ -590,7 +590,7 @@ fun HttpDebugScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = AppShapes.Button
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(

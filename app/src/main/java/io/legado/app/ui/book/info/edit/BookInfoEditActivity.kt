@@ -2,37 +2,38 @@ package io.legado.app.ui.book.info.edit
 
 import android.net.Uri
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
+import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.core.view.WindowInsetsCompat
-import io.legado.app.R
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.Observer
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.BookType
 import io.legado.app.data.entities.Book
 import io.legado.app.databinding.ActivityBookInfoEditBinding
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.addType
-import io.legado.app.help.book.isAudio
-import io.legado.app.help.book.isImage
 import io.legado.app.help.book.isLocal
-import io.legado.app.help.book.isVideo
 import io.legado.app.help.book.removeType
 import io.legado.app.ui.book.changecover.ChangeCoverDialog
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.inputStream
 import io.legado.app.utils.readUri
-import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import splitties.init.appCtx
-import splitties.views.bottomPadding
 import java.io.FileOutputStream
 
+/**
+ * 书籍信息编辑（L-B7 枝叶页）：全 Compose 接管（BookInfoEditScreen），
+ * 保存/换封面（本地选图/换源/刷新）逻辑保留 Activity，View 状态由 Screen 上抛。
+ */
 class BookInfoEditActivity :
     VMBaseActivity<ActivityBookInfoEditBinding, BookInfoEditViewModel>(),
     ChangeCoverDialog.CallBack {
@@ -46,86 +47,62 @@ class BookInfoEditActivity :
     override val binding by viewBinding(ActivityBookInfoEditBinding::inflate)
     override val viewModel by viewModels<BookInfoEditViewModel>()
 
+    // Compose 桥接状态（数据经 VM 加载后驱动 Screen）
+    private var composeBook by mutableStateOf<Book?>(null)
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        viewModel.bookData.observe(this) { upView(it) }
+        binding.composeHost.setContent {
+            LegadoTheme {
+                BookInfoEditScreen(
+                    book = composeBook,
+                    onBack = { finish() },
+                    onSave = { name, author, typeIndex, coverUrl, intro ->
+                        saveData(name, author, typeIndex, coverUrl, intro)
+                    },
+                    onSelectCover = {
+                        selectCover.launch {
+                            mode = HandleFileContract.IMAGE
+                        }
+                    },
+                    onChangeCover = {
+                        viewModel.book?.let {
+                            showDialogFragment(
+                                ChangeCoverDialog(it.name, it.author)
+                            )
+                        }
+                    },
+                    onRefreshCover = { coverUrl ->
+                        viewModel.book?.customCoverUrl = coverUrl
+                        composeBook = viewModel.book?.copy()
+                    }
+                )
+            }
+        }
+        viewModel.bookData.observe(this, Observer { upView(it) })
         if (viewModel.bookData.value == null) {
             intent.getStringExtra("bookUrl")?.let {
                 viewModel.loadBook(it)
             }
         }
-        initView()
-        initEvent()
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.book_info_edit, menu)
-        return super.onCompatCreateOptionsMenu(menu)
+    private fun upView(book: Book) {
+        composeBook = book
     }
 
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_save -> saveData()
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
-
-    private fun initView() {
-        binding.root.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
-            val typeMask = WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime()
-            val insets = windowInsets.getInsets(typeMask)
-            view.bottomPadding = insets.bottom
-            windowInsets
-        }
-    }
-
-    private fun initEvent() = binding.run {
-        tvChangeCover.setOnClickListener {
-            viewModel.bookData.value?.let {
-                showDialogFragment(
-                    ChangeCoverDialog(it.name, it.author)
-                )
-            }
-        }
-        tvSelectCover.setOnClickListener {
-            selectCover.launch {
-                mode = HandleFileContract.IMAGE
-            }
-        }
-        tvRefreshCover.setOnClickListener {
-            viewModel.book?.customCoverUrl = tieCoverUrl.text?.toString()
-            upCover()
-        }
-    }
-
-    private fun upView(book: Book) = binding.run {
-        tieBookName.setText(book.name)
-        tieBookAuthor.setText(book.author)
-        spType.setSelection(
-            when {
-                book.isVideo -> 4
-                book.isImage -> 2
-                book.isAudio -> 1
-                else -> 0
-            }
-        )
-        tieCoverUrl.setText(book.getDisplayCover())
-        tieBookIntro.setText(book.getDisplayIntro())
-        upCover()
-    }
-
-    private fun upCover() {
-        viewModel.book?.let {
-            binding.ivCover.load(it, false)
-        }
-    }
-
-    private fun saveData() = binding.run {
-        val book = viewModel.book ?: return@run
+    private fun saveData(
+        name: String,
+        author: String,
+        typeIndex: Int,
+        coverUrl: String,
+        intro: String
+    ) {
+        val book = viewModel.book ?: return
         val oldBook = book.copy()
-        book.name = tieBookName.text?.toString() ?: ""
-        book.author = tieBookAuthor.text?.toString() ?: ""
+        book.name = name
+        book.author = author
         val local = if (book.isLocal) BookType.local else 0
-        val bookType = when (spType.selectedItemPosition) {
+        val bookType = when (typeIndex) {
             4 -> BookType.video or local
             2 -> BookType.image or local
             1 -> BookType.audio or local
@@ -133,10 +110,8 @@ class BookInfoEditActivity :
         }
         book.removeType(BookType.video, BookType.local, BookType.image, BookType.audio, BookType.text)
         book.addType(bookType)
-        val customCoverUrl = tieCoverUrl.text?.toString()
-        book.customCoverUrl = if (customCoverUrl == book.coverUrl) null else customCoverUrl
-        val customIntro = tieBookIntro.text?.toString()
-        book.customIntro = if (customIntro == book.intro) null else customIntro
+        book.customCoverUrl = if (coverUrl == book.coverUrl) null else coverUrl
+        book.customIntro = if (intro == book.intro) null else intro
         BookHelp.updateCacheFolder(oldBook, book)
         viewModel.saveBook(book) {
             setResult(RESULT_OK)
@@ -146,8 +121,7 @@ class BookInfoEditActivity :
 
     override fun coverChangeTo(coverUrl: String) {
         viewModel.book?.customCoverUrl = coverUrl
-        binding.tieCoverUrl.setText(coverUrl)
-        upCover()
+        composeBook = viewModel.book?.copy()
     }
 
     private fun coverChangeTo(uri: Uri) {
@@ -178,5 +152,4 @@ class BookInfoEditActivity :
             }
         }
     }
-
 }

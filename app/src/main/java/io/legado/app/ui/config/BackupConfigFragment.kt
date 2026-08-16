@@ -4,11 +4,10 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.text.InputType
-import android.view.Menu
-import android.view.MenuInflater
-import android.view.MenuItem
 import android.view.View
-import androidx.core.view.MenuProvider
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Info
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.EditTextPreference
@@ -36,9 +35,9 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.webdav.WebDavException
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.FileDoc
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.checkWrite
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.isContentScheme
@@ -59,8 +58,7 @@ import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 
 class BackupConfigFragment : PreferenceFragment(),
-    SharedPreferences.OnSharedPreferenceChangeListener,
-    MenuProvider {
+    SharedPreferences.OnSharedPreferenceChangeListener {
 
     private val viewModel by activityViewModels<ConfigViewModel>()
     private val waitDialog by lazy { WaitDialog(requireContext()) }
@@ -148,27 +146,24 @@ class BackupConfigFragment : PreferenceFragment(),
         activity?.setTitle(R.string.backup_restore)
         preferenceManager.sharedPreferences?.registerOnSharedPreferenceChangeListener(this)
         listView.setEdgeEffectColor(primaryColor)
-        activity?.addMenuProvider(this, viewLifecycleOwner)
+        // L-E1 S2 改造：菜单迁移至 ConfigActivity Compose 顶栏（原 MenuProvider menu_backup_restore）
+        (activity as? ConfigActivity)?.setTopBarMenu(
+            listOf(
+                MenuAction(
+                    icon = Icons.Filled.HelpOutline,
+                    title = getString(R.string.help),
+                    onClick = { showHelp("webDavHelp") }
+                ),
+                MenuAction(
+                    icon = Icons.Filled.Info,
+                    title = getString(R.string.log),
+                    onClick = { showDialogFragment<AppLogDialog>() }
+                )
+            )
+        )
         if (!LocalConfig.backupHelpVersionIsLast) {
             showHelp("webDavHelp")
         }
-    }
-
-    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-        menuInflater.inflate(R.menu.backup_restore, menu)
-        menu.applyTint(requireContext())
-    }
-
-    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-        when (menuItem.itemId) {
-            R.id.menu_help -> {
-                showHelp("webDavHelp")
-                return true
-            }
-
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-        }
-        return false
     }
 
     override fun onDestroy() {

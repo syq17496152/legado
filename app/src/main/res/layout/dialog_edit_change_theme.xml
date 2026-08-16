@@ -21,7 +21,7 @@
                 android:layout_weight="1"
                 android:paddingBottom="16dp"
                 android:text="@string/change_theme"
-                android:textSize="18sp" />
+                android:textSize="@dimen/text_18sp" />
 
             <Switch
                 android:id="@+id/switch_system_auto"

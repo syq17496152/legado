@@ -12,7 +12,7 @@
         android:padding="6dp"
         android:layout_gravity="center_horizontal"
         android:textColor="@color/primaryText"
-        android:textSize="17sp" />
+        android:textSize="@dimen/text_17sp" />
 
     <androidx.appcompat.widget.AppCompatSeekBar
         android:id="@+id/seek_bar"

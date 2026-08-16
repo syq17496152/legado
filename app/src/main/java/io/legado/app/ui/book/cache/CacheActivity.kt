@@ -3,13 +3,31 @@ package io.legado.app.ui.book.cache
 import android.annotation.SuppressLint
 import android.os.Bundle
 import android.text.InputType
-import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
+import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.PopupMenu
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BubbleChart
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.textfield.TextInputLayout
@@ -39,16 +57,17 @@ import io.legado.app.model.CacheBook
 import io.legado.app.service.ExportBookService
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.ACache
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.applyNavigationBarPadding
-import io.legado.app.utils.applyOpenTint
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.checkWrite
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.enableCustomExport
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
-import io.legado.app.utils.iconItemOnLongClick
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setIconCompat
@@ -84,9 +103,16 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
     private val layoutManager by lazy { LinearLayoutManager(this) }
     private val adapter by lazy { CacheAdapter(this, this) }
     private var booksFlowJob: Job? = null
-    private var menu: Menu? = null
-    private val groupList: ArrayList<BookGroup> = arrayListOf()
+    private val groupList = mutableStateListOf<BookGroup>()
     private var groupId: Long = -1
+
+    // L-B10 顶栏 Compose 状态
+    private var composeTitle by mutableStateOf("")
+    private var composeSubtitle by mutableStateOf("")
+    private var menuExpanded by mutableStateOf(false)
+    private var downloadMenuExpanded by mutableStateOf(false)
+    private var groupMenuExpanded by mutableStateOf(false)
+    private var downloadRunning by mutableStateOf(CacheBook.isRun)
 
     private val exportDir = registerForActivityResult(HandleFileContract()) { result ->
         var isReadyPath = false
@@ -116,70 +142,229 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         groupId = intent.getLongExtra("groupId", -1)
+        composeTitle = getString(R.string.offline_cache)
         lifecycleScope.launch {
-            binding.titleBar.subtitle = withContext(IO) {
+            composeSubtitle = withContext(IO) {
                 appDb.bookGroupDao.getByID(groupId)?.groupName
                     ?: getString(R.string.no_group)
             }
         }
+        initComposeTopBar()
         initRecyclerView()
         initGroupData()
         initBookData()
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.book_cache, menu)
-        menu.iconItemOnLongClick(R.id.menu_download) {
-            PopupMenu(this, it).apply {
-                inflate(R.menu.book_cache_download)
-                this.menu.applyOpenTint(this@CacheActivity)
-                setOnMenuItemClickListener(this@CacheActivity)
-            }.show()
-        }
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        this.menu = menu
-        upMenu()
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_enable_replace)?.isChecked = AppConfig.exportUseReplace
-        // 菜单打开时读取状态[enableCustomExport]
-        menu.findItem(R.id.menu_enable_custom_export)?.isChecked = AppConfig.enableCustomExport
-        menu.findItem(R.id.menu_export_no_chapter_name)?.isChecked = AppConfig.exportNoChapterName
-        menu.findItem(R.id.menu_export_web_dav)?.isChecked = AppConfig.exportToWebDav
-        menu.findItem(R.id.menu_export_pics_file)?.isChecked = AppConfig.exportPictureFile
-        menu.findItem(R.id.menu_parallel_export)?.isChecked = AppConfig.parallelExportBook
-        menu.findItem(R.id.menu_export_type)?.title =
-            "${getString(R.string.export_type)}(${getTypeName()})"
-        menu.findItem(R.id.menu_export_charset)?.title =
-            "${getString(R.string.export_charset)}(${AppConfig.exportCharset})"
-        val cacheRate = AppConfig.cacheConcurrentRate
-        menu.findItem(R.id.menu_cache_rate)?.title =
-            getString(R.string.cache_concurrent_rate) +
-                if (cacheRate.isNullOrBlank()) "(${getString(R.string.text_default)})" else "($cacheRate)"
-        return super.onMenuOpened(featureId, menu)
-    }
-
-    private fun upMenu() {
-        menu?.findItem(R.id.menu_book_group)?.subMenu?.let { subMenu ->
-            subMenu.removeGroup(R.id.menu_group)
-            groupList.forEach { bookGroup ->
-                subMenu.add(R.id.menu_group, bookGroup.order, Menu.NONE, bookGroup.groupName)
+    // L-B10 顶栏 Compose 化：GlassTopAppBar + 下载子菜单/分组/更多菜单全量下沉 AppDropdownMenu
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                Box {
+                    GlassTopAppBar(
+                        title = if (composeSubtitle.isBlank()) composeTitle
+                        else "$composeTitle • $composeSubtitle",
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = {
+                            // 下载按钮：点击展开下载子菜单（当前章起/全部/停止）
+                            Box {
+                                IconButton(onClick = { downloadMenuExpanded = true }) {
+                                    Icon(
+                                        imageVector = if (downloadRunning) Icons.Filled.Stop else Icons.Filled.Download,
+                                        contentDescription = getString(R.string.action_download)
+                                    )
+                                }
+                                AppDropdownMenu(
+                                    expanded = downloadMenuExpanded,
+                                    onDismiss = { downloadMenuExpanded = false },
+                                    actions = buildDownloadMenuActions()
+                                )
+                            }
+                            // 分组按钮：点击展开分组切换子菜单
+                            Box {
+                                IconButton(onClick = { groupMenuExpanded = true }) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Groups,
+                                        contentDescription = getString(R.string.group)
+                                    )
+                                }
+                                AppDropdownMenu(
+                                    expanded = groupMenuExpanded,
+                                    onDismiss = { groupMenuExpanded = false },
+                                    actions = buildGroupMenuActions()
+                                )
+                            }
+                            // 更多菜单：导出/替换/缓存并发率/日志/分项统计等全量下沉
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(
+                                        imageVector = Icons.Filled.MoreVert,
+                                        contentDescription = null
+                                    )
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = buildMenuActions()
+                                )
+                            }
+                        }
+                    )
+                }
             }
         }
     }
 
+    /** 下载子菜单（原 menu_book_cache_download + menu_download） */
+    private fun buildDownloadMenuActions(): List<MenuAction> {
+        return listOf(
+            MenuAction(
+                Icons.Filled.BubbleChart,
+                if (downloadRunning) getString(R.string.stop)
+                else getString(R.string.menu_download_after),
+                onClick = {
+                    if (!downloadRunning) sureCacheBook {
+                        adapter.getItems().forEach { book ->
+                            CacheBook.start(
+                                this@CacheActivity,
+                                book,
+                                book.durChapterIndex,
+                                book.lastChapterIndex
+                            )
+                        }
+                    } else {
+                        CacheBook.stop(this@CacheActivity)
+                    }
+                }
+            ),
+            MenuAction(
+                Icons.Filled.BubbleChart,
+                getString(R.string.menu_download_all),
+                onClick = {
+                    if (!downloadRunning) sureCacheBook {
+                        adapter.getItems().forEach { book ->
+                            CacheBook.start(
+                                this@CacheActivity,
+                                book,
+                                0,
+                                book.lastChapterIndex
+                            )
+                        }
+                    } else {
+                        CacheBook.stop(this@CacheActivity)
+                    }
+                }
+            )
+        )
+    }
+
+    /** 分组切换子菜单（原 menu_book_group 动态分组） */
+    private fun buildGroupMenuActions(): List<MenuAction> {
+        val actions = mutableListOf<MenuAction>()
+        groupList.forEach { bookGroup ->
+            actions += MenuAction(
+                Icons.Filled.Folder,
+                bookGroup.groupName,
+                onClick = {
+                    composeSubtitle = bookGroup.groupName
+                    lifecycleScope.launch {
+                        groupId = withContext(IO) { appDb.bookGroupDao.getByName(bookGroup.groupName) }?.groupId ?: 0
+                        initBookData()
+                    }
+                }
+            )
+        }
+        return actions
+    }
+
     /**
-     * 菜单按下回调
+     * 更多菜单（原 book_cache 全部导出/替换/并发率等项）
      */
+    private fun buildMenuActions(): List<MenuAction> {
+        val cacheRate = AppConfig.cacheConcurrentRate
+        return listOf(
+            MenuAction(Icons.Filled.Download, getString(R.string.export_all), onClick = { exportAll() }),
+            MenuAction(
+                Icons.Filled.List,
+                getString(R.string.replace_purify),
+                checked = AppConfig.exportUseReplace,
+                onClick = { AppConfig.exportUseReplace = !AppConfig.exportUseReplace }
+            ),
+            MenuAction(
+                Icons.Filled.List,
+                getString(R.string.custom_export_section),
+                checked = AppConfig.enableCustomExport,
+                onClick = { AppConfig.enableCustomExport = !AppConfig.enableCustomExport }
+            ),
+            MenuAction(
+                Icons.Filled.List,
+                getString(R.string.export_no_chapter_name),
+                checked = AppConfig.exportNoChapterName,
+                onClick = { AppConfig.exportNoChapterName = !AppConfig.exportNoChapterName }
+            ),
+            MenuAction(
+                Icons.Filled.List,
+                getString(R.string.export_to_web_dav),
+                checked = AppConfig.exportToWebDav,
+                onClick = { AppConfig.exportToWebDav = !AppConfig.exportToWebDav }
+            ),
+            MenuAction(
+                Icons.Filled.List,
+                getString(R.string.export_pics_file),
+                checked = AppConfig.exportPictureFile,
+                onClick = { AppConfig.exportPictureFile = !AppConfig.exportPictureFile }
+            ),
+            MenuAction(
+                Icons.Filled.List,
+                getString(R.string.parallel_export_book),
+                checked = AppConfig.parallelExportBook,
+                onClick = { AppConfig.parallelExportBook = !AppConfig.parallelExportBook }
+            ),
+            MenuAction(Icons.Filled.Folder, getString(R.string.export_folder), onClick = { selectExportFolder(-1) }),
+            MenuAction(Icons.Filled.List, getString(R.string.export_file_name), onClick = { alertExportFileName() }),
+            MenuAction(
+                Icons.Filled.List,
+                getString(R.string.export_type) + "(${getTypeName()})",
+                onClick = { showExportTypeConfig() }
+            ),
+            MenuAction(
+                Icons.Filled.List,
+                getString(R.string.export_charset) + "(${AppConfig.exportCharset})",
+                onClick = { showCharsetConfig() }
+            ),
+            MenuAction(
+                Icons.Filled.List,
+                getString(R.string.cache_concurrent_rate) +
+                    if (cacheRate.isNullOrBlank()) "(${getString(R.string.text_default)})" else "($cacheRate)",
+                onClick = { showCacheRateDialog() }
+            ),
+            MenuAction(Icons.Filled.List, getString(R.string.log), onClick = { showDialogFragment<AppLogDialog>() }),
+            MenuAction(Icons.Filled.List, getString(R.string.cache_stats), onClick = { showCacheStatsDialog() })
+        )
+    }
+
+    // 缓存管理菜单项 id 常量（menu XML 已随 Compose 化清理，原 R.id.menu_* 改为本地常量）
+    private object MenuId {
+        const val DOWNLOAD_AFTER = 1101
+        const val DOWNLOAD_ALL = 1102
+        const val ENABLE_CUSTOM_EXPORT = 1103
+        const val EXPORT_WEB_DAV = 1104
+        const val EXPORT_NO_CHAPTER_NAME = 1105
+        const val EXPORT_PICS_FILE = 1106
+        const val PARALLEL_EXPORT = 1107
+        const val EXPORT_FOLDER = 1108
+        const val EXPORT_FILE_NAME = 1109
+        const val EXPORT_TYPE = 1110
+        const val EXPORT_CHARSET = 1111
+        const val CACHE_RATE = 1112
+        const val CACHE_STATS = 1113
+    }
+
+    /** 菜单按下回调（保留原逻辑，供子菜单/长按入口复用） */
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.menu_download,
-            R.id.menu_download_after -> {
+            MenuId.DOWNLOAD_AFTER -> {
                 if (!CacheBook.isRun) sureCacheBook {
                     adapter.getItems().forEach { book ->
                         CacheBook.start(
@@ -194,7 +379,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                 }
             }
 
-            R.id.menu_download_all -> {
+            MenuId.DOWNLOAD_ALL -> {
                 if (!CacheBook.isRun) sureCacheBook {
                     adapter.getItems().forEach { book ->
                         CacheBook.start(
@@ -212,23 +397,23 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             R.id.menu_export_all -> exportAll()
             R.id.menu_enable_replace -> AppConfig.exportUseReplace = !item.isChecked
             // 更改菜单状态[enableCustomExport]
-            R.id.menu_enable_custom_export -> AppConfig.enableCustomExport = !item.isChecked
-            R.id.menu_export_no_chapter_name -> AppConfig.exportNoChapterName = !item.isChecked
-            R.id.menu_export_web_dav -> AppConfig.exportToWebDav = !item.isChecked
-            R.id.menu_export_pics_file -> AppConfig.exportPictureFile = !item.isChecked
-            R.id.menu_parallel_export -> AppConfig.parallelExportBook = !item.isChecked
-            R.id.menu_export_folder -> {
+            MenuId.ENABLE_CUSTOM_EXPORT -> AppConfig.enableCustomExport = !item.isChecked
+            MenuId.EXPORT_NO_CHAPTER_NAME -> AppConfig.exportNoChapterName = !item.isChecked
+            MenuId.EXPORT_WEB_DAV -> AppConfig.exportToWebDav = !item.isChecked
+            MenuId.EXPORT_PICS_FILE -> AppConfig.exportPictureFile = !item.isChecked
+            MenuId.PARALLEL_EXPORT -> AppConfig.parallelExportBook = !item.isChecked
+            MenuId.EXPORT_FOLDER -> {
                 selectExportFolder(-1)
             }
 
-            R.id.menu_export_file_name -> alertExportFileName()
-            R.id.menu_export_type -> showExportTypeConfig()
-            R.id.menu_export_charset -> showCharsetConfig()
-            R.id.menu_cache_rate -> showCacheRateDialog()
+            MenuId.EXPORT_FILE_NAME -> alertExportFileName()
+            MenuId.EXPORT_TYPE -> showExportTypeConfig()
+            MenuId.EXPORT_CHARSET -> showCharsetConfig()
+            MenuId.CACHE_RATE -> showCacheRateDialog()
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
-            R.id.menu_cache_stats -> showCacheStatsDialog()
+            MenuId.CACHE_STATS -> showCacheStatsDialog()
             else -> if (item.groupId == R.id.menu_group) {
-                binding.titleBar.subtitle = item.title
+                composeSubtitle = item.title.toString()
                 lifecycleScope.launch {
                     groupId = withContext(IO) { appDb.bookGroupDao.getByName(item.title.toString()) }?.groupId ?: 0
                     initBookData()
@@ -288,7 +473,6 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                 groupList.clear()
                 groupList.addAll(it)
                 adapter.notifyDataSetChanged()
-                upMenu()
             }
         }
     }
@@ -315,19 +499,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             notifyItemChanged(it)
         }
         observeEvent<String>(EventBus.UP_DOWNLOAD_STATE) {
-            if (!CacheBook.isRun) {
-                menu?.findItem(R.id.menu_download)?.let { item ->
-                    item.setIconCompat(R.drawable.ic_play_24dp)
-                    item.setTitle(R.string.download_start)
-                }
-                menu?.applyTint(this)
-            } else {
-                menu?.findItem(R.id.menu_download)?.let { item ->
-                    item.setIconCompat(R.drawable.ic_stop_black_24dp)
-                    item.setTitle(R.string.stop)
-                }
-                menu?.applyTint(this)
-            }
+            downloadRunning = CacheBook.isRun
         }
         observeEvent<Pair<Book, BookChapter>>(EventBus.SAVE_CONTENT) { (book, chapter) ->
             viewModel.cacheChapters[book.bookUrl]?.add(chapter.url)

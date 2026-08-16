@@ -24,7 +24,7 @@
                 android:layout_height="match_parent"
                 android:padding="6dp"
                 android:text="@string/view"
-                android:textSize="16sp" />
+                android:textSize="@dimen/text_16sp" />
 
             <RadioGroup
                 android:id="@+id/rg_view"
@@ -80,7 +80,7 @@
                 android:layout_height="match_parent"
                 android:padding="6dp"
                 android:text="@string/sort"
-                android:textSize="16sp" />
+                android:textSize="@dimen/text_16sp" />
 
             <RadioGroup
                 android:id="@+id/rg_sort"

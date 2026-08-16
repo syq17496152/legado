@@ -1,9 +1,31 @@
 package io.legado.app.ui.main.bookshelf
 
 import android.annotation.SuppressLint
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.ManageSearch
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.view.indices
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
@@ -30,6 +52,10 @@ import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.main.MainViewModel
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.checkByIndex
 import io.legado.app.utils.getCheckedIndex
@@ -40,6 +66,7 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.launch
 
 abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfViewModel>(layoutId),
     MainFragmentInterface {
@@ -89,39 +116,93 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
 
     abstract fun gotoTop()
 
-    override fun onCompatCreateOptionsMenu(menu: Menu) {
-        menuInflater.inflate(R.menu.main_bookshelf, menu)
-    }
+    // 顶栏 Compose 状态：更多菜单展开 + 标题（style1 固定"书架"，style2 动态更新分组名）
+    protected var menuExpanded by mutableStateOf(false)
+    protected var composeTopBarTitle by mutableStateOf("")
 
-    override fun onCompatOptionsItemSelected(item: MenuItem) {
-        super.onCompatOptionsItemSelected(item)
-        when (item.itemId) {
-            R.id.menu_remote -> startActivity<RemoteBookActivity>()
-            R.id.menu_search -> startActivity<SearchActivity>()
-            R.id.menu_update_toc -> activityViewModel.upToc(books, onlyUpdateRead)
-            R.id.menu_bookshelf_layout -> configBookshelf()
-            R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
-            R.id.menu_add_local -> startActivity<ImportBookActivity>()
-            R.id.menu_add_url -> showAddBookByUrlAlert()
-            R.id.menu_bookshelf_manage -> startActivity<BookshelfManageActivity> {
-                putExtra("groupId", groupId)
-            }
+    // 子类提供 Compose 顶栏容器（对应布局中的 compose_top_bar）
+    protected abstract val composeTopBar: ComposeView
 
-            R.id.menu_download -> startActivity<CacheActivity> {
-                putExtra("groupId", groupId)
-            }
-
-            R.id.menu_export_bookshelf -> viewModel.exportBookshelf(books) { file ->
-                exportResult.launch {
-                    mode = HandleFileContract.EXPORT
-                    fileData =
-                        HandleFileContract.FileData("bookshelf.json", file, "application/json")
+    // 顶栏 Compose 化：GlassTopAppBar 用 colorScheme.surface（跟随昼夜主题），替代 View TitleBar 的固定 primaryColor
+    protected fun initComposeTopBar() {
+        if (composeTopBarTitle.isBlank()) {
+            composeTopBarTitle = getString(R.string.bookshelf)
+        }
+        composeTopBar.setContent {
+            LegadoTheme {
+                Column(modifier = Modifier.statusBarsPadding()) {
+                    GlassTopAppBar(
+                        title = composeTopBarTitle,
+                        actions = {
+                            // 搜索（原 main_bookshelf.xml 的 showAsAction="always" 项）
+                            IconButton(onClick = { startActivity<SearchActivity>() }) {
+                                Icon(Icons.Default.Search, contentDescription = null)
+                            }
+                            // 更多菜单（原 main_bookshelf.xml 其余项，数据驱动）
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = null)
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = buildMenuActions()
+                                )
+                            }
+                        }
+                    )
                 }
             }
-
-            R.id.menu_import_bookshelf -> importBookshelfAlert(groupId)
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
         }
+    }
+
+    // 更多菜单数据（保留全部原菜单动作，顺序同 main_bookshelf.xml）
+    private fun buildMenuActions(): List<MenuAction> {
+        return listOf(
+            MenuAction(Icons.Default.Refresh, getString(R.string.update_toc), onClick = {
+                activityViewModel.upToc(books, onlyUpdateRead)
+            }),
+            MenuAction(Icons.Default.Add, getString(R.string.book_local), onClick = {
+                startActivity<ImportBookActivity>()
+            }),
+            MenuAction(Icons.Default.Cloud, getString(R.string.add_remote_book), onClick = {
+                startActivity<RemoteBookActivity>()
+            }),
+            MenuAction(Icons.Default.Link, getString(R.string.add_url), onClick = {
+                showAddBookByUrlAlert()
+            }),
+            MenuAction(Icons.Default.ManageSearch, getString(R.string.bookshelf_management), onClick = {
+                startActivity<BookshelfManageActivity> {
+                    putExtra("groupId", groupId)
+                }
+            }),
+            MenuAction(Icons.Default.Download, getString(R.string.cache_export), onClick = {
+                startActivity<CacheActivity> {
+                    putExtra("groupId", groupId)
+                }
+            }),
+            MenuAction(Icons.Default.Groups, getString(R.string.group_manage), onClick = {
+                showDialogFragment<GroupManageDialog>()
+            }),
+            MenuAction(Icons.Default.GridView, getString(R.string.bookshelf_layout), onClick = {
+                configBookshelf()
+            }),
+            MenuAction(Icons.Default.FileUpload, getString(R.string.export_bookshelf), onClick = {
+                viewModel.exportBookshelf(books) { file ->
+                    exportResult.launch {
+                        mode = HandleFileContract.EXPORT
+                        fileData =
+                            HandleFileContract.FileData("bookshelf.json", file, "application/json")
+                    }
+                }
+            }),
+            MenuAction(Icons.Default.FileDownload, getString(R.string.import_bookshelf), onClick = {
+                importBookshelfAlert(groupId)
+            }),
+            MenuAction(Icons.Default.Info, getString(R.string.log), onClick = {
+                showDialogFragment<AppLogDialog>()
+            })
+        )
     }
 
     protected fun initBookGroupData() {

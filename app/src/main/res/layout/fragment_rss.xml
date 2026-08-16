@@ -6,14 +6,12 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <!-- 订阅页顶栏 Compose 化（GlassTopAppBar + SettingsSearchBar，跟随昼夜主题） -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:attachToActivity="false"
-        app:contentLayout="@layout/view_search"
-        app:layout_constraintTop_toTopOf="parent"
-        app:title="@string/rss" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <!-- D1: 标签模式 TabLayout（sourceGroupStyle!=0 && sourceGroupMode==0 时显示） -->
     <com.google.android.material.tabs.TabLayout
@@ -22,7 +20,7 @@
         android:layout_height="wrap_content"
         android:visibility="gone"
         app:tabMode="scrollable"
-        app:layout_constraintTop_toBottomOf="@+id/title_bar" />
+        app:layout_constraintTop_toBottomOf="@+id/compose_top_bar" />
 
     <io.legado.app.ui.widget.recycler.RecyclerViewAtPager2
         android:id="@+id/recycler_view"

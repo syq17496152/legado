@@ -5,11 +5,12 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <!-- L-B10 缓存管理页：顶栏 Compose 化（GlassTopAppBar + 下载/分组/更多菜单 AppDropdownMenu），
+         列表 + 分组加载 View 内核保留（AD-20 内核桥接） -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:title="@string/offline_cache" />
+        android:layout_height="wrap_content" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_view"

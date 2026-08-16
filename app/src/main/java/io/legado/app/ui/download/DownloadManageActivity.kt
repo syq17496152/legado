@@ -1,9 +1,10 @@
 package io.legado.app.ui.download
 
-import android.content.DialogInterface
 import android.os.Bundle
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.tabs.TabLayout
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
 import io.legado.app.constant.AppLog
@@ -12,9 +13,8 @@ import io.legado.app.databinding.ActivityDownloadManageBinding
 import io.legado.app.service.DownloadState
 import io.legado.app.service.DownloadStatus
 import io.legado.app.service.DownloadTask
-import io.legado.app.lib.dialogs.selector
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.IntentType
-import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.openFileUri
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.startService
@@ -27,12 +27,11 @@ import splitties.systemservices.downloadManager
 
 /**
  * 下载管理页（precise-manage：聚合 DownloadService 任务，500ms 轮询系统 DownloadManager）
+ * Compose 化：S2 列表族壳层 DownloadManageScreen，轮询/过滤/任务操作逻辑保留 Activity
  */
 class DownloadManageActivity : BaseActivity<ActivityDownloadManageBinding>() {
 
     override val binding by viewBinding(ActivityDownloadManageBinding::inflate)
-    private val adapter: DownloadTaskAdapter by lazy { DownloadTaskAdapter(this) }
-    private var tabIndex = 0
 
     private enum class Tab(val labelRes: Int) {
         ALL(R.string.download_tab_all),
@@ -42,54 +41,56 @@ class DownloadManageActivity : BaseActivity<ActivityDownloadManageBinding>() {
         FAILED(R.string.download_tab_failed)
     }
 
+    // Compose 桥接状态
+    private var composeItems by mutableStateOf(listOf<DownloadDisplayItem>())
+    private var tabIndex by mutableStateOf(0)
+    private var isLoading by mutableStateOf(true)
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initView()
+        initComposeHost()
         initData()
     }
 
-    private fun initView() {
-        adapter.callBack = object : DownloadTaskAdapter.CallBack {
-            override fun onClick(task: DownloadTask) {
-                showTaskMenu(task)
+    private fun initComposeHost() {
+        binding.composeHost.setContent {
+            LegadoTheme {
+                DownloadManageScreen(
+                    items = composeItems,
+                    tabIndex = tabIndex,
+                    isLoading = isLoading,
+                    onTabChange = { index ->
+                        tabIndex = index
+                    },
+                    onCancelTask = { cancelTask(it) },
+                    onRetryTask = { retryTask(it) },
+                    onOpenFile = { openFile(it) },
+                    onCopyPath = { sendToClip(it.fileName) },
+                    onClearCompleted = { clearCompletedTasks() },
+                    onBack = { finish() }
+                )
             }
         }
-        binding.recyclerView.adapter = adapter
-        binding.recyclerView.applyNavigationBarPadding()
-        Tab.entries.forEach { tab ->
-            binding.tabLayout.addTab(binding.tabLayout.newTab().setText(tab.labelRes))
-        }
-        binding.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab?) {
-                tabIndex = tab?.position ?: 0
-                initData()
-            }
-
-            override fun onTabUnselected(tab: TabLayout.Tab?) {}
-            override fun onTabReselected(tab: TabLayout.Tab?) {}
-        })
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: android.view.Menu): Boolean {
-        menuInflater.inflate(R.menu.download_manage, menu)
-        return true
-    }
-
-    override fun onCompatOptionsItemSelected(item: android.view.MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_clear_completed -> clearCompletedTasks()
-        }
-        return true
     }
 
     private fun initData() {
         lifecycleScope.launch {
             while (isActive) {
                 val tasks = DownloadState.queryAllTaskStatus()
-                adapter.setItems(filterTasks(tasks))
+                composeItems = filterTasks(tasks).map { it.toDisplayItem() }
+                isLoading = false
                 delay(500)
             }
         }
     }
+
+    private fun DownloadTask.toDisplayItem() = DownloadDisplayItem(
+        id = id,
+        fileName = fileName,
+        url = url,
+        status = status,
+        totalSize = totalSize,
+        downloadedSize = downloadedSize
+    )
 
     private fun filterTasks(tasks: List<DownloadTask>): List<DownloadTask> {
         return when (Tab.entries.getOrNull(tabIndex)) {
@@ -102,63 +103,29 @@ class DownloadManageActivity : BaseActivity<ActivityDownloadManageBinding>() {
         }.sortedByDescending { it.startTime }
     }
 
-    private fun showTaskMenu(task: DownloadTask) {
-        val items = mutableListOf<CharSequence>()
-        when (task.status) {
-            DownloadStatus.WAITING, DownloadStatus.RUNNING -> {
-                items.add(getString(R.string.download_delete_task))
-            }
-            DownloadStatus.PAUSED, DownloadStatus.FAILED -> {
-                items.add(getString(R.string.download_retry))
-                items.add(getString(R.string.download_delete_task))
-            }
-            DownloadStatus.COMPLETED -> {
-                items.add(getString(R.string.download_open_file))
-                items.add(getString(R.string.download_copy_path))
-                items.add(getString(R.string.download_delete_task))
-            }
-        }
-        selector("", items) { _: DialogInterface, which: Int ->
-            when (which) {
-                0 -> when (task.status) {
-                    DownloadStatus.WAITING, DownloadStatus.RUNNING -> cancelTask(task.id)
-                    DownloadStatus.PAUSED, DownloadStatus.FAILED -> retryTask(task)
-                    DownloadStatus.COMPLETED -> openFile(task)
-                    else -> Unit
-                }
-                1 -> when (task.status) {
-                    DownloadStatus.PAUSED, DownloadStatus.FAILED -> cancelTask(task.id)
-                    DownloadStatus.COMPLETED -> sendToClip(task.fileName)
-                    else -> Unit
-                }
-                2 -> cancelTask(task.id)
-            }
-        }
-    }
-
-    private fun cancelTask(id: Long) {
-        DownloadState.cancelDownload(id)
+    private fun cancelTask(item: DownloadDisplayItem) {
+        DownloadState.cancelDownload(item.id)
         startService<io.legado.app.service.DownloadService> {
             action = IntentAction.stop
-            putExtra("downloadId", id)
+            putExtra("downloadId", item.id)
         }
     }
 
-    private fun retryTask(task: DownloadTask) {
+    private fun retryTask(item: DownloadDisplayItem) {
         io.legado.app.model.Download.start(
             this,
-            task.url,
-            task.fileName
+            item.url,
+            item.fileName
         )
     }
 
-    private fun openFile(task: DownloadTask) {
+    private fun openFile(item: DownloadDisplayItem) {
         kotlin.runCatching {
-            downloadManager.getUriForDownloadedFile(task.id)?.let { uri ->
-                openFileUri(uri, IntentType.from(task.fileName))
+            downloadManager.getUriForDownloadedFile(item.id)?.let { uri ->
+                openFileUri(uri, IntentType.from(item.fileName))
             }
         }.onFailure {
-            AppLog.put("打开下载文件${task.fileName}出错", it)
+            AppLog.put("打开下载文件${item.fileName}出错", it)
             toastOnUi("${getString(R.string.error)}: ${it.localizedMessage}")
         }
     }
@@ -171,6 +138,5 @@ class DownloadManageActivity : BaseActivity<ActivityDownloadManageBinding>() {
             DownloadState.removeTask(it.id)
         }
         toastOnUi(R.string.clear_cache_success)
-        initData()
     }
 }

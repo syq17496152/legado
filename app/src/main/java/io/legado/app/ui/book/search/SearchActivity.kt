@@ -3,13 +3,19 @@ package io.legado.app.ui.book.search
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View.GONE
 import android.view.View.VISIBLE
-import android.widget.TextView
 import androidx.activity.viewModels
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
@@ -34,14 +40,17 @@ import io.legado.app.lib.theme.Selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.source.manage.BookSourceActivity
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyNavigationBarMargin
 import io.legado.app.utils.applyNavigationBarPadding
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
@@ -49,7 +58,6 @@ import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.transaction
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
@@ -83,20 +91,21 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
             setHasStableIds(true)
         }
     }
-    private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
-    private var menu: Menu? = null
-    private var groups: List<String>? = null
+    // book-search-compose 壳层化：Compose 顶栏搜索/菜单状态（替代原 SearchView + Menu）
+    private var composeSearchQuery by mutableStateOf("")
+    private var menuExpanded by mutableStateOf(false)
+    // 延迟初始化：构造期 getPrefBoolean → context 尚未注入 → NPE（与 ConfigActivity 同源问题），在 onActivityCreated 赋值
+    private var composePrecisionChecked by mutableStateOf(false)
+    private var composeGroups by mutableStateOf(listOf<String>())
     private var historyFlowJob: Job? = null
     private var booksFlowJob: Job? = null
-    private var precisionSearchMenuItem: MenuItem? = null
     private var isManualStopSearch = false
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         binding.llInputHelp.setBackgroundColor(backgroundColor)
+        composePrecisionChecked = getPrefBoolean(PreferKey.precisionSearch)
         initRecyclerView()
-        initSearchView()
+        initComposeTopBar()
         initOtherView()
         initData()
         receiptIntent(intent)
@@ -107,114 +116,161 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         receiptIntent(intent)
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.book_search, menu)
-        this.menu = menu
-        precisionSearchMenuItem = menu.findItem(R.id.menu_precision_search)
-        precisionSearchMenuItem?.isChecked = getPrefBoolean(PreferKey.precisionSearch)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.transaction {
-            menu.removeGroup(R.id.menu_group_1)
-            menu.removeGroup(R.id.menu_group_2)
-            var hasChecked = false
-            val searchScopeNames = viewModel.searchScope.displayNames
-            if (viewModel.searchScope.isSource()) {
-                menu.add(R.id.menu_group_1, Menu.NONE, Menu.NONE, searchScopeNames.first()).apply {
-                    isChecked = true
-                    hasChecked = true
-                }
-            }
-            val allSourceMenu =
-                menu.add(R.id.menu_group_2, R.id.menu_1, Menu.NONE, getString(R.string.all_source))
-                    .apply {
-                        if (searchScopeNames.isEmpty()) {
-                            isChecked = true
-                            hasChecked = true
+    // book-search-compose 壳层化：顶栏（GlassTopAppBar + 搜索 SettingsSearchBar + 更多菜单 AppDropdownMenu）
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                Column {
+                    GlassTopAppBar(
+                        title = getString(R.string.search),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = {
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = null)
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = buildMenuActions()
+                                )
+                            }
                         }
-                    }
-            groups?.forEach {
-                if (searchScopeNames.contains(it)) {
-                    menu.add(R.id.menu_group_1, Menu.NONE, Menu.NONE, it).apply {
-                        isChecked = true
-                        hasChecked = true
-                    }
-                } else {
-                    menu.add(R.id.menu_group_2, Menu.NONE, Menu.NONE, it)
+                    )
+                    SettingsSearchBar(
+                        query = composeSearchQuery,
+                        onQueryChange = {
+                            composeSearchQuery = it
+                            // 输入变化：停止当前搜索，隐藏 FAB，更新搜索历史与书架搜索
+                            viewModel.stop()
+                            binding.fbStartStop.invisible()
+                            upHistory(it.trim())
+                            visibleInputHelp(true)
+                        },
+                        placeholder = getString(R.string.search_book_key),
+                        onSearch = { submitSearch(composeSearchQuery) }
+                    )
                 }
             }
-            if (!hasChecked) {
-                viewModel.searchScope.update("")
-                allSourceMenu.isChecked = true
-            }
-            menu.setGroupCheckable(R.id.menu_group_1, true, false)
-            menu.setGroupCheckable(R.id.menu_group_2, true, true)
         }
-        return super.onMenuOpened(featureId, menu)
     }
 
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_precision_search -> {
-                putPrefBoolean(
-                    PreferKey.precisionSearch,
-                    !getPrefBoolean(PreferKey.precisionSearch)
-                )
-                precisionSearchMenuItem?.isChecked = getPrefBoolean(PreferKey.precisionSearch)
-                searchView.query?.toString()?.trim()?.let {
-                    searchView.setQuery(it, true)
+    // 搜索页菜单项 id 常量（menu XML 已随 Compose 化清理，原 R.id.menu_* 改为本地常量）
+    private object MenuId {
+        const val PRECISION_SEARCH = 1201
+        const val SEARCH_SCOPE = 1202
+    }
+
+    // book-search-compose 壳层化：更多菜单数据（精准搜索 + 分组筛选 + 管理）
+    private fun buildMenuActions(): List<MenuAction> {
+        val searchScopeNames = viewModel.searchScope.displayNames
+        return buildList {
+            // 搜索选项分组
+            add(MenuAction(Icons.Default.Tune, getString(R.string.search_options), header = true) {})
+            add(MenuAction(
+                Icons.Default.Search,
+                getString(R.string.precision_search),
+                checked = composePrecisionChecked,
+                onClick = { handleMenuAction(MenuId.PRECISION_SEARCH) }
+            ))
+            add(MenuAction(
+                Icons.Default.ManageSearch,
+                getString(R.string.groups_or_source),
+                onClick = { handleMenuAction(MenuId.SEARCH_SCOPE) }
+            ))
+            // 分组筛选分组
+            add(MenuAction(Icons.Default.Folder, getString(R.string.groups_or_source), header = true) {})
+            if (!viewModel.searchScope.isAll()) {
+                searchScopeNames.forEach { name ->
+                    add(MenuAction(
+                        Icons.Default.Folder,
+                        name,
+                        checked = true,
+                        onClick = { handleGroupSelect(name, remove = true) }
+                    ))
                 }
             }
+            add(MenuAction(
+                Icons.Default.AllInclusive,
+                getString(R.string.all_source),
+                checked = viewModel.searchScope.isAll(),
+                onClick = { handleMenuAction(R.id.menu_1) }
+            ))
+            composeGroups.forEach { group ->
+                if (!searchScopeNames.contains(group)) {
+                    add(MenuAction(
+                        Icons.Default.Folder,
+                        group,
+                        onClick = { handleGroupSelect(group, remove = false) }
+                    ))
+                }
+            }
+            // 管理分组
+            add(MenuAction(Icons.Default.Settings, getString(R.string.more), header = true) {})
+            add(MenuAction(
+                Icons.Default.ManageSearch,
+                getString(R.string.book_source_manage),
+                onClick = { handleMenuAction(R.id.menu_source_manage) }
+            ))
+            add(MenuAction(
+                Icons.Default.Info,
+                getString(R.string.log),
+                onClick = { handleMenuAction(R.id.menu_log) }
+            ))
+        }
+    }
 
-            R.id.menu_search_scope -> alertSearchScope()
+    // book-search-compose 壳层化：菜单动作统一入口（原 onCompatOptionsItemSelected 逻辑迁移）
+    private fun handleMenuAction(actionId: Int) {
+        when (actionId) {
+            MenuId.PRECISION_SEARCH -> togglePrecisionSearch()
+            MenuId.SEARCH_SCOPE -> alertSearchScope()
             R.id.menu_source_manage -> startActivity<BookSourceActivity>()
             R.id.menu_log -> showDialogFragment(AppLogDialog())
-            R.id.menu_1 -> viewModel.searchScope.update("")
-            else -> {
-                if (item.groupId == R.id.menu_group_1) {
-                    viewModel.searchScope.remove(item.title.toString())
-                } else if (item.groupId == R.id.menu_group_2) {
-                    viewModel.searchScope.update(item.title.toString())
-                }
+            R.id.menu_1 -> {
+                viewModel.searchScope.update("")
+                reSearchIfNeeded()
             }
         }
-        return super.onCompatOptionsItemSelected(item)
     }
 
-    private fun initSearchView() {
-        searchView.applyTint(primaryTextColor)
-        searchView.isSubmitButtonEnabled = true
-        searchView.queryHint = getString(R.string.search_book_key)
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String): Boolean {
-                searchView.clearFocus()
-                query.trim().let { searchKey ->
-                    isManualStopSearch = false
-                    viewModel.saveSearchKey(searchKey)
-                    viewModel.searchKey = ""
-                    viewModel.search(searchKey)
-                }
-                visibleInputHelp(false)
-                return true
-            }
+    // 精准搜索：切换持久化状态并重新搜索
+    private fun togglePrecisionSearch() {
+        val newValue = !getPrefBoolean(PreferKey.precisionSearch)
+        putPrefBoolean(PreferKey.precisionSearch, newValue)
+        composePrecisionChecked = newValue
+        reSearchIfNeeded()
+    }
 
-            override fun onQueryTextChange(newText: String): Boolean {
-                viewModel.stop()
-                binding.fbStartStop.invisible()
-                upHistory(newText.trim())
-                return false
-            }
-        })
-        searchView.setOnQueryTextFocusChangeListener { _, hasFocus ->
-            if (binding.refreshProgressBar.isAutoLoading || (!hasFocus && adapter.isNotEmpty() && searchView.query.isNotBlank())) {
-                visibleInputHelp(false)
-            } else {
-                visibleInputHelp(true)
-            }
+    // 分组筛选：勾选态切换（remove=true 移除勾选，false 选中分组）
+    private fun handleGroupSelect(name: String, remove: Boolean) {
+        if (remove) {
+            viewModel.searchScope.remove(name)
+        } else {
+            viewModel.searchScope.update(name)
         }
-        visibleInputHelp(true)
+        reSearchIfNeeded()
+    }
+
+    // 分组/精准搜索变化后若已有搜索词则重新搜索
+    private fun reSearchIfNeeded() {
+        val query = composeSearchQuery.trim()
+        if (query.isNotEmpty()) {
+            viewModel.searchKey = ""
+            viewModel.search(query)
+        }
+    }
+
+    // book-search-compose 壳层化：提交搜索（原 SearchView onQueryTextSubmit 逻辑迁移）
+    private fun submitSearch(query: String) {
+        query.trim().let { searchKey ->
+            isManualStopSearch = false
+            viewModel.saveSearchKey(searchKey)
+            viewModel.searchKey = ""
+            viewModel.search(searchKey)
+        }
+        visibleInputHelp(false)
     }
 
     private fun initRecyclerView() {
@@ -292,8 +348,10 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
     private fun initData() {
         viewModel.searchScope.stateLiveData.observe(this) {
             if (!binding.llInputHelp.isVisible) {
-                searchView.query?.toString()?.trim()?.let {
-                    searchView.setQuery(it, true)
+                composeSearchQuery.trim().let { query ->
+                    if (query.isNotEmpty()) {
+                        submitSearch(query)
+                    }
                 }
             }
         }
@@ -309,7 +367,7 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         }
         lifecycleScope.launch {
             appDb.bookSourceDao.flowEnabledGroups().flowOn(IO).collect {
-                groups = it
+                composeGroups = it
             }
         }
         lifecycleScope.launch {
@@ -334,10 +392,11 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         }
         val key = intent?.getStringExtra("key")
         if (key.isNullOrBlank()) {
-            searchView.findViewById<TextView>(androidx.appcompat.R.id.search_src_text)
-                .requestFocus()
+            // 无 key：聚焦搜索框（Compose 顶栏搜索框保持焦点状态）
+            binding.composeTopBar.requestFocus()
         } else {
-            searchView.setQuery(key, true)
+            composeSearchQuery = key
+            submitSearch(key)
         }
     }
 
@@ -361,7 +420,7 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
      */
     private fun visibleInputHelp(visible: Boolean) {
         if (visible) {
-            upHistory(searchView.query.toString())
+            upHistory(composeSearchQuery.trim())
             binding.llInputHelp.visibility = VISIBLE
         } else {
             binding.llInputHelp.visibility = GONE
@@ -444,9 +503,9 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
                     setMessage("${displayScope}分组搜索结果为空，是否关闭精准搜索？")
                     yesButton {
                         appCtx.putPrefBoolean(PreferKey.precisionSearch, false)
-                        precisionSearchMenuItem?.isChecked = false
+                        composePrecisionChecked = false
                         viewModel.searchKey = ""
-                        viewModel.search(searchView.query.toString())
+                        viewModel.search(composeSearchQuery.trim())
                     }
                 } else {
                     setMessage("${displayScope}分组搜索结果为空，是否切换到全部分组？")
@@ -490,16 +549,19 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
     override fun searchHistory(key: String) {
         lifecycleScope.launch {
             when {
-                searchView.query.toString() == key -> {
-                    searchView.setQuery(key, true)
+                composeSearchQuery == key -> {
+                    composeSearchQuery = key
+                    submitSearch(key)
                 }
 
                 withContext(IO) { appDb.bookDao.findByName(key).isEmpty() } -> {
-                    searchView.setQuery(key, true)
+                    composeSearchQuery = key
+                    submitSearch(key)
                 }
 
                 else -> {
-                    searchView.setQuery(key, false)
+                    composeSearchQuery = key
+                    upHistory(key)
                 }
             }
         }
@@ -531,11 +593,8 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         }
     }
 
+    // book-search-compose 壳层化：Compose 顶栏无 searchView 焦点拦截，直接退出
     override fun finish() {
-        if (searchView.hasFocus()) {
-            searchView.clearFocus()
-            return
-        }
         super.finish()
     }
 

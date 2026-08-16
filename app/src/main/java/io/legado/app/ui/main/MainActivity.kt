@@ -4,18 +4,25 @@ package io.legado.app.ui.main
 
 import android.os.Bundle
 import android.text.format.DateUtils
-import android.view.MenuItem
 import android.view.ViewGroup
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.core.view.get
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.RssFeed
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
 import androidx.core.view.postDelayed
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentStatePagerAdapter
 import androidx.lifecycle.lifecycleScope
 import androidx.viewpager.widget.ViewPager
-import com.google.android.material.bottomnavigation.BottomNavigationView
 import io.legado.app.BuildConfig
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -43,13 +50,13 @@ import io.legado.app.ui.main.bookshelf.style2.BookshelfFragment2
 import io.legado.app.ui.main.explore.ExploreFragment
 import io.legado.app.ui.main.my.MyFragment
 import io.legado.app.ui.main.rss.RssFragment
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.PillNavTab
+import io.legado.app.ui.widget.components.PillNavigationBar
 import io.legado.app.ui.widget.dialog.TextDialog
-import io.legado.app.ui.widget.text.BadgeView
 import io.legado.app.utils.isCreated
-import io.legado.app.utils.navigationBarHeight
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setEdgeEffectColor
-import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -57,9 +64,7 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import splitties.views.bottomPadding
 import kotlin.coroutines.resume
-import androidx.core.view.get
 import io.legado.app.help.update.AppUpdate
 import io.legado.app.ui.about.UpdateDialog
 import kotlin.time.Duration.Companion.hours
@@ -69,8 +74,6 @@ import kotlin.time.Duration.Companion.hours
  */
 @Suppress("PrivatePropertyName")
 class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
-    BottomNavigationView.OnNavigationItemSelectedListener,
-    BottomNavigationView.OnNavigationItemReselectedListener,
     MainViewModel.CallBack {
 
     override val binding by viewBinding(ActivityMainBinding::inflate)
@@ -89,15 +92,22 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     private var bottomMenuCount = 4
     private val EXIT_INTERVAL = 2000L
     private val realPositions = arrayOf(idBookshelf, idExplore, idRss, idMy)
+    private val SAVED_PAGE_POSITION = "pagePosition"
     private val adapter by lazy {
         TabFragmentPageAdapter(supportFragmentManager)
     }
-    private var onUpBooksBadgeView: BadgeView? = null
+    private val selectedTabState = mutableStateOf(0)
+    private val tabsState = mutableStateOf(emptyList<PillNavTab>())
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         upBottomMenu()
         initView()
-        upHomePage()
+        val savedPosition = savedInstanceState?.getInt(SAVED_PAGE_POSITION)
+        if (savedPosition != null && savedPosition in 0 until bottomMenuCount) {
+            binding.viewPagerMain.setCurrentItem(savedPosition, false)
+        } else {
+            upHomePage()
+        }
         onBackPressedDispatcher.addCallback(this) {
             if (pagePosition != 0) {
                 binding.viewPagerMain.currentItem = 0
@@ -152,40 +162,27 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
     }
 
-    override fun onNavigationItemSelected(item: MenuItem): Boolean = binding.run {
-        when (item.itemId) {
-            R.id.menu_bookshelf ->
-                viewPagerMain.setCurrentItem(0, false)
+    private fun onBottomTabSelect(index: Int) {
+        if (index == pagePosition) {
+            when (realPositions.getOrNull(index)) {
+                idBookshelf -> {
+                    if (System.currentTimeMillis() - bookshelfReselected > 300) {
+                        bookshelfReselected = System.currentTimeMillis()
+                    } else {
+                        (fragmentMap[getFragmentId(0)] as? BaseBookshelfFragment)?.gotoTop()
+                    }
+                }
 
-            R.id.menu_discovery ->
-                viewPagerMain.setCurrentItem(realPositions.indexOf(idExplore), false)
-
-            R.id.menu_rss ->
-                viewPagerMain.setCurrentItem(realPositions.indexOf(idRss), false)
-
-            R.id.menu_my_config ->
-                viewPagerMain.setCurrentItem(realPositions.indexOf(idMy), false)
-        }
-        return false
-    }
-
-    override fun onNavigationItemReselected(item: MenuItem) {
-        when (item.itemId) {
-            R.id.menu_bookshelf -> {
-                if (System.currentTimeMillis() - bookshelfReselected > 300) {
-                    bookshelfReselected = System.currentTimeMillis()
-                } else {
-                    (fragmentMap[getFragmentId(0)] as? BaseBookshelfFragment)?.gotoTop()
+                idExplore -> {
+                    if (System.currentTimeMillis() - exploreReselected > 300) {
+                        exploreReselected = System.currentTimeMillis()
+                    } else {
+                        (fragmentMap[1] as? ExploreFragment)?.compressExplore()
+                    }
                 }
             }
-
-            R.id.menu_discovery -> {
-                if (System.currentTimeMillis() - exploreReselected > 300) {
-                    exploreReselected = System.currentTimeMillis()
-                } else {
-                    (fragmentMap[1] as? ExploreFragment)?.compressExplore()
-                }
-            }
+        } else {
+            binding.viewPagerMain.setCurrentItem(index, false)
         }
     }
 
@@ -194,15 +191,18 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         viewPagerMain.offscreenPageLimit = 3
         viewPagerMain.adapter = adapter
         viewPagerMain.addOnPageChangeListener(PageChangeCallback())
-        bottomNavigationView.setOnNavigationItemSelectedListener(this@MainActivity)
-        bottomNavigationView.setOnNavigationItemReselectedListener(this@MainActivity)
+        bottomNavigationView.setContent {
+            LegadoTheme {
+                PillNavigationBar(
+                    selectedTab = selectedTabState.value,
+                    onTabSelect = ::onBottomTabSelect,
+                    tabs = tabsState.value,
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+                )
+            }
+        }
         if (AppConfig.isEInkMode) {
             bottomNavigationView.setBackgroundResource(R.drawable.bg_eink_border_top)
-        }
-        bottomNavigationView.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
-            val height = windowInsets.navigationBarHeight
-            view.bottomPadding = height
-            windowInsets.inset(0, 0, 0, height)
         }
     }
 
@@ -276,7 +276,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
         alert(R.string.set_local_password, R.string.set_local_password_summary) {
             val editTextBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "password"
+                editView.hint = getString(R.string.password)
             }
             customView {
                 editTextBinding.root
@@ -298,7 +298,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             return
         }
         LocalConfig.appCrash = false
-        alert(getString(R.string.draw), "检测到阅读发生了崩溃，是否打开崩溃日志以便报告问题？") {
+        alert(getString(R.string.draw), getString(R.string.crash_detected_prompt)) {
             yesButton {
                 showDialogFragment<CrashLogsDialog>()
             }
@@ -333,6 +333,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         if (AppConfig.autoRefreshBook) {
             outState.putBoolean("isAutoRefreshedBook", true)
         }
+        outState.putInt(SAVED_PAGE_POSITION, pagePosition)
     }
 
     override fun onDestroy() {
@@ -357,21 +358,13 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
     override fun observeLiveBus() {
         viewModel.onUpBooksLiveData.observe(this) {
-            if (onUpBooksBadgeView == null) {
-                onUpBooksBadgeView = binding.bottomNavigationView.addBadgeView(0)
-            }
-            onUpBooksBadgeView!!.setBadgeCount(it)
+            upBottomMenu()
         }
         observeEvent<String>(EventBus.RECREATE) {
             recreate()
         }
         observeEvent<Boolean>(EventBus.NOTIFY_MAIN) {
             binding.apply {
-                if (it) {
-                    bottomNavigationView.menu.clear()
-                    bottomNavigationView.inflateMenu(R.menu.main_bnv)
-                    onUpBooksBadgeView = null
-                }
                 upBottomMenu()
                 if (it) {
                     viewPagerMain.setCurrentItem(bottomMenuCount - 1, false)
@@ -392,22 +385,48 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     private fun upBottomMenu() {
         val showDiscovery = AppConfig.showDiscovery
         val showRss = AppConfig.showRSS
-        binding.bottomNavigationView.menu.let { menu ->
-            menu.findItem(R.id.menu_discovery).isVisible = showDiscovery
-            menu.findItem(R.id.menu_rss).isVisible = showRss
-        }
+        val tabs = mutableListOf(
+            PillNavTab(
+                icon = Icons.AutoMirrored.Filled.MenuBook,
+                selectedIcon = Icons.AutoMirrored.Filled.MenuBook,
+                label = getString(R.string.bookshelf),
+                badgeCount = viewModel.onUpBooksLiveData.value ?: 0
+            )
+        )
         var index = 0
         if (showDiscovery) {
             index++
             realPositions[index] = idExplore
+            tabs.add(
+                PillNavTab(
+                    icon = Icons.Filled.Explore,
+                    selectedIcon = Icons.Filled.Explore,
+                    label = getString(R.string.discovery)
+                )
+            )
         }
         if (showRss) {
             index++
             realPositions[index] = idRss
+            tabs.add(
+                PillNavTab(
+                    icon = Icons.Filled.RssFeed,
+                    selectedIcon = Icons.Filled.RssFeed,
+                    label = getString(R.string.rss)
+                )
+            )
         }
         index++
         realPositions[index] = idMy
+        tabs.add(
+            PillNavTab(
+                icon = Icons.Filled.Person,
+                selectedIcon = Icons.Filled.Person,
+                label = getString(R.string.my)
+            )
+        )
         bottomMenuCount = index + 1
+        tabsState.value = tabs
         adapter.notifyDataSetChanged()
     }
 
@@ -438,7 +457,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
         override fun onPageSelected(position: Int) {
             pagePosition = position
-            binding.bottomNavigationView.menu[realPositions[position]].isChecked = true
+            selectedTabState.value = position
         }
 
     }

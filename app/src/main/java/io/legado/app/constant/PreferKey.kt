@@ -93,7 +93,6 @@ object PreferKey {
     const val changeSourceLoadInfo = "changeSourceLoadInfo"
     const val changeSourceLoadWordCount = "changeSourceLoadWordCount"
     const val chineseConverterType = "chineseConverterType"
-    const val launcherIcon = "launcherIcon"
     const val textSelectAble = "selectText"
     const val shareLayout = "shareLayout"
     const val comicStyleSelect = "comicStyleSelect"

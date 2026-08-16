@@ -3,6 +3,7 @@ package io.legado.app.ui.adapter
 import android.content.Context
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import io.legado.app.R
 import io.legado.app.base.adapter.ItemViewHolder
@@ -49,6 +50,8 @@ class SourceFolderAdapter(
     ) {
         binding.tvFolderName.text = item
         binding.tvFolderInitial.text = item.firstCodePointAsString()
+        // 对齐书架分组（FolderGroupGridContent）：showBookname==1 时隐藏分组名，仅保留主题色封面+首字
+        binding.tvFolderName.isVisible = AppConfig.showBookname != 1
     }
 
     override fun registerListener(holder: ItemViewHolder, binding: ItemSourceFolderGridBinding) {

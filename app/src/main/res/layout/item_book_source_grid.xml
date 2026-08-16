@@ -51,7 +51,7 @@
                     android:layout_height="wrap_content"
                     android:includeFontPadding="false"
                     android:textColor="@android:color/white"
-                    android:textSize="36sp"
+                    android:textSize="@dimen/text_36sp"
                     android:textStyle="bold"
                     app:layout_constraintBottom_toBottomOf="@id/iv_source_cover"
                     app:layout_constraintEnd_toEndOf="@id/iv_source_cover"
@@ -84,7 +84,7 @@
             android:includeFontPadding="false"
             android:lines="2"
             android:textColor="@color/primaryText"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_12sp"
             tools:ignore="RtlHardcoded,RtlSymmetry"
             tools:text="书源名称" />
 

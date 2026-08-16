@@ -26,6 +26,11 @@ import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.writeBytes
 import java.util.Date
+import androidx.activity.compose.setContent
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.GlassTopAppBar
 
 /**
  * 图片大图模式 Activity（V4 实施 Phase 1.3）
@@ -94,7 +99,7 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding>(),
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initSharedElementTransition()
         initImmersion()
-        initTitleBar()
+        initComposeTopBar()
         initViewPager(savedInstanceState)
         initRotateToolbar()
     }
@@ -145,19 +150,20 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding>(),
     }
 
     /**
-     * 初始化 TitleBar
+     * Compose 顶栏（L-C15 S5 改造）：GlassTopAppBar + 返回按钮，无菜单
      *
      * - 返回按钮：直接 finish()
      * - 标题：使用 "图片浏览" 占位（页码通过 onPageChanged 更新）
      */
-    private fun initTitleBar() {
-        setSupportActionBar(binding.titleBar.toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.setDisplayShowTitleEnabled(false)
-        supportActionBar?.setHomeButtonEnabled(true)
-        binding.titleBar.title = "图片浏览"
-        binding.titleBar.setNavigationOnClickListener {
-            finish()
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = getString(R.string.image_browse),
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = { finish() }
+                )
+            }
         }
     }
 
@@ -237,12 +243,12 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding>(),
             controller.hide(android.view.WindowInsets.Type.systemBars())
             controller.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            binding.titleBar.visibility = View.GONE
+            binding.composeTopBar.visibility = View.GONE
             binding.layoutRotateToolbar.visibility = View.GONE
         } else {
             // 显示系统栏
             controller.show(android.view.WindowInsets.Type.systemBars())
-            binding.titleBar.visibility = View.VISIBLE
+            binding.composeTopBar.visibility = View.VISIBLE
             binding.layoutRotateToolbar.visibility = View.VISIBLE
         }
         AppLog.putDebugWithTag(AppLog.TAG_IMAGE_DETAIL, "toggleImmersive isImmersive=$isImmersive", level = AppLog.Level.INFO)

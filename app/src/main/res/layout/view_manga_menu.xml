@@ -15,18 +15,24 @@
         tools:layout_editor_absoluteX="0dp"
         tools:layout_editor_absoluteY="0dp" />
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <LinearLayout
+        android:id="@+id/top_bar_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:theme="?attr/actionBarStyle"
-        app:layout_constraintTop_toTopOf="parent"
-        app:opaque="true" >
+        android:orientation="vertical"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/compose_top_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/title_bar_addition"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            tools:visibility="visible">
 
             <TextView
                 android:id="@+id/tv_chapter_name"
@@ -72,7 +78,7 @@
 
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-    </io.legado.app.ui.widget.TitleBar>
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/bottom_menu"
@@ -104,7 +110,7 @@
                 android:paddingBottom="10dp"
                 android:text="@string/previous_chapter"
                 android:textColor="@color/primaryText"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_14sp"
                 tools:ignore="TouchTargetSizeCheck" />
 
             <io.legado.app.lib.theme.view.ThemeSeekBar
@@ -125,7 +131,7 @@
                 android:paddingBottom="10dp"
                 android:text="@string/next_chapter"
                 android:textColor="@color/primaryText"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_14sp"
                 tools:ignore="TouchTargetSizeCheck" />
         </LinearLayout>
     </LinearLayout>

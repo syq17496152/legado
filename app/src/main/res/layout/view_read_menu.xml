@@ -15,6 +15,17 @@
         tools:layout_editor_absoluteX="0dp"
         tools:layout_editor_absoluteY="0dp" />
 
+    <!--
+        ui-redesign-m3 主题色同步 P3：保留 View TitleBar（阅读器沉浸式双轨过渡特殊场景，不迁移 GlassTopAppBar）。
+        - 阅读器主菜单展示已由 Compose MenuLayer 接管（ReadBookActivity.showMenuBar → composeSheetHost），
+          ReadMenu.runMenuIn/runMenuOut 已不再被调用，本菜单实际不显示。
+        - 但 ReadMenu.kt 仍被 inflate 并调用其数据更新方法（upBookView/upSeekBar/setAutoPage/
+          refreshMenuColorFilter/reset/upBrightnessState），内部大量引用 titleBar/tvChapterName/
+          tvChapterUrl/tvCustomBtn/tvSourceAction/titleBarAddition；ll_brightness 也以 title_bar 为锚点，
+          BaseReadBookActivity 的系统栏逻辑引用 readMenu.isVisible —— 删除本节点需同步重构 ReadMenu.kt 与
+          沉浸式/状态栏逻辑，回归风险高，故保留并登记，待 S5 旧 View 菜单整体下线时一并清理。
+        - 章节信息栏 title_bar_addition 与漫画菜单 view_manga_menu.xml（已迁移 compose_top_bar）同构。
+    -->
     <io.legado.app.ui.widget.TitleBar
         android:id="@+id/title_bar"
         android:layout_width="match_parent"
@@ -264,7 +275,7 @@
                     android:paddingBottom="10dp"
                     android:text="@string/previous_chapter"
                     android:textColor="@color/primaryText"
-                    android:textSize="14sp"
+                    android:textSize="@dimen/text_14sp"
                     tools:ignore="TouchTargetSizeCheck" />
 
                 <io.legado.app.lib.theme.view.ThemeSeekBar
@@ -288,7 +299,7 @@
                     android:paddingBottom="10dp"
                     android:text="@string/next_chapter"
                     android:textColor="@color/primaryText"
-                    android:textSize="14sp"
+                    android:textSize="@dimen/text_14sp"
                     tools:ignore="TouchTargetSizeCheck" />
             </LinearLayout>
 
@@ -340,7 +351,7 @@
                         android:singleLine="true"
                         android:text="@string/chapter_list"
                         android:textColor="@color/primaryText"
-                        android:textSize="12sp" />
+                        android:textSize="@dimen/text_12sp" />
                 </LinearLayout>
 
                 <View
@@ -384,7 +395,7 @@
                         android:singleLine="true"
                         android:text="@string/read_aloud"
                         android:textColor="@color/primaryText"
-                        android:textSize="12sp" />
+                        android:textSize="@dimen/text_12sp" />
                 </LinearLayout>
 
                 <View
@@ -428,7 +439,7 @@
                         android:singleLine="true"
                         android:text="@string/interface_setting"
                         android:textColor="@color/primaryText"
-                        android:textSize="12sp" />
+                        android:textSize="@dimen/text_12sp" />
                 </LinearLayout>
 
                 <View
@@ -472,7 +483,7 @@
                         android:singleLine="true"
                         android:text="@string/setting"
                         android:textColor="@color/primaryText"
-                        android:textSize="12sp" />
+                        android:textSize="@dimen/text_12sp" />
                 </LinearLayout>
 
                 <View

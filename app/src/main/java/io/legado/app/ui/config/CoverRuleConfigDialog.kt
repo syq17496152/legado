@@ -1,7 +1,6 @@
 package io.legado.app.ui.config
 
 import android.os.Bundle
-import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import androidx.lifecycle.lifecycleScope
@@ -39,7 +38,7 @@ class CoverRuleConfigDialog : BaseDialogFragment(R.layout.dialog_cover_rule_conf
             val searchUrl = binding.editSearchUrl.text?.toString()
             val coverRule = binding.editCoverUrlRule.text?.toString()
             if (searchUrl.isNullOrBlank() || coverRule.isNullOrBlank()) {
-                toastOnUi("搜索url和cover规则不能为空")
+                toastOnUi(R.string.cover_rule_empty)
             } else {
                 BookCover.CoverRule(enable, searchUrl, coverRule).let { config ->
                     BookCover.saveCoverRule(config)
@@ -58,7 +57,6 @@ class CoverRuleConfigDialog : BaseDialogFragment(R.layout.dialog_cover_rule_conf
             val rule = withContext(IO) {
                 BookCover.getCoverRule()
             }
-            Log.e("coverRule", GSON.toJson(rule))
             binding.cbEnable.isChecked = rule.enable
             binding.editSearchUrl.setText(rule.searchUrl)
             binding.editCoverUrlRule.setText(rule.coverRule)

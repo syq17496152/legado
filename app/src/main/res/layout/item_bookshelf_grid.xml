@@ -95,7 +95,7 @@
             android:scrollbars="none"
             android:text="@string/book_name"
             android:textColor="@color/primaryText"
-            android:textSize="12sp"
+            android:textSize="@dimen/text_12sp"
             tools:ignore="RtlHardcoded,RtlSymmetry" />
 
     </LinearLayout>

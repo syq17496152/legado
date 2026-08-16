@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- F-P1-8 文件夹视图卡片（学习书架 grid_group2 样式：无 CardView + 名称叠加封面底部 + 渐变遮罩） -->
+<!-- 文件夹视图卡片（对齐书架 grid_group 风格：主题色渐变封面 + 首字居中 + 分组名在封面下方跟随主题，showBookname 控制显隐） -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -28,7 +28,7 @@
             android:layout_height="wrap_content"
             android:scrollbars="none">
 
-            <!-- 文件夹封面区域：主题色渐变背景（3:4 比例，对齐书架书封） -->
+            <!-- 文件夹封面区域：主题色渐变背景（3:4 比例，对齐书架书封；无封面不再用固定白图） -->
             <ImageView
                 android:id="@+id/iv_folder_cover"
                 android:layout_width="match_parent"
@@ -37,7 +37,6 @@
                 android:background="@drawable/bg_source_folder_cover"
                 android:contentDescription="@string/folder_view"
                 android:scaleType="centerCrop"
-                android:src="@drawable/image_cover_default"
                 android:transitionName="img_cover"
                 app:layout_constraintDimensionRatio="3:4"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -45,7 +44,7 @@
                 app:layout_constraintTop_toTopOf="parent"
                 tools:ignore="ImageContrastCheck,UnusedAttribute" />
 
-            <!-- 分组名首字（居中叠加在渐变背景上，白色加粗） -->
+            <!-- 分组名首字（居中叠加在渐变背景上，白色加粗，保留分组辨识度） -->
             <TextView
                 android:id="@+id/tv_folder_initial"
                 android:layout_width="wrap_content"
@@ -56,7 +55,7 @@
                 android:shadowDy="2"
                 android:shadowRadius="4"
                 android:textColor="@android:color/white"
-                android:textSize="32sp"
+                android:textSize="@dimen/text_28sp"
                 android:textStyle="bold"
                 app:layout_constraintBottom_toBottomOf="@id/iv_folder_cover"
                 app:layout_constraintEnd_toEndOf="@id/iv_folder_cover"
@@ -65,29 +64,22 @@
                 tools:ignore="TextContrastCheck"
                 tools:text="默" />
 
-            <!-- 分组名（叠加在封面底部，渐变遮罩背景，对齐书架 tv_name 样式） -->
-            <TextView
-                android:id="@+id/tv_folder_name"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_gradient_cover"
-                android:ellipsize="end"
-                android:gravity="left|bottom"
-                android:includeFontPadding="false"
-                android:lines="2"
-                android:paddingStart="4dp"
-                android:paddingTop="8dp"
-                android:paddingEnd="4dp"
-                android:paddingBottom="4dp"
-                android:textColor="@color/md_dark_primary_text"
-                android:textSize="11sp"
-                app:layout_constraintBottom_toBottomOf="@+id/iv_folder_cover"
-                app:layout_constraintEnd_toEndOf="@+id/iv_folder_cover"
-                app:layout_constraintStart_toStartOf="@+id/iv_folder_cover"
-                tools:ignore="RtlHardcoded,RtlSymmetry"
-                tools:text="默认分组" />
-
         </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <!-- 分组名（封面下方，对齐书架 grid_group：12sp 主题文本色，2 行居中；showBookname 控制显隐） -->
+        <TextView
+            android:id="@+id/tv_folder_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:ellipsize="end"
+            android:gravity="top|center_horizontal"
+            android:includeFontPadding="false"
+            android:lines="2"
+            android:textColor="@color/primaryText"
+            android:textSize="@dimen/text_12sp"
+            tools:ignore="RtlHardcoded,RtlSymmetry"
+            tools:text="默认分组" />
 
     </LinearLayout>
 

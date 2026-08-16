@@ -15,5 +15,5 @@
     android:paddingRight="12dp"
     android:maxLines="1"
     android:textColor="@color/primaryText"
-    android:textSize="14sp"
+    android:textSize="@dimen/text_14sp"
     tools:ignore="UnusedAttribute" />

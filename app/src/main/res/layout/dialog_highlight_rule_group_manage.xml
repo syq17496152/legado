@@ -62,7 +62,7 @@
                     android:layout_height="wrap_content"
                     android:text="@string/highlight_rule_group_manage_title"
                     android:textColor="@color/primaryText"
-                    android:textSize="20sp"
+                    android:textSize="@dimen/text_20sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -73,7 +73,7 @@
                     android:gravity="center"
                     android:text="@string/highlight_rule_group_manage_subtitle"
                     android:textColor="@color/secondaryText"
-                    android:textSize="12sp" />
+                    android:textSize="@dimen/text_12sp" />
             </LinearLayout>
 
             <Button
@@ -107,7 +107,7 @@
                 android:layout_weight="1"
                 android:text="@string/highlight_rule_group_view_all"
                 android:textColor="@color/primaryText"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_14sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -115,7 +115,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="@color/secondaryText"
-                android:textSize="12sp" />
+                android:textSize="@dimen/text_12sp" />
         </LinearLayout>
 
         <!-- 列表区域 -->
@@ -139,7 +139,7 @@
                 android:layout_gravity="center"
                 android:text="@string/highlight_rule_group_empty"
                 android:textColor="@color/secondaryText"
-                android:textSize="16sp"
+                android:textSize="@dimen/text_16sp"
                 android:visibility="gone" />
         </FrameLayout>
     </LinearLayout>

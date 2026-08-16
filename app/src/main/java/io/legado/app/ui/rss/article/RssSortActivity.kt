@@ -10,8 +10,6 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
 import android.os.Bundle
 import android.view.Gravity
-import android.view.Menu
-import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -19,8 +17,26 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.addCallback
+import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Pageview
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentStatePagerAdapter
 import androidx.lifecycle.lifecycleScope
@@ -32,6 +48,12 @@ import io.legado.app.help.source.sortUrls
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.AppEditDialog
+import io.legado.app.ui.widget.components.EditField
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.dialog.VariableDialog
 import io.legado.app.utils.*
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -50,8 +72,14 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
     private var sortUrls: List<Pair<String, String>>? = null
     private val sortList = mutableListOf<Pair<String, String>>()
     private val fragmentMap = hashMapOf<String, Fragment>()
-    private var menuPage: MenuItem? = null
     private val orientation by lazy { resources.configuration.orientation }
+
+    // L-D4 顶栏 Compose 状态
+    private var composeTitle by mutableStateOf("")
+    private var menuExpanded by mutableStateOf(false)
+    private var searchDialogVisible by mutableStateOf(false)
+    /** 翻页菜单项标题（null 时不显示，由 updatePageMenu 驱动） */
+    private var pageMenuTitle by mutableStateOf<String?>(null)
     private val editSourceResult = registerForActivityResult(
         StartActivityContract(RssSourceEditActivity::class.java)
     ) {
@@ -218,11 +246,11 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
         // 重新初始化数据，复用时重建
         viewModel.initData(intent) {
             upFragments()
-            invalidateOptionsMenu()
         }
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initComposeTopBar()
         binding.viewPager.adapter = adapter
         binding.viewPager.addOnPageChangeListener(object : ViewPager.SimpleOnPageChangeListener() {
             override fun onPageSelected(position: Int) {
@@ -231,7 +259,6 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
         })
         viewModel.initData(intent) {
             upFragments()
-            invalidateOptionsMenu()
         }
         onBackPressedDispatcher.addCallback(this) { //监听返回
             if (viewModel.searchKey != null) {
@@ -242,6 +269,135 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
             }
             finish()
         }
+    }
+
+    // L-D4 顶栏 Compose 化：GlassTopAppBar + 更多菜单 AppDropdownMenu（搜索/翻页/登录/刷新分类等全量下沉）
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = composeTitle,
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = { finish() },
+                    actions = {
+                        if (viewModel.rssSource?.searchUrl.isNullOrBlank().not()) {
+                            IconButton(onClick = { searchDialogVisible = true }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Search,
+                                    contentDescription = getString(R.string.action_search)
+                                )
+                            }
+                        }
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(
+                                    imageVector = Icons.Filled.MoreVert,
+                                    contentDescription = null
+                                )
+                            }
+                            AppDropdownMenu(
+                                expanded = menuExpanded,
+                                onDismiss = { menuExpanded = false },
+                                actions = buildMenuActions()
+                            )
+                        }
+                    }
+                )
+                if (searchDialogVisible) {
+                    AppEditDialog(
+                        title = getString(R.string.action_search),
+                        fields = listOf(
+                            EditField(
+                                label = getString(R.string.action_search),
+                                singleLine = true
+                            )
+                        ),
+                        confirmText = getString(R.string.ok),
+                        cancelText = getString(R.string.cancel),
+                        onConfirm = { values ->
+                            searchDialogVisible = false
+                            val query = values.firstOrNull().orEmpty()
+                            if (query.isNotBlank()) {
+                                viewModel.rssSource?.let { source ->
+                                    start(this@RssSortActivity, null, source.sourceUrl, query)
+                                }
+                            }
+                        },
+                        onDismiss = { searchDialogVisible = false }
+                    )
+                }
+            }
+        }
+    }
+
+    private fun buildMenuActions(): List<MenuAction> {
+        val actions = mutableListOf<MenuAction>()
+        pageMenuTitle?.let { title ->
+            actions += MenuAction(
+                Icons.Filled.Pageview,
+                title,
+                onClick = { currentArticlesFragment?.showPagePicker() }
+            )
+        }
+        if (viewModel.rssSource?.loginUrl.isNullOrBlank().not()) {
+            actions += MenuAction(
+                Icons.Filled.Login,
+                getString(R.string.login),
+                onClick = {
+                    loginResult.launch {
+                        putExtra("type", "rssSource")
+                        putExtra("key", viewModel.rssSource?.sourceUrl)
+                    }
+                }
+            )
+        }
+        actions += MenuAction(
+            Icons.Filled.Refresh,
+            getString(R.string.refresh_sort),
+            onClick = {
+                sortUrls = null
+                viewModel.clearSortCache { upFragments() }
+            }
+        )
+        actions += MenuAction(
+            Icons.Filled.Tune,
+            getString(R.string.set_source_variable),
+            onClick = { setSourceVariable() }
+        )
+        actions += MenuAction(
+            Icons.Filled.Edit,
+            getString(R.string.edit_source),
+            onClick = {
+                viewModel.rssSource?.let {
+                    editSourceResult.launch {
+                        putExtra("sourceUrl", it.sourceUrl)
+                    }
+                }
+            }
+        )
+        actions += MenuAction(
+            Icons.Filled.GridView,
+            getString(R.string.switchLayout),
+            onClick = {
+                viewModel.switchLayout()
+                upFragments()
+            }
+        )
+        actions += MenuAction(
+            Icons.Filled.History,
+            getString(R.string.read_record),
+            onClick = { showDialogFragment(ReadRecordDialog(viewModel.rssSource?.sourceUrl)) }
+        )
+        actions += MenuAction(
+            Icons.Filled.Delete,
+            getString(R.string.clear),
+            onClick = {
+                viewModel.url?.let {
+                    viewModel.clearArticles()
+                }
+            }
+        )
+        return actions
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
@@ -277,86 +433,8 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
         tabRows.clear()
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.rss_articles, menu)
-        menuPage = menu.findItem(R.id.menu_page)
-        menu.findItem(R.id.menu_search)?.apply {
-            val source = viewModel.rssSource
-            val searchUrl = source?.searchUrl ?: return@apply
-            val hasSearchUrl = searchUrl.isNotBlank()
-            isVisible = hasSearchUrl
-            if (hasSearchUrl) {
-                (actionView as? SearchView)?.apply {
-                    isSubmitButtonEnabled = true
-                    setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-                        override fun onQueryTextSubmit(query: String): Boolean {
-                            clearFocus()
-                            start(this@RssSortActivity ,null,source.sourceUrl, query)
-                            return true
-                        }
-
-                        override fun onQueryTextChange(newText: String): Boolean {
-                            return false
-                        }
-                    })
-                    setOnQueryTextFocusChangeListener { _, hasFocus ->
-                        if (!hasFocus) {
-                            isIconified = true
-                        }
-                    }
-                }
-            }
-        }
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_login)?.isVisible =
-            !viewModel.rssSource?.loginUrl.isNullOrBlank()
-        return super.onMenuOpened(featureId, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_page -> currentArticlesFragment?.showPagePicker()
-
-            R.id.menu_login -> loginResult.launch {
-                putExtra("type", "rssSource")
-                putExtra("key", viewModel.rssSource?.sourceUrl)
-            }
-
-            R.id.menu_refresh_sort -> {
-                sortUrls = null
-                viewModel.clearSortCache { upFragments() }
-            }
-            R.id.menu_set_source_variable -> setSourceVariable()
-            R.id.menu_edit_source -> viewModel.rssSource?.let {
-                editSourceResult.launch {
-                    putExtra("sourceUrl", it.sourceUrl)
-                }
-            }
-
-            R.id.menu_clear -> {
-                viewModel.url?.let {
-                    viewModel.clearArticles()
-                }
-            }
-
-            R.id.menu_switch_layout -> {
-                viewModel.switchLayout()
-                upFragments()
-            }
-
-            R.id.menu_read_record -> showDialogFragment(ReadRecordDialog(viewModel.rssSource?.sourceUrl))
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
-
     fun updatePageMenu(page: Int, visible: Boolean) {
-        menuPage?.isVisible = visible
-        if (visible) {
-            menuPage?.title = getString(R.string.menu_page, page)
-        }
+        pageMenuTitle = if (visible) getString(R.string.menu_page, page) else null
     }
 
     private val currentArticlesFragment: RssArticlesFragment?
@@ -418,11 +496,11 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
     private fun upFragmentsView() {
         if (sortList.size == 1) {
             sortList.first().first.takeIf { it.isNotEmpty() }?.let {
-                binding.titleBar.title = viewModel.searchKey ?: it
+                composeTitle = viewModel.searchKey ?: it
             }
             binding.tabsContainer.gone()
         } else {
-            binding.titleBar.title = viewModel.sourceName
+            composeTitle = viewModel.sourceName ?: ""
             binding.tabsContainer.visible()
             setupMultiLineTabs()
         }

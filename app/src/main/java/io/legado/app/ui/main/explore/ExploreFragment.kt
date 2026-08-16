@@ -1,12 +1,22 @@
 package io.legado.app.ui.main.explore
 
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
-import android.view.SubMenu
 import android.view.View
 import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.core.view.isGone
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -26,18 +36,20 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.adapter.SourceFolderAdapter
 import io.legado.app.ui.book.explore.ExploreShowActivity
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.main.MainFragmentInterface
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.ui.widget.recycler.GridSpacingItemDecoration
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.transaction
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
@@ -71,6 +83,9 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     private val folderAdapter by lazy { SourceFolderAdapter(requireContext(), this) }
     private val gridSpacingDecoration = GridSpacingItemDecoration()
     private val linearLayoutManager by lazy { LinearLayoutManager(context) }
+    // 顶栏 Compose 状态：搜索词 + 更多菜单展开
+    private var composeSearchQuery by mutableStateOf("")
+    private var menuExpanded by mutableStateOf(false)
     // D1: 分组模式（sourceGroupStyle!=0 && sourceGroupMode==1）→ 文件夹视图
     private val isFolderViewMode: Boolean
         get() = AppConfig.sourceGroupStyle != 0 && AppConfig.sourceGroupMode == 1
@@ -81,7 +96,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     // 点击文件夹进入分组列表时设为 false，但不修改 isFolderViewMode
     // 用户主动点击菜单"切换视图模式"时才同步修改 isFolderViewMode
     private var isShowingFolder: Boolean = false
-    // F-01 修复：当前选中的分组（解耦 searchView，避免回填 "group:xxx" 污染搜索框）
+    // F-01 修复：当前选中的分组（解耦搜索框，避免回填 "group:xxx" 污染搜索词）
     // null=全部, getString(R.string.no_group)=未分组, 其他字符串=指定分组名
     private var currentGroup: String? = null
     // D2 修复：当前选中的类型（按类型分组时使用，sourceGroupStyle==1）
@@ -91,15 +106,12 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     // 修复：点击"全部分组"文件夹后 currentType=-1/currentGroup=null 但 isShowingFolder=false，应判定为子目录
     private val inSubDirectory: Boolean
         get() = isFolderViewMode && !isShowingFolder
-    private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
     // D1: 标签模式 TabLayout
     private val tabLayout: TabLayout by lazy { binding.tabLayout }
     private val diffItemCallBack = ExploreDiffItemCallBack()
-    private val groups = linkedSetOf<String>()
+    // 分组集合（Compose 菜单数据驱动，mutableStateOf 保证分组变化时菜单重组）
+    private var groups by mutableStateOf(linkedSetOf<String>())
     private var exploreFlowJob: Job? = null
-    private var groupsMenu: SubMenu? = null
     // D1: Tab 选中监听（用 tag 存选中项，避免 position 映射不稳定）
     // D2: 按类型时 tag 存 Int(类型索引)，按分组时 tag 存 String(分组名)
     private val tabSelectedListener = object : TabLayout.OnTabSelectedListener {
@@ -111,15 +123,14 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                 currentGroup = tab.tag as? String
                 currentType = -1
             }
-            upExploreData(searchView.query?.toString())
+            upExploreData(composeSearchQuery)
         }
         override fun onTabUnselected(tab: TabLayout.Tab) = Unit
         override fun onTabReselected(tab: TabLayout.Tab) = Unit
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        setSupportToolbar(binding.titleBar.toolbar)
-        initSearchView()
+        initComposeTopBar()
         initTabLayout()  // D1: 初始化 TabLayout
         // F-P1-8 初始化运行时状态：跟随用户偏好
         isShowingFolder = isFolderViewMode
@@ -143,7 +154,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                             upFolderView()
                         } else {
                             applyView()
-                            upExploreData(searchView.query?.toString())
+                            upExploreData(composeSearchQuery)
                         }
                         requireActivity().invalidateOptionsMenu()
                     } else {
@@ -156,31 +167,62 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         )
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu) {
-        super.onCompatCreateOptionsMenu(menu)
-        menuInflater.inflate(R.menu.main_explore, menu)
-        groupsMenu = menu.findItem(R.id.menu_group)?.subMenu
-        upGroupsMenu()
+    // 顶栏 Compose 化：GlassTopAppBar 用 colorScheme.surface（跟随昼夜主题），搜索/菜单迁移到 Compose
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                Column(modifier = Modifier.statusBarsPadding()) {
+                    GlassTopAppBar(
+                        title = getString(R.string.discovery),
+                        actions = {
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = null)
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = buildMenuActions()
+                                )
+                            }
+                        }
+                    )
+                    SettingsSearchBar(
+                        query = composeSearchQuery,
+                        onQueryChange = {
+                            composeSearchQuery = it
+                            upExploreData(it)
+                        },
+                        placeholder = getString(R.string.screen_find)
+                    )
+                }
+            }
+        }
     }
 
-    override fun onPrepareOptionsMenu(menu: Menu) {
-        super.onPrepareOptionsMenu(menu)
-    }
-
-    private fun initSearchView() {
-        searchView.applyTint(primaryTextColor)
-        searchView.isSubmitButtonEnabled = true
-        searchView.queryHint = getString(R.string.screen_find)
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                return false
+    // 更多菜单数据（文件夹配置 + 动态分组列表）
+    private fun buildMenuActions(): List<MenuAction> {
+        return buildList {
+            add(MenuAction(
+                Icons.Default.FolderOpen,
+                getString(R.string.source_folder_config),
+                onClick = { showFolderConfig() }
+            ))
+            if (groups.isNotEmpty()) {
+                add(MenuAction(Icons.Default.Groups, getString(R.string.group), header = true) {})
+                groups.forEach { group ->
+                    add(MenuAction(
+                        Icons.Default.Label,
+                        group,
+                        onClick = {
+                            currentGroup = group
+                            composeSearchQuery = ""
+                            upExploreData()
+                        }
+                    ))
+                }
             }
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                upExploreData(newText)
-                return false
-            }
-        })
+        }
     }
 
     private fun initRecyclerView() {
@@ -287,13 +329,13 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             val newIsFolder = isFolderViewMode  // sourceGroupStyle!=0 && sourceGroupMode==1
             if (newIsFolder != isShowingFolder) {
                 isShowingFolder = newIsFolder
-                if (newIsFolder) searchView.setQuery("", false)
+                if (newIsFolder) composeSearchQuery = ""
             }
             applyView()
             if (isShowingFolder) {
                 upFolderView()
             } else {
-                upExploreData(searchView.query?.toString())
+                upExploreData(composeSearchQuery)
             }
             requireActivity().invalidateOptionsMenu()
         }
@@ -329,9 +371,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                 .conflate()
                 .distinctUntilChanged()
                 .collect {
-                    groups.clear()
-                    groups.addAll(it)
-                    upGroupsMenu()
+                    groups = it.toCollection(linkedSetOf())
                     if (isShowingFolder) {
                         upFolderView()
                     } else if (isTagMode) {
@@ -346,7 +386,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         if (isShowingFolder) return
         exploreFlowJob?.cancel()
         exploreFlowJob = viewLifecycleOwner.lifecycleScope.launch {
-            // F-01 修复：currentGroup + searchKey 组合查询（6 分支，解耦 searchView 回填）
+            // F-01 修复：currentGroup + searchKey 组合查询（6 分支，解耦搜索框回填）
             val noGroup = getString(R.string.no_group)
             when {
                 // D2: 按类型 + 有搜索词
@@ -379,7 +419,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             ).catch {
                 AppLog.put("发现界面更新数据出错", it)
             }.conflate().flowOn(IO).collect {
-                binding.tvEmptyMsg.isGone = it.isNotEmpty() || searchView.query.isNotEmpty()
+                binding.tvEmptyMsg.isGone = it.isNotEmpty() || composeSearchQuery.isNotEmpty()
                 adapter.setItems(it, diffItemCallBack)
                 delay(500)
             }
@@ -393,33 +433,12 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
 
     override fun onPause() {
         adapter.upResumed(false)
-        searchView.clearFocus()
         adapter.onPause()
         super.onPause()
     }
 
-    private fun upGroupsMenu() = groupsMenu?.transaction { subMenu ->
-        subMenu.removeGroup(R.id.menu_group_text)
-        groups.forEach {
-            subMenu.add(R.id.menu_group_text, Menu.NONE, Menu.NONE, it)
-        }
-    }
-
     override val scope: CoroutineScope
         get() = viewLifecycleOwner.lifecycleScope
-
-    override fun onCompatOptionsItemSelected(item: MenuItem) {
-        super.onCompatOptionsItemSelected(item)
-        when (item.itemId) {
-            R.id.menu_folder_config -> showFolderConfig()
-        }
-        if (item.groupId == R.id.menu_group_text) {
-            // F-01 修复：用 currentGroup 记录归类，不回填 searchView 避免污染搜索框
-            currentGroup = item.title.toString()
-            searchView.setQuery("", false)
-            upExploreData()
-        }
-    }
 
     // F-P1-8 文件夹点击回调：点击文件夹 → 临时切换到列表视图并按分组筛选
     // 注意：不修改 sourceViewMode（用户偏好），仅修改 isShowingFolder（运行时状态）
@@ -447,7 +466,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                 else -> group
             }
         }
-        searchView.setQuery("", false)  // 清空搜索框，不触发查询
+        composeSearchQuery = ""  // 清空搜索词，不触发查询
         upExploreData()  // 直接触发查询
     }
 

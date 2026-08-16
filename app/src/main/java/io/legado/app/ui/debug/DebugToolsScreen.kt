@@ -1,12 +1,12 @@
 package io.legado.app.ui.debug
 
+// 豁免登记: 调试工具页私有卡片组件，见 audit-v10-consistency.md §3.1 E8
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Code
@@ -25,8 +25,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.legado.app.R
+import io.legado.app.ui.widget.components.AppShapes
 
 data class DebugTool(
     val titleRes: Int,
@@ -96,7 +96,8 @@ fun DebugToolsScreen(
                     Column {
                         Text(
                             text = stringResource(R.string.debug_tools),
-                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp, fontWeight = FontWeight.Medium)
+                            // titleLarge 已统一为 20sp+Medium（对齐 View ToolbarTitle），无需再 copy 覆盖
+                            style = MaterialTheme.typography.titleLarge
                         )
                         Text(
                             text = stringResource(R.string.debug_tools_desc),
@@ -145,7 +146,7 @@ private fun DebugToolItem(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = AppShapes.Button
     ) {
         Row(
             modifier = Modifier
@@ -155,7 +156,7 @@ private fun DebugToolItem(
         ) {
             Surface(
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                shape = RoundedCornerShape(10.dp),
+                shape = AppShapes.IconContainer,
                 modifier = Modifier.size(48.dp)
             ) {
                 Box(

@@ -20,7 +20,7 @@
         android:padding="5dp"
         android:text="@string/edit"
         android:textColor="@color/primaryText"
-        android:textSize="14sp" />
+        android:textSize="@dimen/text_14sp" />
 
     <TextView
         android:id="@+id/tv_disable"
@@ -32,6 +32,6 @@
         android:padding="5dp"
         android:text="@string/highlight_rule_disable"
         android:textColor="@color/error"
-        android:textSize="14sp" />
+        android:textSize="@dimen/text_14sp" />
 
 </com.google.android.flexbox.FlexboxLayout>

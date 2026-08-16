@@ -1,12 +1,25 @@
 package io.legado.app.ui.main.rss
 
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
-import android.view.SubMenu
 import android.view.View
 import androidx.activity.OnBackPressedCallback
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -24,8 +37,8 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.adapter.SourceFolderAdapter
+import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.rss.article.ReadRecordDialog
 import io.legado.app.ui.rss.article.RssSortActivity
@@ -35,14 +48,18 @@ import io.legado.app.ui.rss.search.RssSearchActivity
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
 import io.legado.app.ui.rss.subscription.RuleSubActivity
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.ui.widget.recycler.GridSpacingItemDecoration
-import io.legado.app.utils.applyTint
+import io.legado.app.utils.cnCompare
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.transaction
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
@@ -50,7 +67,6 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
-import io.legado.app.ui.login.SourceLoginActivity
 
 /**
  * 订阅界面
@@ -74,6 +90,9 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     }
     private val folderAdapter by lazy { SourceFolderAdapter(requireContext(), this) }
     private val gridSpacingDecoration = GridSpacingItemDecoration()
+    // 顶栏 Compose 状态：搜索词 + 更多菜单展开
+    private var composeSearchQuery by mutableStateOf("")
+    private var menuExpanded by mutableStateOf(false)
     // D1: 分组模式（sourceGroupStyle!=0 && sourceGroupMode==1）→ 文件夹视图
     private val isFolderViewMode: Boolean
         get() = AppConfig.sourceGroupStyle != 0 && AppConfig.sourceGroupMode == 1
@@ -84,7 +103,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     // 点击文件夹进入分组列表时设为 false，但不修改 isFolderViewMode
     // 用户主动点击菜单"切换视图模式"时才同步修改 isFolderViewMode
     private var isShowingFolder: Boolean = false
-    // F-01 修复：当前选中的分组（解耦 searchView，避免回填 "group:xxx" 污染搜索框）
+    // F-01 修复：当前选中的分组（解耦搜索框，避免回填 "group:xxx" 污染搜索词）
     // null=全部, getString(R.string.no_group)=未分组, 其他字符串=指定分组名
     private var currentGroup: String? = null
     // D2 修复：当前选中的类型（按类型分组时使用，sourceGroupStyle==1）
@@ -94,15 +113,12 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     // 修复：点击"全部分组"文件夹后 currentType=-1/currentGroup=null 但 isShowingFolder=false，应判定为子目录
     private val inSubDirectory: Boolean
         get() = isFolderViewMode && !isShowingFolder
-    private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
     // D1: 标签模式 TabLayout
     private val tabLayout: TabLayout by lazy { binding.tabLayout }
     private var groupsFlowJob: Job? = null
     private var rssFlowJob: Job? = null
-    private val groups = linkedSetOf<String>()
-    private var groupsMenu: SubMenu? = null
+    // 分组集合（Compose 菜单数据驱动，mutableStateOf 保证分组变化时菜单重组）
+    private var groups by mutableStateOf(linkedSetOf<String>())
     // D1: Tab 选中监听（用 tag 存选中项，避免 position 映射不稳定）
     // D2: 按类型时 tag 存 Int(类型索引)，按分组时 tag 存 String(分组名)
     private val tabSelectedListener = object : TabLayout.OnTabSelectedListener {
@@ -114,15 +130,14 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                 currentGroup = tab.tag as? String
                 currentType = -1
             }
-            upRssFlowJob(searchView.query?.toString())
+            upRssFlowJob(composeSearchQuery)
         }
         override fun onTabUnselected(tab: TabLayout.Tab) = Unit
         override fun onTabReselected(tab: TabLayout.Tab) = Unit
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        setSupportToolbar(binding.titleBar.toolbar)
-        initSearchView()
+        initComposeTopBar()
         initTabLayout()  // D1: 初始化 TabLayout
         // F-P1-8 初始化运行时状态：跟随用户偏好
         isShowingFolder = isFolderViewMode
@@ -146,7 +161,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                             upFolderView()
                         } else {
                             applyView()
-                            upRssFlowJob(searchView.query?.toString())
+                            upRssFlowJob(composeSearchQuery)
                         }
                         requireActivity().invalidateOptionsMenu()
                     } else {
@@ -159,68 +174,90 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         )
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu) {
-        menuInflater.inflate(R.menu.main_rss, menu)
-        groupsMenu = menu.findItem(R.id.menu_group)?.subMenu
-        upGroupsMenu()
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu) {
-        super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem) {
-        super.onCompatOptionsItemSelected(item)
-        when (item.itemId) {
-            R.id.menu_folder_config -> showFolderConfig()
-            R.id.menu_read_record -> showDialogFragment<ReadRecordDialog>()
-            R.id.menu_rss_config -> startActivity<RssSourceActivity>()
-            R.id.menu_rss_star -> startActivity<RssFavoritesActivity>()
-            else -> if (item.groupId == R.id.menu_group_text) {
-                // F-01 修复：用 currentGroup 记录归类，不回填 searchView 避免污染搜索框
-                currentGroup = item.title.toString()
-                searchView.setQuery("", false)
-                upRssFlowJob()
+    // 顶栏 Compose 化：GlassTopAppBar 用 colorScheme.surface（跟随昼夜主题），搜索/菜单迁移到 Compose
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                Column(modifier = Modifier.statusBarsPadding()) {
+                    GlassTopAppBar(
+                        title = getString(R.string.rss),
+                        actions = {
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = null)
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = buildMenuActions()
+                                )
+                            }
+                        }
+                    )
+                    SettingsSearchBar(
+                        query = composeSearchQuery,
+                        onQueryChange = {
+                            composeSearchQuery = it
+                            // 保留：按名称过滤订阅源列表
+                            upRssFlowJob(it)
+                        },
+                        placeholder = getString(R.string.rss_search_key),
+                        // rss-unified-search: 提交搜索时跳转到 RssSearchActivity
+                        onSearch = {
+                            val key = composeSearchQuery.trim()
+                            if (key.isNotEmpty()) {
+                                RssSearchActivity.start(requireContext(), key)
+                                composeSearchQuery = ""
+                            }
+                        }
+                    )
+                }
             }
+        }
+    }
+
+    // 更多菜单数据（文件夹配置 + 阅读记录 + 收藏 + 动态分组 + 设置）
+    private fun buildMenuActions(): List<MenuAction> {
+        return buildList {
+            add(MenuAction(
+                Icons.Default.FolderOpen,
+                getString(R.string.source_folder_config),
+                onClick = { showFolderConfig() }
+            ))
+            add(MenuAction(
+                Icons.Default.History,
+                getString(R.string.history),
+                onClick = { showDialogFragment<ReadRecordDialog>() }
+            ))
+            add(MenuAction(
+                Icons.Default.Star,
+                getString(R.string.favorite),
+                onClick = { startActivity<RssFavoritesActivity>() }
+            ))
+            if (groups.isNotEmpty()) {
+                add(MenuAction(Icons.Default.Groups, getString(R.string.group), header = true) {})
+                groups.forEach { group ->
+                    add(MenuAction(
+                        Icons.Default.Label,
+                        group,
+                        onClick = {
+                            currentGroup = group
+                            composeSearchQuery = ""
+                            upRssFlowJob()
+                        }
+                    ))
+                }
+            }
+            add(MenuAction(
+                Icons.Default.Settings,
+                getString(R.string.setting),
+                onClick = { startActivity<RssSourceActivity>() }
+            ))
         }
     }
 
     override fun onPause() {
         super.onPause()
-        searchView.clearFocus()
-    }
-
-    private fun upGroupsMenu() = groupsMenu?.transaction { subMenu ->
-        subMenu.removeGroup(R.id.menu_group_text)
-        groups.forEach {
-            subMenu.add(R.id.menu_group_text, Menu.NONE, Menu.NONE, it)
-        }
-    }
-
-    private fun initSearchView() {
-        searchView.applyTint(primaryTextColor)
-        searchView.isSubmitButtonEnabled = true
-        // rss-unified-search: 搜索框 hint 改为"搜索订阅源内容"
-        searchView.queryHint = getString(R.string.rss_search_key)
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                // rss-unified-search: 提交搜索时跳转到 RssSearchActivity
-                query?.trim()?.let { key ->
-                    if (key.isNotEmpty()) {
-                        RssSearchActivity.start(requireContext(), key)
-                        searchView.setQuery("", false)
-                        searchView.clearFocus()
-                    }
-                }
-                return true
-            }
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                // 保留：按名称过滤订阅源列表
-                upRssFlowJob(newText)
-                return false
-            }
-        })
     }
 
     private fun initRecyclerView() {
@@ -237,10 +274,15 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         applyView()  // D1: 统一应用视图（列表/标签/文件夹）
     }
 
-    // F-P1-8 应用列表视图
+    // F-P1-8 应用列表视图（订阅源固定卡片网格展示：用户决策"订阅源默认卡片，无列表展示"，
+    // 列数按屏幕宽度 + sourceMargin 间距自适应，不再受 sourceLayout 列表/紧凑模式影响）
     private fun applyListView() {
         binding.recyclerView.removeItemDecoration(gridSpacingDecoration)
-        binding.recyclerView.layoutManager = GridLayoutManager(context, 4)
+        val marginDp = AppConfig.sourceMargin
+        gridSpacingDecoration.spacing = SourceFolderAdapter.spacingPx(requireContext(), marginDp)
+        binding.recyclerView.addItemDecoration(gridSpacingDecoration)
+        val spanCount = SourceFolderAdapter.calculateSpanCount(requireContext(), marginDp)
+        binding.recyclerView.layoutManager = GridLayoutManager(context, spanCount)
         binding.recyclerView.adapter = adapter
     }
 
@@ -325,13 +367,13 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
             val newIsFolder = isFolderViewMode  // sourceGroupStyle!=0 && sourceGroupMode==1
             if (newIsFolder != isShowingFolder) {
                 isShowingFolder = newIsFolder
-                if (newIsFolder) searchView.setQuery("", false)
+                if (newIsFolder) composeSearchQuery = ""
             }
             applyView()
             if (isShowingFolder) {
                 upFolderView()
             } else {
-                upRssFlowJob(searchView.query?.toString())
+                upRssFlowJob(composeSearchQuery)
             }
             requireActivity().invalidateOptionsMenu()
         }
@@ -364,9 +406,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                 Lifecycle.State.RESUMED,
                 AppDatabase.RSS_SOURCE_TABLE_NAME
             ).conflate().collect {
-                groups.clear()
-                groups.addAll(it)
-                upGroupsMenu()
+                groups = it.toCollection(linkedSetOf())
                 if (isShowingFolder) {
                     upFolderView()
                 } else if (isTagMode) {
@@ -380,7 +420,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         if (isShowingFolder) return
         rssFlowJob?.cancel()
         rssFlowJob = viewLifecycleOwner.lifecycleScope.launch {
-            // F-01 修复：currentGroup + searchKey 组合查询（6 分支，解耦 searchView 回填）
+            // F-01 修复：currentGroup + searchKey 组合查询（6 分支，解耦搜索框回填）
             val noGroup = getString(R.string.no_group)
             when {
                 // D2: 按类型 + 有搜索词
@@ -413,9 +453,23 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
             ).catch {
                 AppLog.put("订阅界面更新数据出错", it)
             }.flowOn(IO).collect {
-                adapter.setItems(it)
+                adapter.setItems(sortSources(it))
             }
         }
+    }
+
+    // D-2 修复：rssSort 配置驱动排序（0=手动/1=名称/2=启用/3=类型/4=分组/5=URL/6=更新时间），与管理页 RssSourceActivity 一致
+    private fun sortSources(data: List<RssSource>): List<RssSource> {
+        val sorted = when (AppConfig.rssSort) {
+            1 -> data.sortedWith { o1, o2 -> o1.sourceName.cnCompare(o2.sourceName) }
+            2 -> data.sortedByDescending { it.enabled }
+            3 -> data.sortedBy { it.type }
+            4 -> data.sortedBy { it.sourceGroup ?: "" }
+            5 -> data.sortedBy { it.sourceUrl }
+            6 -> data.sortedByDescending { it.lastUpdateTime }
+            else -> data  // 0=手动，用 customOrder
+        }
+        return if (AppConfig.rssSortAscending) sorted else sorted.reversed()
     }
 
     // F-P1-8 文件夹点击回调：点击文件夹 → 临时切换到列表视图并按分组筛选
@@ -442,7 +496,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                 else -> group
             }
         }
-        searchView.setQuery("", false)  // 清空搜索框，不触发查询
+        composeSearchQuery = ""  // 清空搜索词，不触发查询
         upRssFlowJob()  // 直接触发查询
     }
 

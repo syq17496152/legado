@@ -45,7 +45,7 @@
         android:layout_marginTop="12dp"
         android:layout_marginEnd="16dp"
         android:background="@drawable/bg_overlay_button"
-        android:contentDescription="切换回内置播放器"
+        android:contentDescription="@string/switch_to_exo_player"
         android:src="@drawable/ic_swap_horiz"
         android:scaleType="centerInside"
         android:padding="12dp"
@@ -79,7 +79,7 @@
             android:layout_marginStart="12dp"
             android:layout_marginTop="12dp"
             android:background="@drawable/bg_overlay_button"
-            android:contentDescription="返回"
+            android:contentDescription="@string/back"
             android:src="@drawable/ic_back"
             android:scaleType="centerInside"
             android:padding="12dp"
@@ -110,7 +110,7 @@
                 android:maxLines="2"
                 android:ellipsize="end"
                 android:textColor="#FFFFFF"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_14sp"
                 android:textStyle="bold"
                 android:background="@drawable/bg_overlay_button"
                 android:padding="12dp" />
@@ -124,7 +124,7 @@
                 android:maxLines="1"
                 android:ellipsize="end"
                 android:textColor="#FFFFFF"
-                android:textSize="12sp"
+                android:textSize="@dimen/text_12sp"
                 android:background="@drawable/bg_overlay_button"
                 android:paddingTop="6dp"
                 android:paddingBottom="6dp"
@@ -158,19 +158,18 @@
             app:layout_constraintEnd_toEndOf="parent">
 
             <!-- 全屏按钮（U1：从视频中下方迁移到右侧功能区，随整体显隐；
-                 visibility=gone 默认隐藏，横屏视频时由 updateFullscreenButtonVisibility 设为 visible） -->
+                 bug①修复：默认 visible，由 updateFullscreenButtonVisibility 保持显示；随 right_buttons 3秒自动隐藏+单击显示） -->
             <ImageButton
                 android:id="@+id/btn_fullscreen"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:layout_marginBottom="16dp"
                 android:background="@drawable/bg_overlay_button"
-                android:contentDescription="全屏"
+                android:contentDescription="@string/full_screen"
                 android:src="@drawable/ic_fullscreen"
                 android:scaleType="centerInside"
                 android:padding="12dp"
-                android:tint="#FFFFFF"
-                android:visibility="gone" />
+                android:tint="#FFFFFF" />
 
             <!-- video-gesture-overhaul: 快退按钮已移除，改为左右滑动 seek（R2/R3） -->
 
@@ -181,7 +180,7 @@
                 android:layout_height="48dp"
                 android:layout_marginBottom="16dp"
                 android:background="@drawable/bg_overlay_button"
-                android:contentDescription="收藏"
+                android:contentDescription="@string/favorite"
                 android:src="@drawable/ic_star_border"
                 android:scaleType="centerInside"
                 android:padding="12dp"
@@ -194,7 +193,7 @@
                 android:layout_height="48dp"
                 android:layout_marginBottom="16dp"
                 android:background="@drawable/bg_overlay_button"
-                android:contentDescription="设置"
+                android:contentDescription="@string/setting"
                 android:src="@drawable/ic_settings"
                 android:scaleType="centerInside"
                 android:padding="12dp"

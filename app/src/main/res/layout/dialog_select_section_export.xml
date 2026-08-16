@@ -30,7 +30,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/export_all"
-                android:textSize="18sp" />
+                android:textSize="@dimen/text_18sp" />
 
         </LinearLayout>
 
@@ -53,7 +53,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/custom_export"
-                android:textSize="18sp" />
+                android:textSize="@dimen/text_18sp" />
 
         </LinearLayout>
 

@@ -10,5 +10,5 @@
     android:paddingBottom="15dp"
     android:singleLine="true"
     android:textColor="@color/primaryText"
-    android:textSize="14sp"
+    android:textSize="@dimen/text_14sp"
     android:gravity="center" />

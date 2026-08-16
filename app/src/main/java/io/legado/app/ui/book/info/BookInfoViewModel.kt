@@ -84,7 +84,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                 upBook(it)
                 return@execute
             }
-            throw NoStackTraceException("未找到书籍")
+            throw NoStackTraceException(context.getString(R.string.book_not_found))
         }.onError {
             AppLog.put(it.localizedMessage, it)
             context.toastOnUi(it.localizedMessage)
@@ -144,7 +144,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                 book.tocUrl = ""
                 book.getRemoteUrl()?.let {
                     val bookWebDav = AppWebDav.defaultBookWebDav
-                        ?: throw NoStackTraceException("webDav没有配置")
+                        ?: throw NoStackTraceException(context.getString(R.string.webdav_not_configured_alarm))
                     val remoteBook = bookWebDav.getRemoteBook(it)
                     if (remoteBook == null) {
                         book.origin = BookType.localTag
@@ -167,7 +167,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                 }
 
                 else -> {
-                    AppLog.put("下载远程书籍<${book.name}>失败", it)
+                    AppLog.put(context.getString(R.string.download_remote_book_fail, book.name), it)
                 }
             }
         }.onFinally {
@@ -236,7 +236,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                     chapterListData.postValue(it)
                 }
             }.onError {
-                context.toastOnUi("LoadTocError:${it.localizedMessage}")
+                context.toastOnUi(context.getString(R.string.load_toc_error, it.localizedMessage))
             }
         } else {
             val bookSource = bookSource ?: let {
@@ -300,7 +300,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             context.toastOnUi("LoadWebFileError\n${it.localizedMessage}")
         }.onSuccess {
             webFiles.addAll(it)
-            book.latestChapterTitle = "已下载"
+            book.latestChapterTitle = context.getString(R.string.downloaded)
             bookData.postValue(book)
             chapterListData.postValue(emptyList())
         }
@@ -506,7 +506,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
         }.onSuccess {
             context.toastOnUi(R.string.clear_cache_success)
         }.onError {
-            context.toastOnUi("清理缓存出错\n${it.localizedMessage}")
+            context.toastOnUi("${context.getString(R.string.clear_cache_error)}\n${it.localizedMessage}")
         }
     }
 

@@ -2,13 +2,28 @@ package io.legado.app.ui.book.manage
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.Menu
 import android.view.MenuItem
 import android.widget.CheckBox
 import android.widget.LinearLayout
+import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.appcompat.widget.PopupMenu
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -28,17 +43,22 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.book.group.GroupManageDialog
 import io.legado.app.ui.book.group.GroupSelectDialog
 import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.SelectActionBar
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.AppEditDialog
+import io.legado.app.ui.widget.components.EditField
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.ui.widget.recycler.VerticalDivider
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.isAbsUrl
@@ -77,11 +97,14 @@ class BookshelfManageActivity :
     private val adapter by lazy { BookAdapter(this, this) }
     private val itemTouchCallback by lazy { ItemTouchCallback(adapter) }
     private var booksFlowJob: Job? = null
-    private var menu: Menu? = null
-    private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
     private var books: List<Book>? = null
+    // L-B8 顶栏 Compose 状态
+    private var composeTitle by mutableStateOf("")
+    private var composeSearchQuery by mutableStateOf("")
+    private var searchVisible by mutableStateOf(false)
+    private var menuExpanded by mutableStateOf(false)
+    private var openBookInfoByClickTitle by mutableStateOf(AppConfig.openBookInfoByClickTitle)
+    private var composeGroupNames by mutableStateOf(listOf<String>())
     private val waitDialog by lazy { WaitDialog(this) }
     private val exportDir = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
@@ -110,7 +133,7 @@ class BookshelfManageActivity :
             }
             upTitle()
         }
-        initSearchView()
+        initComposeTopBar()
         initRecyclerView()
         initOtherView()
         initGroupData()
@@ -131,19 +154,6 @@ class BookshelfManageActivity :
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.bookshelf_manage, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        this.menu = menu
-        menu.findItem(R.id.menu_open_book_info_by_click_title)?.isChecked =
-            AppConfig.openBookInfoByClickTitle
-        upMenu()
-        return super.onPrepareOptionsMenu(menu)
-    }
-
     override fun selectAll(selectAll: Boolean) {
         adapter.selectAll(selectAll)
     }
@@ -157,23 +167,109 @@ class BookshelfManageActivity :
     }
 
     private fun upTitle() {
-        searchView.queryHint = getString(R.string.screen) + " • " + viewModel.groupName
+        composeTitle = getString(R.string.screen) + " • " + viewModel.groupName
     }
 
-    private fun initSearchView() {
-        searchView.applyTint(primaryTextColor)
-        searchView.isSubmitButtonEnabled = true
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                return false
+    // L-B8 顶栏 Compose 化：GlassTopAppBar + 搜索内联 + 分组管理对话框 + 更多菜单 AppDropdownMenu
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                Column {
+                    GlassTopAppBar(
+                        title = composeTitle,
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = {
+                            IconButton(onClick = { searchVisible = !searchVisible }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Search,
+                                    contentDescription = getString(R.string.action_search)
+                                )
+                            }
+                            IconButton(onClick = { showDialogFragment<GroupManageDialog>() }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Groups,
+                                    contentDescription = getString(R.string.group_manage)
+                                )
+                            }
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(
+                                        imageVector = Icons.Filled.MoreVert,
+                                        contentDescription = null
+                                    )
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = buildMenuActions()
+                                )
+                            }
+                        }
+                    )
+                    if (searchVisible) {
+                        SettingsSearchBar(
+                            query = composeSearchQuery,
+                            onQueryChange = {
+                                composeSearchQuery = it
+                                upBookData()
+                            },
+                            placeholder = getString(R.string.screen) + " • " + viewModel.groupName
+                        )
+                    }
+                }
             }
+        }
+    }
 
-            override fun onQueryTextChange(newText: String?): Boolean {
-                upBookData()
-                return false
+    private fun buildMenuActions(): List<MenuAction> {
+        val actions = mutableListOf<MenuAction>()
+        // 导出所用书源
+        actions += MenuAction(
+            Icons.Filled.Description,
+            getString(R.string.export_all_use_book_source),
+            onClick = {
+                viewModel.saveAllUseBookSourceToFile { file ->
+                    exportDir.launch {
+                        mode = HandleFileContract.EXPORT
+                        fileData = HandleFileContract.FileData(
+                            "bookSource.json",
+                            file,
+                            "application/json"
+                        )
+                    }
+                }
             }
-
-        })
+        )
+        // 详情开关
+        actions += MenuAction(
+            Icons.Filled.Info,
+            getString(R.string.open_book_info_by_click_title),
+            checked = openBookInfoByClickTitle,
+            onClick = {
+                openBookInfoByClickTitle = !openBookInfoByClickTitle
+                AppConfig.openBookInfoByClickTitle = openBookInfoByClickTitle
+                adapter.notifyItemRangeChanged(0, adapter.itemCount)
+            }
+        )
+        // 分组切换（动态加载，等价原 menu_book_group 子菜单）
+        composeGroupNames.forEach { name ->
+            actions += MenuAction(
+                Icons.Filled.Folder,
+                name,
+                onClick = {
+                    viewModel.groupName = name
+                    upTitle()
+                    lifecycleScope.launch {
+                        viewModel.groupId = withContext(IO) {
+                            appDb.bookGroupDao.getByName(name)?.groupId ?: 0
+                        }
+                        upBookDataByGroupId()
+                    }
+                }
+            )
+        }
+        return actions
     }
 
     private fun initRecyclerView() {
@@ -209,8 +305,8 @@ class BookshelfManageActivity :
             }.flowOn(IO).conflate().collect {
                 groupList.clear()
                 groupList.addAll(it)
+                composeGroupNames = groupList.map { g -> g.groupName }
                 adapter.notifyDataSetChanged()
-                upMenu()
             }
         }
     }
@@ -254,7 +350,7 @@ class BookshelfManageActivity :
 
     private fun upBookData() {
         books?.let { books ->
-            val searchKey = searchView.query
+            val searchKey = composeSearchQuery
             if (searchKey.isNullOrEmpty()) {
                 adapter.setItems(books)
             } else {
@@ -265,38 +361,6 @@ class BookshelfManageActivity :
                 }
             }
         }
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
-            R.id.menu_open_book_info_by_click_title -> {
-                AppConfig.openBookInfoByClickTitle = !item.isChecked
-                adapter.notifyItemRangeChanged(0, adapter.itemCount)
-            }
-
-            R.id.menu_export_all_use_book_source -> viewModel.saveAllUseBookSourceToFile { file ->
-                exportDir.launch {
-                    mode = HandleFileContract.EXPORT
-                    fileData = HandleFileContract.FileData(
-                        "bookSource.json",
-                        file,
-                        "application/json"
-                    )
-                }
-            }
-
-            else -> if (item.groupId == R.id.menu_group) {
-                viewModel.groupName = item.title.toString()
-                upTitle()
-                lifecycleScope.launch {
-                    viewModel.groupId =
-                        withContext(IO) { appDb.bookGroupDao.getByName(item.title.toString()) }?.groupId ?: 0
-                    upBookDataByGroupId()
-                }
-            }
-        }
-        return super.onCompatOptionsItemSelected(item)
     }
 
     override fun onMenuItemClick(item: MenuItem?): Boolean {
@@ -315,15 +379,6 @@ class BookshelfManageActivity :
             R.id.menu_check_selected_interval -> adapter.checkSelectedInterval()
         }
         return false
-    }
-
-    private fun upMenu() {
-        menu?.findItem(R.id.menu_book_group)?.subMenu?.let { subMenu ->
-            subMenu.removeGroup(R.id.menu_group)
-            groupList.forEach { bookGroup ->
-                subMenu.add(R.id.menu_group, bookGroup.order, Menu.NONE, bookGroup.groupName)
-            }
-        }
     }
 
     private fun alertDelSelection() {

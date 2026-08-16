@@ -27,7 +27,7 @@
             android:padding="4dp"
             android:singleLine="true"
             android:textColor="@color/primaryText"
-            android:textSize="14sp" />
+            android:textSize="@dimen/text_14sp" />
 
         <TextView
             android:id="@+id/tv_book_text"
@@ -36,7 +36,7 @@
             android:padding="4dp"
             android:singleLine="true"
             android:textColor="@color/secondaryText"
-            android:textSize="12sp" />
+            android:textSize="@dimen/text_12sp" />
 
         <TextView
             android:id="@+id/tv_note"
@@ -45,7 +45,7 @@
             android:padding="4dp"
             android:singleLine="true"
             android:textColor="@color/accent"
-            android:textSize="12sp" />
+            android:textSize="@dimen/text_12sp" />
 
     </LinearLayout>
 

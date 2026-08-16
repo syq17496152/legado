@@ -89,7 +89,7 @@
                 android:layout_height="wrap_content"
                 android:layout_margin="16dp"
                 android:text="重新加载"
-                android:textSize="18sp"
+                android:textSize="@dimen/text_18sp"
                 tools:visibility="visible" />
         </LinearLayout>
 

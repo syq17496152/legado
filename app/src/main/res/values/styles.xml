@@ -111,7 +111,7 @@
     <style name="Style.Text.Primary.Normal" parent="android:Widget">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textSize">@dimen/font_size_normal</item>
+        <item name="android:textSize">@dimen/text_body_medium</item>
         <item name="android:textColor">@color/primaryText</item>
         <item name="android:includeFontPadding">false</item>
     </style>
@@ -123,7 +123,7 @@
     <style name="Style.Text.Second.Normal" parent="android:Widget">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
-        <item name="android:textSize">@dimen/font_size_normal</item>
+        <item name="android:textSize">@dimen/text_body_medium</item>
         <item name="android:textColor">@color/secondaryText</item>
         <item name="android:includeFontPadding">false</item>
     </style>

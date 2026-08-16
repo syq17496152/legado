@@ -6,8 +6,10 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical">
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <!-- L-D4 RSS 文章分类页：顶栏 Compose 化（GlassTopAppBar + 菜单下沉 AppDropdownMenu），
+         多行标签+ViewPager+文章列表 View 内核保留（AD-20 内核桥接） -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
 
@@ -18,7 +20,7 @@
         android:orientation="vertical"
         android:padding="8dp"
         android:textColor="@color/background_card"
-        app:layout_constraintTop_toBottomOf="@id/title_bar" />
+        app:layout_constraintTop_toBottomOf="@id/compose_top_bar" />
 
     <androidx.viewpager.widget.ViewPager
         android:id="@+id/view_pager"

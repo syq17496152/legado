@@ -3,7 +3,6 @@ package io.legado.app.ui.rss.subscription
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
-import android.widget.PopupMenu
 import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
 import io.legado.app.base.adapter.ItemViewHolder
@@ -37,22 +36,10 @@ class RuleSubAdapter(context: Context, val callBack: Callback) :
         binding.ivEdit.setOnClickListener {
             callBack.editSubscription(getItem(holder.layoutPosition)!!)
         }
+        // L-D8 S2 改造：条目更多菜单仅删除一项，直接上抛删除确认（Activity Compose ConfirmDialog 统一处理）
         binding.ivMenuMore.setOnClickListener {
-            showMenu(binding.ivMenuMore, holder.layoutPosition)
+            callBack.delSubscription(getItem(holder.layoutPosition)!!)
         }
-    }
-
-    private fun showMenu(view: View, position: Int) {
-        val source = getItem(position) ?: return
-        val popupMenu = PopupMenu(context, view)
-        popupMenu.inflate(R.menu.source_sub_item)
-        popupMenu.setOnMenuItemClickListener { menuItem ->
-            when (menuItem.itemId) {
-                R.id.menu_del -> callBack.delSubscription(source)
-            }
-            true
-        }
-        popupMenu.show()
     }
 
     override fun getViewBinding(parent: ViewGroup): ItemRuleSubBinding {

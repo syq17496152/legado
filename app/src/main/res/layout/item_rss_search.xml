@@ -58,7 +58,7 @@
         android:singleLine="true"
         android:text="@string/app_name"
         android:textColor="@color/primaryText"
-        android:textSize="16sp"
+        android:textSize="@dimen/text_16sp"
         app:layout_constraintEnd_toStartOf="@id/bv_originCount"
         app:layout_constraintStart_toEndOf="@+id/iv_read"
         app:layout_constraintTop_toTopOf="parent" />
@@ -85,7 +85,7 @@
             android:scrollbars="none"
             android:text="@string/last_read"
             android:textColor="@color/primaryText"
-            android:textSize="12sp" />
+            android:textSize="@dimen/text_12sp" />
 
         <!-- 文章摘要（订阅源文章 description 字段，对应书源的 tv_introduce） -->
         <io.legado.app.ui.widget.text.MultilineTextView
@@ -96,7 +96,7 @@
             android:scrollbars="none"
             android:text="@string/book_intro"
             android:textColor="@color/primaryText"
-            android:textSize="12sp" />
+            android:textSize="@dimen/text_12sp" />
 
     </LinearLayout>
 

@@ -3,10 +3,25 @@ package io.legado.app.ui.book.audio
 import android.annotation.SuppressLint
 import android.os.Bundle
 import android.view.Gravity
-import android.view.Menu
-import android.view.MenuItem
 import android.widget.SeekBar
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -27,6 +42,10 @@ import io.legado.app.model.AudioPlay
 import io.legado.app.model.BookCover
 import io.legado.app.service.AudioPlayService
 import io.legado.app.ui.about.AppLogDialog
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
@@ -76,7 +95,11 @@ class AudioPlayActivity :
     private val lyricViewX by lazy { binding.lyricViewX }
     private var lyricOn = false
     private var oldLyric: String? = null
-    private var menuCustomBtn: MenuItem? = null
+
+    // L-B13 S5 改造：Compose 顶栏状态
+    private var composeTitle by mutableStateOf("")
+    private var menuExpanded by mutableStateOf(false)
+    private var showCustomBtn by mutableStateOf(false)
 
     private val tocActivityResult = registerForActivityResult(TocActivityResult()) {
         it?.let {
@@ -95,95 +118,171 @@ class AudioPlayActivity :
         }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.titleBar.setBackgroundResource(R.color.transparent)
         AudioPlay.register(this)
         viewModel.titleData.observe(this) { name ->
-            binding.titleBar.title = name
+            composeTitle = name
             val lyric = AudioPlay.durChapter?.getVariable("lyric")?.takeIf { it.isNotBlank() }
             upLyric(lyric ?: AudioPlay.durLyric)
         }
         viewModel.coverData.observe(this) {
             upCover(it)
         }
-        viewModel.customBtnListData.observe(this) { menuCustomBtn?.isVisible = it }
+        viewModel.customBtnListData.observe(this) { showCustomBtn = it }
         viewModel.initData(intent) {
             initListener()
         }
         initView()
+        initComposeTopBar()
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.audio_play, menu)
-        menuCustomBtn = menu.findItem(R.id.menu_custom_btn)?.also {
-            it.isVisible = viewModel.customBtnListData.value == true
+    // ==================== L-B13 S5 改造：Compose 顶栏迁移 ====================
+
+    /**
+     * Compose 顶栏（L-B13 S5 改造）：GlassTopAppBar + 自定义/换源图标按钮 + MoreVert 下拉菜单
+     */
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = composeTitle,
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = { onBackPressedDispatcher.onBackPressed() },
+                    actions = {
+                        if (showCustomBtn) {
+                            IconButton(onClick = { clickCustomButton() }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Tune,
+                                    contentDescription = getString(R.string.custom_button)
+                                )
+                            }
+                        }
+                        IconButton(onClick = {
+                            AudioPlay.book?.let {
+                                showDialogFragment(ChangeBookSourceDialog(it.name, it.author))
+                            }
+                        }) {
+                            Icon(
+                                imageVector = Icons.Filled.SwapHoriz,
+                                contentDescription = getString(R.string.change_origin)
+                            )
+                        }
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(
+                                    imageVector = Icons.Filled.MoreVert,
+                                    contentDescription = getString(R.string.more)
+                                )
+                            }
+                            AppDropdownMenu(
+                                expanded = menuExpanded,
+                                onDismiss = { menuExpanded = false },
+                                actions = buildAudioPlayMenuActions()
+                            )
+                        }
+                    }
+                )
+            }
         }
-        return super.onCompatCreateOptionsMenu(menu)
     }
 
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_login)?.isVisible = !AudioPlay.bookSource?.loginUrl.isNullOrBlank()
-        menu.findItem(R.id.menu_wake_lock)?.isChecked = AppConfig.audioPlayUseWakeLock
-        return super.onMenuOpened(featureId, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_custom_btn -> {
-                AudioPlay.bookSource?.let {source ->
-                    AudioPlay.book?.let { book ->
-                        SourceCallBack.callBackBtn(
-                            this,
-                            SourceCallBack.CLICK_CUSTOM_BUTTON,
-                            source,
-                            book,
-                            AudioPlay.durChapter,
-                            BookType.audio
-                        )
+    /**
+     * 下拉菜单数据驱动（迁移自 audio_play.xml + onCompatOptionsItemSelected）
+     */
+    private fun buildAudioPlayMenuActions(): List<MenuAction> {
+        val actions = mutableListOf<MenuAction>()
+        // 登录（源配置了登录地址才显示）
+        if (!AudioPlay.bookSource?.loginUrl.isNullOrBlank()) {
+            actions += MenuAction(
+                icon = Icons.Filled.Login,
+                title = getString(R.string.login),
+                onClick = {
+                    AudioPlay.bookSource?.let {
+                        startActivity<SourceLoginActivity> {
+                            putExtra("bookType", BookType.audio)
+                        }
+                    }
+                }
+            )
+        }
+        // 复制播放地址
+        actions += MenuAction(
+            icon = Icons.Filled.ContentCopy,
+            title = getString(R.string.copy_play_url),
+            onClick = { copyAudioUrl() }
+        )
+        // 编辑书源
+        actions += MenuAction(
+            icon = Icons.Filled.Edit,
+            title = getString(R.string.edit_book_source),
+            onClick = {
+                AudioPlay.bookSource?.let {
+                    sourceEditResult.launch {
+                        putExtra("sourceUrl", it.bookSourceUrl)
                     }
                 }
             }
-            R.id.menu_change_source -> AudioPlay.book?.let {
-                showDialogFragment(ChangeBookSourceDialog(it.name, it.author))
+        )
+        // 唤醒锁
+        actions += MenuAction(
+            icon = Icons.Filled.Visibility,
+            title = getString(R.string.audio_play_wake_lock),
+            checked = AppConfig.audioPlayUseWakeLock,
+            onClick = {
+                AppConfig.audioPlayUseWakeLock = !AppConfig.audioPlayUseWakeLock
             }
-
-            R.id.menu_login -> AudioPlay.bookSource?.let {
-                startActivity<SourceLoginActivity> {
-                    putExtra("bookType", BookType.audio)
-                }
-            }
-
-            R.id.menu_wake_lock -> AppConfig.audioPlayUseWakeLock = !AppConfig.audioPlayUseWakeLock
-            R.id.menu_copy_audio_url -> {
+        )
+        // 跳过片头片尾
+        actions += MenuAction(
+            icon = Icons.Filled.SkipNext,
+            title = getString(R.string.skip_book_credits),
+            onClick = {
                 AudioPlay.book?.let {
-                    val url = AudioPlayService.url
-                    SourceCallBack.callBackBtn(
-                        this,
-                        SourceCallBack.CLICK_COPY_PLAY_URL,
-                        AudioPlay.bookSource,
-                        it,
-                        AudioPlay.durChapter,
-                        BookType.audio,
-                        url
-                    ) {
-                        sendToClip(url)
-                    }
+                    showDialogFragment(AudioSkipCredits.newInstance(it))
                 }
             }
-            R.id.menu_edit_source -> AudioPlay.bookSource?.let {
-                sourceEditResult.launch {
-                    putExtra("sourceUrl", it.bookSourceUrl)
-                }
-            }
-
-            /* 跳过片头片尾设定按钮 */
-            R.id.menu_skip_credits -> AudioPlay.book?.let {
-                showDialogFragment(AudioSkipCredits.newInstance(it))
-            }
-
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-        }
-        return super.onCompatOptionsItemSelected(item)
+        )
+        // 日志
+        actions += MenuAction(
+            icon = Icons.Filled.Info,
+            title = getString(R.string.log),
+            onClick = { showDialogFragment<AppLogDialog>() }
+        )
+        return actions
     }
+
+    private fun clickCustomButton() {
+        AudioPlay.bookSource?.let { source ->
+            AudioPlay.book?.let { book ->
+                SourceCallBack.callBackBtn(
+                    this,
+                    SourceCallBack.CLICK_CUSTOM_BUTTON,
+                    source,
+                    book,
+                    AudioPlay.durChapter,
+                    BookType.audio
+                )
+            }
+        }
+    }
+
+    private fun copyAudioUrl() {
+        AudioPlay.book?.let {
+            val url = AudioPlayService.url
+            SourceCallBack.callBackBtn(
+                this,
+                SourceCallBack.CLICK_COPY_PLAY_URL,
+                AudioPlay.bookSource,
+                it,
+                AudioPlay.durChapter,
+                BookType.audio,
+                url
+            ) {
+                sendToClip(url)
+            }
+        }
+    }
+
+    // ==================== 原有业务逻辑（未改动） ====================
 
     private fun initView() {
         observeEventSticky<AudioPlay.PlayMode>(EventBus.PLAY_MODE_CHANGED) {

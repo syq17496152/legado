@@ -103,7 +103,7 @@
                 android:paddingRight="10dp"
                 android:singleLine="true"
                 android:textColor="@color/primaryText"
-                android:textSize="12sp" />
+                android:textSize="@dimen/text_12sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -153,7 +153,7 @@
                     android:maxLines="1"
                     android:text="结果"
                     android:textColor="@color/primaryText"
-                    android:textSize="12sp" />
+                    android:textSize="@dimen/text_12sp" />
             </LinearLayout>
 
 
@@ -194,7 +194,7 @@
                     android:maxLines="1"
                     android:text="@string/main_menu"
                     android:textColor="@color/primaryText"
-                    android:textSize="12sp" />
+                    android:textSize="@dimen/text_12sp" />
             </LinearLayout>
 
             <View
@@ -234,7 +234,7 @@
                     android:maxLines="1"
                     android:text="退出"
                     android:textColor="@color/primaryText"
-                    android:textSize="12sp" />
+                    android:textSize="@dimen/text_12sp" />
             </LinearLayout>
 
             <!--        <View-->
@@ -272,7 +272,7 @@
             <!--                android:maxLines="1"-->
             <!--                android:text="@string/setting"-->
             <!--                android:textColor="@color/primaryText"-->
-            <!--                android:textSize="12sp" />-->
+            <!--                android:textSize="@dimen/text_12sp" />-->
             <!--        </LinearLayout>-->
 
             <View

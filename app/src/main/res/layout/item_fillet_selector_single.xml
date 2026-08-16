@@ -13,7 +13,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/book_type"
-        android:textSize="14sp" />
+        android:textSize="@dimen/text_14sp" />
 
     <androidx.appcompat.widget.AppCompatSpinner
         android:id="@+id/sp_type"

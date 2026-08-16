@@ -43,6 +43,13 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 
+    <!-- Phase4 阅读浮层 Sheet 化：目录/书签 Compose 浮层宿主（无回归，保留 TocActivity 全功能入口） -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_sheet_host"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <View
         android:id="@+id/navigation_bar"
         android:layout_width="match_parent"

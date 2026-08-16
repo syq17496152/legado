@@ -6,10 +6,6 @@
     <dimen name="nav_header_height">176dp</dimen>
     <dimen name="fab_margin">16dp</dimen>
 
-    <dimen name="font_size_normal">14sp</dimen>
-    <dimen name="font_size_middle">16sp</dimen>
-    <dimen name="font_size_large">18sp</dimen>
-
     <dimen name="fast_scroll_min_thumb_height">24dp</dimen>
 
     <dimen name="line_height">0.8dp</dimen>
@@ -24,11 +20,30 @@
     <dimen name="corner_large">16dp</dimen>
     <!-- corner_full = 50% 需在代码/drawable中设置 -->
 
-    <!-- ========== Design Tokens: Typography Scale (M3 子集) ========== -->
+    <!-- ========== Design Tokens: Typography Scale (全局字号刻度表，统一管理) ==========
+         所有 View 布局硬编码 textSize 应引用此处刻度，禁止散落硬编码字号；
+         不同场景可用不同档位（详情摘要 13 / 正文 14-16 / 弹窗标题 18 / 封面大字 28-36），
+         但均由本刻度表统一管理，一处修改全局生效（主题统一 AD-19）。 -->
+    <dimen name="text_10sp">10sp</dimen>
+    <dimen name="text_11sp">11sp</dimen>
+    <dimen name="text_12sp">12sp</dimen>
+    <dimen name="text_13sp">13sp</dimen>
+    <dimen name="text_14sp">14sp</dimen>
+    <dimen name="text_15sp">15sp</dimen>
+    <dimen name="text_16sp">16sp</dimen>
+    <dimen name="text_17sp">17sp</dimen>
+    <dimen name="text_18sp">18sp</dimen>
+    <dimen name="text_20sp">20sp</dimen>
+    <dimen name="text_22sp">22sp</dimen>
+    <dimen name="text_24sp">24sp</dimen>
+    <dimen name="text_28sp">28sp</dimen>
+    <dimen name="text_32sp">32sp</dimen>
+    <dimen name="text_36sp">36sp</dimen>
+    <!-- M3 语义别名（保持与 Compose LegadoTypography 对齐） -->
     <dimen name="text_display_small">36sp</dimen>
     <dimen name="text_headline_medium">28sp</dimen>
     <dimen name="text_headline_small">24sp</dimen>
-    <dimen name="text_title_large">22sp</dimen>
+    <dimen name="text_title_large">20sp</dimen>
     <dimen name="text_title_medium">16sp</dimen>
     <dimen name="text_title_small">14sp</dimen>
     <dimen name="text_body_large">16sp</dimen>

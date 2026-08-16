@@ -16,7 +16,7 @@
         android:layout_height="match_parent"
         android:gravity="center"
         android:padding="4dp"
-        android:textSize="11sp"
+        android:textSize="@dimen/text_11sp"
         android:textStyle="bold"
         android:background="@drawable/card_video_background" />
 

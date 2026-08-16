@@ -32,7 +32,7 @@
                 android:layout_weight="1"
                 android:text="@string/auto_page_speed"
                 android:textColor="@color/primaryText"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_14sp" />
 
             <TextView
                 android:id="@+id/tv_read_speed"
@@ -91,7 +91,7 @@
                 android:text="@string/chapter_list"
                 android:maxLines="1"
                 android:textColor="@color/primaryText"
-                android:textSize="12sp" />
+                android:textSize="@dimen/text_12sp" />
         </LinearLayout>
 
         <View
@@ -129,7 +129,7 @@
                 android:text="@string/main_menu"
                 android:maxLines="1"
                 android:textColor="@color/primaryText"
-                android:textSize="12sp" />
+                android:textSize="@dimen/text_12sp" />
         </LinearLayout>
 
         <View
@@ -167,7 +167,7 @@
                 android:text="@string/stop"
                 android:maxLines="1"
                 android:textColor="@color/primaryText"
-                android:textSize="12sp" />
+                android:textSize="@dimen/text_12sp" />
         </LinearLayout>
 
         <View
@@ -205,7 +205,7 @@
                 android:text="@string/setting"
                 android:maxLines="1"
                 android:textColor="@color/primaryText"
-                android:textSize="12sp" />
+                android:textSize="@dimen/text_12sp" />
         </LinearLayout>
 
     </LinearLayout>

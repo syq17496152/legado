@@ -4,11 +4,25 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Article
+import androidx.compose.material.icons.outlined.FormatAlignLeft
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.WrapText
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
@@ -32,6 +46,10 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.code.config.ChangeThemeDialog
 import io.legado.app.ui.code.config.SettingsDialog
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.keyboard.KeyboardToolPop
 import io.legado.app.utils.imeHeight
 import io.legado.app.utils.putPrefBoolean
@@ -57,7 +75,10 @@ class CodeEditActivity :
     private val editor: CodeEditor by lazy { binding.editText }
     private val editorSearcher: EditorSearcher by lazy { editor.searcher }
     private var searchOptions: SearchOptions? = null
-    private var menuSaveBtn: MenuItem? = null
+    private var menuExpanded by mutableStateOf(false)
+    private var titleState by mutableStateOf("")
+    private var saveVisible by mutableStateOf(false)
+    private var autoWrapChecked by mutableStateOf(AppConfig.editAutoWrap)
 
     private val isDark
         get() = AppConfig.editTemeAuto && ThemeConfig.isDarkTheme()
@@ -69,14 +90,14 @@ class CodeEditActivity :
         viewModel.initData(intent) {
             editor.apply {
                 viewModel.title?.let {
-                    binding.titleBar.title = it
+                    titleState = it
                 }
                 nonPrintablePaintingFlags = AppConfig.editNonPrintable
                 setEditorLanguage(viewModel.language)
                 upEdit(AppConfig.editFontScale, null, AppConfig.editAutoWrap)
                 setText(viewModel.initialText)
                 editable = viewModel.writable
-                menuSaveBtn?.isVisible = viewModel.writable
+                saveVisible = viewModel.writable
                 requestFocus()
                 postDelayed({
                     val pos = cursor.indexer.getCharPosition(viewModel.cursorPosition)
@@ -85,6 +106,7 @@ class CodeEditActivity :
             }
         }
         initView()
+        initComposeTopBar()
     }
 
     private fun initView() {
@@ -182,17 +204,86 @@ class CodeEditActivity :
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.code_edit_activity, menu)
-        menuSaveBtn = menu.findItem(R.id.menu_save).apply {
-            isVisible = viewModel.writable
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = titleState.ifBlank { getString(R.string.edit_code) },
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = { finish() },
+                    actions = {
+                        // 常驻快捷按钮：搜索 / 保存
+                        IconButton(onClick = { search() }) {
+                            Icon(Icons.Outlined.Search, contentDescription = null)
+                        }
+                        if (saveVisible) {
+                            IconButton(onClick = { save(false) }) {
+                                Icon(Icons.Outlined.Save, contentDescription = null)
+                            }
+                        }
+                        // 溢出菜单
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = null)
+                            }
+                            AppDropdownMenu(
+                                expanded = menuExpanded,
+                                onDismiss = { menuExpanded = false },
+                                actions = buildMenuActions()
+                            )
+                        }
+                    }
+                )
+            }
         }
-        return super.onCompatCreateOptionsMenu(menu)
     }
 
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        menu.findItem(R.id.menu_auto_wrap)?.isChecked = AppConfig.editAutoWrap
-        return super.onPrepareOptionsMenu(menu)
+    private fun buildMenuActions(): List<MenuAction> = buildList {
+        // 格式化
+        add(
+            MenuAction(
+                icon = Icons.Outlined.FormatAlignLeft,
+                title = getString(R.string.format_code),
+                onClick = { viewModel.formatCode(editor) }
+            )
+        )
+        // 更换主题
+        add(
+            MenuAction(
+                icon = Icons.Outlined.Palette,
+                title = getString(R.string.change_theme),
+                onClick = { showDialogFragment(ChangeThemeDialog()) }
+            )
+        )
+        // 配置设置
+        add(
+            MenuAction(
+                icon = Icons.Outlined.Settings,
+                title = getString(R.string.config_settings),
+                onClick = { showDialogFragment(SettingsDialog(this@CodeEditActivity, this@CodeEditActivity)) }
+            )
+        )
+        // 自动换行（勾选态）
+        add(
+            MenuAction(
+                icon = Icons.Outlined.WrapText,
+                title = getString(R.string.auto_wrap),
+                checked = autoWrapChecked,
+                onClick = {
+                    autoWrapChecked = !AppConfig.editAutoWrap
+                    upEdit(autoWarp = !AppConfig.editAutoWrap)
+                    putPrefBoolean(PreferKey.editAutoWrap, !AppConfig.editAutoWrap)
+                }
+            )
+        )
+        // 日志
+        add(
+            MenuAction(
+                icon = Icons.Outlined.Article,
+                title = getString(R.string.log),
+                onClick = { showDialogFragment<AppLogDialog>() }
+            )
+        )
     }
 
     private fun setSearchOptions() {
@@ -201,6 +292,10 @@ class CodeEditActivity :
             !isRegex,
             RegexBackrefGrammar.DEFAULT
         )
+    }
+
+    override fun finish() {
+        save(true)
     }
 
     private fun search() {
@@ -312,27 +407,6 @@ class CodeEditActivity :
             binding.tvSearchResult.text =
                 "${if (currentPosition > 0) "$currentPosition/" else ""}$totalResults"
         }
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_search -> search()
-            R.id.menu_save -> save(false)
-            R.id.menu_format_code -> viewModel.formatCode(editor)
-            R.id.menu_change_theme -> showDialogFragment(ChangeThemeDialog())
-            R.id.menu_config_settings -> showDialogFragment(SettingsDialog(this, this))
-            R.id.menu_auto_wrap -> {
-                item.isChecked = !AppConfig.editAutoWrap
-                upEdit(autoWarp = !AppConfig.editAutoWrap)
-                putPrefBoolean(PreferKey.editAutoWrap, !AppConfig.editAutoWrap)
-            }
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
-
-    override fun finish() {
-        save(true)
     }
 
     override fun helpActions(): List<SelectItem<String>> {

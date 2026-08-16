@@ -5,8 +5,6 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
@@ -15,6 +13,11 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.fragment.app.activityViewModels
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
 import io.legado.app.constant.AppConst
@@ -23,6 +26,8 @@ import io.legado.app.databinding.FragmentWebViewLoginBinding
 import io.legado.app.help.http.CookieStore
 import io.legado.app.help.webView.PooledWebView
 import io.legado.app.lib.theme.accentColor
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.gone
 import io.legado.app.utils.longSnackbar
@@ -42,29 +47,42 @@ class WebViewLoginFragment : BaseFragment(R.layout.fragment_web_view_login) {
     private var checking = false
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        setSupportToolbar(binding.titleBar.toolbar)
         viewModel.source?.let {
-            binding.titleBar.title = getString(R.string.login_source, it.getTag())
+            initComposeTopBar(it)
             initWebView(it)
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu) {
-        menuInflater.inflate(R.menu.source_webview_login, menu)
+    /** Compose 顶栏（L-C13 S6 改造）：GlassTopAppBar + 确定按钮（原 menu_ok 逻辑） */
+    private fun initComposeTopBar(source: BaseSource) {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = getString(R.string.login_source, source.getTag()),
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = { activity?.finish() },
+                    actions = {
+                        IconButton(onClick = { checkHostCookie() }) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = getString(R.string.ok)
+                            )
+                        }
+                    }
+                )
+            }
+        }
     }
 
-    override fun onCompatOptionsItemSelected(item: MenuItem) {
-        when (item.itemId) {
-            R.id.menu_ok -> {
-                if (!checking) {
-                    checking = true
-                    binding.titleBar.snackbar(R.string.check_host_cookie)
-                    // 强制持久化 WebView 当前 cookie，防止 finish 后丢失
-                    CookieManager.getInstance().flush()
-                    viewModel.source?.let {
-                        loadUrl(it)
-                    }
-                }
+    /** 确定：强制持久化 cookie 并重新加载页面（原 onCompatOptionsItemSelected menu_ok 逻辑） */
+    private fun checkHostCookie() {
+        if (!checking) {
+            checking = true
+            binding.root.snackbar(R.string.check_host_cookie)
+            // 强制持久化 WebView 当前 cookie，防止 finish 后丢失
+            CookieManager.getInstance().flush()
+            viewModel.source?.let {
+                loadUrl(it)
             }
         }
     }

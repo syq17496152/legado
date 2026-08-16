@@ -62,8 +62,11 @@ abstract class BaseReadBookActivity :
 
     override val binding by viewBinding(ActivityBookReadBinding::inflate)
     override val viewModel by viewModels<ReadBookViewModel>()
+    // S5：菜单覆盖层可见性（ReadBookActivity 覆写为 Compose 菜单层状态）
+    protected open val menuOverlayVisible: Boolean
+        get() = binding.readMenu.isVisible
     protected val menuLayoutIsVisible
-        get() = bottomDialog > 0 || binding.readMenu.isVisible || binding.searchMenu.bottomMenuVisible
+        get() = bottomDialog > 0 || menuOverlayVisible || binding.searchMenu.bottomMenuVisible
 
     var bottomDialog = 0
         set(value) {

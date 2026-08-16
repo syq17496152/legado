@@ -1,5 +1,6 @@
 package io.legado.app.ui.debug
 
+// 豁免登记: 调试工具页私有卡片组件，见 audit-v10-consistency.md §3.1 E8
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,8 +21,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.legado.app.R
+import io.legado.app.ui.widget.components.AppShapes
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
@@ -80,7 +81,7 @@ fun PingTestScreen(
                 title = {
                     Text(
                         text = stringResource(R.string.debug_ping_test),
-                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp, fontWeight = FontWeight.Medium)
+                        style = MaterialTheme.typography.titleLarge
                     )
                 },
                 navigationIcon = {
@@ -126,7 +127,7 @@ fun PingTestScreen(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
                 ),
-                shape = RoundedCornerShape(12.dp)
+                shape = AppShapes.Button
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
@@ -316,7 +317,7 @@ fun PingTestScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp)),
+                                .clip(AppShapes.Tiny),
                         )
                         
                         Spacer(modifier = Modifier.height(8.dp))
@@ -339,7 +340,7 @@ fun PingTestScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = AppShapes.Button
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
@@ -383,7 +384,7 @@ fun PingTestScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = AppShapes.Button
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
@@ -429,7 +430,7 @@ fun PingTestScreen(
                                     icon = Icons.Default.CheckCircle,
                                     label = stringResource(R.string.debug_ping_success),
                                     value = successCount.toString(),
-                                    color = Color(0xFF4CAF50)
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                                 StatChip(
                                     icon = Icons.Default.Cancel,
@@ -457,7 +458,7 @@ fun PingTestScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = AppShapes.Button
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
@@ -497,8 +498,8 @@ fun PingTestScreen(
                                 label = stringResource(R.string.debug_ping_loss_rate),
                                 value = String.format("%.1f%%", stats.lossRate * 100),
                                 valueColor = when {
-                                    stats.lossRate == 0f -> Color(0xFF4CAF50)
-                                    stats.lossRate < 0.3f -> Color(0xFFFF9800)
+                                    stats.lossRate == 0f -> MaterialTheme.colorScheme.primary
+                                    stats.lossRate < 0.3f -> MaterialTheme.colorScheme.tertiary
                                     else -> MaterialTheme.colorScheme.error
                                 }
                             )
@@ -537,7 +538,7 @@ fun PingTestScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                     ),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = AppShapes.Button
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
@@ -577,8 +578,8 @@ fun PingTestScreen(
 @Composable
 private fun PingResultItem(result: PingResult) {
     Surface(
-        color = if (result.success) Color(0xFF4CAF50).copy(alpha = 0.1f) else MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
-        shape = RoundedCornerShape(8.dp)
+        color = if (result.success) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
+        shape = AppShapes.Chip
     ) {
         Row(
             modifier = Modifier
@@ -591,7 +592,7 @@ private fun PingResultItem(result: PingResult) {
                 Icon(
                     imageVector = if (result.success) Icons.Default.CheckCircle else Icons.Default.Cancel,
                     contentDescription = null,
-                    tint = if (result.success) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                    tint = if (result.success) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
@@ -619,6 +620,7 @@ private fun StatChip(
 ) {
     Surface(
         color = color.copy(alpha = 0.1f),
+        // 已知上限:16dp 全角 pill（StatChip）无对应 token，AppShapes.SheetTop 仅顶部圆角语义不符，暂保留硬编码
         shape = RoundedCornerShape(16.dp)
     ) {
         Row(

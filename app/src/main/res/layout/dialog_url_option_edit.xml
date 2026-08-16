@@ -26,7 +26,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/url_option"
-                android:textSize="18sp"
+                android:textSize="@dimen/text_18sp"
                 android:textStyle="bold" />
 
             <Space

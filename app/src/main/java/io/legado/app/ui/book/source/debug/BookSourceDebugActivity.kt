@@ -2,11 +2,22 @@ package io.legado.app.ui.book.source.debug
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import androidx.activity.viewModels
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Help
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -17,6 +28,11 @@ import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.qrcode.QrCodeResult
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.launch
@@ -35,18 +51,19 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
     override val viewModel by viewModels<BookSourceDebugModel>()
 
     private val adapter by lazy { BookSourceDebugAdapter(this) }
-    private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
+    private var composeSearchQuery by mutableStateOf("")
+    private var menuExpanded by mutableStateOf(false)
     private val qrCodeResult = registerForActivityResult(QrCodeResult()) {
         it?.let {
+            composeSearchQuery = it
             startSearch(it)
         }
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initComposeTopBar()
         initRecyclerView()
-        initSearchView()
+        openOrCloseHelp(true)
         viewModel.init(intent.getStringExtra("key")) {
             initHelpView()
         }
@@ -60,33 +77,93 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
         }
     }
 
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                Column {
+                    GlassTopAppBar(
+                        title = getString(R.string.debug_source),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = {
+                            // 扫码
+                            IconButton(onClick = { qrCodeResult.launch() }) {
+                                Icon(
+                                    Icons.Default.QrCodeScanner,
+                                    contentDescription = getString(R.string.scan_qr_code)
+                                )
+                            }
+                            // 更多菜单
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = null)
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = buildMenuActions()
+                                )
+                            }
+                        }
+                    )
+                    SettingsSearchBar(
+                        query = composeSearchQuery,
+                        onQueryChange = { composeSearchQuery = it },
+                        placeholder = getString(R.string.search_book_key),
+                        onSearch = { startSearch(composeSearchQuery) }
+                    )
+                }
+            }
+        }
+    }
+
+    private fun buildMenuActions(): List<MenuAction> {
+        return listOf(
+            MenuAction(
+                Icons.Default.Code,
+                getString(R.string.search_src),
+                onClick = { showDialogFragment(TextDialog("html", viewModel.searchSrc)) }
+            ),
+            MenuAction(
+                Icons.Default.Code,
+                getString(R.string.boo_src),
+                onClick = { showDialogFragment(TextDialog("html", viewModel.bookSrc)) }
+            ),
+            MenuAction(
+                Icons.Default.Code,
+                getString(R.string.toc_src),
+                onClick = { showDialogFragment(TextDialog("html", viewModel.tocSrc)) }
+            ),
+            MenuAction(
+                Icons.Default.Code,
+                getString(R.string.content_src),
+                onClick = { showDialogFragment(TextDialog("html", viewModel.contentSrc)) }
+            ),
+            MenuAction(
+                Icons.Default.Refresh,
+                getString(R.string.refresh_explore),
+                onClick = {
+                    lifecycleScope.launch {
+                        viewModel.bookSource?.clearExploreKindsCache()
+                        adapter.clearItems()
+                        openOrCloseHelp(true)
+                        initExploreKinds()
+                    }
+                }
+            ),
+            MenuAction(
+                Icons.Default.Help,
+                getString(R.string.help),
+                onClick = { showHelp("debugHelp") }
+            )
+        )
+    }
+
     private fun initRecyclerView() {
         binding.recyclerView.setEdgeEffectColor(primaryColor)
         binding.recyclerView.adapter = adapter
         binding.recyclerView.applyNavigationBarPadding()
         binding.rotateLoading.loadingColor = accentColor
-    }
-
-    private fun initSearchView() {
-        searchView.onActionViewExpanded()
-        searchView.isSubmitButtonEnabled = true
-        searchView.queryHint = getString(R.string.search_book_key)
-        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                searchView.clearFocus()
-                openOrCloseHelp(false)
-                startSearch(query ?: "我的")
-                return true
-            }
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                return false
-            }
-        })
-        searchView.setOnQueryTextFocusChangeListener { _, hasFocus ->
-            openOrCloseHelp(hasFocus)
-        }
-        openOrCloseHelp(true)
     }
 
     @SuppressLint("SetTextI18n")
@@ -97,19 +174,22 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
             }
         }
         binding.textMy.onClick {
-            searchView.setQuery(binding.textMy.text, true)
+            composeSearchQuery = binding.textMy.text.toString()
+            startSearch(composeSearchQuery)
         }
         binding.textXt.onClick {
-            searchView.setQuery(binding.textXt.text, true)
+            composeSearchQuery = binding.textXt.text.toString()
+            startSearch(composeSearchQuery)
         }
         binding.textFx.onClick {
             if (!binding.textFx.text.startsWith("ERROR:")) {
-                searchView.setQuery(binding.textFx.text, true)
+                composeSearchQuery = binding.textFx.text.toString()
+                startSearch(composeSearchQuery)
             }
         }
         binding.textInfo.onClick {
-            if (!searchView.query.isNullOrBlank()) {
-                searchView.setQuery(searchView.query, true)
+            if (!composeSearchQuery.isNullOrBlank()) {
+                startSearch(composeSearchQuery)
             }
         }
         binding.textToc.onClick {
@@ -132,7 +212,7 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
                 if (it.title.startsWith("ERROR:")) {
                     adapter.addItem("获取发现出错\n${it.url}")
                     openOrCloseHelp(false)
-                    searchView.clearFocus()
+                    composeSearchQuery = ""
                     return@launch
                 }
             }
@@ -142,7 +222,8 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
                     selector("选择发现", exploreKindTitles) { _, index ->
                         val explore = exploreKinds[index]
                         binding.textFx.text = "${explore.title}::${explore.url}"
-                        searchView.setQuery(binding.textFx.text, true)
+                        composeSearchQuery = binding.textFx.text.toString()
+                        startSearch(composeSearchQuery)
                     }
                 }
             }
@@ -150,60 +231,30 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
     }
 
     private fun prefixAutoComplete(prefix: String) {
-        val query = searchView.query
-        if (query.isNullOrBlank() || query.length <= 2) {
-            searchView.setQuery(prefix, false)
+        if (composeSearchQuery.isNullOrBlank() || composeSearchQuery.length <= 2) {
+            composeSearchQuery = prefix
         } else {
-            if (!query.startsWith(prefix)) {
-                searchView.setQuery("$prefix$query", true)
+            if (!composeSearchQuery.startsWith(prefix)) {
+                composeSearchQuery = "$prefix$composeSearchQuery"
+                startSearch(composeSearchQuery)
             } else {
-                searchView.setQuery(query, true)
+                startSearch(composeSearchQuery)
             }
         }
     }
 
-    /**
-     * 打开关闭历史界面
-     */
     private fun openOrCloseHelp(open: Boolean) {
-        if (open) {
-            binding.help.visibility = View.VISIBLE
-        } else {
-            binding.help.visibility = View.GONE
-        }
+        binding.help.visibility = if (open) View.VISIBLE else View.GONE
     }
 
     private fun startSearch(key: String) {
+        openOrCloseHelp(false)
         adapter.clearItems()
         viewModel.startDebug(key, {
             binding.rotateLoading.visible()
         }, {
             toastOnUi("未获取到书源")
         })
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.book_source_debug, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_scan -> qrCodeResult.launch()
-            R.id.menu_search_src -> showDialogFragment(TextDialog("html", viewModel.searchSrc))
-            R.id.menu_book_src -> showDialogFragment(TextDialog("html", viewModel.bookSrc))
-            R.id.menu_toc_src -> showDialogFragment(TextDialog("html", viewModel.tocSrc))
-            R.id.menu_content_src -> showDialogFragment(TextDialog("html", viewModel.contentSrc))
-            R.id.menu_refresh_explore -> lifecycleScope.launch {
-                viewModel.bookSource?.clearExploreKindsCache()
-                adapter.clearItems()
-                openOrCloseHelp(true)
-                initExploreKinds()
-            }
-
-            R.id.menu_help -> showHelp("debugHelp")
-        }
-        return super.onCompatOptionsItemSelected(item)
     }
 
 }

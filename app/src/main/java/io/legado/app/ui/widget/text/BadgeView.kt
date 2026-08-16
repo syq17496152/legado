@@ -89,7 +89,7 @@ class BadgeView @JvmOverloads constructor(
         }
 
         //setTypeface(Typeface.DEFAULT_BOLD);
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+        setTextSize(TypedValue.COMPLEX_UNIT_PX, resources.getDimension(R.dimen.text_label_small))
         setPadding(dip2Px(5f), dip2Px(1f), dip2Px(5f), dip2Px(1f))
         radius = radios.toFloat()
 

@@ -2,10 +2,19 @@ package io.legado.app.ui.rss.source.debug
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -14,6 +23,11 @@ import io.legado.app.help.source.sortUrls
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.setEdgeEffectColor
@@ -31,13 +45,13 @@ class RssSourceDebugActivity : VMBaseActivity<ActivityRssSourceDebugBinding, Rss
     override val viewModel by viewModels<RssSourceDebugModel>()
 
     private val adapter by lazy { RssSourceDebugAdapter(this) }
-    private val searchView: androidx.appcompat.widget.SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
+    private var composeSearchQuery by mutableStateOf("")
+    private var menuExpanded by mutableStateOf(false)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initComposeTopBar()
         initRecyclerView()
-        initSearchView()
+        openOrCloseHelp(true)
         viewModel.initData(intent.getStringExtra("key")) {
             initHelpView()
         }
@@ -51,17 +65,52 @@ class RssSourceDebugActivity : VMBaseActivity<ActivityRssSourceDebugBinding, Rss
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.rss_source_debug, menu)
-        return super.onCompatCreateOptionsMenu(menu)
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                Column {
+                    GlassTopAppBar(
+                        title = getString(R.string.debug_source),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = {
+                            // 更多菜单
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = null)
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = buildMenuActions()
+                                )
+                            }
+                        }
+                    )
+                    SettingsSearchBar(
+                        query = composeSearchQuery,
+                        onQueryChange = { composeSearchQuery = it },
+                        placeholder = getString(R.string.rss_debug_search_hint),
+                        onSearch = { startSearch(composeSearchQuery) }
+                    )
+                }
+            }
+        }
     }
 
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_list_src -> showDialogFragment(TextDialog("Html", viewModel.listSrc))
-            R.id.menu_content_src -> showDialogFragment(TextDialog("Html", viewModel.contentSrc))
-        }
-        return super.onCompatOptionsItemSelected(item)
+    private fun buildMenuActions(): List<MenuAction> {
+        return listOf(
+            MenuAction(
+                Icons.Default.Code,
+                getString(R.string.list_src),
+                onClick = { showDialogFragment(TextDialog("Html", viewModel.listSrc)) }
+            ),
+            MenuAction(
+                Icons.Default.Code,
+                getString(R.string.content_src),
+                onClick = { showDialogFragment(TextDialog("Html", viewModel.contentSrc)) }
+            )
+        )
     }
 
     private fun initRecyclerView() {
@@ -71,42 +120,25 @@ class RssSourceDebugActivity : VMBaseActivity<ActivityRssSourceDebugBinding, Rss
         binding.rotateLoading.loadingColor = accentColor
     }
 
-    private fun initSearchView() {
-        openOrCloseHelp(true)
-        searchView.onActionViewExpanded()
-        searchView.isSubmitButtonEnabled = true
-        searchView.setOnQueryTextListener(object : androidx.appcompat.widget.SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                searchView.clearFocus()
-                openOrCloseHelp(false)
-                startSearch(query ?: "我的")
-                return true
-            }
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                return false
-            }
-        })
-        searchView.setOnQueryTextFocusChangeListener { _, hasFocus ->
-            openOrCloseHelp(hasFocus)
-        }
-    }
     @SuppressLint("SetTextI18n")
     private fun initHelpView() {
         binding.textMy.onClick {
-            searchView.setQuery(binding.textMy.text, true)
+            composeSearchQuery = binding.textMy.text.toString()
+            startSearch(composeSearchQuery)
         }
         binding.textXt.onClick {
-            searchView.setQuery(binding.textXt.text, true)
+            composeSearchQuery = binding.textXt.text.toString()
+            startSearch(composeSearchQuery)
         }
         binding.textFl.onClick {
             if (!binding.textFl.text.startsWith("ERROR:")) {
-                searchView.setQuery(binding.textFl.text, true)
+                composeSearchQuery = binding.textFl.text.toString()
+                startSearch(composeSearchQuery)
             }
         }
         binding.textContent.onClick {
-            if (!searchView.query.isNullOrBlank()) {
-                searchView.setQuery(searchView.query, true)
+            if (!composeSearchQuery.isNullOrBlank()) {
+                startSearch(composeSearchQuery)
             }
         }
         initSortKinds()
@@ -120,19 +152,19 @@ class RssSourceDebugActivity : VMBaseActivity<ActivityRssSourceDebugBinding, Rss
             sortKinds?.firstOrNull()?.let {
                 binding.textFl.text = "${it.first}::${it.second}"
                 if (it.first.startsWith("ERROR:")) {
-                    adapter.addItem("获取发现出错\n${it.second}")
+                    adapter.addItem("${getString(R.string.get_explore_error)}\n${it.second}")
                     openOrCloseHelp(false)
-                    searchView.clearFocus()
                     return@launch
                 }
             }
             @Suppress("USELESS_ELVIS")
             sortKinds?.map { it.first ?: "" }?.let { sortKindTitles ->
                 binding.textFl.onLongClick {
-                    selector("选择分类", sortKindTitles) { _, index ->
+                    selector(getString(R.string.select_kind), sortKindTitles) { _, index ->
                         val sort = sortKinds[index]
                         binding.textFl.text = "${sort.first}::${sort.second}"
-                        searchView.setQuery(binding.textFl.text, true)
+                        composeSearchQuery = binding.textFl.text.toString()
+                        startSearch(composeSearchQuery)
                     }
                 }
             }
@@ -143,18 +175,17 @@ class RssSourceDebugActivity : VMBaseActivity<ActivityRssSourceDebugBinding, Rss
      * 打开关闭辅助面板
      */
     private fun openOrCloseHelp(open: Boolean) {
-        if (open) {
-            binding.help.visibility = View.VISIBLE
-        } else {
-            binding.help.visibility = View.GONE
-        }
+        binding.help.visibility = if (open) View.VISIBLE else View.GONE
     }
+
     private fun startSearch(key: String) {
+        openOrCloseHelp(false)
         adapter.clearItems()
-        viewModel.startDebug(key, {
+        val searchKey = key.ifBlank { getString(R.string.rss_debug_my) }
+        viewModel.startDebug(searchKey, {
             binding.rotateLoading.visible()
         }, {
-            toastOnUi("未获取到书源")
+            toastOnUi(getString(R.string.no_rss_source))
         })
     }
 }

@@ -2,6 +2,9 @@ package io.legado.app.ui.rss.search
 
 import android.graphics.drawable.Drawable
 import android.os.Bundle
+import androidx.activity.compose.setContent
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.bumptech.glide.load.engine.DiskCacheStrategy
@@ -21,11 +24,11 @@ import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.rss.read.ReadRss
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyNavigationBarMargin
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.gone
 import io.legado.app.utils.visible
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -68,6 +71,7 @@ class RssArticleInfoActivity :
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         applyThemeColors()
+        initComposeTopBar()
         binding.rvSourceList.layoutManager = LinearLayoutManager(this)
         binding.rvSourceList.adapter = sourceAdapter
         binding.rvSourceList.applyNavigationBarMargin()
@@ -103,8 +107,7 @@ class RssArticleInfoActivity :
      * 阶段11.4 问题1 修复：集中应用动态主题色（整体方案：详情页所有元素跟随主题变动）
      *
      * 参考书源 BookInfoActivity 的主题色设置：
-     * - TitleBar 背景色 = primaryColor
-     * - TitleBar tint = accentColor
+     * - 顶栏（GlassTopAppBar）背景色 = surface（由 LegadoTheme 管理，跟随应用主题）
      * - 根布局/ArcView/CardView 背景色 = backgroundColor
      * - 底部操作栏背景色 = bottomBackground（与书源 flAction 一致）
      * - 底部"返回"按钮文字色 = getPrimaryTextColor(根据 bottomBackground 明暗)
@@ -116,9 +119,7 @@ class RssArticleInfoActivity :
      * 确保初始化和主题切换后都能正确显示。
      */
     private fun applyThemeColors() {
-        binding.titleBar.setBackgroundColor(primaryColor)
         binding.root.setBackgroundColor(backgroundColor)
-        binding.titleBar.applyTint(accentColor)
         binding.arcView.setBgColor(backgroundColor)
         // 阶段11.4 问题1 补全：CardView 背景色跟随主题（原默认白色，暗色模式显白块）
         binding.ivCoverC.setCardBackgroundColor(backgroundColor)
@@ -133,6 +134,22 @@ class RssArticleInfoActivity :
         // 阶段11.4 问题1 整体方案：多源列表 Adapter 选中色 + iv_checked tint 响应主题切换
         // 注意：onActivityCreated 阶段调用时 itemCount=0 是 no-op；onConfigurationChanged 阶段触发重新绑定
         sourceAdapter.updateThemeColors()
+    }
+
+    /**
+     * ui-redesign-m3 12.6z 壳层化：顶栏 Compose 化（GlassTopAppBar），
+     * 背景/前景色由 LegadoTheme 统一管理，跟随应用主题。
+     */
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = getString(R.string.rss_article_info_title),
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = { finish() }
+                )
+            }
+        }
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {

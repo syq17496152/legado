@@ -21,7 +21,7 @@
             android:layout_height="wrap_content"
             android:text="@string/style_name"
             android:textColor="@color/primaryText"
-            android:textSize="16sp" />
+            android:textSize="@dimen/text_16sp" />
 
         <TextView
             android:id="@+id/tv_name"
@@ -103,7 +103,7 @@
             android:padding="6dp"
             android:singleLine="true"
             android:text="@string/text_color"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_14sp"
             app:isBottomBackground="true"
             tools:ignore="HardcodedText" />
 
@@ -120,7 +120,7 @@
             android:padding="6dp"
             android:singleLine="true"
             android:text="@string/bg_color"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_14sp"
             app:isBottomBackground="true"
             tools:ignore="HardcodedText" />
 
@@ -137,7 +137,7 @@
             android:padding="6dp"
             android:singleLine="true"
             android:text="@string/text_accent_color"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_14sp"
             app:isBottomBackground="true"
             tools:ignore="HardcodedText" />
 

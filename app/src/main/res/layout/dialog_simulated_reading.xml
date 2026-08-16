@@ -22,7 +22,7 @@
             android:layout_marginRight="2dp"
             android:text="@string/switch_on"
             android:textColor="@color/primaryText"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_16sp"
             tools:ignore="RtlHardcoded"
             android:minWidth="88dp" />
 
@@ -67,7 +67,7 @@
             android:layout_gravity="center_vertical"
             android:text="@string/start_from"
             android:textColor="@color/primaryText"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_16sp"
             android:gravity="center_vertical"
             android:minWidth="100dp" />
 
@@ -85,7 +85,7 @@
             android:hint="Select date"
             android:layout_weight="1"
             android:clickable="true"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_16sp"
             android:layout_marginRight="68dp" />
 
         <View
@@ -115,7 +115,7 @@
                 android:layout_marginRight="2dp"
                 android:text="@string/start_chapter"
                 android:textColor="@color/primaryText"
-                android:textSize="16sp"
+                android:textSize="@dimen/text_16sp"
                 tools:ignore="RtlHardcoded" />
 
         </LinearLayout>
@@ -138,7 +138,7 @@
             android:paddingBottom="4dp"
             android:textColor="@color/primaryText"
             android:textCursorDrawable="@drawable/shape_text_cursor"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_14sp"
             tools:ignore="TouchTargetSizeCheck,TextContrastCheck" />
 
         <LinearLayout
@@ -155,7 +155,7 @@
                 android:layout_marginRight="5dp"
                 android:text="@string/daily_chapters"
                 android:textColor="@color/primaryText"
-                android:textSize="16sp" />
+                android:textSize="@dimen/text_16sp" />
 
             <EditText
                 android:id="@+id/edit_num"
@@ -175,7 +175,7 @@
                 android:paddingBottom="4dp"
                 android:textColor="@color/primaryText"
                 android:textCursorDrawable="@drawable/shape_text_cursor"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_14sp"
                 tools:ignore="TouchTargetSizeCheck,SpeakableTextPresentCheck,TextContrastCheck"
                 android:textAlignment="center" />
         </LinearLayout>

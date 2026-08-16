@@ -26,7 +26,7 @@
         android:singleLine="true"
         android:text="@string/book_source"
         android:textColor="@color/primaryText"
-        android:textSize="16sp"
+        android:textSize="@dimen/text_16sp"
         tools:ignore="RtlHardcoded,RtlSymmetry" />
 
 </LinearLayout>

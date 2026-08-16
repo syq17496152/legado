@@ -3,11 +3,17 @@ package io.legado.app.ui.autoTask
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
-import android.view.View
-import android.widget.AdapterView
 import androidx.activity.viewModels
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Help
+import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.databinding.ActivityAutoTaskEditBinding
@@ -15,6 +21,8 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.model.AutoTask
 import io.legado.app.model.AutoTaskRule
 import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.CronSchedule
 import io.legado.app.utils.GSON
 import io.legado.app.utils.sendToClip
@@ -24,19 +32,14 @@ import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 /**
- * F-P1-1 自动任务编辑页（借鉴阅读T，简化版）
- *
- * 与阅读T 版本的差异：
- * - 不使用 KeyboardToolPop（软键盘工具栏）
- * - 不使用 WebCodeDialog（代码编辑弹框）
- * - 不使用 BookSourceEditAdapter（字段列表适配器），改用 ScrollView + TextInputLayout 表单
- * - 不使用字段导航（field_nav_scroll/field_nav_group）
+ * 自动任务编辑页（S3 表单编辑页，简化版）
+ * Compose 化：S3 表单族壳层 AutoTaskEditScreen，构建/保存校验/未保存拦截/登录/复制粘贴逻辑保留 Activity
  */
 class AutoTaskEditActivity :
     VMBaseActivity<ActivityAutoTaskEditBinding, AutoTaskEditViewModel>() {
 
     companion object {
-        // F-P9-1 Cron 频率预设值
+        // Cron 频率预设值
         private const val CRON_EVERY_DAY = "0 0 * * *"
         private const val CRON_EVERY_HOUR = "0 * * * *"
 
@@ -55,102 +58,96 @@ class AutoTaskEditActivity :
     private var task: AutoTaskRule? = null
     private var originTask: AutoTaskRule? = null
 
+    // Compose 桥接状态
+    private var editState by mutableStateOf(AutoTaskEditState())
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initComposeHost()
         viewModel.initData(intent) {
             task = it
             upView(it)
         }
-        // F-P9-1 Cron 频率选择器：自定义档才显示 Cron 输入框
-        binding.spCronFrequency.onItemSelectedListener =
-            object : AdapterView.OnItemSelectedListener {
-                override fun onItemSelected(
-                    parent: AdapterView<*>?, view: View?, position: Int, id: Long
-                ) {
-                    binding.tilCron.visibility =
-                        if (position == 2) View.VISIBLE else View.GONE
-                }
+    }
 
-                override fun onNothingSelected(parent: AdapterView<*>?) {}
+    private fun initComposeHost() {
+        binding.composeHost.setContent {
+            LegadoTheme {
+                AutoTaskEditScreen(
+                    state = editState,
+                    onStateChange = { editState = it },
+                    menuActions = buildMenuActions(),
+                    onBack = { finish() }
+                )
             }
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.auto_task_edit, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        val loginUrl = binding.etLoginUrl.text?.toString()?.trim().orEmpty()
-        menu.findItem(R.id.menu_login)?.let {
-            it.isVisible = true
-            it.isEnabled = loginUrl.isNotBlank()
         }
-        return super.onMenuOpened(featureId, menu)
     }
 
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_save -> {
-                val rule = buildTask() ?: return true
-                viewModel.save(rule) {
-                    originTask = rule.copy()
-                    setResult(RESULT_OK)
-                    finish()
-                }
-            }
-            R.id.menu_debug_task -> {
-                // TODO: AutoTaskDebugActivity 尚未创建，创建后启用下面注释
+    private fun buildMenuActions(): List<MenuAction> {
+        return listOf(
+            MenuAction(Icons.Default.Save, getString(R.string.action_save)) { onSave() },
+            MenuAction(Icons.Default.BugReport, getString(R.string.debug)) {
+                // TODO: AutoTaskDebugActivity 尚未创建，创建后启用
                 toastOnUi(R.string.auto_task_debug_pending)
-                // val rule = buildTask() ?: return true
-                // viewModel.save(rule) {
-                //     originTask = rule.copy()
-                //     startActivity(AutoTaskDebugActivity.startIntent(this, rule.id))
-                // }
-            }
-            R.id.menu_login -> openLogin()
-            R.id.menu_copy_source -> sendToClip(GSON.toJson(buildTaskDraft()))
-            R.id.menu_paste_source -> viewModel.pasteSource { upView(it) }
-            R.id.menu_help -> showHelpDialog()
-        }
-        return super.onCompatOptionsItemSelected(item)
+            },
+            MenuAction(Icons.Default.Login, getString(R.string.login)) { openLogin() },
+            MenuAction(Icons.Default.ContentCopy, getString(R.string.copy_source)) {
+                sendToClip(GSON.toJson(buildTaskDraft()))
+            },
+            MenuAction(Icons.Default.ContentPaste, getString(R.string.paste_source)) {
+                viewModel.pasteSource { upView(it) }
+            },
+            MenuAction(Icons.Default.Help, getString(R.string.help)) { showHelpDialog() }
+        )
     }
 
-    private fun upView(rule: AutoTaskRule) = binding.run {
+    private fun onSave() {
+        val rule = buildTask() ?: return
+        viewModel.save(rule) {
+            originTask = rule.copy()
+            setResult(RESULT_OK)
+            finish()
+        }
+    }
+
+    private fun upView(rule: AutoTaskRule) {
         originTask = rule.copy()
-        cbEnable.isChecked = rule.enable
-        cbCookie.isChecked = rule.enabledCookieJar
-        etName.setText(rule.name)
-        // F-P9-1 根据 cron 判断频率并设置 Spinner 选中项
+        task = rule
+        // 根据 cron 判断频率并设置选中项
         val cron = rule.cron?.ifBlank { AutoTask.DEFAULT_CRON }.orEmpty()
-        etCron.setText(cron)
         val freqIndex = when (cron) {
             CRON_EVERY_DAY -> 0
             CRON_EVERY_HOUR -> 1
             else -> 2
         }
-        spCronFrequency.setSelection(freqIndex)
-        etComment.setText(rule.comment.orEmpty())
-        etScript.setText(rule.script)
-        etHeader.setText(rule.header.orEmpty())
-        etJslib.setText(rule.jsLib.orEmpty())
-        etConcurrentRate.setText(rule.concurrentRate.orEmpty())
-        etLoginUrl.setText(rule.loginUrl.orEmpty())
-        etLoginUi.setText(rule.loginUi.orEmpty())
-        etLoginCheckJs.setText(rule.loginCheckJs.orEmpty())
+        editState = AutoTaskEditState(
+            enable = rule.enable,
+            enabledCookieJar = rule.enabledCookieJar,
+            name = rule.name,
+            cronFrequency = freqIndex,
+            cron = cron,
+            comment = rule.comment.orEmpty(),
+            script = rule.script,
+            header = rule.header.orEmpty(),
+            jsLib = rule.jsLib.orEmpty(),
+            concurrentRate = rule.concurrentRate.orEmpty(),
+            loginUrl = rule.loginUrl.orEmpty(),
+            loginUi = rule.loginUi.orEmpty(),
+            loginCheckJs = rule.loginCheckJs.orEmpty()
+        )
     }
 
-    private fun buildTask(): AutoTaskRule? = binding.run {
-        val name = etName.text?.toString()?.trim().orEmpty()
+    private fun buildTask(): AutoTaskRule? {
+        val name = editState.name.trim()
         if (name.isBlank()) {
             toastOnUi(getString(R.string.auto_task_name_required))
             return null
         }
-        // F-P9-1 根据频率生成 cron
-        val cron = when (spCronFrequency.selectedItemPosition) {
+        // 根据频率生成 cron
+        val cron = when (editState.cronFrequency) {
             0 -> CRON_EVERY_DAY
             1 -> CRON_EVERY_HOUR
             else -> {
-                val customCron = etCron.text?.toString()?.trim().orEmpty()
+                val customCron = editState.cron.trim()
                     .ifBlank { AutoTask.DEFAULT_CRON }
                 if (CronSchedule.parse(customCron) == null) {
                     toastOnUi(getString(R.string.auto_task_cron_invalid))
@@ -159,7 +156,7 @@ class AutoTaskEditActivity :
                 customCron
             }
         }
-        val script = etScript.text?.toString().orEmpty()
+        val script = editState.script
         if (script.isBlank()) {
             toastOnUi(getString(R.string.auto_task_script_empty))
             return null
@@ -167,41 +164,40 @@ class AutoTaskEditActivity :
         val rule = task ?: AutoTaskRule()
         rule.name = name
         rule.cron = cron
-        rule.comment = etComment.text?.toString()?.trim()?.ifBlank { null }
+        rule.comment = editState.comment.trim().ifBlank { null }
         rule.script = script
-        rule.header = etHeader.text?.toString()?.trim()?.ifBlank { null }
-        rule.jsLib = etJslib.text?.toString()?.trim()?.ifBlank { null }
-        rule.concurrentRate = etConcurrentRate.text?.toString()?.trim()?.ifBlank { null }
-        rule.loginUrl = etLoginUrl.text?.toString()?.trim()?.ifBlank { null }
-        rule.loginUi = etLoginUi.text?.toString()?.trim()?.ifBlank { null }
-        rule.loginCheckJs = etLoginCheckJs.text?.toString()?.trim()?.ifBlank { null }
-        rule.enable = cbEnable.isChecked
-        rule.enabledCookieJar = cbCookie.isChecked
+        rule.header = editState.header.trim().ifBlank { null }
+        rule.jsLib = editState.jsLib.trim().ifBlank { null }
+        rule.concurrentRate = editState.concurrentRate.trim().ifBlank { null }
+        rule.loginUrl = editState.loginUrl.trim().ifBlank { null }
+        rule.loginUi = editState.loginUi.trim().ifBlank { null }
+        rule.loginCheckJs = editState.loginCheckJs.trim().ifBlank { null }
+        rule.enable = editState.enable
+        rule.enabledCookieJar = editState.enabledCookieJar
         task = rule
         return rule
     }
 
-    private fun buildTaskDraft(): AutoTaskRule = binding.run {
+    private fun buildTaskDraft(): AutoTaskRule {
         val base = originTask ?: task ?: AutoTaskRule()
-        base.copy(
-            name = etName.text?.toString().orEmpty(),
-            // F-P9-1 根据频率生成 cron
-            cron = when (spCronFrequency.selectedItemPosition) {
+        return base.copy(
+            name = editState.name,
+            // 根据频率生成 cron
+            cron = when (editState.cronFrequency) {
                 0 -> CRON_EVERY_DAY
                 1 -> CRON_EVERY_HOUR
-                else -> etCron.text?.toString()?.trim()?.ifBlank { AutoTask.DEFAULT_CRON }
-                    ?: AutoTask.DEFAULT_CRON
+                else -> editState.cron.trim().ifBlank { AutoTask.DEFAULT_CRON }
             },
-            comment = etComment.text?.toString()?.trim()?.ifBlank { null },
-            script = etScript.text?.toString().orEmpty(),
-            header = etHeader.text?.toString()?.trim()?.ifBlank { null },
-            jsLib = etJslib.text?.toString()?.trim()?.ifBlank { null },
-            concurrentRate = etConcurrentRate.text?.toString()?.trim()?.ifBlank { null },
-            loginUrl = etLoginUrl.text?.toString()?.trim()?.ifBlank { null },
-            loginUi = etLoginUi.text?.toString()?.trim()?.ifBlank { null },
-            loginCheckJs = etLoginCheckJs.text?.toString()?.trim()?.ifBlank { null },
-            enable = cbEnable.isChecked,
-            enabledCookieJar = cbCookie.isChecked
+            comment = editState.comment.trim().ifBlank { null },
+            script = editState.script,
+            header = editState.header.trim().ifBlank { null },
+            jsLib = editState.jsLib.trim().ifBlank { null },
+            concurrentRate = editState.concurrentRate.trim().ifBlank { null },
+            loginUrl = editState.loginUrl.trim().ifBlank { null },
+            loginUi = editState.loginUi.trim().ifBlank { null },
+            loginCheckJs = editState.loginCheckJs.trim().ifBlank { null },
+            enable = editState.enable,
+            enabledCookieJar = editState.enabledCookieJar
         )
     }
 
@@ -246,5 +242,4 @@ class AutoTaskEditActivity :
             toastOnUi(getString(R.string.auto_task_help_missing))
         }
     }
-
 }

@@ -33,7 +33,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="@color/primaryText"
-                android:textSize="14sp"
+                android:textSize="@dimen/text_14sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -42,7 +42,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="1dp"
                 android:textColor="@color/secondaryText"
-                android:textSize="11sp" />
+                android:textSize="@dimen/text_11sp" />
         </LinearLayout>
 
         <ImageView
@@ -64,7 +64,7 @@
         android:layout_marginTop="6dp"
         android:text="@string/preview"
         android:textColor="@color/secondaryText"
-        android:textSize="10sp" />
+        android:textSize="@dimen/text_10sp" />
 
     <TextView
         android:id="@+id/tv_preview"
@@ -76,6 +76,6 @@
         android:minHeight="32dp"
         android:padding="8dp"
         android:textColor="@color/primaryText"
-        android:textSize="13sp" />
+        android:textSize="@dimen/text_13sp" />
 
 </LinearLayout>

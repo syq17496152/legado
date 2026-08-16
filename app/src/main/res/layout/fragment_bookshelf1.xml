@@ -5,15 +5,13 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <!-- 书架页顶栏 Compose 化（GlassTopAppBar，跟随昼夜主题；分组 Tab 由 BookshelfScreen 内 BookGroupTabs 渲染） -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:attachToActivity="false"
-        app:contentLayout="@layout/view_tab_layout_min"
-        app:title="@string/bookshelf" />
+        android:layout_height="wrap_content" />
 
-    <androidx.viewpager.widget.ViewPager
+    <androidx.compose.ui.platform.ComposeView
         android:id="@+id/view_pager_bookshelf"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />

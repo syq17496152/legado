@@ -9,6 +9,17 @@ import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.view.setPadding
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
@@ -23,10 +34,12 @@ import io.legado.app.databinding.ItemFilletTextBinding
 import io.legado.app.databinding.ItemSourceEditBinding
 import io.legado.app.databinding.ItemSelectorSingleBinding
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.about.AppLogDialog
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.GSON
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.isAbsUrl
@@ -70,6 +83,7 @@ class SourceLoginDialog : BaseDialogFragment(R.layout.dialog_login, true),
     private var rowUiName = arrayListOf<String>()
     private var hasChange = false
     private var loginUrl: String? = null
+    private var composeMenuExpanded by mutableStateOf(false)
     private val sourceLoginJsExtensions by lazy {
         SourceLoginJsExtensions(
             activity as AppCompatActivity,
@@ -641,28 +655,70 @@ class SourceLoginDialog : BaseDialogFragment(R.layout.dialog_login, true),
 
     private fun buttonUi(source: BaseSource, rowUis: List<RowUi>?) {
         rowUiBuilder(source, rowUis, false)
-        binding.toolBar.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                R.id.menu_ok -> {
-                    oKToClose = true
-                    login(source)
-                }
+        initComposeTopBar(source)
+    }
 
-                R.id.menu_show_login_header -> alert {
-                    setTitle(R.string.login_header)
-                    source.getLoginHeader()?.let { loginHeader ->
-                        setMessage(loginHeader)
-                        positiveButton(R.string.copy_text) {
-                            appCtx.sendToClip(loginHeader)
+    private fun initComposeTopBar(source: BaseSource) {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = getString(R.string.login_source, source.getTag()),
+                    actions = {
+                        // 确定（提交登录）
+                        IconButton(onClick = {
+                            oKToClose = true
+                            login(source)
+                        }) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = getString(R.string.ok)
+                            )
+                        }
+                        // 更多菜单：查看/删除登录头、日志
+                        Box {
+                            IconButton(onClick = { composeMenuExpanded = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = null)
+                            }
+                            AppDropdownMenu(
+                                expanded = composeMenuExpanded,
+                                onDismiss = { composeMenuExpanded = false },
+                                actions = buildLoginMenuActions(source)
+                            )
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    private fun buildLoginMenuActions(source: BaseSource): List<MenuAction> {
+        return listOf(
+            MenuAction(
+                Icons.Default.Info,
+                getString(R.string.show_login_header),
+                onClick = {
+                    alert {
+                        setTitle(R.string.login_header)
+                        source.getLoginHeader()?.let { loginHeader ->
+                            setMessage(loginHeader)
+                            positiveButton(R.string.copy_text) {
+                                appCtx.sendToClip(loginHeader)
+                            }
                         }
                     }
                 }
-
-                R.id.menu_del_login_header -> source.removeLoginHeader()
-                R.id.menu_log -> showDialogFragment<AppLogDialog>()
-            }
-            return@setOnMenuItemClickListener true
-        }
+            ),
+            MenuAction(
+                Icons.Default.Delete,
+                getString(R.string.del_login_header),
+                onClick = { source.removeLoginHeader() }
+            ),
+            MenuAction(
+                Icons.Default.Info,
+                getString(R.string.log),
+                onClick = { showDialogFragment<AppLogDialog>() }
+            )
+        )
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
@@ -688,10 +744,6 @@ class SourceLoginDialog : BaseDialogFragment(R.layout.dialog_login, true),
             rowUis = loginUi(loginUiStr)
             buttonUi(source, rowUis)
         }
-        binding.toolBar.setBackgroundColor(primaryColor)
-        binding.toolBar.title = getString(R.string.login_source, source.getTag())
-        binding.toolBar.inflateMenu(R.menu.source_login)
-        binding.toolBar.menu.applyTint(requireContext())
     }
 
     private fun handleButtonClick(source: BaseSource, action: String?, name: String, isLongClick: Boolean) {

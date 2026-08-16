@@ -3,8 +3,6 @@ package io.legado.app.ui.image
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewTreeObserver
 import android.view.WindowManager
@@ -37,6 +35,24 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
 
 /**
  * 图片浏览 Activity（V4 重写：垂直画布架构）
@@ -81,6 +97,9 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
     private var currentImageUrl: String? = null
     /** 沉浸式状态（true=隐藏状态栏/导航栏/工具栏） */
     private var isImmersive = false
+
+    /** Compose 顶栏「更多」菜单展开态（L-C15 S5 改造） */
+    private var menuExpanded by mutableStateOf(false)
 
     // ==================== Phase 3.4: 智能预加载（滚动速度判断） ====================
     /** 上次滚动时间戳（用于计算滚动速度） */
@@ -150,7 +169,7 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
             level = AppLog.Level.INFO
         )
         initImmersion()
-        initTitleBar()
+        initComposeTopBar()
         initRecyclerView()
         initFullscreenViewPager()
         initRotateToolbar()
@@ -173,56 +192,63 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
     }
 
     /**
-     * 初始化标题栏：返回按钮 + 文章标题
+     * Compose 顶栏（L-C15 S5 改造）：GlassTopAppBar + 收藏/刷新图标按钮 + MoreVert 下拉菜单
      */
-    private fun initTitleBar() {
-        val title = intent.getStringExtra("title") ?: "图片浏览"
-        setSupportActionBar(binding.titleBar.toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.setDisplayShowTitleEnabled(false)
-        supportActionBar?.setHomeButtonEnabled(true)
-        binding.titleBar.title = title
-        binding.titleBar.setNavigationOnClickListener {
-            if (isHorizontalMode) {
-                exitHorizontalMode()
-            } else {
-                finish()
+    private fun initComposeTopBar() {
+        val title = intent.getStringExtra("title") ?: getString(R.string.image_browse)
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = title,
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = {
+                        if (isHorizontalMode) {
+                            exitHorizontalMode()
+                        } else {
+                            finish()
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { starCurrentArticle() }) {
+                            Icon(
+                                imageVector = Icons.Filled.Star,
+                                contentDescription = getString(R.string.favorite)
+                            )
+                        }
+                        IconButton(onClick = { refreshImages() }) {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = getString(R.string.refresh)
+                            )
+                        }
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(
+                                    imageVector = Icons.Filled.MoreVert,
+                                    contentDescription = getString(R.string.more)
+                                )
+                            }
+                            AppDropdownMenu(
+                                expanded = menuExpanded,
+                                onDismiss = { menuExpanded = false },
+                                actions = buildMenuActions()
+                            )
+                        }
+                    }
+                )
             }
         }
     }
 
     // ==================== B3-5.1: 工具栏菜单（收藏/刷新/浏览器打开/日志） ====================
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.image_gallery, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_image_star -> {
-                // 收藏当前文章
-                val article = ImagePlay.rssArticles?.getOrNull(ImagePlay.rssArticleIndex)
-                if (article != null) {
-                    showDialogFragment(RssFavoritesDialog(article))
-                } else {
-                    toastOnUi("无当前文章")
-                }
-            }
-            R.id.menu_image_refresh -> {
-                // 刷新：清 Glide 内存缓存 + 重新加载
-                AppLog.putDebugWithTag(
-                    AppLog.TAG_IMAGE_CANVAS,
-                    "menu_refresh: clear cache and reload",
-                    level = AppLog.Level.INFO
-                )
-                com.bumptech.glide.Glide.get(this).clearMemory()
-                canvasAdapter?.notifyDataSetChanged()
-                viewModel.loadInitialArticle()
-                toastOnUi("已刷新")
-            }
-            R.id.menu_image_browser_open -> {
-                // 浏览器打开原始详情页
+    private fun buildMenuActions(): List<MenuAction> {
+        val actions = mutableListOf<MenuAction>()
+        // 浏览器打开原始详情页
+        actions += MenuAction(
+            icon = Icons.Filled.OpenInBrowser,
+            title = getString(R.string.open_in_browser),
+            onClick = {
                 val article = ImagePlay.rssArticles?.getOrNull(ImagePlay.rssArticleIndex)
                 val link = article?.link
                 if (!link.isNullOrBlank()) {
@@ -231,13 +257,38 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
                     toastOnUi("无文章链接")
                 }
             }
-            R.id.menu_image_log -> {
-                // 查看日志
-                io.legado.app.ui.about.AppLogDialog()
-                    .show(supportFragmentManager, "appLogDialog")
+        )
+        // 查看日志
+        actions += MenuAction(
+            icon = Icons.Filled.Info,
+            title = getString(R.string.log),
+            onClick = {
+                io.legado.app.ui.about.AppLogDialog().show(supportFragmentManager, "appLogDialog")
             }
+        )
+        return actions
+    }
+
+    private fun starCurrentArticle() {
+        val article = ImagePlay.rssArticles?.getOrNull(ImagePlay.rssArticleIndex)
+        if (article != null) {
+            showDialogFragment(RssFavoritesDialog(article))
+        } else {
+            toastOnUi("无当前文章")
         }
-        return super.onCompatOptionsItemSelected(item)
+    }
+
+    private fun refreshImages() {
+        // 刷新：清 Glide 内存缓存 + 重新加载
+        AppLog.putDebugWithTag(
+            AppLog.TAG_IMAGE_CANVAS,
+            "menu_refresh: clear cache and reload",
+            level = AppLog.Level.INFO
+        )
+        com.bumptech.glide.Glide.get(this).clearMemory()
+        canvasAdapter?.notifyDataSetChanged()
+        viewModel.loadInitialArticle()
+        toastOnUi("已刷新")
     }
 
     /**
@@ -341,30 +392,22 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
             // BUG1 fix V2: 使用 OnGlobalLayoutListener 确保在布局完成后获取准确高度
             // V1 的 titleBar.post 在某些时机 titleBar.height=0（尚未完成 layout），导致 paddingTop 不够
             // V2 改用 OnGlobalLayoutListener 回调，此时所有 View 已完成 measure/layout
-            binding.titleBar.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+            binding.composeTopBar.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
                 override fun onGlobalLayout() {
-                    val titleBarHeight = binding.titleBar.height
-                    if (titleBarHeight <= 0) return // 高度仍为0则等待下次回调
-                    val statusBarHeight = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        windowManager.currentWindowMetrics.windowInsets
-                            .getInsets(android.view.WindowInsets.Type.statusBars()).top
-                    } else {
-                        @Suppress("DEPRECATION")
-                        val rect = android.graphics.Rect()
-                        window.decorView.getWindowVisibleDisplayFrame(rect)
-                        rect.top
-                    }
-                    val totalTopPadding = titleBarHeight + statusBarHeight
+                    val topBarHeight = binding.composeTopBar.height
+                    if (topBarHeight <= 0) return // 高度仍为0则等待下次回调
+                    // L-C15 S5 改造：Compose GlassTopAppBar 已自带状态栏 padding，无需再加 statusBarHeight
+                    val totalTopPadding = topBarHeight
                     if (totalTopPadding > 0 && paddingTop != totalTopPadding) {
                         setPadding(paddingLeft, totalTopPadding, paddingRight, paddingBottom)
                         AppLog.putDebugWithTag(
                             AppLog.TAG_IMAGE_CANVAS,
-                            "BUG1 fix V2: set paddingTop=$totalTopPadding (titleBar=$titleBarHeight + statusBar=$statusBarHeight)",
+                            "BUG1 fix V2: set paddingTop=$totalTopPadding (topBar=$topBarHeight)",
                             level = AppLog.Level.INFO
                         )
                     }
                     // 只需执行一次，移除监听
-                    binding.titleBar.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                    binding.composeTopBar.viewTreeObserver.removeOnGlobalLayoutListener(this)
                 }
             })
             layoutManager = LinearLayoutManager(this@ImageGalleryActivity)
@@ -664,12 +707,12 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
             controller.hide(android.view.WindowInsets.Type.systemBars())
             controller.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            binding.titleBar.visibility = View.GONE
+            binding.composeTopBar.visibility = View.GONE
             binding.layoutRotateToolbar.visibility = View.GONE
             binding.tvPageIndex.visibility = View.GONE
         } else {
             controller.show(android.view.WindowInsets.Type.systemBars())
-            binding.titleBar.visibility = View.VISIBLE
+            binding.composeTopBar.visibility = View.VISIBLE
             if (isHorizontalMode) {
                 binding.layoutRotateToolbar.visibility = View.VISIBLE
                 updatePageIndex(binding.viewPagerFullscreen.currentItem)

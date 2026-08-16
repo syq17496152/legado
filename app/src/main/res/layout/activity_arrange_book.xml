@@ -5,14 +5,13 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <!-- L-B8 书架管理页：顶栏 Compose 化（GlassTopAppBar + 搜索弹窗 + 菜单下沉 AppDropdownMenu），
+         列表 + 批量栏 View 内核保留（AD-20 内核桥接） -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:contentInsetStartWithNavigation="0dp"
-        app:contentLayout="@layout/view_search"
-        app:layout_constraintTop_toTopOf="parent"
-        app:title="@string/bookshelf_management" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <io.legado.app.ui.widget.recycler.scroller.FastScrollRecyclerView
         android:id="@+id/recycler_view"
@@ -20,7 +19,7 @@
         android:layout_height="0dp"
         android:scrollbars="none"
         app:layout_constraintBottom_toTopOf="@id/select_action_bar"
-        app:layout_constraintTop_toBottomOf="@id/title_bar" />
+        app:layout_constraintTop_toBottomOf="@id/compose_top_bar" />
 
     <io.legado.app.ui.widget.SelectActionBar
         android:id="@+id/select_action_bar"

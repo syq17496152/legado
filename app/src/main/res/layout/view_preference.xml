@@ -33,7 +33,7 @@
         <TextView
             android:id="@+id/preference_title"
             android:singleLine="true"
-            android:textSize="16sp"
+            android:textSize="@dimen/text_16sp"
             android:text="@string/title"
             android:textColor="@color/primaryText"
             android:layout_width="match_parent"
@@ -41,7 +41,7 @@
 
         <TextView
             android:id="@+id/preference_desc"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_14sp"
             android:textColor="@color/tv_text_summary"
             android:text="@string/default1"
             android:layout_width="match_parent"

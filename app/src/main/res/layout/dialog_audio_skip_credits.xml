@@ -15,7 +15,7 @@
             android:layout_height="wrap_content"
             android:paddingBottom="8dp"
             android:text="@string/skip_book_credits"
-            android:textSize="18sp" />
+            android:textSize="@dimen/text_18sp" />
 
         <io.legado.app.ui.widget.DetailSeekBar
             android:id="@+id/open_credits"

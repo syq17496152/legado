@@ -7,13 +7,12 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <!-- L-C4 替换规则编辑页：顶栏 Compose 化（GlassTopAppBar + 菜单下沉 AppDropdownMenu），
+         字段区 View 内核保留（EditText 行内编辑 + KeyboardToolPop + 正则帮助），底部保存栏 Compose 化（S3 骨架范式） -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:contentInsetStartWithNavigation="0dp"
-        app:displayHomeAsUp="true"
-        app:title="@string/replace_rule_edit" />
+        android:layout_height="wrap_content" />
 
     <io.legado.app.ui.widget.NoChildScrollNestedScrollView
         android:layout_width="match_parent"
@@ -167,5 +166,10 @@
 
         </LinearLayout>
     </io.legado.app.ui.widget.NoChildScrollNestedScrollView>
+
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_bottom_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
 
 </LinearLayout>

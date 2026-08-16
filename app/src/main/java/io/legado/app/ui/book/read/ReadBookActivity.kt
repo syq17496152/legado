@@ -12,10 +12,27 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowManager
 import androidx.activity.addCallback
+import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.PopupMenu
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Text
 import androidx.core.view.get
 import androidx.core.view.size
 import androidx.lifecycle.lifecycleScope
@@ -34,6 +51,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.Bookmark
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.IntentData
@@ -57,6 +75,8 @@ import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor
+import io.legado.app.lib.theme.bottomBackground
+import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.model.analyzeRule.AnalyzeRule
@@ -106,7 +126,20 @@ import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
 import io.legado.app.ui.widget.PopupAction
 import io.legado.app.ui.widget.dialog.PhotoDialog
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppModalBottomSheet
+import io.legado.app.ui.widget.components.BookTocBookmarkSheet
+import io.legado.app.ui.widget.components.MenuLayer
+import io.legado.app.ui.widget.components.MenuLayerAction
+import io.legado.app.ui.widget.components.MenuLayerState
+import io.legado.app.ui.widget.components.ReaderMenuSheet
+import io.legado.app.ui.widget.components.ReaderMenuSheetAction
+import io.legado.app.ui.widget.components.ReaderMenuSheetState
+import io.legado.app.help.config.ThemeConfig
+import io.legado.app.utils.putPrefBoolean
+import kotlinx.coroutines.flow.MutableStateFlow
 import io.legado.app.utils.ACache
+import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.Debounce
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.NetworkUtils
@@ -141,6 +174,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import com.script.rhino.runScriptWithContext
@@ -173,6 +207,16 @@ class ReadBookActivity : BaseReadBookActivity(),
                 viewModel.openChapter(it[0] as Int, it[1] as Int)
             }
         }
+    // Phase4 阅读浮层 Sheet 化：目录/书签 Compose 浮层显隐状态（S5 阶段2 收敛到 activeSheet 单态；保留 TocActivity 全功能入口）
+    private var tocChapterTitles: List<String> = emptyList()
+    private var tocBookmarkTitles: List<String> = emptyList()
+    // S5 阅读器浮层（AD-03）：Compose 菜单层 UI 状态单源（直接替换 read_menu）
+    val readerUiState = ReaderUiStateHolder()
+    private val menuLayerState = MutableStateFlow(MenuLayerState())
+    private val readerMenuState = MutableStateFlow(ReaderMenuSheetState())
+    // S5：菜单覆盖层可见性（覆写 Base，让系统栏/自动翻页感知 Compose 菜单层状态）
+    override val menuOverlayVisible: Boolean
+        get() = readerUiState.state.value.menuVisible
     private val sourceEditActivity =
         registerForActivityResult(StartActivityContract(BookSourceEditActivity::class.java)) {
             if (it.resultCode == RESULT_OK) {
@@ -279,6 +323,14 @@ class ReadBookActivity : BaseReadBookActivity(),
         upScreenTimeOut()
         ReadBook.register(this)
         onBackPressedDispatcher.addCallback(this) {
+            // S5 阶段4：Back 优先级链（弹层→搜索→自动翻页→菜单路由→退出阅读，R6）
+            // 1) 弹层单态（activeSheet）最优先关闭
+            if (readerUiState.state.value.activeSheet != null) {
+                readerUiState.dismissSheet()
+                binding.composeSheetHost.invisible()
+                return@addCallback
+            }
+            // 2) 全文搜索层
             if (isShowingSearchResult) {
                 exitSearchMenu()
                 restoreLastBookProcess()
@@ -294,19 +346,27 @@ class ReadBookActivity : BaseReadBookActivity(),
                 toastOnUi(R.string.read_aloud_pause)
                 return@addCallback
             }
+            // 3) 自动翻页（菜单打开时已 pause，此处 stop 退出自动翻页态）
             if (isAutoPage) {
                 autoPageStop()
+                return@addCallback
+            }
+            // 4) 菜单路由：收起 Compose 菜单层
+            if (readerUiState.state.value.menuVisible) {
+                hideMenu()
                 return@addCallback
             }
             if (getPrefBoolean("disableReturnKey") && !menuLayoutIsVisible) {
                 return@addCallback
             }
+            // 5) 退出阅读
             finish()
         }
     }
 
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
+        setupTocSheet()
         viewModel.initReadBookConfig(intent)
         Looper.myQueue().addIdleHandler {
             viewModel.initData(intent)
@@ -470,7 +530,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         when (item.itemId) {
             R.id.menu_change_source,
             R.id.menu_book_change_source -> {
-                binding.readMenu.runMenuOut()
+                hideMenu()
                 ReadBook.book?.let {
                     showDialogFragment(ChangeBookSourceDialog(it.name, it.author))
                 }
@@ -482,7 +542,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                     appDb.bookChapterDao.getChapter(book.bookUrl, ReadBook.durChapterIndex)
                         ?: return@launch
                 withContext(Main) {
-                    binding.readMenu.runMenuOut()
+                    hideMenu()
                     showDialogFragment(
                         ChangeChapterSourceDialog(book.name, book.author, chapter.index, chapter.title)
                     )
@@ -663,12 +723,12 @@ class ReadBookActivity : BaseReadBookActivity(),
         val isDown = action == 0
 
         if (keyCode == KeyEvent.KEYCODE_MENU) {
-            if (isDown && !binding.readMenu.canShowMenu) {
-                binding.readMenu.runMenuIn()
+            val menuVisible = readerUiState.state.value.menuVisible
+            if (isDown && !menuVisible) {
+                showMenuBar()
                 return true
             }
-            if (!isDown && !binding.readMenu.canShowMenu) {
-                binding.readMenu.canShowMenu = true
+            if (!isDown && !menuVisible) {
                 return true
             }
         }
@@ -1002,6 +1062,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         handler.post {
             upMenu()
             binding.readMenu.upBookView()
+            updateMenuLayerState()
         }
     }
 
@@ -1093,13 +1154,28 @@ class ReadBookActivity : BaseReadBookActivity(),
             else /* chapter */ -> ReadBook.durChapterIndex
         }
         binding.readMenu.setSeekPage(progress)
+        updateMenuLayerState()
     }
 
     /**
      * 显示菜单
      */
     override fun showMenuBar() {
-        binding.readMenu.runMenuIn()
+        binding.composeSheetHost.visible()
+        onMenuShow()
+        updateMenuLayerState()
+        readerUiState.showMenu()
+    }
+
+    /**
+     * S5：收起 Compose 菜单层（同步暂停/恢复自动翻页，替代原 read_menu.runMenuOut）
+     */
+    private fun hideMenu() {
+        onMenuHide()
+        readerUiState.hideMenu()
+        if (readerUiState.state.value.activeSheet == null) {
+            binding.composeSheetHost.invisible()
+        }
     }
 
     override val oldBook: Book?
@@ -1134,7 +1210,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             BaseReadAloudService.isRun -> showReadAloudDialog()
             isAutoPage -> showDialogFragment<AutoReadDialog>()
             isShowingSearchResult -> binding.searchMenu.runMenuIn()
-            else -> binding.readMenu.runMenuIn()
+            else -> showMenuBar()
         }
     }
 
@@ -1197,9 +1273,538 @@ class ReadBookActivity : BaseReadBookActivity(),
      * 打开目录
      */
     override fun openChapterList() {
-        ReadBook.book?.let {
-            tocActivity.launch(it.bookUrl)
+        ReadBook.book?.let { book ->
+            // Phase4：优先展示 Compose 目录/书签浮层做快速跳转；「完整目录」按钮仍启动 TocActivity 保留全功能
+            loadTocSheetData(book)
+            readerUiState.showSheet(ReadBookSheet.Toc)
+            binding.composeSheetHost.visible()
         }
+    }
+
+    /**
+     * Phase4：加载浮层所需的章节标题与书签标题数据
+     */
+    private fun loadTocSheetData(book: Book) {
+        lifecycleScope.launch(IO) {
+            val chapters = appDb.bookChapterDao.getChapterList(book.bookUrl)
+            val titles = chapters.map { it.title }
+            val bookmarks = appDb.bookmarkDao.getByBook(book.name, book.author)
+            val bookmarkTitles = bookmarks.map {
+                (if (it.chapterName.isBlank()) "" else it.chapterName + " ") + it.bookText
+            }
+            withContext(Main) {
+                tocChapterTitles = titles
+                tocBookmarkTitles = bookmarkTitles
+            }
+        }
+    }
+
+    /**
+     * Phase4：关闭 Compose 目录/书签浮层
+     */
+    private fun dismissTocSheet() {
+        readerUiState.dismissSheet(ReadBookSheet.Toc)
+        binding.composeSheetHost.invisible()
+    }
+
+    /**
+     * S5 阶段3：打开阅读设置 Sheet（ReaderMenu）
+     */
+    private fun showReaderMenu() {
+        updateReaderMenuState()
+        readerUiState.showSheet(ReadBookSheet.ReaderMenu)
+        binding.composeSheetHost.visible()
+    }
+
+    /**
+     * S5 阶段3：关闭阅读设置 Sheet
+     */
+    private fun dismissReaderMenu() {
+        readerUiState.dismissSheet(ReadBookSheet.ReaderMenu)
+        binding.composeSheetHost.invisible()
+        ReadBookConfig.save()
+    }
+
+    /**
+     * S5 阶段3：同步阅读设置 Sheet 展示数据
+     */
+    private fun updateReaderMenuState() {
+        val resources = resources
+        val indentIndex = ReadBookConfig.paragraphIndent.takeWhile { it == '　' }.length.coerceAtMost(4)
+        val indentLabels = runCatching { resources.getStringArray(R.array.indent) }.getOrNull()
+        readerMenuState.value = ReaderMenuSheetState(
+            textSize = ReadBookConfig.textSize,
+            lineSpacingExtra = ReadBookConfig.lineSpacingExtra,
+            brightness = AppConfig.readBrightness,
+            brightnessAuto = brightnessAuto(),
+            isNightTheme = AppConfig.isNightTheme,
+            indentLabel = indentLabels?.getOrNull(indentIndex) ?: "",
+            pageAnimLabel = pageAnimLabel(ReadBook.pageAnim()),
+            fontLabel = ReadBookConfig.textFont.substringAfterLast('/')
+                .ifBlank { getString(R.string.text_font) },
+        )
+    }
+
+    /**
+     * S5 阶段3：翻页动画展示名
+     */
+    private fun pageAnimLabel(anim: Int): String = when (anim) {
+        0 -> getString(R.string.page_anim_cover)
+        1 -> getString(R.string.page_anim_slide)
+        2 -> getString(R.string.page_anim_simulation)
+        3 -> getString(R.string.page_anim_scroll)
+        else -> getString(R.string.page_anim_none)
+    }
+
+    /**
+     * S5 阶段3：构建阅读设置 Sheet 回调
+     */
+    private fun readerMenuSheetAction() = ReaderMenuSheetAction(
+        onDismiss = ::dismissReaderMenu,
+        onTextSizeChange = { value ->
+            ReadBookConfig.textSize = value
+            postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
+        },
+        onLineSpacingChange = { value ->
+            ReadBookConfig.lineSpacingExtra = value
+            postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
+        },
+        onBrightnessAuto = {
+            putPrefBoolean("brightnessAuto", !brightnessAuto())
+            updateReaderMenuState()
+        },
+        onBrightnessChange = { value -> setScreenBrightness(value.toFloat()) },
+        onNightTheme = {
+            AppConfig.isNightTheme = !AppConfig.isNightTheme
+            ThemeConfig.applyDayNight(this)
+            updateReaderMenuState()
+        },
+        onIndentClick = {
+            selector(
+                title = getString(R.string.text_indent),
+                items = resources.getStringArray(R.array.indent).toList()
+            ) { _, index ->
+                ReadBookConfig.paragraphIndent = "　".repeat(index)
+                postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
+                updateReaderMenuState()
+            }
+        },
+        onPageAnimClick = {
+            dismissReaderMenu()
+            showReadStyle()
+        },
+        onFontClick = {
+            dismissReaderMenu()
+            showReadStyle()
+        },
+        onMoreSettingClick = {
+            dismissReaderMenu()
+            showMoreSetting()
+        },
+    )
+
+    /**
+     * Phase4：初始化 Compose 目录/书签浮层宿主
+     */
+    @OptIn(ExperimentalMaterial3Api::class)
+    private fun setupTocSheet() {
+        binding.composeSheetHost.setContent {
+            LegadoTheme {
+                // S5 菜单层（直接替换 read_menu）：Compose 承载菜单层+浮层，正文 ReadView 保持 XML 垫底
+                val uiState by readerUiState.state.collectAsState()
+                val menuState by menuLayerState.collectAsState()
+                val readerMenuState by readerMenuState.collectAsState()
+                MenuLayer(
+                    uiState = uiState,
+                    state = menuState,
+                    action = menuLayerAction(),
+                )
+                // S5 阶段2：activeSheet 单态宿主（任意时刻最多一个 Sheet）
+                if (uiState.activeSheet == ReadBookSheet.Toc) {
+                    AppModalBottomSheet(onDismiss = ::dismissTocSheet) {
+                        BookTocBookmarkSheet(
+                            chapterList = tocChapterTitles,
+                            bookmarkTitles = tocBookmarkTitles,
+                            onChapterClick = { index ->
+                                if (index < tocChapterTitles.size) {
+                                    dismissTocSheet()
+                                    ReadBook.book?.let { viewModel.openChapter(index) }
+                                }
+                            },
+                            onBookmarkClick = { index ->
+                                val book = ReadBook.book ?: return@BookTocBookmarkSheet
+                                val bookmarks =
+                                    appDb.bookmarkDao.getByBook(book.name, book.author)
+                                if (index < bookmarks.size) {
+                                    val bm = bookmarks[index]
+                                    dismissTocSheet()
+                                    viewModel.openChapter(bm.chapterIndex, bm.chapterPos)
+                                }
+                            }
+                        )
+                        // 完整目录全功能入口（无回归）
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                        ) {
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = {
+                                dismissTocSheet()
+                                ReadBook.book?.let { tocActivity.launch(it.bookUrl) }
+                            }) {
+                                Text(stringResource(R.string.chapter_list))
+                            }
+                        }
+                    }
+                }
+                // S5 阶段3：阅读设置 Sheet（ReaderMenu）
+                if (uiState.activeSheet == ReadBookSheet.ReaderMenu) {
+                    ReaderMenuSheet(
+                        state = readerMenuState,
+                        action = readerMenuSheetAction(),
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * S5：构建菜单层动作回调（直接替换 read_menu 全部按钮逻辑）
+     */
+    private fun menuLayerAction() = MenuLayerAction(
+        onBack = { onBackPressedDispatcher.onBackPressed() },
+        onTitleClick = ::openBookInfoActivity,
+        onChapterClick = ::openBookInfoActivity,
+        onCustomBtn = ::customButtonClick,
+        onSourceLogin = ::showLogin,
+        onSourcePay = ::payAction,
+        onSourceEdit = ::openSourceEditActivity,
+        onSourceDisable = ::disableSource,
+        onMoreChangeSource = {
+            readerUiState.hideMenu()
+            ReadBook.book?.let { showDialogFragment(ChangeBookSourceDialog(it.name, it.author)) }
+        },
+        onMoreRefresh = {
+            readerUiState.hideMenu()
+            refreshDurContent()
+        },
+        onMoreDownload = {
+            readerUiState.hideMenu()
+            showDownloadDialog()
+        },
+        onMoreBookmark = {
+            readerUiState.hideMenu()
+            addBookmark()
+        },
+        onMoreHighlightRule = {
+            readerUiState.hideMenu()
+            startActivity<HighlightRuleActivity>()
+        },
+        onMoreRefreshAfter = {
+            readerUiState.hideMenu()
+            if (ReadBook.bookSource == null) {
+                upContent()
+            } else {
+                ReadBook.book?.let {
+                    ReadBook.clearTextChapter()
+                    binding.readView.upContent()
+                    viewModel.refreshContentAfter(it)
+                }
+            }
+        },
+        onMoreRefreshAll = {
+            readerUiState.hideMenu()
+            if (ReadBook.bookSource == null) {
+                upContent()
+            } else {
+                ReadBook.book?.let { refreshContentAll(it) }
+            }
+        },
+        onMoreEditContent = {
+            readerUiState.hideMenu()
+            showDialogFragment(ContentEditDialog())
+        },
+        onMorePageAnim = {
+            readerUiState.hideMenu()
+            showPageAnimConfig {
+                binding.readView.upPageAnim()
+                ReadBook.loadContent(false)
+            }
+        },
+        onMoreReverseContent = {
+            readerUiState.hideMenu()
+            ReadBook.book?.let { viewModel.reverseContent(it) }
+        },
+        onMoreSimulatedReading = {
+            readerUiState.hideMenu()
+            showSimulatedReading()
+        },
+        onMoreReplaceRuleToggle = {
+            readerUiState.hideMenu()
+            changeReplaceRuleState()
+            updateMenuLayerState()
+        },
+        onMoreSameTitleRemoved = {
+            readerUiState.hideMenu()
+            ReadBook.book?.let {
+                lifecycleScope.launch {
+                    val contentProcessor = withContext(IO) { ContentProcessor.get(it) }
+                    val textChapter = ReadBook.curTextChapter
+                    if (textChapter != null
+                        && !textChapter.sameTitleRemoved
+                        && !contentProcessor.removeSameTitleCache.contains(
+                            textChapter.chapter.getFileName("nr")
+                        )
+                    ) {
+                        toastOnUi(getString(R.string.no_remove_duplicate_title))
+                    }
+                    viewModel.reverseRemoveSameTitle()
+                    updateMenuLayerState()
+                }
+            }
+        },
+        onMoreReSegment = {
+            readerUiState.hideMenu()
+            ReadBook.book?.let {
+                it.setReSegment(!it.getReSegment())
+                ReadBook.loadContent(false)
+                updateMenuLayerState()
+            }
+        },
+        onMoreDelRubyTag = {
+            readerUiState.hideMenu()
+            ReadBook.book?.let {
+                val checked = !it.getDelTag(Book.rubyTag)
+                if (checked) {
+                    it.addDelTag(Book.rubyTag)
+                } else {
+                    it.removeDelTag(Book.rubyTag)
+                }
+                refreshContentAll(it)
+                updateMenuLayerState()
+            }
+        },
+        onMoreDelHTag = {
+            readerUiState.hideMenu()
+            ReadBook.book?.let {
+                val checked = !it.getDelTag(Book.hTag)
+                if (checked) {
+                    it.addDelTag(Book.hTag)
+                } else {
+                    it.removeDelTag(Book.hTag)
+                }
+                refreshContentAll(it)
+                updateMenuLayerState()
+            }
+        },
+        onMoreImageStyle = {
+            readerUiState.hideMenu()
+            val imgStyles = arrayListOf(
+                Book.imgStyleDefault, Book.imgStyleFull, Book.imgStyleText, Book.imgStyleSingle
+            )
+            selector(
+                R.string.image_style,
+                imgStyles
+            ) { _, index ->
+                val imageStyle = imgStyles[index]
+                ReadBook.book?.setImageStyle(imageStyle)
+                if (imageStyle == Book.imgStyleSingle) {
+                    ReadBook.book?.setPageAnim(0) // 切换图片样式 single 后自动切覆盖翻页
+                    binding.readView.upPageAnim()
+                }
+                ReadBook.loadContent(false)
+                updateMenuLayerState()
+            }
+        },
+        onMoreUpdateToc = {
+            readerUiState.hideMenu()
+            ReadBook.book?.let {
+                if (it.isEpub) {
+                    BookHelp.clearCache(it)
+                    EpubFile.clear()
+                }
+                if (it.isMobi) {
+                    MobiFile.clear()
+                }
+                loadChapterList(it)
+            }
+        },
+        onMoreEffectiveReplaces = {
+            readerUiState.hideMenu()
+            showDialogFragment<EffectiveReplacesDialog>()
+        },
+        onMoreLog = {
+            readerUiState.hideMenu()
+            showDialogFragment<AppLogDialog>()
+        },
+        onMoreHelp = {
+            readerUiState.hideMenu()
+            showHelp()
+        },
+        onMoreSetCharset = {
+            readerUiState.hideMenu()
+            showCharsetConfig()
+        },
+        onMoreTocRegex = {
+            readerUiState.hideMenu()
+            showDialogFragment(TxtTocRuleDialog(ReadBook.book?.tocUrl))
+        },
+        onSearch = {
+            readerUiState.hideMenu()
+            openSearchActivity(null)
+        },
+        onAutoPage = {
+            readerUiState.hideMenu()
+            autoPage()
+        },
+        onReplaceRule = {
+            readerUiState.hideMenu()
+            openReplaceRule()
+        },
+        onNightTheme = {
+            AppConfig.isNightTheme = !AppConfig.isNightTheme
+            ThemeConfig.applyDayNight(this)
+            updateMenuLayerState()
+        },
+        onPrevChapter = { ReadBook.moveToPrevChapter(upContent = true, toLast = false) },
+        onNextChapter = { ReadBook.moveToNextChapter(true) },
+        onCatalog = {
+            readerUiState.hideMenu()
+            openChapterList()
+        },
+        onReadAloud = {
+            readerUiState.hideMenu()
+            onClickReadAloud()
+        },
+        onReadAloudLong = {
+            readerUiState.hideMenu()
+            showReadAloudDialog()
+        },
+        onFont = {
+            readerUiState.hideMenu()
+            showReaderMenu()
+        },
+        onSetting = {
+            readerUiState.hideMenu()
+            showMoreSetting()
+        },
+        onBrightnessAuto = {
+            putPrefBoolean("brightnessAuto", !brightnessAuto())
+            updateMenuLayerState()
+        },
+        onBrightnessChange = { value -> setScreenBrightness(value.toFloat()) },
+        onBrightnessPosAdjust = { AppConfig.brightnessVwPos = !AppConfig.brightnessVwPos },
+        onScrimClick = { hideMenu() },
+    )
+
+    /**
+     * S5：同步 Compose 菜单层展示数据（由 upMenuView / seek 更新时调用）
+     */
+    private fun updateMenuLayerState() {
+        val book = ReadBook.book
+        val chapter = ReadBook.curTextChapter
+        val source = ReadBook.bookSource
+        val curIndex = ReadBook.durChapterIndex
+        val pageMode = AppConfig.progressBarBehavior == "page"
+        // 阅读器独立配色（复刻原 ReadMenu.upColorConfig：跟随阅读页/沉浸模式，非全局主题色）
+        val immersiveMenu =
+            AppConfig.readBarStyleFollowPage && ReadBookConfig.durConfig.curBgType() == 0
+        val menuBg = if (immersiveMenu) {
+            kotlin.runCatching { ReadBookConfig.durConfig.curBgStr().toColorInt() }
+                .getOrDefault(bottomBackground)
+        } else {
+            bottomBackground
+        }
+        val menuText = if (immersiveMenu) {
+            ReadBookConfig.durConfig.curTextColor()
+        } else {
+            getPrimaryTextColor(ColorUtils.isColorLight(menuBg))
+        }
+        menuLayerState.value = MenuLayerState(
+            title = book?.name ?: "",
+            chapterTitle = chapter?.title ?: "",
+            chapterUrl = if (book != null && !book.isLocal && chapter != null) {
+                chapter.chapter.getAbsoluteURL()
+            } else {
+                ""
+            },
+            sourceName = source?.bookSourceName ?: "",
+            isLocalBook = ReadBook.isLocalBook,
+            isLocalTxt = book?.isLocalTxt == true,
+            isEpub = book?.isEpub == true,
+            hasCustomButton = source?.customButton == true,
+            brightnessAuto = brightnessAuto(),
+            brightness = AppConfig.readBrightness,
+            seekMax = if (pageMode) (chapter?.pageSize?.minus(1) ?: 0) else ReadBook.simulatedChapterSize - 1,
+            seekProgress = if (pageMode) ReadBook.durPageIndex else ReadBook.durChapterIndex,
+            isAutoPage = isAutoPage,
+            isNightTheme = AppConfig.isNightTheme,
+            canPrev = curIndex != 0,
+            canNext = curIndex != ReadBook.simulatedChapterSize - 1,
+            menuBg = menuBg,
+            menuText = menuText,
+            menuAccent = accentColor,
+            useReplaceRule = book?.getUseReplaceRule() ?: false,
+            sameTitleRemoved = chapter?.sameTitleRemoved == true,
+            reSegment = book?.getReSegment() ?: false,
+            delRubyTag = book?.getDelTag(Book.rubyTag) ?: false,
+            delHTag = book?.getDelTag(Book.hTag) ?: false,
+        )
+    }
+
+    /**
+     * S5：自定义按钮回调（原 read_menu 逻辑迁移）
+     */
+    private fun customButtonClick() {
+        val book = ReadBook.book ?: return
+        Coroutine.async {
+            appDb.bookChapterDao.getChapter(book.bookUrl, ReadBook.durChapterIndex)
+        }.onSuccess {
+            SourceCallBack.callBackBtn(
+                this@ReadBookActivity,
+                SourceCallBack.CLICK_CUSTOM_BUTTON,
+                ReadBook.bookSource,
+                book,
+                it,
+                BookType.text
+            )
+        }
+    }
+
+    /**
+     * S5：刷新当前章节内容（原 menu_refresh_dur 逻辑迁移）
+     */
+    private fun refreshDurContent() {
+        if (ReadBook.bookSource == null) {
+            upContent()
+        } else {
+            ReadBook.book?.let {
+                ReadBook.curTextChapter = null
+                binding.readView.upContent()
+                viewModel.refreshContentDur(it)
+            }
+        }
+    }
+
+    /**
+     * S5：亮度自动模式判定（原 read_menu 逻辑迁移）
+     */
+    private fun brightnessAuto(): Boolean =
+        getPrefBoolean("brightnessAuto", true) || !getPrefBoolean(PreferKey.showBrightnessView, true)
+
+    /**
+     * S5：设置屏幕亮度（简化版，原 read_menu 逻辑迁移；不含高亮度日光观测分支）
+     */
+    private fun setScreenBrightness(value: Float) {
+        val autoBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        val params = window.attributes
+        params.screenBrightness = when {
+            brightnessAuto() || value == autoBrightness -> autoBrightness
+            value < 1f -> 0.004f
+            else -> value / 255f
+        }
+        window.attributes = params
     }
 
     /**
@@ -1814,15 +2419,18 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
         observeEvent<String>(PreferKey.showBrightnessView) {
             readMenu.upBrightnessState()
+            updateMenuLayerState()
         }
         observeEvent<List<SearchResult>>(EventBus.SEARCH_RESULT) {
             viewModel.searchResultList = it
         }
         observeEvent<Boolean>(EventBus.UPDATE_READ_ACTION_BAR) {
             readMenu.reset()
+            updateMenuLayerState()
         }
         observeEvent<Boolean>(EventBus.UP_SEEK_BAR) {
             readMenu.upSeekBar()
+            updateMenuLayerState()
         }
         observeEvent<Boolean>(EventBus.REFRESH_BOOK_CONTENT) { //书源js函数触发刷新
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {

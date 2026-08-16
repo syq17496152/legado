@@ -5,13 +5,34 @@ import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
 import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.widget.AdapterView
 import android.widget.EditText
+import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Help
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.ToggleOn
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -34,6 +55,10 @@ import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.rss.source.debug.RssSourceDebugActivity
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.dialog.UrlOptionDialog
 import io.legado.app.ui.widget.dialog.VariableDialog
 import io.legado.app.ui.widget.keyboard.KeyboardToolPop
@@ -67,6 +92,7 @@ class RssSourceEditActivity :
 
     override val binding by viewBinding(ActivityRssSourceEditBinding::inflate)
     override val viewModel by viewModels<RssSourceEditViewModel>()
+    private var menuExpanded by mutableStateOf(false)
     private val softKeyboardTool by lazy {
         KeyboardToolPop(this, lifecycleScope, binding.root, this)
     }
@@ -95,6 +121,7 @@ class RssSourceEditActivity :
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         softKeyboardTool.attachToWindow(window)
         initView()
+        initComposeTopBar()
         viewModel.initData(intent) {
             upSourceView(viewModel.rssSource)
         }
@@ -128,14 +155,140 @@ class RssSourceEditActivity :
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.source_edit, menu)
-        return super.onCompatCreateOptionsMenu(menu)
+        return false
     }
 
     override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_login)?.isVisible = !viewModel.rssSource?.loginUrl.isNullOrBlank()
-        menu.findItem(R.id.menu_auto_complete)?.isChecked = viewModel.autoComplete
-        return super.onMenuOpened(featureId, menu)
+        return false
+    }
+
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = getString(R.string.rss_source_edit),
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = { finish() },
+                    actions = {
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(
+                                    imageVector = Icons.Filled.MoreVert,
+                                    contentDescription = null
+                                )
+                            }
+                            AppDropdownMenu(
+                                expanded = menuExpanded,
+                                onDismiss = { menuExpanded = false },
+                                actions = buildMenuActions()
+                            )
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    private fun buildMenuActions(): List<MenuAction> {
+        val actions = mutableListOf<MenuAction>()
+        actions += MenuAction(
+            Icons.Filled.Code,
+            getString(R.string.edit_content),
+            onClick = { onFullEditClicked() }
+        )
+        actions += MenuAction(
+            Icons.Filled.Save,
+            getString(R.string.action_save),
+            onClick = {
+                viewModel.save(getRssSource()) {
+                    setResult(RESULT_OK)
+                    finish()
+                }
+            }
+        )
+        actions += MenuAction(
+            Icons.Filled.BugReport,
+            getString(R.string.debug_source),
+            onClick = {
+                viewModel.save(getRssSource()) { source ->
+                    startActivity<RssSourceDebugActivity> {
+                        putExtra("key", source.sourceUrl)
+                    }
+                }
+            }
+        )
+        if (!getRssSource().loginUrl.isNullOrBlank()) {
+            actions += MenuAction(
+                Icons.Filled.Login,
+                getString(R.string.login),
+                onClick = {
+                    viewModel.save(getRssSource()) {
+                        startActivity<SourceLoginActivity> {
+                            putExtra("type", "rssSource")
+                            putExtra("key", it.sourceUrl)
+                        }
+                    }
+                }
+            )
+        }
+        actions += MenuAction(
+            Icons.Filled.Tune,
+            getString(R.string.set_source_variable),
+            onClick = { setSourceVariable() }
+        )
+        actions += MenuAction(
+            Icons.Filled.History,
+            getString(R.string.cookie),
+            onClick = { viewModel.clearCookie(getRssSource().sourceUrl) }
+        )
+        actions += MenuAction(
+            Icons.Filled.ToggleOn,
+            getString(R.string.auto_complete),
+            checked = viewModel.autoComplete,
+            onClick = { viewModel.autoComplete = !viewModel.autoComplete }
+        )
+        actions += MenuAction(
+            Icons.Filled.ContentCopy,
+            getString(R.string.copy_source),
+            onClick = { sendToClip(GSON.toJson(getRssSource())) }
+        )
+        actions += MenuAction(
+            Icons.Filled.Description,
+            getString(R.string.paste_source),
+            onClick = { viewModel.pasteSource { upSourceView(it) } }
+        )
+        actions += MenuAction(
+            Icons.Filled.QrCodeScanner,
+            getString(R.string.import_by_qr_code),
+            onClick = { qrCodeResult.launch() }
+        )
+        actions += MenuAction(
+            Icons.Filled.Share,
+            getString(R.string.str_share),
+            onClick = { share(GSON.toJson(getRssSource())) }
+        )
+        actions += MenuAction(
+            Icons.Filled.QrCodeScanner,
+            getString(R.string.qr_share),
+            onClick = {
+                shareWithQr(
+                    GSON.toJson(getRssSource()),
+                    getString(R.string.share_rss_source),
+                    ErrorCorrectionLevel.L
+                )
+            }
+        )
+        actions += MenuAction(
+            Icons.Filled.History,
+            getString(R.string.log),
+            onClick = { showDialogFragment<AppLogDialog>() }
+        )
+        actions += MenuAction(
+            Icons.Filled.Help,
+            getString(R.string.help),
+            onClick = { showHelp("rssRuleHelp") }
+        )
+        return actions.filterNotNull().toList()
     }
 
     private val textEditLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -168,47 +321,6 @@ class RssSourceEditActivity :
         else {
             toastOnUi(R.string.please_focus_cursor_on_textbox)
         }
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_fullscreen_edit -> onFullEditClicked()
-
-            R.id.menu_save -> viewModel.save(getRssSource()) {
-                setResult(RESULT_OK)
-                finish()
-            }
-
-            R.id.menu_debug_source -> viewModel.save(getRssSource()) { source ->
-                startActivity<RssSourceDebugActivity> {
-                    putExtra("key", source.sourceUrl)
-                }
-            }
-
-            R.id.menu_login -> viewModel.save(getRssSource()) {
-                startActivity<SourceLoginActivity> {
-                    putExtra("type", "rssSource")
-                    putExtra("key", it.sourceUrl)
-                }
-            }
-
-            R.id.menu_set_source_variable -> setSourceVariable()
-            R.id.menu_clear_cookie -> viewModel.clearCookie(getRssSource().sourceUrl)
-            R.id.menu_auto_complete -> viewModel.autoComplete = !viewModel.autoComplete
-            R.id.menu_copy_source -> sendToClip(GSON.toJson(getRssSource()))
-            R.id.menu_qr_code_camera -> qrCodeResult.launch()
-            R.id.menu_paste_source -> viewModel.pasteSource { upSourceView(it) }
-            R.id.menu_share_str -> share(GSON.toJson(getRssSource()))
-            R.id.menu_share_qr -> shareWithQr(
-                GSON.toJson(getRssSource()),
-                getString(R.string.share_rss_source),
-                ErrorCorrectionLevel.L
-            )
-
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-            R.id.menu_help -> showHelp("rssRuleHelp")
-        }
-        return super.onCompatOptionsItemSelected(item)
     }
 
     private fun initView() {

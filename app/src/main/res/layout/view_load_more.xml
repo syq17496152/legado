@@ -22,7 +22,7 @@
         android:layout_gravity="center"
         android:gravity="center"
         android:textColor="?android:attr/textColorSecondary"
-        android:textSize="14sp"
+        android:textSize="@dimen/text_14sp"
         android:background="?attr/selectableItemBackground"
         android:visibility="invisible"
         android:singleLine="true"

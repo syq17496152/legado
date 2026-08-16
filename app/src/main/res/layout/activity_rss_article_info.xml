@@ -7,16 +7,13 @@
     android:orientation="vertical">
 
     <!--
-    阶段11.4 主题适配修复：
-    - 根布局不设 background，让 BaseActivity.onCreateView 动态设置 backgroundColor（跟随主题）
-    - TitleBar 加 app:title + app:themeMode="dark"（与书源 activity_book_info.xml 一致）
+    ui-redesign-m3 12.6z 壳层化：TitleBar 替换为 ComposeView（GlassTopAppBar），
+    背景/前景色由 LegadoTheme 统一管理，跟随应用主题（此前 titleBar 固定 primaryColor 背景）。
     -->
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:themeMode="dark"
-        app:title="@string/rss_article_info_title" />
+        android:layout_height="wrap_content" />
 
     <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
         android:id="@+id/refresh_layout"
@@ -104,7 +101,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:textColor="@color/primaryText"
-                        android:textSize="20sp"
+                        android:textSize="@dimen/text_20sp"
                         android:textStyle="bold"
                         tools:text="文章标题" />
 
@@ -143,7 +140,7 @@
                                 android:includeFontPadding="false"
                                 android:singleLine="true"
                                 android:textColor="@color/tv_text_summary"
-                                android:textSize="13sp"
+                                android:textSize="@dimen/text_13sp"
                                 tools:ignore="NestedWeights,RtlHardcoded,RtlSymmetry"
                                 tools:text="2026-07-20" />
 
@@ -177,7 +174,7 @@
                                 android:includeFontPadding="false"
                                 android:singleLine="true"
                                 android:textColor="@color/tv_text_summary"
-                                android:textSize="13sp"
+                                android:textSize="@dimen/text_13sp"
                                 tools:ignore="NestedWeights,RtlHardcoded,RtlSymmetry"
                                 tools:text="视频" />
 
@@ -211,7 +208,7 @@
                                 android:includeFontPadding="false"
                                 android:singleLine="true"
                                 android:textColor="@color/tv_text_summary"
-                                android:textSize="13sp"
+                                android:textSize="@dimen/text_13sp"
                                 tools:ignore="NestedWeights,RtlHardcoded,RtlSymmetry"
                                 tools:text="共 3 个来源" />
 
@@ -232,7 +229,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/book_intro"
                         android:textColor="@color/secondaryText"
-                        android:textSize="14sp"
+                        android:textSize="@dimen/text_14sp"
                         android:textStyle="bold" />
 
                     <io.legado.app.ui.widget.text.ScrollTextView
@@ -241,7 +238,7 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
                         android:textColor="@color/primaryText"
-                        android:textSize="15sp"
+                        android:textSize="@dimen/text_15sp"
                         tools:text="内容简介" />
 
                     <View
@@ -257,7 +254,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/rss_all_sources"
                         android:textColor="@color/secondaryText"
-                        android:textSize="14sp"
+                        android:textSize="@dimen/text_14sp"
                         android:textStyle="bold" />
 
                     <androidx.recyclerview.widget.RecyclerView
@@ -302,7 +299,7 @@
             android:includeFontPadding="false"
             android:text="@string/cancel"
             android:textColor="@color/primaryText"
-            android:textSize="15sp" />
+            android:textSize="@dimen/text_15sp" />
 
         <io.legado.app.ui.widget.text.AccentBgTextView
             android:id="@+id/tv_read"
@@ -312,7 +309,7 @@
             android:gravity="center"
             android:includeFontPadding="false"
             android:text="@string/reading"
-            android:textSize="15sp" />
+            android:textSize="@dimen/text_15sp" />
 
     </LinearLayout>
 

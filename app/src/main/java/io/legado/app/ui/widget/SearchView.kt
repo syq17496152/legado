@@ -41,7 +41,7 @@ class SearchView @JvmOverloads constructor(
                 mSearchHintIcon = this.context.getDrawable(R.drawable.ic_search_hint)
             }
             // 改变字体
-            textView!!.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            textView!!.setTextSize(TypedValue.COMPLEX_UNIT_PX, context.resources.getDimension(R.dimen.text_body_medium))
             textView!!.gravity = Gravity.CENTER_VERTICAL
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
                 textView!!.isLocalePreferredLineHeightForMinimumUsed = false

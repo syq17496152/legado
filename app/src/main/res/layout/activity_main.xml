@@ -13,14 +13,9 @@
         android:layout_weight="1"
         tools:ignore="SpeakableTextPresentCheck" />
 
-    <io.legado.app.lib.theme.view.ThemeBottomNavigationVIew
+    <androidx.compose.ui.platform.ComposeView
         android:id="@+id/bottom_navigation_view"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@color/background"
-        android:minHeight="56dp"
-        app:itemActiveIndicatorStyle="@color/transparent"
-        app:labelVisibilityMode="unlabeled"
-        app:menu="@menu/main_bnv" />
+        android:layout_height="wrap_content" />
 
 </LinearLayout>

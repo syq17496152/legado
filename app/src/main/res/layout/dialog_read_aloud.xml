@@ -31,7 +31,7 @@
             android:paddingBottom="10dp"
             android:text="@string/previous_chapter"
             android:textColor="@color/primaryText"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_14sp"
             tools:ignore="TouchTargetSizeCheck" />
 
         <View
@@ -113,7 +113,7 @@
             android:paddingBottom="10dp"
             android:text="@string/next_chapter"
             android:textColor="@color/primaryText"
-            android:textSize="14sp"
+            android:textSize="@dimen/text_14sp"
             tools:ignore="TouchTargetSizeCheck" />
 
     </LinearLayout>
@@ -173,7 +173,7 @@
                 android:layout_gravity="center"
                 android:text="@string/read_aloud_speed"
                 android:textColor="@color/primaryText"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_14sp" />
 
             <TextView
                 android:id="@+id/tv_tts_speed_value"
@@ -182,7 +182,7 @@
                 android:layout_gravity="center"
                 android:paddingHorizontal="3dp"
                 android:textColor="@color/primaryText"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_14sp" />
 
             <Space
                 android:layout_width="0dp"
@@ -283,7 +283,7 @@
                 android:singleLine="true"
                 android:text="@string/chapter_list"
                 android:textColor="@color/primaryText"
-                android:textSize="12sp" />
+                android:textSize="@dimen/text_12sp" />
         </LinearLayout>
 
         <View
@@ -325,7 +325,7 @@
                 android:singleLine="true"
                 android:text="@string/main_menu"
                 android:textColor="@color/primaryText"
-                android:textSize="12sp" />
+                android:textSize="@dimen/text_12sp" />
         </LinearLayout>
 
         <View
@@ -366,7 +366,7 @@
                 android:singleLine="true"
                 android:text="@string/to_backstage"
                 android:textColor="@color/primaryText"
-                android:textSize="12sp" />
+                android:textSize="@dimen/text_12sp" />
         </LinearLayout>
 
         <View
@@ -407,7 +407,7 @@
                 android:singleLine="true"
                 android:text="@string/setting"
                 android:textColor="@color/primaryText"
-                android:textSize="12sp" />
+                android:textSize="@dimen/text_12sp" />
         </LinearLayout>
 
     </LinearLayout>

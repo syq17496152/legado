@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 倍速列表项：圆角卡片背景 + 白字16sp，SpeedAdapter 专用（不影响选集列表） -->
+<!-- 倍速列表项：透明背景 + 主题文字色16sp，SpeedAdapter 专用（不影响选集列表）。
+     选中态由代码动态设置圆角 primary 高亮背景，未选中保持透明，日夜模式在深色面板上都清晰一致 -->
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/text1"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/card_video_background"
+    android:background="@null"
     android:gravity="center_vertical"
     android:paddingLeft="20dp"
     android:paddingTop="11dp"
     android:paddingRight="20dp"
     android:paddingBottom="11dp"
-    android:textColor="#FFFFFF"
-    android:textSize="16sp" />
+    android:textColor="@color/primaryText"
+    android:textSize="@dimen/text_16sp" />

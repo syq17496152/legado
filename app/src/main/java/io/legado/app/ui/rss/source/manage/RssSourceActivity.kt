@@ -2,14 +2,26 @@ package io.legado.app.ui.rss.source.manage
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.Menu
 import android.view.MenuItem
-import android.view.SubMenu
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.PopupMenu
-import androidx.appcompat.widget.SearchView
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.SettingsSearchBar
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -24,7 +36,6 @@ import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.model.CheckRssSource
 import io.legado.app.ui.adapter.SourceFolderAdapter
 import io.legado.app.ui.association.ImportRssSourceDialog
@@ -38,7 +49,6 @@ import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.ui.widget.recycler.GridSpacingItemDecoration
 import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ACache
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.isAbsUrl
@@ -51,7 +61,6 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.transaction
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
@@ -95,12 +104,14 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     // 域名分组（参照 BookSourceActivity.groupSourcesByDomain）
     private var groupSourcesByDomain = false
     private val hostMap = hashMapOf<String, String>()
-    private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
-    }
+    private val searchViewQuery: String
+        get() = composeSearchQuery
     private var sourceFlowJob: Job? = null
     private var groups = arrayListOf<String>()
-    private var groupMenu: SubMenu? = null
+    // source-compose 桥接：Compose 顶栏搜索/菜单状态
+    private var composeSearchQuery by mutableStateOf("")
+    private var menuExpanded by mutableStateOf(false)
+    private var composeGroups by mutableStateOf(listOf<String>())
     private val qrCodeResult = registerForActivityResult(QrCodeResult()) {
         it ?: return@registerForActivityResult
         showDialogFragment(ImportRssSourceDialog(it))
@@ -132,7 +143,7 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         // D2 修复：初始化运行时状态：跟随用户偏好
         isShowingFolder = isFolderViewMode
         initRecyclerView()
-        initSearchView()
+        initComposeTopBar()
         if (isShowingFolder) {
             upFolderView()
         } else {
@@ -142,21 +153,192 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         initSelectActionBar()
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.rss_source, menu)
-        return super.onCompatCreateOptionsMenu(menu)
+    // source-compose 壳层化：顶栏（GlassTopAppBar + 搜索 SettingsSearchBar + 更多菜单 AppDropdownMenu）
+    private fun initComposeTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                Column {
+                    GlassTopAppBar(
+                        title = getString(R.string.rss_source),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = {
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = null)
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = buildMenuActions()
+                                )
+                            }
+                        }
+                    )
+                    SettingsSearchBar(
+                        query = composeSearchQuery,
+                        onQueryChange = {
+                            composeSearchQuery = it
+                            upSourceFlow(it)
+                        },
+                        placeholder = getString(R.string.search_rss_source),
+                        onSearch = { upSourceFlow(composeSearchQuery) }
+                    )
+                }
+            }
+        }
     }
 
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        groupMenu = menu.findItem(R.id.menu_group)?.subMenu
-        // source-layout-refactor 同步排序菜单升降序勾选状态
-        menu.findItem(R.id.action_sort)?.subMenu?.findItem(R.id.menu_sort_desc)?.isChecked = !sortAscending
-        upGroupMenu()
-        return super.onPrepareOptionsMenu(menu)
+    // source-compose 壳层化：更多菜单数据（含分组标题、勾选态、动态分组）
+    private fun buildMenuActions(): List<MenuAction> {
+        return buildList {
+            // 排序分组
+            add(MenuAction(Icons.Default.Sort, getString(R.string.sort), header = true) {})
+            add(MenuAction(
+                Icons.Default.Sort,
+                getString(R.string.sort_desc),
+                checked = !sortAscending,
+                onClick = { handleMenuAction(R.id.menu_sort_desc) }
+            ))
+            add(MenuAction(
+                Icons.Default.ManageSearch,
+                getString(R.string.sort_manual),
+                checked = AppConfig.rssSort == 0,
+                onClick = { handleMenuAction(R.id.menu_sort_manual) }
+            ))
+            add(MenuAction(
+                Icons.Default.SortByAlpha,
+                getString(R.string.sort_by_name),
+                checked = AppConfig.rssSort == 1,
+                onClick = { handleMenuAction(R.id.menu_sort_name) }
+            ))
+            add(MenuAction(
+                Icons.Default.CheckCircle,
+                getString(R.string.is_enabled),
+                checked = AppConfig.rssSort == 2,
+                onClick = { handleMenuAction(R.id.menu_sort_enable) }
+            ))
+            add(MenuAction(
+                Icons.Default.Link,
+                getString(R.string.sort_by_url),
+                checked = AppConfig.rssSort == 5,
+                onClick = { handleMenuAction(R.id.menu_sort_url) }
+            ))
+            add(MenuAction(
+                Icons.Default.Schedule,
+                getString(R.string.sort_by_lastUpdateTime),
+                checked = AppConfig.rssSort == 6,
+                onClick = { handleMenuAction(R.id.menu_sort_time) }
+            ))
+            // 类型分组
+            add(MenuAction(Icons.Default.Category, getString(R.string.source_type), header = true) {})
+            add(MenuAction(
+                Icons.Default.AllInclusive,
+                getString(R.string.all),
+                checked = currentType == -1,
+                onClick = { handleMenuAction(R.id.menu_type_all) }
+            ))
+            add(MenuAction(
+                Icons.Default.Language,
+                getString(R.string.type_web),
+                checked = currentType == 0,
+                onClick = { handleMenuAction(R.id.menu_type_0) }
+            ))
+            add(MenuAction(
+                Icons.Default.Image,
+                getString(R.string.type_image),
+                checked = currentType == 1,
+                onClick = { handleMenuAction(R.id.menu_type_1) }
+            ))
+            add(MenuAction(
+                Icons.Default.VideoLibrary,
+                getString(R.string.type_video),
+                checked = currentType == 2,
+                onClick = { handleMenuAction(R.id.menu_type_2) }
+            ))
+            // 分组管理（含动态分组）
+            add(MenuAction(Icons.Default.Folder, getString(R.string.menu_action_group), header = true) {})
+            add(MenuAction(
+                Icons.Default.FolderOpen,
+                getString(R.string.group_manage),
+                onClick = { handleMenuAction(R.id.menu_group_manage) }
+            ))
+            add(MenuAction(
+                Icons.Default.ToggleOn,
+                getString(R.string.enabled),
+                onClick = { handleMenuAction(R.id.menu_enabled_group) }
+            ))
+            add(MenuAction(
+                Icons.Default.ToggleOff,
+                getString(R.string.disabled),
+                onClick = { handleMenuAction(R.id.menu_disabled_group) }
+            ))
+            add(MenuAction(
+                Icons.Default.Login,
+                getString(R.string.need_login),
+                onClick = { handleMenuAction(R.id.menu_group_login) }
+            ))
+            add(MenuAction(
+                Icons.Default.FolderOff,
+                getString(R.string.no_group),
+                onClick = { handleMenuAction(R.id.menu_group_null) }
+            ))
+            composeGroups.forEach { group ->
+                add(MenuAction(
+                    Icons.Default.Folder,
+                    group,
+                    onClick = { handleGroupSelect(group) }
+                ))
+            }
+            // 操作分组
+            add(MenuAction(Icons.Default.Settings, getString(R.string.source_folder_config), header = true) {})
+            add(MenuAction(
+                Icons.Default.Folder,
+                getString(R.string.source_folder_config),
+                onClick = { handleMenuAction(R.id.menu_folder_config) }
+            ))
+            add(MenuAction(
+                Icons.Default.Add,
+                getString(R.string.add_rss_source),
+                onClick = { handleMenuAction(R.id.menu_add) }
+            ))
+            add(MenuAction(
+                Icons.Default.FileDownload,
+                getString(R.string.import_local),
+                onClick = { handleMenuAction(R.id.menu_import_local) }
+            ))
+            add(MenuAction(
+                Icons.Default.CloudDownload,
+                getString(R.string.import_on_line),
+                onClick = { handleMenuAction(R.id.menu_import_onLine) }
+            ))
+            add(MenuAction(
+                Icons.Default.QrCodeScanner,
+                getString(R.string.import_by_qr_code),
+                onClick = { handleMenuAction(R.id.menu_import_qr) }
+            ))
+            add(MenuAction(
+                Icons.Default.Domain,
+                getString(R.string.group_sources_by_domain),
+                checked = groupSourcesByDomain,
+                onClick = { handleMenuAction(R.id.menu_group_sources_by_domain) }
+            ))
+            add(MenuAction(
+                Icons.Default.AutoAwesome,
+                getString(R.string.import_default_rule),
+                onClick = { handleMenuAction(R.id.menu_import_default) }
+            ))
+            add(MenuAction(
+                Icons.Default.Help,
+                getString(R.string.help),
+                onClick = { handleMenuAction(R.id.menu_help) }
+            ))
+        }
     }
 
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
+    // source-compose 壳层化：菜单动作统一入口（原 onCompatOptionsItemSelected 逻辑迁移）
+    private fun handleMenuAction(actionId: Int) {
+        when (actionId) {
             R.id.menu_folder_config -> showFolderConfig()
             R.id.menu_add -> startActivity<RssSourceEditActivity>()
             R.id.menu_import_local -> importDoc.launch {
@@ -170,100 +352,96 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
             R.id.menu_import_default -> viewModel.importDefault()
             // source-layout-refactor 快捷筛选词：重置子目录状态，回根目录筛选
             R.id.menu_enabled_group, R.id.menu_disabled_group, R.id.menu_group_login,
-            R.id.menu_group_null -> {
-                currentType = -1
-                currentGroup = null
-                // D2 修复：文件夹视图下切换到列表视图
-                if (isShowingFolder) {
-                    isShowingFolder = false
-                    applyListView()
-                    invalidateOptionsMenu()
-                }
-                val keyword = when (item.itemId) {
-                    R.id.menu_enabled_group -> getString(R.string.enabled)
-                    R.id.menu_disabled_group -> getString(R.string.disabled)
-                    R.id.menu_group_login -> getString(R.string.need_login)
-                    R.id.menu_group_null -> getString(R.string.no_group)
-                    else -> ""
-                }
-                searchView.setQuery(keyword, true)
-            }
-
+            R.id.menu_group_null -> handleQuickFilter(actionId)
             // source-layout-refactor 按类型筛选菜单（隐藏字段方案，不回填搜索框）
-            R.id.menu_type_all, R.id.menu_type_0, R.id.menu_type_1, R.id.menu_type_2 -> {
-                item.isChecked = true
-                currentType = when (item.itemId) {
-                    R.id.menu_type_all -> -1
-                    R.id.menu_type_0 -> 0
-                    R.id.menu_type_1 -> 1
-                    R.id.menu_type_2 -> 2
-                    else -> -1
-                }
-                currentGroup = null
-                // D2 修复：文件夹视图下切换到列表视图
-                if (isShowingFolder) {
-                    isShowingFolder = false
-                    applyListView()
-                    invalidateOptionsMenu()
-                }
-                upSourceFlow(searchView.query?.toString())
-            }
+            R.id.menu_type_all, R.id.menu_type_0, R.id.menu_type_1, R.id.menu_type_2 ->
+                handleTypeSelect(actionId)
 
             // source-layout-refactor 菜单排序：映射到 rssSort 配置（C-01 修复：订阅源独立排序）
             R.id.menu_sort_manual -> {
-                item.isChecked = true
                 AppConfig.rssSort = 0
-                upSourceFlow(searchView.query?.toString())
+                upSourceFlow(searchViewQuery)
             }
             R.id.menu_sort_name -> {
-                item.isChecked = true
                 AppConfig.rssSort = 1
-                upSourceFlow(searchView.query?.toString())
+                upSourceFlow(searchViewQuery)
             }
             R.id.menu_sort_enable -> {
-                item.isChecked = true
                 AppConfig.rssSort = 2
-                upSourceFlow(searchView.query?.toString())
+                upSourceFlow(searchViewQuery)
             }
             R.id.menu_sort_url -> {
-                item.isChecked = true
                 AppConfig.rssSort = 5
-                upSourceFlow(searchView.query?.toString())
+                upSourceFlow(searchViewQuery)
             }
             R.id.menu_sort_time -> {
-                item.isChecked = true
                 AppConfig.rssSort = 6
-                upSourceFlow(searchView.query?.toString())
+                upSourceFlow(searchViewQuery)
             }
             R.id.menu_sort_desc -> {
                 sortAscending = !sortAscending
-                item.isChecked = !sortAscending
-                upSourceFlow(searchView.query?.toString())
+                upSourceFlow(searchViewQuery)
             }
 
             R.id.menu_group_sources_by_domain -> {
-                item.isChecked = !item.isChecked
-                groupSourcesByDomain = item.isChecked
+                groupSourcesByDomain = !groupSourcesByDomain
                 // Issue-6 ADR-15: 同步 adapter.showSourceHost（参考 BookSourceActivity）
-                adapter.showSourceHost = item.isChecked
-                upSourceFlow(searchView.query?.toString())
+                adapter.showSourceHost = groupSourcesByDomain
+                upSourceFlow(searchViewQuery)
             }
 
             R.id.menu_help -> showHelp("SourceMRssHelp")
-            else -> // source-layout-refactor 动态分组菜单：用隐藏字段
-                if (item.groupId == R.id.source_group) {
-                    currentType = -1
-                    currentGroup = item.title.toString()
-                    // D2 修复：文件夹视图下切换到列表视图
-                    if (isShowingFolder) {
-                        isShowingFolder = false
-                        applyListView()
-                        invalidateOptionsMenu()
-                    }
-                    upSourceFlow(searchView.query?.toString())
-                }
         }
-        return super.onCompatOptionsItemSelected(item)
+    }
+
+    // 快捷筛选词：重置子目录状态，回根目录筛选
+    private fun handleQuickFilter(actionId: Int) {
+        currentType = -1
+        currentGroup = null
+        // D2 修复：文件夹视图下切换到列表视图
+        if (isShowingFolder) {
+            isShowingFolder = false
+            applyListView()
+        }
+        val keyword = when (actionId) {
+            R.id.menu_enabled_group -> getString(R.string.enabled)
+            R.id.menu_disabled_group -> getString(R.string.disabled)
+            R.id.menu_group_login -> getString(R.string.need_login)
+            R.id.menu_group_null -> getString(R.string.no_group)
+            else -> ""
+        }
+        composeSearchQuery = keyword
+        upSourceFlow(keyword)
+    }
+
+    // 按类型筛选（隐藏字段方案，不回填搜索框）
+    private fun handleTypeSelect(actionId: Int) {
+        currentType = when (actionId) {
+            R.id.menu_type_all -> -1
+            R.id.menu_type_0 -> 0
+            R.id.menu_type_1 -> 1
+            R.id.menu_type_2 -> 2
+            else -> -1
+        }
+        currentGroup = null
+        // D2 修复：文件夹视图下切换到列表视图
+        if (isShowingFolder) {
+            isShowingFolder = false
+            applyListView()
+        }
+        upSourceFlow(searchViewQuery)
+    }
+
+    // 动态分组筛选
+    private fun handleGroupSelect(group: String) {
+        currentType = -1
+        currentGroup = group
+        // D2 修复：文件夹视图下切换到列表视图
+        if (isShowingFolder) {
+            isShowingFolder = false
+            applyListView()
+        }
+        upSourceFlow(searchViewQuery)
     }
 
     override fun onMenuItemClick(item: MenuItem?): Boolean {
@@ -386,7 +564,7 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
             0 -> { // 列表平铺：直接显示所有源
                 isShowingFolder = false
                 applyListView()
-                upSourceFlow(searchView.query?.toString())
+                upSourceFlow(searchViewQuery)
             }
             1, 2 -> { // 按类型/按分组：显示文件夹
                 isShowingFolder = true
@@ -394,7 +572,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
                 upFolderView()
             }
         }
-        invalidateOptionsMenu()
     }
 
     // D2 修复：更新文件夹视图数据（参照 BookSourceActivity.upFolderView，订阅源 3 类型）
@@ -415,25 +592,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         folderAdapter.setItems(folderList, folderAdapter.diffItemCallback)
     }
 
-    private fun initSearchView() {
-        binding.titleBar.findViewById<SearchView>(R.id.search_view).let {
-            it.applyTint(primaryTextColor)
-            it.onActionViewExpanded()
-            it.queryHint = getString(R.string.search_rss_source)
-            it.clearFocus()
-            it.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-                override fun onQueryTextSubmit(query: String?): Boolean {
-                    return false
-                }
-
-                override fun onQueryTextChange(newText: String?): Boolean {
-                    upSourceFlow(newText)
-                    return false
-                }
-            })
-        }
-    }
-
     private fun initSelectActionBar() {
         binding.selectActionBar.setMainActionText(R.string.delete)
         binding.selectActionBar.inflateMenu(R.menu.rss_source_sel)
@@ -446,7 +604,7 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
             appDb.rssSourceDao.flowGroups().flowOn(IO).conflate().collect {
                 groups.clear()
                 groups.addAll(it)
-                upGroupMenu()
+                composeGroups = groups.toList()
             }
         }
     }
@@ -511,13 +669,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         alert(titleResource = R.string.draw, messageResource = R.string.sure_del) {
             yesButton { viewModel.del(*currentSelectionAdapter().selection.toTypedArray()) }
             noButton()
-        }
-    }
-
-    private fun upGroupMenu() = groupMenu?.transaction { menu ->
-        menu.removeGroup(R.id.source_group)
-        groups.forEach {
-            menu.add(R.id.source_group, Menu.NONE, Menu.NONE, it)
         }
     }
 
@@ -660,8 +811,7 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         // D3：点击文件夹后切换到列表视图（二级页面用列表）
         isShowingFolder = false
         applyListView()
-        invalidateOptionsMenu()
-        upSourceFlow(searchView.query?.toString())
+        upSourceFlow(searchViewQuery)
     }
 
     // D2 修复：返回键：子目录内返回文件夹视图，文件夹视图退出 Activity
@@ -681,9 +831,8 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
                 upFolderView()
             } else {
                 applyListView()
-                upSourceFlow(searchView.query?.toString())
+                upSourceFlow(searchViewQuery)
             }
-            invalidateOptionsMenu()
             return
         }
         super.onBackPressed()

@@ -6,19 +6,17 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:title="@string/edit_code"
-        app:opaque="true" />
+        android:layout_height="wrap_content" />
 
     <io.github.rosemoe.sora.widget.CodeEditor
         android:id="@+id/editText"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        app:textSize="18sp"
+        app:textSize="@dimen/text_18sp"
         tools:text="Hello, world!" />
 
     <LinearLayout
@@ -43,7 +41,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/search_result"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_14sp" />
 
             <TextView
                 android:id="@+id/tv_search_result"
@@ -51,7 +49,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
                 android:text="0"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_14sp" />
 
             <Space
                 android:layout_width="0dp"
@@ -80,7 +78,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/find"
                 android:textColor="@color/primaryText"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_14sp" />
 
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="0dp"
@@ -120,7 +118,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/replace"
                 android:textColor="@color/primaryText"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_14sp" />
 
             <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="0dp"
@@ -159,7 +157,7 @@
                 android:layout_weight="1"
                 android:text="@string/btn_previous"
                 android:textColor="@color/primaryText"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_14sp" />
 
             <Button
                 android:id="@+id/btn_next"
@@ -169,7 +167,7 @@
                 android:layout_weight="1"
                 android:text="@string/btn_next"
                 android:textColor="@color/primaryText"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_14sp" />
 
             <Button
                 android:id="@+id/btn_replace"
@@ -179,7 +177,7 @@
                 android:layout_weight="1"
                 android:text="@string/replace"
                 android:textColor="@color/primaryText"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_14sp" />
 
             <Button
                 android:id="@+id/btn_replace_all"
@@ -190,7 +188,7 @@
                 android:enabled="false"
                 android:text="@string/replace_all"
                 android:textColor="@color/selector_btn_text_color"
-                android:textSize="14sp" />
+                android:textSize="@dimen/text_14sp" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

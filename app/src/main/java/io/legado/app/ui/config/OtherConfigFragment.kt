@@ -459,7 +459,7 @@ class OtherConfigFragment : PreferenceFragment(),
     private fun alertLocalPassword() {
         context?.alert(R.string.set_local_password, R.string.set_local_password_summary) {
             val editTextBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "password"
+                editView.setHint(R.string.password)
             }
             customView {
                 editTextBinding.root

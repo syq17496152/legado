@@ -15,7 +15,7 @@
             android:layout_height="wrap_content"
             android:paddingBottom="8dp"
             android:text="@string/manga_color_filter"
-            android:textSize="18sp" />
+            android:textSize="@dimen/text_18sp" />
 
         <io.legado.app.ui.widget.DetailSeekBar
             android:id="@+id/dsb_brightness"

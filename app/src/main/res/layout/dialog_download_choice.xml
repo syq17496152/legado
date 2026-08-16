@@ -20,7 +20,7 @@
         android:layout_marginRight="5dp"
         android:text="@string/chapter"
         android:textColor="@color/primaryText"
-        android:textSize="16sp"
+        android:textSize="@dimen/text_16sp"
         tools:ignore="RtlHardcoded" />
 
     <EditText
@@ -41,7 +41,7 @@
         android:paddingBottom="4dp"
         android:textColor="@color/primaryText"
         android:textCursorDrawable="@drawable/shape_text_cursor"
-        android:textSize="14sp"
+        android:textSize="@dimen/text_14sp"
         tools:ignore="TouchTargetSizeCheck,TextContrastCheck" />
 
     <TextView
@@ -52,7 +52,7 @@
         android:layout_marginRight="5dp"
         android:text="@string/to"
         android:textColor="@color/primaryText"
-        android:textSize="16sp" />
+        android:textSize="@dimen/text_16sp" />
 
     <EditText
         android:id="@+id/edit_end"
@@ -72,7 +72,7 @@
         android:paddingBottom="4dp"
         android:textColor="@color/primaryText"
         android:textCursorDrawable="@drawable/shape_text_cursor"
-        android:textSize="14sp"
+        android:textSize="@dimen/text_14sp"
         tools:ignore="TouchTargetSizeCheck,SpeakableTextPresentCheck,TextContrastCheck" />
 
     <View

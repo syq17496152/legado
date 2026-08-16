@@ -8,6 +8,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.model.ReadBook
+import io.legado.app.R
 
 class BookInfoEditViewModel(application: Application) : BaseViewModel(application) {
     var book: Book? = null
@@ -32,9 +33,9 @@ class BookInfoEditViewModel(application: Application) : BaseViewModel(applicatio
             success?.invoke()
         }.onError {
             if (it is SQLiteConstraintException) {
-                AppLog.put("书籍信息保存失败，存在相同书名作者书籍\n$it", it, true)
+                AppLog.put(getApplication<Application>().getString(R.string.book_info_save_fail_duplicate, it), it, true)
             } else {
-                AppLog.put("书籍信息保存失败\n$it", it, true)
+                AppLog.put(getApplication<Application>().getString(R.string.book_info_save_fail, it), it, true)
             }
         }
     }

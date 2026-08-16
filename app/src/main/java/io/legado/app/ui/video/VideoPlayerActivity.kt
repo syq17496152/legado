@@ -8,10 +8,7 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.util.Log
 import android.view.LayoutInflater
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
 import android.view.textclassifier.TextClassifier
@@ -23,9 +20,32 @@ import android.webkit.WebViewClient
 import android.widget.ArrayAdapter
 import android.widget.AdapterView
 import androidx.activity.addCallback
+import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AlertDialog
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Login
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.PictureInPicture
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
@@ -68,7 +88,6 @@ import io.legado.app.help.webView.WebJsExtensions.Companion.nameSource
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.backgroundColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.model.VideoPlay
 import io.legado.app.service.VideoPlayService
 import io.legado.app.ui.about.AppLogDialog
@@ -82,6 +101,10 @@ import io.legado.app.ui.rss.search.ChangeRssArticleSourceDialog
 import io.legado.app.ui.rss.search.RssSearchSourceHolder
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
 import io.legado.app.ui.video.config.SettingsDialog
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.ui.widget.text.ScrollTextView
 import io.legado.app.utils.StartActivityContract
@@ -96,7 +119,6 @@ import io.legado.app.utils.openUrl
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setHtml
 import io.legado.app.utils.setMarkdown
-import io.legado.app.utils.setTintMutate
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
@@ -121,7 +143,16 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     // P0-1: playerView 从 legacyContainer 获取（legacyContainer 已隐藏但 XML 保留避免编译错误）
     // ViewPager2 模式下使用 currentFragment?.playerView，此字段仅供 Legacy 代码路径引用
     private val playerView: VideoPlayer by lazy { binding.playerView }
-    private var starMenuItem: MenuItem? = null
+
+    // Compose 顶栏（L-D9 S5 改造）状态
+    private var composeTitle by mutableStateOf("")
+    private var menuExpanded by mutableStateOf(false)
+    private var starChecked by mutableStateOf(false)
+    private var starVisible by mutableStateOf(false)
+    private var showCustomBtn by mutableStateOf(false)
+    private var showRefresh by mutableStateOf(false)
+    private var showLogin by mutableStateOf(false)
+    private var showChangeSource by mutableStateOf(false)
 
     // R3 抖音风格：ViewPager2 相关
     private var useViewPagerMode = true  // P0-1: 统一 ViewPager2 模式，移除 legacyContainer
@@ -167,7 +198,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     private var isNew = true
     internal var isFullScreen = false
     private var orientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-    private var menuCustomBtn: MenuItem? = null
 
     /**
      * T2.8: initSource 协程 Job 引用（onPause 时取消，解决 Bug-25：onPause 后 initSource 仍运行导致资源泄漏）
@@ -252,7 +282,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         registerForActivityResult(StartActivityContract(BookSourceEditActivity::class.java)) {
             if (it.resultCode == RESULT_OK) {
                 viewModel.upSource {
-                    menuCustomBtn?.isVisible = (VideoPlay.source as? BookSource)?.customButton == true
+                    showCustomBtn = (VideoPlay.source as? BookSource)?.customButton == true
                 }
             }
         }
@@ -337,6 +367,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             initView()
             upView()
         }
+        initComposeTopBar()
         onBackPressedDispatcher.addCallback(this) {
             if (isFullScreen) {
                 toggleFullScreen()
@@ -405,20 +436,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         binding.legacyContainer.gone()
         binding.viewPagerContainer.visible()
 
-        // 修复：重新绑定 titleBarNew 为 ActionBar
-        setSupportActionBar(binding.titleBarNew.toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.setDisplayShowTitleEnabled(false)
-
-        // B1 修复：直接绑定返回按钮点击事件，绕过 onSupportNavigateUp 的 ActionBar 链路
-        // 根因：activity_video_player.xml 有两个 TitleBar（title_bar 在 legacyContainer + title_bar_new 在 viewPagerContainer），
-        // TitleBar.kt 的 attachToActivity() 在 onAttachedToWindow() 时自动调用 setSupportActionBar(toolbar)，
-        // 两个 TitleBar 都调用 setSupportActionBar 导致 ActionBar 引用混乱，onSupportNavigateUp 可能未被正确触发。
-        // setNavigationOnClickListener 直接绑定点击事件更可靠，与 ActionBar 状态无关。
-        binding.titleBarNew.setNavigationOnClickListener {
-            Log.d("VideoBack", "NavigationOnClickListener triggered, isFullScreen=$isFullScreen")
-            onBackPressedDispatcher.onBackPressed()
-        }
+        // L-D9 S5 改造：顶栏已 Compose 化（GlassTopAppBar），不再绑定 ActionBar，
+        // 返回按钮由 initComposeTopBar 的 onNavClick 直接委托 onBackPressedDispatcher。
+        // 原 B1 双 TitleBar setSupportActionBar 冲突问题随 ActionBar 移除而消失。
+        updateSourceDependentMenu()
 
         // P0-1: 书源/单URL模式禁用滑动（单 Fragment），订阅源模式保持垂直滑动
         // 能力迁移：书源视频多集（episodes 非空且 >1）时放开滑动，支持上下滑动切换上/下集
@@ -455,7 +476,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                         fragment.activatePlayer()
                     }
                     // 更新标题（适配文章模式/集数模式/书源剧集模式）
-                    binding.titleBarNew.title = when {
+                    composeTitle = when {
                         !VideoPlay.rssArticles.isNullOrEmpty() ->
                             VideoPlay.rssArticles?.getOrNull(position)?.title ?: ""
                         VideoPlay.book != null && !VideoPlay.episodes.isNullOrEmpty() ->
@@ -486,7 +507,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
 
         // 设置标题
-        binding.titleBarNew.title = VideoPlay.videoTitle ?: ""
+        composeTitle = VideoPlay.videoTitle ?: ""
     }
 
     /**
@@ -532,11 +553,230 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         binding.root.setBackgroundColor(backgroundColor)
         // P0-1: 统一 ViewPager2 模式，旧版 UI 初始化全部移除
         // Fragment 自行管理播放器和控件，设置面板由 VideoSettingsPanel 提供
-        // Issue-4 修复：旧 titleBar 绑定返回按钮（attachToActivity=false 后需手动设置）
-        // 确保旧模式下点击左上角返回箭头能 finish Activity
-        binding.titleBar.toolbar.setNavigationIcon(R.drawable.ic_arrow_back)
-        binding.titleBar.setNavigationOnClickListener {
-            onBackPressedDispatcher.onBackPressed()
+        // 返回按钮由 Compose 顶栏 initComposeTopBar 的 onNavClick 直接委托 onBackPressedDispatcher
+    }
+
+    /**
+     * Compose 顶栏（L-D9 S5 改造）：GlassTopAppBar + 自定义/刷新/收藏图标按钮 + MoreVert 下拉菜单
+     *
+     * - 标题：composeTitle 状态驱动（VIDEO_SUB_TITLE / UP_VIDEO_INFO / onPageSelected 更新）
+     * - 全屏显隐：toggleFullScreen() 通过 binding.composeTopBar.gone()/visible() 控制
+     * - 返回按钮：直接委托 onBackPressedDispatcher（全屏退出全屏，非全屏 finish）
+     */
+    private fun initComposeTopBar() {
+        composeTitle = VideoPlay.videoTitle ?: ""
+        updateSourceDependentMenu()
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = composeTitle,
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = { onBackPressedDispatcher.onBackPressed() },
+                    actions = {
+                        if (showCustomBtn) {
+                            IconButton(onClick = { clickCustomButton() }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Tune,
+                                    contentDescription = getString(R.string.custom_button)
+                                )
+                            }
+                        }
+                        if (showRefresh) {
+                            IconButton(onClick = { recreate() }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Refresh,
+                                    contentDescription = getString(R.string.refresh)
+                                )
+                            }
+                        }
+                        if (starVisible) {
+                            IconButton(onClick = { onFragmentStarClicked() }) {
+                                Icon(
+                                    imageVector = if (starChecked) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                    contentDescription = getString(R.string.favorite)
+                                )
+                            }
+                        }
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(
+                                    imageVector = Icons.Filled.MoreVert,
+                                    contentDescription = getString(R.string.more)
+                                )
+                            }
+                            AppDropdownMenu(
+                                expanded = menuExpanded,
+                                onDismiss = { menuExpanded = false },
+                                actions = buildMenuActions()
+                            )
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    /**
+     * 源相关菜单项可见性（源初始化完成/编辑返回后刷新）
+     */
+    private fun updateSourceDependentMenu() {
+        showCustomBtn = (VideoPlay.source as? BookSource)?.customButton == true
+        showRefresh = VideoPlay.source is RssSource
+        showLogin = !VideoPlay.source?.loginUrl.isNullOrBlank()
+        showChangeSource = (RssSearchSourceHolder.articles?.size ?: 0) > 1
+    }
+
+    /**
+     * 下拉菜单数据驱动（迁移自 video_play.xml + onCompatOptionsItemSelected）
+     */
+    private fun buildMenuActions(): List<MenuAction> {
+        val actions = mutableListOf<MenuAction>()
+        // 浮窗播放
+        actions += MenuAction(
+            icon = Icons.Filled.PictureInPicture,
+            title = getString(R.string.float_window),
+            onClick = { startFloatingWindow() }
+        )
+        // 配置设置
+        actions += MenuAction(
+            icon = Icons.Filled.Settings,
+            title = getString(R.string.config_settings),
+            onClick = { showDialogFragment(SettingsDialog(this)) }
+        )
+        // 登录（源配置了登录地址才显示）
+        if (showLogin) {
+            actions += MenuAction(
+                icon = Icons.Filled.Login,
+                title = getString(R.string.login),
+                onClick = { openSourceLogin() }
+            )
+        }
+        // 复制播放地址
+        actions += MenuAction(
+            icon = Icons.Filled.ContentCopy,
+            title = getString(R.string.copy_play_url),
+            onClick = { copyVideoUrl() }
+        )
+        // 浏览器打开
+        actions += MenuAction(
+            icon = Icons.Filled.OpenInBrowser,
+            title = getString(R.string.open_in_browser),
+            onClick = { openVideoInBrowser() }
+        )
+        // 其他播放器打开
+        actions += MenuAction(
+            icon = Icons.Filled.Movie,
+            title = getString(R.string.open_other_video_player),
+            onClick = { openInOtherPlayer() }
+        )
+        // 换源（搜索结果多源场景显示）
+        if (showChangeSource) {
+            actions += MenuAction(
+                icon = Icons.Filled.SwapVert,
+                title = getString(R.string.change_source),
+                onClick = { showDialogFragment(ChangeRssArticleSourceDialog()) }
+            )
+        }
+        // 编辑书源
+        actions += MenuAction(
+            icon = Icons.Filled.Edit,
+            title = getString(R.string.edit_book_source),
+            onClick = { editSource() }
+        )
+        // 日志
+        actions += MenuAction(
+            icon = Icons.Filled.Info,
+            title = getString(R.string.log),
+            onClick = { showDialogFragment<AppLogDialog>() }
+        )
+        return actions
+    }
+
+    // ==================== 下拉菜单动作实现（迁移自 onCompatOptionsItemSelected） ====================
+
+    private fun clickCustomButton() {
+        (VideoPlay.source as? BookSource)?.let { source ->
+            VideoPlay.book?.let { book ->
+                SourceCallBack.callBackBtn(
+                    this,
+                    SourceCallBack.CLICK_CUSTOM_BUTTON,
+                    source,
+                    book,
+                    VideoPlay.chapter,
+                    BookType.video
+                )
+            }
+        }
+    }
+
+    private fun openSourceLogin() {
+        VideoPlay.source?.let { s ->
+            when (s) {
+                is BookSource -> startActivity<SourceLoginActivity> {
+                    putExtra("bookType", BookType.video)
+                }
+                is RssSource -> startActivity<SourceLoginActivity> {
+                    putExtra("type", "rssSource")
+                    putExtra("key", s.getKey())
+                }
+            }
+        }
+    }
+
+    private fun copyVideoUrl() {
+        val url = VideoPlay.videoUrl
+        if (url.isNullOrBlank()) {
+            this.toastOnUi(getString(R.string.video_no_play_url))
+            return
+        }
+        VideoPlay.book?.let {
+            SourceCallBack.callBackBtn(
+                this,
+                SourceCallBack.CLICK_COPY_PLAY_URL,
+                VideoPlay.source as? BookSource,
+                it,
+                VideoPlay.chapter,
+                BookType.video,
+                url
+            ) {
+                sendToClip(url)
+            }
+        }
+    }
+
+    private fun openVideoInBrowser() {
+        // 浏览器打开：优先用视频URL，其次用 RSS 文章链接
+        val url = VideoPlay.videoUrl
+            ?: VideoPlay.rssArticles?.getOrNull(VideoPlay.rssArticleIndex)?.link
+        if (url.isNullOrBlank()) {
+            this.toastOnUi(getString(R.string.video_no_available_url))
+        } else {
+            openUrl(url)
+        }
+    }
+
+    private fun openInOtherPlayer() {
+        val url = VideoPlay.videoUrl
+        if (url.isNullOrBlank()) {
+            this.toastOnUi(getString(R.string.video_no_play_url))
+            return
+        }
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(url.toUri(), "video/*")
+        }
+        startActivity(intent)
+    }
+
+    private fun editSource() {
+        VideoPlay.source?.let { s ->
+            when (s) {
+                is BookSource -> bookSourceEditResult.launch {
+                    putExtra("sourceUrl", s.getKey())
+                }
+                is RssSource -> rssSourceEditResult.launch {
+                    putExtra("sourceUrl", s.getKey())
+                }
+            }
         }
     }
 
@@ -857,16 +1097,16 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     private fun updateVideoUrlDisplay() {
         val videoUrl = VideoPlay.videoUrl
         if (!videoUrl.isNullOrEmpty()) {
-            binding.tvVideoUrl.text = "播放地址：$videoUrl"
+            binding.tvVideoUrl.text = getString(R.string.video_play_url_format, videoUrl)
             binding.tvVideoUrl.visible()
             binding.btnCopyUrl.visible()
             binding.tvVideoUrl.setOnClickListener {
                 sendToClip(videoUrl)
-                toastOnUi("播放地址已复制")
+                toastOnUi(getString(R.string.video_play_url_copied))
             }
             binding.btnCopyUrl.setOnClickListener {
                 sendToClip(videoUrl)
-                toastOnUi("播放地址已复制")
+                toastOnUi(getString(R.string.video_play_url_copied))
             }
         }
     }
@@ -997,13 +1237,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 } else {
                     ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 }
-                // F1 真全屏修复：用 titleBarNew.gone() 替代 supportActionBar?.hide()
-                // 根因：supportActionBar?.hide() 只隐藏 ActionBar 内容显示，但 TitleBar（AppBarLayout）
-                // 作为 viewPagerContainer（LinearLayout）子控件仍占据布局空间，
-                // 导致 ViewPager2 高度 = 屏幕高度 - TitleBar高度，playerView 无法铺满全屏。
+                // F1 真全屏修复：用 composeTopBar.gone() 替代 supportActionBar?.hide()
+                // 根因：supportActionBar?.hide() 只隐藏 ActionBar 内容显示，但顶栏仍占据布局空间，
+                // 导致 ViewPager2 高度 = 屏幕高度 - 顶栏高度，playerView 无法铺满全屏。
                 // gone() 释放布局空间，ViewPager2 可铺满整个屏幕实现真全屏。
-                binding.titleBarNew.gone()
-                Log.d("VideoFS", "enter fullscreen: titleBarNew gone, isFullScreen=$isFullScreen, isPortraitVideo=${VideoPlay.isPortraitVideo}")
+                binding.composeTopBar.gone()
                 currentFragment?.onFullScreenChanged(true)
             } else {
                 requestedOrientation = if (VideoPlay.isPortraitVideo) {
@@ -1021,10 +1259,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             if (useViewPagerMode) {
                 // R3 阶段4：ViewPager2 模式恢复竖屏
                 requestedOrientation = orientation
-                // F1 真全屏修复：恢复 TitleBar 显示（与 entering 的 gone() 对应）
-                binding.titleBarNew.visible()
+                // F1 真全屏修复：恢复顶栏显示（与 entering 的 gone() 对应）
+                binding.composeTopBar.visible()
                 supportActionBar?.show()
-                Log.d("VideoFS", "exit fullscreen: titleBarNew visible, isFullScreen=$isFullScreen")
                 currentFragment?.onFullScreenChanged(false)
             } else {
                 requestedOrientation = orientation
@@ -1134,40 +1371,15 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         })
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.video_play, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        menuCustomBtn = menu.findItem(R.id.menu_custom_btn)?.also {
-            it.isVisible = (VideoPlay.source as? BookSource)?.customButton == true
-        }
-        starMenuItem = menu.findItem(R.id.menu_rss_star)
-        upStarMenu()
-        // menu_rss_refresh 只在 RSS 源时显示
-        menu.findItem(R.id.menu_rss_refresh)?.isVisible = VideoPlay.source is RssSource
-        // rss-unified-search: 仅当搜索结果多源场景（RssSearchSourceHolder.articles.size > 1）显示换源菜单
-        menu.findItem(R.id.menu_change_source)?.isVisible =
-            (RssSearchSourceHolder.articles?.size ?: 0) > 1
-        return super.onPrepareOptionsMenu(menu)
-    }
-
+    /**
+     * L-D9 S5 改造：菜单已迁移至 Compose AppDropdownMenu，原 ActionBar 菜单体系（video_play.xml）
+     * 及 onCompatCreateOptionsMenu/onPrepareOptionsMenu/onMenuOpened/onCompatOptionsItemSelected
+     * 均已移除。收藏按钮状态改为 Compose 状态驱动（starVisible/starChecked）。
+     */
     private fun upStarMenu() {
         val isStarred = VideoPlay.rssStar != null
-        if (VideoPlay.rssStar != null) {
-            starMenuItem?.isVisible = true
-            starMenuItem?.setIcon(R.drawable.ic_star)
-            starMenuItem?.setTitle(R.string.in_favorites)
-            starMenuItem?.icon?.setTintMutate(primaryTextColor)
-        } else if(VideoPlay.rssRecord != null) {
-            starMenuItem?.isVisible = true
-            starMenuItem?.setIcon(R.drawable.ic_star_border)
-            starMenuItem?.setTitle(R.string.out_favorites)
-            starMenuItem?.icon?.setTintMutate(primaryTextColor)
-        } else {
-            starMenuItem?.isVisible = false
-        }
+        starVisible = VideoPlay.rssStar != null || VideoPlay.rssRecord != null
+        starChecked = isStarred
         // R3 阶段2：同步更新当前 Fragment 的收藏按钮状态
         currentFragment?.updateStarState(isStarred)
     }
@@ -1186,113 +1398,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 VideoPlay.rssStar?.let { showDialogFragment(RssFavoritesDialog(it)) }
             }
         }
-    }
-
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_login)?.isVisible = !VideoPlay.source?.loginUrl.isNullOrBlank()
-        return super.onMenuOpened(featureId, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_custom_btn -> {
-                (VideoPlay.source as? BookSource)?.let {source ->
-                    VideoPlay.book?.let { book ->
-                        SourceCallBack.callBackBtn(
-                            this,
-                            SourceCallBack.CLICK_CUSTOM_BUTTON,
-                            source,
-                            book,
-                            VideoPlay.chapter,
-                            BookType.video
-                        )
-                    }
-                }
-            }
-            R.id.menu_rss_star -> viewModel.addFavorite {
-                VideoPlay.rssStar?.let { showDialogFragment(RssFavoritesDialog(it)) }
-            }
-            R.id.menu_rss_refresh -> {
-                // 简化说明: refresh 通过 recreate 重启 Activity 重新加载 RSS 文章列表
-                // 已知上限: 会重置播放进度等运行时状态
-                // 升级路径: 后续可抽取 refreshRssArticles() 只重载列表不重启 Activity
-                recreate()
-            }
-            R.id.menu_float_window -> startFloatingWindow()
-            R.id.menu_config_settings -> showDialogFragment(SettingsDialog(this))
-            R.id.menu_login -> VideoPlay.source?.let {s ->
-               when (s) {
-                    is BookSource -> {
-                        startActivity<SourceLoginActivity> {
-                            putExtra("bookType", BookType.video)
-                        }
-                    }
-                    is RssSource -> {
-                        startActivity<SourceLoginActivity> {
-                            putExtra("type", "rssSource")
-                            putExtra("key", s.getKey())
-                        }
-                    }
-                }
-            }
-
-            R.id.menu_copy_video_url -> {
-                val url = VideoPlay.videoUrl
-                if (url.isNullOrBlank()){
-                    this.toastOnUi("暂无播放地址")
-                    return true
-                }
-                VideoPlay.book?.let {
-                    SourceCallBack.callBackBtn(
-                        this,
-                        SourceCallBack.CLICK_COPY_PLAY_URL,
-                        VideoPlay.source as? BookSource,
-                        it,
-                        VideoPlay.chapter,
-                        BookType.video,
-                        url
-                    ) {
-                        sendToClip(url)
-                    }
-                }
-            }
-            R.id.menu_browser_open -> {
-                // 浏览器打开：优先用视频URL，其次用 RSS 文章链接
-                val url = VideoPlay.videoUrl
-                    ?: VideoPlay.rssArticles?.getOrNull(VideoPlay.rssArticleIndex)?.link
-                if (url.isNullOrBlank()) {
-                    this.toastOnUi("暂无可用地址")
-                } else {
-                    openUrl(url)
-                }
-            }
-            R.id.menu_open_other_video_player -> {
-                val url = VideoPlay.videoUrl
-                if (url.isNullOrBlank()){
-                    this.toastOnUi("暂无播放地址")
-                    return true
-                }
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(url.toUri(), "video/*")
-                }
-                startActivity(intent)
-            }
-            R.id.menu_edit_source -> VideoPlay.source?.let {s  ->
-                when (s) {
-                    is BookSource -> bookSourceEditResult.launch {
-                        putExtra("sourceUrl", s.getKey())
-                    }
-                    is RssSource -> rssSourceEditResult.launch {
-                        putExtra("sourceUrl", s.getKey())
-                    }
-                }
-            }
-
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-            // rss-unified-search: 弹出换源对话框
-            R.id.menu_change_source -> showDialogFragment(ChangeRssArticleSourceDialog())
-        }
-        return super.onCompatOptionsItemSelected(item)
     }
 
     private fun startFloatingWindow() {
@@ -1372,11 +1477,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
         observeEventSticky<String>(EventBus.VIDEO_SUB_TITLE) {
             if (useViewPagerMode) {
-                binding.titleBarNew.title = it
+                composeTitle = it
                 // R3 阶段2：同步更新当前 Fragment 的视频标题
                 currentFragment?.updateVideoTitle(it)
             } else {
-                binding.titleBarNew.title = it
+                composeTitle = it
             }
             // R3 修复：startPlay 异步赋值 videoUrl，VIDEO_SUB_TITLE 在每次 player.setUp 后触发，此时 videoUrl 已就绪
             // P0-1: 统一 ViewPager2 模式，updateVideoUrlDisplay 已移除
@@ -1387,7 +1492,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 // 文章列表模式：文章数量不变，只需更新当前 Fragment 的集数/线路选择器
                 if (!VideoPlay.rssArticles.isNullOrEmpty()) {
                     currentFragment?.updateEpisodeSelector()
-                    binding.titleBarNew.title = VideoPlay.videoTitle ?: ""
+                    composeTitle = VideoPlay.videoTitle ?: ""
                     return@observeEvent
                 }
                 // 集数列表模式：增量更新 adapter 数量（避免 notifyDataSetChanged 重建首个 Fragment）
@@ -1399,7 +1504,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 } else if (newCount < oldCount) {
                     videoPagerAdapter?.notifyItemRangeRemoved(newCount, oldCount - newCount)
                 }
-                binding.titleBarNew.title = VideoPlay.rssEpisodes?.getOrNull(VideoPlay.rssEpisodeIndex)?.title
+                composeTitle = VideoPlay.rssEpisodes?.getOrNull(VideoPlay.rssEpisodeIndex)?.title
                     ?: VideoPlay.videoTitle ?: ""
                 // 集数模式下也更新选择器（集数列表可能变化）
                 currentFragment?.updateEpisodeSelector()
