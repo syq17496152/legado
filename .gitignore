@@ -82,6 +82,23 @@ build_temp.bat
 .trae/memory/archived/feedback/legacy_20260727.md
 .trae/memory/ai_memory_main.md
 
+# === 本地调试产物 / 临时文件（不入库）===
+# 调试 UI 与 VLM 分析工具状态
+.mimosa/
+bak/
+/_*.txt
+/_*.xml
+/_*.png
+/_*.db
+/asm_out.txt
+
+# .trae 调试产物（skills/ 除外，skill 需入库）
+/.trae/.ignore
+/.trae/cache/
+/.trae/*.png
+/.trae/*.xml
+/.trae/tmp_*.py
+
 # === APK 发布脚本配置（含 API token，禁止提交）===
 scripts/publish_config.json
 /.opencode/command/*.md
