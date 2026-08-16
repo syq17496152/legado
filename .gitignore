@@ -32,6 +32,7 @@ tools/legado-jvm/.gradle/
 # 临时目录和输出
 temp/
 output/
+.zcode/
 
 # 签名密钥（不入 git，仅本地使用）
 *.jks
