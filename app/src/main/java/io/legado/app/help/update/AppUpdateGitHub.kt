@@ -61,7 +61,9 @@ object AppUpdateGitHub : AppUpdate.AppUpdateInterface {
                         it.versionName,
                         it.note,
                         it.downloadUrl,
-                        it.name
+                        it.name,
+                        it.assetSize,
+                        it.createdAt
                     )
                 }
                 ?: throw NoStackTraceException("已是最新版本")

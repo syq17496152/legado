@@ -73,6 +73,8 @@ object PreferKey {
     const val obsidianAutoExport = "obsidianAutoExport"
     // precise-manage: 网址记录开关（默认开启）
     const val recordUrl = "recordUrl"
+    // precise-manage: 下载管理已隐藏任务 id（用户清除已完成但保留文件的记录）
+    const val downloadDismissedIds = "downloadDismissedIds"
     const val migratedThreadCount = "migratedThreadCount" // 老用户迁移标志位（boolean）
     const val rssParseConcurrency = "rssParseConcurrency"
     const val imageLoadConcurrency = "imageLoadConcurrency"
@@ -171,6 +173,10 @@ object PreferKey {
     const val progressBarBehavior = "progressBarBehavior"
     const val sourceEditMaxLine = "sourceEditMaxLine"
     const val ttsTimer = "ttsTimer"
+    const val ttsTimerMode = "ttsTimerMode"
+    const val ttsTimerChapters = "ttsTimerChapters"
+    const val ttsParagraphPauseMs = "ttsParagraphPauseMs"
+    const val pullDownBookmark = "pullDownBookmark"
     const val noAnimScrollPage = "noAnimScrollPage"
     const val webDavDeviceName = "webDavDeviceName"
     const val webServiceWakeLock = "webServiceWakeLock"

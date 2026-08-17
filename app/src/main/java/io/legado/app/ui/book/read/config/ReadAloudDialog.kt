@@ -132,10 +132,34 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
             toastOnUi("保存设定时间成功！")
         }
         tvTimer.setOnClickListener {
-            val times = intArrayOf(0, 5, 10, 15, 30, 60, 90, 180)
-            val timeKeys = times.map { "$it 分钟" }
-            context?.selector("设定时间", timeKeys) { _, index ->
-                ReadAloud.setTimer(requireContext(), times[index])
+            // 定时朗读三模式: 按分钟/读完本章/剩余章节 (sync-upstream-optimizations-20260816 R7.2)
+            context?.selector("定时朗读", listOf("按分钟", "读完本章", "剩余章节", "取消定时")) { _, mode ->
+                when (mode) {
+                    0 -> {
+                        val times = intArrayOf(0, 5, 10, 15, 30, 60, 90, 180)
+                        val timeKeys = times.map { "$it 分钟" }
+                        context?.selector("设定时间", timeKeys) { _, index ->
+                            ReadAloud.setTimer(requireContext(), times[index])
+                            upTimerText(times[index])
+                        }
+                    }
+                    1 -> {
+                        ReadAloud.setTimerMode(requireContext(), 1)
+                        upTimerText(0)
+                    }
+                    2 -> {
+                        val chapters = intArrayOf(1, 2, 3, 5, 10, 20)
+                        val chapterKeys = chapters.map { "$it 章" }
+                        context?.selector("剩余章节", chapterKeys) { _, index ->
+                            ReadAloud.setTimerMode(requireContext(), 2, chapters[index])
+                            upTimerText(0)
+                        }
+                    }
+                    else -> {
+                        ReadAloud.setTimer(requireContext(), 0)
+                        upTimerText(0)
+                    }
+                }
             }
         }
         //设置保存的默认值
@@ -198,10 +222,17 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
     }
 
     private fun upTimerText(timeMinute: Int) {
-        if (timeMinute < 0) {
-            binding.tvTimer.text = requireContext().getString(R.string.timer_m, 0)
-        } else {
-            binding.tvTimer.text = requireContext().getString(R.string.timer_m, timeMinute)
+        when (BaseReadAloudService.ttsTimerMode) {
+            1 -> binding.tvTimer.text = requireContext().getString(R.string.timer_chapter_stop)
+            2 -> binding.tvTimer.text =
+                requireContext().getString(R.string.timer_chapters_m, BaseReadAloudService.remainChapters)
+            else -> {
+                if (timeMinute < 0) {
+                    binding.tvTimer.text = requireContext().getString(R.string.timer_m, 0)
+                } else {
+                    binding.tvTimer.text = requireContext().getString(R.string.timer_m, timeMinute)
+                }
+            }
         }
     }
 

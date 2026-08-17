@@ -103,6 +103,14 @@
 
     <io.legado.app.lib.prefs.SwitchPreference
         android:defaultValue="true"
+        android:key="pullDownBookmark"
+        android:title="@string/pull_down_bookmark_title"
+        android:summary="@string/pull_down_bookmark_summary"
+        app:iconSpaceReserved="false"
+        app:isBottomBackground="true" />
+
+    <io.legado.app.lib.prefs.SwitchPreference
+        android:defaultValue="true"
         android:key="volumeKeyPage"
         android:title="@string/volume_key_page"
         app:iconSpaceReserved="false"

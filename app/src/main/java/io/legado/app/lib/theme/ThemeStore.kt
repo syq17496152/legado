@@ -192,6 +192,15 @@ private constructor(private val mContext: Context) : ThemeStoreInterface {
             ThemeStore(context).apply()
         }
 
+        /**
+         * 主题变更令牌（apply() 时打的时间戳）。供 BaseActivity 在 onResume 比对，
+         * 懒刷新系统栏/背景图（from legado-archive refreshThemeBackgroundIfChanged 模式）。
+         */
+        @CheckResult
+        fun valuesChanged(context: Context = appCtx): Long {
+            return prefs(context).getLong(ThemeStorePrefKeys.VALUES_CHANGED, 0L)
+        }
+
         @CheckResult
         @ColorInt
         fun primaryColor(context: Context = appCtx): Int {

@@ -139,7 +139,9 @@ class RssSourceEditActivity :
         if (!source.equal(viewModel.rssSource ?: RssSource())) {
             alert(R.string.exit) {
                 setMessage(R.string.exit_no_save)
-                positiveButton(R.string.yes)
+                positiveButton(R.string.yes) {
+                    viewModel.save(source) { super.finish() }
+                }
                 negativeButton(R.string.no) {
                     super.finish()
                 }

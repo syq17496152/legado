@@ -75,6 +75,7 @@ class AboutActivity : BaseActivity<ActivityAboutBinding>() {
                     onCopyGzh = { sendToClip(getString(R.string.legado_gzh)) },
                     onCrashLog = { showDialogFragment<CrashLogsDialog>() },
                     onSaveLog = { saveLog() },
+                    onShareLog = { shareLog() },
                     onCreateHeapDump = { createHeapDump() }
                 )
             }
@@ -127,6 +128,19 @@ class AboutActivity : BaseActivity<ActivityAboutBinding>() {
         }
     }
 
+    /**
+     * 分享日志 (打包 logs.zip 拉起系统分享, sync-upstream-optimizations-20260816 R4)
+     */
+    private fun shareLog() {
+        Coroutine.async {
+            buildLogsZip()
+        }.onSuccess { zipFile ->
+            share(zipFile, "application/zip")
+        }.onError {
+            AppLog.put("分享日志出错\n${it.localizedMessage}", it, true)
+        }
+    }
+
     private fun createHeapDump() {
         Coroutine.async {
             val backupPath = AppConfig.backupPath ?: let {
@@ -151,7 +165,7 @@ class AboutActivity : BaseActivity<ActivityAboutBinding>() {
         }
     }
 
-    private fun copyLogs(doc: FileDoc) {
+    private fun buildLogsZip(): File {
         val cacheDir = appCtx.externalCache
         val logFiles = File(cacheDir, "logs")
         val crashFiles = File(cacheDir, "crash")
@@ -161,7 +175,11 @@ class AboutActivity : BaseActivity<ActivityAboutBinding>() {
 
         val zipFile = File(cacheDir, "logs.zip")
         ZipUtils.zipFiles(arrayListOf(logFiles, crashFiles, logcatFile), zipFile)
+        return zipFile
+    }
 
+    private fun copyLogs(doc: FileDoc) {
+        val zipFile = buildLogsZip()
         doc.find("logs.zip")?.delete()
 
         zipFile.inputStream().use { input ->

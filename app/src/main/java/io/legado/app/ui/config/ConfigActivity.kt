@@ -28,6 +28,11 @@ class ConfigActivity : VMBaseActivity<ActivityConfigBinding, ConfigViewModel>() 
     override val binding by viewBinding(ActivityConfigBinding::inflate)
     override val viewModel by viewModels<ConfigViewModel>()
 
+    // 主题架构 v2：设置宿主页豁免主题重建（改色经 ThemeSync 即时换肤，避免活预览页闪屏），
+    // RECREATE 事件到达时由 BaseActivity 刷系统栏/背景图
+    override val recreateOnThemeChange: Boolean
+        get() = false
+
     // L-E1/L-E2 S2 改造：Compose 顶栏标题与菜单状态（Fragment 通过 setTopBarMenu 注册菜单）
     // 注意：不能在属性初始化处调用 getString()（构造期 Context 未 attach 会 NPE），需在 onActivityCreated 中赋值
     private var composeTitle by mutableStateOf("")
@@ -105,9 +110,7 @@ class ConfigActivity : VMBaseActivity<ActivityConfigBinding, ConfigViewModel>() 
 
     override fun observeLiveBus() {
         super.observeLiveBus()
-        observeEvent<String>(EventBus.RECREATE) {
-            recreate()
-        }
+        // RECREATE 订阅上移 BaseActivity（主题架构 v2），此处不再重复订阅
     }
 
 }

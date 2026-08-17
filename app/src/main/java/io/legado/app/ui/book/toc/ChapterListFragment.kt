@@ -131,7 +131,7 @@ class ChapterListFragment : VMBaseFragment<TocViewModel>(R.layout.fragment_chapt
                     else -> appDb.bookChapterDao.search(viewModel.bookUrl, searchKey, 0, end)
                 }
             }.let {
-                adapter.setItems(it)
+                adapter.setItemsWithCollapse(it, searchKey)
             }
         }
     }

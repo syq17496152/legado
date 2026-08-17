@@ -32,6 +32,7 @@ import io.legado.app.data.dao.RssStarDao
 import io.legado.app.data.dao.RuleSubDao
 import io.legado.app.data.dao.SearchBookDao
 import io.legado.app.data.dao.SearchKeywordDao
+import io.legado.app.data.dao.SourceGroupCoverDao
 import io.legado.app.data.dao.ServerDao
 import io.legado.app.data.dao.TxtTocRuleDao
 import io.legado.app.data.dao.UrlRecordDao
@@ -50,6 +51,7 @@ import io.legado.app.data.entities.DictRule
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.data.entities.KeyboardAssist
 import io.legado.app.data.entities.PlayHistory
+import io.legado.app.data.entities.SourceGroupCover
 import io.legado.app.data.entities.SourceRecycleBin
 import io.legado.app.data.entities.ReadRecord
 import io.legado.app.data.entities.ReadRecordDetail
@@ -80,7 +82,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 103,
+    version = 104,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -89,7 +91,7 @@ val appDb by lazy {
         RuleSub::class, DictRule::class, KeyboardAssist::class, Server::class,
         CoverGalleryGroup::class, CoverGalleryImage::class, ReadRecordDetail::class,
         AutoTaskRule::class, BookHighlight::class, PlayHistory::class, SourceRecycleBin::class,
-        UrlRecord::class],
+        UrlRecord::class, SourceGroupCover::class],
     views = [BookSourcePart::class],
     autoMigrations = [
         AutoMigration(from = 43, to = 44),
@@ -146,6 +148,7 @@ val appDb by lazy {
         // rss-weight: 94→95 使用手动 Migration（DatabaseMigrations.migration_94_95），rssSources 表新增 parseConcurrency + weight 字段
         // rss-unified-search: 98→99 使用手动 Migration（DatabaseMigrations.migration_98_99），search_keywords 表改为复合主键(word, type)
         // precise-manage: 102→103 使用手动 Migration（DatabaseMigrations.migration_102_103），新增 url_records 表（网址记录）
+        // source-folder-cover: 103→104 使用手动 Migration（DatabaseMigrations.migration_103_104），新增 source_group_covers 表（发现/订阅源分组封面）
     ]
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -177,6 +180,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract val playHistoryDao: PlayHistoryDao
     abstract val sourceRecycleBinDao: SourceRecycleBinDao
     abstract val urlRecordDao: UrlRecordDao
+    abstract val sourceGroupCoverDao: SourceGroupCoverDao
 
     companion object {
 

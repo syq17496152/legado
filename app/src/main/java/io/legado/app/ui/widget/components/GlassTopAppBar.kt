@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.Dp
 import io.legado.app.lib.theme.elevation
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.ui.theme.ThemeSync
 
 /**
  * 顶栏（S2/S4 统一容器）。
@@ -41,6 +42,8 @@ fun GlassTopAppBar(
     elevation: Dp? = null
 ) {
     val context = LocalContext.current
+    // 订阅全局主题信号：ThemeSync.bump() 后本组件重组，重读 primaryColor/elevation 最新值
+    val themeVersion = ThemeSync.version
     // 默认容器色：跟随「颜色主题」colorPrimary（对齐 View TitleBar），可覆盖
     val barColor = containerColor ?: Color(context.primaryColor)
     // 默认阴影：跟随 barElevation 设置（View 侧 context.elevation，px→dp），可覆盖

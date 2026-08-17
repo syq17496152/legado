@@ -18,6 +18,7 @@ import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.EventBus
 import io.legado.app.constant.Theme
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
@@ -32,6 +33,7 @@ import io.legado.app.utils.applyTint
 import io.legado.app.utils.disableAutoFill
 import io.legado.app.utils.fullScreen
 import io.legado.app.utils.hideSoftInput
+import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setLightStatusBar
 import io.legado.app.utils.setNavigationBarColorAuto
 import io.legado.app.utils.setStatusBarColorAuto
@@ -48,6 +50,14 @@ abstract class BaseActivity<VB : ViewBinding>(
 ) : AppCompatActivity() {
 
     protected abstract val binding: VB
+
+    /**
+     * 收到 EventBus.RECREATE（主题切换/书架布局变更等）时是否重建本 Activity。
+     * 沉浸页（阅读器/视频/音频播放）覆写为 false，避免打断播放；其 Compose
+     * 内容经 ThemeSync 版本信号即时换肤，View 侧系统栏由 onConfigurationChanged 兜底。
+     */
+    open val recreateOnThemeChange: Boolean
+        get() = true
 
     val isInMultiWindow: Boolean
         @SuppressLint("ObsoleteSdkInt")
@@ -83,6 +93,7 @@ abstract class BaseActivity<VB : ViewBinding>(
         setupSystemBar()
         setContentView(binding.root)
         upBackgroundImage()
+        lastThemeToken = ThemeStore.valuesChanged(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             findViewById<TitleBar>(R.id.title_bar)
                 ?.onMultiWindowModeChanged(isInMultiWindowMode, fullScreen)
@@ -91,7 +102,40 @@ abstract class BaseActivity<VB : ViewBinding>(
             finish()
         }
         observeLiveBus()
+        // 主题架构 v2：主题/书架布局等 RECREATE 事件统一由基类订阅——
+        // 普通页面重建（View+Compose 全刷新）；沉浸页/活预览设置页按
+        // recreateOnThemeChange 豁免，改刷系统栏与背景图（Compose 侧经 ThemeSync 即时换肤）
+        observeEvent<String>(EventBus.RECREATE) {
+            if (recreateOnThemeChange) {
+                recreate()
+            } else {
+                setupSystemBar()
+                upBackgroundImage()
+            }
+        }
         onActivityCreated(savedInstanceState)
+    }
+
+    /** 上次见到的主题令牌（onCreate 初始化，onResume 比对懒刷新） */
+    private var lastThemeToken = 0L
+
+    override fun onResume() {
+        super.onResume()
+        refreshThemeAppearanceIfChanged()
+    }
+
+    /**
+     * 主题外观懒同步（from legado-archive refreshThemeBackgroundIfChanged 模式）：
+     * 本页处于后台期间主题变更（未收到/未处理重建事件）时，onResume 对比
+     * ThemeStore VALUES_CHANGED 令牌，确定性刷新系统栏与背景图。
+     */
+    private fun refreshThemeAppearanceIfChanged() {
+        val token = ThemeStore.valuesChanged(this)
+        if (token != lastThemeToken) {
+            lastThemeToken = token
+            setupSystemBar()
+            upBackgroundImage()
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.O)

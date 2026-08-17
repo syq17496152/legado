@@ -96,6 +96,10 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     ReadManga.Callback, ChangeBookSourceDialog.CallBack, MangaMenu.CallBack,
     MangaColorFilterDialog.Callback, ScrollTimer.ScrollCallback, MangaEpaperDialog.Callback {
 
+    // 主题架构 v2：漫画沉浸页不随主题事件重建，Compose 侧经 ThemeSync 刷新
+    override val recreateOnThemeChange: Boolean
+        get() = false
+
     private val mLayoutManager by lazy {
         MangaLayoutManager(this)
     }

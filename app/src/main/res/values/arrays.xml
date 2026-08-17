@@ -5,6 +5,22 @@
 		<item>WEBDAV</item>
 	</string-array>
 
+	<string-array name="tts_paragraph_pause_entries">
+		<item>关闭</item>
+		<item>0.3 秒</item>
+		<item>0.5 秒</item>
+		<item>0.8 秒</item>
+		<item>1.2 秒</item>
+	</string-array>
+
+	<string-array name="tts_paragraph_pause_values">
+		<item>0</item>
+		<item>300</item>
+		<item>500</item>
+		<item>800</item>
+		<item>1200</item>
+	</string-array>
+
 	<string-array name="book_type">
 		<item>Text</item>
 		<item>Audio</item>

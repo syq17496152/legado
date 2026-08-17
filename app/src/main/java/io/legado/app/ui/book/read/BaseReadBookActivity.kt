@@ -62,6 +62,11 @@ abstract class BaseReadBookActivity :
 
     override val binding by viewBinding(ActivityBookReadBinding::inflate)
     override val viewModel by viewModels<ReadBookViewModel>()
+
+    // 主题架构 v2：阅读器配色独立（ReadBookConfig），不随全局主题事件重建；
+    // Compose 菜单/浮层经 ThemeSync 刷新
+    override val recreateOnThemeChange: Boolean
+        get() = false
     // S5：菜单覆盖层可见性（ReadBookActivity 覆写为 Compose 菜单层状态）
     protected open val menuOverlayVisible: Boolean
         get() = binding.readMenu.isVisible

@@ -136,4 +136,16 @@ object ReadAloud {
         }
     }
 
+    // 定时朗读模式入口: mode 1=读完本章 2=剩余 chapters 章 (R7.2)
+    fun setTimerMode(context: Context, mode: Int, chapters: Int = 0) {
+        if (BaseReadAloudService.isRun) {
+            val intent = Intent(context, aloudClass)
+            intent.action = IntentAction.setTimer
+            intent.putExtra("mode", mode)
+            intent.putExtra("minute", 0)
+            intent.putExtra("chapters", chapters)
+            context.startForegroundServiceCompat(intent)
+        }
+    }
+
 }

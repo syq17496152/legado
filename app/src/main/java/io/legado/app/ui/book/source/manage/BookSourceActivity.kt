@@ -31,6 +31,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSourcePart
+
 import io.legado.app.databinding.ActivityBookSourceBinding
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
@@ -46,6 +47,7 @@ import io.legado.app.ui.book.search.SearchScope
 import io.legado.app.ui.book.source.debug.BookSourceDebugActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.adapter.FolderItem
 import io.legado.app.ui.adapter.SourceFolderAdapter
 import io.legado.app.ui.config.CheckSourceConfig
 import io.legado.app.ui.file.HandleFileContract
@@ -98,7 +100,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     private val adapter by lazy { BookSourceAdapter(this, this, binding.recyclerView) }
     private val adapterCompact by lazy { BookSourceAdapterCompact(this, this) }
     private val adapterGrid by lazy { BookSourceAdapterGrid(this, this) }
-    private val folderAdapter by lazy { SourceFolderAdapter(this, this) }
     private val itemTouchCallback by lazy { ItemTouchCallback(adapter) }
     private val verticalDivider by lazy { VerticalDivider(this) }
     private val gridSpacingDecoration = GridSpacingItemDecoration()
@@ -118,8 +119,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     private var composeSearchQuery by mutableStateOf("")
     private var composeCurrentType by mutableStateOf(-1)
     private var composeCurrentGroup by mutableStateOf<String?>(null)
-    private var composeIsShowingFolder by mutableStateOf(false)
-    private var composeFolderItems by mutableStateOf(listOf<String>())
     private var composeCheckMessages by mutableStateOf(mapOf<String, String>())
     private var composeIsChecking by mutableStateOf(false)
     // source-compose 桥接：Compose 多选状态（多选在 Compose 侧接管）
@@ -131,9 +130,9 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     private var currentType: Int = -1        // -1=全部, 0-4=具体类型
     private var currentGroup: String? = null // null=根目录, 非空=在某个分组内
     private val inSubDirectory: Boolean get() = currentType >= 0 || currentGroup != null
-    // source-layout-refactor 视图状态：sourceGroupStyle!=0 时根目录显示文件夹
+    // source-layout-refactor 视图状态：管理页固定平铺（source-folder-cover 决策：不再显示文件夹，见 spec AD-03）
     private val isFolderViewMode: Boolean
-        get() = AppConfig.sourceGroupStyle != 0
+        get() = false
     // 当前是否显示文件夹视图（运行时状态）
     private var isShowingFolder: Boolean = false
     private val qrResult = registerForActivityResult(QrCodeResult()) {
@@ -164,17 +163,10 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        // F-P1-8 初始化运行时状态：跟随用户偏好
-        isShowingFolder = isFolderViewMode
-        composeIsShowingFolder = isShowingFolder
+        // source-folder-cover：管理页固定平铺，不显示文件夹视图
+        isShowingFolder = false
         initRecyclerView()
-        if (isShowingFolder) {
-            upFolderView()
-            // V4 分组折叠渲染：文件夹根目录也填充全量数据供 Compose 分组展示
-            upBookSource()
-        } else {
-            upBookSource()
-        }
+        upBookSource()
         initLiveDataGroup()
         initSelectActionBar()
         resumeCheckSource()
@@ -199,8 +191,8 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                     groupSourcesByDomain = groupSourcesByDomain,
                     isFolderViewMode = isFolderViewMode,
                     sourceGroupStyle = AppConfig.sourceGroupStyle,
-                    isShowingFolder = composeIsShowingFolder,
-                    folderItems = composeFolderItems,
+                    isShowingFolder = false,
+                    folderItems = emptyList(),
                     searchQuery = composeSearchQuery,
                     isSelecting = composeIsSelecting,
                     selectedCount = composeSelectedUrls.size,
@@ -237,7 +229,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                         composeCurrentGroup = group
                         upBookSource()
                     },
-                    onFolderClick = { onFolderClick(it) },
+                    onFolderClick = { },
                     onFolderConfig = { showFolderConfig() },
                     onAddSource = { startActivity<BookSourceEditActivity>() },
                     onImportLocal = {
@@ -396,11 +388,8 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         // 多选交互降级为：长按进入多选 + 逐项勾选（Compose 侧 onItemLongClick/onItemClick toggleSelect）。
         binding.recyclerView.setEdgeEffectColor(primaryColor)
         binding.recyclerView.recycledViewPool.setMaxRecycledViews(0, 15)
-        if (isShowingFolder) {
-            applyFolderView()
-        } else {
-            applyListView()
-        }
+        // source-folder-cover：管理页固定平铺，始终列表视图
+        applyListView()
     }
 
     // source-layout-refactor 应用列表视图（支持 sourceLayout: 0=列表/1=紧凑/2-6=网格）
@@ -429,19 +418,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         itemTouchCallback.isCanDrag =
             AppConfig.bookSourceSort == 0 && sort == BookSourceSort.Default
             && layout == 0 && !groupSourcesByDomain
-    }
-
-    // source-layout-refactor 应用文件夹视图
-    private fun applyFolderView() {
-        binding.recyclerView.removeItemDecoration(verticalDivider)
-        binding.recyclerView.removeItemDecoration(gridSpacingDecoration)
-        val marginDp = AppConfig.sourceMargin
-        gridSpacingDecoration.spacing = SourceFolderAdapter.spacingPx(this, marginDp)
-        binding.recyclerView.addItemDecoration(gridSpacingDecoration)
-        val spanCount = SourceFolderAdapter.calculateSpanCount(this, marginDp)
-        binding.recyclerView.layoutManager = GridLayoutManager(this, spanCount)
-        binding.recyclerView.adapter = folderAdapter
-        itemTouchCallback.isCanDrag = false
     }
 
     // M-01 修复：获取当前选择适配器（统一 list/compact/grid 的 selection API）
@@ -484,54 +460,20 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     // source-layout-refactor 配置对话框（新签名：onConfigChanged 回调）
     private fun showFolderConfig() {
-        SourceFolderAdapter.showConfigDialog(this, isBookSource = true) {
+        // source-folder-cover：管理页固定平铺，隐藏分组样式选项（showGroupStyle=false）
+        SourceFolderAdapter.showConfigDialog(this, isBookSource = true, showGroupStyle = false) {
             applyConfigChange()
         }
     }
 
     // source-layout-refactor 配置变更后应用视图
     private fun applyConfigChange() {
-        // 配置变更后重置子目录状态
+        // source-folder-cover：管理页固定平铺，配置变更仅影响列表布局/排序/间距
         currentType = -1
         currentGroup = null
-        when (AppConfig.sourceGroupStyle) {
-            0 -> { // 列表平铺：直接显示所有源
-                isShowingFolder = false
-                composeIsShowingFolder = false
-                applyListView()
-                upBookSource(composeSearchQuery)
-            }
-            1, 2 -> { // 按类型/按分组：显示文件夹
-                isShowingFolder = true
-                composeIsShowingFolder = true
-                applyFolderView()
-                upFolderView()
-                // V4 分组折叠渲染：填充全量数据供 Compose 分组展示
-                upBookSource(composeSearchQuery)
-            }
-        }
-    }
-
-    // F-P1-8 更新文件夹视图数据（根据分组样式：按分组/按类型）
-    private fun upFolderView() {
-        val folderList = mutableListOf<String>()
-        if (AppConfig.sourceGroupStyle == 1) {
-            // 按类型分组：显示类型文件夹
-            folderList.add(getString(R.string.all_groups))
-            folderList.add(getString(R.string.type_text))
-            folderList.add(getString(R.string.type_audio))
-            folderList.add(getString(R.string.type_image))
-            folderList.add(getString(R.string.type_file))
-            folderList.add(getString(R.string.type_video))
-        } else {
-            // 按自定义分组
-            folderList.add(getString(R.string.all_groups))
-            folderList.add(getString(R.string.no_group))
-            folderList.addAll(groups)
-        }
-        folderAdapter.setItems(folderList, folderAdapter.diffItemCallback)
-        composeFolderItems = folderList
-        composeIsShowingFolder = true
+        isShowingFolder = false
+        applyListView()
+        upBookSource(composeSearchQuery)
     }
 
     private fun upBookSource(searchKey: String? = null) {
@@ -695,14 +637,8 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             currentGroup = null
             composeCurrentType = -1
             composeCurrentGroup = null
-            if (AppConfig.sourceGroupStyle == 0) {
-                applyListView()
-            } else {
-                isShowingFolder = true
-                composeIsShowingFolder = true
-                applyFolderView()
-                upFolderView()
-            }
+            // source-folder-cover：管理页固定平铺，返回根目录始终列表视图
+            applyListView()
             upBookSource(composeSearchQuery)
             return
         }
@@ -716,9 +652,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 groups.clear()
                 groups.addAll(it)
                 composeGroups = groups.toList()
-                if (isShowingFolder) {
-                    upFolderView()
-                }
             }
         }
     }
@@ -1008,34 +941,14 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         }
     }
 
-    // source-layout-refactor 文件夹点击回调：设置状态变量，不触碰搜索框
-    override fun onFolderClick(group: String) {
-        when (AppConfig.sourceGroupStyle) {
-            1 -> { // 按类型
-                currentType = when (group) {
-                    getString(R.string.type_text) -> 0
-                    getString(R.string.type_audio) -> 1
-                    getString(R.string.type_image) -> 2
-                    getString(R.string.type_file) -> 3
-                    getString(R.string.type_video) -> 4
-                    else -> -1  // all_groups
-                }
-                currentGroup = null
-            }
-            2 -> { // 按分组
-                currentType = -1
-                currentGroup = when (group) {
-                    getString(R.string.all_groups) -> null
-                    getString(R.string.no_group) -> null
-                    else -> group
-                }
-            }
-            else -> return  // 列表平铺模式无文件夹
-        }
-        isShowingFolder = false
-        composeIsShowingFolder = false
-        applyListView()
-        upBookSource(composeSearchQuery)
+    // source-folder-cover：管理页固定平铺，文件夹相关回调保留空实现（仅满足 CallBack 接口）
+    override fun onFolderClick(folder: FolderItem) {
+    }
+
+    override fun onFolderSelectImage(folder: FolderItem) {
+    }
+
+    override fun onFolderRestoreCover(folder: FolderItem) {
     }
 
     override fun del(bookSource: BookSourcePart) {

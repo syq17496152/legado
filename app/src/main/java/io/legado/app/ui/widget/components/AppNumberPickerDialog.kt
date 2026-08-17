@@ -2,6 +2,7 @@ package io.legado.app.ui.widget.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
@@ -35,7 +36,9 @@ fun AppNumberPickerDialog(
     cancelText: String,
     onConfirm: (Int) -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    neutralText: String? = null,
+    onNeutral: (() -> Unit)? = null
 ) {
     val min = range.first.toFloat()
     val max = range.last.toFloat()
@@ -95,8 +98,18 @@ fun AppNumberPickerDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = cancelText)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (neutralText != null && onNeutral != null) {
+                    TextButton(onClick = onNeutral) {
+                        Text(
+                            text = neutralText,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(text = cancelText)
+                }
             }
         }
     )

@@ -26,6 +26,7 @@ import io.legado.app.data.entities.RuleSub
 import io.legado.app.data.entities.SearchKeyword
 import io.legado.app.data.entities.Server
 import io.legado.app.data.entities.TxtTocRule
+import io.legado.app.help.DefaultData
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.upType
@@ -217,6 +218,9 @@ object Restore {
             FileUtils.delete(ThemeConfig.configFilePath)
             copyTo(File(ThemeConfig.configFilePath))
             ThemeConfig.upConfig()
+            // 旧版本备份的主题文件缺少新版内置主题（如 4 主题时代备份恢复后仅剩 4 个），
+            // 合并补齐全部内置主题（addNewConfigs 仅新增、同名不覆盖，用户自定义主题保留）
+            DefaultData.importDefaultThemeConfigs()
         }?.onFailure {
             AppLog.put("恢复主题出错\n${it.localizedMessage}", it)
         }

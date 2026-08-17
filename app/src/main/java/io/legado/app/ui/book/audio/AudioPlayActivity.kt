@@ -88,6 +88,10 @@ class AudioPlayActivity :
 
     override val binding by viewBinding(ActivityAudioPlayBinding::inflate)
     override val viewModel by viewModels<AudioPlayViewModel>()
+
+    // 主题架构 v2：沉浸播放页不随主题事件重建（避免打断播放），Compose 侧经 ThemeSync 刷新
+    override val recreateOnThemeChange: Boolean
+        get() = false
     private val timerSliderPopup by lazy { SliderPopup(this, TIMER) }
     private val speedControlPopup by lazy { SliderPopup(this, SPEED) }
     private var adjustProgress = false

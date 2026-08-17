@@ -61,6 +61,8 @@ import java.io.File
 import java.io.InputStream
 import java.net.ConnectException
 import java.net.SocketTimeoutException
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * 在线朗读
@@ -138,7 +140,9 @@ class HttpReadAloudService : BaseReadAloudService(),
         if (nowSpeak < contentList.lastIndex) {
             nowSpeak++
         } else {
-            nextChapter()
+            if (!checkTimerAtChapterEnd()) {
+                nextChapter()
+            }
         }
     }
 
@@ -181,6 +185,16 @@ class HttpReadAloudService : BaseReadAloudService(),
                     val mediaItem = MediaItem.fromUri(Uri.fromFile(file))
                     launch(Main) {
                         exoPlayer.addMediaItem(mediaItem)
+                    }
+                    // 段落间停顿: 在非末段后插入静音项 (R7.1)
+                    val pauseMs = AppConfig.ttsParagraphPauseMs
+                    if (pauseMs > 0 && index < contentList.lastIndex) {
+                        val pauseItem = MediaItem.fromUri(
+                            Uri.fromFile(createParagraphPauseFile(pauseMs))
+                        )
+                        launch(Main) {
+                            exoPlayer.addMediaItem(pauseItem)
+                        }
                     }
                 }
                 preDownloadAudios(httpTts)
@@ -247,6 +261,16 @@ class HttpReadAloudService : BaseReadAloudService(),
                     val mediaSource = createMediaSource(dataSourceFactory, fileName)
                     launch(Main) {
                         exoPlayer.addMediaSource(mediaSource)
+                    }
+                    // 段落间停顿: 在非末段后插入静音项 (R7.1)
+                    val pauseMs = AppConfig.ttsParagraphPauseMs
+                    if (pauseMs > 0 && index < contentList.lastIndex) {
+                        val pauseItem = MediaItem.fromUri(
+                            Uri.fromFile(createParagraphPauseFile(pauseMs))
+                        )
+                        launch(Main) {
+                            exoPlayer.addMediaItem(pauseItem)
+                        }
                     }
                 }
                 preDownloadAudiosStream(httpTts, downloaderChannel)
@@ -428,6 +452,37 @@ class HttpReadAloudService : BaseReadAloudService(),
         file.writeBytes(resources.openRawResource(R.raw.silent_sound).readBytes())
     }
 
+    /**
+     * 生成段落停顿用的指定时长静音 WAV (8kHz 16bit 单声道)
+     */
+    private fun createParagraphPauseFile(durationMs: Int): File {
+        val file = FileUtils.createFileIfNotExist("${ttsFolderPath}pause_$durationMs.wav")
+        if (file.length() > 44L) {
+            return file
+        }
+        val sampleRate = 8000
+        val dataBytes = sampleRate * 2 * durationMs / 1000
+        val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+        header.put("RIFF".toByteArray())
+        header.putInt(36 + dataBytes)
+        header.put("WAVE".toByteArray())
+        header.put("fmt ".toByteArray())
+        header.putInt(16)
+        header.putShort(1)
+        header.putShort(1)
+        header.putInt(sampleRate)
+        header.putInt(sampleRate * 2)
+        header.putShort(2)
+        header.putShort(16)
+        header.put("data".toByteArray())
+        header.putInt(dataBytes)
+        file.outputStream().use { out ->
+            out.write(header.array())
+            out.write(ByteArray(dataBytes))
+        }
+        return file
+    }
+
     private fun hasSpeakFile(name: String): Boolean {
         return FileUtils.exist("${ttsFolderPath}$name.mp3")
     }
@@ -570,6 +625,10 @@ class HttpReadAloudService : BaseReadAloudService(),
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) return
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
             playErrorNo = 0
+        }
+        // 段落停顿静音项不推进段落指针 (R7.1)
+        if (mediaItem?.localConfiguration?.uri?.lastPathSegment?.startsWith("pause_") == true) {
+            return
         }
         updateNextPos()
         upPlayPos()

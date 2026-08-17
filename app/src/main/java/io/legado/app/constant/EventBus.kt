@@ -48,4 +48,6 @@ object EventBus {
      */
     const val VIDEO_FALLBACK_WEBVIEW = "videoFallbackWebview"
     const val ARTICLES_LOADED = "articlesLoaded"
+    // 阅读页滚动模式顶部下拉快速书签 (R5)
+    const val PULL_DOWN_BOOKMARK = "pullDownBookmark"
 }

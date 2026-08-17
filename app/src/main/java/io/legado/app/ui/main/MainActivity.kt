@@ -360,9 +360,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         viewModel.onUpBooksLiveData.observe(this) {
             upBottomMenu()
         }
-        observeEvent<String>(EventBus.RECREATE) {
-            recreate()
-        }
+        // RECREATE 订阅上移 BaseActivity（主题架构 v2），此处不再重复订阅
         observeEvent<Boolean>(EventBus.NOTIFY_MAIN) {
             binding.apply {
                 upBottomMenu()

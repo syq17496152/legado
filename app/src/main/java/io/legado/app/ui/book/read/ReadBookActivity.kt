@@ -2268,7 +2268,35 @@ class ReadBookActivity : BaseReadBookActivity(),
                 chapterName = page.title
                 bookText = page.text.trim()
             }
-            showDialogFragment(BookmarkDialog(bookmark))
+            showDialogFragment(BookmarkDialog(bookmark))        }
+    }
+
+    // 滚动模式顶部下拉快速书签: 同位置去重后直接入库不弹窗 (R5)
+    private fun quickAddBookmark() {
+        val book = ReadBook.book
+        val page = ReadBook.curTextChapter?.getPage(ReadBook.durPageIndex)
+        if (book == null || page == null) {
+            return
+        }
+        val bookmark = book.createBookMark().apply {
+            chapterIndex = ReadBook.durChapterIndex
+            chapterPos = ReadBook.durChapterPos
+            chapterName = page.title
+            bookText = page.text.trim()
+        }
+        Coroutine.async {
+            val exists = appDb.bookmarkDao.getByBook(book.name, book.author)
+                .any { it.chapterIndex == bookmark.chapterIndex && it.chapterPos == bookmark.chapterPos }
+            if (!exists) {
+                appDb.bookmarkDao.insert(bookmark)
+                true
+            } else {
+                false
+            }
+        }.onSuccess {
+            toastOnUi(if (it) "已添加书签" else "当前位置已有书签")
+        }.onError {
+            toastOnUi(R.string.create_bookmark_error)
         }
     }
 
@@ -2360,6 +2388,10 @@ class ReadBookActivity : BaseReadBookActivity(),
     override fun observeLiveBus() = binding.run {
         observeEvent<String>(EventBus.TIME_CHANGED) { readView.upTime() }
         observeEvent<Int>(EventBus.BATTERY_CHANGED) { readView.upBattery(it) }
+        // 滚动模式顶部下拉快速书签 (R5)
+        observeEvent<Unit>(EventBus.PULL_DOWN_BOOKMARK) {
+            quickAddBookmark()
+        }
         observeEvent<Boolean>(EventBus.MEDIA_BUTTON) {
             if (it) {
                 onClickReadAloud()

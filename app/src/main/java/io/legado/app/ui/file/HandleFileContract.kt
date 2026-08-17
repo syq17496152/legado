@@ -9,7 +9,9 @@ import io.legado.app.help.IntentData
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.utils.RealPathUtil
 import io.legado.app.utils.externalFiles
+import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.putJson
+import io.legado.app.utils.toastOnUi
 import splitties.init.appCtx
 
 @Suppress("unused")
@@ -44,13 +46,24 @@ class HandleFileContract :
     }
 
     override fun parseResult(resultCode: Int, intent: Intent?): Result {
-        val uri = if (resultCode != RESULT_OK || intent?.data == null ||
-            RealPathUtil.getTreePath(intent.data!!)
-                ?.startsWith(appCtx.externalFiles.parent!!) == true
-        ) {
+        val uri = if (resultCode != RESULT_OK || intent?.data == null) {
             null
         } else {
-            intent.data
+            val data = intent.data!!
+            // 统一解析真实路径：content tree URI 用 getTreePath，file:// 直接取 path，
+            // 两者都判断是否落在应用私有外部目录（Android/data 下，对用户文件系统不可见且无实际意义）
+            val realPath = if (data.isContentScheme()) {
+                RealPathUtil.getTreePath(data)
+            } else {
+                data.path
+            }
+            if (realPath != null && realPath.startsWith(appCtx.externalFiles.parent!!)) {
+                // 明确提示而非静默失败，引导用户选择公共目录
+                appCtx.toastOnUi("不能选择应用私有目录，请选择公共目录（如 Download/Documents）")
+                null
+            } else {
+                data
+            }
         }
         return Result(uri, requestCode, intent?.getStringExtra("value"))
     }

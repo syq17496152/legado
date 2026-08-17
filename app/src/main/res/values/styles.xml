@@ -162,4 +162,9 @@
         <item name="android:background">@drawable/bg_panel_button</item>
     </style>
 
+    <!-- source-folder-cover: 文件夹封面圆角（对齐书架分组卡片 AppShapes.Chip = 8dp） -->
+    <style name="ShapeAppearanceOverlay.SourceFolderCover" parent="">
+        <item name="cornerSize">8dp</item>
+    </style>
+
 </resources>

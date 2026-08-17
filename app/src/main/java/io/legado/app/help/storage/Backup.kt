@@ -1,7 +1,9 @@
 package io.legado.app.help.storage
 
 import android.content.Context
+import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Environment
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import io.legado.app.constant.AppLog
@@ -26,6 +28,7 @@ import io.legado.app.data.repository.CoverGalleryRepository
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.LogUtils
+import io.legado.app.utils.RealPathUtil
 import io.legado.app.utils.compress.ZipUtils
 import io.legado.app.utils.createFolderIfNotExist
 import io.legado.app.utils.defaultSharedPreferences
@@ -603,15 +606,38 @@ object Backup {
         if (ZipUtils.zipFiles(paths, zipFilePath)) {
             when {
                 path.isNullOrBlank() -> {
-                    copyBackup(context.getExternalFilesDir(null)!!, backupFileName)
+                    // 未配置备份路径时，写入公共目录 Download/legado/backup，
+                    // 确保用户可在系统文件管理器/文件选择器中直接看到备份文件（Android 11+ 公共目录需 MediaStore 扫描）
+                    val defaultDir = Environment.getExternalStoragePublicDirectory(
+                        Environment.DIRECTORY_DOWNLOADS
+                    ).getFile("legado", "backup")
+                    if (!defaultDir.exists() && !defaultDir.mkdirs()) {
+                        throw NoStackTraceException("无法创建默认备份目录\n路径: ${defaultDir.absolutePath}")
+                    }
+                    copyBackup(defaultDir, backupFileName)
                 }
 
                 path.isContentScheme() -> {
+                    // SAF tree 若落在 Android/data 私有目录（系统选择器选到私有目录），文件管理器同样不可见
+                    val treePath = RealPathUtil.getTreePath(path.toUri())
+                    if (treePath != null && treePath.startsWith(appCtx.externalFiles.parent!!)) {
+                        throw NoStackTraceException(
+                            "备份路径是应用私有目录，系统文件管理器不可见，请重新选择公共目录（如 Download/Documents）"
+                        )
+                    }
                     copyBackup(context, path.toUri(), backupFileName)
                 }
 
                 else -> {
-                    copyBackup(File(path), backupFileName)
+                    val targetFile = File(path)
+                    // 已配置的备份路径若指向应用私有目录（Android/data 下），
+                    // 文件管理器不可见，会导致"提示备份成功却找不到文件"，直接拒绝并引导重选公共目录
+                    if (targetFile.absolutePath.startsWith(appCtx.externalFiles.parent!!)) {
+                        throw NoStackTraceException(
+                            "备份路径是应用私有目录，系统文件管理器不可见，请重新选择公共目录（如 Download/Documents）"
+                        )
+                    }
+                    copyBackup(targetFile, backupFileName)
                 }
             }
             try {
@@ -619,6 +645,9 @@ object Backup {
             } catch (e: Exception) {
                 AppLog.put("上传备份至webdav失败\n$e", e)
             }
+        } else {
+            // 打包失败不再静默"成功"，向上抛出让调用方提示真实错误
+            throw NoStackTraceException("备份文件打包失败，请重试")
         }
         FileUtils.delete(backupPath)
         FileUtils.delete(zipFilePath)
@@ -678,6 +707,12 @@ object Backup {
             FileOutputStream(file).use { outputS ->
                 inputS.copyTo(outputS)
             }
+            // 检查文件是否真的写入成功
+            if (!file.exists() || file.length() == 0L) {
+                throw NoStackTraceException("备份文件写入失败，请检查备份路径权限\n路径: ${file.absolutePath}")
+            }
+            // 通知MediaStore扫描，确保文件在系统文件管理器可见
+            MediaScannerConnection.scanFile(appCtx, arrayOf(file.absolutePath), null, null)
         }
     }
 

@@ -3,11 +3,14 @@ package io.legado.app.ui.book.read.page.delegate
 import android.graphics.Canvas
 import android.view.MotionEvent
 import android.view.VelocityTracker
+import io.legado.app.constant.EventBus
 import io.legado.app.data.entities.Book
 import io.legado.app.help.book.isImage
+import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
+import io.legado.app.utils.postEvent
 
 class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
 
@@ -17,6 +20,13 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
     //速度追踪器
     private val mVelocity: VelocityTracker = VelocityTracker.obtain()
     private val slopSquare get() = readView.pageSlopSquare2
+
+    // 下拉书签: 顶部继续下拉累计距离, 超阈值触发一次 (R5, 仅滚动模式)
+    private var pullDownDistance = 0f
+    private var pullDownTriggered = false
+    private val pullDownThresholdPx by lazy {
+        readView.context.resources.displayMetrics.density * 64
+    }
 
     var noAnim: Boolean = false
 
@@ -51,6 +61,8 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
             MotionEvent.ACTION_DOWN -> {
                 abortAnim()
                 mVelocity.clear()
+                pullDownDistance = 0f
+                pullDownTriggered = false
             }
 
             MotionEvent.ACTION_MOVE -> {
@@ -58,6 +70,8 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
             }
 
             MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
+                pullDownDistance = 0f
+                pullDownTriggered = false
                 onAnimStart(readView.defaultAnimationSpeed)
             }
         }
@@ -92,6 +106,26 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
         }
         if (isMoved) {
             isRunning = true
+            if (AppConfig.pullDownBookmark) {
+                handlePullDownBookmark(pointY)
+            }
+        }
+    }
+
+    // 顶部下拉快速书签: 已在章顶且继续下拉超过阈值时触发一次 (R5)
+    private fun handlePullDownBookmark(pointY: Float) {
+        val contentView = curPage as? io.legado.app.ui.book.read.page.ContentTextView
+        if (contentView == null || !contentView.atChapterStart()) {
+            pullDownDistance = 0f
+            return
+        }
+        val delta = pointY - lastY
+        if (delta > 0) {
+            pullDownDistance += delta
+            if (!pullDownTriggered && pullDownDistance > pullDownThresholdPx) {
+                pullDownTriggered = true
+                postEvent(EventBus.PULL_DOWN_BOOKMARK, Unit)
+            }
         }
     }
 

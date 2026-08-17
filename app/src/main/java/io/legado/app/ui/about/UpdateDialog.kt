@@ -9,6 +9,7 @@ import io.legado.app.databinding.DialogUpdateBinding
 import io.legado.app.help.update.AppUpdate
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.Download
+import io.legado.app.utils.ConvertUtils
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -16,6 +17,9 @@ import io.noties.markwon.Markwon
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.html.HtmlPlugin
 import io.noties.markwon.image.glide.GlideImagesPlugin
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class UpdateDialog() : BaseDialogFragment(R.layout.dialog_update) {
 
@@ -25,6 +29,8 @@ class UpdateDialog() : BaseDialogFragment(R.layout.dialog_update) {
             putString("updateBody", updateInfo.updateLog)
             putString("url", updateInfo.downloadUrl)
             putString("name", updateInfo.fileName)
+            putLong("assetSize", updateInfo.assetSize)
+            putLong("publishDate", updateInfo.publishDate)
         }
     }
 
@@ -38,6 +44,18 @@ class UpdateDialog() : BaseDialogFragment(R.layout.dialog_update) {
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         binding.toolBar.setBackgroundColor(primaryColor)
         binding.toolBar.title = arguments?.getString("newVersion")
+        // 显示包大小与发布日期 (sync-upstream-optimizations-20260816 R3)
+        binding.toolBar.subtitle = buildString {
+            val assetSize = arguments?.getLong("assetSize") ?: 0L
+            if (assetSize > 0) append(ConvertUtils.formatFileSize(assetSize))
+            val publishDate = arguments?.getLong("publishDate") ?: 0L
+            if (publishDate > 0) {
+                if (isNotEmpty()) append(" ｜ ")
+                append(
+                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(publishDate))
+                )
+            }
+        }.takeIf { it.isNotEmpty() }
         val updateBody = arguments?.getString("updateBody")
         if (updateBody == null) {
             toastOnUi("没有数据")

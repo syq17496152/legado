@@ -30,8 +30,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.legado.app.lib.theme.bottomBackground
+import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.elevation
 import io.legado.app.lib.theme.transparentNavBar
+import io.legado.app.ui.theme.ThemeSync
 
 data class PillNavTab(
     val icon: ImageVector,
@@ -57,8 +59,12 @@ fun PillNavigationBar(
     modifier: Modifier = Modifier,
     showLabels: Boolean = true
 ) {
-    val primary = MaterialTheme.colorScheme.primary
     val context = LocalContext.current
+    // 订阅全局主题信号：bump 后重组，重读 bottomBackground/transparentNavBar/elevation/primary
+    val themeVersion = ThemeSync.version
+    // 选中色跟随「主色 colorPrimary」（对齐原版 BottomNavigationView 语义与 View TitleBar 顶栏色，
+    // 避免 accent 主题下出现「蓝色顶栏+红色选中」的撞色不协调）
+    val primary = Color(context.primaryColor)
     // 主题联动：背景跟随「导航栏颜色 colorBottomBackground」，开启「沉浸导航栏
     // transparentNavBar」时透明透出背景图；阴影跟随 barElevation（对齐原版
     // ThemeBottomNavigationVIew：bottomBackground + elevation=context.elevation）

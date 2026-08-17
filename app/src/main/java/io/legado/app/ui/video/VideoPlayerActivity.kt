@@ -140,6 +140,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     SettingsDialog.CallBack, RssFavoritesDialog.Callback, VideoSettingsPanel.SettingsPanelCallback {
     override val binding by viewBinding(ActivityVideoPlayerBinding::inflate)
     override val viewModel by viewModels<VideoPlayerViewModel>()
+
+    // 主题架构 v2：沉浸播放页不随主题事件重建（避免打断播放），Compose 侧经 ThemeSync 刷新
+    override val recreateOnThemeChange: Boolean
+        get() = false
     // P0-1: playerView 从 legacyContainer 获取（legacyContainer 已隐藏但 XML 保留避免编译错误）
     // ViewPager2 模式下使用 currentFragment?.playerView，此字段仅供 Legacy 代码路径引用
     private val playerView: VideoPlayer by lazy { binding.playerView }

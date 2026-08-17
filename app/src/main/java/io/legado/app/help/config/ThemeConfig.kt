@@ -42,6 +42,7 @@ import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.toastOnUi
+import io.legado.app.ui.theme.ThemeSync
 import java.io.FileOutputStream
 
 @Keep
@@ -472,6 +473,9 @@ object ThemeConfig {
                     .apply()
             }
         }
+        // 主题架构 v2：bump 全局同步信号，所有已组合的 Compose 页面立即重组刷新
+        // （applyDayNight 也经由本函数，日夜切换同样覆盖非重建页面）
+        ThemeSync.bump()
     }
 
     fun clearBg(context: Context) {

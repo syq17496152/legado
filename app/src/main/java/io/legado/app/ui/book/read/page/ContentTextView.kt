@@ -209,6 +209,10 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
      * 以内容显示区域顶端为界，pageOffset的绝对值为textPage上方的高度
      * pageOffset + textPage.height 为 textPage 下方的高度
      */
+
+    // 是否已位于本章顶部 (下拉书签手势判定, R5)
+    fun atChapterStart(): Boolean = pageOffset >= 0
+
     fun scroll(mOffset: Int) {
         pageOffset += mOffset
         if (longScreenshot) {

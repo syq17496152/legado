@@ -597,6 +597,30 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.ttsTimer, value)
         }
 
+    // 定时朗读模式 0=按分钟 1=读完本章 2=剩余章节 (sync-upstream-optimizations-20260816 R7.2)
+    var ttsTimerMode: Int
+        get() = appCtx.getPrefInt(PreferKey.ttsTimerMode, 0)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.ttsTimerMode, value)
+        }
+
+    var ttsTimerChapters: Int
+        get() = appCtx.getPrefInt(PreferKey.ttsTimerChapters, 3)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.ttsTimerChapters, value)
+        }
+
+    // 朗读段落间停顿时长毫秒 0=关闭 (sync-upstream-optimizations-20260816 R7.1)
+    var ttsParagraphPauseMs: Int
+        get() = appCtx.getPrefInt(PreferKey.ttsParagraphPauseMs, 0)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.ttsParagraphPauseMs, value)
+        }
+
+    // 滚动阅读顶部下拉快速书签 (sync-upstream-optimizations-20260816 R5)
+    val pullDownBookmark: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.pullDownBookmark, true)
+
     val speechRatePlay: Int get() = if (ttsFlowSys) defaultSpeechRate else ttsSpeechRate
 
     var chineseConverterType: Int

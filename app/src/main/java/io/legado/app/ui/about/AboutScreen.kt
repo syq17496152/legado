@@ -62,6 +62,7 @@ fun AboutScreen(
     onCopyGzh: () -> Unit,
     onCrashLog: () -> Unit,
     onSaveLog: () -> Unit,
+    onShareLog: () -> Unit,
     onCreateHeapDump: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -125,6 +126,13 @@ fun AboutScreen(
                     icon = Icons.Filled.Save,
                     title = stringResource(R.string.save_log),
                     onClick = onSaveLog
+                )
+            }
+            item {
+                SettingsClickRow(
+                    icon = Icons.Filled.Share,
+                    title = stringResource(R.string.share_log),
+                    onClick = onShareLog
                 )
             }
             item {

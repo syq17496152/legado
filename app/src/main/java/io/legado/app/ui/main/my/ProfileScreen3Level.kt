@@ -13,7 +13,6 @@ import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -55,7 +54,6 @@ import io.legado.app.ui.book.toc.rule.TxtTocRuleActivity
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
 import io.legado.app.ui.dict.rule.DictRuleActivity
-import io.legado.app.ui.file.FileManageActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.widget.components.MetricGrid
 import io.legado.app.ui.widget.components.MetricItem
@@ -223,12 +221,6 @@ fun ProfileScreen3Level() {
                             title = context.getString(R.string.read_record),
                             subtitle = context.getString(R.string.read_record_summary),
                             onClick = { context.startActivity<ReadRecordActivity>() }
-                        )
-                        SettingsClickRow(
-                            icon = Icons.Filled.FolderOpen,
-                            title = context.getString(R.string.file_manage),
-                            subtitle = context.getString(R.string.file_manage_summary),
-                            onClick = { context.startActivity<FileManageActivity>() }
                         )
                         SettingsClickRow(
                             icon = Icons.Filled.Storage,

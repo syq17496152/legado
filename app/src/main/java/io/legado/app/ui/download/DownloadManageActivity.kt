@@ -112,6 +112,8 @@ class DownloadManageActivity : BaseActivity<ActivityDownloadManageBinding>() {
     }
 
     private fun retryTask(item: DownloadDisplayItem) {
+        // 先移除旧的失败任务（系统侧记录一并清除），避免重试后新旧两条并存
+        DownloadState.cancelDownload(item.id)
         io.legado.app.model.Download.start(
             this,
             item.url,
@@ -135,7 +137,8 @@ class DownloadManageActivity : BaseActivity<ActivityDownloadManageBinding>() {
         tasks.filter {
             it.status == DownloadStatus.COMPLETED || it.status == DownloadStatus.FAILED
         }.forEach {
-            DownloadState.removeTask(it.id)
+            // clearTask 仅隐藏记录，保留已下载文件（downloadManager.remove 会连文件一起删）
+            DownloadState.clearTask(it.id)
         }
         toastOnUi(R.string.clear_cache_success)
     }

@@ -82,6 +82,14 @@
     <string name="service">服务</string>
     <string name="setting">设置</string>
     <string name="theme_setting">主题设置</string>
+    <string name="theme_saved_pending_mode">已保存，将在切换到%1$s模式后生效</string>
+    <string name="color_hue">色相</string>
+    <string name="color_saturation">饱和度</string>
+    <string name="color_lightness">明度</string>
+    <string name="theme_list_section">主题</string>
+    <string name="import_from_clipboard">从剪贴板导入</string>
+    <string name="current_mode_suffix">（当前）</string>
+    <string name="theme_general_section">通用</string>
     <string name="theme_setting_s">与界面/颜色相关的一些设置</string>
     <string name="other_setting">其它设置</string>
     <string name="other_setting_s">与功能相关的一些设置</string>
@@ -176,6 +184,14 @@
     <string name="set_timer">定时</string>
     <string name="read_aloud_pause">朗读暂停</string>
     <string name="read_aloud_timer">正在朗读（还剩 %d 分钟）</string>
+    <string name="read_aloud_timer_chapter">正在朗读（读完本章停）</string>
+    <string name="read_aloud_timer_chapters">正在朗读（还剩 %d 章）</string>
+    <string name="timer_chapter_stop">读完本章停</string>
+    <string name="timer_chapters_m">剩余 %d 章</string>
+    <string name="tts_paragraph_pause_title">段落间停顿</string>
+    <string name="tts_paragraph_pause_summary">朗读时在段落之间插入静音停顿，系统与在线语音引擎均生效（对已开始朗读的段落从下一段起生效）</string>
+    <string name="pull_down_bookmark_title">下拉添加书签</string>
+    <string name="pull_down_bookmark_summary">滚动阅读模式下，在章节顶部继续下拉可快速添加当前位置书签</string>
     <string name="playing_timer">正在播放（还剩 %d 分钟）</string>
     <string name="ps_hide_navigation_bar">阅读界面隐藏虚拟按键</string>
     <string name="pt_hide_navigation_bar">隐藏导航栏</string>
@@ -209,6 +225,7 @@
     <string name="scan_image">扫描本地图片</string>
     <string name="rule_summary">规则说明</string>
     <string name="share">分享</string>
+    <string name="share_log">分享日志</string>
     <string name="share_app">软件分享</string>
     <string name="flow_sys">跟随系统</string>
     <string name="add">添加</string>

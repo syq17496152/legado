@@ -11,7 +11,8 @@ data class AppReleaseInfo(
     val note: String,
     val name: String,
     val downloadUrl: String,
-    val assetUrl: String
+    val assetUrl: String,
+    val assetSize: Long = 0
 ) {
     val versionName: String = name.split("_").getOrNull(2)?.dropLast(2) ?: ""
 }
@@ -70,6 +71,7 @@ data class Asset(
     val downloadCount: Int,
     val id: Int,
     val name: String,
+    val size: Long = 0,
     val state: String,
     val url: String
 ) {
@@ -87,7 +89,7 @@ data class Asset(
             else -> AppVariant.OFFICIAL
         }
 
-        return AppReleaseInfo(appVariant, timestamp, note, name, apkUrl, url)
+        return AppReleaseInfo(appVariant, timestamp, note, name, apkUrl, url, size)
     }
 }
 

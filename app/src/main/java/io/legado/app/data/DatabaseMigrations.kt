@@ -24,7 +24,7 @@ object DatabaseMigrations {
             migration_89_90, migration_90_91, migration_91_92, migration_92_93,
             migration_93_94, migration_94_95, migration_95_96, migration_96_97,
             migration_97_98, migration_98_99, migration_99_100, migration_100_101,
-            migration_101_102, migration_102_103
+            migration_101_102, migration_102_103, migration_103_104
         )
     }
 
@@ -811,6 +811,30 @@ object DatabaseMigrations {
                 AppLog.put("AppDatabase Migration 102→103: url_records 表创建成功")
             }.onFailure { e ->
                 AppLog.put("AppDatabase Migration 102→103: url_records 表创建失败: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * source-folder-cover: 103→104 新增 source_group_covers 表（发现/订阅源分组封面）
+     *
+     * 建表 SQL 必须与 SourceGroupCover 实体导出的 schema 104.json 严格一致：
+     * 复合主键 (kind, groupName)，无额外索引（主键已唯一，避免 Room 迁移校验不一致崩溃）。
+     */
+    private val migration_103_104 = object : Migration(103, 104) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            kotlin.runCatching {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `source_group_covers`(
+                        `kind` TEXT NOT NULL,
+                        `groupName` TEXT NOT NULL,
+                        `cover` TEXT,
+                        PRIMARY KEY(`kind`, `groupName`)
+                    )"""
+                )
+                AppLog.put("AppDatabase Migration 103→104: source_group_covers 表创建成功")
+            }.onFailure { e ->
+                AppLog.put("AppDatabase Migration 103→104: source_group_covers 表创建失败: ${e.message}")
             }
         }
     }

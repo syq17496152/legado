@@ -134,12 +134,22 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                     }
                 }
                 isAddedText = true
+                // 段落间停顿: 非末段后插入静音朗读项 (R7.1)
+                val pauseMs = AppConfig.ttsParagraphPauseMs
+                if (pauseMs > 0 && i < contentList.lastIndex) {
+                    tts.runCatching {
+                        @Suppress("DEPRECATION")
+                        playSilentUtterance(pauseMs.toLong(), TextToSpeech.QUEUE_ADD, "${AppConst.APP_TAG}pause$i")
+                    }
+                }
             }
             LogUtils.d(TAG, "朗读内容添加完成")
             if (!isAddedText) {
                 playStop()
                 delay(1000)
-                nextChapter()
+                if (!checkTimerAtChapterEnd()) {
+                    nextChapter()
+                }
             }
         }.onError {
             AppLog.put("tts朗读出错\n${it.localizedMessage}", it, true)
@@ -211,6 +221,10 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
 
         override fun onDone(s: String) {
             LogUtils.d(TAG, "onDone utteranceId:$s")
+            // 段落停顿静音项不推进段落 (R7.1)
+            if (s.contains("pause")) {
+                return
+            }
             nextParagraph()
         }
 

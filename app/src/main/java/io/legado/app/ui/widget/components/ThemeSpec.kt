@@ -30,6 +30,10 @@ data class ThemeSpec(
  * - 彩色角色：primary=accent、secondary=primary、tertiary=secondary
  * - on* 色：contrastOn（亮底黑 / 暗底白）
  * - error 固定 M3 标准红（暗 #FF5252 / 亮 #E53935）
+ *
+ * 生成后经 [withContrastGuard] 后处理（Archive 思路）：文字槽位对实际容器槽位
+ * 校验最低对比度，撞色时跨昼夜取对比度更高的 M3 中性文字色兜底，
+ * 防自定义主题出现「不可读」组合。
  */
 fun ThemeSpec.toM3Scheme(): ColorScheme {
     val isLight = isLight
@@ -47,7 +51,7 @@ fun ThemeSpec.toM3Scheme(): ColorScheme {
     val onPrimary = contrastOn(primaryC)
     val onSecondary = contrastOn(secondaryC)
 
-    return if (isLight) {
+    val scheme = if (isLight) {
         lightColorScheme(
             primary = primaryC,
             secondary = secondaryC,
@@ -90,6 +94,46 @@ fun ThemeSpec.toM3Scheme(): ColorScheme {
             onError = Color.Black
         )
     }
+    return scheme.withContrastGuard()
+}
+
+/** 最低字面/容器对比度（防完全不可读，非 WCAG 合规线；Archive 同源阈值） */
+private const val MIN_FONT_SURFACE_CONTRAST = 1.3
+
+/** M3 中性文字兜底色（跨昼夜二选一，取对比度更高者） */
+private val contrastFallbackLight = Color(0xFF1D1B20)
+private val contrastFallbackDark = Color(0xFFE6E0E9)
+
+/**
+ * 主题撞色守卫（from legado-archive ThemeConfig 后处理 pass）：
+ * onSurface/onBackground/onSurfaceVariant 对 surface/background 校验对比度，
+ * 低于阈值时用「对比度更高的 M3 中性文字色」替换，保证任何自定义主题下文字可读。
+ */
+private fun ColorScheme.withContrastGuard(): ColorScheme {
+    fun guard(foreground: Color, container: Color): Color {
+        // 压平 alpha：calculateContrast 要求不透明色，主题色可能带透明度（如 #fde5e5e5）
+        val opaqueMask = -0x1000000 // 0xFF000000
+        val fg = foreground.toArgb() or opaqueMask
+        val bg = container.toArgb() or opaqueMask
+        if (ColorUtils.calculateContrast(fg, bg) >= MIN_FONT_SURFACE_CONTRAST) {
+            return foreground
+        }
+        val lightC = contrastFallbackLight.toArgb()
+        val darkC = contrastFallbackDark.toArgb()
+        return if (
+            ColorUtils.calculateContrast(lightC, bg) >= ColorUtils.calculateContrast(darkC, bg)
+        ) {
+            contrastFallbackLight
+        } else {
+            contrastFallbackDark
+        }
+    }
+
+    return copy(
+        onSurface = guard(onSurface, surface),
+        onBackground = guard(onBackground, background),
+        onSurfaceVariant = guard(onSurfaceVariant, surfaceVariant)
+    )
 }
 
 /** contrastOn：亮底取黑、暗底取白 */

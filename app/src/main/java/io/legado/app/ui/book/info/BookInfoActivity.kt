@@ -156,6 +156,11 @@ class BookInfoActivity :
     ChangeCoverDialog.CallBack,
     VariableDialog.Callback {
 
+    private companion object {
+        // 分享携带书籍 JSON 的安全阈值（Binder 事务上限约 1MB，chooser 包装再翻倍，300KB 保守安全）
+        private const val MAX_SHARE_BOOK_JSON = 300_000
+    }
+
     private val tocActivityResult = registerForActivityResult(TocActivityResult()) {
         it?.let {
             viewModel.getBook(false)?.let { book ->
@@ -411,7 +416,14 @@ class BookInfoActivity :
             onClick = {
                 viewModel.getBook()?.let {
                     val bookJson = GSON.toJson(it)
-                    val shareStr = "${it.bookUrl}#$bookJson"
+                    // P0-fix(2026-08-16): 视频/大体量书的 JSON 可达数 MB（真机 TransactionTooLargeException:
+                    // data parcel size 4258840 bytes），超 Binder 事务上限 startActivity 直接闪退；
+                    // 超阈值降级为仅分享书源链接，不携带完整 JSON
+                    val shareStr = if (bookJson.length > MAX_SHARE_BOOK_JSON) {
+                        it.bookUrl
+                    } else {
+                        "${it.bookUrl}#$bookJson"
+                    }
                     SourceCallBack.callBackBtn(
                         this,
                         SourceCallBack.CLICK_SHARE_BOOK,

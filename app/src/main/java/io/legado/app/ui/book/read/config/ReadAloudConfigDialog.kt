@@ -86,6 +86,7 @@ class ReadAloudConfigDialog : BasePrefDialogFragment() {
             findPreference<SwitchPreference>(PreferKey.pauseReadAloudWhilePhoneCalls)?.let {
                 it.isEnabled = AppConfig.ignoreAudioFocus
             }
+            upParagraphPauseSummary()
         }
 
         override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -127,6 +128,19 @@ class ReadAloudConfigDialog : BasePrefDialogFragment() {
                         it.isEnabled = AppConfig.ignoreAudioFocus
                     }
                 }
+
+                PreferKey.ttsParagraphPauseMs -> {
+                    upParagraphPauseSummary()
+                }
+            }
+        }
+
+        // 段落停顿摘要显示所选时长 (R7.1)
+        private fun upParagraphPauseSummary() {
+            findPreference<ListPreference>(PreferKey.ttsParagraphPauseMs)?.let {
+                val value = AppConfig.ttsParagraphPauseMs.toString()
+                val index = it.findIndexOfValue(value)
+                it.summary = if (index >= 0) it.entries[index] else null
             }
         }
 

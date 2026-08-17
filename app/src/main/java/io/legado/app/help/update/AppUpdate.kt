@@ -17,7 +17,9 @@ object AppUpdate {
         val tagName: String,
         val updateLog: String,
         val downloadUrl: String,
-        val fileName: String
+        val fileName: String,
+        val assetSize: Long = 0,
+        val publishDate: Long = 0
     )
 
     interface AppUpdateInterface {

@@ -46,6 +46,13 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
     @Volatile
     private var cacheInstall = false
 
+    // P0-fix(2026-08-16): APK 内置 so（jniLibs）加载状态（install 优先路径）
+    @Volatile
+    private var apkSoLoadChecked = false
+
+    @Volatile
+    private var apkSoLoadable = false
+
     init {
         // P0-fix(2026-07-31): 切换 SO 下载源到 GitHub Releases（国内可访问）
         // - 根因：Google Storage（storage.googleapis.com）在国内网络环境不稳定，
@@ -67,6 +74,13 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
 
     /**
      * 判断Cronet是否安装完成
+     *
+     * P0-fix(2026-08-16): 新增 APK 内置 so（jniLibs）判定，优先级最高
+     * - 根因：私有仓库 Release 资产匿名不可下载（GitHub API 实测 404，ghproxy 系
+     *   匿名代理同样拿不到私仓资产），原 soFile（动态下载位置）校验在真机上永远 false，
+     *   Cronet 从未真正可用，视频 CDN TLS 指纹检测被拒导致"播放不了"
+     * - 方案：libcronet.so 已内置 APK jniLibs（arm64-v8a，md5 与 cronet.json 一致），
+     *   System.loadLibrary 成功即视为安装完成；动态下载仅作内置异常时的理论兜底
      */
     override fun install(): Boolean {
         synchronized(this) {
@@ -75,6 +89,29 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
             }
         }
 
+        // 1. APK 内置 so：尝试系统加载（<100ms，从 APK mmap；结果进程内缓存）
+        if (apkSoLoadChecked) {
+            if (apkSoLoadable) {
+                synchronized(this) { cacheInstall = true }
+                return true
+            }
+        } else {
+            apkSoLoadChecked = true
+            apkSoLoadable = try {
+                System.loadLibrary("cronet")
+                AppLog.put("CronetLoader.install: libcronet.so loaded from APK jniLibs")
+                true
+            } catch (e: Throwable) {
+                AppLog.put("CronetLoader.install: APK jniLibs load failed", e)
+                false
+            }
+            if (apkSoLoadable) {
+                synchronized(this) { cacheInstall = true }
+                return true
+            }
+        }
+
+        // 2. 动态下载的 soFile 校验（原逻辑，内置缺失时的兜底路径）
         if (md5.length != 32 || !soFile.exists() || md5 != getFileMD5(soFile)) {
             cacheInstall = false
             return cacheInstall
@@ -179,6 +216,11 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
      */
     override fun preDownload() {
         Coroutine.async {
+            // P0-fix(2026-08-16): APK 内置 so 可用则跳过下载（私仓 Release 匿名不可达，下载必失败白耗流量）
+            if (install()) {
+                DebugLog.d(javaClass.simpleName, "APK 内置 so 可用，跳过下载")
+                return@async
+            }
             //md5 = getUrlMd5(md5Url)
             if (soFile.exists() && md5 == getFileMD5(soFile)) {
                 DebugLog.d(javaClass.simpleName, "So 库已存在")
@@ -333,6 +375,11 @@ object CronetLoader : CronetEngine.Builder.LibraryLoader(), Cronet.LoaderInterfa
                 }
             }
             val connection = URL(url).openConnection() as HttpURLConnection
+            // P0-ANR-fix(2026-08-16): HttpURLConnection 默认无超时（connect/read 均 0=无限），
+            // GitHub 直连挂起时下载线程无限阻塞并持有 engineInitLock，主线程等锁 ANR
+            // 铁证：真机 21:21:05.448 开始下载，17s+ 无任何下文日志，连环 ANR 闪退
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 15_000
             inputStream = connection.inputStream
             destFile.parentFile!!.mkdirs()
             destFile.createNewFile()

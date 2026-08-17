@@ -27,11 +27,55 @@ import splitties.init.appCtx
 
 internal const val BUFFER_SIZE = 32 * 1024
 
-val cronetEngine: ExperimentalCronetEngine? by lazy {
-    // 防御性 try-catch：覆盖整个 lazy 块，确保任何异常（含 apply 块内方法抛出）都被捕获
+/**
+ * P0-ANR-fix(2026-08-16): cronetEngine 由 lazy(SYNCHRONIZED) 改为 volatile 非阻塞读取
+ *
+ * 根因铁证（真机日志 2026-08-16 21:20~21:22，进程 5206→8629→15320→18957 连环死亡）:
+ *   1. preInit 在 IO 线程触发 lazy 持锁执行 syncEnsureSoFile（GitHub 直连下载 so，
+ *      HttpURLConnection 未设超时，真机挂起 17s+ 无下文）
+ *   2. 主线程 GSY MediaHandler → ExoPlayerManager.initVideoPlayer → ExoPlayerHelper
+ *      .setDefaultHeaders → cronetDataFactory lazy → cronetEngine lazy 等待同一把锁
+ *   3. MIUIScout ANR 堆栈 4 次卡在 getCronetEngine(CronetHelper.kt:30)，主线程阻塞 22s
+ *      → ANR(SIGABRT) → 进程死亡 → 用户反复打开播放器反复闪退
+ *   4. crashCount>=3 降级仅跳过 preInit，但 lazy 仍会被主线程触发，降级机制失效
+ *
+ * 修复：读取方（主线程/网络线程）未就绪立即拿到 null 回退 OkHttp，绝不阻塞；
+ *   初始化仅在 preInitCronetEngine（IO 线程）执行一次，成功后所有读取方拿到实例
+ */
+@Volatile
+private var cachedCronetEngine: ExperimentalCronetEngine? = null
+
+@Volatile
+private var cronetInitFailed = false
+
+private val engineInitLock = Any()
+
+val cronetEngine: ExperimentalCronetEngine?
+    get() = cachedCronetEngine
+
+/**
+ * 仅限 IO 线程（preInitCronetEngine）调用：阻塞执行 so 下载 + 引擎构建
+ * 失败后本次进程生命周期内不再重试（与原 lazy 缓存 null 结果的行为一致）
+ */
+private fun initCronetEngineBlocking(): ExperimentalCronetEngine? {
+    synchronized(engineInitLock) {
+        cachedCronetEngine?.let { return it }
+        if (cronetInitFailed) return null
+        val engine = buildCronetEngine()
+        if (engine == null) {
+            cronetInitFailed = true
+        } else {
+            cachedCronetEngine = engine
+        }
+        return engine
+    }
+}
+
+private fun buildCronetEngine(): ExperimentalCronetEngine? {
+    // 防御性 try-catch：覆盖整个初始化，确保任何异常（含 apply 块内方法抛出）都被捕获
     // 铁证：真机日志显示 "All available Cronet providers are disabled" 异常从 lazy 块逃逸，
     //   原因是 try 只包裹 builder.build()，apply 块中的方法异常未被捕获
-    try {
+    return try {
         disableCertificateVerify()
         // P0: 优先动态下载 libcronet.so（减少 APK 体积 6.37MB），失败再尝试 jniLibs 兜底
         // 铁证：2026-07-31 用户决策"优化为动态下载"，移除 jniLibs/libcronet.so
@@ -39,19 +83,20 @@ val cronetEngine: ExperimentalCronetEngine? by lazy {
         // ProGuard 规则（cronet-proguard-rules.pro + proguard-rules.pro）保留所有 Cronet Java 类，确保 JNI 调用正常
         // 2026-07-30 崩溃根因是 R8 移除 Java 类（非 so 文件名问题），ProGuard 规则已修复
         val nativeLoaded = try {
-            // 优先动态下载 + System.load 加载
-            val soReady = CronetLoader.syncEnsureSoFile()
-            AppLog.put("CronetHelper: syncEnsureSoFile()=$soReady, soFile=${CronetLoader.soFileExists()}, md5=${CronetLoader.md5Value().take(8)}")
-            if (soReady) {
-                CronetLoader.manualLoad()
-            } else {
-                // 降级：尝试从 jniLibs 加载（如果用户手动放入了 so）
-                try {
-                    System.loadLibrary("cronet")
-                    AppLog.put("CronetHelper: System.loadLibrary(cronet) success (from jniLibs fallback)")
-                    true
-                } catch (e: Throwable) {
-                    AppLog.put("CronetHelper: System.loadLibrary(cronet) failed, no native engine available", e)
+            // P0-fix(2026-08-16): 优先 APK 内置 so（jniLibs）——零网络依赖，打开即用
+            // 铁证：私有仓库 Release 匿名不可下载（GitHub API 404，ghproxy 匿名代理同样拿不到私仓资产），
+            //   原方案真机上 so 永远装不上 → Cronet 降级 → 视频 CDN TLS 指纹被拒"播放不了"
+            try {
+                System.loadLibrary("cronet")
+                AppLog.put("CronetHelper: System.loadLibrary(cronet) success (from APK jniLibs)")
+                true
+            } catch (e: Throwable) {
+                // 内置缺失（理论上不发生，arm64-v8a 已随 APK 打包）：兜底动态下载
+                val soReady = CronetLoader.syncEnsureSoFile()
+                AppLog.put("CronetHelper: syncEnsureSoFile()=$soReady, soFile=${CronetLoader.soFileExists()}, md5=${CronetLoader.md5Value().take(8)}")
+                if (soReady) {
+                    CronetLoader.manualLoad()
+                } else {
                     false
                 }
             }
@@ -105,6 +150,9 @@ val cronetEngine: ExperimentalCronetEngine? by lazy {
 
 /**
  * P0-ANR-fix(2026-07-31): 后台预初始化 cronetEngine，避免主线程 lazy 触发导致 ANR
+ * P0-ANR-fix(2026-08-16): lazy 已重构为 volatile 非阻塞读取，本方法是唯一初始化入口；
+ *   crashCount>=3 降级时直接 return（cachedCronetEngine 保持 null），
+ *   主线程/网络线程读取 null 后回退 OkHttp，不再出现降级后主线程仍触发 lazy 的漏洞
  *
  * 根因铁证（extracted_v3 日志 appLog-26-07-31_08-12-49.319.txt）:
  *   08:13:07.240 VideoPlay.startPlay（主线程）
@@ -114,8 +162,8 @@ val cronetEngine: ExperimentalCronetEngine? by lazy {
  *   08:13:12.565 Dispatchers.Main timed out 5000ms → ANR，App被系统杀死
  *   08:13:13.074 App 重启
  *
- * 修复方案: App.onCreate 后台线程预触发 cronetEngine lazy 初始化，
- *   后续主线程访问 lazy 时直接返回已初始化实例，不阻塞主线程
+ * 修复方案: App.onCreate 后台线程执行 initCronetEngineBlocking 完成全部初始化，
+ *   任何线程读取 cronetEngine 均为非阻塞 volatile 字段访问
  *
  * 为什么之前打包so方案没这个问题:
  *   打包so方案 System.loadLibrary 直接从APK加载so（<100ms），
@@ -144,8 +192,9 @@ fun preInitCronetEngine() {
         prefs.edit().putBoolean("cronet_initializing", true).apply()
 
         val startMs = System.currentTimeMillis()
-        // 触发 cronetEngine lazy 初始化（在调用线程执行，App.onCreate 中应在 IO 线程调用）
-        val engine = cronetEngine
+        // 触发阻塞初始化（在调用线程执行，App.onCreate 中应在 IO 线程调用）
+        // P0-ANR-fix(2026-08-16): 主线程不再有路径触发此初始化（cronetEngine 改为非阻塞读取）
+        val engine = initCronetEngineBlocking()
         val costMs = System.currentTimeMillis() - startMs
 
         // 3. 初始化成功，清除初始化标志

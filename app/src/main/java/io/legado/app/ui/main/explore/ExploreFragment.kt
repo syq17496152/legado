@@ -31,13 +31,16 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSourcePart
+import io.legado.app.data.entities.SourceGroupCover
 import io.legado.app.databinding.FragmentExploreBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.ui.adapter.FolderItem
 import io.legado.app.ui.adapter.SourceFolderAdapter
 import io.legado.app.ui.book.explore.ExploreShowActivity
+import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.main.MainFragmentInterface
@@ -48,11 +51,18 @@ import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.ui.widget.recycler.GridSpacingItemDecoration
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
+import io.legado.app.utils.FileUtils
+import io.legado.app.utils.MD5Utils
+import io.legado.app.utils.externalFiles
+import io.legado.app.utils.inputStream
+import io.legado.app.utils.readUri
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.startActivity
+import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
@@ -60,6 +70,8 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
+import splitties.init.appCtx
+import java.io.FileOutputStream
 
 /**
  * 发现界面
@@ -80,9 +92,52 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     override val viewModel by viewModels<ExploreViewModel>()
     private val binding by viewBinding(FragmentExploreBinding::bind)
     private val adapter by lazy { ExploreAdapter(requireContext(), this) }
-    private val folderAdapter by lazy { SourceFolderAdapter(requireContext(), this) }
+    private val folderAdapter by lazy {
+        SourceFolderAdapter(requireContext(), SourceGroupCover.KIND_BOOK, this)
+    }
     private val gridSpacingDecoration = GridSpacingItemDecoration()
     private val linearLayoutManager by lazy { LinearLayoutManager(context) }
+    // source-folder-cover: 待设置封面的文件夹（选图返回后写入）
+    private var pendingFolder: FolderItem? = null
+    // source-folder-cover: 选择封面图片 → 复制到 covers 目录 + upsert 数据库
+    private val selectFolderCover =
+        registerForActivityResult(HandleFileContract()) { result ->
+            val uri = result.uri ?: return@registerForActivityResult
+            val folder = pendingFolder ?: return@registerForActivityResult
+            pendingFolder = null
+            scope.launch {
+                kotlin.runCatching {
+                    var savedPath: String? = null
+                    withContext(IO) {
+                        readUri(uri) { fileDoc, inputStream ->
+                            var file = requireContext().externalFiles
+                            val suffix = if (fileDoc.name.contains(".9.png", true)) {
+                                ".9.png"
+                            } else {
+                                "." + fileDoc.name.substringAfterLast(".")
+                            }
+                            val fileName = uri.inputStream(requireContext()).getOrThrow().use { tmp ->
+                                MD5Utils.md5Encode(tmp) + suffix
+                            }
+                            file = FileUtils.createFileIfNotExist(file, "covers", fileName)
+                            FileOutputStream(file).use { outputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                            savedPath = file.absolutePath
+                        }
+                    }
+                    // readUri 回调非挂持上下文, 挂起库操作移到此处执行
+                    savedPath?.let { path ->
+                        appDb.sourceGroupCoverDao.upsert(
+                            SourceGroupCover(SourceGroupCover.KIND_BOOK, folder.groupKey, path)
+                        )
+                        folderAdapter.updateCover(folder.groupKey, path)
+                    }
+                }.onFailure {
+                    appCtx.toastOnUi(it.localizedMessage)
+                }
+            }
+        }
     // 顶栏 Compose 状态：搜索词 + 更多菜单展开
     private var composeSearchQuery by mutableStateOf("")
     private var menuExpanded by mutableStateOf(false)
@@ -343,21 +398,81 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
 
     // F-P1-8 更新文件夹视图数据。D2: 按类型时显示类型文件夹
     private fun upFolderView() {
-        val folderList = mutableListOf<String>()
+        val folderList = mutableListOf<FolderItem>()
         if (AppConfig.sourceGroupStyle == 1) {
             // D2: 按类型分组
-            folderList.add(getString(R.string.all_groups))
-            folderList.add(getString(R.string.type_text))
-            folderList.add(getString(R.string.type_audio))
-            folderList.add(getString(R.string.type_image))
-            folderList.add(getString(R.string.type_file))
-            folderList.add(getString(R.string.type_video))
+            folderList.add(
+                FolderItem(
+                    SourceGroupCover.KEY_ALL_GROUPS,
+                    getString(R.string.all_groups),
+                    true
+                )
+            )
+            folderList.add(
+                FolderItem(
+                    SourceGroupCover.KEY_TYPE_TEXT,
+                    getString(R.string.type_text),
+                    true
+                )
+            )
+            folderList.add(
+                FolderItem(
+                    SourceGroupCover.KEY_TYPE_AUDIO,
+                    getString(R.string.type_audio),
+                    true
+                )
+            )
+            folderList.add(
+                FolderItem(
+                    SourceGroupCover.KEY_TYPE_IMAGE,
+                    getString(R.string.type_image),
+                    true
+                )
+            )
+            folderList.add(
+                FolderItem(
+                    SourceGroupCover.KEY_TYPE_FILE,
+                    getString(R.string.type_file),
+                    true
+                )
+            )
+            folderList.add(
+                FolderItem(
+                    SourceGroupCover.KEY_TYPE_VIDEO,
+                    getString(R.string.type_video),
+                    true
+                )
+            )
         } else {
-            folderList.add(getString(R.string.all_groups))
-            folderList.add(getString(R.string.no_group))
-            folderList.addAll(groups)
+            folderList.add(
+                FolderItem(
+                    SourceGroupCover.KEY_ALL_GROUPS,
+                    getString(R.string.all_groups),
+                    true
+                )
+            )
+            folderList.add(
+                FolderItem(
+                    SourceGroupCover.KEY_NO_GROUP,
+                    getString(R.string.no_group),
+                    true
+                )
+            )
+            folderList.addAll(
+                groups.map { FolderItem(it, it, false) }
+            )
         }
         folderAdapter.setItems(folderList, folderAdapter.diffItemCallback)
+        // source-folder-cover: 批量加载分组封面缓存
+        scope.launch {
+            kotlin.runCatching {
+                appDb.sourceGroupCoverDao.getCoversByKind(SourceGroupCover.KIND_BOOK)
+            }.getOrDefault(emptyList())
+                .associate { it.groupName to it.cover }
+                .let { covers ->
+                    folderAdapter.upCovers(covers)
+                }
+        }
     }
 
     private fun initGroupData() {
@@ -443,31 +558,52 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     // F-P1-8 文件夹点击回调：点击文件夹 → 临时切换到列表视图并按分组筛选
     // 注意：不修改 sourceViewMode（用户偏好），仅修改 isShowingFolder（运行时状态）
     // 这样再次进入或用户点击菜单"文件夹视图"时，仍会显示文件夹视图
-    override fun onFolderClick(group: String) {
+    override fun onFolderClick(folder: FolderItem) {
         isShowingFolder = false
         applyView()  // D1: 统一应用视图（分组模式点击文件夹后进入列表）
         requireActivity().invalidateOptionsMenu()
         // D2: 按类型时设置 currentType，按分组时设置 currentGroup
         if (AppConfig.sourceGroupStyle == 1) {
-            currentType = when (group) {
-                getString(R.string.type_text) -> 0
-                getString(R.string.type_audio) -> 1
-                getString(R.string.type_image) -> 2
-                getString(R.string.type_file) -> 3
-                getString(R.string.type_video) -> 4
+            currentType = when (folder.groupKey) {
+                SourceGroupCover.KEY_TYPE_TEXT -> 0
+                SourceGroupCover.KEY_TYPE_AUDIO -> 1
+                SourceGroupCover.KEY_TYPE_IMAGE -> 2
+                SourceGroupCover.KEY_TYPE_FILE -> 3
+                SourceGroupCover.KEY_TYPE_VIDEO -> 4
                 else -> -1  // all_groups
             }
             currentGroup = null
         } else {
             currentType = -1
-            currentGroup = when (group) {
-                getString(R.string.all_groups) -> null
-                getString(R.string.no_group) -> getString(R.string.no_group)
-                else -> group
+            currentGroup = when (folder.groupKey) {
+                SourceGroupCover.KEY_ALL_GROUPS -> null
+                SourceGroupCover.KEY_NO_GROUP -> getString(R.string.no_group)
+                else -> folder.groupKey
             }
         }
         composeSearchQuery = ""  // 清空搜索词，不触发查询
         upExploreData()  // 直接触发查询
+    }
+
+    override fun onFolderSelectImage(folder: FolderItem) {
+        pendingFolder = folder
+        selectFolderCover.launch {
+            mode = HandleFileContract.IMAGE
+        }
+    }
+
+    override fun onFolderRestoreCover(folder: FolderItem) {
+        scope.launch {
+            kotlin.runCatching {
+                appDb.sourceGroupCoverDao.delete(
+                    SourceGroupCover.KIND_BOOK,
+                    folder.groupKey
+                )
+                folderAdapter.updateCover(folder.groupKey, null)
+            }.onFailure {
+                appCtx.toastOnUi(it.localizedMessage)
+            }
+        }
     }
 
     override fun scrollTo(pos: Int) {

@@ -60,6 +60,9 @@ fun LegadoTheme(
 ) {
     val context = LocalContext.current
 
+    // 主题全局同步信号：ThemeSync.bump() 后所有已组合页面立即重组刷新（无需 Activity 重建）
+    val themeVersion = ThemeSync.version
+
     val isNightTheme = AppConfig.isNightTheme
     val primaryColorValue = ThemeStore.primaryColor(context)
     val accentColor = ThemeStore.accentColor(context)
@@ -70,7 +73,7 @@ fun LegadoTheme(
     val isLight = !isNightTheme && ColorUtils.isColorLight(bgColor)
 
     val colorScheme = remember(
-        isNightTheme, primaryColorValue, accentColor, bgColor,
+        themeVersion, isNightTheme, primaryColorValue, accentColor, bgColor,
         textPrimaryColor, textSecondaryColor
     ) {
         ThemeSpec(

@@ -187,9 +187,11 @@ android {
     }
     packaging {
         resources.excludes.add('META-INF/*')
-        // P0: libcronet.so 动态下载模式（2026-07-31 优化，APK 不再内置 so，减少 6.37MB）
-        // so 文件在运行时由 CronetLoader.syncEnsureSoFile() 同步下载到应用私有目录
-        // pickFirsts 保留作为兜底（用户手动放入 jniLibs 时仍可工作）
+        // P0-fix(2026-08-16): libcronet.so 回归 APK 内置（jniLibs/arm64-v8a）
+        // - 2026-07-31 动态下载方案实测不可行：私有仓库 Release 资产匿名不可下载
+        //   （GitHub 需 token，ghproxy 匿名代理拿不到私仓资产），真机 so 永远装不上，
+        //   Cronet 从未可用 + 下载线程挂起曾致主线程 ANR 闪退（详见 CronetHelper/CronetLoader）
+        // - 内置代价：APK +6.37MB；收益：零网络依赖、打开即用
         // 详见 docs/project-rules/package-naming.md "libcronet.so 动态下载规范"
         jniLibs {
             pickFirsts.add('**/libcronet.so')

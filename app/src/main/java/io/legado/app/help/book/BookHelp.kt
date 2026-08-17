@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.apache.commons.text.similarity.JaccardSimilarity
 import splitties.init.appCtx
@@ -60,6 +61,7 @@ object BookHelp {
     private const val cacheImageFolderName = "images"
     private const val cacheEpubFolderName = "epub"
     private val downloadImages = ConcurrentHashMap<String, Mutex>()
+    private val saveTextMutexes = ConcurrentHashMap<String, Mutex>()
 
     val cachePath = FileUtils.getPath(downloadDir, cacheFolderName)
 
@@ -165,8 +167,17 @@ object BookHelp {
         content: String
     ) {
         AppLog.putDebugWithTag(AppLog.TAG_CONTENT, "开始保存章节内容 bookNameLen=${book.name.length} chapterIndex=${bookChapter.index} contentLen=${content.length}", level = AppLog.Level.INFO)
+        // 同章节文件级互斥, 防止批量缓存/前台阅读/换源并发写同一缓存文件互相覆盖 (sync-upstream-optimizations-20260816 R2)
+        val file = downloadDir.getFile(
+            cacheFolderName,
+            book.getFolderName(),
+            bookChapter.getFileName()
+        )
+        val mutex = saveTextMutexes.getOrPut(file.absolutePath) { Mutex() }
         try {
-            saveText(book, bookChapter, content)
+            mutex.withLock {
+                saveText(book, bookChapter, content)
+            }
             //saveImages(bookSource, book, bookChapter, content)
             postEvent(EventBus.SAVE_CONTENT, Pair(book, bookChapter))
             AppLog.putDebugWithTag(AppLog.TAG_CONTENT, "章节内容保存成功 bookNameLen=${book.name.length} chapterIndex=${bookChapter.index}", level = AppLog.Level.INFO)
@@ -181,13 +192,22 @@ object BookHelp {
         content: String
     ) {
         if (content.isEmpty()) return
-        //保存文本
-        FileUtils.createFileIfNotExist(
+        //保存文本 (临时文件+原子改名, 中断不产生半写文件)
+        val file = FileUtils.createFileIfNotExist(
             downloadDir,
             cacheFolderName,
             book.getFolderName(),
             bookChapter.getFileName(),
-        ).writeText(content)
+        )
+        val tmpFile = File("${file.absolutePath}.tmp")
+        try {
+            tmpFile.writeText(content)
+            if (!tmpFile.renameTo(file)) {
+                file.writeText(content)
+            }
+        } finally {
+            tmpFile.delete()
+        }
         if (book.isOnLineTxt && AppConfig.tocCountWords) {
             val wordCount = StringUtils.wordCountFormat(content.length)
             bookChapter.wordCount = wordCount

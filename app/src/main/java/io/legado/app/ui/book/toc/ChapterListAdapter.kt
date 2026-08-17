@@ -32,6 +32,12 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
     private val displayTitleMap = ConcurrentHashMap<String, String>()
     private val handler = Handler(Looper.getMainLooper())
 
+    // 分卷折叠: 全量列表 + 折叠卷集合, 展示列表由 applyCollapse 派生 (sync-upstream-optimizations-20260816 R6)
+    private var allItems: List<BookChapter> = emptyList()
+    private val collapsedVolumeUrls = mutableSetOf<String>()
+    private var searchKey: String? = null
+    private val volumeMatchCounts = mutableMapOf<String, Int>()
+
     override val diffItemCallback: DiffUtil.ItemCallback<BookChapter>
         get() = object : DiffUtil.ItemCallback<BookChapter>() {
 
@@ -113,6 +119,78 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
         return displayTitleMap[chapter.title] ?: chapter.title
     }
 
+    /**
+     * 装载目录并应用分卷折叠 (R6)
+     */
+    fun setItemsWithCollapse(items: List<BookChapter>, searchKey: String?) {
+        this.searchKey = searchKey
+        allItems = items
+        countVolumeMatches(items, searchKey)
+        setItems(applyCollapse(items))
+    }
+
+    fun isVolumeCollapsed(item: BookChapter): Boolean {
+        return collapsedVolumeUrls.contains(item.url)
+    }
+
+    /**
+     * 卷行点击: 展开态点击折叠; 折叠态点击先展开再跳转 (兼容原卷名跳转行为)
+     */
+    fun toggleVolume(item: BookChapter, onExpandJump: () -> Unit) {
+        if (!item.isVolume) return
+        if (collapsedVolumeUrls.remove(item.url)) {
+            setItems(applyCollapse(allItems))
+            onExpandJump()
+        } else {
+            collapsedVolumeUrls.add(item.url)
+            setItems(applyCollapse(allItems))
+        }
+    }
+
+    fun volumeMatchCount(item: BookChapter): Int {
+        return volumeMatchCounts[item.url] ?: 0
+    }
+
+    fun currentSearchKey(): String? {
+        return searchKey
+    }
+
+    private fun applyCollapse(items: List<BookChapter>): List<BookChapter> {
+        if (collapsedVolumeUrls.isEmpty()) {
+            return items
+        }
+        val result = arrayListOf<BookChapter>()
+        var collapsed = false
+        for (item in items) {
+            if (item.isVolume) {
+                collapsed = collapsedVolumeUrls.contains(item.url)
+                result.add(item)
+            } else if (!collapsed) {
+                result.add(item)
+            }
+        }
+        return result
+    }
+
+    // 搜索态统计每卷匹配章节数 (卷行展示 N 章)
+    private fun countVolumeMatches(items: List<BookChapter>, searchKey: String?) {
+        volumeMatchCounts.clear()
+        if (searchKey.isNullOrBlank()) {
+            return
+        }
+        var curVolume: BookChapter? = null
+        for (item in items) {
+            if (item.isVolume) {
+                curVolume = item
+                volumeMatchCounts[item.url] = 0
+            } else {
+                curVolume?.let {
+                    volumeMatchCounts[it.url] = (volumeMatchCounts[it.url] ?: 0) + 1
+                }
+            }
+        }
+    }
+
     override fun getViewBinding(parent: ViewGroup): ItemChapterListBinding {
         return ItemChapterListBinding.inflate(inflater, parent, false)
     }
@@ -136,7 +214,9 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
                 }
                 tvChapterName.text = getDisplayTitle(item)
                 if (item.isVolume) {
-                    //卷名，如第一卷 突出显示
+                    //卷名，如第一卷 突出显示; 追加折叠状态箭头 (R6)
+                    val arrow = if (isVolumeCollapsed(item)) " ▸" else " ▾"
+                    tvChapterName.text = tvChapterName.text.toString() + arrow
                     tvChapterItem.setBackgroundColor(context.getCompatColor(R.color.btn_bg_press))
                 } else {
                     //普通章节 保持不变
@@ -156,6 +236,15 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
                     //章节字数
                     tvWordCount.text = item.wordCount
                     tvWordCount.visible()
+                } else if (item.isVolume && !currentSearchKey().isNullOrBlank()) {
+                    //搜索态卷行显示该卷匹配章节数 (R6)
+                    val count = volumeMatchCount(item)
+                    if (count > 0) {
+                        tvWordCount.text = "${count}章"
+                        tvWordCount.visible()
+                    } else {
+                        tvWordCount.gone()
+                    }
                 } else {
                     tvWordCount.gone()
                 }
@@ -177,7 +266,14 @@ class ChapterListAdapter(context: Context, val callback: Callback) :
     override fun registerListener(holder: ItemViewHolder, binding: ItemChapterListBinding) {
         holder.itemView.setOnClickListener {
             getItem(holder.layoutPosition)?.let {
-                callback.openChapter(it)
+                if (it.isVolume) {
+                    //卷行点击切换折叠; 折叠态点击先展开再跳转 (R6)
+                    toggleVolume(it) {
+                        callback.openChapter(it)
+                    }
+                } else {
+                    callback.openChapter(it)
+                }
             }
         }
         holder.itemView.setOnLongClickListener {

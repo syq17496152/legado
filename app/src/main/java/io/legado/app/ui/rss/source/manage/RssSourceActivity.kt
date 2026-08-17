@@ -37,6 +37,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.CheckRssSource
+import io.legado.app.ui.adapter.FolderItem
 import io.legado.app.ui.adapter.SourceFolderAdapter
 import io.legado.app.ui.association.ImportRssSourceDialog
 import io.legado.app.ui.config.CheckRssSourceConfig
@@ -89,15 +90,13 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     private val itemTouchCallback by lazy { ItemTouchCallback(adapter) }
     private val verticalDivider by lazy { VerticalDivider(this) }
     private val gridSpacingDecoration = GridSpacingItemDecoration()
-    // D2 修复：文件夹视图 Adapter（参照 BookSourceActivity）
-    private val folderAdapter by lazy { SourceFolderAdapter(this, this) }
     // source-layout-refactor 隐藏字段方案：子目录状态变量
     private var currentType: Int = -1        // -1=全部, 0-2=具体类型（网页/图片/视频）
     private var currentGroup: String? = null // null=根目录, 非空=在某个分组内
     private val inSubDirectory: Boolean get() = currentType >= 0 || currentGroup != null
-    // D2 修复：文件夹视图运行时状态（参照 BookSourceActivity）
+    // source-folder-cover：管理页固定平铺，不再显示文件夹视图（见 spec AD-03）
     private val isFolderViewMode: Boolean
-        get() = AppConfig.sourceGroupStyle != 0
+        get() = false
     private var isShowingFolder: Boolean = false
     // source-layout-refactor 排序升降序
     private var sortAscending = true
@@ -140,15 +139,11 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        // D2 修复：初始化运行时状态：跟随用户偏好
-        isShowingFolder = isFolderViewMode
+        // source-folder-cover：管理页固定平铺，不显示文件夹视图
+        isShowingFolder = false
         initRecyclerView()
         initComposeTopBar()
-        if (isShowingFolder) {
-            upFolderView()
-        } else {
-            upSourceFlow()
-        }
+        upSourceFlow()
         initGroupFlow()
         initSelectActionBar()
     }
@@ -398,11 +393,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     private fun handleQuickFilter(actionId: Int) {
         currentType = -1
         currentGroup = null
-        // D2 修复：文件夹视图下切换到列表视图
-        if (isShowingFolder) {
-            isShowingFolder = false
-            applyListView()
-        }
         val keyword = when (actionId) {
             R.id.menu_enabled_group -> getString(R.string.enabled)
             R.id.menu_disabled_group -> getString(R.string.disabled)
@@ -424,11 +414,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
             else -> -1
         }
         currentGroup = null
-        // D2 修复：文件夹视图下切换到列表视图
-        if (isShowingFolder) {
-            isShowingFolder = false
-            applyListView()
-        }
         upSourceFlow(searchViewQuery)
     }
 
@@ -436,11 +421,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     private fun handleGroupSelect(group: String) {
         currentType = -1
         currentGroup = group
-        // D2 修复：文件夹视图下切换到列表视图
-        if (isShowingFolder) {
-            isShowingFolder = false
-            applyListView()
-        }
         upSourceFlow(searchViewQuery)
     }
 
@@ -481,12 +461,8 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         dragSelectTouchHelper.activeSlideSelect()
         // Note: need judge selection first, so add ItemTouchHelper after it.
         ItemTouchHelper(itemTouchCallback).attachToRecyclerView(binding.recyclerView)
-        // D2 修复：根据 isShowingFolder 选择视图
-        if (isShowingFolder) {
-            applyFolderView()
-        } else {
-            applyListView()
-        }
+        // source-folder-cover：管理页固定平铺
+        applyListView()
     }
 
     // source-layout-refactor 应用列表视图（支持 sourceLayout: 0=列表/1=紧凑/2-6=网格）
@@ -538,58 +514,18 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
 
     // source-layout-refactor 配置对话框（新签名：onConfigChanged 回调）
     private fun showFolderConfig() {
-        SourceFolderAdapter.showConfigDialog(this, isBookSource = false) {
+        SourceFolderAdapter.showConfigDialog(this, isBookSource = false, showGroupStyle = false) {
             applyConfigChange()
         }
     }
 
-    // D2 修复：应用文件夹视图（参照 BookSourceActivity.applyFolderView）
-    private fun applyFolderView() {
-        binding.recyclerView.removeItemDecoration(verticalDivider)
-        binding.recyclerView.removeItemDecoration(gridSpacingDecoration)
-        val marginDp = AppConfig.sourceMargin
-        gridSpacingDecoration.spacing = SourceFolderAdapter.spacingPx(this, marginDp)
-        binding.recyclerView.addItemDecoration(gridSpacingDecoration)
-        val spanCount = SourceFolderAdapter.calculateSpanCount(this, marginDp)
-        binding.recyclerView.layoutManager = GridLayoutManager(this, spanCount)
-        binding.recyclerView.adapter = folderAdapter
-        itemTouchCallback.isCanDrag = false
-    }
-
-    // D2 修复：配置变更后应用视图（支持文件夹视图）
+    // source-folder-cover：管理页固定平铺，配置变更仅影响列表布局/排序/间距
     private fun applyConfigChange() {
         currentType = -1
         currentGroup = null
-        when (AppConfig.sourceGroupStyle) {
-            0 -> { // 列表平铺：直接显示所有源
-                isShowingFolder = false
-                applyListView()
-                upSourceFlow(searchViewQuery)
-            }
-            1, 2 -> { // 按类型/按分组：显示文件夹
-                isShowingFolder = true
-                applyFolderView()
-                upFolderView()
-            }
-        }
-    }
-
-    // D2 修复：更新文件夹视图数据（参照 BookSourceActivity.upFolderView，订阅源 3 类型）
-    private fun upFolderView() {
-        val folderList = mutableListOf<String>()
-        if (AppConfig.sourceGroupStyle == 1) {
-            // 按类型分组：订阅源 0=网页/1=图片/2=视频
-            folderList.add(getString(R.string.all_groups))
-            folderList.add(getString(R.string.type_web))
-            folderList.add(getString(R.string.type_image))
-            folderList.add(getString(R.string.type_video))
-        } else {
-            // 按自定义分组
-            folderList.add(getString(R.string.all_groups))
-            folderList.add(getString(R.string.no_group))
-            folderList.addAll(groups)
-        }
-        folderAdapter.setItems(folderList, folderAdapter.diffItemCallback)
+        isShowingFolder = false
+        applyListView()
+        upSourceFlow(searchViewQuery)
     }
 
     private fun initSelectActionBar() {
@@ -786,53 +722,24 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         )
     }
 
-    // D2 修复：文件夹点击回调（参照 BookSourceActivity.onFolderClick，订阅源 3 类型）
-    override fun onFolderClick(group: String) {
-        when (AppConfig.sourceGroupStyle) {
-            1 -> { // 按类型
-                currentType = when (group) {
-                    getString(R.string.type_web) -> 0
-                    getString(R.string.type_image) -> 1
-                    getString(R.string.type_video) -> 2
-                    else -> -1  // all_groups
-                }
-                currentGroup = null
-            }
-            2 -> { // 按分组
-                currentType = -1
-                currentGroup = when (group) {
-                    getString(R.string.all_groups) -> null
-                    getString(R.string.no_group) -> null
-                    else -> group
-                }
-            }
-            else -> return  // 列表平铺模式无文件夹
-        }
-        // D3：点击文件夹后切换到列表视图（二级页面用列表）
-        isShowingFolder = false
-        applyListView()
-        upSourceFlow(searchViewQuery)
+    // source-folder-cover：管理页固定平铺，文件夹相关回调保留空实现（仅满足 CallBack 接口）
+    override fun onFolderClick(folder: FolderItem) {
     }
 
-    // D2 修复：返回键：子目录内返回文件夹视图，文件夹视图退出 Activity
+    override fun onFolderSelectImage(folder: FolderItem) {
+    }
+
+    override fun onFolderRestoreCover(folder: FolderItem) {
+    }
+
+    // source-folder-cover：管理页固定平铺，返回键直接处理子目录
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        if (isShowingFolder) {
-            super.onBackPressed()
-            return
-        }
         if (inSubDirectory) {
             currentType = -1
             currentGroup = null
-            if (isFolderViewMode) {
-                // 子目录返回到文件夹视图
-                isShowingFolder = true
-                applyFolderView()
-                upFolderView()
-            } else {
-                applyListView()
-                upSourceFlow(searchViewQuery)
-            }
+            applyListView()
+            upSourceFlow(searchViewQuery)
             return
         }
         super.onBackPressed()

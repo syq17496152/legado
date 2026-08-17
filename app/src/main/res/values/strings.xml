@@ -83,6 +83,14 @@
     <string name="service">Services</string>
     <string name="setting">Settings</string>
     <string name="theme_setting">Theme settings</string>
+    <string name="theme_saved_pending_mode">Saved. It will take effect after switching to %1$s mode</string>
+    <string name="color_hue">Hue</string>
+    <string name="color_saturation">Saturation</string>
+    <string name="color_lightness">Lightness</string>
+    <string name="theme_list_section">Themes</string>
+    <string name="import_from_clipboard">Import from clipboard</string>
+    <string name="current_mode_suffix"> (current)</string>
+    <string name="theme_general_section">General</string>
     <string name="theme_setting_s">Some settings related to interface or color</string>
     <string name="other_setting">Other settings</string>
     <string name="other_setting_s">Some function-related settings</string>
@@ -177,6 +185,14 @@
     <string name="set_timer">Timer</string>
     <string name="read_aloud_pause">Speak Paused</string>
     <string name="read_aloud_timer">Speaking(%d min left)</string>
+    <string name="read_aloud_timer_chapter">Speaking(stop after this chapter)</string>
+    <string name="read_aloud_timer_chapters">Speaking(%d chapters left)</string>
+    <string name="timer_chapter_stop">Stop after chapter</string>
+    <string name="timer_chapters_m">%d chapters left</string>
+    <string name="tts_paragraph_pause_title">Pause between paragraphs</string>
+    <string name="tts_paragraph_pause_summary">Insert a silent pause between paragraphs while reading aloud. Applies to both system and online engines (takes effect from the next paragraph).</string>
+    <string name="pull_down_bookmark_title">Pull down to bookmark</string>
+    <string name="pull_down_bookmark_summary">In scroll reading mode, pull down at the top of a chapter to quickly bookmark the current position.</string>
     <string name="playing_timer">Playing(%d min left)</string>
     <string name="ps_hide_navigation_bar">Hide virtual buttons when reading</string>
     <string name="pt_hide_navigation_bar">Hide navigation bar</string>
@@ -210,6 +226,7 @@
     <string name="scan_image">Scan local images</string>
     <string name="rule_summary">Rules description</string>
     <string name="share">Share</string>
+    <string name="share_log">Share logs</string>
     <string name="share_app">Share to</string>
     <string name="flow_sys">Follow system</string>
     <string name="add">Add</string>

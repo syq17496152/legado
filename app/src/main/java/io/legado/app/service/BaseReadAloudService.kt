@@ -85,6 +85,15 @@ abstract class BaseReadAloudService : BaseService(),
         var timeMinute: Int = 0
             private set
 
+        // 定时朗读模式 0=按分钟 1=读完本章 2=剩余章节; remainChapters 为模式2剩余章数
+        @JvmStatic
+        var ttsTimerMode: Int = 0
+            private set
+
+        @JvmStatic
+        var remainChapters: Int = 0
+            private set
+
         fun isPlay(): Boolean {
             return isRun && !pause
         }
@@ -152,9 +161,24 @@ abstract class BaseReadAloudService : BaseService(),
         initBroadcastReceiver()
         initPhoneStateListener()
         upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PLAYING)
-        setTimer(AppConfig.ttsTimer)
-        if (AppConfig.ttsTimer > 0) {
-            toastOnUi("朗读定时 ${AppConfig.ttsTimer} 分钟")
+        when (AppConfig.ttsTimerMode) {
+            1 -> {
+                ttsTimerMode = 1
+                toastOnUi("读完本章后停止朗读")
+                doDs()
+            }
+            2 -> {
+                ttsTimerMode = 2
+                remainChapters = AppConfig.ttsTimerChapters
+                toastOnUi("读完 $remainChapters 章后停止朗读")
+                doDs()
+            }
+            else -> {
+                setTimer(AppConfig.ttsTimer)
+                if (AppConfig.ttsTimer > 0) {
+                    toastOnUi("朗读定时 ${AppConfig.ttsTimer} 分钟")
+                }
+            }
         }
         execute {
             ImageLoader
@@ -223,7 +247,11 @@ abstract class BaseReadAloudService : BaseService(),
             IntentAction.prev -> prevChapter()
             IntentAction.next -> nextChapter()
             IntentAction.addTimer -> addTimer()
-            IntentAction.setTimer -> setTimer(intent.getIntExtra("minute", 0))
+            IntentAction.setTimer -> setTimerExt(
+                intent.getIntExtra("mode", 0),
+                intent.getIntExtra("minute", 0),
+                intent.getIntExtra("chapters", 0)
+            )
             IntentAction.stop -> stopSelf()
         }
         return super.onStartCommand(intent, flags, startId)
@@ -376,13 +404,60 @@ abstract class BaseReadAloudService : BaseService(),
             upTtsProgress(readAloudNumber + 1)
             play()
         } else {
-            nextChapter()
+            if (!checkTimerAtChapterEnd()) {
+                nextChapter()
+            }
         }
     }
 
     private fun setTimer(minute: Int) {
-        timeMinute = minute
+        setTimerExt(0, minute, 0)
+    }
+
+    // 定时朗读统一入口: mode 0=按分钟(恢复原有行为) 1=读完本章 2=剩余 chapters 章 (R7.2)
+    private fun setTimerExt(mode: Int, minute: Int, chapters: Int) {
+        ttsTimerMode = mode
+        AppConfig.ttsTimerMode = mode
+        remainChapters = 0
+        when (mode) {
+            1 -> {
+                timeMinute = 0
+                AppConfig.ttsTimer = 0
+                toastOnUi("读完本章后停止朗读")
+            }
+            2 -> {
+                timeMinute = 0
+                AppConfig.ttsTimer = 0
+                remainChapters = chapters
+                AppConfig.ttsTimerChapters = chapters
+                toastOnUi("读完 $chapters 章后停止朗读")
+            }
+            else -> {
+                timeMinute = minute
+                AppConfig.ttsTimer = minute
+            }
+        }
         doDs()
+    }
+
+    // 自然读完当前章节时判定是否按定时模式停止; 返回 true 表示已停止不再进入下一章
+    internal fun checkTimerAtChapterEnd(): Boolean {
+        when (ttsTimerMode) {
+            1 -> {
+                toastOnUi("读完本章，定时停止朗读")
+                ReadAloud.stop(this)
+                return true
+            }
+            2 -> {
+                remainChapters--
+                if (remainChapters <= 0) {
+                    toastOnUi("已读完设定章节，定时停止朗读")
+                    ReadAloud.stop(this)
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     private fun addTimer() {
@@ -403,6 +478,10 @@ abstract class BaseReadAloudService : BaseService(),
         postEvent(EventBus.READ_ALOUD_DS, timeMinute)
         upReadAloudNotification()
         dsJob?.cancel()
+        if (ttsTimerMode != 0) {
+            // 按章节定时: 无分钟倒计时, 章末由 checkTimerAtChapterEnd 判定
+            return
+        }
         dsJob = lifecycleScope.launch {
             while (isActive) {
                 delay(60000)
@@ -520,6 +599,11 @@ abstract class BaseReadAloudService : BaseService(),
     private fun upMediaMetadata() {
         var nTitle: String = when {
             pause -> getString(R.string.read_aloud_pause)
+            ttsTimerMode == 1 -> getString(R.string.read_aloud_timer_chapter)
+            ttsTimerMode == 2 && remainChapters > 0 -> getString(
+                R.string.read_aloud_timer_chapters,
+                remainChapters
+            )
             timeMinute > 0 -> getString(
                 R.string.read_aloud_timer,
                 timeMinute
@@ -599,6 +683,11 @@ abstract class BaseReadAloudService : BaseService(),
     private fun createNotification(): NotificationCompat.Builder {
         var nTitle: String = when {
             pause -> getString(R.string.read_aloud_pause)
+            ttsTimerMode == 1 -> getString(R.string.read_aloud_timer_chapter)
+            ttsTimerMode == 2 && remainChapters > 0 -> getString(
+                R.string.read_aloud_timer_chapters,
+                remainChapters
+            )
             timeMinute > 0 -> getString(
                 R.string.read_aloud_timer,
                 timeMinute
