@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Archive UI 迁移（Phase 0 地基补齐）：liquidglass(毛玻璃底栏) 要求 minSdk 24，本项目 minSdk 23，用 overrideLibrary 覆盖（与 Archive 一致）；运行时仅 API24+ 启用毛玻璃 -->
+    <uses-sdk tools:overrideLibrary="com.qmdeve.liquidglass,top.yukonga.miuix.kmp" />
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />

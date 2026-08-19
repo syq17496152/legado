@@ -38,12 +38,11 @@ dependencyResolutionManagement {
                 includeGroupByRegex("com\\.github.*")
             }
         }
-        mavenCentral()
-
-        //镜像仓库 - 国内加速
+        //镜像仓库 - 国内加速（前置，mavenCentral 直连在国内经常超时）
         maven { url 'https://maven.aliyun.com/repository/google' }
         maven { url 'https://maven.aliyun.com/repository/public' }
         maven { url 'https://repo.huaweicloud.com/repository/maven/' }
+        mavenCentral()
     }
 }
 rootProject.name = 'legado'

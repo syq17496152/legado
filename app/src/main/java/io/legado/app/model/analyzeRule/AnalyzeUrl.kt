@@ -26,6 +26,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.exoplayer.ExoPlayerHelper
 import io.legado.app.help.glide.GlideHeaders
 import io.legado.app.help.http.BackstageWebView
+import io.legado.app.help.webView.WebViewPool
 import io.legado.app.help.http.CookieManager
 import io.legado.app.help.http.CookieManager.mergeCookies
 import io.legado.app.help.http.CookieStore
@@ -95,7 +96,9 @@ class AnalyzeUrl(
     private var coroutineContext: CoroutineContext = EmptyCoroutineContext,
     headerMapF: Map<String, String>? = null,
     hasLoginHeader: Boolean = true,
-    private val infoMap: MutableMap<String, String>? = null
+    private val infoMap: MutableMap<String, String>? = null,
+    // Archive UI 迁移（Phase 0 地基补齐）：WebView 复用池作用域（GLOBAL/DISCOVERY/RSS）
+    private val webViewPoolScope: WebViewPool.Scope = WebViewPool.Scope.GLOBAL
 ) : JsExtensions {
     constructor(mUrl: String) : this(mUrl, null)
 
@@ -482,7 +485,8 @@ class AnalyzeUrl(
                             javaScript = webJs ?: jsStr,
                             sourceRegex = sourceRegex,
                             headerMap = headerMap,
-                            delayTime = webViewDelayTime
+                            delayTime = webViewDelayTime,
+                            poolScope = webViewPoolScope
                         ).getStrResponse()
                     }
 
@@ -492,7 +496,8 @@ class AnalyzeUrl(
                         javaScript = webJs ?: jsStr,
                         sourceRegex = sourceRegex,
                         headerMap = headerMap,
-                        delayTime = webViewDelayTime
+                        delayTime = webViewDelayTime,
+                        poolScope = webViewPoolScope
                     ).getStrResponse()
                 }
             } else {

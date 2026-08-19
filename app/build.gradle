@@ -254,6 +254,11 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
     debugImplementation(libs.compose.ui.tooling)
+    //Archive UI 迁移（Phase 0 地基补齐）：4 个 Compose 生态库
+    implementation(libs.miuix)
+    implementation(libs.reorderable)
+    implementation(libs.liquidglass)
+    implementation(libs.lazycolumnscrollbar)
 
     //图像处理库Toolkit
     implementation(libs.renderscript.intrinsics.replacement.toolkit)

@@ -70,7 +70,9 @@ class BackstageWebView(
     private val result: String? = null,
     private val isRule: Boolean = false,
     private val interceptAllRequests: Boolean = false,  // 新增：是否拦截所有请求（fetch/XHR），仅视频抓取场景启用
-    private val videoSniffJs: String? = null            // 新增：页面加载前注入的JS（视频嗅探用）
+    private val videoSniffJs: String? = null,            // 新增：页面加载前注入的JS（视频嗅探用）
+    // Archive UI 迁移（Phase 0 地基补齐）：WebView 复用池作用域（GLOBAL/DISCOVERY/RSS）
+    private val poolScope: WebViewPool.Scope = WebViewPool.Scope.GLOBAL
 ) {
 
     private val mHandler = Handler(Looper.getMainLooper())
@@ -166,7 +168,7 @@ class BackstageWebView(
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun createWebView(): WebView {
-        val pooledWebView = WebViewPool.acquire(appCtx)
+        val pooledWebView = WebViewPool.acquire(appCtx, poolScope)
         this.pooledWebView = pooledWebView
         val webView = pooledWebView.realWebView
         webView.onResume() //缓存库拿的需要激活

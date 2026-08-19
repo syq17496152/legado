@@ -12,6 +12,7 @@ import io.legado.app.help.book.removeAllBookType
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.SourceNetworkClient
 import io.legado.app.help.source.getBookType
+import io.legado.app.help.webView.WebViewPool
 import io.legado.app.model.Debug
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
@@ -96,9 +97,11 @@ object WebBook {
         url: String,
         page: Int? = 1,
         context: CoroutineContext = Dispatchers.IO,
+        webViewPoolScope: WebViewPool.Scope = WebViewPool.Scope.GLOBAL,
+        shouldBreak: ((size: Int) -> Boolean)? = null,
     ): Coroutine<List<SearchBook>> {
         return Coroutine.async(scope, context) {
-            exploreBookAwait(bookSource, url, page)
+            exploreBookAwait(bookSource, url, page, webViewPoolScope, shouldBreak)
         }
     }
 
@@ -106,6 +109,8 @@ object WebBook {
         bookSource: BookSource,
         url: String,
         page: Int? = 1,
+        webViewPoolScope: WebViewPool.Scope = WebViewPool.Scope.GLOBAL,
+        shouldBreak: ((size: Int) -> Boolean)? = null,
     ): ArrayList<SearchBook> {
         val ruleData = RuleData()
         AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "发现页请求开始 page=$page", level = AppLog.Level.INFO)
@@ -118,7 +123,8 @@ object WebBook {
             source = bookSource,
             ruleData = ruleData,
             coroutineContext = currentCoroutineContext(),
-            infoMap = exploreInfoMap
+            infoMap = exploreInfoMap,
+            webViewPoolScope = webViewPoolScope
         )
         // M6 SourceNetworkClient 统一网络请求 + 登录检测 + 重定向检测 + lastHost 回填
         val res = SourceNetworkClient.requestWithLoginCheck(
@@ -132,7 +138,8 @@ object WebBook {
             analyzeUrl = analyzeUrl,
             baseUrl = res.url,
             body = res.body,
-            isSearch = false
+            isSearch = false,
+            shouldBreak = shouldBreak
         )
     }
 

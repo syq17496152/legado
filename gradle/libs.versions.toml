@@ -4,6 +4,11 @@ kotlin = "2.3.10"
 ksp = "2.3.4"
 agp = "8.13.2"
 composeBom = "2025.04.01"
+# Archive UI 迁移（Phase 0 地基补齐）：4 个 Compose 生态依赖，对齐 ARCHIVE tag archive-v3-3.26.08172114
+miuix = "0.8.8"
+reorderable = "3.1.0"
+liquidglass = "1.0.3"
+lazyColumnScrollbar = "2.2.0"
 appcompat = "1.7.1"
 colorpicker = "1.1.0"
 constraintlayout = "2.2.1"
@@ -97,6 +102,11 @@ compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-foundation = { module = "androidx.compose.foundation:foundation" }
 compose-runtime = { module = "androidx.compose.runtime:runtime" }
 compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+# Archive UI 迁移（Phase 0 地基补齐）：4 个 Compose 生态库
+miuix = { module = "top.yukonga.miuix.kmp:miuix-android", version.ref = "miuix" }
+reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
+liquidglass = { module = "com.qmdeve.liquidglass:core", version.ref = "liquidglass" }
+lazycolumnscrollbar = { module = "com.github.nanihadesuka:LazyColumnScrollbar", version.ref = "lazyColumnScrollbar" }
 lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 
