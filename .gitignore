@@ -34,6 +34,10 @@ temp/
 output/
 .zcode/
 
+# 参考项目源码（Rimchars/legado 等，不提交远端）
+archive-ref/
+docs/temp-analysis/
+
 # 签名密钥（不入 git，仅本地使用）
 *.jks
 *.keystore
