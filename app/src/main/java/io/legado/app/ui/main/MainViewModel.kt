@@ -6,13 +6,15 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import androidx.recyclerview.widget.RecyclerView.RecycledViewPool
 import io.legado.app.base.BaseViewModel
+import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookType
 import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
+import io.legado.app.data.dao.BookUpdateInfo
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
-import io.legado.app.help.AppWebDav
+import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.DefaultData
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.addType
@@ -39,8 +41,8 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.LinkedList
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import kotlin.collections.forEach
 import kotlin.math.min
@@ -48,11 +50,10 @@ import io.legado.app.model.RuleUpdate
 import io.legado.app.model.SourceCallBack
 
 class MainViewModel(application: Application) : BaseViewModel(application) {
-    // upTocPool 归更新+缓存类（书籍目录更新、缓存下载）
-    private var threadCount = AppConfig.updateCacheThreadCount
-    private var poolSize = threadCount
+    private var threadCount = AppConfig.threadCount
+    private var poolSize = min(threadCount, AppConst.MAX_THREAD)
     private var upTocPool = Executors.newFixedThreadPool(poolSize).asCoroutineDispatcher()
-    private val waitUpTocBooks = ConcurrentLinkedQueue<String>()
+    private val waitUpTocBooks = LinkedList<String>()
     private val onUpTocBooks = ConcurrentHashMap.newKeySet<String>()
     private val eventListenerSource = ConcurrentHashMap<BookSource, Boolean>()
     val onUpBooksLiveData = MutableLiveData<Int>()
@@ -79,11 +80,11 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
     }
 
     fun upPool() {
-        threadCount = AppConfig.updateCacheThreadCount
+        threadCount = AppConfig.threadCount
         if (upTocJob?.isActive == true || cacheBookJob?.isActive == true) {
             return
         }
-        val newPoolSize = threadCount
+        val newPoolSize = min(threadCount, AppConst.MAX_THREAD)
         if (poolSize == newPoolSize) {
             return
         }
@@ -92,28 +93,13 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
         upTocPool = Executors.newFixedThreadPool(poolSize).asCoroutineDispatcher()
     }
 
-    /**
-     * 搜索线程数变更回调（仅记录日志，SearchModel 下次搜索自动重建 searchPool）
-     */
-    fun onSearchThreadCountChanged() {
-        AppLog.put("搜索线程数变更: ${AppConfig.searchThreadCount}（下次搜索生效）")
-    }
-
-    /**
-     * 更新+缓存线程数变更回调（重读配置并重建 upTocPool）
-     */
-    fun onUpdateCacheThreadCountChanged() {
-        AppLog.put("更新+缓存线程数变更: ${AppConfig.updateCacheThreadCount}")
-        upPool()
-    }
-
     fun isUpdate(bookUrl: String): Boolean {
         return onUpTocBooks.contains(bookUrl)
     }
 
     fun upAllBookToc() {
         execute {
-            addToWaitUp(appDb.bookDao.hasUpdateBooks, AppConfig.onlyUpdateRead)
+            addUpdateInfosToWaitUp(appDb.bookDao.updateBookInfos, AppConfig.onlyUpdateRead)
         }
     }
 
@@ -144,6 +130,20 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
     @Synchronized
     private fun addToWaitUp(books: List<Book>, onlyUpdateRead: Boolean) {
         books.forEach { book ->
+            if (onlyUpdateRead && book.getUnreadChapterNum() > 0) return@forEach
+            if (!waitUpTocBooks.contains(book.bookUrl) && !onUpTocBooks.contains(book.bookUrl)) {
+                waitUpTocBooks.add(book.bookUrl)
+            }
+        }
+        if (upTocJob == null) {
+            startUpTocJob()
+        }
+    }
+
+    @Synchronized
+    private fun addUpdateInfosToWaitUp(books: List<BookUpdateInfo>, onlyUpdateRead: Boolean) {
+        books.forEach { book ->
+            if (book.isLocal) return@forEach
             if (onlyUpdateRead && book.getUnreadChapterNum() > 0) return@forEach
             if (!waitUpTocBooks.contains(book.bookUrl) && !onUpTocBooks.contains(book.bookUrl)) {
                 waitUpTocBooks.add(book.bookUrl)
@@ -303,7 +303,7 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
 
     fun restoreWebDav(name: String) {
         execute {
-            AppWebDav.restoreWebDav(name)
+            AppCloudStorage.restore(name)
         }
     }
 

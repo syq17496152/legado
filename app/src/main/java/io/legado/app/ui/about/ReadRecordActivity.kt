@@ -52,6 +52,10 @@ class ReadRecordActivity : BaseActivity<ActivityReadRecordBinding>() {
     }
 
     private fun initComposeHost() {
+        binding.scrollView.visibility = android.view.View.GONE
+        binding.topBar.visibility = android.view.View.GONE
+        binding.titleBar.visibility = android.view.View.GONE
+        binding.composeHost.visibility = android.view.View.VISIBLE
         binding.composeHost.setContent {
             LegadoTheme {
                 ReadRecordScreen(

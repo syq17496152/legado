@@ -66,6 +66,11 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/menu_read_menu_edit"
+        android:title="@string/read_menu_edit"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/menu_get_progress"
         android:title="@string/get_book_progress"
         android:visible="false"
@@ -131,6 +136,11 @@
             android:title="@string/del_h_tag"
             app:showAsAction="never" />
 
+        <item
+            android:id="@+id/menu_epub_schedule_mode"
+            android:title="@string/epub_core_schedule_mode"
+            app:showAsAction="never" />
+
     </group>
 
     <item
@@ -141,6 +151,12 @@
     <item
         android:id="@+id/menu_update_toc"
         android:title="@string/update_toc"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_paragraph_rule_manage"
+        android:title="@string/paragraph_rule"
+        android:visible="false"
         app:showAsAction="never" />
 
     <item

@@ -7,7 +7,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ComposeView
 
 import io.legado.app.R
 import io.legado.app.constant.AppLog
@@ -23,6 +22,7 @@ import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
 import io.legado.app.ui.main.bookshelf.BookshelfScreen
 import io.legado.app.ui.main.bookshelf.sortedByBook
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
@@ -87,14 +87,17 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
             onBookClick = { book -> startActivityForBook(book) },
             onBookLongClick = { book ->
                 startActivity<BookInfoActivity> {
+                    putExtra("bookUrl", book.bookUrl)
                     putExtra("name", book.name)
                     putExtra("author", book.author)
+                    putExtra("origin", book.origin)
+                    putExtra("originName", book.originName)
                 }
             },
         )
     }
 
-    override val composeTopBar: ComposeView get() = binding.composeTopBar
+    override val topBar: MainTopBarView get() = binding.topBar
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         initComposeTopBar()
@@ -138,6 +141,7 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
                 onlyUpdateRead = it.onlyUpdateRead
             }
         }
+        binding.topBar.setTitle(composeTopBarTitle)
     }
 
     private fun upConnect() {
@@ -184,6 +188,12 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
 
     override fun gotoTop() {
         topScrollTrigger++
+    }
+
+    fun switchToGroupId(groupId: Long) {
+        if (groupList.any { it.groupId == groupId }) {
+            onGroupSelected(groupId)
+        }
     }
 
     override fun onDestroyView() {

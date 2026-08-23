@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.read.page.entities.column
 
 import android.graphics.Canvas
+import android.graphics.Color
 import android.os.Build
 import android.text.TextPaint
 import androidx.annotation.Keep
@@ -22,7 +23,12 @@ data class TextHtmlColumn(
     override val charData: String,
     val mTextSize: Float,
     val mTextColor: Int?,
-    val linkUrl: String?
+    val linkUrl: String?,
+    val isBold: Boolean = false,
+    val isItalic: Boolean = false,
+    val isUnderline: Boolean = false,
+    val isStrikethrough: Boolean = false,
+    val backgroundColor: Int? = null
 ) : TextBaseColumn {
 
     override var textLine: TextLine = emptyTextLine
@@ -60,6 +66,9 @@ data class TextHtmlColumn(
             textPaint.run {
                 color = ReadBookConfig.textAccentColor
                 isUnderlineText = true
+                isStrikeThruText = false
+                isFakeBoldText = isBold
+                textSkewX = if (isItalic) -0.25f else 0f
             }
             drawText(view, canvas, y, textPaint)
             return
@@ -70,23 +79,42 @@ data class TextHtmlColumn(
             } else {
                 mTextColor ?: ReadBookConfig.textColor
             }
-            isUnderlineText = false
+            isUnderlineText = isUnderline
+            isStrikeThruText = isStrikethrough
+            isFakeBoldText = isBold
+            textSkewX = if (isItalic) -0.25f else 0f
         }
         drawText(view, canvas, y, textPaint)
     }
 
     private fun drawText(view: ContentTextView, canvas: Canvas, y: Float, textPaint: TextPaint) {
+        val enablePaperInk = linkUrl == null && !textLine.isReadAloud && !isSearchResult
+        backgroundColor?.takeIf { it != Color.TRANSPARENT }?.let { color ->
+            val oldColor = textPaint.color
+            textPaint.color = color
+            val fontMetrics = textPaint.fontMetrics
+            val verticalPadding = textPaint.textSize * 0.18f
+            val horizontalPadding = if (Color.alpha(color) == 255) {
+                textPaint.textSize * 0.16f
+            } else {
+                0f
+            }
+            val top = (y + fontMetrics.ascent - verticalPadding).coerceAtLeast(0f)
+            val bottom = (y + fontMetrics.descent + verticalPadding).coerceAtMost(textLine.height)
+            canvas.drawRect(start - horizontalPadding, top, end + horizontalPadding, bottom, textPaint)
+            textPaint.color = oldColor
+        }
         if (charData == HR_PLACE_STR) {
             canvas.drawRect(start, 0f, end, 3f, textPaint)
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
             val letterSpacing = textPaint.letterSpacing * textPaint.textSize
             val letterSpacingHalf = letterSpacing * 0.5f
-            canvas.drawText(charData, start + letterSpacingHalf, y, textPaint)
+            view.drawTextWithPaperInk(canvas, charData, start + letterSpacingHalf, y, textPaint, enablePaperInk)
         } else {
-            canvas.drawText(charData, start, y, textPaint)
+            view.drawTextWithPaperInk(canvas, charData, start, y, textPaint, enablePaperInk)
         }
         if (selected) {
-            canvas.drawRect(start, 0f, end, textLine.height, view.selectedPaint)
+            view.drawSelectedRect(canvas, start, 0f, end, textLine.height)
         }
     }
 

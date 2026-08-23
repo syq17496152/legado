@@ -29,6 +29,9 @@ class SeekBarPreference(context: Context, attrs: AttributeSet) : Preference(cont
             mValueText?.text = field.toString()
         }
 
+    val minValue: Int get() = mMinValue
+    val maxValue: Int get() = mMaxValue
+
     init {
         layoutResource = R.layout.view_preference_seekbar
         val a = context.obtainStyledAttributes(attrs, R.styleable.NumberPickerPreference)

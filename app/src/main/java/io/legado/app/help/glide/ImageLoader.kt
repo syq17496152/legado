@@ -69,6 +69,25 @@ object ImageLoader {
         }
     }
 
+    fun loadBitmap(
+        fragment: Fragment,
+        lifecycle: Lifecycle,
+        path: String?
+    ): RequestBuilder<Bitmap> {
+        val requestManager = Glide.with(fragment).lifecycle(lifecycle).`as`(Bitmap::class.java)
+        return when {
+            path.isNullOrEmpty() -> requestManager.load(path)
+            path.isDataUrl() -> requestManager.load(path)
+            path.isAbsUrl() -> requestManager.load(path)
+            path.isContentScheme() -> requestManager.load(path.toUri())
+            else -> kotlin.runCatching {
+                requestManager.load(File(path))
+            }.getOrElse {
+                requestManager.load(path)
+            }
+        }
+    }
+
     fun loadFile(context: Context, path: String?): RequestBuilder<File> {
         return when {
             path.isNullOrEmpty() -> Glide.with(context).asFile().load(path)

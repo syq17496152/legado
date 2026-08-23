@@ -5,10 +5,14 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <androidx.compose.ui.platform.ComposeView
-        android:id="@+id/compose_top_bar"
+    <io.legado.app.ui.widget.TitleBar
+        android:id="@+id/title_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        app:contentInsetStartWithNavigation="0dp"
+        app:contentLayout="@layout/view_search"
+        app:displayHomeAsUp="true"
+        app:title="@string/book_source" />
 
     <FrameLayout
         android:layout_width="match_parent"
@@ -19,13 +23,7 @@
             android:id="@+id/recycler_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="gone"
             app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
-
-        <androidx.compose.ui.platform.ComposeView
-            android:id="@+id/compose_host"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
 
     </FrameLayout>
 

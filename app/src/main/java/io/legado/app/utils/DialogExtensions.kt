@@ -13,6 +13,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 import androidx.core.view.forEach
 import androidx.fragment.app.DialogFragment
+import io.legado.app.R
+import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.Selector
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.accentColor
@@ -88,6 +90,16 @@ fun DialogFragment.setLayout(width: Int, height: Int) {
 
 fun Dialog.setLayout(width: Int, height: Int) {
     window?.setLayout(width, height)
+}
+
+fun Dialog.applyModernWindowStyle() {
+    if (AppConfig.isEInkMode) return
+    window?.let { window ->
+        val attr = window.attributes
+        attr.windowAnimations = R.style.AnimDialogCenter
+        window.attributes = attr
+        window.setBackgroundDrawable(context.filletBackground)
+    }
 }
 
 fun Dialog.toggleSystemBar(show: Boolean) {

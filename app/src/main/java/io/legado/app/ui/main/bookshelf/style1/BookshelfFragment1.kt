@@ -4,13 +4,14 @@ import android.os.Bundle
 import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ComposeView
 
 import io.legado.app.R
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.EventBus
 import io.legado.app.databinding.FragmentBookshelf1Binding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.book.group.GroupEditDialog
@@ -19,6 +20,8 @@ import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
 import io.legado.app.ui.main.bookshelf.BookshelfScreen
 import io.legado.app.ui.main.bookshelf.sortedByBook
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.utils.observeEvent
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
@@ -50,6 +53,8 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     private var error by mutableStateOf(false)
     private var topScrollTrigger by mutableLongStateOf(0L)
     private var refreshing by mutableStateOf(false)
+    // 顶栏设置版本号：TOP_BAR_CHANGED 时自增，驱动书架分组标签（BookGroupTabs）重组读取最新 TopBarConfig
+    private var topBarVersion by mutableIntStateOf(0)
     private var booksJob: Job? = null
 
     private var bookSort: Int = 0
@@ -71,6 +76,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             isFolder = false,
             topScrollTrigger = topScrollTrigger,
             isRefreshing = refreshing,
+            topBarVersion = topBarVersion,
             onRefresh = {
                 refreshing = true
                 activityViewModel.upToc(currentBooks, onlyUpdateRead)
@@ -85,14 +91,17 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             onBookClick = { book -> startActivityForBook(book) },
             onBookLongClick = { book ->
                 startActivity<BookInfoActivity> {
+                    putExtra("bookUrl", book.bookUrl)
                     putExtra("name", book.name)
                     putExtra("author", book.author)
+                    putExtra("origin", book.origin)
+                    putExtra("originName", book.originName)
                 }
             },
         )
     }
 
-    override val composeTopBar: ComposeView get() = binding.composeTopBar
+    override val topBar: MainTopBarView get() = binding.topBar
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         initComposeTopBar()
@@ -100,6 +109,16 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         binding.viewPagerBookshelf.setContent {
             LegadoTheme {
                 BookshelfContent()
+            }
+        }
+    }
+
+    override fun observeLiveBus() {
+        super.observeLiveBus()
+        // 顶栏设置变化：MainActivity 只刷新 View 层 MainTopBarView，Compose 书架分组标签需自增版本触发重组
+        observeEvent<Boolean>(EventBus.TOP_BAR_CHANGED) {
+            if (it == AppConfig.isNightTheme) {
+                topBarVersion++
             }
         }
     }
@@ -159,6 +178,12 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
 
     override fun gotoTop() {
         topScrollTrigger++
+    }
+
+    fun switchToGroupId(groupId: Long) {
+        if (groupList.any { it.groupId == groupId }) {
+            onGroupSelected(groupId)
+        }
     }
 
     override fun onDestroyView() {

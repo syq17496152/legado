@@ -12,8 +12,10 @@ import io.legado.app.constant.EventBus
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.book.BookContent
+import io.legado.app.help.book.isEpub
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.help.config.ReaderFontWeight
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.page.entities.TextChapter
 import io.legado.app.utils.RealPathUtil
@@ -233,53 +235,25 @@ object ChapterProvider {
         } ?: Typeface.DEFAULT
     }
 
-    private val highlightTypefaceCache = HashMap<String, Typeface?>()
-
-    /**
-     * 高亮自定义字体: 按路径解析 Typeface 并缓存。
-     * 逐列绘制时高频调用, 必须缓存(命中与未命中都缓存)。失败返回 null, 不影响阅读字体。
-     */
-    fun getHighlightTypeface(fontPath: String): Typeface? {
-        if (fontPath.isEmpty()) return null
-        if (highlightTypefaceCache.containsKey(fontPath)) return highlightTypefaceCache[fontPath]
-        val typeface = kotlin.runCatching {
-            when {
-                fontPath.isContentScheme() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
-                    appCtx.contentResolver
-                        .openFileDescriptor(fontPath.toUri(), "r")!!
-                        .use { Typeface.Builder(it.fileDescriptor).build() }
-                }
-
-                fontPath.isContentScheme() ->
-                    Typeface.createFromFile(RealPathUtil.getPath(appCtx, fontPath.toUri()))
-
-                else -> Typeface.createFromFile(fontPath)
-            }
-        }.getOrNull()
-        highlightTypefaceCache[fontPath] = typeface
-        return typeface
-    }
+    /** 高亮样式字体：与正文同源，供 HighlightDraw 直接取用 */
+    fun getHighlightTypeface(fontPath: String): Typeface? = getTypeface(fontPath)
 
     private fun getPaints(typeface: Typeface?): Pair<TextPaint, TextPaint> {
         // 字体统一处理
         val bold = Typeface.create(typeface, Typeface.BOLD)
         val normal = Typeface.create(typeface, Typeface.NORMAL)
-        val (titleFont, textFont) = when (ReadBookConfig.textBold) {
-            1 -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-                    Pair(Typeface.create(typeface, 900, false), bold)
-                else
-                    Pair(bold, bold)
-            }
-
-            2 -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-                    Pair(normal, Typeface.create(typeface, 300, false))
-                else
-                    Pair(normal, normal)
-            }
-
-            else -> Pair(bold, normal)
+        val textWeight = ReadBookConfig.textWeight
+        val titleWeight = ReaderFontWeight.titleWeight(textWeight)
+        val (titleFont, textFont) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            Pair(
+                Typeface.create(typeface, titleWeight, false),
+                Typeface.create(typeface, textWeight, false)
+            )
+        } else {
+            Pair(
+                if (titleWeight >= 600) bold else normal,
+                if (textWeight >= 600) bold else normal
+            )
         }
 
         //标题
@@ -313,7 +287,13 @@ object ChapterProvider {
             return
         }
         if (width != viewWidth || height != viewHeight) {
-            if (width == viewWidth) {
+            if (ReadBook.book?.isEpub == true) {
+                upViewSizeRunnable?.let {
+                    handler.removeCallbacks(it)
+                    upViewSizeRunnable = null
+                }
+                notifyViewSizeChange(width, height)
+            } else if (width == viewWidth) {
                 upViewSizeRunnable = handler.postDelayed(300) {
                     upViewSizeRunnable = null
                     notifyViewSizeChange(width, height)

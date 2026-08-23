@@ -11,6 +11,10 @@
         android:title="@android:string/copy" />
 
     <item
+        android:id="@+id/menu_web_search"
+        android:title="@string/search" />
+
+    <item
         android:id="@+id/menu_bookmark"
         android:title="@string/bookmark" />
 
@@ -21,6 +25,18 @@
     <item
         android:id="@+id/menu_dict"
         android:title="@string/dict" />
+
+    <item
+        android:id="@+id/menu_ask_ai"
+        android:title="@string/ask_ai" />
+
+    <item
+        android:id="@+id/menu_generate_image"
+        android:title="@string/ai_image_generate" />
+
+    <item
+        android:id="@+id/menu_share_image"
+        android:title="@string/share" />
 
     <item
         android:id="@+id/menu_search_content"

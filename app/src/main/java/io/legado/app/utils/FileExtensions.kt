@@ -86,3 +86,18 @@ fun File.checkWrite(): Boolean {
 fun File.outputStream(append: Boolean = false): FileOutputStream {
     return FileOutputStream(this, append)
 }
+
+/**
+ * 判断当前文件是否在 parent 目录内（含 parent 自身），用于路径越界防护
+ * P1E：ThemePackageManager / SafeZipExtractor / RedAssetPackage 等 config 类使用
+ */
+fun File.isSameOrSubFileOf(parent: File): Boolean {
+    val childPath = canonicalPath
+    val parentPath = parent.canonicalPath
+    val parentPrefix = if (parentPath.endsWith(File.separator)) {
+        parentPath
+    } else {
+        parentPath + File.separator
+    }
+    return childPath == parentPath || childPath.startsWith(parentPrefix)
+}

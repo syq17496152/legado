@@ -50,7 +50,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
 class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleViewModel>(),
-    TxtTocRuleEditDialog.Callback {
+    TxtTocRuleEditComposeDialog.Callback {
 
     override val viewModel by viewModels<TxtTocRuleViewModel>()
     override val binding by viewBinding(ActivityTxtTocRuleBinding::inflate)
@@ -152,7 +152,7 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
         MenuAction(
             icon = Icons.Default.Add,
             title = getString(R.string.add),
-            onClick = { showDialogFragment(TxtTocRuleEditDialog()) }
+            onClick = { showDialogFragment(TxtTocRuleEditComposeDialog.create()) }
         ),
         MenuAction(
             icon = Icons.Default.FileUpload,
@@ -241,7 +241,7 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
     /** 点击行/编辑按钮 → 打开编辑对话框 */
     private fun editRule(index: Int) {
         currentRules.getOrNull(index)?.let {
-            showDialogFragment(TxtTocRuleEditDialog(it.id))
+            showDialogFragment(TxtTocRuleEditComposeDialog.create(it.id))
         }
     }
 

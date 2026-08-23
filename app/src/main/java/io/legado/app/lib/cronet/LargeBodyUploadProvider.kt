@@ -62,7 +62,7 @@ class LargeBodyUploadProvider(
 
     }
 
-    override fun rewind(p0: UploadDataSink?) {
+    override fun rewind(uploadDataSink: UploadDataSink) {
         check(body.isOneShot()) { "Okhttp RequestBody is OneShot" }
         filled = false
         fillBuffer()

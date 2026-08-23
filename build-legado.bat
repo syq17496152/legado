@@ -147,6 +147,7 @@ if errorlevel 1 (
     echo.
     echo   Try: build-legado.bat clean
     echo.
+    call :STOP_DAEMON
     pause
     exit /b 1
 )
@@ -210,8 +211,29 @@ if "!APK_FOUND!"=="1" (
     )
 )
 
+call :STOP_DAEMON
+
 echo.
 pause
+exit /b 0
+
+:: ============================================================
+::  Stop build daemons after packaging to free memory
+::  (fix 2026-08-21: --no-daemon does NOT stop Kotlin daemon;
+::   Gradle/Kotlin daemons auto-shutdown only after 2-3h idle)
+:: ============================================================
+:STOP_DAEMON
+echo.
+echo ============================================================
+echo   Stopping build daemons to release memory...
+echo ============================================================
+cd /d "%PROJECT_DIR%"
+:: Stop Gradle daemon (also stops the Kotlin daemon it manages)
+call gradlew.bat --stop >nul 2>&1
+:: Fallback: force-kill this project's leftover Kotlin daemon
+:: (filtered by marker path containing in-legado, avoid killing others)
+powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'java.exe' -and $_.CommandLine -like '*KotlinCompileDaemon*' -and $_.CommandLine -like '*in-legado*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" 2>nul
+echo [OK] Build daemons stopped.
 exit /b 0
 
 :DO_CLEAN

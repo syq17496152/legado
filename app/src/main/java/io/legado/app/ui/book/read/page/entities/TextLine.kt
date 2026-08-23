@@ -35,6 +35,7 @@ data class TextLine(
     var lineBottom: Float = 0f,
     var indentWidth: Float = 0f,
     var paragraphNum: Int = 0,
+    var sourceIndex: Int = -1,
     var chapterPosition: Int = 0,
     var pagePosition: Int = 0,
     val isTitle: Boolean = false,
@@ -58,6 +59,7 @@ data class TextLine(
     val height: Float inline get() = lineBottom - lineTop
     val canvasRecorder = CanvasRecorderFactory.create()
     var searchResultColumnCount = 0
+    /** 有「需要逐列绘制」高亮装饰(非纯背景 fill)的列数,>0 时禁用快绘路径 */
     var styledColumnCount = 0
     var isReadAloud: Boolean = false
         set(value) {
@@ -171,9 +173,8 @@ data class TextLine(
             for (i in columns.indices) {
                 columns[i].draw(view, canvas)
             }
+            drawHighlightRuns(view, canvas)
         }
-
-        drawHighlightRuns(canvas)
 
         // 墨水屏模式下的朗读和搜索下划线
         if (AppConfig.isEInkMode && (isReadAloud || searchResultColumnCount > 0)) {
@@ -207,16 +208,6 @@ data class TextLine(
         if (textPaint.color != textColor) {
             textPaint.color = textColor
         }
-        // T-C1: 先画 fill 矩形（修复 R-P1-1c：fill-only 样式 needsPerColumnDraw=false，
-        // 不计入 styledColumnCount，TextLine.checkFastDraw 放行快绘，原快绘不画 fill 导致背景色高亮消失）
-        // 顺序对齐 TextColumn.draw:74-77（fill 在 drawText 之前，避免覆盖文字）
-        for (i in columns.indices) {
-            val column = columns[i] as TextColumn
-            val fill = column.highlightStyle?.fill ?: 0
-            if (fill != 0) {
-                canvas.drawRect(column.start, 0f, column.end, height, view.highlightPaint(fill))
-            }
-        }
         val paint = PaintPool.obtain()
         paint.set(textPaint)
         val letterSpacing = paint.letterSpacing * paint.textSize
@@ -228,12 +219,26 @@ data class TextLine(
             paint.wordSpacing = wordSpacing
         }
         val offsetX = if (atLeastApi35) letterSpacingHalf else extraLetterSpacingOffsetX
-        canvas.drawText(text, indentSize, text.length, startX + offsetX, lineBase - lineTop, paint)
+        view.drawTextWithPaperInk(
+            canvas = canvas,
+            text = text,
+            start = indentSize,
+            end = text.length,
+            x = startX + offsetX,
+            y = lineBase - lineTop,
+            paint = paint,
+            enableBlend = !isReadAloud
+        )
         PaintPool.recycle(paint)
         for (i in columns.indices) {
             val column = columns[i] as TextColumn
+            // 快绘路径补画高亮背景填充(fill), 否则纯背景色高亮丢失
+            val fill = column.highlightStyle?.fill ?: 0
+            if (fill != 0) {
+                view.drawHighlightFill(canvas, column.start, 0f, column.end, height, fill)
+            }
             if (column.selected) {
-                canvas.drawRect(column.start, 0f, column.end, height, view.selectedPaint)
+                view.drawSelectedRect(canvas, column.start, 0f, column.end, height)
             }
         }
     }
@@ -267,30 +272,6 @@ data class TextLine(
         }
     }
 
-    /** 按连续同装饰的列区间画 下划线/删除线/方框(文字之上) */
-    private fun drawHighlightRuns(canvas: Canvas) {
-        val baseline = lineBase - lineTop
-        var i = 0
-        val cols = columns
-        while (i < cols.size) {
-            val c = cols[i] as? TextColumn
-            val st = c?.highlightStyle
-            val u = st?.underline; val sk = st?.strike; val bx = st?.box
-            if (st == null || (u == null && sk == null && bx == null)) { i++; continue }
-            // 向后合并 underline/strike/box 完全相同的连续列
-            var j = i + 1
-            while (j < cols.size) {
-                val n = (cols[j] as? TextColumn)?.highlightStyle
-                if (n?.underline == u && n?.strike == sk && n?.box == bx) j++ else break
-            }
-            val x0 = (cols[i] as TextColumn).start
-            val x1 = (cols[j - 1] as TextColumn).end
-            val fallback = if (st.textColor != 0) st.textColor else ReadBookConfig.textColor
-            HighlightDraw.drawRun(canvas, x0, x1, baseline, height, u, sk, bx, fallback)
-            i = j
-        }
-    }
-
     fun checkFastDraw(): Boolean {
         if (!AppConfig.optimizeRender || exceed || !onlyTextColumn || textPage.isMsgPage) {
             return false
@@ -298,7 +279,49 @@ data class TextLine(
         if (wordSpacing != 0f && (!atLeastApi26 || !wordSpacingWorking)) {
             return false
         }
-        return searchResultColumnCount == 0 && styledColumnCount == 0
+        if (styledColumnCount != 0) {
+            // 有需要逐列绘制的高亮装饰时,快绘路径无法绘制,降级为普通路径
+            return false
+        }
+        return searchResultColumnCount == 0
+    }
+
+    /** 合并连续同样式列, 一次性绘制下划线/删除线/方框装饰 */
+    private fun drawHighlightRuns(view: ContentTextView, canvas: Canvas) {
+        var i = 0
+        val cols = columns
+        val n = cols.size
+        val baseline = lineBase - lineTop
+        while (i < n) {
+            val col = cols[i]
+            if (col !is TextColumn) { i++; continue }
+            val hs = col.highlightStyle ?: run { i++; continue }
+            // 合并起点
+            val runStart = col.start
+            var runEnd = col.end
+            var underline = hs.underline
+            var strike = hs.strike
+            var box = hs.box
+            j@ for (j in i + 1 until n) {
+                val next = cols[j]
+                if (next !is TextColumn) continue@j
+                val nhs = next.highlightStyle ?: break@j
+                if (nhs.underline != underline || nhs.strike != strike || nhs.box != box) {
+                    break@j
+                }
+                runEnd = next.end
+            }
+            HighlightDraw.drawRun(
+                canvas, runStart, runEnd, baseline, height,
+                underline, strike, box, ReadBookConfig.textColor
+            )
+            // 跳到下一个不同样式的列
+            var k = i + 1
+            while (k < n && cols[k] is TextColumn && (cols[k] as TextColumn).highlightStyle?.let { it.underline == underline && it.strike == strike && it.box == box } == true) {
+                k++
+            }
+            i = k
+        }
     }
 
     fun invalidate() {

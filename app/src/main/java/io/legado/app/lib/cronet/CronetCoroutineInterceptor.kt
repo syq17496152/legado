@@ -130,7 +130,7 @@ class CronetCoroutineInterceptor(private val cookieJar: CookieJar) : Interceptor
                     coroutine.resume(response)
                 }
 
-                override fun onCanceled(request: UrlRequest?, info: UrlResponseInfo?) {
+                override fun onCanceled(request: UrlRequest, info: UrlResponseInfo) {
                     super.onCanceled(request, info)
                     coroutine.cancel()
                 }

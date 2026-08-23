@@ -3,13 +3,11 @@ package io.legado.app.ui.book.cache
 import android.annotation.SuppressLint
 import android.os.Bundle
 import android.text.InputType
-import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.widget.PopupMenu
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -70,7 +68,6 @@ import io.legado.app.utils.enableCustomExport
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.observeEvent
-import io.legado.app.utils.setIconCompat
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startService
 import io.legado.app.utils.toastOnUi
@@ -91,7 +88,6 @@ import kotlin.math.max
  * cache/download 缓存界面
  */
 class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>(),
-    PopupMenu.OnMenuItemClickListener,
     CacheAdapter.CallBack {
 
     override val binding by viewBinding(ActivityCacheBookBinding::inflate)
@@ -341,90 +337,6 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             MenuAction(Icons.Filled.List, getString(R.string.log), onClick = { showDialogFragment<AppLogDialog>() }),
             MenuAction(Icons.Filled.List, getString(R.string.cache_stats), onClick = { showCacheStatsDialog() })
         )
-    }
-
-    // 缓存管理菜单项 id 常量（menu XML 已随 Compose 化清理，原 R.id.menu_* 改为本地常量）
-    private object MenuId {
-        const val DOWNLOAD_AFTER = 1101
-        const val DOWNLOAD_ALL = 1102
-        const val ENABLE_CUSTOM_EXPORT = 1103
-        const val EXPORT_WEB_DAV = 1104
-        const val EXPORT_NO_CHAPTER_NAME = 1105
-        const val EXPORT_PICS_FILE = 1106
-        const val PARALLEL_EXPORT = 1107
-        const val EXPORT_FOLDER = 1108
-        const val EXPORT_FILE_NAME = 1109
-        const val EXPORT_TYPE = 1110
-        const val EXPORT_CHARSET = 1111
-        const val CACHE_RATE = 1112
-        const val CACHE_STATS = 1113
-    }
-
-    /** 菜单按下回调（保留原逻辑，供子菜单/长按入口复用） */
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_download,
-            MenuId.DOWNLOAD_AFTER -> {
-                if (!CacheBook.isRun) sureCacheBook {
-                    adapter.getItems().forEach { book ->
-                        CacheBook.start(
-                            this@CacheActivity,
-                            book,
-                            book.durChapterIndex,
-                            book.lastChapterIndex
-                        )
-                    }
-                } else {
-                    CacheBook.stop(this@CacheActivity)
-                }
-            }
-
-            MenuId.DOWNLOAD_ALL -> {
-                if (!CacheBook.isRun) sureCacheBook {
-                    adapter.getItems().forEach { book ->
-                        CacheBook.start(
-                            this@CacheActivity,
-                            book,
-                            0,
-                            book.lastChapterIndex
-                        )
-                    }
-                } else {
-                    CacheBook.stop(this@CacheActivity)
-                }
-            }
-
-            R.id.menu_export_all -> exportAll()
-            R.id.menu_enable_replace -> AppConfig.exportUseReplace = !item.isChecked
-            // 更改菜单状态[enableCustomExport]
-            MenuId.ENABLE_CUSTOM_EXPORT -> AppConfig.enableCustomExport = !item.isChecked
-            MenuId.EXPORT_NO_CHAPTER_NAME -> AppConfig.exportNoChapterName = !item.isChecked
-            MenuId.EXPORT_WEB_DAV -> AppConfig.exportToWebDav = !item.isChecked
-            MenuId.EXPORT_PICS_FILE -> AppConfig.exportPictureFile = !item.isChecked
-            MenuId.PARALLEL_EXPORT -> AppConfig.parallelExportBook = !item.isChecked
-            MenuId.EXPORT_FOLDER -> {
-                selectExportFolder(-1)
-            }
-
-            MenuId.EXPORT_FILE_NAME -> alertExportFileName()
-            MenuId.EXPORT_TYPE -> showExportTypeConfig()
-            MenuId.EXPORT_CHARSET -> showCharsetConfig()
-            MenuId.CACHE_RATE -> showCacheRateDialog()
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-            MenuId.CACHE_STATS -> showCacheStatsDialog()
-            else -> if (item.groupId == R.id.menu_group) {
-                composeSubtitle = item.title.toString()
-                lifecycleScope.launch {
-                    groupId = withContext(IO) { appDb.bookGroupDao.getByName(item.title.toString()) }?.groupId ?: 0
-                    initBookData()
-                }
-            }
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
-
-    override fun onMenuItemClick(item: MenuItem): Boolean {
-        return onCompatOptionsItemSelected(item)
     }
 
     private fun initRecyclerView() {

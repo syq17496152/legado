@@ -42,6 +42,19 @@ class VideoPagerAdapter(
         }
     }
 
+    override fun getItemId(position: Int): Long {
+        // FragmentStateAdapter 稳定 ID：以 position 为 ID。
+        // 数据仅尾部增量（ARTICLES_LOADED notifyItemRangeInserted）或整体重建（notifyDataSetChanged+setCurrentItem(0)），
+        // 既有 position 的 ID 保持稳定，避免中间插入导致 Fragment 错位复用。
+        return position.toLong()
+    }
+
+    override fun containsItem(itemId: Long): Boolean {
+        // 关键修复：数据收缩后（如线路切换重建、列表变短），ViewPager2 布局时可能引用已移除的 position，
+        // 不校验会抛 IndexOutOfBoundsException "Invalid view holder adapter position"（用户 3.26.081817 实测崩溃）。
+        return itemId >= 0 && itemId < getItemCount().toLong()
+    }
+
     override fun createFragment(position: Int): Fragment {
         return VideoFragment.newInstance(position)
     }

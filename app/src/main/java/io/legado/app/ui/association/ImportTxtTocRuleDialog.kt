@@ -2,6 +2,8 @@ package io.legado.app.ui.association
 
 import android.content.DialogInterface
 import android.os.Bundle
+import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -14,19 +16,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.viewModels
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
 import io.legado.app.data.entities.TxtTocRule
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.ImportItem
 import io.legado.app.ui.widget.components.ImportSourceSheet
 import io.legado.app.ui.widget.components.ImportState
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
-import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 
 /**
@@ -35,7 +37,7 @@ import io.legado.app.utils.showDialogFragment
  * 业务逻辑（importSource/importSelect/comparisonSource）全部保留在 [ImportTxtTocRuleViewModel]，
  * 本类仅做 ViewModel 状态到 Compose 的桥接。备注列展示 [TxtTocRule.example]（常显，不随 importShowComment）。
  */
-class ImportTxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_import_sheet),
+class ImportTxtTocRuleDialog() : ComposeDialogFragment(),
     CodeDialog.Callback {
 
     constructor(source: String, finishOnDismiss: Boolean = false) : this() {
@@ -44,6 +46,10 @@ class ImportTxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_import_sheet
             putBoolean("finishOnDismiss", finishOnDismiss)
         }
     }
+
+    override val dialogTheme: Int = R.style.Theme_Legado_ComposeDialog_Bottom
+    override val dialogGravity: Int = Gravity.BOTTOM
+    override val dialogWindowAnimations: Int = R.style.AnimDialogBottom
 
     private val viewModel by viewModels<ImportTxtTocRuleViewModel>()
 
@@ -54,11 +60,6 @@ class ImportTxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_import_sheet
     private val successCount = mutableStateOf<Int?>(null)
     private val errorLive = mutableStateOf<String?>(null)
 
-    override fun onStart() {
-        super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-    }
-
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
         if (arguments?.getBoolean("finishOnDismiss") == true) {
@@ -67,7 +68,23 @@ class ImportTxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_import_sheet
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    ImportTxtTocRuleSheetContent()
+                }
+            }
+        }
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
         val source = arguments?.getString("source")
         if (source.isNullOrEmpty()) {
             dismiss()
@@ -78,12 +95,6 @@ class ImportTxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_import_sheet
         }
         viewModel.errorLiveData.observe(viewLifecycleOwner) {
             errorLive.value = it
-        }
-        val composeView = view.findViewById<ComposeView>(R.id.compose_view)
-        composeView.setContent {
-            LegadoTheme {
-                ImportTxtTocRuleSheetContent()
-            }
         }
         viewModel.importSource(source)
     }

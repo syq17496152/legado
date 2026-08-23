@@ -23,7 +23,9 @@ import io.legado.app.utils.BitmapUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.SvgUtils
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import java.io.File
@@ -156,6 +158,29 @@ object ImageProvider {
         }
     }
 
+    fun cacheImageAsync(
+        book: Book,
+        src: String,
+        bookSource: BookSource?,
+        width: Int? = null,
+        height: Int? = null,
+        cacheKeySuffix: String? = null,
+        onFinished: (() -> Unit)? = null
+    ) {
+        CoroutineScope(IO).launch {
+            try {
+                cacheImage(book, src, bookSource)
+                if (width != null && width > 0) {
+                    getImage(book, src, width, height, cacheKeySuffix)
+                }
+            } catch (e: Exception) {
+                putDebug("ImageProvider async cache failed: $src\n${e.localizedMessage}")
+            } finally {
+                onFinished?.invoke()
+            }
+        }
+    }
+
     /**
      *获取图片宽度高度信息
      */
@@ -187,7 +212,8 @@ object ImageProvider {
         book: Book,
         src: String,
         width: Int,
-        height: Int? = null
+        height: Int? = null,
+        cacheKeySuffix: String? = null
     ): Bitmap {
         //src为空白时 可能被净化替换掉了 或者规则失效
         if (book.getUseReplaceRule() && src.isBlank()) {
@@ -212,13 +238,24 @@ object ImageProvider {
         }.getOrDefault(errorBitmap)
     }
 
+    fun getImageOrNull(
+        book: Book,
+        src: String,
+        width: Int,
+        height: Int? = null,
+        cacheKeySuffix: String? = null
+    ): Bitmap? {
+        val bitmap = getImage(book, src, width, height, cacheKeySuffix)
+        return bitmap.takeUnless { it == errorBitmap }
+    }
+
     fun clear() {
         bitmapLruCache.evictAll()
     }
 
     // B13: 系统内存压力时降级图片缓存
     @Suppress("DEPRECATION")
-    fun trimMemory(level: Int) {
+    fun trimMemory(level: Int = ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
         if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
             || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW
             || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL

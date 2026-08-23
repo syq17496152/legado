@@ -26,9 +26,13 @@ object SvgUtils {
 
     fun createBitmap(inputStream: InputStream, width: Int, height: Int? = null): Bitmap? {
         return kotlin.runCatching {
-            val svg = SVG.getFromInputStream(inputStream)
-            createBitmap(svg, width, height)
+            createBitmapOrThrow(inputStream, width, height)
         }.getOrNull()
+    }
+
+    internal fun createBitmapOrThrow(inputStream: InputStream, width: Int, height: Int? = null): Bitmap {
+        val svg = SVG.getFromInputStream(inputStream)
+        return createBitmap(svg, width, height)
     }
 
     fun createDrawable(inputStream: InputStream): Pair<PictureDrawable, Size>? {

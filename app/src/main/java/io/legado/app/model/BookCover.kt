@@ -180,10 +180,11 @@ object BookCover {
         path: String?,
         loadOnlyWifi: Boolean = false,
         sourceOrigin: String? = null,
+        forcePath: Boolean = false,
     ): RequestBuilder<Drawable> {
         val loadBlur = ImageLoader.load(context, defaultDrawable)
             .transform(BlurTransformation(25), CenterCrop())
-        if (AppConfig.useDefaultCover) {
+        if (AppConfig.useDefaultCover && !forcePath) {
             return loadBlur
         }
         var options = RequestOptions().set(OkHttpModelLoader.loadOnlyWifiOption, loadOnlyWifi)

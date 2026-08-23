@@ -472,8 +472,11 @@ class BookshelfManageActivity :
 
     override fun openBook(book: Book) {
         startActivity<BookInfoActivity> {
+            putExtra("bookUrl", book.bookUrl)
             putExtra("name", book.name)
             putExtra("author", book.author)
+            putExtra("origin", book.origin)
+            putExtra("originName", book.originName)
         }
     }
 

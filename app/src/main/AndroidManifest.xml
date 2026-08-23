@@ -3,7 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Archive UI 迁移（Phase 0 地基补齐）：liquidglass(毛玻璃底栏) 要求 minSdk 24，本项目 minSdk 23，用 overrideLibrary 覆盖（与 Archive 一致）；运行时仅 API24+ 启用毛玻璃 -->
-    <uses-sdk tools:overrideLibrary="com.qmdeve.liquidglass,top.yukonga.miuix.kmp" />
+    <!-- Cronet 500 要求 minSdk 24，用 overrideLibrary 覆盖以保持项目 minSdk 23；API23 设备上 Cronet 不可用，请求自动回退 OkHttp（CronetInterceptor 已有降级路径）
+        覆盖 cronet-bundled 传递引入的 cronet 家族全部子构件包名（cronet 聚合器/bundled/embedded/api/common/fallback/shared/httpengine-native-provider），未用到的包名被 manifest 合并器忽略，无害 -->
+    <uses-sdk tools:overrideLibrary="com.qmdeve.liquidglass,top.yukonga.miuix.kmp,org.chromium.net.bundled,org.chromium.net,com.google.net.cronet.granular.cronet,com.google.net.cronet.granular.cronet_api,com.google.net.cronet.granular.cronet_embedded,com.google.net.cronet.granular.cronet_common,com.google.net.cronet.granular.cronet_fallback,com.google.net.cronet.granular.cronet_shared,com.google.net.cronet.granular.httpengine_native_provider" />
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -23,6 +25,10 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"
+        tools:ignore="ApiLevel" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
@@ -232,6 +238,111 @@
         <activity
             android:name=".ui.config.ConfigActivity"
             android:launchMode="standard" />
+        <!-- 外观套件（界面样式）管理 -->
+        <activity
+            android:name=".ui.config.AppearanceKitActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.AppearanceKitEditActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.BubbleManageActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.NavigationBarManageActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.TopBarManageActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.BookInfoManageActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.S3ContainerManageActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.LibraryContainerManageActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.CoverCollectionManageActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.CoverCollectionDetailActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.RelaySettingsActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
+        <!-- 现代发现套件管理（7.11h） -->
+        <activity
+            android:name=".ui.main.explore.DiscoverySuiteManageActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout"
+            android:launchMode="standard" />
+        <!-- 书架标签管理（7.11i） -->
+        <activity
+            android:name=".ui.main.bookshelf.BookshelfTagManageActivity"
+            android:launchMode="singleTask" />
+        <activity
+            android:name=".ui.config.ShareNoteTemplateManageActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.AiProviderManageActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.AiProviderEditActivity"
+            android:launchMode="standard"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity
+            android:name=".ui.config.AiImageProviderManageActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.AiImageProviderEditActivity"
+            android:launchMode="standard"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity
+            android:name=".ui.main.ai.AiChatActivity"
+            android:launchMode="standard"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity
+            android:name=".ui.main.ai.AiImageGalleryActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.config.AiWorldBookManageActivity"
+            android:launchMode="standard"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity
+            android:name=".ui.book.character.BookCharacterManageActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.main.my.MyFeatureBooksActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.book.character.BookCharacterEditActivity"
+            android:launchMode="standard"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity
+            android:name=".ui.book.character.BookCharacterCardActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.book.character.BookCharacterRelationActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.book.read.config.ParagraphRuleManageActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.book.read.config.ParagraphRuleEditActivity"
+            android:launchMode="standard"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity
+            android:name=".ui.book.read.config.ReadMenuButtonManageActivity"
+            android:launchMode="standard" />
+        <activity
+            android:name=".ui.book.read.config.ReadMenuCustomButtonEditActivity"
+            android:launchMode="standard"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+        <activity
+            android:name=".ui.book.read.config.SpeakerGroupManageActivity"
+            android:launchMode="standard" />
         <!-- F-P0-1 调试工具集（借鉴蛋蛋Max） -->
         <activity
             android:name=".ui.debug.DebugToolsActivity"
@@ -352,6 +463,11 @@
         <activity
             android:name=".ui.book.cache.CacheActivity"
             android:launchMode="singleTop" />
+        <activity
+            android:name=".ui.book.cache.CacheManageActivity"
+            android:launchMode="singleTop" />
+        <activity
+            android:name=".ui.image.ImageCropActivity" />
         <!-- WebView界面 -->
         <activity
             android:name=".ui.browser.WebViewActivity"
@@ -553,6 +669,9 @@
             android:name=".service.CacheBookService"
             android:foregroundServiceType="dataSync" />
         <service
+            android:name=".service.WebDavTaskService"
+            android:foregroundServiceType="dataSync" />
+        <service
             android:name=".service.ExportBookService"
             android:foregroundServiceType="dataSync" />
         <service
@@ -590,6 +709,29 @@
             android:name=".service.AutoTaskService"
             android:foregroundServiceType="dataSync|shortService" />
 
+        <!-- F-P1-F AI 任务保活服务 -->
+        <service
+            android:name=".service.AiTaskKeepAliveService"
+            android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".service.relay.RelayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-enabled encrypted reverse tunnel for personal remote Web access" />
+        </service>
+        <receiver
+            android:name=".service.relay.RelayBootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <!-- F-P1-1 自动任务 UI -->
         <activity
             android:name=".ui.autoTask.AutoTaskActivity"
@@ -607,6 +749,31 @@
             android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:exported="false"
             android:launchMode="singleTask" />
+        <!-- 书籍详情页(沉浸式 Compose) -->
+        <activity
+            android:name=".ui.book.info.BookInfoComposeActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false" />
+        <!-- 主题管理 -->
+        <activity
+            android:name=".ui.config.ThemeManageActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false" />
+        <!-- 朗读 BGM 管理 -->
+        <activity
+            android:name=".ui.book.read.config.ReadAloudBgmManageActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false" />
+        <!-- 朗读用量记录 -->
+        <activity
+            android:name=".ui.book.read.config.AiReadAloudUsageRecordActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false" />
+        <!-- 高级标题管理 -->
+        <activity
+            android:name=".ui.config.AdvancedTitleManageActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false" />
 
         <receiver
             android:name=".receiver.MediaButtonReceiver"
@@ -615,6 +782,9 @@
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </receiver>
+        <receiver
+            android:name=".ui.book.cache.AudioCacheActionReceiver"
+            android:exported="false" />
 
         <provider
             android:name=".api.ReaderProvider"

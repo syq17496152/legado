@@ -3,68 +3,14 @@ package io.legado.app.ui.book.source.edit
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.EditText
-import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import io.legado.app.ui.widget.components.AppShapes
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Help
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Login
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.ToggleOn
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.PrimaryScrollableTabRow
-import androidx.compose.material3.Tab
-import androidx.compose.material3.Text
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.tabs.TabLayout
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -82,6 +28,8 @@ import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
+import io.legado.app.lib.theme.accentColor
+import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.search.SearchActivity
@@ -90,11 +38,6 @@ import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
-import io.legado.app.ui.theme.LegadoTheme
-import io.legado.app.ui.widget.components.AppDropdownMenu
-import io.legado.app.ui.widget.components.GlassTopAppBar
-import io.legado.app.ui.widget.components.MenuAction
-import io.legado.app.ui.widget.components.SettingsCard
 import io.legado.app.ui.widget.dialog.UrlOptionDialog
 import io.legado.app.ui.widget.dialog.VariableDialog
 import io.legado.app.ui.widget.keyboard.KeyboardToolPop
@@ -129,15 +72,6 @@ class BookSourceEditActivity :
     override val viewModel by viewModels<BookSourceEditViewModel>()
 
     private val adapter by lazy { BookSourceEditAdapter() }
-    private val recyclerView by lazy { RecyclerView(this) }
-    private var menuExpanded by mutableStateOf(false)
-    private var typeMenuExpanded by mutableStateOf(false)
-    private var typeIndex by mutableIntStateOf(0)
-    private var isEnable by mutableStateOf(true)
-    private var isEnableExplore by mutableStateOf(true)
-    private var isEnableCookie by mutableStateOf(true)
-    private var isEventListener by mutableStateOf(false)
-    private var isCustomButton by mutableStateOf(false)
     private val sourceEntities: ArrayList<EditEntity> = ArrayList()
     private val searchEntities: ArrayList<EditEntity> = ArrayList()
     private val exploreEntities: ArrayList<EditEntity> = ArrayList()
@@ -169,10 +103,8 @@ class BookSourceEditActivity :
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         softKeyboardTool.attachToWindow(window)
         initView()
-        initComposeTopBar()
         viewModel.initData(intent) {
             upSourceView(viewModel.bookSource)
-            restoreState(savedInstanceState)
         }
     }
 
@@ -183,31 +115,15 @@ class BookSourceEditActivity :
         }
     }
 
-    private fun initComposeTopBar() {
-        binding.composeTopBar.setContent {
-            LegadoTheme {
-                GlassTopAppBar(
-                    title = getString(R.string.edit_book_source),
-                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                    onNavClick = { finish() },
-                    actions = {
-                        Box {
-                            IconButton(onClick = { menuExpanded = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.MoreVert,
-                                    contentDescription = null
-                                )
-                            }
-                            AppDropdownMenu(
-                                expanded = menuExpanded,
-                                onDismiss = { menuExpanded = false },
-                                actions = buildMenuActions()
-                            )
-                        }
-                    }
-                )
-            }
-        }
+    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.source_edit, menu)
+        return super.onCompatCreateOptionsMenu(menu)
+    }
+
+    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
+        menu.findItem(R.id.menu_login)?.isVisible = !getSource().loginUrl.isNullOrBlank()
+        menu.findItem(R.id.menu_auto_complete)?.isChecked = viewModel.autoComplete
+        return super.onMenuOpened(featureId, menu)
     }
 
     private val textEditLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -217,7 +133,7 @@ class BookSourceEditActivity :
                 result.data?.getStringExtra("text")?.let {
                     view.setText(it)
                 }
-                result.data?.getIntExtra("cursorPosition", -1)?.takeIf { it in 0..<view.text.length }?.let {
+                result.data?.getIntExtra("cursorPosition", -1)?.takeIf { it in 0 ..< view.text.length }?.let {
                     view.setSelection(it)
                 }
             } else {
@@ -237,325 +153,107 @@ class BookSourceEditActivity :
                 putExtra("cursorPosition", view.selectionStart)
             }
             textEditLauncher.launch(intent)
-        } else {
+        }
+        else {
             toastOnUi(R.string.please_focus_cursor_on_textbox)
         }
     }
 
-    private fun buildMenuActions(): List<MenuAction> {
-        val actions = mutableListOf<MenuAction>()
-        actions += MenuAction(
-            Icons.Filled.Code,
-            getString(R.string.edit_content),
-            onClick = { onFullEditClicked() }
-        )
-        actions += MenuAction(
-            Icons.Filled.Save,
-            getString(R.string.action_save),
-            onClick = {
-                saveSource(getSource()) {
-                    setResult(RESULT_OK, Intent().putExtra("origin", it.bookSourceUrl))
-                    finish()
+    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            R.id.menu_fullscreen_edit -> onFullEditClicked()
+
+            R.id.menu_save -> saveSource(getSource()) {
+                setResult(RESULT_OK, Intent().putExtra("origin", it.bookSourceUrl))
+                finish()
+            }
+
+            R.id.menu_debug_source -> saveSource(getSource()) { source ->
+                startActivity<BookSourceDebugActivity> {
+                    putExtra("key", source.bookSourceUrl)
                 }
             }
-        )
-        actions += MenuAction(
-            Icons.Filled.BugReport,
-            getString(R.string.debug_source),
-            onClick = {
-                saveSource(getSource()) { source ->
-                    startActivity<BookSourceDebugActivity> {
-                        putExtra("key", source.bookSourceUrl)
-                    }
-                }
-            }
-        )
-        if (!getSource().loginUrl.isNullOrBlank()) {
-            actions += MenuAction(
-                Icons.Filled.Login,
-                getString(R.string.login),
-                onClick = {
-                    saveSource(getSource()) { source ->
-                        startActivity<SourceLoginActivity> {
-                            putExtra("type", "bookSource")
-                            putExtra("key", source.bookSourceUrl)
-                        }
-                    }
-                }
+
+            R.id.menu_clear_cookie -> viewModel.clearCookie(getSource().bookSourceUrl)
+            R.id.menu_auto_complete -> viewModel.autoComplete = !viewModel.autoComplete
+            R.id.menu_copy_source -> sendToClip(GSON.toJson(getSource()))
+            R.id.menu_paste_source -> viewModel.pasteSource { upSourceView(it) }
+            R.id.menu_qr_code_camera -> qrCodeResult.launch()
+            R.id.menu_share_str -> share(GSON.toJson(getSource()))
+            R.id.menu_share_qr -> shareWithQr(
+                GSON.toJson(getSource()),
+                getString(R.string.share_book_source),
+                ErrorCorrectionLevel.L
             )
-        }
-        actions += MenuAction(
-            Icons.Filled.Search,
-            getString(R.string.search),
-            onClick = {
-                saveSource(getSource()) { source ->
-                    SearchActivity.start(this, source)
+
+            R.id.menu_log -> showDialogFragment<AppLogDialog>()
+            R.id.menu_help -> showHelp("ruleHelp")
+            R.id.menu_login -> saveSource(getSource()) { source ->
+                startActivity<SourceLoginActivity> {
+                    putExtra("type", "bookSource")
+                    putExtra("key", source.bookSourceUrl)
                 }
             }
-        )
-        actions += MenuAction(
-            Icons.Filled.History,
-            getString(R.string.cookie),
-            onClick = { viewModel.clearCookie(getSource().bookSourceUrl) }
-        )
-        actions += MenuAction(
-            Icons.Filled.ToggleOn,
-            getString(R.string.auto_complete),
-            checked = viewModel.autoComplete,
-            onClick = { viewModel.autoComplete = !viewModel.autoComplete }
-        )
-        actions += MenuAction(
-            Icons.Filled.ContentCopy,
-            getString(R.string.copy_source),
-            onClick = { sendToClip(GSON.toJson(getSource())) }
-        )
-        actions += MenuAction(
-            Icons.Filled.Description,
-            getString(R.string.paste_source),
-            onClick = { viewModel.pasteSource { upSourceView(it) } }
-        )
-        actions += MenuAction(
-            Icons.Filled.Tune,
-            getString(R.string.set_source_variable),
-            onClick = { setSourceVariable() }
-        )
-        actions += MenuAction(
-            Icons.Filled.QrCodeScanner,
-            getString(R.string.import_by_qr_code),
-            onClick = { qrCodeResult.launch() }
-        )
-        actions += MenuAction(
-            Icons.Filled.QrCodeScanner,
-            getString(R.string.qr_share),
-            onClick = {
-                shareWithQr(
-                    GSON.toJson(getSource()),
-                    getString(R.string.share_book_source),
-                    ErrorCorrectionLevel.L
-                )
+
+            R.id.menu_set_source_variable -> setSourceVariable()
+            R.id.menu_search -> saveSource(getSource()) { source ->
+                SearchActivity.start(this, source)
             }
-        )
-        actions += MenuAction(
-            Icons.Filled.Share,
-            getString(R.string.str_share),
-            onClick = { share(GSON.toJson(getSource())) }
-        )
-        actions += MenuAction(
-            Icons.Filled.History,
-            getString(R.string.log),
-            onClick = { showDialogFragment<AppLogDialog>() }
-        )
-        actions += MenuAction(
-            Icons.Filled.Help,
-            getString(R.string.help),
-            onClick = { showHelp("ruleHelp") }
-        )
-        return actions.filterNotNull().toList()
+
+        }
+        return super.onCompatOptionsItemSelected(item)
     }
 
     private fun initView() {
-        initComposeQuickToolbar()
-        initComposeTabBar()
-        recyclerView.setEdgeEffectColor(primaryColor)
-        // 兜底：默认 sourceEditMaxLine=Int.MAX_VALUE(≥999) 时也需 layoutManager，
-        // 否则字段区不 measure 任何 item（改造前由布局 XML 声明兜底，改代码动态创建后丢失）
-        recyclerView.layoutManager = if (adapter.editEntityMaxLine < 999) {
-            NoChildScrollLinearLayoutManager(this) //行数少时,用的TextView跟随,阻止跟随光标滚动
-        } else {
-            LinearLayoutManager(this) //行数多/默认时标准滚动
+        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+            setText(R.string.source_tab_base)
+        })
+        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+            setText(R.string.source_tab_search)
+        })
+        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+            setText(R.string.source_tab_find)
+        })
+        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+            setText(R.string.source_tab_info)
+        })
+        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+            setText(R.string.source_tab_toc)
+        })
+        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+            setText(R.string.source_tab_content)
+        })
+        binding.recyclerView.setEdgeEffectColor(primaryColor)
+        if (adapter.editEntityMaxLine < 999) {
+            binding.recyclerView.layoutManager = NoChildScrollLinearLayoutManager(this) //启用后会阻止RecyclerView跟随光标滚动,行数少时,用的TextView跟随
         }
-        recyclerView.adapter = adapter
-        recyclerView.viewTreeObserver.addOnGlobalFocusChangeListener { _, newFocus ->
+        binding.recyclerView.adapter = adapter
+        binding.recyclerView.viewTreeObserver.addOnGlobalFocusChangeListener { _, newFocus ->
             if (newFocus is EditText) {
                 newFocus.postDelayed({ sendText("") }, 120)
             }
         }
-        recyclerView.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
+        binding.tabLayout.setBackgroundColor(backgroundColor)
+        binding.tabLayout.setSelectedTabIndicatorColor(accentColor)
+        binding.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabReselected(tab: TabLayout.Tab?) {
+
+            }
+
+            override fun onTabUnselected(tab: TabLayout.Tab?) {
+
+            }
+
+            override fun onTabSelected(tab: TabLayout.Tab?) {
+                setEditEntities(tab?.position)
+            }
+        })
+        binding.recyclerView.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
             val navigationBarHeight = windowInsets.navigationBarHeight
             val imeHeight = windowInsets.imeHeight
             view.bottomPadding = if (imeHeight == 0) navigationBarHeight else 0
             softKeyboardTool.initialPadding = imeHeight
             windowInsets
-        }
-        initComposeFields()
-        initComposeBottomBar()
-    }
-
-    private var selectedTabIndex by mutableIntStateOf(0)
-
-    @OptIn(ExperimentalMaterial3Api::class)
-    private fun initComposeTabBar() {
-        binding.composeTabBar.setContent {
-            LegadoTheme {
-                val tabLabels = listOf(
-                    R.string.source_tab_base,
-                    R.string.source_tab_search,
-                    R.string.source_tab_find,
-                    R.string.source_tab_info,
-                    R.string.source_tab_toc,
-                    R.string.source_tab_content
-                )
-                val current = selectedTabIndex
-                PrimaryScrollableTabRow(
-                    selectedTabIndex = current,
-                    edgePadding = 8.dp
-                ) {
-                    tabLabels.forEachIndexed { index, label ->
-                        Tab(
-                            selected = index == current,
-                            onClick = { selectedTabIndex = index; setEditEntities(index) },
-                            text = { Text(text = stringResource(label)) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    // S3 阶段3：顶部快捷工具条 SettingsCard 分组 Compose 化（类型 Spinner + 开关组，删死字段 cb_is_enable_review）
-    // 修复（v2）：类型不再用全宽 SettingsClickRow——其内部 fillMaxWidth() 在 FlowRow 中会占满整行，
-    // 导致「类型」独占一行、其余开关全部换行到下面。改为紧凑「标签+值+下拉箭头」可点击行，
-    // 与「启用/发现/自动保存Cookie」同一 FlowRow 内自然同行（还原原版第一行结构），事件监听/定制按钮自动换第二行
-    @OptIn(ExperimentalLayoutApi::class)
-    private fun initComposeQuickToolbar() {
-        binding.composeQuickToolbar.setContent {
-            LegadoTheme {
-                val typeLabels = resources.getStringArray(R.array.book_type)
-                SettingsCard {
-                    // 类型+五个开关全部放入 FlowRow 自动换行：类型/启用/发现/自动保存Cookie 第一行 → 事件监听/定制按钮 第二行
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(0.dp)
-                    ) {
-                        // 类型：紧凑「标签+值+下拉箭头」可点击行，点击弹菜单（不用全宽 SettingsClickRow，避免独占一行）
-                        Box {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .clip(AppShapes.Chip)
-                                    .clickable { typeMenuExpanded = true }
-                                    .padding(horizontal = 6.dp)
-                                    .height(40.dp)
-                            ) {
-                                Text(
-                                    text = getString(R.string.book_type),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = typeLabels.getOrNull(typeIndex) ?: "",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Icon(
-                                    imageVector = Icons.Filled.ArrowDropDown,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = typeMenuExpanded,
-                                onDismissRequest = { typeMenuExpanded = false }
-                            ) {
-                                typeLabels.forEachIndexed { index, label ->
-                                    DropdownMenuItem(
-                                        text = { Text(text = label) },
-                                        onClick = {
-                                            typeIndex = index
-                                            typeMenuExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                        // 5 开关按原版 ThemeCheckBox 样式（CheckBox+文字 朴素横排）
-                        // 内联 Checkbox+Row 避免 kapt 对 @Composable 函数生成 NonExistentClass 桩错误
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(40.dp)) {
-                            Checkbox(checked = isEnable, onCheckedChange = { isEnable = it },
-                                colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary, checkmarkColor = MaterialTheme.colorScheme.onPrimary))
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Text(text = getString(R.string.is_enable), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(40.dp)) {
-                            Checkbox(checked = isEnableExplore, onCheckedChange = { isEnableExplore = it },
-                                colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary, checkmarkColor = MaterialTheme.colorScheme.onPrimary))
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Text(text = getString(R.string.discovery), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(40.dp)) {
-                            Checkbox(checked = isEnableCookie, onCheckedChange = { isEnableCookie = it },
-                                colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary, checkmarkColor = MaterialTheme.colorScheme.onPrimary))
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Text(text = getString(R.string.auto_save_cookie), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(40.dp)) {
-                            Checkbox(checked = isEventListener, onCheckedChange = { isEventListener = it },
-                                colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary, checkmarkColor = MaterialTheme.colorScheme.onPrimary))
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Text(text = getString(R.string.is_event_listener), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(40.dp)) {
-                            Checkbox(checked = isCustomButton, onCheckedChange = { isCustomButton = it },
-                                colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary, checkmarkColor = MaterialTheme.colorScheme.onPrimary))
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Text(text = getString(R.string.custom_button), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // S3 阶段3：字段区（保留 EditText 行内编辑）
-    // 简化说明：不套 SettingsCard——其内层 Column 不撑满高度且带 16dp 水平内边距+圆角，
-    // 会导致 RecyclerView 高度塌陷（内容展示不出）与行内编辑被圆角/内边距裁剪（布局错乱），
-    // 字段区必须全宽可滚动。
-    private fun initComposeFields() {
-        binding.composeFields.setContent {
-            LegadoTheme {
-                AndroidView(
-                    factory = { recyclerView },
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-        }
-    }
-
-    // S3 阶段3：底部保存/取消栏（12dp 圆角 48dp 高）
-    private fun initComposeBottomBar() {
-        binding.composeBottomBar.setContent {
-            LegadoTheme {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { finish() },
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = AppShapes.Button
-                    ) {
-                        Text(text = getString(R.string.cancel))
-                    }
-                    Button(
-                        onClick = {
-                            saveSource(getSource()) {
-                                setResult(RESULT_OK, Intent().putExtra("origin", it.bookSourceUrl))
-                                finish()
-                            }
-                        },
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = AppShapes.Button
-                    ) {
-                        Text(text = getString(R.string.action_save))
-                    }
-                }
-            }
         }
     }
 
@@ -579,55 +277,6 @@ class BookSourceEditActivity :
         softKeyboardTool.dismiss()
     }
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        saveEditEntities(outState, "sourceEntities", sourceEntities)
-        saveEditEntities(outState, "searchEntities", searchEntities)
-        saveEditEntities(outState, "exploreEntities", exploreEntities)
-        saveEditEntities(outState, "infoEntities", infoEntities)
-        saveEditEntities(outState, "tocEntities", tocEntities)
-        saveEditEntities(outState, "contentEntities", contentEntities)
-        outState.putInt(KEY_SELECTED_TAB, selectedTabIndex)
-        super.onSaveInstanceState(outState)
-    }
-
-    private fun saveEditEntities(outState: Bundle, key: String, list: ArrayList<EditEntity>) {
-        outState.putString(key, if (list.isEmpty()) null else GSON.toJson(list))
-    }
-
-    private fun restoreEditEntities(savedState: Bundle?, key: String, list: ArrayList<EditEntity>) {
-        val json = savedState?.getString(key) ?: return
-        val saved: Array<EditEntity>? = runCatching {
-            GSON.fromJson(json, Array<EditEntity>::class.java)
-        }.getOrNull()
-        if (saved != null && saved.size == list.size) {
-            saved.forEachIndexed { i, entity ->
-                if (list[i].key == entity.key) {
-                    list[i].value = entity.value
-                }
-            }
-        }
-        // 尺寸不匹配时保留当前 upSourceView 填充值，避免 key 错位覆盖
-    }
-
-    private fun restoreState(savedInstanceState: Bundle?) {
-        if (savedInstanceState == null) return
-        restoreEditEntities(savedInstanceState, "sourceEntities", sourceEntities)
-        restoreEditEntities(savedInstanceState, "searchEntities", searchEntities)
-        restoreEditEntities(savedInstanceState, "exploreEntities", exploreEntities)
-        restoreEditEntities(savedInstanceState, "infoEntities", infoEntities)
-        restoreEditEntities(savedInstanceState, "tocEntities", tocEntities)
-        restoreEditEntities(savedInstanceState, "contentEntities", contentEntities)
-        val tab = savedInstanceState.getInt(KEY_SELECTED_TAB, 0)
-        if (tab in 0..5) {
-            selectedTabIndex = tab
-            setEditEntities(tab)
-        }
-    }
-
-    companion object {
-        private const val KEY_SELECTED_TAB = "selectedTabIndex"
-    }
-
     private fun setEditEntities(tabPosition: Int?) {
         adapter.editEntities = when (tabPosition) {
             1 -> searchEntities
@@ -638,25 +287,27 @@ class BookSourceEditActivity :
 //            6 -> reviewEntities
             else -> sourceEntities
         }
-        recyclerView.scrollToPosition(0)
+        binding.recyclerView.scrollToPosition(0)
         window.decorView.rootView.clearFocus()
     }
 
     private fun upSourceView(bookSource: BookSource?) {
         val bs = bookSource ?: BookSource()
         bs.let {
-            isEnable = it.enabled
-            isEnableExplore = it.enabledExplore
-            isEnableCookie = it.enabledCookieJar ?: false
-            typeIndex = when (it.bookSourceType) {
-                BookSourceType.video -> 4
-                BookSourceType.file -> 3
-                BookSourceType.image -> 2
-                BookSourceType.audio -> 1
-                else -> 0
-            }
-            isEventListener = it.eventListener
-            isCustomButton = it.customButton
+            binding.cbIsEnable.isChecked = it.enabled
+            binding.cbIsEnableExplore.isChecked = it.enabledExplore
+            binding.cbIsEnableCookie.isChecked = it.enabledCookieJar ?: false
+            binding.spType.setSelection(
+                when (it.bookSourceType) {
+                    BookSourceType.video -> 4
+                    BookSourceType.file -> 3
+                    BookSourceType.image -> 2
+                    BookSourceType.audio -> 1
+                    else -> 0
+                }
+            )
+            binding.cbIsEventListener.isChecked = it.eventListener
+            binding.cbIsCustomButton.isChecked = it.customButton
         }
         // 基本信息
         sourceEntities.clear()
@@ -768,24 +419,24 @@ class BookSourceEditActivity :
 //            add(EditEntity("postQuoteUrl", rr.postQuoteUrl, R.string.post_quote_url))
 //            add(EditEntity("deleteUrl", rr.deleteUrl, R.string.delete_review_url))
 //        }
-        selectedTabIndex = 0
+        binding.tabLayout.selectTab(binding.tabLayout.getTabAt(0))
         setEditEntities(0)
     }
 
     private fun getSource(): BookSource {
         val source = viewModel.bookSource?.copy() ?: BookSource()
-        source.enabled = isEnable
-        source.enabledExplore = isEnableExplore
-        source.enabledCookieJar = isEnableCookie
-        source.bookSourceType = when (typeIndex) {
+        source.enabled = binding.cbIsEnable.isChecked
+        source.enabledExplore = binding.cbIsEnableExplore.isChecked
+        source.enabledCookieJar = binding.cbIsEnableCookie.isChecked
+        source.bookSourceType = when (binding.spType.selectedItemPosition) {
             4 -> BookSourceType.video
             3 -> BookSourceType.file
             2 -> BookSourceType.image
             1 -> BookSourceType.audio
             else -> BookSourceType.default
         }
-        source.eventListener = isEventListener
-        source.customButton = isCustomButton
+        source.eventListener = binding.cbIsEventListener.isChecked
+        source.customButton = binding.cbIsCustomButton.isChecked
         val searchRule = SearchRule()
         val exploreRule = ExploreRule()
         val bookInfoRule = BookInfoRule()
@@ -993,23 +644,23 @@ class BookSourceEditActivity :
 
     override fun helpActions(): List<SelectItem<String>> {
         val helpActions = arrayListOf(
-            SelectItem(getString(R.string.insert_url_param), "urlOption"),
-            SelectItem(getString(R.string.book_source_tutorial), "ruleHelp"),
-            SelectItem(getString(R.string.js_tutorial), "jsHelp"),
-            SelectItem(getString(R.string.regex_tutorial), "regexHelp"),
+            SelectItem("插入URL参数", "urlOption"),
+            SelectItem("书源教程", "ruleHelp"),
+            SelectItem("js教程", "jsHelp"),
+            SelectItem("正则教程", "regexHelp"),
         )
         val view = window.decorView.findFocus()
         if (view is EditText) {
             when (view.getTag(R.id.tag)) {
                 "bookSourceGroup" -> {
                     helpActions.add(
-                        SelectItem(getString(R.string.insert_group), "addGroup")
+                        SelectItem("插入分组", "addGroup")
                     )
                 }
 
                 else -> {
                     helpActions.add(
-                        SelectItem(getString(R.string.select_file), "selectFile")
+                        SelectItem("选择文件", "selectFile")
                     )
                 }
             }
@@ -1053,7 +704,7 @@ class BookSourceEditActivity :
                     val editTextLocation = IntArray(2)
                     view.getLocationOnScreen(editTextLocation)
                     val recyclerViewLocation = IntArray(2)
-                    recyclerView.getLocationOnScreen(recyclerViewLocation)
+                    binding.recyclerView.getLocationOnScreen(recyclerViewLocation)
                     val layout = view.layout
                     if (layout != null) {
                         val line = layout.getLineForOffset(end)
@@ -1062,12 +713,12 @@ class BookSourceEditActivity :
                         val cursorYOnScreen = editTextLocation[1] + cursorYInEditText
                         // 光标相对于RecyclerView的位置
                         val cursorYInRecyclerView = cursorYOnScreen - recyclerViewLocation[1]
-                        val recyclerViewBottom = recyclerView.height - 120 //考虑键盘的经验值
+                        val recyclerViewBottom = binding.recyclerView.height - 120 //考虑键盘的经验值
                         // 如果光标不在可见范围内，则滚动到光标位置
                         if (cursorYInRecyclerView !in 0..recyclerViewBottom) {
                             val scrollDistance = cursorYInRecyclerView - recyclerViewBottom / 3
-                            if (scrollDistance > 0 && recyclerView.canScrollVertically(1) || scrollDistance < 0 && recyclerView.canScrollVertically(-1)) {
-                                recyclerView.smoothScrollBy(0, scrollDistance)
+                            if (scrollDistance > 0 && binding.recyclerView.canScrollVertically(1) || scrollDistance < 0 && binding.recyclerView.canScrollVertically(-1)) {
+                                binding.recyclerView.smoothScrollBy(0, scrollDistance)
                             }
                         }
                     }
@@ -1122,10 +773,10 @@ class BookSourceEditActivity :
     }
 
     private fun setSourceVariable() {
-        viewModel.save(getSource()) { source ->
+        saveSource(getSource()) { source ->
             lifecycleScope.launch {
                 val comment =
-                    source.getDisplayVariableComment(getString(R.string.source_variable_comment))
+                    source.getDisplayVariableComment("源变量可在js中通过source.getVariable()获取")
                 val variable = withContext(IO) { source.getVariable() }
                 showDialogFragment(
                     VariableDialog(

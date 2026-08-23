@@ -118,10 +118,12 @@ abstract class HorizontalPageDelegate(readView: ReadView) : PageDelegate(readVie
             scroller.abortAnimation()
             if (!isCancel) {
                 readView.fillPage(mDirection)
-                readView.invalidate()
+                flushDeferredAnimationRefresh()
+                readView.postInvalidateOnAnimation()
             }
         } else {
             readView.isAbortAnim = false
+            flushDeferredAnimationRefresh()
         }
     }
 

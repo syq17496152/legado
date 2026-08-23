@@ -1,5 +1,6 @@
 package io.legado.app.ui.login
 
+import android.webkit.JavascriptInterface
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
@@ -7,6 +8,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.model.ReadAloud
+import io.legado.app.model.ReadBook
 import io.legado.app.ui.rss.read.RssJsExtensions
 import io.legado.app.ui.widget.dialog.BottomWebViewDialog
 import io.legado.app.utils.FileUtils
@@ -30,6 +32,18 @@ class SourceLoginJsExtensions(
     interface Callback {
         fun upUiData(data: Map<String, Any?>?)
         fun reUiView(deltaUp: Boolean = false)
+        fun showBrowser(
+            url: String,
+            html: String? = null,
+            preloadJs: String? = null,
+            config: String? = null
+        ): Boolean = false
+        fun open(
+            name: String,
+            url: String? = null,
+            title: String? = null,
+            origin: String? = null
+        ): Boolean = false
     }
 
     fun upLoginData(data: Map<String, Any?>?) {
@@ -45,6 +59,15 @@ class SourceLoginJsExtensions(
         callbackRef.get()?.reUiView()
     }
 
+    override fun onOpen(
+        name: String,
+        url: String?,
+        title: String?,
+        origin: String?
+    ): Boolean {
+        return callbackRef.get()?.open(name, url, title, origin) == true
+    }
+
     fun refreshBookInfo() {
         postEvent(EventBus.REFRESH_BOOK_INFO, true)
     }
@@ -55,6 +78,11 @@ class SourceLoginJsExtensions(
 
     fun refreshContent() {
         postEvent(EventBus.REFRESH_BOOK_CONTENT, true)
+    }
+
+    @JavascriptInterface
+    fun refreshParagraph(): Boolean {
+        return ReadBook.refreshCurrentParagraphRuleResult()
     }
 
     fun copyText(text: String) {
@@ -76,18 +104,31 @@ class SourceLoginJsExtensions(
 
     @JvmOverloads
     fun showBrowser(url: String, html: String? = null, preloadJs: String? = null, config: String? = null) {
-        val activity = activityRef.get() ?: return
         val source = getSource() ?: return
-        activity.showDialogFragment(
-            BottomWebViewDialog(
-                source.getKey(),
-                bookType,
-                url,
-                html,
-                preloadJs,
-                config
-            )
-        )
+        if (callbackRef.get()?.showBrowser(url, html, preloadJs, config) == true) {
+            return
+        }
+        val activity = activityRef.get() ?: return
+        activity.runOnUiThread {
+            if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+            // 从弹出菜单等瞬时上下文触发时活动可能不在 STARTED，提交 DialogFragment 事务会异常退出；
+            // 加生命周期守卫 + 兜底捕获，避免崩溃。
+            if (!activity.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) {
+                return@runOnUiThread
+            }
+            runCatching {
+                activity.showDialogFragment(
+                    BottomWebViewDialog(
+                        source.getKey(),
+                        bookType,
+                        url,
+                        html,
+                        preloadJs,
+                        config
+                    )
+                )
+            }
+        }
     }
 
 }

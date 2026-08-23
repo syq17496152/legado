@@ -5,6 +5,26 @@
 		<item>WEBDAV</item>
 	</string-array>
 
+	<string-array name="cloud_storage_types">
+		<item>WebDAV</item>
+		<item>S3</item>
+	</string-array>
+
+	<string-array name="cloud_storage_type_values">
+		<item>WEBDAV</item>
+		<item>S3</item>
+	</string-array>
+
+	<string-array name="ai_read_aloud_role_mode_title">
+		<item>全文批处理</item>
+		<item>并发查找模式</item>
+	</string-array>
+
+	<string-array name="ai_read_aloud_role_mode_value">
+		<item>full_tool</item>
+		<item>chunk_context</item>
+	</string-array>
+
 	<string-array name="tts_paragraph_pause_entries">
 		<item>关闭</item>
 		<item>0.3 秒</item>
@@ -248,6 +268,66 @@
 		<item>Default</item>
 		<item>Same color as content</item>
 		<item>Customize</item>
+	</string-array>
+
+	<string-array name="discovery_page_mode_entries">
+		<item>@string/discovery_page_mode_modern</item>
+		<item>@string/discovery_page_mode_legacy</item>
+		<item>@string/discovery_page_mode_suite</item>
+	</string-array>
+
+	<string-array name="discovery_page_mode_values">
+		<item>modern</item>
+		<item>legacy</item>
+		<item>suite</item>
+	</string-array>
+
+	<string-array name="rss_page_mode_entries">
+		<item>@string/rss_page_mode_modern</item>
+		<item>@string/rss_page_mode_legacy</item>
+	</string-array>
+
+	<string-array name="page_mode_values">
+		<item>modern</item>
+		<item>legacy</item>
+	</string-array>
+
+	<string-array name="fast_scroller_touch_target_entries">
+		<item>@string/fast_scroller_touch_target_compact</item>
+		<item>@string/fast_scroller_touch_target_original</item>
+		<item>@string/fast_scroller_touch_target_standard</item>
+		<item>@string/fast_scroller_touch_target_large</item>
+		<item>@string/fast_scroller_touch_target_extra_large</item>
+	</string-array>
+
+	<string-array name="fast_scroller_touch_target_values">
+		<item>32</item>
+		<item>36</item>
+		<item>44</item>
+		<item>52</item>
+		<item>60</item>
+	</string-array>
+
+	<string-array name="epub_read_engine_entries">
+		<item>@string/epub_read_engine_text</item>
+		<item>@string/epub_read_engine_core</item>
+	</string-array>
+
+	<string-array name="epub_read_engine_values">
+		<item>text</item>
+		<item>core</item>
+	</string-array>
+
+	<string-array name="cover_collection_mode_entries">
+		<item>@string/cover_collection_mode_random</item>
+		<item>@string/cover_collection_mode_sequence</item>
+		<item>@string/cover_collection_mode_mixed</item>
+	</string-array>
+
+	<string-array name="cover_collection_mode_values">
+		<item>random</item>
+		<item>sequence</item>
+		<item>mixed</item>
 	</string-array>
 
 </resources>

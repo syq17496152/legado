@@ -3,14 +3,17 @@ package io.legado.app.ui.book.read.config
 import android.app.Application
 import android.os.Bundle
 import io.legado.app.base.BaseViewModel
+import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.ConcurrentRateLimiter.Companion.concurrentRecordMap
+import io.legado.app.help.readaloud.speech.SpeechRouteSanitizer
 import io.legado.app.model.ReadAloud
 import io.legado.app.utils.getClipText
 import io.legado.app.utils.isJsonArray
 import io.legado.app.utils.isJsonObject
+import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
 
 class HttpTtsEditViewModel(app: Application) : BaseViewModel(app) {
@@ -42,8 +45,18 @@ class HttpTtsEditViewModel(app: Application) : BaseViewModel(app) {
         this.httpTTS = httpTTS
         execute {
             appDb.httpTTSDao.insert(httpTTS)
+            SpeechRouteSanitizer.cleanInvalidRoutes()
             concurrentRecordMap.remove(httpTTS.getKey()) //删除并发限制缓存
-            if (ReadAloud.ttsEngine == httpTTS.id.toString()) ReadAloud.upReadAloudClass()
+            ReadAloud.refreshReadAloudClass()
+            postEvent(
+                EventBus.READ_ALOUD_CONFIG_CHANGED,
+                Bundle().apply {
+                    putString(
+                        EventBus.READ_ALOUD_CONFIG_SCOPE,
+                        EventBus.READ_ALOUD_CONFIG_SCOPE_ENGINE
+                    )
+                }
+            )
         }.onSuccess {
             success?.invoke()
         }

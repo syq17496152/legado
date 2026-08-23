@@ -85,8 +85,10 @@ class AnalyzeByJSonPath(json: Any) {
                 try {
                     val obj = ctx.read<Any>(rule)
                     if (obj is List<*>) {
-                        for (o in obj) result.add(o.toString())
-                    } else {
+                        // F-5.2: JSONPath 列表项可能为 null，跳过避免 NPE
+                        for (o in obj) if (o != null) result.add(o.toString())
+                    } else if (obj != null) {
+                        // F-5.2: JSONPath 匹配不到时 read 返回 null，判空避免 NPE
                         result.add(obj.toString())
                     }
                 } catch (e: Exception) {

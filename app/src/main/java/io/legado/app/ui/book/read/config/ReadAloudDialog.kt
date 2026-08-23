@@ -3,23 +3,20 @@ package io.legado.app.ui.book.read.config
 import android.annotation.SuppressLint
 import android.content.DialogInterface
 import android.os.Bundle
-import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
-import android.view.WindowManager
 import android.widget.SeekBar
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.databinding.DialogReadAloudBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.selector
-import io.legado.app.lib.theme.bottomBackground
-import io.legado.app.lib.theme.getPrimaryTextColor
+import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
+import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.book.read.ReadBookActivity
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.*
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -31,16 +28,7 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
 
     override fun onStart() {
         super.onStart()
-        dialog?.window?.run {
-            clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            setBackgroundDrawableResource(R.color.background)
-            decorView.setPadding(0, 0, 0, 0)
-            val attr = attributes
-            attr.dimAmount = 0.0f
-            attr.gravity = Gravity.BOTTOM
-            attributes = attr
-            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        }
+        dialog?.window?.applyReaderBottomSheetWindow()
     }
 
     override fun onDismiss(dialog: DialogInterface) {
@@ -54,11 +42,15 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
             dismiss()
             return
         }
-        val bg = requireContext().bottomBackground
-        val isLight = ColorUtils.isColorLight(bg)
-        val textColor = requireContext().getPrimaryTextColor(isLight)
+        binding.root.applyUiBodyTypefaceDeep(requireContext().uiTypeface())
+        val palette = ReaderSheetStyle.resolve(requireContext())
+        val textColor = palette.textColor
         binding.run {
-            rootView.setBackgroundColor(bg)
+            rootView.background = ReaderSheetStyle.topSheetDrawable(palette)
+            panelTransport.background = null
+            panelTimer.background = null
+            panelTts.background = null
+            panelActions.background = null
             tvPre.setTextColor(textColor)
             tvNext.setTextColor(textColor)
             ivPlayPrev.setColorFilter(textColor)
@@ -68,7 +60,7 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
             ivTimer.setColorFilter(textColor)
             tvTimer.setTextColor(textColor)
             ivTtsSpeechReduce.setColorFilter(textColor)
-            tvTtsSpeed.setTextColor(textColor)
+            tvTtsSpeed.setTextColor(palette.secondaryTextColor)
             tvTtsSpeedValue.setTextColor(textColor)
             ivTtsSpeechAdd.setColorFilter(textColor)
             ivCatalog.setColorFilter(textColor)
@@ -101,8 +93,16 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
         llSetting.setOnClickListener {
             ReadAloudConfigDialog().show(childFragmentManager, "readAloudConfigDialog")
         }
-        tvPre.setOnClickListener { ReadBook.moveToPrevChapter(upContent = true, toLast = false) }
-        tvNext.setOnClickListener { ReadBook.moveToNextChapter(true) }
+        tvPre.setOnClickListener {
+            ReadBook.moveToPrevChapter(
+                upContent = true,
+                toLast = false,
+                fromReadAloud = BaseReadAloudService.isRun
+            )
+        }
+        tvNext.setOnClickListener {
+            ReadBook.moveToNextChapter(true, fromReadAloud = BaseReadAloudService.isRun)
+        }
         ivStop.setOnClickListener {
             ReadAloud.stop(requireContext())
             dismissAllowingStateLoss()
@@ -132,33 +132,11 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
             toastOnUi("保存设定时间成功！")
         }
         tvTimer.setOnClickListener {
-            // 定时朗读三模式: 按分钟/读完本章/剩余章节 (sync-upstream-optimizations-20260816 R7.2)
-            context?.selector("定时朗读", listOf("按分钟", "读完本章", "剩余章节", "取消定时")) { _, mode ->
-                when (mode) {
-                    0 -> {
-                        val times = intArrayOf(0, 5, 10, 15, 30, 60, 90, 180)
-                        val timeKeys = times.map { "$it 分钟" }
-                        context?.selector("设定时间", timeKeys) { _, index ->
-                            ReadAloud.setTimer(requireContext(), times[index])
-                            upTimerText(times[index])
-                        }
-                    }
-                    1 -> {
-                        ReadAloud.setTimerMode(requireContext(), 1)
-                        upTimerText(0)
-                    }
-                    2 -> {
-                        val chapters = intArrayOf(1, 2, 3, 5, 10, 20)
-                        val chapterKeys = chapters.map { "$it 章" }
-                        context?.selector("剩余章节", chapterKeys) { _, index ->
-                            ReadAloud.setTimerMode(requireContext(), 2, chapters[index])
-                            upTimerText(0)
-                        }
-                    }
-                    else -> {
-                        ReadAloud.setTimer(requireContext(), 0)
-                        upTimerText(0)
-                    }
+            val times = intArrayOf(0, 5, 10, 15, 30, 60, 90, 180)
+            val timeKeys = times.map { "$it 分钟" }
+            showComposeChoiceListDialog("设定时间", timeKeys) { index ->
+                times.getOrNull(index)?.let { time ->
+                    ReadAloud.setTimer(requireContext(), time)
                 }
             }
         }
@@ -205,10 +183,7 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
             binding.ivPlayPause.setImageResource(R.drawable.ic_play_24dp)
             binding.ivPlayPause.contentDescription = getString(R.string.audio_play)
         }
-        val bg = requireContext().bottomBackground
-        val isLight = ColorUtils.isColorLight(bg)
-        val textColor = requireContext().getPrimaryTextColor(isLight)
-        binding.ivPlayPause.setColorFilter(textColor)
+        binding.ivPlayPause.setColorFilter(ReaderSheetStyle.resolve(requireContext()).textColor)
     }
 
     private fun upSeekTimer() {
@@ -222,17 +197,10 @@ class ReadAloudDialog : BaseDialogFragment(R.layout.dialog_read_aloud) {
     }
 
     private fun upTimerText(timeMinute: Int) {
-        when (BaseReadAloudService.ttsTimerMode) {
-            1 -> binding.tvTimer.text = requireContext().getString(R.string.timer_chapter_stop)
-            2 -> binding.tvTimer.text =
-                requireContext().getString(R.string.timer_chapters_m, BaseReadAloudService.remainChapters)
-            else -> {
-                if (timeMinute < 0) {
-                    binding.tvTimer.text = requireContext().getString(R.string.timer_m, 0)
-                } else {
-                    binding.tvTimer.text = requireContext().getString(R.string.timer_m, timeMinute)
-                }
-            }
+        if (timeMinute < 0) {
+            binding.tvTimer.text = requireContext().getString(R.string.timer_m, 0)
+        } else {
+            binding.tvTimer.text = requireContext().getString(R.string.timer_m, timeMinute)
         }
     }
 

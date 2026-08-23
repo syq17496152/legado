@@ -3,14 +3,11 @@ package io.legado.app.ui.book.read.page.delegate
 import android.graphics.Canvas
 import android.view.MotionEvent
 import android.view.VelocityTracker
-import io.legado.app.constant.EventBus
 import io.legado.app.data.entities.Book
 import io.legado.app.help.book.isImage
-import io.legado.app.help.config.AppConfig
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
-import io.legado.app.utils.postEvent
 
 class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
 
@@ -21,17 +18,12 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
     private val mVelocity: VelocityTracker = VelocityTracker.obtain()
     private val slopSquare get() = readView.pageSlopSquare2
 
-    // 下拉书签: 顶部继续下拉累计距离, 超阈值触发一次 (R5, 仅滚动模式)
-    private var pullDownDistance = 0f
-    private var pullDownTriggered = false
-    private val pullDownThresholdPx by lazy {
-        readView.context.resources.displayMetrics.density * 64
-    }
-
     var noAnim: Boolean = false
+    private var scrollRemainder = 0f
 
     override fun onAnimStart(animationSpeed: Int) {
         readView.onScrollAnimStart()
+        mVelocity.computeCurrentVelocity(velocityDuration)
         //惯性滚动
         fling(
             0, touchY.toInt(), 0, mVelocity.yVelocity.toInt(),
@@ -61,8 +53,9 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
             MotionEvent.ACTION_DOWN -> {
                 abortAnim()
                 mVelocity.clear()
-                pullDownDistance = 0f
-                pullDownTriggered = false
+                // Keep the initial sample so a quick gesture with only one MOVE event still
+                // has enough history to produce a release velocity.
+                mVelocity.addMovement(event)
             }
 
             MotionEvent.ACTION_MOVE -> {
@@ -70,15 +63,19 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
             }
 
             MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
-                pullDownDistance = 0f
-                pullDownTriggered = false
+                mVelocity.addMovement(event)
                 onAnimStart(readView.defaultAnimationSpeed)
             }
         }
     }
 
     override fun onScroll() {
-        curPage.scroll((touchY - lastY).toInt())
+        val offset = touchY - lastY + scrollRemainder
+        val intOffset = offset.toInt()
+        scrollRemainder = offset - intOffset
+        if (intOffset != 0) {
+            curPage.scroll(intOffset)
+        }
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -87,7 +84,6 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
 
     private fun onScroll(event: MotionEvent) {
         mVelocity.addMovement(event)
-        mVelocity.computeCurrentVelocity(velocityDuration)
         //取最后添加(即最新的)一个触摸点来计算滚动位置
         //多点触控时即最后按下的手指产生的事件点
         val pointX = event.getX(event.pointerCount - 1)
@@ -106,32 +102,17 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
         }
         if (isMoved) {
             isRunning = true
-            if (AppConfig.pullDownBookmark) {
-                handlePullDownBookmark(pointY)
-            }
-        }
-    }
-
-    // 顶部下拉快速书签: 已在章顶且继续下拉超过阈值时触发一次 (R5)
-    private fun handlePullDownBookmark(pointY: Float) {
-        val contentView = curPage as? io.legado.app.ui.book.read.page.ContentTextView
-        if (contentView == null || !contentView.atChapterStart()) {
-            pullDownDistance = 0f
-            return
-        }
-        val delta = pointY - lastY
-        if (delta > 0) {
-            pullDownDistance += delta
-            if (!pullDownTriggered && pullDownDistance > pullDownThresholdPx) {
-                pullDownTriggered = true
-                postEvent(EventBus.PULL_DOWN_BOOKMARK, Unit)
-            }
         }
     }
 
     override fun computeScroll() {
         if (scroller.computeScrollOffset()) {
             readView.setTouchPoint(scroller.currX.toFloat(), scroller.currY.toFloat(), false)
+            // Scroller exposes integer coordinates. On a high refresh-rate display two
+            // consecutive frames can therefore have the same currY even though the fling is
+            // still active. In that case onScroll() has no pixel to apply and does not
+            // invalidate the content view, so explicitly keep the animation clock running.
+            readView.postInvalidateOnAnimation()
         } else if (isStarted) {
             onAnimStop()
             stopScroll()
@@ -148,6 +129,7 @@ class ScrollPageDelegate(readView: ReadView) : PageDelegate(readView) {
         isStarted = false
         isMoved = false
         isRunning = false
+        scrollRemainder = 0f
         if (!scroller.isFinished) {
             readView.isAbortAnim = true
             scroller.abortAnimation()

@@ -14,6 +14,8 @@ import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheDataSink
 import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.CacheWriter
+import androidx.media3.datasource.cache.ContentMetadata
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -39,6 +41,7 @@ import io.legado.app.model.VideoPlay
 import io.legado.app.utils.GSON
 import io.legado.app.utils.externalCache
 import io.legado.app.utils.fromJsonArray
+import io.legado.app.utils.isJsonArray
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -1187,4 +1190,168 @@ object ExoPlayerHelper {
         }
         return mediaSourceBuilder.build()
     }
+
+    // ===================== 音频离线缓存（Archive 回退引入） =====================
+
+    private const val AUDIO_OFFLINE_CACHE_MAX_BYTES = 4L * 1024 * 1024 * 1024
+
+    private val audioCache: Cache by lazy {
+        val databaseProvider = StandaloneDatabaseProvider(appCtx)
+        return@lazy SimpleCache(
+            File(appCtx.externalCache, "audio_exoplayer"),
+            LeastRecentlyUsedCacheEvictor(AUDIO_OFFLINE_CACHE_MAX_BYTES),
+            databaseProvider
+        )
+    }
+
+    private val audioCompleteMarkerDir: File by lazy {
+        File(appCtx.externalCache, "audio_exoplayer_complete").apply { mkdirs() }
+    }
+
+    private val audioCacheDataSourceFactory by lazy {
+        CacheDataSource.Factory()
+            .setCache(audioCache)
+            .setUpstreamDataSourceFactory(okhttpDataFactory)
+            .setCacheReadDataSourceFactory(FileDataSource.Factory())
+            .setCacheWriteDataSinkFactory(
+                CacheDataSink.Factory()
+                    .setCache(audioCache)
+                    .setFragmentSize(CacheDataSink.DEFAULT_FRAGMENT_SIZE)
+            )
+    }
+
+    fun createMediaRequest(url: String, headers: Map<String, String>): MediaRequest {
+        return MediaRequest(url, headers.toMap())
+    }
+
+    fun cacheMedia(
+        request: MediaRequest,
+        progress: ((requestLength: Long, bytesCached: Long, newBytesCached: Long) -> Unit)? = null,
+        shouldCancel: (() -> Boolean)? = null
+    ): Long {
+        var totalCached = 0L
+        val urls = getMediaUrls(request.url)
+        require(urls.isNotEmpty()) { "media url is empty" }
+        urls.forEach { url ->
+            if (shouldCancel?.invoke() == true) {
+                throw kotlinx.coroutines.CancellationException("audio cache cancelled")
+            }
+            val dataSpec = androidx.media3.datasource.DataSpec.Builder()
+                .setUri(url)
+                .setKey(url)
+                .setHttpRequestHeaders(request.headers)
+                .build()
+            var cached = 0L
+            CacheWriter(
+                audioCacheDataSourceFactory.createDataSourceForDownloading(),
+                dataSpec,
+                null
+            ) { requestLength, bytesCached, newBytesCached ->
+                if (shouldCancel?.invoke() == true) {
+                    throw kotlinx.coroutines.CancellationException("audio cache cancelled")
+                }
+                cached = bytesCached
+                progress?.invoke(requestLength, bytesCached, newBytesCached)
+            }.cache()
+            markMediaUrlComplete(url)
+            totalCached += cached
+        }
+        return totalCached
+    }
+
+    fun isMediaCached(url: String?): Boolean {
+        if (url.isNullOrBlank()) return false
+        val urls = getMediaUrls(url)
+        if (urls.isEmpty()) return false
+        return urls.all { isMediaUrlCached(it) }
+    }
+
+    fun removeMediaCache(url: String?) {
+        if (url.isNullOrBlank()) return
+        getMediaUrls(url).forEach {
+            audioCache.removeResource(it)
+            mediaCompleteMarker(it).delete()
+        }
+    }
+
+    fun copyMediaCache(url: String?, targetDir: File): Int {
+        if (url.isNullOrBlank()) return 0
+        if (!targetDir.exists()) targetDir.mkdirs()
+        var count = 0
+        getMediaUrls(url).forEachIndexed { urlIndex, mediaUrl ->
+            for (span in audioCache.getCachedSpans(mediaUrl)) {
+                if (!span.isCached) continue
+                val source = span.file ?: continue
+                if (!source.exists() || !source.isFile) continue
+                val name = "${urlIndex}_${span.position}_${span.length}_${source.name}"
+                source.copyTo(File(targetDir, name), overwrite = true)
+                count++
+            }
+        }
+        return count
+    }
+
+    fun importMediaCache(url: String?, sourceDir: File): Int {
+        if (url.isNullOrBlank() || !sourceDir.exists() || !sourceDir.isDirectory) return 0
+        val urls = getMediaUrls(url)
+        if (urls.isEmpty()) return 0
+        var count = 0
+        sourceDir.listFiles()
+            ?.filter { it.isFile }
+            ?.forEach { source ->
+                val prefix = source.name.substringBefore('_', "")
+                val urlIndex = prefix.toIntOrNull() ?: return@forEach
+                val targetUrl = urls.getOrNull(urlIndex) ?: return@forEach
+                val remain = source.name.substringAfter('_', "")
+                val position = remain.substringBefore('_', "").toLongOrNull() ?: return@forEach
+                val lengthPart = remain.substringAfter("${position}_", "")
+                val expectedLength = lengthPart.substringBefore('_', "").toLongOrNull()
+                    ?: source.length()
+                val cacheFile = audioCache.startFile(targetUrl, position, expectedLength)
+                cacheFile.parentFile?.mkdirs()
+                source.inputStream().use { input ->
+                    cacheFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                audioCache.commitFile(cacheFile, source.length())
+                markMediaUrlComplete(targetUrl)
+                count++
+            }
+        return count
+    }
+
+    private fun isMediaUrlCached(url: String): Boolean {
+        val contentLength = ContentMetadata.getContentLength(audioCache.getContentMetadata(url))
+        return if (contentLength > 0) {
+            audioCache.isCached(url, 0, contentLength)
+        } else {
+            mediaCompleteMarker(url).isFile &&
+                audioCache.getCachedBytes(url, 0, Long.MAX_VALUE) > 0
+        }
+    }
+
+    private fun markMediaUrlComplete(url: String) {
+        runCatching {
+            mediaCompleteMarker(url).writeText(System.currentTimeMillis().toString())
+        }
+    }
+
+    private fun mediaCompleteMarker(url: String): File {
+        return File(audioCompleteMarkerDir, io.legado.app.utils.MD5Utils.md5Encode(url))
+    }
+
+    private fun getMediaUrls(url: String): List<String> {
+        if (url.isJsonArray()) {
+            GSON.fromJsonArray<String>(url).getOrNull()?.filter { it.isNotBlank() }?.let {
+                return it
+            }
+        }
+        return listOf(url)
+    }
+
+    data class MediaRequest(
+        val url: String,
+        val headers: Map<String, String> = emptyMap()
+    )
 }

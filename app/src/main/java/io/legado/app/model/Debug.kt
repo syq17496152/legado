@@ -87,6 +87,24 @@ object Debug {
         }
     }
 
+    /**
+     * 临时切换调试上下文执行代码块（archive ParagraphRuleProcessor 依赖）
+     * 执行结束后恢复原 debugSource/callback/startTime
+     */
+    suspend fun <T> withDebugSource(sourceUrl: String?, callback: Callback?, block: suspend () -> T): T {
+        val oldSource = debugSource
+        val oldCallback = this.callback
+        debugSource = sourceUrl
+        this.callback = callback
+        startTime = System.currentTimeMillis()
+        return try {
+            block()
+        } finally {
+            debugSource = oldSource
+            this.callback = oldCallback
+        }
+    }
+
     fun startChecking(source: BookSource) {
         isChecking = true
         debugTimeMap[source.bookSourceUrl] = System.currentTimeMillis()

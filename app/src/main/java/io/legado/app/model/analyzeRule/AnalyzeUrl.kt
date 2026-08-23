@@ -87,6 +87,11 @@ class AnalyzeUrl(
     private val page: Int? = null,
     private val speakText: String? = null,
     private val speakSpeed: Int? = null,
+    private val currentToneID: String? = null,
+    private val currentSpeakerName: String? = null,
+    private val currentEmotionName: String? = null,
+    private val currentEmotionTag: String? = null,
+    private val currentSpeechRouteJson: String? = null,
     private var baseUrl: String = "",
     private val source: BaseSource? = null,
     private val ruleData: RuleDataInterface? = null,
@@ -394,6 +399,11 @@ class AnalyzeUrl(
             bindings["key"] = key
             bindings["speakText"] = speakText
             bindings["speakSpeed"] = speakSpeed
+            bindings["currentToneID"] = currentToneID
+            bindings["currentSpeakerName"] = currentSpeakerName
+            bindings["currentEmotionName"] = currentEmotionName
+            bindings["currentEmotionTag"] = currentEmotionTag
+            bindings["currentSpeechRouteJson"] = currentSpeechRouteJson
             bindings["book"] = ruleData as? Book
             bindings["source"] = source
             bindings["result"] = result
@@ -842,6 +852,11 @@ class AnalyzeUrl(
         fun AnalyzeUrl.getMediaItem(): MediaItem {
             setCookie()
             return ExoPlayerHelper.createMediaItem(url, headerMap)
+        }
+
+        fun AnalyzeUrl.getMediaRequest(): ExoPlayerHelper.MediaRequest {
+            setCookie()
+            return ExoPlayerHelper.createMediaRequest(url, headerMap)
         }
 
     }

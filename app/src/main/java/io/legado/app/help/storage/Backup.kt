@@ -12,7 +12,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.Cache
 import io.legado.app.exception.NoStackTraceException
-import io.legado.app.help.AppWebDav
+import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.getFolderNameNoCache
@@ -21,6 +21,7 @@ import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.lib.cloud.CloudStorageType
 import io.legado.app.model.BookCover
 import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
 import io.legado.app.ui.book.read.config.HighlightRuleStore
@@ -384,7 +385,7 @@ object Backup {
                 mutex.withLock {
                     if (shouldBackup()) {
                         val backupZipFileName = getNowZipFileName()
-                        if (!AppWebDav.hasBackUp(backupZipFileName)) {
+                        if (!AppCloudStorage.hasBackup(backupZipFileName)) {
                             backup(context, AppConfig.backupPath)
                         } else {
                             LocalConfig.lastBackup = System.currentTimeMillis()
@@ -397,10 +398,15 @@ object Backup {
         }
     }
 
-    suspend fun backupLocked(context: Context, path: String?) {
+    suspend fun backupLocked(
+        context: Context,
+        path: String?,
+        uploadCloud: Boolean = true,
+        uploadWebDavFallback: Boolean = false
+    ) {
         mutex.withLock {
             withContext(IO) {
-                backup(context, path)
+                backup(context, path, uploadCloud, uploadWebDavFallback)
             }
         }
     }
@@ -409,7 +415,12 @@ object Backup {
      * F-P0-2 备份选择器：核心备份逻辑
      * 根据用户在 BackupSelectorConfig 中的选择决定备份哪些内容
      */
-    private suspend fun backup(context: Context, path: String?) {
+    private suspend fun backup(
+        context: Context,
+        path: String?,
+        uploadCloud: Boolean = true,
+        uploadWebDavFallback: Boolean = false
+    ) {
         LogUtils.d(TAG, "开始备份 path:$path")
         LocalConfig.lastBackup = System.currentTimeMillis()
         val aes = BackupAES()
@@ -640,10 +651,16 @@ object Backup {
                     copyBackup(targetFile, backupFileName)
                 }
             }
-            try {
-                AppWebDav.backUpWebDav(zipFileName)
-            } catch (e: Exception) {
-                AppLog.put("上传备份至webdav失败\n$e", e)
+            // 打包成功后按云存储类型上传（S3/WebDAV，对齐 archive 多云端能力）
+            if (uploadCloud) {
+                val cloudType = if (uploadWebDavFallback) CloudStorageType.WEBDAV else AppCloudStorage.type
+                AppLog.put("Upload cloud backup: ${cloudType.name} $zipFileName")
+                if (uploadWebDavFallback) {
+                    AppCloudStorage.backupToWebDav(zipFileName)
+                } else {
+                    AppCloudStorage.backup(zipFileName)
+                }
+                AppLog.put("Cloud backup finished: ${cloudType.name} $zipFileName")
             }
         } else {
             // 打包失败不再静默"成功"，向上抛出让调用方提示真实错误
@@ -654,7 +671,7 @@ object Backup {
 
         currentCoroutineContext().ensureActive()
 
-        AppWebDav.upBgs(getBackgroundImageFiles().toTypedArray())
+        AppCloudStorage.upBgs(getBackgroundImageFiles().toTypedArray())
     }
 
     /**

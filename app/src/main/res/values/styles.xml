@@ -53,6 +53,23 @@
         <item name="colorAccent">@color/md_grey_900</item>
     </style>
 
+    <style name="MangaControlButton">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:background">@drawable/bg_read_menu_quick_action_button</item>
+        <item name="android:clickable">true</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:focusable">true</item>
+        <item name="android:gravity">center</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:minWidth">@dimen/manga_control_button_min_width</item>
+        <item name="android:paddingStart">@dimen/manga_control_button_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/manga_control_button_padding_horizontal</item>
+        <item name="android:textColor">@color/primaryText</item>
+        <item name="android:textSize">@dimen/manga_control_button_text_size</item>
+    </style>
+
     <style name="Spinner" parent="android:Theme.Holo.Light" />
 
     //**********System Style******************//
@@ -135,6 +152,33 @@
     <style name="dialog_style" parent="@android:style/Theme.Dialog">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>
+    </style>
+
+    <style name="AnimDialogCenter">
+        <item name="android:windowEnterAnimation">@anim/dialog_center_enter</item>
+        <item name="android:windowExitAnimation">@anim/dialog_center_exit</item>
+    </style>
+
+    <style name="AnimDialogFade">
+        <item name="android:windowEnterAnimation">@anim/dialog_fade_enter</item>
+        <item name="android:windowExitAnimation">@anim/dialog_fade_exit</item>
+    </style>
+
+    <style name="AnimDialogBottom">
+        <item name="android:windowEnterAnimation">@anim/dialog_bottom_enter</item>
+        <item name="android:windowExitAnimation">@anim/dialog_bottom_exit</item>
+    </style>
+
+    <style name="Theme.Legado.ComposeDialog.Center" parent="@android:style/Theme.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@style/AnimDialogCenter</item>
+    </style>
+
+    <style name="Theme.Legado.ComposeDialog.Bottom" parent="@android:style/Theme.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@style/AnimDialogBottom</item>
     </style>
 
     //*******************Video Player Style**********************************//

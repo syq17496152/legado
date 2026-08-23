@@ -125,6 +125,18 @@ data class BookChapter(
         return bookUrl + url
     }
 
+    fun contentCacheIdentity(): String {
+        if (!isVolume && url.isNotBlank()) {
+            return runCatching { "url|" + getAbsoluteURL() }
+                .getOrElse { "url|$url" }
+        }
+        return "title|" + title.trim()
+    }
+
+    fun contentCacheFileName(suffix: String = "nb"): String {
+        return "c-${MD5Utils.md5Encode16(contentCacheIdentity())}.$suffix"
+    }
+
     fun getDisplayTitle(
         replaceRules: List<ReplaceRule>? = null,
         useReplace: Boolean = true,

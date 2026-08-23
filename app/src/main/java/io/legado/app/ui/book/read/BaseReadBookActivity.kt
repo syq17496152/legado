@@ -13,14 +13,10 @@ import androidx.activity.viewModels
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.Dispatchers.Main
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppConst.charsets
+import io.legado.app.constant.PageAnim
 import io.legado.app.constant.PreferKey
 import io.legado.app.databinding.ActivityBookReadBinding
 import io.legado.app.databinding.DialogDownloadChoiceBinding
@@ -45,6 +41,7 @@ import io.legado.app.utils.FileDoc
 import io.legado.app.utils.find
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.gone
+import io.legado.app.utils.isHuaweiSystemDevice
 import io.legado.app.utils.isTv
 import io.legado.app.utils.setLightStatusBar
 import io.legado.app.utils.setNavigationBarColorAuto
@@ -62,16 +59,8 @@ abstract class BaseReadBookActivity :
 
     override val binding by viewBinding(ActivityBookReadBinding::inflate)
     override val viewModel by viewModels<ReadBookViewModel>()
-
-    // 主题架构 v2：阅读器配色独立（ReadBookConfig），不随全局主题事件重建；
-    // Compose 菜单/浮层经 ThemeSync 刷新
-    override val recreateOnThemeChange: Boolean
-        get() = false
-    // S5：菜单覆盖层可见性（ReadBookActivity 覆写为 Compose 菜单层状态）
-    protected open val menuOverlayVisible: Boolean
-        get() = binding.readMenu.isVisible
     protected val menuLayoutIsVisible
-        get() = bottomDialog > 0 || menuOverlayVisible || binding.searchMenu.bottomMenuVisible
+        get() = bottomDialog > 0 || binding.readMenu.isVisible || binding.searchMenu.bottomMenuVisible
 
     var bottomDialog = 0
         set(value) {
@@ -85,12 +74,8 @@ abstract class BaseReadBookActivity :
             ReadBook.book?.let { book ->
                 FileDoc.fromUri(uri, true).find(book.originName)?.let { doc ->
                     book.bookUrl = doc.uri.toString()
-                    lifecycleScope.launch(IO) {
-                        book.save()
-                        withContext(Main) {
-                            viewModel.loadChapterList(book)
-                        }
-                    }
+                    book.save()
+                    viewModel.loadChapterList(book)
                 } ?: ReadBook.upMsg("找不到文件")
             }
         } ?: ReadBook.upMsg("没有权限访问")
@@ -271,10 +256,13 @@ abstract class BaseReadBookActivity :
     private fun upLayoutInDisplayCutoutMode() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.attributes = window.attributes.apply {
-                layoutInDisplayCutoutMode = if (ReadBookConfig.readBodyToLh) {
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-                } else {
-                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
+                layoutInDisplayCutoutMode = when {
+                    ReadBookConfig.readBodyToLh || isHuaweiSystemDevice ->
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+
+                    else -> {
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
+                    }
                 }
             }
         }
@@ -352,13 +340,9 @@ abstract class BaseReadBookActivity :
                     book.setDailyChapters(num)
                     book.setStartChapter(start)
                     book.setReadSimulating(enabled)
-                    lifecycleScope.launch(IO) {
-                        book.save()
-                        withContext(Main) {
-                            ReadBook.clearTextChapter()
-                            viewModel.initData(intent)
-                        }
-                    }
+                    book.save()
+                    ReadBook.clearTextChapter()
+                    viewModel.initData(intent)
                 }
             }
             cancelButton()
@@ -383,15 +367,17 @@ abstract class BaseReadBookActivity :
     }
 
     fun showPageAnimConfig(success: () -> Unit) {
-        val items = arrayListOf<String>()
-        items.add(getString(R.string.btn_default_s))
-        items.add(getString(R.string.page_anim_cover))
-        items.add(getString(R.string.page_anim_slide))
-        items.add(getString(R.string.page_anim_simulation))
-        items.add(getString(R.string.page_anim_scroll))
-        items.add(getString(R.string.page_anim_none))
-        selector(R.string.page_anim, items) { _, i ->
-            ReadBook.book?.setPageAnim(i - 1)
+        val items = listOf(
+            getString(R.string.btn_default_s) to null,
+            getString(R.string.page_anim_cover) to PageAnim.coverPageAnim,
+            getString(R.string.page_anim_linked_cover) to PageAnim.linkedCoverPageAnim,
+            getString(R.string.page_anim_slide) to PageAnim.slidePageAnim,
+            getString(R.string.page_anim_simulation) to PageAnim.simulationPageAnim,
+            getString(R.string.page_anim_scroll) to PageAnim.scrollPageAnim,
+            getString(R.string.page_anim_none) to PageAnim.noAnim
+        )
+        selector(R.string.page_anim, items.map { it.first }) { _, i ->
+            ReadBook.book?.setPageAnim(items.getOrNull(i)?.second ?: -1)
             success()
         }
     }

@@ -62,13 +62,13 @@ class ReplaceRuleViewModel(application: Application) : BaseViewModel(application
         }
     }
 
-    fun upOrder() {
+    fun upOrder(rules: List<ReplaceRule>) {
+        if (rules.isEmpty()) return
+        val normalized = rules.mapIndexed { index, rule ->
+            rule.copy(order = index + 1)
+        }
         execute {
-            val rules = appDb.replaceRuleDao.all
-            for ((index, rule) in rules.withIndex()) {
-                rule.order = index + 1
-            }
-            appDb.replaceRuleDao.update(*rules.toTypedArray())
+            appDb.replaceRuleDao.update(*normalized.toTypedArray())
         }
     }
 

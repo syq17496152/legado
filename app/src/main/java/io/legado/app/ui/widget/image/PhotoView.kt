@@ -618,15 +618,11 @@ class PhotoView @JvmOverloads constructor(
     }
 
     override fun canScrollHorizontally(direction: Int): Boolean {
-        // 修复（image-gallery）：图片未放大时（isZoonUp=false）允许父 ViewPager2 拦截水平滑动切换图片
-        // 仅当用户主动缩放放大图片后，且图片在指定方向可滚动时，才消费事件阻止父容器拦截
-        // 旧实现用 hasMultiTouch 判断会导致双指触摸残留状态干扰；用 canScrollHorizontallySelf 单独判断会因图片原始尺寸大于控件而误判
-        return if (isZoonUp && canScrollHorizontallySelf(direction.toFloat())) true else false
+        return if (hasMultiTouch) true else canScrollHorizontallySelf(direction.toFloat())
     }
 
     override fun canScrollVertically(direction: Int): Boolean {
-        // 同 canScrollHorizontally，保证垂直方向（外层 ViewPager2 切换文章）正常工作
-        return if (isZoonUp && canScrollVerticallySelf(direction.toFloat())) true else false
+        return if (hasMultiTouch) true else canScrollVerticallySelf(direction.toFloat())
     }
 
     private inner class InterpolatorProxy : Interpolator {
@@ -942,6 +938,40 @@ class PhotoView @JvmOverloads constructor(
         mTranslateY = 0
     }
 
+    fun getDisplayMatrixCopy(): Matrix {
+        return Matrix(mSynthesisMatrix)
+    }
+
+    fun fitInsideRect(targetRect: RectF) {
+        if (!hasDrawable || !isKnowSize || targetRect.isEmpty) return
+        initBase()
+        val scaleX = targetRect.width() / mImgRect.width()
+        val scaleY = targetRect.height() / mImgRect.height()
+        val scale = minOf(scaleX, scaleY)
+        mAnimMatrix.postScale(scale, scale, mScreenCenter.x, mScreenCenter.y)
+        executeTranslate()
+        val dx = targetRect.centerX() - mImgRect.centerX()
+        val dy = targetRect.centerY() - mImgRect.centerY()
+        mAnimMatrix.postTranslate(dx, dy)
+        executeTranslate()
+        resetBase()
+    }
+
+    fun fillRect(targetRect: RectF) {
+        if (!hasDrawable || !isKnowSize || targetRect.isEmpty) return
+        initBase()
+        val scaleX = targetRect.width() / mImgRect.width()
+        val scaleY = targetRect.height() / mImgRect.height()
+        val scale = maxOf(scaleX, scaleY)
+        mAnimMatrix.postScale(scale, scale, mScreenCenter.x, mScreenCenter.y)
+        executeTranslate()
+        val dx = targetRect.centerX() - mImgRect.centerX()
+        val dy = targetRect.centerY() - mImgRect.centerY()
+        mAnimMatrix.postTranslate(dx, dy)
+        executeTranslate()
+        resetBase()
+    }
+
     interface ClipCalculate {
         fun calculateTop(): Float
     }
@@ -1244,10 +1274,6 @@ class PhotoView @JvmOverloads constructor(
             val scaleFactor = detector.scaleFactor
             if (java.lang.Float.isNaN(scaleFactor) || java.lang.Float.isInfinite(scaleFactor)) return false
             mScale *= scaleFactor
-            // 修复（image-gallery）：同步更新 isZoonUp，保证 canScrollHorizontally/Vertically 正确判断
-            // 旧实现只更新 mScale 不更新 isZoonUp，导致双指放大后 canScrollHorizontally 仍返回 false
-            // 父 ViewPager2 会拦截事件导致无法平移放大后的图片
-            isZoonUp = mScale > 1.0f
             //mScaleCenter.set(detector.getFocusX(), detector.getFocusY());
             mAnimMatrix.postScale(
                 scaleFactor,

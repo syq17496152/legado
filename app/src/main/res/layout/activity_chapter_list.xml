@@ -1,21 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
+<androidx.compose.ui.platform.ComposeView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/compose_view"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
-
-    <!-- L-Toc 目录页：顶栏 Compose 化（GlassTopAppBar + TabRow + 搜索 + 更多菜单） -->
-    <androidx.compose.ui.platform.ComposeView
-        android:id="@+id/compose_top_bar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
-
-    <androidx.viewpager.widget.ViewPager
-        android:id="@+id/view_pager"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        tools:ignore="SpeakableTextPresentCheck" />
-
-</LinearLayout>
+    android:layout_height="match_parent" />

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.PorterDuff
+import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.animation.Animation
@@ -11,14 +12,23 @@ import android.widget.FrameLayout
 import androidx.core.view.isVisible
 import io.legado.app.R
 import io.legado.app.databinding.ViewSearchMenuBinding
+import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.Selector
+import io.legado.app.lib.theme.UiCorner
+import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.bottomBackground
-import io.legado.app.lib.theme.getPrimaryTextColor
+import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.lib.theme.themeCardColorOrDefault
+import io.legado.app.lib.theme.themeMutedColorOrDefault
+import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.searchContent.SearchResult
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.activity
 import io.legado.app.utils.applyNavigationBarPadding
+import io.legado.app.utils.dpToPx
+import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.invisible
 import io.legado.app.utils.loadAnimation
 import io.legado.app.utils.visible
@@ -35,11 +45,13 @@ class SearchMenu @JvmOverloads constructor(
 
     private val menuBottomIn: Animation = loadAnimation(context, R.anim.anim_readbook_bottom_in)
     private val menuBottomOut: Animation = loadAnimation(context, R.anim.anim_readbook_bottom_out)
+    private val accentColor: Int = context.accentColor
     private val bgColor: Int = context.bottomBackground
-    private val textColor: Int = context.getPrimaryTextColor(ColorUtils.isColorLight(bgColor))
-    private val bottomBackgroundList: ColorStateList =
-        Selector.colorBuild().setDefaultColor(bgColor)
-            .setPressedColor(ColorUtils.darkenColor(bgColor)).create()
+    private val textColor: Int = context.primaryTextColor
+    private var bottomBackgroundList: ColorStateList = Selector.colorBuild()
+        .setDefaultColor(context.themeCardColorOrDefault())
+        .setPressedColor(ColorUtils.darkenColor(context.themeCardColorOrDefault()))
+        .create()
     private var onMenuOutEnd: (() -> Unit)? = null
     private var isMenuOutAnimating = false
 
@@ -55,6 +67,7 @@ class SearchMenu @JvmOverloads constructor(
     val bottomMenuVisible get() = isVisible && binding.llBottomMenu.isVisible
 
     init {
+        binding.root.applyUiBodyTypefaceDeep(context.uiTypeface())
         initAnimation()
         initView()
         bindEvent()
@@ -68,22 +81,53 @@ class SearchMenu @JvmOverloads constructor(
     }
 
     private fun initView() = binding.run {
-        llSearchBaseInfo.setBackgroundColor(bgColor)
-        tvCurrentSearchInfo.setTextColor(bottomBackgroundList)
-        llBottomBg.setBackgroundColor(bgColor)
+        val isBgLight = ColorUtils.isColorLight(bgColor)
+        val themeSurfaceColor = context.themeMutedColorOrDefault()
+        val themeCardColor = context.themeCardColorOrDefault()
+        val dividerColor = context.getCompatColor(R.color.divider)
+        val panelBaseColor = ColorUtils.blendColors(
+            bgColor,
+            themeSurfaceColor,
+            if (isBgLight) 0.90f else 0.82f
+        )
+        val panelInnerColor = ColorUtils.blendColors(
+            bgColor,
+            themeCardColor,
+            if (isBgLight) 0.80f else 0.70f
+        )
+        bottomBackgroundList = Selector.colorBuild()
+            .setDefaultColor(panelInnerColor)
+            .setPressedColor(ColorUtils.darkenColor(panelInnerColor))
+            .create()
+        val panelStrokeColor = ColorUtils.adjustAlpha(
+            if (isBgLight) dividerColor else textColor,
+            if (isBgLight) 1f else 0.14f
+        )
+        val menuOpacity = (AppConfig.readMenuAlpha / 100f).coerceIn(0.35f, 1f)
+        llBottomMenu.background = GradientDrawable().apply {
+            cornerRadius = UiCorner.scaledDp(18F)
+            setColor(ColorUtils.withAlpha(panelBaseColor, menuOpacity))
+            setStroke(1.dpToPx(), panelStrokeColor)
+        }
+        llSearchBaseInfo.background = GradientDrawable().apply {
+            cornerRadius = UiCorner.searchRadius(14F)
+            setColor(ColorUtils.withAlpha(panelInnerColor, menuOpacity))
+            setStroke(1.dpToPx(), panelStrokeColor)
+        }
+        tvCurrentSearchInfo.setTextColor(textColor)
+        llBottomBg.setBackgroundColor(android.graphics.Color.TRANSPARENT)
         fabLeft.backgroundTintList = bottomBackgroundList
-        fabLeft.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
+        fabLeft.setColorFilter(accentColor, PorterDuff.Mode.SRC_IN)
         fabRight.backgroundTintList = bottomBackgroundList
-        fabRight.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
+        fabRight.setColorFilter(accentColor, PorterDuff.Mode.SRC_IN)
         tvMainMenu.setTextColor(textColor)
         tvSearchResults.setTextColor(textColor)
         tvSearchExit.setTextColor(textColor)
         ivMainMenu.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         ivSearchResults.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
         ivSearchExit.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        ivSearchContentUp.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        ivSearchContentDown.setColorFilter(textColor, PorterDuff.Mode.SRC_IN)
-        tvCurrentSearchInfo.setTextColor(textColor)
+        ivSearchContentUp.setColorFilter(accentColor, PorterDuff.Mode.SRC_IN)
+        ivSearchContentDown.setColorFilter(accentColor, PorterDuff.Mode.SRC_IN)
         applyNavigationBarPadding()
     }
 

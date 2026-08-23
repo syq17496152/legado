@@ -12,6 +12,7 @@ data class TextParagraph(
     val chapterIndices: IntRange get() = firstLine.chapterPosition..lastLine.chapterPosition + lastLine.charSize
     val chapterPosition: Int get() = firstLine.chapterPosition
     val realNum: Int get() = firstLine.paragraphNum
+    val sourceIndex: Int get() = firstLine.sourceIndex
     val isParagraphEnd: Boolean get() = lastLine.isParagraphEnd
 
 }

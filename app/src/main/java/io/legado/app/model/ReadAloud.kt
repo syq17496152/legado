@@ -79,6 +79,82 @@ object ReadAloud {
         postEvent(EventBus.READ_ALOUD_PLAY, bundle)
     }
 
+    fun refreshReadAloudClass(): Class<*> {
+        aloudClass = getReadAloudClass()
+        return aloudClass
+    }
+
+    fun moveToCue(
+        context: Context,
+        cueIndex: Int,
+        chapterPosition: Int,
+        expectedChapterIndex: Int = ReadBook.durChapterIndex,
+        play: Boolean = BaseReadAloudService.isPlay()
+    ) {
+        if (!BaseReadAloudService.isRun) return
+        val intent = Intent(context, aloudClass)
+        intent.action = IntentAction.moveTo
+        intent.putExtra("cueIndex", cueIndex)
+        intent.putExtra("chapterPosition", chapterPosition)
+        intent.putExtra("expectedChapterIndex", expectedChapterIndex)
+        intent.putExtra("play", play)
+        context.startForegroundServiceCompat(intent)
+    }
+
+    fun playFromPosition(
+        context: Context,
+        bookUrl: String,
+        chapterIndex: Int,
+        chapterUrl: String,
+        chapterPosition: Int
+    ) {
+        val intent = Intent(context, aloudClass)
+        intent.action = IntentAction.playFromPosition
+        intent.putExtra("bookUrl", bookUrl)
+        intent.putExtra("chapterIndex", chapterIndex)
+        intent.putExtra("chapterUrl", chapterUrl)
+        intent.putExtra("chapterPosition", chapterPosition)
+        try {
+            context.startForegroundServiceCompat(intent)
+        } catch (e: Exception) {
+            val msg = "启动选句朗读出错\n${e.localizedMessage}"
+            AppLog.put(msg, e)
+            context.toastOnUi(msg)
+        }
+    }
+
+    fun prevChapter(context: Context, continuePlayback: Boolean = BaseReadAloudService.isPlay()) {
+        if (BaseReadAloudService.isRun) {
+            val intent = Intent(context, aloudClass)
+            intent.action = IntentAction.prev
+            intent.putExtra("continuePlayback", continuePlayback)
+            context.startForegroundServiceCompat(intent)
+        }
+    }
+
+    fun nextChapter(context: Context, continuePlayback: Boolean = BaseReadAloudService.isPlay()) {
+        if (BaseReadAloudService.isRun) {
+            val intent = Intent(context, aloudClass)
+            intent.action = IntentAction.next
+            intent.putExtra("continuePlayback", continuePlayback)
+            context.startForegroundServiceCompat(intent)
+        }
+    }
+
+    fun selectChapter(
+        context: Context,
+        chapterIndex: Int,
+        continuePlayback: Boolean = BaseReadAloudService.isPlay()
+    ) {
+        if (BaseReadAloudService.isRun) {
+            val intent = Intent(context, aloudClass)
+            intent.action = IntentAction.selectChapter
+            intent.putExtra("chapterIndex", chapterIndex)
+            intent.putExtra("continuePlayback", continuePlayback)
+            context.startForegroundServiceCompat(intent)
+        }
+    }
+
     fun pause(context: Context) {
         if (BaseReadAloudService.isRun) {
             val intent = Intent(context, aloudClass)
@@ -101,6 +177,11 @@ object ReadAloud {
             intent.action = IntentAction.stop
             context.startForegroundServiceCompat(intent)
         }
+    }
+
+    // 切换书籍时停止朗读（archive-ui P1-B）：与 stop 等价，供 ReadBook.stopReadAloudForBookSwitch 联动 UI 状态
+    fun stopForBookSwitch(context: Context) {
+        stop(context)
     }
 
     fun prevParagraph(context: Context) {

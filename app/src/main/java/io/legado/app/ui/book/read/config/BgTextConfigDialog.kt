@@ -1,44 +1,88 @@
 package io.legado.app.ui.book.read.config
 
-import android.annotation.SuppressLint
 import android.content.DialogInterface
-import android.graphics.PorterDuff
 import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
-import android.widget.SeekBar
-import androidx.appcompat.widget.TooltipCompat
+import android.widget.ImageView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.viewinterop.AndroidView
+import io.legado.app.ui.widget.compose.releaseComposeImage
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.graphics.toColorInt
-import androidx.core.view.isGone
+import androidx.appcompat.widget.AppCompatImageView
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import io.legado.app.R
 import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
-import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.databinding.DialogReadBgTextBinding
-import io.legado.app.databinding.ItemBgImageBinding
 import io.legado.app.help.DefaultData
 import io.legado.app.help.book.isImage
 import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.help.glide.ImageLoader
+import io.legado.app.help.http.addHeaders
+import io.legado.app.help.http.newCallResponse
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.lib.dialogs.SelectItem
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
-import io.legado.app.lib.theme.bottomBackground
-import io.legado.app.lib.theme.getPrimaryTextColor
-import io.legado.app.lib.theme.getSecondaryTextColor
 import io.legado.app.model.ReadBook
+import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
-import io.legado.app.utils.ColorUtils
+import io.legado.app.ui.widget.compose.AppDialogStyle
+import io.legado.app.ui.widget.compose.AppThemedStepperSlider
+import io.legado.app.ui.widget.compose.LegadoMiuixCard
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
+import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
@@ -54,6 +98,7 @@ import io.legado.app.utils.find
 import io.legado.app.utils.getFile
 import io.legado.app.utils.inputStream
 import io.legado.app.utils.longToast
+import io.legado.app.utils.observeEvent
 import io.legado.app.utils.openInputStream
 import io.legado.app.utils.openOutputStream
 import io.legado.app.utils.outputStream
@@ -63,18 +108,13 @@ import io.legado.app.utils.readBytes
 import io.legado.app.utils.readUri
 import io.legado.app.utils.stackTraceStr
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import splitties.init.appCtx
 import java.io.File
 import java.io.FileOutputStream
 import androidx.lifecycle.lifecycleScope
-import io.legado.app.help.http.addHeaders
-import io.legado.app.help.http.newCallResponse
-import io.legado.app.model.analyzeRule.AnalyzeUrl
-import io.legado.app.utils.setSelectionSafely
 import kotlinx.coroutines.launch
+import splitties.init.appCtx
 
-class BgTextConfigDialog : BaseDialogFragment(R.layout.dialog_read_bg_text) {
+class BgTextConfigDialog : BaseDialogFragment(0) {
 
     companion object {
         const val TEXT_COLOR = 121
@@ -82,21 +122,17 @@ class BgTextConfigDialog : BaseDialogFragment(R.layout.dialog_read_bg_text) {
         const val TEXT_ACCENT_COLOR = 123
     }
 
-    private val binding by viewBinding(DialogReadBgTextBinding::bind)
     private val configFileName = "readConfig.zip"
-    private val adapter by lazy { BgAdapter(requireContext(), secondaryTextColor) }
-    private var primaryTextColor = 0
-    private var secondaryTextColor = 0
     private val importFormNet = "网络导入"
+    private var presetBgImages by mutableStateOf<List<String>>(emptyList())
+    private var refreshTick by mutableIntStateOf(0)
+    private var pendingSelfConfigEvents = 0
+
     private val selectBgImage = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
-            setBgFromUri(uri)
-        }
+        it.uri?.let { uri -> setBgFromUri(uri) }
     }
     private val selectExportDir = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
-            exportConfig(uri)
-        }
+        it.uri?.let { uri -> exportConfig(uri) }
     }
     private val selectImportDoc = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
@@ -112,7 +148,7 @@ class BgTextConfigDialog : BaseDialogFragment(R.layout.dialog_read_bg_text) {
         super.onStart()
         dialog?.window?.run {
             clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            setBackgroundDrawableResource(R.color.background)
+            setBackgroundDrawableResource(android.R.color.transparent)
             decorView.setPadding(0, 0, 0, 0)
             val attr = attributes
             attr.dimAmount = 0.0f
@@ -122,11 +158,34 @@ class BgTextConfigDialog : BaseDialogFragment(R.layout.dialog_read_bg_text) {
         }
     }
 
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        observeEvent<ArrayList<Int>>(EventBus.UP_CONFIG) {
+            if (pendingSelfConfigEvents > 0) {
+                pendingSelfConfigEvents--
+            } else {
+                refreshTick++
+            }
+        }
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                val style = rememberAppDialogStyle()
+                CompositionLocalProvider(
+                    LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
+                ) {
+                    BgTextConfigContent(style = style)
+                }
+            }
+        }
+    }
+
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         (activity as ReadBookActivity).bottomDialog++
-        initView()
-        initData()
-        initEvent()
+        presetBgImages = requireContext().assets.list("bg")?.toList().orEmpty()
     }
 
     override fun onDismiss(dialog: DialogInterface) {
@@ -135,176 +194,579 @@ class BgTextConfigDialog : BaseDialogFragment(R.layout.dialog_read_bg_text) {
         (activity as ReadBookActivity).bottomDialog--
     }
 
-    private fun initView() = binding.run {
-        val bg = requireContext().bottomBackground
-        val isLight = ColorUtils.isColorLight(bg)
-        primaryTextColor = requireContext().getPrimaryTextColor(isLight)
-        secondaryTextColor = requireContext().getSecondaryTextColor(isLight)
-        rootView.setBackgroundColor(bg)
-        tvNameTitle.setTextColor(primaryTextColor)
-        tvName.setTextColor(secondaryTextColor)
-        ivEdit.setColorFilter(secondaryTextColor, PorterDuff.Mode.SRC_IN)
-        tvRestore.setTextColor(primaryTextColor)
-        swDarkStatusIcon.setTextColor(primaryTextColor)
-        ivImport.setColorFilter(primaryTextColor, PorterDuff.Mode.SRC_IN)
-        ivExport.setColorFilter(primaryTextColor, PorterDuff.Mode.SRC_IN)
-        ivDelete.setColorFilter(primaryTextColor, PorterDuff.Mode.SRC_IN)
-        tvBgAlpha.setTextColor(primaryTextColor)
-        tvBgImage.setTextColor(primaryTextColor)
-        if (ReadBook.book?.isImage == true) {
-            spUnderline.isGone = true
-        } else {
-            val textStyles = arrayOf("关闭", "实线", "虚线")
-            val adapter = object : ArrayAdapter<String>(requireContext(), R.layout.item_text_common, textStyles) {
-                override fun getDropDownView(
-                    position: Int,
-                    convertView: View?,
-                    parent: ViewGroup
-                ): View {
-                    val view = super.getDropDownView(position, convertView, parent)
-                    if (view is android.widget.TextView) {
-                        view.setBackgroundColor(bg) // 设置下拉列表项的背景色
-                        view.setTextColor(primaryTextColor) // 设置下拉列表项的文本颜色
-                    }
-                    return view
+    @Composable
+    private fun BgTextConfigContent(style: AppDialogStyle) {
+        refreshTick
+        LegadoMiuixCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            color = style.surface,
+            contentColor = style.primaryText,
+            cornerRadius = style.panelRadius,
+            insidePadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                HeaderSection(style)
+                ToggleSection(style)
+                if (ReadBook.book?.isImage != true) {
+                    UnderlineSection(style)
                 }
-            }
-            adapter.setDropDownViewResource(R.layout.item_spinner_dropdown)
-            spUnderline.adapter = adapter
-            spUnderline.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                var isInitializing = true
-                override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-                    if (isInitializing) { //忽略初始化选择
-                        isInitializing = false
-                        return
-                    }
-                    ReadBookConfig.durConfig.underlineMode = position
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(6, 9, 11))
-                }
-                override fun onNothingSelected(parent: AdapterView<*>) { }
+                ColorSection(style)
+                ImportExportSection(style)
+                SliderSection(style)
+                BackgroundImageSection(style)
             }
         }
-        recyclerView.adapter = adapter
-        adapter.addHeaderView {
-            ItemBgImageBinding.inflate(layoutInflater, it, false).apply {
-                tvName.setTextColor(secondaryTextColor)
-                tvName.text = getString(R.string.select_image)
-                ivBg.setImageResource(R.drawable.ic_image)
-                ivBg.setColorFilter(primaryTextColor, PorterDuff.Mode.SRC_IN)
-                root.setOnClickListener {
+    }
+
+    @Composable
+    private fun HeaderSection(style: AppDialogStyle) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(style.actionRadius),
+            color = style.fieldSurface,
+            contentColor = style.primaryText,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.style_name),
+                    color = style.primaryText,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = ReadBookConfig.durConfig.name.ifBlank { "文字" },
+                    color = style.secondaryText,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    painter = painterResource(R.drawable.ic_edit),
+                    contentDescription = stringResource(R.string.edit),
+                    tint = style.secondaryText,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clickable { editStyleName() }
+                        .padding(2.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.restore),
+                    color = style.accent,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.clickable { restorePreset() }
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun ToggleSection(style: AppDialogStyle) {
+        ReaderSectionCard(style = style, title = null, contentPadding = PaddingValues(6.dp)) {
+            var darkStatusIcon by rememberSaveable(refreshTick) {
+                mutableStateOf(ReadBookConfig.durConfig.curStatusIconDark())
+            }
+            var scrollFollowBg by rememberSaveable(refreshTick) {
+                mutableStateOf(ReadBookConfig.durConfig.curReadScrollFollowBackground())
+            }
+            ReaderSwitchRow(
+                title = stringResource(R.string.dark_status_icon),
+                checked = darkStatusIcon,
+                style = style
+            ) {
+                darkStatusIcon = it
+                ReadBookConfig.durConfig.setCurStatusIconDark(it)
+                (activity as? ReadBookActivity)?.upSystemUiVisibility()
+            }
+            ReaderSwitchRow(
+                title = stringResource(R.string.read_scroll_follow_background),
+                checked = scrollFollowBg,
+                style = style,
+                summary = stringResource(R.string.read_scroll_follow_background_summary)
+            ) {
+                scrollFollowBg = it
+                ReadBookConfig.durConfig.setCurReadScrollFollowBackground(it)
+                postReadConfigChanged(1, 5)
+            }
+        }
+    }
+
+    @Composable
+    private fun UnderlineSection(style: AppDialogStyle) {
+        ReaderSectionCard(
+            style = style,
+            title = stringResource(R.string.text_underline),
+            contentPadding = PaddingValues(8.dp)
+        ) {
+            var underlineMode by rememberSaveable(refreshTick) {
+                mutableIntStateOf(ReadBookConfig.durConfig.underlineMode)
+            }
+            ReaderSegmentedOptions(
+                options = listOf(
+                    ReaderOption("0", "关闭"),
+                    ReaderOption("1", "实线"),
+                    ReaderOption("2", "虚线")
+                ),
+                selectedValue = underlineMode.toString(),
+                style = style,
+                pillStyle = true
+            ) { value ->
+                val next = value.toIntOrNull() ?: return@ReaderSegmentedOptions
+                if (next == underlineMode) return@ReaderSegmentedOptions
+                underlineMode = next
+                ReadBookConfig.durConfig.underlineMode = next
+                postReadConfigChanged(6, 9, 11)
+            }
+        }
+    }
+
+    @Composable
+    private fun ColorSection(style: AppDialogStyle) {
+        ReaderSectionCard(style = style, title = null, contentPadding = PaddingValues(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                ColorAction(
+                    text = stringResource(R.string.text_color),
+                    color = Color(ReadBookConfig.durConfig.curTextColor()),
+                    style = style,
+                    modifier = Modifier.weight(1f)
+                ) { showTextColorPicker() }
+                ColorAction(
+                    text = stringResource(R.string.bg_color),
+                    color = currentBackgroundSwatch(),
+                    style = style,
+                    modifier = Modifier.weight(1f)
+                ) { showBgColorPicker() }
+                ColorAction(
+                    text = stringResource(R.string.text_accent_color),
+                    color = Color(ReadBookConfig.durConfig.curTextAccentColor()),
+                    style = style,
+                    modifier = Modifier.weight(1f)
+                ) { showTextAccentColorPicker() }
+            }
+        }
+    }
+
+    @Composable
+    private fun ColorAction(
+        text: String,
+        color: Color,
+        style: AppDialogStyle,
+        modifier: Modifier = Modifier,
+        onClick: () -> Unit
+    ) {
+        Surface(
+            modifier = modifier
+                .heightIn(min = 42.dp)
+                .clickable(onClick = onClick),
+            shape = RoundedCornerShape(style.actionRadius),
+            color = style.fieldSurface,
+            contentColor = style.primaryText,
+            tonalElevation = 0.dp,
+            shadowElevation = 1.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 9.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(color)
+                )
+                Spacer(modifier = Modifier.width(7.dp))
+                Text(
+                    text = text,
+                    color = style.primaryText,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun ImportExportSection(style: AppDialogStyle) {
+        ReaderSectionCard(style = style, title = null, contentPadding = PaddingValues(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SmallActionButton(
+                    text = stringResource(R.string.import_str),
+                    iconRes = R.drawable.ic_import,
+                    style = style,
+                    modifier = Modifier.weight(1f),
+                    onClick = ::launchImport
+                )
+                SmallActionButton(
+                    text = stringResource(R.string.export_str),
+                    iconRes = R.drawable.ic_export,
+                    style = style,
+                    modifier = Modifier.weight(1f),
+                    onClick = ::launchExport
+                )
+                SmallActionButton(
+                    text = stringResource(R.string.delete),
+                    iconRes = R.drawable.ic_clear_all,
+                    style = style,
+                    modifier = Modifier.weight(1f),
+                    danger = true,
+                    onClick = ::deleteCurrentConfig
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun SmallActionButton(
+        text: String,
+        iconRes: Int,
+        style: AppDialogStyle,
+        modifier: Modifier = Modifier,
+        danger: Boolean = false,
+        onClick: () -> Unit
+    ) {
+        Surface(
+            modifier = modifier
+                .heightIn(min = 42.dp)
+                .clickable(onClick = onClick),
+            shape = RoundedCornerShape(style.actionRadius),
+            color = if (danger) style.danger.copy(alpha = 0.11f) else style.fieldSurface,
+            contentColor = if (danger) style.danger else style.primaryText,
+            tonalElevation = 0.dp,
+            shadowElevation = 1.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    painter = painterResource(iconRes),
+                    contentDescription = text,
+                    tint = if (danger) style.danger else style.primaryText,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = text,
+                    color = if (danger) style.danger else style.primaryText,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun SliderSection(style: AppDialogStyle) {
+        ReaderSectionCard(style = style, title = null, contentPadding = PaddingValues(8.dp)) {
+            var bgAlpha by rememberSaveable(refreshTick) { mutableIntStateOf(ReadBookConfig.bgAlpha) }
+            var textShadow by rememberSaveable(refreshTick) { mutableIntStateOf(ReadBookConfig.paperInkStrength) }
+            SliderRow(
+                title = stringResource(R.string.bg_alpha),
+                value = bgAlpha,
+                range = 0..100,
+                style = style
+            ) {
+                bgAlpha = it
+                ReadBookConfig.bgAlpha = it
+                postReadConfigChanged(3)
+            }
+            SliderRow(
+                title = stringResource(R.string.text_shadow),
+                value = textShadow,
+                range = 0..100,
+                style = style,
+                valueText = if (textShadow == 0) stringResource(R.string.jf_convert_o) else "$textShadow%"
+            ) {
+                textShadow = it
+                ReadBookConfig.paperInkStrength = it
+                postReadConfigChanged(2, 9, 6)
+            }
+        }
+    }
+
+    @Composable
+    private fun SliderRow(
+        title: String,
+        value: Int,
+        range: IntRange,
+        style: AppDialogStyle,
+        valueText: String = "$value%",
+        onValueChange: (Int) -> Unit
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    color = style.primaryText,
+                    fontSize = 13.sp,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = valueText,
+                    color = style.accent,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            AppThemedStepperSlider(
+                value = value,
+                range = range,
+                onValueChange = onValueChange,
+                palette = style.toMiuixPalette(),
+                trackHeight = 32.dp,
+                thumbSize = 24.dp,
+                endpointWidth = 28.dp
+            )
+        }
+    }
+
+    @Composable
+    private fun BackgroundImageSection(style: AppDialogStyle) {
+        ReaderSectionCard(
+            style = style,
+            title = stringResource(R.string.bg_image),
+            contentPadding = PaddingValues(8.dp)
+        ) {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item(key = "select_image") {
+                    SelectImageTile(style)
+                }
+                items(
+                    items = presetBgImages,
+                    key = { it }
+                ) { imageName ->
+                    PresetBackgroundTile(imageName = imageName, style = style)
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun SelectImageTile(style: AppDialogStyle) {
+        Surface(
+            modifier = Modifier
+                .width(82.dp)
+                .height(82.dp)
+                .clickable {
                     selectBgImage.launch {
                         mode = HandleFileContract.IMAGE
                     }
-                }
+                },
+            shape = RoundedCornerShape(style.actionRadius),
+            color = style.fieldSurface,
+            contentColor = style.primaryText,
+            tonalElevation = 0.dp,
+            shadowElevation = 1.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_image),
+                    contentDescription = stringResource(R.string.select_image),
+                    tint = style.primaryText,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.select_image),
+                    color = style.secondaryText,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
-        }
-        requireContext().assets.list("bg")?.let {
-            adapter.setItems(it.toList())
         }
     }
 
-    @SuppressLint("InflateParams")
-    private fun initData() = with(ReadBookConfig.durConfig) {
-        binding.tvName.text = name.ifBlank { "文字" }
-        binding.swDarkStatusIcon.isChecked = curStatusIconDark()
-        binding.spUnderline.setSelectionSafely(underlineMode)
-        binding.sbBgAlpha.progress = bgAlpha
+    @Composable
+    private fun PresetBackgroundTile(imageName: String, style: AppDialogStyle) {
+        Surface(
+            modifier = Modifier
+                .width(82.dp)
+                .height(82.dp)
+                .clickable {
+                    ReadBookConfig.durConfig.setCurBg(1, imageName)
+                    postReadConfigChanged(1)
+                    refreshTick++
+                },
+            shape = RoundedCornerShape(style.actionRadius),
+            color = style.fieldSurface,
+            contentColor = style.primaryText,
+            tonalElevation = 0.dp,
+            shadowElevation = 1.dp
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .clip(RoundedCornerShape(topStart = style.actionRadius, topEnd = style.actionRadius))
+                        .background(style.surface)
+                ) {
+                    PresetBackgroundPreview(
+                        imageName = imageName,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                Text(
+                    text = imageName.substringBeforeLast("."),
+                    color = style.secondaryText,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                )
+            }
+        }
     }
 
-    @SuppressLint("InflateParams")
-    private fun initEvent() = with(ReadBookConfig.durConfig) {
-        binding.ivEdit.setOnClickListener {
-            alert(R.string.style_name) {
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = "name"
-                    editView.setText(ReadBookConfig.durConfig.name)
+    @Composable
+    private fun PresetBackgroundPreview(imageName: String, modifier: Modifier = Modifier) {
+        AndroidView(
+            modifier = modifier,
+            factory = { viewContext ->
+                AppCompatImageView(viewContext).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
                 }
-                customView { alertBinding.root }
-                okButton {
-                    alertBinding.editView.text?.toString()?.let {
-                        binding.tvName.text = it
-                        ReadBookConfig.durConfig.name = it
-                    }
-                }
-                cancelButton()
-            }
-        }
-        binding.tvRestore.setOnClickListener {
-            val defaultConfigs = DefaultData.readConfigs
-            val layoutNames = defaultConfigs.map { it.name }
-            context?.selector("选择预设布局", layoutNames) { _, i ->
-                if (i >= 0) {
-                    ReadBookConfig.durConfig = defaultConfigs[i].copy()
-                    initData()
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5, 13))
-                }
-            }
-        }
-        binding.swDarkStatusIcon.setOnCheckedChangeListener { _, isChecked ->
-            setCurStatusIconDark(isChecked)
-            (activity as? ReadBookActivity)?.upSystemUiVisibility()
-        }
-        binding.tvTextColor.setOnClickListener {
-            ColorPickerDialog.newBuilder()
-                .setColor(curTextColor())
-                .setShowAlphaSlider(false)
-                .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
-                .setDialogId(TEXT_COLOR)
-                .show(requireActivity())
-        }
-        binding.tvTextAccentColor.setOnClickListener {
-            ColorPickerDialog.newBuilder()
-                .setColor(curTextAccentColor())
-                .setShowAlphaSlider(false)
-                .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
-                .setDialogId(TEXT_ACCENT_COLOR)
-                .show(requireActivity())
-        }
-        binding.tvBgColor.setOnClickListener {
-            val bgColor =
-                if (curBgType() == 0) curBgStr().toColorInt()
-                else "#015A86".toColorInt()
-            ColorPickerDialog.newBuilder()
-                .setColor(bgColor)
-                .setShowAlphaSlider(false)
-                .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
-                .setDialogId(BG_COLOR)
-                .show(requireActivity())
-        }
-        binding.tvBgColor.apply {
-            TooltipCompat.setTooltipText(this, text)
-        }
-        binding.ivImport.setOnClickListener {
-            selectImportDoc.launch {
-                mode = HandleFileContract.FILE
-                title = getString(R.string.import_str)
-                allowExtensions = arrayOf("zip")
-                otherActions = arrayListOf(SelectItem(importFormNet, -1))
-            }
-        }
-        binding.ivExport.setOnClickListener {
-            selectExportDir.launch {
-                title = getString(R.string.export_str)
-            }
-        }
-        binding.ivDelete.setOnClickListener {
-            if (ReadBookConfig.deleteDur()) {
-                postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5, 13))
-                dismissAllowingStateLoss()
-            } else {
-                toastOnUi("数量已是最少,不能删除.")
-            }
-        }
-        binding.sbBgAlpha.setOnSeekBarChangeListener(object : SeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                ReadBookConfig.bgAlpha = progress
-                postEvent(EventBus.UP_CONFIG, arrayListOf(3))
-            }
+            },
+            update = { imageView ->
+                ImageLoader.load(imageView.context, "file:///android_asset/bg/$imageName")
+                    .centerCrop()
+                    .into(imageView)
+            },
+            onRelease = { it.releaseComposeImage() }
+        )
+    }
 
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                postEvent(EventBus.UP_CONFIG, arrayListOf(3))
+    private fun editStyleName() {
+        showComposeTextInputDialog(
+            title = getString(R.string.style_name),
+            hint = "name",
+            initialValue = ReadBookConfig.durConfig.name,
+            onPositive = {
+                ReadBookConfig.durConfig.name = it
+                refreshTick++
             }
-        })
+        )
+    }
+
+    private fun restorePreset() {
+        val defaultConfigs = DefaultData.readConfigs
+        val layoutNames = defaultConfigs.map { it.name }
+        showComposeChoiceListDialog("选择预设布局", layoutNames) { i ->
+            if (i >= 0) {
+                ReadBookConfig.durConfig = defaultConfigs[i].copy()
+                refreshTick++
+                postReadConfigChanged(1, 2, 5)
+            }
+        }
+    }
+
+    private fun showTextColorPicker() {
+        ColorPickerDialog.newBuilder()
+            .setColor(ReadBookConfig.durConfig.curTextColor())
+            .setShowAlphaSlider(false)
+            .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
+            .setDialogId(TEXT_COLOR)
+            .show(requireActivity())
+    }
+
+    private fun showTextAccentColorPicker() {
+        ColorPickerDialog.newBuilder()
+            .setColor(ReadBookConfig.durConfig.curTextAccentColor())
+            .setShowAlphaSlider(false)
+            .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
+            .setDialogId(TEXT_ACCENT_COLOR)
+            .show(requireActivity())
+    }
+
+    private fun showBgColorPicker() {
+        val bgColor =
+            if (ReadBookConfig.durConfig.curBgType() == 0) ReadBookConfig.durConfig.curBgStr().toColorInt()
+            else "#015A86".toColorInt()
+        ColorPickerDialog.newBuilder()
+            .setColor(bgColor)
+            .setShowAlphaSlider(false)
+            .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
+            .setDialogId(BG_COLOR)
+            .show(requireActivity())
+    }
+
+    private fun currentBackgroundSwatch(): Color {
+        return if (ReadBookConfig.durConfig.curBgType() == 0) {
+            runCatching { Color(ReadBookConfig.durConfig.curBgStr().toColorInt()) }
+                .getOrDefault(Color(0xFF015A86))
+        } else {
+            Color(0xFF015A86)
+        }
+    }
+
+    private fun postReadConfigChanged(vararg configKeys: Int) {
+        pendingSelfConfigEvents++
+        postEvent(EventBus.UP_CONFIG, arrayListOf(*configKeys.toTypedArray()))
+    }
+
+    private fun launchImport() {
+        selectImportDoc.launch {
+            mode = HandleFileContract.FILE
+            title = getString(R.string.import_str)
+            allowExtensions = arrayOf("zip")
+            otherActions = arrayListOf(SelectItem(importFormNet, -1))
+        }
+    }
+
+    private fun launchExport() {
+        selectExportDir.launch {
+            title = getString(R.string.export_str)
+        }
+    }
+
+    private fun deleteCurrentConfig() {
+        if (ReadBookConfig.deleteDur()) {
+            postReadConfigChanged(1, 2, 5)
+            dismissAllowingStateLoss()
+        } else {
+            toastOnUi("数量已是最少, 不能删除.")
+        }
     }
 
     private fun exportConfig(uri: Uri) {
@@ -374,18 +836,15 @@ class BgTextConfigDialog : BaseDialogFragment(R.layout.dialog_read_bg_text) {
         return null
     }
 
-    @SuppressLint("InflateParams")
     private fun importNetConfigAlert() {
-        alert("输入地址") {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater)
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let { url ->
+        showComposeTextInputDialog(
+            title = "输入地址",
+            onPositive = { url ->
+                if (url.isNotBlank()) {
                     importNetConfig(url)
                 }
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun importNetConfig(url: String) {
@@ -414,7 +873,8 @@ class BgTextConfigDialog : BaseDialogFragment(R.layout.dialog_read_bg_text) {
             ReadBookConfig.import(byteArray)
         }.onSuccess {
             ReadBookConfig.durConfig = it
-            postEvent(EventBus.UP_CONFIG, arrayListOf(1, 2, 5, 13))
+            refreshTick++
+            postReadConfigChanged(1, 2, 5)
             toastOnUi("导入成功")
         }.onError {
             it.printOnDebug()
@@ -454,7 +914,8 @@ class BgTextConfigDialog : BaseDialogFragment(R.layout.dialog_read_bg_text) {
                         }
                     }
                     ReadBookConfig.durConfig.setCurBg(2, fileName)
-                    postEvent(EventBus.UP_CONFIG, arrayListOf(1))
+                    postReadConfigChanged(1)
+                    refreshTick++
                 }.onSuccess {
                     appCtx.toastOnUi("设定成功")
                 }.onFailure {
@@ -479,7 +940,8 @@ class BgTextConfigDialog : BaseDialogFragment(R.layout.dialog_read_bg_text) {
                     inputStream.copyTo(outputStream)
                 }
                 ReadBookConfig.durConfig.setCurBg(2, fileName)
-                postEvent(EventBus.UP_CONFIG, arrayListOf(1))
+                postReadConfigChanged(1)
+                refreshTick++
             }.onFailure {
                 appCtx.toastOnUi(it.localizedMessage)
             }

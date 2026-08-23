@@ -8,11 +8,16 @@ import java.io.File
 
 class FileManageViewModel(application: Application) : BaseViewModel(application) {
 
-    val rootDoc = context.getExternalFilesDir(null)?.parentFile
+    var rootDoc: File? = context.getExternalFilesDir(null)?.parentFile
     var subDocs = mutableListOf<File>()
     val filesLiveData = MutableLiveData<List<File>>()
 
     val lastDir: File? get() = subDocs.lastOrNull() ?: rootDoc
+
+    fun setRoot(file: File?) {
+        rootDoc = file ?: context.getExternalFilesDir(null)?.parentFile
+        subDocs.clear()
+    }
 
     fun upFiles(parentFile: File?) {
         execute {

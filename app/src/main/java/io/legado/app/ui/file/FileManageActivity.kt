@@ -18,6 +18,11 @@ import java.io.File
 
 class FileManageActivity : VMBaseActivity<ActivityFileManageBinding, FileManageViewModel>() {
 
+    companion object {
+        const val EXTRA_ROOT_PATH = "rootPath"
+        const val EXTRA_TITLE = "title"
+    }
+
     override val binding by viewBinding(ActivityFileManageBinding::inflate)
     override val viewModel by viewModels<FileManageViewModel>()
     private val dirParent = ".."
@@ -30,6 +35,11 @@ class FileManageActivity : VMBaseActivity<ActivityFileManageBinding, FileManageV
     private val currentFiles = arrayListOf<File>()
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        intent.getStringExtra(EXTRA_ROOT_PATH)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { File(it) }
+            ?.apply { mkdirs() }
+            ?.let(viewModel::setRoot)
         initComposeHost()
         viewModel.upFiles(viewModel.rootDoc)
         onBackPressedDispatcher.addCallback(this) {

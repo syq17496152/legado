@@ -2,31 +2,6 @@ package io.legado.app.ui.main.bookshelf
 
 import android.annotation.SuppressLint
 import android.view.View
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.ManageSearch
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.ComposeView
-import androidx.core.view.indices
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.LiveData
@@ -37,7 +12,6 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
-import io.legado.app.databinding.DialogBookshelfConfigBinding
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.AppConfig
@@ -52,13 +26,10 @@ import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.main.MainViewModel
-import io.legado.app.ui.theme.LegadoTheme
-import io.legado.app.ui.widget.components.AppDropdownMenu
-import io.legado.app.ui.widget.components.GlassTopAppBar
-import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.dialog.WaitDialog
-import io.legado.app.utils.checkByIndex
-import io.legado.app.utils.getCheckedIndex
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.readText
@@ -116,78 +87,77 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
 
     abstract fun gotoTop()
 
-    // 顶栏 Compose 状态：更多菜单展开 + 标题（style1 固定"书架"，style2 动态更新分组名）
-    protected var menuExpanded by mutableStateOf(false)
-    protected var composeTopBarTitle by mutableStateOf("")
+    // 顶栏对齐 Archive MainTopBarView（BOOKSHELF 模式）：标题 + 搜索按钮 + 更多按钮；标题 style1 固定"书架"，style2 动态更新分组名
+    protected var composeTopBarTitle: String = ""
 
-    // 子类提供 Compose 顶栏容器（对应布局中的 compose_top_bar）
-    protected abstract val composeTopBar: ComposeView
+    // 子类提供 MainTopBarView 顶栏（对应布局中的 top_bar）
+    protected abstract val topBar: MainTopBarView
 
-    // 顶栏 Compose 化：GlassTopAppBar 用 colorScheme.surface（跟随昼夜主题），替代 View TitleBar 的固定 primaryColor
+    // 更多菜单弹窗句柄（ModernActionPopup，生命周期由弹窗自身管理）
+    protected var menuPopup: ModernActionPopup.Handle? = null
+
+    // 顶栏初始化：MainTopBarView BOOKSHELF 模式 + 搜索/更多菜单接线
     protected fun initComposeTopBar() {
         if (composeTopBarTitle.isBlank()) {
             composeTopBarTitle = getString(R.string.bookshelf)
         }
-        composeTopBar.setContent {
-            LegadoTheme {
-                Column(modifier = Modifier.statusBarsPadding()) {
-                    GlassTopAppBar(
-                        title = composeTopBarTitle,
-                        actions = {
-                            // 搜索（原 main_bookshelf.xml 的 showAsAction="always" 项）
-                            IconButton(onClick = { startActivity<SearchActivity>() }) {
-                                Icon(Icons.Default.Search, contentDescription = null)
-                            }
-                            // 更多菜单（原 main_bookshelf.xml 其余项，数据驱动）
-                            Box {
-                                IconButton(onClick = { menuExpanded = true }) {
-                                    Icon(Icons.Default.MoreVert, contentDescription = null)
-                                }
-                                AppDropdownMenu(
-                                    expanded = menuExpanded,
-                                    onDismiss = { menuExpanded = false },
-                                    actions = buildMenuActions()
-                                )
-                            }
-                        }
-                    )
-                }
-            }
+        topBar.applyStatusBarPadding(withInitialPadding = true)
+        topBar.setMode(MainTopBarView.Mode.BOOKSHELF)
+        topBar.setTitle(composeTopBarTitle)
+        topBar.setSearchHint(getString(R.string.search_book_key))
+        // 搜索（原 main_bookshelf.xml 的 showAsAction="always" 项）
+        topBar.setActionsVisible(search = true)
+        topBar.searchButton.setOnClickListener {
+            startActivity<SearchActivity>()
+        }
+        // 更多菜单（原 main_bookshelf.xml 其余项，数据驱动）
+        topBar.moreButton.setOnClickListener {
+            showBookshelfMenu(it)
         }
     }
 
-    // 更多菜单数据（保留全部原菜单动作，顺序同 main_bookshelf.xml）
-    private fun buildMenuActions(): List<MenuAction> {
+    private fun showBookshelfMenu(anchor: View) {
+        menuPopup = ModernActionPopup.show(anchor, buildMenuActions(), menuPopup)
+    }
+
+    // 更多菜单数据（保留全部原菜单动作，顺序同 main_bookshelf.xml；图标经 ModernActionPopup 间接目录省略）
+    private fun buildMenuActions(): List<ModernActionPopup.Action> {
         return listOf(
-            MenuAction(Icons.Default.Refresh, getString(R.string.update_toc), onClick = {
+            ModernActionPopup.Action(getString(R.string.update_toc)) {
                 activityViewModel.upToc(books, onlyUpdateRead)
-            }),
-            MenuAction(Icons.Default.Add, getString(R.string.book_local), onClick = {
+            },
+            ModernActionPopup.Action(getString(R.string.book_local)) {
                 startActivity<ImportBookActivity>()
-            }),
-            MenuAction(Icons.Default.Cloud, getString(R.string.add_remote_book), onClick = {
+            },
+            ModernActionPopup.Action(getString(R.string.add_remote_book)) {
                 startActivity<RemoteBookActivity>()
-            }),
-            MenuAction(Icons.Default.Link, getString(R.string.add_url), onClick = {
+            },
+            ModernActionPopup.Action(getString(R.string.add_url)) {
                 showAddBookByUrlAlert()
-            }),
-            MenuAction(Icons.Default.ManageSearch, getString(R.string.bookshelf_management), onClick = {
+            },
+            ModernActionPopup.Action(getString(R.string.bookshelf_management)) {
                 startActivity<BookshelfManageActivity> {
                     putExtra("groupId", groupId)
                 }
-            }),
-            MenuAction(Icons.Default.Download, getString(R.string.cache_export), onClick = {
+            },
+            ModernActionPopup.Action(getString(R.string.cache_export)) {
                 startActivity<CacheActivity> {
                     putExtra("groupId", groupId)
                 }
-            }),
-            MenuAction(Icons.Default.Groups, getString(R.string.group_manage), onClick = {
+            },
+            ModernActionPopup.Action(getString(R.string.group_manage)) {
                 showDialogFragment<GroupManageDialog>()
-            }),
-            MenuAction(Icons.Default.GridView, getString(R.string.bookshelf_layout), onClick = {
+            },
+            ModernActionPopup.Action(getString(R.string.bookshelf_layout)) {
                 configBookshelf()
-            }),
-            MenuAction(Icons.Default.FileUpload, getString(R.string.export_bookshelf), onClick = {
+            },
+            // 7.11i 书架标签管理入口（对齐 Archive menu_book_tag_manage）
+            ModernActionPopup.Action(getString(R.string.bookshelf_tag_manage)) {
+                startActivity<BookshelfTagManageActivity> {
+                    putExtra("groupId", groupId)
+                }
+            },
+            ModernActionPopup.Action(getString(R.string.export_bookshelf)) {
                 viewModel.exportBookshelf(books) { file ->
                     exportResult.launch {
                         mode = HandleFileContract.EXPORT
@@ -195,13 +165,13 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
                             HandleFileContract.FileData("bookshelf.json", file, "application/json")
                     }
                 }
-            }),
-            MenuAction(Icons.Default.FileDownload, getString(R.string.import_bookshelf), onClick = {
+            },
+            ModernActionPopup.Action(getString(R.string.import_bookshelf)) {
                 importBookshelfAlert(groupId)
-            }),
-            MenuAction(Icons.Default.Info, getString(R.string.log), onClick = {
+            },
+            ModernActionPopup.Action(getString(R.string.log)) {
                 showDialogFragment<AppLogDialog>()
-            })
+            }
         )
     }
 
@@ -246,113 +216,144 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
         }
     }
 
-    @SuppressLint("InflateParams")
+    // 书架布局弹框：对齐 Archive BookshelfConfigDialog（Compose 弹框，分组样式/布局/排序/书名/列表样式/简介行数/边距）
     fun configBookshelf() {
-        alert(titleResource = R.string.bookshelf_layout) {
-            var bookshelfLayout = AppConfig.bookshelfLayout
-            var bookshelfSort = AppConfig.bookshelfSort
-            var showBookname = AppConfig.showBookname
-            val alertBinding =
-                DialogBookshelfConfigBinding.inflate(layoutInflater)
-                    .apply {
-                        if (AppConfig.bookGroupStyle !in 0..<spGroupStyle.count) {
-                            AppConfig.bookGroupStyle = 0
-                        }
-                        if (bookshelfLayout !in rgLayout.indices) {
-                            bookshelfLayout = 0
-                            AppConfig.bookshelfLayout = 0
-                        }
-                        if (bookshelfSort !in rgSort.indices) {
-                            bookshelfSort = 0
-                            AppConfig.bookshelfSort = 0
-                        }
-                        if (showBookname !in rgbLayout.indices) {
-                            showBookname = 0
-                            AppConfig.showBookname = 0
-                        }
-                        spGroupStyle.setSelection(AppConfig.bookGroupStyle)
-                        swShowUnread.isChecked = AppConfig.showUnread
-                        swShowReadProgress.isChecked = AppConfig.showBookshelfReadProgress
-                        swShowLastUpdateTime.isChecked = AppConfig.showLastUpdateTime
-                        swShowWaitUpBooks.isChecked = AppConfig.showWaitUpCount
-                        swShowBookshelfFastScroller.isChecked = AppConfig.showBookshelfFastScroller
-                        rgLayout.checkByIndex(bookshelfLayout)
-                        rgbLayout.checkByIndex(showBookname)
-                        if (bookshelfLayout < 2) {
-                            bookNameChoice.visibility = View.GONE
-                        }
-                        rgLayout.setOnCheckedChangeListener { group, checkedId ->
-                            val index = group.getCheckedIndex()
-                            bookNameChoice.visibility = if (index > 1) View.VISIBLE else View.GONE
-                        }
-                        rgSort.checkByIndex(bookshelfSort)
-                        margin.progress = AppConfig.bookshelfMargin
-                    }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.apply {
-                    var notifyMain = false
-                    var recreate = false
-                    if (AppConfig.bookGroupStyle != spGroupStyle.selectedItemPosition) {
-                        AppConfig.bookGroupStyle = spGroupStyle.selectedItemPosition
-                        notifyMain = true
-                    }
-                    if (showBookname != rgbLayout.getCheckedIndex()) {
-                        AppConfig.showBookname = rgbLayout.getCheckedIndex()
-                        recreate = true
-                    }
-                    if (AppConfig.bookshelfMargin != margin.progress) {
-                        AppConfig.bookshelfMargin = margin.progress
-                        recreate = true
-                    }
-                    if (AppConfig.showUnread != swShowUnread.isChecked) {
-                        AppConfig.showUnread = swShowUnread.isChecked
-                        postEvent(EventBus.BOOKSHELF_REFRESH, "")
-                    }
-                    if (AppConfig.showBookshelfReadProgress != swShowReadProgress.isChecked) {
-                        AppConfig.showBookshelfReadProgress = swShowReadProgress.isChecked
-                        kotlin.runCatching {
-                            AppLog.putDebugWithTag(
-                                AppLog.TAG_SHELF_PROGRESS,
-                                "showBookshelfReadProgress switched -> ${swShowReadProgress.isChecked}",
-                                level = AppLog.Level.INFO
-                            )
-                        }
-                        postEvent(EventBus.BOOKSHELF_REFRESH, "")
-                    }
-                    if (AppConfig.showLastUpdateTime != swShowLastUpdateTime.isChecked) {
-                        AppConfig.showLastUpdateTime = swShowLastUpdateTime.isChecked
-                        postEvent(EventBus.BOOKSHELF_REFRESH, "")
-                    }
-                    if (AppConfig.showWaitUpCount != swShowWaitUpBooks.isChecked) {
-                        AppConfig.showWaitUpCount = swShowWaitUpBooks.isChecked
-                        activityViewModel.postUpBooksLiveData(true)
-                    }
-                    if (AppConfig.showBookshelfFastScroller != swShowBookshelfFastScroller.isChecked) {
-                        AppConfig.showBookshelfFastScroller = swShowBookshelfFastScroller.isChecked
-                        postEvent(EventBus.BOOKSHELF_REFRESH, "")
-                    }
-                    if (bookshelfSort != rgSort.getCheckedIndex()) {
-                        AppConfig.bookshelfSort = rgSort.getCheckedIndex()
-                        upSort()
-                    }
-                    if (bookshelfLayout != rgLayout.getCheckedIndex()) {
-                        AppConfig.bookshelfLayout = rgLayout.getCheckedIndex()
-                        if (AppConfig.bookshelfLayout < 2) {
-                            activityViewModel.booksGridRecycledViewPool.clear()
-                        } else {
-                            activityViewModel.booksListRecycledViewPool.clear()
-                        }
-                        recreate = true
-                    }
-                    if (recreate) {
-                        postEvent(EventBus.RECREATE, "")
-                    } else if (notifyMain) {
-                        postEvent(EventBus.NOTIFY_MAIN, false)
-                    }
+        var bookshelfLayout = AppConfig.bookshelfLayout
+        var bookshelfSort = AppConfig.bookshelfSort
+        var showBookname = AppConfig.showBookname
+        var listItemStyle = AppConfig.bookshelfListItemStyle
+        var listIntroLines = AppConfig.bookshelfListIntroLines
+        if (bookshelfLayout !in 0..6) {
+            bookshelfLayout = 0
+            AppConfig.bookshelfLayout = 0
+        }
+        if (bookshelfSort !in 0..5) {
+            bookshelfSort = 0
+            AppConfig.bookshelfSort = 0
+        }
+        if (showBookname !in 0..2) {
+            showBookname = 0
+            AppConfig.showBookname = 0
+        }
+        if (listItemStyle !in 0..2) {
+            listItemStyle = 0
+            AppConfig.bookshelfListItemStyle = 0
+        }
+        if (listIntroLines !in 0..3) {
+            listIntroLines = 2
+            AppConfig.bookshelfListIntroLines = 2
+        }
+        showDialogFragment(
+            BookshelfConfigDialog.create(
+                initialValues = BookshelfConfigValues(
+                    groupStyle = AppConfig.bookGroupStyle,
+                    showUnread = AppConfig.showUnread,
+                    showLastUpdateTime = AppConfig.showLastUpdateTime,
+                    showWaitUpCount = AppConfig.showWaitUpCount,
+                    showFastScroller = AppConfig.showBookshelfFastScroller,
+                    returnToTopAfterRead = AppConfig.bookshelfReturnToTopAfterRead,
+                    layout = bookshelfLayout,
+                    sort = bookshelfSort,
+                    showBookname = showBookname,
+                    listItemStyle = listItemStyle,
+                    listIntroLines = listIntroLines,
+                    margin = AppConfig.bookshelfMargin
+                ),
+                onPreviewMarginChange = ::previewBookshelfMargin,
+                onApply = { values ->
+                    applyBookshelfConfig(
+                        previousLayout = bookshelfLayout,
+                        previousSort = bookshelfSort,
+                        previousShowBookname = showBookname,
+                        values = values
+                    )
                 }
+            )
+        )
+    }
+
+    private fun previewBookshelfMargin(margin: Int) {
+        val normalizedMargin = margin.coerceIn(0, 60)
+        if (AppConfig.bookshelfMargin == normalizedMargin) {
+            return
+        }
+        AppConfig.bookshelfMargin = normalizedMargin
+        postEvent(EventBus.BOOKSHELF_REFRESH, "")
+    }
+
+    private fun applyBookshelfConfig(
+        previousLayout: Int,
+        previousSort: Int,
+        previousShowBookname: Int,
+        values: BookshelfConfigValues
+    ) {
+        val groupStyle = values.groupStyle.coerceIn(0, 1)
+        val layout = values.layout.coerceIn(0, 6)
+        val sort = values.sort.coerceIn(0, 5)
+        val showBookname = values.showBookname.coerceIn(0, 2)
+        val listItemStyle = values.listItemStyle.coerceIn(0, 2)
+        val listIntroLines = values.listIntroLines.coerceIn(0, 3)
+        val margin = values.margin.coerceIn(0, 60)
+        var notifyMain = false
+        var structureChanged = false
+        if (AppConfig.bookGroupStyle != groupStyle) {
+            AppConfig.bookGroupStyle = groupStyle
+            notifyMain = true
+        }
+        if (AppConfig.showBookname != showBookname) {
+            AppConfig.showBookname = showBookname
+            structureChanged = true
+        }
+        if (AppConfig.bookshelfMargin != margin) {
+            AppConfig.bookshelfMargin = margin
+            structureChanged = true
+        }
+        if (AppConfig.bookshelfListItemStyle != listItemStyle) {
+            AppConfig.bookshelfListItemStyle = listItemStyle
+            structureChanged = true
+        }
+        if (AppConfig.bookshelfListIntroLines != listIntroLines) {
+            AppConfig.bookshelfListIntroLines = listIntroLines
+            structureChanged = true
+        }
+        if (AppConfig.showUnread != values.showUnread) {
+            AppConfig.showUnread = values.showUnread
+            structureChanged = true
+        }
+        if (AppConfig.showLastUpdateTime != values.showLastUpdateTime) {
+            AppConfig.showLastUpdateTime = values.showLastUpdateTime
+            structureChanged = true
+        }
+        if (AppConfig.showWaitUpCount != values.showWaitUpCount) {
+            AppConfig.showWaitUpCount = values.showWaitUpCount
+            structureChanged = true
+        }
+        if (AppConfig.showBookshelfFastScroller != values.showFastScroller) {
+            AppConfig.showBookshelfFastScroller = values.showFastScroller
+            structureChanged = true
+        }
+        if (AppConfig.bookshelfReturnToTopAfterRead != values.returnToTopAfterRead) {
+            AppConfig.bookshelfReturnToTopAfterRead = values.returnToTopAfterRead
+            structureChanged = true
+        }
+        if (previousSort != sort) {
+            AppConfig.bookshelfSort = sort
+            upSort()
+            structureChanged = true
+        }
+        if (previousLayout != layout) {
+            AppConfig.bookshelfLayout = layout
+            if (AppConfig.bookshelfLayout < 2) {
+                activityViewModel.booksGridRecycledViewPool.clear()
+            } else {
+                activityViewModel.booksListRecycledViewPool.clear()
             }
-            cancelButton()
+            structureChanged = true
+        }
+        if (notifyMain) {
+            postEvent(EventBus.NOTIFY_MAIN, false)
+        } else if (structureChanged) {
+            postEvent(EventBus.BOOKSHELF_REFRESH, "")
         }
     }
 

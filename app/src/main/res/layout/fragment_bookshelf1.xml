@@ -5,9 +5,9 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- 书架页顶栏 Compose 化（GlassTopAppBar，跟随昼夜主题；分组 Tab 由 BookshelfScreen 内 BookGroupTabs 渲染） -->
-    <androidx.compose.ui.platform.ComposeView
-        android:id="@+id/compose_top_bar"
+    <!-- 书架页顶栏对齐 Archive MainTopBarView（跟随昼夜主题；分组 Tab 由 BookshelfScreen 内 BookGroupTabs 渲染） -->
+    <io.legado.app.ui.widget.MainTopBarView
+        android:id="@+id/top_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
 

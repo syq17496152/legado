@@ -58,8 +58,8 @@ object SourceNetworkClient {
                 sourceRegex = sourceRegex
             ).let { response ->
                 if (!checkJs.isNullOrBlank()) {
-                    // 检测源是否已登录
-                    analyzeUrl.evalJS(checkJs, response) as StrResponse
+                    // 检测源是否已登录（类型容错：loginCheckJs 可能返回 String/其他类型而非 StrResponse）
+                    analyzeLoginResult(analyzeUrl.evalJS(checkJs, response), response)
                 } else {
                     response
                 }
@@ -69,7 +69,7 @@ object SourceNetworkClient {
             if (!checkJs.isNullOrBlank()) {
                 val errResponse = analyzeUrl.getErrStrResponse(throwable)
                 try {
-                    (analyzeUrl.evalJS(checkJs, errResponse) as StrResponse).also {
+                    analyzeLoginResult(analyzeUrl.evalJS(checkJs, errResponse), errResponse).also {
                         if (it.code() == 500) {
                             throw throwable
                         }
@@ -98,6 +98,22 @@ object SourceNetworkClient {
         checkRedirect(source, res)
 
         return res
+    }
+
+    /**
+     * 登录检测 JS 结果类型容错（修复实测 ClassCastException：String→StrResponse 强转崩溃）
+     *
+     * loginCheckJs 通常返回 StrResponse（JS 内构造 {code:200,...}），但部分源返回 String 或 null：
+     *   - StrResponse → 直接使用（登录状态判断依据）
+     *   - String → 以 fallback 的 url 构造 StrResponse（body=返回串，code 默认 200）
+     *   - 其他/空 → 回退 fallback（视为未检测出异常，保持原响应继续流程）
+     */
+    private fun analyzeLoginResult(result: Any?, fallback: StrResponse): StrResponse {
+        return when (result) {
+            is StrResponse -> result
+            is String -> StrResponse(fallback.url, result)
+            else -> fallback
+        }
     }
 
     /**

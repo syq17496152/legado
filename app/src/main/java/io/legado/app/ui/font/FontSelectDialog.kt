@@ -204,5 +204,6 @@ class FontSelectDialog : BaseDialogFragment(R.layout.dialog_font_select),
     interface CallBack {
         fun selectFont(path: String)
         val curFontPath: String
+        val applySystemTypefaceOnDefault: Boolean get() = false
     }
 }

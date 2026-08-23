@@ -124,4 +124,8 @@ class ExploreShowViewModel(application: Application) : BaseViewModel(application
         return bookshelf.contains(key) || bookshelf.contains(bookUrl)
     }
 
+    fun sourceTypeHint(): Int? {
+        return bookSource?.bookSourceType
+    }
+
 }

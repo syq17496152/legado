@@ -13,7 +13,6 @@ plugins {
     alias libs.plugins.ksp
 //    alias libs.plugins.google.services  // 禁用 Google Services，用于包名验证调试
 }
-apply from: 'download.gradle'
 
 static def releaseTime() {
     return new Date().format("yy.MMddHH", TimeZone.getTimeZone("GMT+8"))
@@ -187,15 +186,6 @@ android {
     }
     packaging {
         resources.excludes.add('META-INF/*')
-        // P0-fix(2026-08-16): libcronet.so 回归 APK 内置（jniLibs/arm64-v8a）
-        // - 2026-07-31 动态下载方案实测不可行：私有仓库 Release 资产匿名不可下载
-        //   （GitHub 需 token，ghproxy 匿名代理拿不到私仓资产），真机 so 永远装不上，
-        //   Cronet 从未可用 + 下载线程挂起曾致主线程 ANR 闪退（详见 CronetHelper/CronetLoader）
-        // - 内置代价：APK +6.37MB；收益：零网络依赖、打开即用
-        // 详见 docs/project-rules/package-naming.md "libcronet.so 动态下载规范"
-        jniLibs {
-            pickFirsts.add('**/libcronet.so')
-        }
     }
 
     sourceSets {
@@ -259,6 +249,10 @@ dependencies {
     implementation(libs.reorderable)
     implementation(libs.liquidglass)
     implementation(libs.lazycolumnscrollbar)
+    // P1E 后端支撑：Lottie 动画库。libs.versions.toml 中已登记 lottie 目录条目，
+    // 但 Gradle 8.14.4 访问器增量生成未拾取新增词条（libs.lottie 报 unknown property），
+    // 故此处用坐标直接引用，避免依赖访问器再生（目录条目保留供后续生效）。
+    implementation("com.airbnb.android:lottie:6.6.6")
 
     //图像处理库Toolkit
     implementation(libs.renderscript.intrinsics.replacement.toolkit)
@@ -338,7 +332,7 @@ dependencies {
     implementation(libs.brotli)
     // T4.1: DoH（DNS over HTTPS）依赖，绕过本地 DNS 污染
     implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
-    implementation(fileTree(dir: 'cronetlib', include: ['*.jar', '*.aar']))
+    implementation(libs.cronet.bundled)
     implementation(libs.protobuf.javalite)
 
     //Glide
@@ -376,7 +370,10 @@ dependencies {
     implementation(libs.markwon.core)
     implementation(libs.markwon.image.glide)
     implementation(libs.markwon.ext.tables)
+    implementation(libs.markwon.ext.strikethrough)
+    implementation(libs.markwon.ext.tasklist)
     implementation(libs.markwon.html)
+    implementation(libs.markwon.linkify)
 
     //转换繁体
     implementation(libs.quick.chinese.transfer.core)

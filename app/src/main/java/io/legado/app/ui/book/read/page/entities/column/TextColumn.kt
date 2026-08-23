@@ -43,54 +43,65 @@ data class TextColumn(
             }
             field = value
         }
+
+    /** 高亮规则/手动高亮为当前列合并出的样式;null=无高亮 */
     var highlightStyle: HighlightStyle? = null
         set(value) {
             if (field != value) {
                 textLine.invalidate()
-                val before = field?.needsPerColumnDraw == true
-                val after = value?.needsPerColumnDraw == true
-                if (!before && after) textLine.styledColumnCount++
-                else if (before && !after) textLine.styledColumnCount--
+                if (field?.needsPerColumnDraw == true) textLine.styledColumnCount--
+                if (value?.needsPerColumnDraw == true) textLine.styledColumnCount++
             }
             field = value
         }
 
     override fun draw(view: ContentTextView, canvas: Canvas) {
+        val hs = highlightStyle
         val textPaint = if (textLine.isTitle) {
             ChapterProvider.titlePaint
         } else {
             ChapterProvider.contentPaint
         }
-        val hs = highlightStyle
-        val hsTextColor = hs?.textColor ?: 0
-        val textColor = when {
-            textLine.isReadAloud || isSearchResult -> ReadBookConfig.textAccentColor
-            hsTextColor != 0 -> hsTextColor
-            else -> ReadBookConfig.textColor
+        val baseColor = if (textLine.isReadAloud || isSearchResult) {
+            ReadBookConfig.textAccentColor
+        } else {
+            ReadBookConfig.textColor
         }
-        if (textPaint.color != textColor) {
-            textPaint.color = textColor
-        }
+        // 背景填充(文字之下)
         val fill = hs?.fill ?: 0
         if (fill != 0) {
-            canvas.drawRect(start, 0f, end, textLine.height, view.highlightPaint(fill))
+            view.drawHighlightFill(canvas, start, 0f, end, textLine.height, fill)
         }
-        val saved = if (hs != null) HighlightDraw.applyTextStyle(textPaint, hs) else null
+        // 字色: 高亮优先
+        val hsTextColor = hs?.textColor ?: 0
+        val textColorVal = if (hsTextColor != 0) hsTextColor else baseColor
+        if (textPaint.color != textColorVal) {
+            textPaint.color = textColorVal
+        }
+        // 字体/粗斜体
+        val saved = if (hs != null && hs.needsPerColumnDraw) {
+            HighlightDraw.applyTextStyle(textPaint, hs)
+        } else {
+            null
+        }
+        val enablePaperInk = !textLine.isReadAloud && !isSearchResult
         val y = textLine.lineBase - textLine.lineTop
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
             val letterSpacing = textPaint.letterSpacing * textPaint.textSize
             val letterSpacingHalf = letterSpacing * 0.5f
-            canvas.drawText(charData, start + letterSpacingHalf, y, textPaint)
+            view.drawTextWithPaperInk(canvas, charData, start + letterSpacingHalf, y, textPaint, enablePaperInk)
         } else {
-            canvas.drawText(charData, start, y, textPaint)
+            view.drawTextWithPaperInk(canvas, charData, start, y, textPaint, enablePaperInk)
         }
-        if (saved != null) HighlightDraw.restoreTextStyle(textPaint, saved)
-        hs?.emphasis?.let { e ->
-            val color = if (e.color != 0) e.color else textColor
-            HighlightDraw.drawEmphasis(canvas, start, end, textLine.height, color)
+        saved?.let { HighlightDraw.restoreTextStyle(textPaint, it) }
+        // 着重号
+        val emphasis = hs?.emphasis
+        if (emphasis != null) {
+            val emColor = if (emphasis.color != 0) emphasis.color else textColorVal
+            HighlightDraw.drawEmphasis(canvas, start, end, textLine.height, emColor)
         }
         if (selected) {
-            canvas.drawRect(start, 0f, end, textLine.height, view.selectedPaint)
+            view.drawSelectedRect(canvas, start, 0f, end, textLine.height)
         }
     }
 

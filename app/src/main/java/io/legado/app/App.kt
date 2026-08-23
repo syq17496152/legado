@@ -23,6 +23,7 @@ import io.legado.app.constant.AppConst.channelIdDownload
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppConst.channelIdReadAloud
 import io.legado.app.constant.AppConst.channelIdWeb
+import io.legado.app.constant.AppConst.channelIdAiTask
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
@@ -49,6 +50,7 @@ import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.config.ThemeConfig.applyDayNight
 import io.legado.app.help.config.ThemeConfig.applyDayNightInit
+import io.legado.app.lib.theme.ThemeRuntimeKeys
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.model.ImageProvider
@@ -74,7 +76,6 @@ import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefInt
 import io.legado.app.utils.putPrefString
 import kotlinx.coroutines.launch
-import org.chromium.base.ThreadUtils
 import splitties.init.appCtx
 import splitties.systemservices.notificationManager
 import java.net.URL
@@ -100,10 +101,8 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashHandler(this)
-        if (isDebuggable) {
-            // Cronet 149 重命名：setThreadAssertsDisabledForTesting → hasSubtleSideEffectsSetThreadAssertsDisabledForTesting
-            ThreadUtils.hasSubtleSideEffectsSetThreadAssertsDisabledForTesting(true)
-        }
+        // Cronet 500（cronet-bundled）不再暴露 org.chromium.base.ThreadUtils 的线程断言测试钩子
+        // hasSubtleSideEffectsSetThreadAssertsDisabledForTesting（150 时代用于禁用线程断言），此处移除调用
         oldConfig = Configuration(resources.configuration)
         // F-暗夜紫默认主题：首次安装时写入暗夜紫夜间主题配置（老用户 dNThemeName 已有值，不受影响）
         if (getPrefString(PreferKey.dNThemeName).isNullOrBlank()) {
@@ -181,6 +180,9 @@ class App : Application() {
     }
 
     override fun attachBaseContext(base: Context) {
+        runCatching {
+            ThemeRuntimeKeys.migrateLegacyNightValues(base)
+        }
         super.attachBaseContext(AppContextWrapper.wrap(base))
     }
 
@@ -310,12 +312,24 @@ class App : Application() {
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
 
+        val aiTaskChannel = NotificationChannel(
+            channelIdAiTask,
+            "AI任务",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            enableLights(false)
+            enableVibration(false)
+            setSound(null, null)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+
         //向notification manager 提交channel
         notificationManager.createNotificationChannels(
             listOf(
                 downloadChannel,
                 readAloudChannel,
-                webChannel
+                webChannel,
+                aiTaskChannel
             )
         )
     }

@@ -614,6 +614,20 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
         }
     }
 
+    fun refreshExpandedIfNoKinds(): Boolean {
+        val position = exIndex
+        if (position < 0) return false
+        val source = getItem(position) ?: return false
+        if (!sourceKinds[source.bookSourceUrl].isNullOrEmpty()) return false
+        Coroutine.async(callBack.scope) {
+            source.clearExploreKindsCache()
+            sourceKinds[source.bookSourceUrl] = source.exploreKinds()
+        }.onSuccess {
+            notifyItemChanged(position, false)
+        }
+        return true
+    }
+
     fun onPause() {
         sourceKinds.clear()
         saveInfoMapJob?.cancel()

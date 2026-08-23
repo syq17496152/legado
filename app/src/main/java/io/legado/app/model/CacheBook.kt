@@ -195,6 +195,7 @@ object CacheBook {
 
         private val waitDownloadSet = linkedSetOf<Int>()
         private val onDownloadSet = linkedSetOf<Int>()
+        private val readerRequests = hashMapOf<Int, ReaderRequest>()
         private val tasks = CompositeCoroutine()
         private var isStopped = false
         private var waitingRetry = false
@@ -231,6 +232,11 @@ object CacheBook {
         fun stop() {
             waitDownloadSet.clear()
             tasks.clear()
+            val canceledReaderRequests = readerRequests.toMap()
+            readerRequests.clear()
+            canceledReaderRequests.forEach { (index, request) ->
+                ReadBook.cancelContentLoad(index, request.generation)
+            }
             isStopped = true
             isLoading = false
             postEvent(EventBus.UP_DOWNLOAD, book.bookUrl)
@@ -408,8 +414,19 @@ object CacheBook {
             scope: CoroutineScope,
             chapter: BookChapter,
             semaphore: Semaphore?,
-            resetPageOffset: Boolean = false
+            resetPageOffset: Boolean = false,
+            requestGeneration: Long? = null,
+            upContent: Boolean = true,
+            success: (() -> Unit)? = null
         ) {
+            if (requestGeneration != null) {
+                readerRequests[chapter.index] = ReaderRequest(
+                    generation = requestGeneration,
+                    resetPageOffset = resetPageOffset,
+                    upContent = upContent,
+                    success = success
+                )
+            }
             if (onDownloadSet.contains(chapter.index)) {
                 return
             }
@@ -445,16 +462,35 @@ object CacheBook {
             chapter: BookChapter,
             content: String,
             resetPageOffset: Boolean = false,
-            canceled: Boolean = false
+            canceled: Boolean = false,
+            requestGeneration: Long? = null
         ) {
+            val readerRequest = takeReaderRequest(chapter.index)
+            val generation = readerRequest?.generation ?: requestGeneration
+            val shouldResetPageOffset = readerRequest?.resetPageOffset ?: resetPageOffset
+            val shouldUpdateContent = readerRequest?.upContent ?: true
             if (ReadBook.book?.bookUrl == book.bookUrl) {
                 ReadBook.contentLoadFinish(
                     book, chapter, content,
-                    resetPageOffset = resetPageOffset,
-                    canceled = canceled
+                    upContent = shouldUpdateContent,
+                    resetPageOffset = shouldResetPageOffset,
+                    canceled = canceled,
+                    requestGeneration = generation,
+                    success = readerRequest?.success
                 )
             }
         }
+
+        @Synchronized
+        private fun takeReaderRequest(chapterIndex: Int): ReaderRequest? =
+            if (onDownloadSet.contains(chapterIndex)) null else readerRequests.remove(chapterIndex)
+
+        private data class ReaderRequest(
+            val generation: Long,
+            val resetPageOffset: Boolean,
+            val upContent: Boolean,
+            val success: (() -> Unit)?
+        )
 
     }
 

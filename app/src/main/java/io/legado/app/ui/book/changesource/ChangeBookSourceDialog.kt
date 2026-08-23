@@ -105,7 +105,14 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
+        val context = requireContext()
+        val surfaceColor = context.changeSourceSurfaceColor()
+        val mutedColor = context.changeSourceMutedColor()
+        binding.toolBar.setBackgroundColor(primaryColor.forceOpaque())
+        view.background = context.changeSourceDialogBackground()
+        view.clipToOutline = true
+        binding.recyclerView.setBackgroundColor(surfaceColor)
+        binding.llBottomBar.setBackgroundColor(mutedColor)
         viewModel.initData(arguments, callBack?.oldBook, activity is ReadBookActivity)
         showTitle()
         initMenu()

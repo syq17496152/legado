@@ -39,6 +39,7 @@ class EpubFile(var book: Book) {
 
     companion object : BaseLocalBookParse {
         private var eFile: EpubFile? = null
+        const val NATIVE_CONTENT_FLAG = "<epub-native"
 
         @Synchronized
         private fun getEFile(book: Book): EpubFile {
@@ -78,6 +79,29 @@ class EpubFile(var book: Book) {
         fun clear() {
             eFile = null
         }
+
+        @Synchronized
+        fun clearBook(book: Book) {
+            if (eFile?.book?.bookUrl == book.bookUrl) {
+                eFile = null
+            }
+        }
+
+        @Synchronized
+        internal fun getNativeLayout(book: Book, href: String): EpubLayoutDocument? {
+            // 项目使用简化 HTML 排版引擎，未实现原生排版，返回 null 以兼容 Archive 前端
+            return null
+        }
+
+        @Synchronized
+        internal fun getFootnote(book: Book, href: String): EpubFootnote? {
+            return null
+        }
+
+        internal data class EpubFootnote(
+            val title: String,
+            val html: String
+        )
     }
 
     private var mCharset: Charset = Charset.defaultCharset()

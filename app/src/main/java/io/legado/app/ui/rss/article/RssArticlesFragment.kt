@@ -4,9 +4,9 @@ import android.content.res.Configuration
 import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
-import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.DiffUtil
@@ -29,7 +29,9 @@ import io.legado.app.ui.rss.read.ReadRss
 import io.legado.app.ui.widget.recycler.LoadMoreView
 import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.ui.widget.number.NumberPickerDialog
+import io.legado.app.utils.applyMainBottomBarPadding
 import io.legado.app.utils.applyNavigationBarPadding
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
@@ -53,7 +55,10 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
     private var isResumed = false
 
     private val binding by viewBinding(FragmentRssArticlesBinding::bind)
-    private val activityViewModel by activityViewModels<RssSortViewModel>()
+    // modern-rss: 嵌入 RssFragment（新版订阅）时取父 Fragment 作用域 RssSortViewModel，其余（RssSortActivity）取 Activity 作用域
+    private val activityViewModel by lazy(LazyThreadSafetyMode.NONE) {
+        ViewModelProvider(parentFragment ?: requireActivity())[RssSortViewModel::class.java]
+    }
     override val viewModel by viewModels<RssArticlesViewModel>()
     private val isPreload by lazy { activityViewModel.rssSource?.preload ?: false }
     private val orientation by lazy { resources.configuration.orientation }
@@ -73,6 +78,11 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
     override val isGridLayout: Boolean
         get() = activityViewModel.articleStyle == 2
     private var fullRefresh = false
+    // modern-rss: 顶部覆盖顶栏（MainTopBarView）占位
+    private var topOverlaySpace = 0
+    private var topOverlayEnabled = false
+    private val embeddedInModernRss: Boolean
+        get() = parentFragment is io.legado.app.ui.main.rss.RssFragment
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         viewModel.init(arguments)
@@ -83,7 +93,12 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
     private fun initView() = binding.run {
         refreshLayout.setColorSchemeColors(accentColor)
         recyclerView.setEdgeEffectColor(primaryColor)
-        recyclerView.applyNavigationBarPadding()
+        // modern-rss: 嵌入新版订阅页时预留 MainActivity 主底部栏空间
+        if (embeddedInModernRss) {
+            recyclerView.applyMainBottomBarPadding(withInitialPadding = true)
+        } else {
+            recyclerView.applyNavigationBarPadding()
+        }
         loadMoreView.setOnClickListener {
             if (!loadMoreView.isLoading) {
                 scrollToBottom(true)
@@ -124,6 +139,7 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
         }
         recyclerView.layoutManager = layoutManager
         recyclerView.adapter = adapter
+        applyTopOverlaySpace()
         adapter.addFooterView {
             ViewLoadMoreBinding.bind(loadMoreView)
         }
@@ -150,18 +166,43 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
         })
         if (isPreload) {
             refreshLayout.post {
-                refreshLayout.isRefreshing = true
+                refreshLayout.isRefreshing = !embeddedInModernRss
                 loadArticles()
             }
             return@run
         }
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                refreshLayout.isRefreshing = true
+                refreshLayout.isRefreshing = !embeddedInModernRss
                 loadArticles()
                 this@launch.cancel()
             }
         } //只刷新可见页面,非预加载时使用
+    }
+
+    /** modern-rss: 供 RssFragment（新版订阅）设置顶部覆盖顶栏占位空间 */
+    fun setTopOverlaySpace(space: Int, overlay: Boolean) {
+        topOverlaySpace = space
+        topOverlayEnabled = overlay
+        view?.post {
+            applyTopOverlaySpace()
+        }
+    }
+
+    private fun applyTopOverlaySpace() {
+        if (view == null || !embeddedInModernRss) return
+        binding.recyclerView.clipToPadding = true
+        binding.recyclerView.setPadding(
+            binding.recyclerView.paddingLeft,
+            topOverlaySpace,
+            binding.recyclerView.paddingRight,
+            binding.recyclerView.paddingBottom
+        )
+        binding.refreshLayout.setProgressViewOffset(
+            true,
+            (topOverlaySpace - 28.dpToPx()).coerceAtLeast(0),
+            topOverlaySpace + 56.dpToPx()
+        )
     }
 
     private fun initData() {

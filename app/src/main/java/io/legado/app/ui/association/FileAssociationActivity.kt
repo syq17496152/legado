@@ -12,6 +12,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.databinding.ActivityTranslucenceBinding
 import io.legado.app.exception.InvalidBooksDirException
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.BubblePackageManager
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
@@ -20,7 +21,9 @@ import io.legado.app.utils.FileUtils
 import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.canRead
 import io.legado.app.utils.checkWrite
+import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getFile
+import io.legado.app.utils.inputStream
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.readUri
 import io.legado.app.utils.showDialogFragment
@@ -64,6 +67,13 @@ class FileAssociationActivity :
         viewModel.importBookLiveData.observe(this) { uri ->
             importBook(uri)
         }
+        viewModel.importRedThemeLiveData.observe(this) { uri ->
+            binding.rotateLoading.gone()
+            showDialogFragment(ImportRedThemeDialog(uri, true))
+        }
+        viewModel.importBubbleLiveData.observe(this) { uri ->
+            importBubble(uri)
+        }
         viewModel.onLineImportLive.observe(this) {
             startActivity<OnLineImportActivity> {
                 data = it
@@ -77,6 +87,7 @@ class FileAssociationActivity :
                 "replaceRule" -> showDialogFragment(ImportReplaceRuleDialog(it.second, true))
                 "httpTts" -> showDialogFragment(ImportHttpTtsDialog(it.second, true))
                 "theme" -> showDialogFragment(ImportThemeDialog(it.second, true))
+                "bubble" -> importBubble(Uri.parse(it.second))
                 "txtRule" -> showDialogFragment(ImportTxtTocRuleDialog(it.second, true))
                 "dictRule" -> showDialogFragment(ImportDictRuleDialog(it.second, true))
             }
@@ -127,6 +138,36 @@ class FileAssociationActivity :
                     }.request()
             }
         } ?: finish()
+    }
+
+    private fun importBubble(uri: Uri) {
+        lifecycleScope.launch {
+            runCatching {
+                withContext(IO) {
+                    val file = externalFiles.getFile(
+                        "bubbleImports",
+                        "import_${System.currentTimeMillis()}.zip"
+                    )
+                    file.parentFile?.mkdirs()
+                    uri.inputStream(this@FileAssociationActivity).getOrThrow().use { input ->
+                        FileOutputStream(file).use { output -> input.copyTo(output) }
+                    }
+                    BubblePackageManager.importZip(file)
+                }
+            }.onSuccess {
+                binding.rotateLoading.gone()
+                toastOnUi(R.string.success)
+                finish()
+            }.onFailure {
+                binding.rotateLoading.gone()
+                val msg = "导入气泡失败\n${it.localizedMessage}"
+                AppLog.put(msg, it)
+                toastOnUi(msg)
+                handler.postDelayed(2000) {
+                    finish()
+                }
+            }
+        }
     }
 
     private fun importBook(uri: Uri) {

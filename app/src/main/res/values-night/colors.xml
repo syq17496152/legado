@@ -53,4 +53,6 @@
     <color name="panel_btn_bg">#1AFFFFFF</color>
     <color name="panel_btn_ripple">#33FFFFFF</color>
     <color name="drag_handle_bg">#4DFFFFFF</color>
+    <color name="book_info_frost">#DD252528</color>
+    <color name="glass_stroke">#4D8EA6C8</color>
 </resources>

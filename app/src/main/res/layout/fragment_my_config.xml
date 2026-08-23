@@ -5,16 +5,20 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- 我的页顶栏 Compose 化（GlassTopAppBar，跟随昼夜主题） -->
-    <androidx.compose.ui.platform.ComposeView
-        android:id="@+id/compose_top_bar"
+    <io.legado.app.ui.widget.TitleBar
+        android:id="@+id/title_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        app:attachToActivity="false"
+        app:title="@string/my" />
+
+    <include layout="@layout/view_search" />
 
     <LinearLayout
         android:id="@+id/pre_fragment"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:orientation="vertical" />
 
 </LinearLayout>

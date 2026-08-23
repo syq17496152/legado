@@ -21,6 +21,7 @@ import io.legado.app.model.ImageProvider
 import io.legado.app.model.ReadBook
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
+import io.legado.app.service.relay.RelayContentSanitizer
 import io.legado.app.utils.GSON
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.fromJsonObject
@@ -226,6 +227,21 @@ object BookController {
             returnData.setErrorMsg(e.stackTraceStr)
         }
         return returnData
+    }
+
+    fun getRelayBookCover(parameters: Map<String, List<String>>): ReturnData {
+        val bookUrl = parameters["url"]?.firstOrNull()
+            ?: return ReturnData().setErrorMsg("bookUrl为空")
+        val book = appDb.bookDao.getBook(bookUrl)
+            ?: return ReturnData().setErrorMsg("bookUrl不对")
+        return getCover(mapOf("path" to listOf(book.getDisplayCover().orEmpty())))
+    }
+
+    fun getRelayBookContent(parameters: Map<String, List<String>>): ReturnData {
+        val base = getBookContent(parameters)
+        if (!base.isSuccess) return base
+        val content = base.data as? String ?: return ReturnData().setErrorMsg("正文格式无效")
+        return ReturnData().setData(RelayContentSanitizer.removeImages(content))
     }
 
     /**

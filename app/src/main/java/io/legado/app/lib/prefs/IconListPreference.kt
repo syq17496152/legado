@@ -51,6 +51,18 @@ class IconListPreference(context: Context, attrs: AttributeSet) : ListPreference
         }
     }
 
+    fun selectedIconDrawable(): Drawable? {
+        val selectedIndex = findIndexOfValue(value)
+        return if (selectedIndex >= 0) {
+            mEntryDrawables.getOrNull(selectedIndex)
+                ?.constantState
+                ?.newDrawable()
+                ?.mutate()
+        } else {
+            null
+        }
+    }
+
     override fun onBindViewHolder(holder: PreferenceViewHolder) {
         super.onBindViewHolder(holder)
         val v = Preference.bindView<ImageView>(

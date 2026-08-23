@@ -8,8 +8,16 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import io.legado.app.data.dao.AiAgentDao
+import io.legado.app.data.dao.AiGeneratedImageDao
+import io.legado.app.data.dao.AiImageGroupDao
+import io.legado.app.data.dao.AiMemoryDao
+import io.legado.app.data.dao.AiReadAloudRoleCacheDao
+import io.legado.app.data.dao.AiReadAloudUsageRecordDao
 import io.legado.app.data.dao.AutoTaskRuleDao
+import io.legado.app.data.dao.BookAiChapterSummaryDao
 import io.legado.app.data.dao.BookChapterDao
+import io.legado.app.data.dao.BookCharacterDao
 import io.legado.app.data.dao.BookDao
 import io.legado.app.data.dao.BookHighlightDao
 import io.legado.app.data.dao.BookGroupDao
@@ -23,7 +31,13 @@ import io.legado.app.data.dao.HttpTTSDao
 import io.legado.app.data.dao.KeyboardAssistsDao
 import io.legado.app.data.dao.PlayHistoryDao
 import io.legado.app.data.dao.SourceRecycleBinDao
+import io.legado.app.data.dao.ParagraphRuleDao
+import io.legado.app.data.dao.ReadMenuCustomButtonDao
+import io.legado.app.data.dao.ReadAloudBgmDao
+import io.legado.app.data.dao.ReadAloudSpeakerGroupDao
+import io.legado.app.data.dao.ReadRecentBookDao
 import io.legado.app.data.dao.ReadRecordDao
+import io.legado.app.data.dao.ReadRecordDailyDao
 import io.legado.app.data.dao.ReplaceRuleDao
 import io.legado.app.data.dao.RssArticleDao
 import io.legado.app.data.dao.RssReadRecordDao
@@ -36,10 +50,25 @@ import io.legado.app.data.dao.SourceGroupCoverDao
 import io.legado.app.data.dao.ServerDao
 import io.legado.app.data.dao.TxtTocRuleDao
 import io.legado.app.data.dao.UrlRecordDao
+import io.legado.app.data.entities.AiAgentJob
+import io.legado.app.data.entities.AiAgentSession
+import io.legado.app.data.entities.AiAgentTrace
+import io.legado.app.data.entities.AiGeneratedImage
+import io.legado.app.data.entities.AiImageGroup
+import io.legado.app.data.entities.AiMemoryFragment
+import io.legado.app.data.entities.AiMemoryFragmentFts
+import io.legado.app.data.entities.AiMemoryItem
+import io.legado.app.data.entities.AiMemoryItemFts
+import io.legado.app.data.entities.AiReadAloudRoleCache
+import io.legado.app.data.entities.AiReadAloudUsageRecord
 import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.BookAiChapterSummary
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.BookCharacter
+import io.legado.app.data.entities.BookCharacterRelation
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookHighlight
+import io.legado.app.data.entities.BookParagraphRule
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.Bookmark
@@ -50,10 +79,20 @@ import io.legado.app.data.entities.CoverGalleryImage
 import io.legado.app.data.entities.DictRule
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.data.entities.KeyboardAssist
+import io.legado.app.data.entities.ParagraphRule
+import io.legado.app.data.entities.ParagraphRuleVar
 import io.legado.app.data.entities.PlayHistory
+import io.legado.app.data.entities.ReadMenuCustomButton
+import io.legado.app.data.entities.ReadAloudBgmAssignmentCache
+import io.legado.app.data.entities.ReadAloudBgmGroup
+import io.legado.app.data.entities.ReadAloudBgmTrack
+import io.legado.app.data.entities.ReadAloudSpeakerGroup
+import io.legado.app.data.entities.ReadAloudSpeakerGroupItem
+import io.legado.app.data.entities.ReadRecentBook
 import io.legado.app.data.entities.SourceGroupCover
 import io.legado.app.data.entities.SourceRecycleBin
 import io.legado.app.data.entities.ReadRecord
+import io.legado.app.data.entities.ReadRecordDaily
 import io.legado.app.data.entities.ReadRecordDetail
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.RssArticle
@@ -82,7 +121,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 104,
+    version = 106,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -91,7 +130,17 @@ val appDb by lazy {
         RuleSub::class, DictRule::class, KeyboardAssist::class, Server::class,
         CoverGalleryGroup::class, CoverGalleryImage::class, ReadRecordDetail::class,
         AutoTaskRule::class, BookHighlight::class, PlayHistory::class, SourceRecycleBin::class,
-        UrlRecord::class, SourceGroupCover::class],
+        UrlRecord::class, SourceGroupCover::class, ReadRecordDaily::class, ReadRecentBook::class,
+        ParagraphRule::class, BookParagraphRule::class, ParagraphRuleVar::class,
+        ReadMenuCustomButton::class,
+        AiImageGroup::class, AiGeneratedImage::class,
+        BookCharacter::class, BookCharacterRelation::class,
+        BookAiChapterSummary::class, AiReadAloudRoleCache::class,
+        ReadAloudBgmGroup::class, ReadAloudBgmTrack::class, ReadAloudBgmAssignmentCache::class,
+        ReadAloudSpeakerGroup::class, ReadAloudSpeakerGroupItem::class,
+        AiReadAloudUsageRecord::class,
+        AiAgentSession::class, AiAgentJob::class, AiAgentTrace::class,
+        AiMemoryItem::class, AiMemoryFragment::class, AiMemoryItemFts::class, AiMemoryFragmentFts::class],
     views = [BookSourcePart::class],
     autoMigrations = [
         AutoMigration(from = 43, to = 44),
@@ -149,6 +198,8 @@ val appDb by lazy {
         // rss-unified-search: 98→99 使用手动 Migration（DatabaseMigrations.migration_98_99），search_keywords 表改为复合主键(word, type)
         // precise-manage: 102→103 使用手动 Migration（DatabaseMigrations.migration_102_103），新增 url_records 表（网址记录）
         // source-folder-cover: 103→104 使用手动 Migration（DatabaseMigrations.migration_103_104），新增 source_group_covers 表（发现/订阅源分组封面）
+        // archive-ui P1-B: 104→105 使用手动 Migration（DatabaseMigrations.migration_104_105），新增 6 张表（readRecordDaily/readRecentBooks/paragraph_rules/book_paragraph_rules/paragraph_rule_vars/read_menu_custom_buttons）
+        // archive-ui P1-F: 105→106 使用手动 Migration（DatabaseMigrations.migration_105_106），新增 AI agent/images/memory/read-aloud bgm/speaker/book character/chapter summary 等共 19 张表（含 2 张 FTS4 虚拟表）
     ]
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -181,6 +232,20 @@ abstract class AppDatabase : RoomDatabase() {
     abstract val sourceRecycleBinDao: SourceRecycleBinDao
     abstract val urlRecordDao: UrlRecordDao
     abstract val sourceGroupCoverDao: SourceGroupCoverDao
+    abstract val readRecordDailyDao: ReadRecordDailyDao
+    abstract val readRecentBookDao: ReadRecentBookDao
+    abstract val paragraphRuleDao: ParagraphRuleDao
+    abstract val readMenuCustomButtonDao: ReadMenuCustomButtonDao
+    abstract val bookCharacterDao: BookCharacterDao
+    abstract val aiImageGroupDao: AiImageGroupDao
+    abstract val aiGeneratedImageDao: AiGeneratedImageDao
+    abstract val bookAiChapterSummaryDao: BookAiChapterSummaryDao
+    abstract val aiReadAloudRoleCacheDao: AiReadAloudRoleCacheDao
+    abstract val readAloudBgmDao: ReadAloudBgmDao
+    abstract val readAloudSpeakerGroupDao: ReadAloudSpeakerGroupDao
+    abstract val aiReadAloudUsageRecordDao: AiReadAloudUsageRecordDao
+    abstract val aiAgentDao: AiAgentDao
+    abstract val aiMemoryDao: AiMemoryDao
 
     companion object {
 

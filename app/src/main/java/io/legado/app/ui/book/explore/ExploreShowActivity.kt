@@ -1,150 +1,211 @@
 package io.legado.app.ui.book.explore
 
 import android.os.Bundle
+import android.view.MenuItem
 import androidx.activity.viewModels
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.databinding.ActivityExploreShowBinding
-import io.legado.app.ui.book.info.BookInfoActivity
-import io.legado.app.ui.theme.LegadoTheme
-import io.legado.app.utils.startActivity
+import io.legado.app.help.webView.WebViewPool
+import io.legado.app.ui.book.SearchBookOpenHelper
+import io.legado.app.ui.widget.compose.LegadoComposeTheme
+import io.legado.app.ui.widget.number.NumberPickerDialog
+import io.legado.app.utils.stableSearchBookKey
 import io.legado.app.utils.viewbindingdelegate.viewBinding
+import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-/**
- * 发现列表分页页（L-B14，S2 列表族 + 分页加载范式）。
- *
- * Compose 内容区（[ExploreShowScreen]）桥接：保留原分页加载（滚动到底下一页 /
- * 滚动到顶上一页）、跳页（NumberPicker 1-999）、错误重试业务逻辑，
- * UI 全部收敛到受控组件（GlassTopAppBar / EmptyStatePlaceholder / 骨架屏 / 弹窗族）。
- */
 class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreShowViewModel>() {
+
     override val binding by viewBinding(ActivityExploreShowBinding::inflate)
     override val viewModel by viewModels<ExploreShowViewModel>()
 
-    // Compose 桥接状态
-    private var composeItems by mutableStateOf(listOf<ExploreShowDisplayItem>())
-    private var currentPage by mutableStateOf(1)
-    private var topLoading by mutableStateOf(false)
-    private var bottomLoading by mutableStateOf(true)
-    private var hasMore by mutableStateOf(true)
-    private var loadMoreError by mutableStateOf<String?>(null)
-    private var jumpFlag by mutableStateOf(0)
+    private val composeBooks = mutableStateListOf<SearchBook>()
+    private val composeBottomLoading = mutableStateOf(false)
+    private val composeTopLoading = mutableStateOf(false)
+    private val composeHasMore = mutableStateOf(true)
+    private val composeHasPrevious = mutableStateOf(false)
+    private val composeBottomError = mutableStateOf<String?>(null)
+    private val composeTopError = mutableStateOf<String?>(null)
+    private val composeScrollToTopSignal = mutableIntStateOf(0)
+    private val composeKeepPositionAfterPrependSignal = mutableIntStateOf(0)
+    private val composePrependedItemCount = mutableIntStateOf(0)
+    private val bookshelfTick = mutableIntStateOf(0)
     private var oldPage = -1
+    private var isClearAll = false
+
+    private val menuPage by lazy {
+        binding.titleBar.menu.add(getString(R.string.menu_page, 1)).apply {
+            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            setOnMenuItemClickListener {
+                val page = viewModel.pageLiveData.value ?: 1
+                NumberPickerDialog(this@ExploreShowActivity)
+                    .setTitle(getString(R.string.change_page))
+                    .setMaxValue(999)
+                    .setMinValue(1)
+                    .setValue(page)
+                    .show { targetPage ->
+                        if (page != targetPage) {
+                            oldPage = targetPage
+                            viewModel.skipPage(targetPage)
+                            isClearAll = true
+                            composeBooks.clear()
+                            composeHasMore.value = true
+                            composeHasPrevious.value = targetPage > 1
+                            composeBottomError.value = null
+                            composeTopError.value = null
+                            composeTopLoading.value = false
+                            scrollToBottom(forceLoad = true)
+                        }
+                    }
+                true
+            }
+        }
+    }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initComposeHost()
-        observeViewModel()
+        binding.titleBar.title = intent.getStringExtra("exploreName")
+        initComposeList()
+        viewModel.booksData.observe(this) { upData(it) }
+        viewModel.addBooksData.observe(this) { upDataTop(it) }
+        viewModel.errorLiveData.observe(this) {
+            composeBottomLoading.value = false
+            composeBottomError.value = it
+        }
+        viewModel.errorTopLiveData.observe(this) {
+            composeTopLoading.value = false
+            composeTopError.value = it
+            composeHasPrevious.value = oldPage > 1
+        }
+        viewModel.upAdapterLiveData.observe(this) {
+            bookshelfTick.intValue++
+        }
+        viewModel.pageLiveData.observe(this) {
+            menuPage.title = getString(R.string.menu_page, it)
+        }
         viewModel.initData(intent)
     }
 
-    private fun initComposeHost() {
-        binding.composeHost.setContent {
-            LegadoTheme {
-                ExploreShowScreen(
-                    items = composeItems,
-                    title = intent.getStringExtra("exploreName") ?: getString(R.string.discovery),
-                    currentPage = currentPage,
-                    topLoading = topLoading,
-                    bottomLoading = bottomLoading,
-                    hasMore = hasMore,
-                    canLoadTop = oldPage > 1,
-                    emptyMessage = getString(R.string.empty),
-                    loadMoreError = loadMoreError,
-                    jumpFlag = jumpFlag,
-                    onBack = { finish() },
-                    onLoadMore = { scrollToBottom() },
-                    onLoadTop = { scrollToTop() },
-                    onRetryLoadMore = { scrollToBottom(true) },
-                    onItemClick = { index ->
-                        composeItems.getOrNull(index)?.let { item ->
-                            startActivity<BookInfoActivity> {
-                                putExtra("name", item.book.name)
-                                putExtra("author", item.book.author)
-                                putExtra("bookUrl", item.book.bookUrl)
-                            }
-                        }
-                    },
-                    onPageChange = { page -> changePage(page) }
+    private fun initComposeList() {
+        composeBottomLoading.value = true
+        binding.composeList.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        binding.composeList.setContent {
+            LegadoComposeTheme {
+                ExploreShowComposeScreen(
+                    books = composeBooks,
+                    isLoading = composeBottomLoading.value,
+                    isLoadingPrevious = composeTopLoading.value,
+                    hasMore = composeHasMore.value,
+                    hasPrevious = composeHasPrevious.value,
+                    errorMessage = composeBottomError.value,
+                    previousErrorMessage = composeTopError.value,
+                    scrollToTopSignal = composeScrollToTopSignal.intValue,
+                    keepPositionAfterPrependSignal = composeKeepPositionAfterPrependSignal.intValue,
+                    prependedItemCount = composePrependedItemCount.intValue,
+                    bookshelfTick = bookshelfTick.intValue,
+                    isInBookshelf = { book -> isInBookshelf(book) },
+                    lifecycle = lifecycle,
+                    onBookClick = { book -> showBookInfo(book) },
+                    onLoadMore = { scrollToBottom(forceLoad = composeBottomError.value != null) },
+                    onLoadPrevious = { scrollToTop(forceLoad = composeTopError.value != null) }
                 )
             }
         }
     }
 
-    private fun observeViewModel() {
-        viewModel.booksData.observe(this) { books -> upData(books) }
-        viewModel.addBooksData.observe(this) { books -> upDataTop(books) }
-        viewModel.errorLiveData.observe(this) {
-            bottomLoading = false
-            loadMoreError = it
-        }
-        viewModel.errorTopLiveData.observe(this) {
-            topLoading = false
-            loadMoreError = it
-        }
-        viewModel.upAdapterLiveData.observe(this) {
-            composeItems = composeItems.map { item ->
-                item.copy(isInBookshelf = viewModel.isInBookShelf(item.book))
-            }
-        }
-        viewModel.pageLiveData.observe(this) { currentPage = it }
-    }
-
-    /** 滚动到底 -> 加载下一页 */
     private fun scrollToBottom(forceLoad: Boolean = false) {
-        if ((hasMore && !bottomLoading && !topLoading) || forceLoad) {
-            bottomLoading = true
-            loadMoreError = null
-            viewModel.explore()
-        }
-    }
-
-    /** 滚动到顶 -> 加载上一页 */
-    private fun scrollToTop(forceLoad: Boolean = false) {
-        if ((oldPage > 1 && !bottomLoading && !topLoading) || forceLoad) {
-            topLoading = true
-            loadMoreError = null
-            oldPage--
-            viewModel.explore(oldPage)
-        }
-    }
-
-    /** 跳页：清空当前列表并强制加载指定页 */
-    private fun changePage(page: Int) {
-        oldPage = page
-        viewModel.skipPage(page)
-        composeItems = emptyList()
-        jumpFlag++
+        val canLoad = composeHasMore.value && !composeBottomLoading.value && !composeTopLoading.value
+        if (!canLoad && !forceLoad) return
+        composeHasMore.value = true
+        composeBottomLoading.value = true
+        composeBottomError.value = null
         viewModel.explore()
     }
 
+    private fun scrollToTop(forceLoad: Boolean = false) {
+        if (composeBottomLoading.value || composeTopLoading.value) return
+        val targetPage = if (forceLoad) oldPage else oldPage - 1
+        if (targetPage < 1) return
+        oldPage = targetPage
+        composeTopLoading.value = true
+        composeTopError.value = null
+        composeHasPrevious.value = targetPage > 1
+        viewModel.explore(targetPage)
+    }
+
     private fun upData(books: List<SearchBook>) {
-        bottomLoading = false
-        if (books.isEmpty() && composeItems.isEmpty()) {
-            hasMore = false
-        } else if (composeItems.size == books.size) {
-            hasMore = false
-        } else {
-            hasMore = true
-            composeItems = books.map { it.toDisplayItem() }
+        val oldSize = composeBooks.size
+        composeBottomLoading.value = false
+        composeBottomError.value = null
+        if (books.isEmpty() && oldSize == 0) {
+            composeHasMore.value = false
+            replaceComposeBooks(emptyList())
+            isClearAll = false
+            return
+        }
+        composeHasMore.value = isClearAll || books.size > oldSize
+        replaceComposeBooks(books)
+        if (isClearAll) {
+            composeScrollToTopSignal.intValue++
+            isClearAll = false
         }
     }
 
     private fun upDataTop(books: List<SearchBook>) {
-        topLoading = false
-        composeItems = books.map { it.toDisplayItem() } + composeItems
+        val oldSize = composeBooks.size
+        val oldFirstKey = composeBooks.firstOrNull()?.stableSearchBookKey()
+        composeTopLoading.value = false
+        composeTopError.value = null
+        replaceComposeBooks(books, resetPrepend = false)
+        val prependedCount = oldFirstKey?.let { key ->
+            books.indexOfFirst { it.stableSearchBookKey() == key }
+        }?.takeIf { it > 0 } ?: (books.size - oldSize).coerceAtLeast(0)
+        if (prependedCount > 0) {
+            composePrependedItemCount.intValue = prependedCount
+            composeKeepPositionAfterPrependSignal.intValue++
+        } else {
+            composePrependedItemCount.intValue = 0
+        }
+        composeHasPrevious.value = oldPage > 1
     }
 
-    private fun SearchBook.toDisplayItem() = ExploreShowDisplayItem(
-        name = name,
-        author = author,
-        intro = trimIntro(this@ExploreShowActivity),
-        kinds = getKindList(),
-        latestChapterTitle = latestChapterTitle.orEmpty(),
-        isInBookshelf = viewModel.isInBookShelf(this),
-        book = this
-    )
+    private fun replaceComposeBooks(books: List<SearchBook>, resetPrepend: Boolean = true) {
+        composeBooks.clear()
+        composeBooks.addAll(books)
+        if (resetPrepend) {
+            composePrependedItemCount.intValue = 0
+        }
+    }
+
+    private fun isInBookshelf(book: SearchBook): Boolean {
+        return viewModel.isInBookShelf(book)
+    }
+
+    private fun showBookInfo(book: SearchBook) {
+        lifecycleScope.launch {
+            val isVideo = withContext(IO) {
+                SearchBookOpenHelper.isVideoResult(book, viewModel.sourceTypeHint())
+            }
+            SearchBookOpenHelper.open(this@ExploreShowActivity, book, isVideo)
+        }
+    }
+
+    override fun onPause() {
+        WebViewPool.scheduleDestroyScope(WebViewPool.Scope.DISCOVERY)
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        WebViewPool.destroyScope(WebViewPool.Scope.DISCOVERY)
+        super.onDestroy()
+    }
 }

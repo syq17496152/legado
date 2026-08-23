@@ -6,11 +6,11 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- L-D8 S2 改造：Compose 顶栏桥接（GlassTopAppBar + 添加按钮 + ConfirmDialog 删除确认） -->
-    <androidx.compose.ui.platform.ComposeView
-        android:id="@+id/compose_top_bar"
+    <io.legado.app.ui.widget.TitleBar
+        android:id="@+id/title_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        app:title="@string/rule_subscription" />
 
     <FrameLayout
         android:layout_width="match_parent"
@@ -22,7 +22,7 @@
             android:layout_height="match_parent"
             android:clipToPadding="false"
             app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-            tools:listitem="@layout/item_rule_sub" />
+            tools:ignore="MissingClass" />
 
         <TextView
             android:id="@+id/tv_empty_msg"

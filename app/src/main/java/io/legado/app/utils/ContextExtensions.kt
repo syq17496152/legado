@@ -418,3 +418,11 @@ val Context.channel: String
 
 val Context.isDebuggable: Boolean
     get() = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+
+fun Context.clearClip() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        clipboardManager.clearPrimaryClip()
+    } else {
+        clipboardManager.setPrimaryClip(ClipData.newPlainText(null, ""))
+    }
+}

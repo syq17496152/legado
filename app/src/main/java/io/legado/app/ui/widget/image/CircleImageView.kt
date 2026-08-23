@@ -118,6 +118,7 @@ class CircleImageView @JvmOverloads constructor(
 
     private var textColor = context.getCompatColor(R.color.primaryText)
     private var textBold = false
+    private var textTypeface: Typeface? = null
     var isInView = false
 
     init {
@@ -198,6 +199,7 @@ class CircleImageView @JvmOverloads constructor(
         text?.let {
             textPaint.color = textColor
             textPaint.isFakeBoldText = textBold
+            textPaint.typeface = textTypeface
             textPaint.textSize = 15f.spToPx()
             val fm = textPaint.fontMetrics
             canvas.drawText(
@@ -222,6 +224,11 @@ class CircleImageView @JvmOverloads constructor(
 
     fun setTextBold(bold: Boolean) {
         this.textBold = bold
+        invalidate()
+    }
+
+    fun setTypeface(typeface: Typeface?) {
+        this.textTypeface = typeface
         invalidate()
     }
 

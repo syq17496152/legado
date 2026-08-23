@@ -24,7 +24,8 @@ object DatabaseMigrations {
             migration_89_90, migration_90_91, migration_91_92, migration_92_93,
             migration_93_94, migration_94_95, migration_95_96, migration_96_97,
             migration_97_98, migration_98_99, migration_99_100, migration_100_101,
-            migration_101_102, migration_102_103, migration_103_104
+            migration_101_102, migration_102_103, migration_103_104, migration_104_105,
+            migration_105_106
         )
     }
 
@@ -836,6 +837,546 @@ object DatabaseMigrations {
             }.onFailure { e ->
                 AppLog.put("AppDatabase Migration 103→104: source_group_covers 表创建失败: ${e.message}")
             }
+        }
+    }
+
+    private val migration_104_105 = object : Migration(104, 105) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            kotlin.runCatching {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `readRecordDaily` (
+                        `date` TEXT NOT NULL,
+                        `readTime` INTEGER NOT NULL DEFAULT 0,
+                        `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`date`)
+                    )"""
+                )
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `readRecentBooks` (
+                        `bookUrl` TEXT NOT NULL,
+                        `lastRead` INTEGER NOT NULL,
+                        PRIMARY KEY(`bookUrl`)
+                    )"""
+                )
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `paragraph_rules` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL DEFAULT '',
+                        `jsLib` TEXT NOT NULL DEFAULT '',
+                        `loginUrl` TEXT NOT NULL DEFAULT '',
+                        `loginUi` TEXT NOT NULL DEFAULT '',
+                        `enabledCookieJar` INTEGER NOT NULL DEFAULT 0,
+                        `script` TEXT NOT NULL DEFAULT '',
+                        `timeoutMillisecond` INTEGER NOT NULL DEFAULT 3000,
+                        `sortOrder` INTEGER NOT NULL DEFAULT 0,
+                        `updateTime` INTEGER NOT NULL DEFAULT 0
+                    )"""
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_paragraph_rules_id` ON `paragraph_rules` (`id`)")
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `book_paragraph_rules` (
+                        `bookUrl` TEXT NOT NULL,
+                        `ruleId` INTEGER NOT NULL,
+                        `enabled` INTEGER NOT NULL DEFAULT 1,
+                        `sortOrder` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`bookUrl`, `ruleId`),
+                        FOREIGN KEY(`ruleId`) REFERENCES `paragraph_rules`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )"""
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_book_paragraph_rules_bookUrl` ON `book_paragraph_rules` (`bookUrl`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_book_paragraph_rules_ruleId` ON `book_paragraph_rules` (`ruleId`)")
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `paragraph_rule_vars` (
+                        `ruleId` INTEGER NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `value` TEXT NOT NULL,
+                        PRIMARY KEY(`ruleId`, `name`),
+                        FOREIGN KEY(`ruleId`) REFERENCES `paragraph_rules`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )"""
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_paragraph_rule_vars_ruleId` ON `paragraph_rule_vars` (`ruleId`)")
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `read_menu_custom_buttons` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL DEFAULT '',
+                        `iconPath` TEXT NOT NULL DEFAULT '',
+                        `jsLib` TEXT NOT NULL DEFAULT '',
+                        `loginUrl` TEXT NOT NULL DEFAULT '',
+                        `loginUi` TEXT NOT NULL DEFAULT '',
+                        `enabledCookieJar` INTEGER NOT NULL DEFAULT 0,
+                        `script` TEXT NOT NULL DEFAULT '',
+                        `timeoutMillisecond` INTEGER NOT NULL DEFAULT 3000,
+                        `sortOrder` INTEGER NOT NULL DEFAULT 0,
+                        `updateTime` INTEGER NOT NULL DEFAULT 0
+                    )"""
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_read_menu_custom_buttons_id` ON `read_menu_custom_buttons` (`id`)")
+                AppLog.put("AppDatabase Migration 104→105: archive-ui 6 张新表创建成功")
+            }.onFailure { e ->
+                AppLog.put("AppDatabase Migration 104→105: 新表创建失败: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * archive-ui P1-F: 105→106 新增 AI 相关能力（共 19 张表，含 2 张 FTS4 虚拟表）
+     *
+     * - AI 智能体：ai_agent_sessions / ai_agent_jobs / ai_agent_traces
+     * - AI 记忆：ai_memory_items / ai_memory_fragments + FTS4（ai_memory_items_fts / ai_memory_fragments_fts）
+     * - AI 图片：ai_image_groups / ai_generated_images
+     * - 书籍角色：book_characters / book_character_relations
+     * - 章节摘要：book_ai_chapter_summaries
+     * - 朗读角色与 BGM/SFX：ai_read_aloud_role_caches / read_aloud_bgm_groups / read_aloud_bgm_tracks / read_aloud_bgm_assignment_caches
+     * - 朗读发言人分组：read_aloud_speaker_groups / read_aloud_speaker_group_items
+     * - 朗读用量记录：ai_read_aloud_usage_records
+     *
+     * SQL 与 AiXxx/BookXxx/ReadAloudXxx 等实体导出的 schema 106 严格一一对应（列、默认值、主键、索引、外键）。
+     * 禁 fallbackToDestructiveMigration；每条 execSQL 均以 runCatching 包裹并记录日志。
+     */
+    private val migration_105_106 = object : Migration(105, 106) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            runCatchingSql(db, "105→106 ai_agent_sessions") {
+                """CREATE TABLE IF NOT EXISTS `ai_agent_sessions` (
+                    `sessionId` TEXT NOT NULL,
+                    `scope` TEXT NOT NULL DEFAULT '',
+                    `status` TEXT NOT NULL DEFAULT '',
+                    `currentGoal` TEXT NOT NULL DEFAULT '',
+                    `currentTask` TEXT NOT NULL DEFAULT '',
+                    `currentStep` TEXT NOT NULL DEFAULT '',
+                    `contextJson` TEXT NOT NULL DEFAULT '',
+                    `pendingConfirmationsJson` TEXT NOT NULL DEFAULT '',
+                    `retryStateJson` TEXT NOT NULL DEFAULT '',
+                    `lastError` TEXT NOT NULL DEFAULT '',
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`sessionId`)
+                )"""
+            }
+            runCatchingSql(db, "105→106 index_ai_agent_sessions_scope_updatedAt") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_agent_sessions_scope_updatedAt` ON `ai_agent_sessions` (`scope`, `updatedAt`)"
+            }
+            runCatchingSql(db, "105→106 index_ai_agent_sessions_status_updatedAt") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_agent_sessions_status_updatedAt` ON `ai_agent_sessions` (`status`, `updatedAt`)"
+            }
+            runCatchingSql(db, "105→106 ai_agent_jobs") {
+                """CREATE TABLE IF NOT EXISTS `ai_agent_jobs` (
+                    `jobId` TEXT NOT NULL,
+                    `sessionId` TEXT NOT NULL DEFAULT '',
+                    `type` TEXT NOT NULL DEFAULT '',
+                    `status` TEXT NOT NULL DEFAULT '',
+                    `inputJson` TEXT NOT NULL DEFAULT '',
+                    `checkpointJson` TEXT NOT NULL DEFAULT '',
+                    `outputJson` TEXT NOT NULL DEFAULT '',
+                    `error` TEXT NOT NULL DEFAULT '',
+                    `retryCount` INTEGER NOT NULL DEFAULT 0,
+                    `maxRetry` INTEGER NOT NULL DEFAULT 2,
+                    `nextRunAt` INTEGER NOT NULL DEFAULT 0,
+                    `leaseUntil` INTEGER NOT NULL DEFAULT 0,
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`jobId`)
+                )"""
+            }
+            runCatchingSql(db, "105→106 index_ai_agent_jobs_sessionId_createdAt") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_agent_jobs_sessionId_createdAt` ON `ai_agent_jobs` (`sessionId`, `createdAt`)"
+            }
+            runCatchingSql(db, "105→106 index_ai_agent_jobs_status_updatedAt") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_agent_jobs_status_updatedAt` ON `ai_agent_jobs` (`status`, `updatedAt`)"
+            }
+            runCatchingSql(db, "105→106 index_ai_agent_jobs_type_updatedAt") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_agent_jobs_type_updatedAt` ON `ai_agent_jobs` (`type`, `updatedAt`)"
+            }
+            runCatchingSql(db, "105→106 ai_agent_traces") {
+                """CREATE TABLE IF NOT EXISTS `ai_agent_traces` (
+                    `traceId` TEXT NOT NULL,
+                    `sessionId` TEXT NOT NULL DEFAULT '',
+                    `jobId` TEXT NOT NULL DEFAULT '',
+                    `round` INTEGER NOT NULL DEFAULT 0,
+                    `eventType` TEXT NOT NULL DEFAULT '',
+                    `payloadJson` TEXT NOT NULL DEFAULT '',
+                    `usageJson` TEXT NOT NULL DEFAULT '',
+                    `success` INTEGER NOT NULL DEFAULT 1,
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`traceId`)
+                )"""
+            }
+            runCatchingSql(db, "105→106 index_ai_agent_traces_jobId_round_createdAt") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_agent_traces_jobId_round_createdAt` ON `ai_agent_traces` (`jobId`, `round`, `createdAt`)"
+            }
+            runCatchingSql(db, "105→106 index_ai_agent_traces_sessionId_createdAt") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_agent_traces_sessionId_createdAt` ON `ai_agent_traces` (`sessionId`, `createdAt`)"
+            }
+            runCatchingSql(db, "105→106 index_ai_agent_traces_eventType_createdAt") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_agent_traces_eventType_createdAt` ON `ai_agent_traces` (`eventType`, `createdAt`)"
+            }
+            runCatchingSql(db, "105→106 ai_memory_items") {
+                """CREATE TABLE IF NOT EXISTS `ai_memory_items` (
+                    `memoryId` TEXT NOT NULL,
+                    `scope` TEXT NOT NULL DEFAULT '',
+                    `bookKey` TEXT NOT NULL DEFAULT '',
+                    `sessionId` TEXT NOT NULL DEFAULT '',
+                    `type` TEXT NOT NULL DEFAULT '',
+                    `subject` TEXT NOT NULL DEFAULT '',
+                    `predicate` TEXT NOT NULL DEFAULT '',
+                    `objectValue` TEXT NOT NULL DEFAULT '',
+                    `content` TEXT NOT NULL DEFAULT '',
+                    `confidence` INTEGER NOT NULL DEFAULT 50,
+                    `importance` INTEGER NOT NULL DEFAULT 50,
+                    `sourceIds` TEXT NOT NULL DEFAULT '',
+                    `sourceChapterIndex` INTEGER NOT NULL DEFAULT -1,
+                    `fingerprint` TEXT NOT NULL DEFAULT '',
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                    `lastUsedAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`memoryId`)
+                )"""
+            }
+            runCatchingSql(db, "105→106 index_ai_memory_items_scope_updatedAt") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_memory_items_scope_updatedAt` ON `ai_memory_items` (`scope`, `updatedAt`)"
+            }
+            runCatchingSql(db, "105→106 index_ai_memory_items_bookKey_updatedAt") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_memory_items_bookKey_updatedAt` ON `ai_memory_items` (`bookKey`, `updatedAt`)"
+            }
+            runCatchingSql(db, "105→106 index_ai_memory_items_sessionId_updatedAt") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_memory_items_sessionId_updatedAt` ON `ai_memory_items` (`sessionId`, `updatedAt`)"
+            }
+            runCatchingSql(db, "105→106 index_ai_memory_items_type_updatedAt") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_memory_items_type_updatedAt` ON `ai_memory_items` (`type`, `updatedAt`)"
+            }
+            runCatchingSql(db, "105→106 index_ai_memory_items_fingerprint") {
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_ai_memory_items_fingerprint` ON `ai_memory_items` (`fingerprint`)"
+            }
+            runCatchingSql(db, "105→106 ai_memory_fragments") {
+                """CREATE TABLE IF NOT EXISTS `ai_memory_fragments` (
+                    `fragmentId` TEXT NOT NULL,
+                    `scope` TEXT NOT NULL DEFAULT '',
+                    `bookKey` TEXT NOT NULL DEFAULT '',
+                    `sessionId` TEXT NOT NULL DEFAULT '',
+                    `sourceType` TEXT NOT NULL DEFAULT '',
+                    `title` TEXT NOT NULL DEFAULT '',
+                    `content` TEXT NOT NULL DEFAULT '',
+                    `chapterIndex` INTEGER NOT NULL DEFAULT -1,
+                    `chapterTitle` TEXT NOT NULL DEFAULT '',
+                    `paragraphStart` INTEGER NOT NULL DEFAULT -1,
+                    `paragraphEnd` INTEGER NOT NULL DEFAULT -1,
+                    `contentHash` TEXT NOT NULL DEFAULT '',
+                    `importance` INTEGER NOT NULL DEFAULT 50,
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                    `lastUsedAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`fragmentId`)
+                )"""
+            }
+            runCatchingSql(db, "105→106 index_ai_memory_fragments_scope_updatedAt") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_memory_fragments_scope_updatedAt` ON `ai_memory_fragments` (`scope`, `updatedAt`)"
+            }
+            runCatchingSql(db, "105→106 index_ai_memory_fragments_bookKey_chapterIndex") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_memory_fragments_bookKey_chapterIndex` ON `ai_memory_fragments` (`bookKey`, `chapterIndex`)"
+            }
+            runCatchingSql(db, "105→106 index_ai_memory_fragments_sessionId_updatedAt") {
+                "CREATE INDEX IF NOT EXISTS `index_ai_memory_fragments_sessionId_updatedAt` ON `ai_memory_fragments` (`sessionId`, `updatedAt`)"
+            }
+            runCatchingSql(db, "105→106 index_ai_memory_fragments_contentHash") {
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_ai_memory_fragments_contentHash` ON `ai_memory_fragments` (`contentHash`)"
+            }
+            runCatchingSql(db, "105→106 ai_memory_items_fts") {
+                """CREATE VIRTUAL TABLE IF NOT EXISTS `ai_memory_items_fts`
+                USING FTS4(`memoryId` TEXT NOT NULL, `subject` TEXT NOT NULL, `predicate` TEXT NOT NULL, `objectValue` TEXT NOT NULL, `content` TEXT NOT NULL)"""
+            }
+            runCatchingSql(db, "105→106 ai_memory_fragments_fts") {
+                """CREATE VIRTUAL TABLE IF NOT EXISTS `ai_memory_fragments_fts`
+                USING FTS4(`fragmentId` TEXT NOT NULL, `title` TEXT NOT NULL, `content` TEXT NOT NULL, `chapterTitle` TEXT NOT NULL)"""
+            }
+            runCatchingSql(db, "105→106 ai_image_groups") {
+                """CREATE TABLE IF NOT EXISTS `ai_image_groups` (
+                    `id` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `sortOrder` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )"""
+            }
+            runCatchingSql(db, "105→106 ai_generated_images") {
+                """CREATE TABLE IF NOT EXISTS `ai_generated_images` (
+                    `id` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `prompt` TEXT NOT NULL,
+                    `providerId` TEXT NOT NULL,
+                    `providerName` TEXT NOT NULL,
+                    `model` TEXT NOT NULL,
+                    `localPath` TEXT NOT NULL,
+                    `originalSource` TEXT NOT NULL,
+                    `bookKey` TEXT NOT NULL,
+                    `bookName` TEXT NOT NULL,
+                    `bookAuthor` TEXT NOT NULL,
+                    `chapterKey` TEXT NOT NULL,
+                    `chapterIndex` INTEGER NOT NULL,
+                    `chapterTitle` TEXT NOT NULL,
+                    `characterId` INTEGER NOT NULL,
+                    `characterName` TEXT NOT NULL,
+                    `sourceType` TEXT NOT NULL,
+                    `sourceText` TEXT NOT NULL,
+                    `favorite` INTEGER NOT NULL,
+                    `groupId` TEXT,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )"""
+            }
+            runCatchingSql(db, "105→106 ai_generated_images 索引") {
+                """CREATE INDEX IF NOT EXISTS `index_ai_generated_images_groupId` ON `ai_generated_images` (`groupId`)
+                ;CREATE INDEX IF NOT EXISTS `index_ai_generated_images_favorite` ON `ai_generated_images` (`favorite`)
+                ;CREATE INDEX IF NOT EXISTS `index_ai_generated_images_createdAt` ON `ai_generated_images` (`createdAt`)
+                ;CREATE INDEX IF NOT EXISTS `index_ai_generated_images_bookKey` ON `ai_generated_images` (`bookKey`)
+                ;CREATE INDEX IF NOT EXISTS `index_ai_generated_images_chapterKey` ON `ai_generated_images` (`chapterKey`)
+                ;CREATE INDEX IF NOT EXISTS `index_ai_generated_images_characterId` ON `ai_generated_images` (`characterId`)
+                ;CREATE INDEX IF NOT EXISTS `index_ai_generated_images_sourceType` ON `ai_generated_images` (`sourceType`)"""
+            }
+            runCatchingSql(db, "105→106 book_characters") {
+                """CREATE TABLE IF NOT EXISTS `book_characters` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `bookUrl` TEXT NOT NULL DEFAULT '',
+                    `name` TEXT NOT NULL DEFAULT '',
+                    `avatar` TEXT NOT NULL DEFAULT '',
+                    `gender` TEXT NOT NULL DEFAULT '',
+                    `identity` TEXT NOT NULL DEFAULT '',
+                    `skills` TEXT NOT NULL DEFAULT '',
+                    `attributes` TEXT NOT NULL DEFAULT '',
+                    `appearance` TEXT NOT NULL DEFAULT '',
+                    `personality` TEXT NOT NULL DEFAULT '',
+                    `biography` TEXT NOT NULL DEFAULT '',
+                    `speechRouteJson` TEXT NOT NULL DEFAULT '',
+                    `autoCreated` INTEGER NOT NULL DEFAULT 0,
+                    `source` TEXT NOT NULL DEFAULT '',
+                    `lastDetectedAt` INTEGER NOT NULL DEFAULT 0,
+                    `roleLevel` INTEGER NOT NULL DEFAULT 0,
+                    `sortOrder` INTEGER NOT NULL DEFAULT 0,
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0
+                )"""
+            }
+            runCatchingSql(db, "105→106 book_characters 索引") {
+                """CREATE INDEX IF NOT EXISTS `index_book_characters_bookUrl` ON `book_characters` (`bookUrl`)
+                ;CREATE UNIQUE INDEX IF NOT EXISTS `index_book_characters_bookUrl_name` ON `book_characters` (`bookUrl`, `name`)"""
+            }
+            runCatchingSql(db, "105→106 book_character_relations") {
+                """CREATE TABLE IF NOT EXISTS `book_character_relations` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `bookUrl` TEXT NOT NULL DEFAULT '',
+                    `fromCharacterId` INTEGER NOT NULL DEFAULT 0,
+                    `toCharacterId` INTEGER NOT NULL DEFAULT 0,
+                    `relationName` TEXT NOT NULL DEFAULT '',
+                    `relationType` TEXT NOT NULL DEFAULT '',
+                    `description` TEXT NOT NULL DEFAULT '',
+                    `strength` INTEGER NOT NULL DEFAULT 50,
+                    `sortOrder` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                    FOREIGN KEY(`fromCharacterId`) REFERENCES `book_characters`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                    FOREIGN KEY(`toCharacterId`) REFERENCES `book_characters`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                )"""
+            }
+            runCatchingSql(db, "105→106 book_character_relations 索引") {
+                """CREATE INDEX IF NOT EXISTS `index_book_character_relations_bookUrl` ON `book_character_relations` (`bookUrl`)
+                ;CREATE INDEX IF NOT EXISTS `index_book_character_relations_fromCharacterId` ON `book_character_relations` (`fromCharacterId`)
+                ;CREATE INDEX IF NOT EXISTS `index_book_character_relations_toCharacterId` ON `book_character_relations` (`toCharacterId`)
+                ;CREATE UNIQUE INDEX IF NOT EXISTS `index_book_character_relations_bookUrl_fromCharacterId_toCharacterId_relationName` ON `book_character_relations` (`bookUrl`, `fromCharacterId`, `toCharacterId`, `relationName`)"""
+            }
+            runCatchingSql(db, "105→106 book_ai_chapter_summaries") {
+                """CREATE TABLE IF NOT EXISTS `book_ai_chapter_summaries` (
+                    `cacheKey` TEXT NOT NULL,
+                    `bookUrl` TEXT NOT NULL DEFAULT '',
+                    `bookName` TEXT NOT NULL DEFAULT '',
+                    `chapterIndex` INTEGER NOT NULL DEFAULT 0,
+                    `chapterKey` TEXT NOT NULL DEFAULT '',
+                    `chapterTitle` TEXT NOT NULL DEFAULT '',
+                    `contentHash` TEXT NOT NULL DEFAULT '',
+                    `modelId` TEXT NOT NULL DEFAULT '',
+                    `modelName` TEXT NOT NULL DEFAULT '',
+                    `summary` TEXT NOT NULL DEFAULT '',
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`cacheKey`)
+                )"""
+            }
+            runCatchingSql(db, "105→106 book_ai_chapter_summaries 索引") {
+                """CREATE INDEX IF NOT EXISTS `index_book_ai_chapter_summaries_bookUrl_chapterIndex` ON `book_ai_chapter_summaries` (`bookUrl`, `chapterIndex`)
+                ;CREATE INDEX IF NOT EXISTS `index_book_ai_chapter_summaries_bookUrl_contentHash` ON `book_ai_chapter_summaries` (`bookUrl`, `contentHash`)"""
+            }
+            runCatchingSql(db, "105→106 ai_read_aloud_role_caches") {
+                """CREATE TABLE IF NOT EXISTS `ai_read_aloud_role_caches` (
+                    `cacheKey` TEXT NOT NULL,
+                    `bookUrl` TEXT NOT NULL DEFAULT '',
+                    `chapterKey` TEXT NOT NULL DEFAULT '',
+                    `chapterIndex` INTEGER NOT NULL DEFAULT 0,
+                    `chapterTitle` TEXT NOT NULL DEFAULT '',
+                    `contentHash` TEXT NOT NULL DEFAULT '',
+                    `mode` TEXT NOT NULL DEFAULT '',
+                    `paragraphCount` INTEGER NOT NULL DEFAULT 0,
+                    `status` TEXT NOT NULL DEFAULT 'success',
+                    `retryCount` INTEGER NOT NULL DEFAULT 0,
+                    `lastError` TEXT NOT NULL DEFAULT '',
+                    `createdCharacterIdsJson` TEXT NOT NULL DEFAULT '',
+                    `characterHash` TEXT NOT NULL DEFAULT '',
+                    `voiceHash` TEXT NOT NULL DEFAULT '',
+                    `segmentsJson` TEXT NOT NULL DEFAULT '',
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`cacheKey`)
+                )"""
+            }
+            runCatchingSql(db, "105→106 ai_read_aloud_role_caches 索引") {
+                """CREATE INDEX IF NOT EXISTS `index_ai_read_aloud_role_caches_bookUrl_chapterIndex` ON `ai_read_aloud_role_caches` (`bookUrl`, `chapterIndex`)
+                ;CREATE INDEX IF NOT EXISTS `index_ai_read_aloud_role_caches_bookUrl_contentHash` ON `ai_read_aloud_role_caches` (`bookUrl`, `contentHash`)"""
+            }
+            runCatchingSql(db, "105→106 read_aloud_bgm_groups") {
+                """CREATE TABLE IF NOT EXISTS `read_aloud_bgm_groups` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `name` TEXT NOT NULL DEFAULT '',
+                    `assetType` TEXT NOT NULL DEFAULT 'bgm',
+                    `sortOrder` INTEGER NOT NULL DEFAULT 0,
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0
+                )"""
+            }
+            runCatchingSql(db, "105→106 read_aloud_bgm_groups 索引") {
+                """CREATE INDEX IF NOT EXISTS `index_read_aloud_bgm_groups_sortOrder_id` ON `read_aloud_bgm_groups` (`sortOrder`, `id`)
+                ;CREATE INDEX IF NOT EXISTS `index_read_aloud_bgm_groups_assetType_sortOrder_id` ON `read_aloud_bgm_groups` (`assetType`, `sortOrder`, `id`)"""
+            }
+            runCatchingSql(db, "105→106 read_aloud_bgm_tracks") {
+                """CREATE TABLE IF NOT EXISTS `read_aloud_bgm_tracks` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `groupId` INTEGER NOT NULL DEFAULT 0,
+                    `assetType` TEXT NOT NULL DEFAULT 'bgm',
+                    `name` TEXT NOT NULL DEFAULT '',
+                    `fileName` TEXT NOT NULL DEFAULT '',
+                    `filePath` TEXT NOT NULL DEFAULT '',
+                    `tags` TEXT NOT NULL DEFAULT '',
+                    `checksum` TEXT NOT NULL DEFAULT '',
+                    `durationMs` INTEGER NOT NULL DEFAULT 0,
+                    `defaultVolume` REAL NOT NULL DEFAULT 1.0,
+                    `enabled` INTEGER NOT NULL DEFAULT 1,
+                    `sortOrder` INTEGER NOT NULL DEFAULT 0,
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0
+                )"""
+            }
+            runCatchingSql(db, "105→106 read_aloud_bgm_tracks 索引") {
+                """CREATE INDEX IF NOT EXISTS `index_read_aloud_bgm_tracks_groupId_sortOrder_id` ON `read_aloud_bgm_tracks` (`groupId`, `sortOrder`, `id`)
+                ;CREATE INDEX IF NOT EXISTS `index_read_aloud_bgm_tracks_assetType_enabled_groupId_sortOrder_id` ON `read_aloud_bgm_tracks` (`assetType`, `enabled`, `groupId`, `sortOrder`, `id`)
+                ;CREATE INDEX IF NOT EXISTS `index_read_aloud_bgm_tracks_checksum` ON `read_aloud_bgm_tracks` (`checksum`)
+                ;CREATE INDEX IF NOT EXISTS `index_read_aloud_bgm_tracks_enabled` ON `read_aloud_bgm_tracks` (`enabled`)"""
+            }
+            runCatchingSql(db, "105→106 read_aloud_bgm_assignment_caches") {
+                """CREATE TABLE IF NOT EXISTS `read_aloud_bgm_assignment_caches` (
+                    `cacheKey` TEXT NOT NULL,
+                    `bookUrl` TEXT NOT NULL DEFAULT '',
+                    `chapterKey` TEXT NOT NULL DEFAULT '',
+                    `chapterIndex` INTEGER NOT NULL DEFAULT 0,
+                    `chapterTitle` TEXT NOT NULL DEFAULT '',
+                    `contentHash` TEXT NOT NULL DEFAULT '',
+                    `modelId` TEXT NOT NULL DEFAULT '',
+                    `catalogHash` TEXT NOT NULL DEFAULT '',
+                    `assignmentsJson` TEXT NOT NULL DEFAULT '',
+                    `status` TEXT NOT NULL DEFAULT 'success',
+                    `lastError` TEXT NOT NULL DEFAULT '',
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`cacheKey`)
+                )"""
+            }
+            runCatchingSql(db, "105→106 read_aloud_bgm_assignment_caches 索引") {
+                """CREATE INDEX IF NOT EXISTS `index_read_aloud_bgm_assignment_caches_bookUrl_chapterIndex` ON `read_aloud_bgm_assignment_caches` (`bookUrl`, `chapterIndex`)
+                ;CREATE INDEX IF NOT EXISTS `index_read_aloud_bgm_assignment_caches_bookUrl_contentHash` ON `read_aloud_bgm_assignment_caches` (`bookUrl`, `contentHash`)"""
+            }
+            runCatchingSql(db, "105→106 read_aloud_speaker_groups") {
+                """CREATE TABLE IF NOT EXISTS `read_aloud_speaker_groups` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `name` TEXT NOT NULL DEFAULT '',
+                    `enabled` INTEGER NOT NULL DEFAULT 1,
+                    `sortOrder` INTEGER NOT NULL DEFAULT 0,
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0
+                )"""
+            }
+            runCatchingSql(db, "105→106 read_aloud_speaker_groups 索引") {
+                """CREATE INDEX IF NOT EXISTS `index_read_aloud_speaker_groups_enabled_sortOrder_id` ON `read_aloud_speaker_groups` (`enabled`, `sortOrder`, `id`)
+                ;CREATE INDEX IF NOT EXISTS `index_read_aloud_speaker_groups_sortOrder_id` ON `read_aloud_speaker_groups` (`sortOrder`, `id`)"""
+            }
+            runCatchingSql(db, "105→106 read_aloud_speaker_group_items") {
+                """CREATE TABLE IF NOT EXISTS `read_aloud_speaker_group_items` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `groupId` INTEGER NOT NULL DEFAULT 0,
+                    `engineType` TEXT NOT NULL DEFAULT '',
+                    `engineValue` TEXT NOT NULL DEFAULT '',
+                    `engineName` TEXT NOT NULL DEFAULT '',
+                    `speakerName` TEXT NOT NULL DEFAULT '',
+                    `toneID` TEXT NOT NULL DEFAULT '',
+                    `sourceGroupId` TEXT NOT NULL DEFAULT '',
+                    `sourceGroupName` TEXT NOT NULL DEFAULT '',
+                    `sortOrder` INTEGER NOT NULL DEFAULT 0,
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    `updatedAt` INTEGER NOT NULL DEFAULT 0
+                )"""
+            }
+            runCatchingSql(db, "105→106 read_aloud_speaker_group_items 索引") {
+                """CREATE INDEX IF NOT EXISTS `index_read_aloud_speaker_group_items_groupId_sortOrder_id` ON `read_aloud_speaker_group_items` (`groupId`, `sortOrder`, `id`)
+                ;CREATE INDEX IF NOT EXISTS `index_read_aloud_speaker_group_items_engineType_engineValue_toneID` ON `read_aloud_speaker_group_items` (`engineType`, `engineValue`, `toneID`)"""
+            }
+            runCatchingSql(db, "105→106 ai_read_aloud_usage_records") {
+                """CREATE TABLE IF NOT EXISTS `ai_read_aloud_usage_records` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `type` TEXT NOT NULL DEFAULT '',
+                    `status` TEXT NOT NULL DEFAULT '',
+                    `bookUrl` TEXT NOT NULL DEFAULT '',
+                    `bookName` TEXT NOT NULL DEFAULT '',
+                    `chapterTitle` TEXT NOT NULL DEFAULT '',
+                    `chapterIndex` INTEGER NOT NULL DEFAULT 0,
+                    `cacheKey` TEXT NOT NULL DEFAULT '',
+                    `batchName` TEXT NOT NULL DEFAULT '',
+                    `providerName` TEXT NOT NULL DEFAULT '',
+                    `modelId` TEXT NOT NULL DEFAULT '',
+                    `elapsedMillis` INTEGER NOT NULL DEFAULT 0,
+                    `requestCount` INTEGER NOT NULL DEFAULT 0,
+                    `inputTokens` INTEGER NOT NULL DEFAULT 0,
+                    `cachedInputTokens` INTEGER NOT NULL DEFAULT 0,
+                    `outputTokens` INTEGER NOT NULL DEFAULT 0,
+                    `totalTokens` INTEGER NOT NULL DEFAULT 0,
+                    `summary` TEXT NOT NULL DEFAULT '',
+                    `error` TEXT NOT NULL DEFAULT '',
+                    `createdAt` INTEGER NOT NULL DEFAULT 0
+                )"""
+            }
+            runCatchingSql(db, "105→106 ai_read_aloud_usage_records 索引") {
+                """CREATE INDEX IF NOT EXISTS `index_ai_read_aloud_usage_records_type_createdAt` ON `ai_read_aloud_usage_records` (`type`, `createdAt`)
+                ;CREATE INDEX IF NOT EXISTS `index_ai_read_aloud_usage_records_bookUrl_chapterIndex` ON `ai_read_aloud_usage_records` (`bookUrl`, `chapterIndex`)
+                ;CREATE INDEX IF NOT EXISTS `index_ai_read_aloud_usage_records_cacheKey` ON `ai_read_aloud_usage_records` (`cacheKey`)"""
+            }
+            // httpTTS 新增 synthesisThreadCount/speakersJson/emotionsJson 列（speech 引擎配置）
+            runCatchingSql(db, "105→106 httpTTS add synthesisThreadCount") {
+                """ALTER TABLE `httpTTS` ADD COLUMN `synthesisThreadCount` INTEGER NOT NULL DEFAULT 1"""
+            }
+            runCatchingSql(db, "105→106 httpTTS add speakersJson") {
+                """ALTER TABLE `httpTTS` ADD COLUMN `speakersJson` TEXT NOT NULL DEFAULT ''"""
+            }
+            runCatchingSql(db, "105→106 httpTTS add emotionsJson") {
+                """ALTER TABLE `httpTTS` ADD COLUMN `emotionsJson` TEXT NOT NULL DEFAULT ''"""
+            }
+            AppLog.put("AppDatabase Migration 105→106: AI 相关 19 张新表创建成功")
+        }
+
+        private fun runCatchingSql(
+            db: SupportSQLiteDatabase,
+            tag: String,
+            sql: () -> String
+        ) {
+            // 简化说明：execSQL 一次仅执行一条语句，分号拼接多条会漏执行；按分号拆分逐条执行（建表/索引导入语句内部无分号，安全）
+            sql().split(";").map { it.trim() }.filter { it.isNotBlank() }
+                .forEach { stmt ->
+                    kotlin.runCatching { db.execSQL(stmt) }
+                        .onFailure { e ->
+                            AppLog.put("AppDatabase Migration 105→106: [$tag] 执行失败: ${e.message}")
+                        }
+                }
         }
     }
 

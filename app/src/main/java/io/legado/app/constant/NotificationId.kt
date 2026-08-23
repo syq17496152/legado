@@ -17,9 +17,13 @@ object NotificationId {
     const val VideoPlayService = 108
     // F-P1-1 自动任务通知 ID
     const val AutoTaskService = 109
+    const val AiTaskService = 112
+    const val PublicWebRelayService = 113
+    const val WebDavTask = 111
     const val AutoTaskBookUpdateBase = 20000
     const val AutoTaskNotifyBase = 21000
     const val Download = 10000
     const val ExportBook = 201
+    const val AudioCache = 202
 
 }

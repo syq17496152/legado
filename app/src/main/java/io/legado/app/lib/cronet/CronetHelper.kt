@@ -21,7 +21,6 @@ import org.chromium.net.ExperimentalCronetEngine
 import org.chromium.net.UploadDataProvider
 import org.chromium.net.UrlRequest
 import org.chromium.net.X509Util
-import org.chromium.net.impl.NativeCronetEngineBuilderImpl
 import org.json.JSONObject
 import splitties.init.appCtx
 
@@ -72,73 +71,22 @@ private fun initCronetEngineBlocking(): ExperimentalCronetEngine? {
 }
 
 private fun buildCronetEngine(): ExperimentalCronetEngine? {
-    // 防御性 try-catch：覆盖整个初始化，确保任何异常（含 apply 块内方法抛出）都被捕获
-    // 铁证：真机日志显示 "All available Cronet providers are disabled" 异常从 lazy 块逃逸，
-    //   原因是 try 只包裹 builder.build()，apply 块中的方法异常未被捕获
+    // Cronet 500.0.1（cronet-bundled）：libcronet.so 已随 AAR 自动打包并按架构加载，
+    // 无需手动 System.loadLibrary / NativeCronetEngineBuilderImpl / 自定义 LibraryLoader（CronetLoader）
+    // 统一用公开 ExperimentalCronetEngine.Builder，构建失败由外层 try-catch 兜底返回 null → 调用方回退 OkHttp
     return try {
         disableCertificateVerify()
-        // P0: 优先动态下载 libcronet.so（减少 APK 体积 6.37MB），失败再尝试 jniLibs 兜底
-        // 铁证：2026-07-31 用户决策"优化为动态下载"，移除 jniLibs/libcronet.so
-        // 动态下载的 so 文件名带版本号（libcronet.{version}.so），通过 System.load 加载
-        // ProGuard 规则（cronet-proguard-rules.pro + proguard-rules.pro）保留所有 Cronet Java 类，确保 JNI 调用正常
-        // 2026-07-30 崩溃根因是 R8 移除 Java 类（非 so 文件名问题），ProGuard 规则已修复
-        val nativeLoaded = try {
-            // P0-fix(2026-08-16): 优先 APK 内置 so（jniLibs）——零网络依赖，打开即用
-            // 铁证：私有仓库 Release 匿名不可下载（GitHub API 404，ghproxy 匿名代理同样拿不到私仓资产），
-            //   原方案真机上 so 永远装不上 → Cronet 降级 → 视频 CDN TLS 指纹被拒"播放不了"
-            try {
-                System.loadLibrary("cronet")
-                AppLog.put("CronetHelper: System.loadLibrary(cronet) success (from APK jniLibs)")
-                true
-            } catch (e: Throwable) {
-                // 内置缺失（理论上不发生，arm64-v8a 已随 APK 打包）：兜底动态下载
-                val soReady = CronetLoader.syncEnsureSoFile()
-                AppLog.put("CronetHelper: syncEnsureSoFile()=$soReady, soFile=${CronetLoader.soFileExists()}, md5=${CronetLoader.md5Value().take(8)}")
-                if (soReady) {
-                    CronetLoader.manualLoad()
-                } else {
-                    false
-                }
-            }
-        } catch (e: Throwable) {
-            AppLog.put("CronetHelper: native load failed", e)
-            false
-        }
-
-        // P0: 强制使用 NativeCronetEngineBuilderImpl，绕过 ExperimentalCronetEngine.Builder(context) 的 pickBuilderImpl 降级逻辑
-        // 根因：ExperimentalCronetEngine.Builder(context) 内部 pickBuilderImpl 尝试创建 NativeCronetEngineBuilderImpl，
-        //   但其内部 native 检查（如 Cronet.loadLibrary）可能因时序/条件不满足而失败，降级到 JavaCronetEngineBuilderImpl。
-        // 解决：native so 已加载后直接创建 NativeCronetEngineBuilderImpl，绕过 pickBuilderImpl 的降级判断
-        val engine = if (nativeLoaded) {
-            AppLog.put("CronetHelper: creating NativeCronetEngineBuilderImpl directly (bypass pickBuilderImpl)")
-            NativeCronetEngineBuilderImpl(appCtx).apply {
-                setLibraryLoader(CronetLoader)//设置自定义so库加载
-                setStoragePath(appCtx.externalCache.absolutePath)//设置缓存路径
-                enableHttpCache(HTTP_CACHE_DISK, (1024 * 1024 * 50).toLong())//设置50M的磁盘缓存
-                enableQuic(true)//设置支持http/3（HTTP/3 = HTTP over QUIC，Cronet 无独立 enableHttp3 方法）
-                enableHttp2(true)  //设置支持http/2
-                enablePublicKeyPinningBypassForLocalTrustAnchors(true)
-                enableBrotli(true)//Brotli压缩
-                // P1-1: 启用网络质量评估（2026-07-31）
-                // 作用：Cronet 内部测量有效带宽和 RTT，用于 QUIC 协商和连接迁移决策
-                // 成熟方案参考：Android CronetEngine 官方文档 enableNetworkQualityEstimator
-                enableNetworkQualityEstimator(true)
-                setExperimentalOptions(options)
-            }.build()
-        } else {
-            AppLog.put("CronetHelper: native load failed, fallback to default Builder (JavaCronetEngine)")
-            ExperimentalCronetEngine.Builder(appCtx).apply {
-                setLibraryLoader(CronetLoader)
-                setStoragePath(appCtx.externalCache.absolutePath)
-                enableHttpCache(HTTP_CACHE_DISK, (1024 * 1024 * 50).toLong())
-                enableQuic(true)
-                enableHttp2(true)
-                enablePublicKeyPinningBypassForLocalTrustAnchors(true)
-                enableBrotli(true)
-                enableNetworkQualityEstimator(true)
-                setExperimentalOptions(options)
-            }.build()
-        }
+        val engine = ExperimentalCronetEngine.Builder(appCtx).apply {
+            setStoragePath(appCtx.externalCache.absolutePath)//设置缓存路径
+            enableHttpCache(HTTP_CACHE_DISK, (1024 * 1024 * 50).toLong())//设置50M的磁盘缓存
+            enableQuic(true)//设置支持http/3（HTTP/3 = HTTP over QUIC，Cronet 无独立 enableHttp3 方法）
+            enableHttp2(true)  //设置支持http/2
+            enablePublicKeyPinningBypassForLocalTrustAnchors(true)
+            enableBrotli(true)//Brotli压缩
+            // P1-1: 启用网络质量评估（2026-07-31）：Cronet 内部测量有效带宽和 RTT，用于 QUIC 协商和连接迁移决策
+            enableNetworkQualityEstimator(true)
+            setExperimentalOptions(options)
+        }.build()
         AppLog.put("CronetHelper: engine built, class=${engine.javaClass.simpleName}, version=${engine.versionString}")
         DebugLog.d("Cronet Version:", engine.versionString)
         engine

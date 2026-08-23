@@ -224,6 +224,13 @@ object ReadBookConfig {
             field = value
             appCtx.putPrefInt(PreferKey.autoReadSpeed, value)
         }
+    var autoReadMode = appCtx.getPrefInt(PreferKey.autoReadMode, AUTO_READ_MODE_SCROLL)
+        set(value) {
+            field = value
+            appCtx.putPrefInt(PreferKey.autoReadMode, value)
+        }
+    const val AUTO_READ_MODE_SCROLL = 0
+    const val AUTO_READ_MODE_TIMED = 1
     var styleSelect: Int
         get() = if (isComic) comicStyleSelect else readStyleSelect
         set(value) {
@@ -293,6 +300,19 @@ object ReadBookConfig {
         get() = config.textBold
         set(value) {
             config.textBold = value
+        }
+
+    var textWeight: Int
+        get() = ReaderFontWeight.normalize(config.textBold)
+        set(value) {
+            config.textBold = ReaderFontWeight.normalize(value)
+        }
+
+    var paperInkStrength: Int
+        get() = config.curPaperInkStrength()
+        set(value) {
+            config.paperInkStrength = value.coerceIn(0, 100)
+            config.paperEffect = false
         }
 
     var textSize: Int
@@ -455,6 +475,8 @@ object ReadBookConfig {
             exportConfig.letterSpacing = shareConfig.letterSpacing
             exportConfig.lineSpacingExtra = shareConfig.lineSpacingExtra
             exportConfig.paragraphSpacing = shareConfig.paragraphSpacing
+            exportConfig.paperEffect = shareConfig.paperEffect
+            exportConfig.paperInkStrength = shareConfig.paperInkStrength
             exportConfig.titleMode = shareConfig.titleMode
             exportConfig.titleSize = shareConfig.titleSize
             exportConfig.titleTopSpacing = shareConfig.titleTopSpacing
@@ -584,6 +606,8 @@ object ReadBookConfig {
         var letterSpacing: Float = 0.1f,//字间距
         var lineSpacingExtra: Int = 12,//行间距
         var paragraphSpacing: Int = 2,//段距
+        var paperEffect: Boolean = false,//纸质化
+        var paperInkStrength: Int = 0,//纸墨融合强度
         var titleMode: Int = 0,//标题位置 0:居左 1:居中 2:隐藏
         var titleSize: Int = 0,
         var titleTopSpacing: Int = 0,
@@ -613,7 +637,10 @@ object ReadBookConfig {
         var tipColor: Int = 0,
         var tipDividerColor: Int = -1,
         var headerMode: Int = 0,
-        var footerMode: Int = 0
+        var footerMode: Int = 0,
+        private var readScrollFollowBackground: Boolean = false,
+        private var readScrollFollowBackgroundNight: Boolean = false,
+        private var readScrollFollowBackgroundEInk: Boolean = false
     ) {
 
         @Transient
@@ -744,6 +771,10 @@ object ReadBookConfig {
             }
         }
 
+        fun curPaperInkStrength(): Int {
+            return paperInkStrength.takeIf { it > 0 } ?: if (paperEffect) 60 else 0
+        }
+
         fun setCurBg(bgType: Int, bg: String) {
             when {
                 AppConfig.isEInkMode -> {
@@ -776,6 +807,22 @@ object ReadBookConfig {
                 AppConfig.isEInkMode -> bgTypeEInk
                 AppConfig.isNightTheme -> bgTypeNight
                 else -> bgType
+            }
+        }
+
+        fun curReadScrollFollowBackground(): Boolean {
+            return when {
+                AppConfig.isEInkMode -> readScrollFollowBackgroundEInk
+                AppConfig.isNightTheme -> readScrollFollowBackgroundNight
+                else -> readScrollFollowBackground
+            }
+        }
+
+        fun setCurReadScrollFollowBackground(value: Boolean) {
+            when {
+                AppConfig.isEInkMode -> readScrollFollowBackgroundEInk = value
+                AppConfig.isNightTheme -> readScrollFollowBackgroundNight = value
+                else -> readScrollFollowBackground = value
             }
         }
 
@@ -873,6 +920,8 @@ object ReadBookConfig {
             "letterSpacing" to letterSpacing,
             "lineSpacingExtra" to lineSpacingExtra,
             "paragraphSpacing" to paragraphSpacing,
+            "paperEffect" to paperEffect,
+            "paperInkStrength" to paperInkStrength,
             "titleMode" to titleMode,
             "titleSize" to titleSize,
             "titleTopSpacing" to titleTopSpacing,
@@ -902,7 +951,10 @@ object ReadBookConfig {
             "tipColor" to tipColor,
             "tipDividerColor" to tipDividerColor,
             "headerMode" to headerMode,
-            "footerMode" to footerMode
+            "footerMode" to footerMode,
+            "readScrollFollowBackground" to readScrollFollowBackground,
+            "readScrollFollowBackgroundNight" to readScrollFollowBackgroundNight,
+            "readScrollFollowBackgroundEInk" to readScrollFollowBackgroundEInk
         )
 
     }

@@ -103,8 +103,12 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
         url: String,
         html: String? = null,
         preloadJs: String? = null,
-        config: String? = null
+        config: String? = null,
+        webViewSession: CommentWebViewSession? = null,
+        onDismiss: (() -> Unit)? = null
     ) : this() {
+        this.webViewSession = webViewSession
+        this.onDismissAction = onDismiss
         arguments = Bundle().apply {
             putString("sourceKey", sourceKey)
             putInt("bookType", bookType)
@@ -112,6 +116,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
             putString("html", html)
             putString("preloadJs", preloadJs)
             putString("config", config)
+            putBoolean("useCommentWebViewSession", webViewSession != null)
         }
     }
 
@@ -139,10 +144,13 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
     private var customWebViewCallback: WebChromeClient.CustomViewCallback? = null
     private var originOrientation: Int? = null
     private var needClearHistory = true
+    private var webViewSession: CommentWebViewSession? = null
+    private var onDismissAction: (() -> Unit)? = null
+    private var dismissActionNotified = false
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
-        pooledWebView = WebViewPool.acquire(context)
+        pooledWebView = webViewSession?.acquire(context) ?: WebViewPool.acquire(context)
         currentWebView = pooledWebView.realWebView
     }
 
@@ -607,7 +615,16 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
 
     override fun onDestroyView() {
         customWebViewCallback?.onCustomViewHidden()
-        WebViewPool.release(pooledWebView)
+        if (webViewSession != null) {
+            webViewSession?.detachForReuse(pooledWebView)
+        } else {
+            WebViewPool.release(pooledWebView)
+        }
+        if (!dismissActionNotified) {
+            dismissActionNotified = true
+            onDismissAction?.invoke()
+            onDismissAction = null
+        }
         originOrientation?.let {
             activity?.requestedOrientation = it
         }

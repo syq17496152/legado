@@ -22,11 +22,6 @@ import io.legado.app.utils.writeText
 class TocViewModel(application: Application) : BaseViewModel(application) {
     var bookUrl: String = ""
     var bookData = MutableLiveData<Book>()
-    var chapterListCallBack: ChapterListCallBack? = null
-    var bookMarkCallBack: BookmarkCallBack? = null
-    // F-P1-2 高亮标注回调
-    var highlightCallBack: HighlightCallBack? = null
-    var searchKey: String? = null
 
     fun initBook(bookUrl: String) {
         this.bookUrl = bookUrl
@@ -68,18 +63,6 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
         }.onSuccess {
             it?.let(success)
         }
-    }
-
-    fun startChapterListSearch(newText: String?) {
-        chapterListCallBack?.upChapterList(newText)
-    }
-
-    fun startBookmarkSearch(newText: String?) {
-        bookMarkCallBack?.upBookmark(newText)
-    }
-
-    fun upChapterListAdapter() {
-        chapterListCallBack?.upAdapter()
     }
 
     fun saveBookmark(treeUri: Uri) {
@@ -124,20 +107,4 @@ class TocViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    interface ChapterListCallBack {
-        fun upChapterList(searchKey: String?)
-
-        fun clearDisplayTitle()
-
-        fun upAdapter()
-    }
-
-    interface BookmarkCallBack {
-        fun upBookmark(searchKey: String?)
-    }
-
-    // F-P1-2 高亮标注回调
-    interface HighlightCallBack {
-        fun upHighlight(searchKey: String?)
-    }
 }

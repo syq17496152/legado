@@ -450,9 +450,17 @@ fun View.applyStatusBarPadding(withInitialPadding: Boolean = false) {
     val initialPadding = if (withInitialPadding) topPadding else 0
     setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
         val insets = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars())
-        topPadding = initialPadding + insets.top
+        if (this is StatusBarInsetAware) {
+            onStatusBarInsetChanged(insets.top, initialPadding)
+        } else {
+            topPadding = initialPadding + insets.top
+        }
         windowInsets
     }
+}
+
+interface StatusBarInsetAware {
+    fun onStatusBarInsetChanged(insetTop: Int, initialPaddingTop: Int)
 }
 
 fun View.applyNavigationBarPadding(withInitialPadding: Boolean = false) {
@@ -469,6 +477,18 @@ fun View.applyNavigationBarMargin(withInitialMargin: Boolean = false) {
         updateLayoutParams<ViewGroup.MarginLayoutParams> {
             bottomMargin = initialMargin + windowInsets.navigationBarHeight
         }
+        windowInsets
+    }
+}
+
+fun View.applyMainBottomBarPadding(withInitialPadding: Boolean = false) {
+    // 简化说明: 相对 Archive 版移除了 RecyclerView ItemDecoration 与未存在资源
+    // (R.dimen.main_content_bottom_bar_padding / R.id.main_bottom_bar_space_decoration),
+    // 目标项目无对应资源且当前仅用于 ScrollView,底部留白以 90dp 等效值补齐。
+    val initialPadding = if (withInitialPadding) bottomPadding else 0
+    setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
+        val bottomSpace = windowInsets.navigationBarHeight + 90.dpToPx()
+        bottomPadding = initialPadding + bottomSpace
         windowInsets
     }
 }

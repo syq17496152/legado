@@ -1,217 +1,186 @@
 package io.legado.app.ui.config
 
-import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
 import android.view.View
-import android.view.ViewGroup
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.ui.platform.ComposeView
-import androidx.fragment.app.Fragment
-import androidx.lifecycle.lifecycleScope
+import androidx.core.view.MenuProvider
 import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
+import io.legado.app.help.LauncherIconHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
-import io.legado.app.help.http.addHeaders
-import io.legado.app.help.http.newCallResponse
-import io.legado.app.help.http.okHttpClient
-import io.legado.app.model.analyzeRule.AnalyzeUrl
-import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.theme.LegadoTheme
-import io.legado.app.ui.widget.components.MenuAction
-import io.legado.app.utils.ColorUtils
-import io.legado.app.utils.FileUtils
-import io.legado.app.utils.GSON
-import io.legado.app.utils.MD5Utils
-import io.legado.app.utils.externalFiles
-import io.legado.app.utils.getClipText
-import io.legado.app.utils.getPrefInt
-import io.legado.app.utils.inputStream
+import io.legado.app.ui.config.compose.ComposeSettingFragment
+import io.legado.app.ui.config.compose.SettingActionSpec
+import io.legado.app.ui.config.compose.SettingChoiceOption
+import io.legado.app.ui.config.compose.SettingChoiceSpec
+import io.legado.app.ui.config.compose.SettingPageSpec
+import io.legado.app.ui.config.compose.SettingSectionSpec
+import io.legado.app.ui.config.compose.SettingSwitchSpec
+import io.legado.app.utils.applyTint
 import io.legado.app.utils.postEvent
-import io.legado.app.utils.putPrefBoolean
-import io.legado.app.utils.putPrefInt
-import io.legado.app.utils.putPrefString
-import io.legado.app.utils.readUri
-import io.legado.app.utils.removePref
-import io.legado.app.utils.share
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.toastOnUi
-import kotlinx.coroutines.launch
-import splitties.init.appCtx
-import java.io.FileOutputStream
 
-/**
- * 主题设置（L-E2，主题架构 v2 重设计）：内容区全 Compose（[ThemeConfigScreen]），
- * 文件选择/下载/分享等系统交互保留 Fragment。
- *
- * 旧版 PreferenceFragment 实现废弃：色行改 ColorPickerSheet 活预览（MoRealm 思路）、
- * 主题列表改瓦片网格（MD3-DIY 手机模型预览），改色经 ThemeSync 即时全局换肤
- * （本页不重建，ConfigActivity 豁免 RECREATE 重建）。
- */
-class ThemeConfigFragment : Fragment() {
+class ThemeConfigFragment : ComposeSettingFragment(), MenuProvider {
 
-    private val requestCodeBgLight = 121
-    private val requestCodeBgDark = 122
-
-    private val selectImage = registerForActivityResult(HandleFileContract()) {
-        it.uri?.let { uri ->
-            when (it.requestCode) {
-                requestCodeBgLight -> setBgFromUri(uri, PreferKey.bgImage) { upTheme(false) }
-                requestCodeBgDark -> setBgFromUri(uri, PreferKey.bgImageN) { upTheme(true) }
-            }
-        }
-    }
-
-    override fun onCreateView(
-        inflater: android.view.LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View {
-        return ComposeView(requireContext()).apply {
-            setContent {
-                LegadoTheme {
-                    ThemeConfigScreen(
-                        onApplyConfig = { config ->
-                            ThemeConfig.applyConfig(requireContext(), config)
-                        },
-                        onDeleteConfig = { config ->
-                            val index = ThemeConfig.configList.indexOf(config)
-                            if (index >= 0) {
-                                ThemeConfig.delConfig(index)
-                            }
-                        },
-                        onShareConfig = { config ->
-                            requireContext().share(GSON.toJson(config), getString(R.string.share))
-                        },
-                        onImportClick = {
-                            val clip = requireContext().getClipText()
-                            when {
-                                clip.isNullOrEmpty() -> toastOnUi(R.string.cannot_empty)
-                                !ThemeConfig.addConfig(clip) -> toastOnUi("格式不对,添加失败")
-                            }
-                        },
-                        onColorChange = { isNightGroup, key, color ->
-                            // 背景色明暗守卫（原 ColorPreference.onSaveColor 逻辑）
-                            if (key == PreferKey.cBackground && !isNightGroup &&
-                                !ColorUtils.isColorLight(color)
-                            ) {
-                                toastOnUi(R.string.day_background_too_dark)
-                            } else if (key == PreferKey.cNBackground && isNightGroup &&
-                                ColorUtils.isColorLight(color)
-                            ) {
-                                toastOnUi(R.string.night_background_too_light)
-                            } else {
-                                requireContext().putPrefInt(key, color)
-                                upTheme(isNightGroup)
-                            }
-                        },
-                        onTransparentNavBarChange = { isNightGroup, checked ->
-                            val key = if (isNightGroup) PreferKey.tNavBarN else PreferKey.tNavBar
-                            requireContext().putPrefBoolean(key, checked)
-                            upTheme(isNightGroup)
-                        },
-                        onBgImageClick = { isNightGroup ->
-                            selectImage.launch {
-                                requestCode = if (isNightGroup) {
-                                    requestCodeBgDark
-                                } else {
-                                    requestCodeBgLight
-                                }
-                                mode = HandleFileContract.IMAGE
-                            }
-                        },
-                        onBgImageDelete = { isNightGroup ->
-                            val key = if (isNightGroup) PreferKey.bgImageN else PreferKey.bgImage
-                            requireContext().removePref(key)
-                            upTheme(isNightGroup)
-                        },
-                        onBlurringChange = { isNightGroup, value ->
-                            val key = if (isNightGroup) {
-                                PreferKey.bgImageNBlurring
-                            } else {
-                                PreferKey.bgImageBlurring
-                            }
-                            requireContext().putPrefInt(key, value)
-                            upTheme(isNightGroup)
-                        },
-                        onSaveTheme = { isNightGroup, name ->
-                            if (isNightGroup) {
-                                ThemeConfig.saveNightTheme(requireContext(), name)
-                            } else {
-                                ThemeConfig.saveDayTheme(requireContext(), name)
-                            }
-                            toastOnUi(R.string.set_success)
-                        },
-                        onTransparentStatusBarChange = { checked ->
-                            requireContext()
-                                .putPrefBoolean(PreferKey.transparentStatusBar, checked)
-                            recreateActivities()
-                        },
-                        onImmNavigationBarChange = { checked ->
-                            requireContext().putPrefBoolean(PreferKey.immNavigationBar, checked)
-                            recreateActivities()
-                        },
-                        onElevationChange = { value ->
-                            AppConfig.elevation = value
-                            recreateActivities()
-                        },
-                        onFontScaleChange = { value ->
-                            requireContext().putPrefInt(PreferKey.fontScale, value)
-                            recreateActivities()
-                        },
-                        onCoverConfigClick = {
-                            startActivity<ConfigActivity> {
-                                putExtra("configTag", ConfigTag.COVER_CONFIG)
-                            }
-                        },
-                        onWelcomeConfigClick = {
-                            startActivity<ConfigActivity> {
-                                putExtra("configTag", ConfigTag.WELCOME_CONFIG)
-                            }
-                        }
-                    )
-                }
-            }
-        }
-    }
+    override val titleRes: Int = R.string.theme_setting
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        activity?.setTitle(R.string.theme_setting)
-        // L-E2 S2：菜单迁移至 ConfigActivity Compose 顶栏（日夜切换）
-        (activity as? ConfigActivity)?.setTopBarMenu(
-            listOf(
-                MenuAction(
-                    icon = Icons.Filled.DarkMode,
-                    title = getString(R.string.theme_mode),
-                    onClick = {
-                        AppConfig.isNightTheme = !AppConfig.isNightTheme
-                        ThemeConfig.applyDayNight(requireContext())
-                    }
+        activity?.addMenuProvider(this, viewLifecycleOwner)
+    }
+
+    override fun buildPageSpec(): SettingPageSpec {
+        return SettingPageSpec(
+            titleRes = titleRes,
+            sections = listOf(
+                SettingSectionSpec(
+                    items = listOf(
+                        SettingChoiceSpec(
+                            key = PreferKey.launcherIcon,
+                            title = getString(R.string.change_icon),
+                            summary = getString(R.string.change_icon_summary),
+                            options = iconOptions(),
+                            selectedValue = stringSetting(PreferKey.launcherIcon, DEFAULT_LAUNCHER_ICON),
+                            visible = Build.VERSION.SDK_INT >= 26,
+                            onSelected = { updateStringSetting(PreferKey.launcherIcon, it) }
+                        ),
+                        SettingSwitchSpec(
+                            key = PreferKey.mainTransparentStatusBar,
+                            title = getString(R.string.main_immersion_status_bar),
+                            summary = getString(R.string.main_status_bar_immersion),
+                            checked = booleanSetting(PreferKey.mainTransparentStatusBar, false),
+                            onCheckedChange = {
+                                updateBooleanSetting(PreferKey.mainTransparentStatusBar, it)
+                            }
+                        ),
+                        SettingSwitchSpec(
+                            key = PreferKey.immersiveManageBar,
+                            title = getString(R.string.manage_bar_immersion),
+                            summary = getString(R.string.manage_bar_immersion_summary),
+                            checked = booleanSetting(PreferKey.immersiveManageBar, true),
+                            onCheckedChange = {
+                                updateBooleanSetting(PreferKey.immersiveManageBar, it)
+                            }
+                        ),
+                        SettingActionSpec(
+                            key = KEY_THEME_MANAGE,
+                            title = getString(R.string.theme_list),
+                            summary = getString(R.string.theme_list_summary),
+                            onClick = { startActivity<ThemeManageActivity>() }
+                        ),
+                        SettingActionSpec(
+                            key = KEY_NAVIGATION_BAR_MANAGE,
+                            title = getString(R.string.navigation_bar_manage),
+                            summary = getString(R.string.navigation_bar_manage_summary),
+                            onClick = { startActivity<NavigationBarManageActivity>() }
+                        ),
+                        SettingActionSpec(
+                            key = KEY_DISCOVERY_SUBSCRIPTION_SETTINGS,
+                            title = getString(R.string.discovery_subscription_settings_title),
+                            summary = getString(R.string.discovery_subscription_settings_summary),
+                            onClick = {
+                                startActivity<ConfigActivity> {
+                                    putExtra("configTag", ConfigTag.DISCOVERY_SUBSCRIPTION_CONFIG)
+                                }
+                            }
+                        ),
+                        SettingActionSpec(
+                            key = KEY_TOP_BAR_MANAGE,
+                            title = getString(R.string.top_bar_manage),
+                            summary = getString(R.string.top_bar_manage_summary),
+                            onClick = { startActivity<TopBarManageActivity>() }
+                        ),
+                        SettingActionSpec(
+                            key = KEY_BOOK_INFO_MANAGE,
+                            title = getString(R.string.book_info_manage),
+                            summary = getString(R.string.book_info_manage_summary),
+                            onClick = { startActivity<BookInfoManageActivity>() }
+                        ),
+                        SettingActionSpec(
+                            key = KEY_BUBBLE_MANAGE,
+                            title = getString(R.string.bubble_manage),
+                            summary = getString(R.string.bubble_manage_summary),
+                            onClick = { startActivity<BubbleManageActivity>() }
+                        ),
+                        SettingActionSpec(
+                            key = KEY_SHARE_NOTE_TEMPLATE_MANAGE,
+                            title = "摘录分享模板",
+                            summary = "管理正文长按分享图片使用的 HTML 模板",
+                            searchKeys = listOf("分享模板", "摘录模板", "笔记模板", "正文分享"),
+                            onClick = { startActivity<ShareNoteTemplateManageActivity>() }
+                        ),
+                        SettingActionSpec(
+                            key = ConfigTag.COVER_CONFIG,
+                            title = getString(R.string.cover_config),
+                            summary = getString(R.string.cover_config_summary),
+                            onClick = {
+                                startActivity<ConfigActivity> {
+                                    putExtra("configTag", ConfigTag.COVER_CONFIG)
+                                }
+                            }
+                        )
+                    )
                 )
             )
         )
     }
 
-    override fun onDestroyView() {
-        super.onDestroyView()
-        // 防止 ConfigActivity 顶栏残留本页菜单
-        (activity as? ConfigActivity)?.setTopBarMenu(emptyList())
+    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
+        menuInflater.inflate(R.menu.theme_config, menu)
+        updateThemeModeMenu(menu)
+        menu.applyTint(requireContext())
     }
 
-    /**
-     * 应用主题：当前模式组实时生效（applyTheme→ThemeSync.bump 即时全局换肤）；
-     * 非当前模式组已保存偏好，切换模式后生效（toast 明确反馈，消除「设置无效」观感）。
-     */
-    private fun upTheme(isNightGroup: Boolean) {
-        if (AppConfig.isNightTheme == isNightGroup) {
-            ThemeConfig.applyTheme(requireContext())
-            recreateActivities()
+    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+        when (menuItem.itemId) {
+            R.id.menu_theme_mode -> {
+                AppConfig.isNightTheme = !AppConfig.isNightTheme
+                menuItem.setIcon(themeModeIconRes())
+                ThemeConfig.applyDayNight(requireContext())
+                return true
+            }
+        }
+        return false
+    }
+
+    override fun onSettingPreferenceChanged(key: String) {
+        when (key) {
+            PreferKey.launcherIcon -> LauncherIconHelp.changeIcon(
+                stringSetting(PreferKey.launcherIcon, DEFAULT_LAUNCHER_ICON)
+            )
+
+            PreferKey.mainTransparentStatusBar,
+            PreferKey.transparentStatusBar,
+            PreferKey.immersiveManageBar,
+            PreferKey.immNavigationBar -> recreateActivities()
+        }
+    }
+
+    private fun updateThemeModeMenu(menu: Menu) {
+        menu.findItem(R.id.menu_theme_mode)?.setIcon(themeModeIconRes())
+    }
+
+    private fun themeModeIconRes(): Int {
+        return if (AppConfig.isNightTheme) {
+            R.drawable.ic_daytime
         } else {
-            val modeName = getString(if (isNightGroup) R.string.night else R.string.day)
-            toastOnUi(getString(R.string.theme_saved_pending_mode, modeName))
+            R.drawable.ic_brightness
+        }
+    }
+
+    private fun iconOptions(): List<SettingChoiceOption> {
+        val entries = resources.getStringArray(R.array.icon_names)
+        val values = resources.getStringArray(R.array.icons)
+        return values.mapIndexed { index, value ->
+            SettingChoiceOption(
+                value = value,
+                label = entries.getOrElse(index) { value },
+                iconName = value
+            )
         }
     }
 
@@ -219,70 +188,14 @@ class ThemeConfigFragment : Fragment() {
         postEvent(EventBus.RECREATE, "")
     }
 
-    private fun setBgFromUri(uri: Uri, preferenceKey: String, success: () -> Unit) {
-        if (uri.scheme?.lowercase() in listOf("http", "https")) {
-            lifecycleScope.launch {
-                kotlin.runCatching {
-                    appCtx.toastOnUi("下载背景图片中...")
-                    val analyzeUrl = AnalyzeUrl(uri.toString())
-                    val url = analyzeUrl.urlNoQuery
-                    var file = requireContext().externalFiles
-                    val res = okHttpClient.newCallResponse(0) {
-                        addHeaders(analyzeUrl.headerMap)
-                        url(url)
-                    }
-                    val contentType = res.header("Content-Type") ?: "image/jpeg"
-                    val imageType = when {
-                        contentType.contains("png", ignoreCase = true) -> "png"
-                        contentType.contains("gif", ignoreCase = true) -> "gif"
-                        contentType.contains("webp", ignoreCase = true) -> "webp"
-                        else -> "jpg"
-                    }
-                    val suffix = if (url.contains(".9.png", true)) {
-                        ".9.png"
-                    } else {
-                        ".$imageType"
-                    }
-                    val fileName = MD5Utils.md5Encode(url) + suffix
-                    file = FileUtils.createFileIfNotExist(file, preferenceKey, fileName)
-                    res.body.byteStream().use { inputStream ->
-                        FileOutputStream(file).use { outputStream ->
-                            inputStream.copyTo(outputStream)
-                        }
-                    }
-                    requireContext().putPrefString(preferenceKey, file.absolutePath)
-                    if (isAdded && context != null) {
-                        success()
-                    }
-                }.onSuccess {
-                    appCtx.toastOnUi("设定成功")
-                }.onFailure {
-                    appCtx.toastOnUi(it.localizedMessage)
-                }
-            }
-            return
-        }
-        readUri(uri) { fileDoc, inputStream ->
-            kotlin.runCatching {
-                var file = requireContext().externalFiles
-                val suffix = if (fileDoc.name.contains(".9.png", true)) {
-                    ".9.png"
-                } else {
-                    "." + fileDoc.name.substringAfterLast(".")
-                }
-                val fileName = uri.inputStream(requireContext()).getOrThrow().use {
-                    MD5Utils.md5Encode(it) + suffix
-                }
-                file = FileUtils.createFileIfNotExist(file, preferenceKey, fileName)
-                FileOutputStream(file).use {
-                    inputStream.copyTo(it)
-                }
-                requireContext().putPrefString(preferenceKey, file.absolutePath)
-                success()
-            }.onFailure {
-                appCtx.toastOnUi(it.localizedMessage)
-            }
-        }
+    companion object {
+        private const val DEFAULT_LAUNCHER_ICON = "ic_launcher"
+        private const val KEY_THEME_MANAGE = "theme_manage"
+        private const val KEY_NAVIGATION_BAR_MANAGE = "navigation_bar_manage"
+        private const val KEY_DISCOVERY_SUBSCRIPTION_SETTINGS = "discoverySubscriptionSettings"
+        private const val KEY_TOP_BAR_MANAGE = "top_bar_manage"
+        private const val KEY_BOOK_INFO_MANAGE = "book_info_manage"
+        private const val KEY_BUBBLE_MANAGE = "bubble_manage"
+        private const val KEY_SHARE_NOTE_TEMPLATE_MANAGE = "share_note_template_manage"
     }
-
 }

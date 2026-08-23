@@ -5,11 +5,14 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- L-RssSource 订阅源管理页：顶栏 Compose 化（GlassTopAppBar + 搜索 SettingsSearchBar + 更多菜单 AppDropdownMenu） -->
-    <androidx.compose.ui.platform.ComposeView
-        android:id="@+id/compose_top_bar"
+    <io.legado.app.ui.widget.TitleBar
+        android:id="@+id/title_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        app:contentInsetStartWithNavigation="0dp"
+        app:contentLayout="@layout/view_search"
+        app:displayHomeAsUp="true"
+        app:title="@string/rss_source" />
 
     <FrameLayout
         android:layout_width="match_parent"

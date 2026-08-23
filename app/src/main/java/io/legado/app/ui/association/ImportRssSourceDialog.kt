@@ -3,6 +3,8 @@ package io.legado.app.ui.association
 import android.annotation.SuppressLint
 import android.content.DialogInterface
 import android.os.Bundle
+import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.material.icons.Icons
@@ -21,10 +23,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssSource
@@ -36,13 +38,13 @@ import io.legado.app.ui.widget.components.ImportItem
 import io.legado.app.ui.widget.components.ImportSourceSheet
 import io.legado.app.ui.widget.components.ImportState
 import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.GSON
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.putPrefBoolean
-import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
@@ -57,7 +59,7 @@ import kotlinx.coroutines.withContext
  *  - LiveData（successLiveData/errorLiveData）→ Fragment 级 Compose 状态字段（mutableStateOf）
  *  - 普通 ArrayList（allSources/checkSources/selectStatus）→ remember 派生 + SnapshotStateList 镜像
  */
-class ImportRssSourceDialog() : BaseDialogFragment(R.layout.dialog_import_sheet),
+class ImportRssSourceDialog() : ComposeDialogFragment(),
     CodeDialog.Callback {
 
     constructor(source: String, finishOnDismiss: Boolean = false) : this() {
@@ -66,6 +68,10 @@ class ImportRssSourceDialog() : BaseDialogFragment(R.layout.dialog_import_sheet)
             putBoolean("finishOnDismiss", finishOnDismiss)
         }
     }
+
+    override val dialogTheme: Int = R.style.Theme_Legado_ComposeDialog_Bottom
+    override val dialogGravity: Int = Gravity.BOTTOM
+    override val dialogWindowAnimations: Int = R.style.AnimDialogBottom
 
     private val viewModel by viewModels<ImportRssSourceViewModel>()
 
@@ -76,11 +82,6 @@ class ImportRssSourceDialog() : BaseDialogFragment(R.layout.dialog_import_sheet)
     private val successCount = mutableStateOf<Int?>(null)
     private val errorLive = mutableStateOf<String?>(null)
 
-    override fun onStart() {
-        super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-    }
-
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
         if (arguments?.getBoolean("finishOnDismiss") == true) {
@@ -90,7 +91,23 @@ class ImportRssSourceDialog() : BaseDialogFragment(R.layout.dialog_import_sheet)
 
     @OptIn(ExperimentalMaterial3Api::class)
     @SuppressLint("NotifyDataSetChanged")
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    ImportRssSourceSheetContent()
+                }
+            }
+        }
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
         val source = arguments?.getString("source")
         if (source.isNullOrEmpty()) {
             dismiss()
@@ -101,12 +118,6 @@ class ImportRssSourceDialog() : BaseDialogFragment(R.layout.dialog_import_sheet)
         }
         viewModel.errorLiveData.observe(viewLifecycleOwner) {
             errorLive.value = it
-        }
-        val composeView = view.findViewById<ComposeView>(R.id.compose_view)
-        composeView.setContent {
-            LegadoTheme {
-                ImportRssSourceSheetContent()
-            }
         }
         viewModel.importSource(source)
     }

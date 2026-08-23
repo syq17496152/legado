@@ -150,3 +150,14 @@ scripts/publish_config.json
 /logs/live_logcat.txt
 /logs/live_logcat_v2.txt
 /logs/test_logcat.txt
+
+# === archive 迁移期间产生的临时/垃圾产物（2026-08-23 规整，不入库）===
+*.hprof
+/temp_screen.png
+/build-release-r8.txt
+/bak-*/
+
+# === 本地调试残留（.trae 下未分类临时文件，不入库）===
+/.trae/read76_*.txt
+/.trae/memory/*.bak_archived
+/.trae/tmp/

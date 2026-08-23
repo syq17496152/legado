@@ -15,6 +15,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.databinding.DialogContentEditBinding
 import io.legado.app.databinding.DialogEditTextBinding
+import io.legado.app.constant.EventBus
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.isLocal
@@ -24,6 +25,7 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.ReadBook
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.applyTint
+import io.legado.app.utils.postEvent
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -87,7 +89,7 @@ class ContentEditDialog : BaseDialogFragment(R.layout.dialog_content_edit) {
                 }
                 R.id.menu_reset -> viewModel.initContent(true) { content ->
                     binding.contentView.setText(content)
-                    ReadBook.loadContent(ReadBook.durChapterIndex, resetPageOffset = false)
+                    refreshCurrentChapter()
                 }
                 R.id.menu_copy_all -> requireContext()
                     .sendToClip("${binding.toolBar.title}\n${binding.contentView.text}")
@@ -109,7 +111,7 @@ class ContentEditDialog : BaseDialogFragment(R.layout.dialog_content_edit) {
                         chapter.update()
                     }
                     binding.toolBar.title = chapter.getDisplayTitle()
-                    ReadBook.loadContent(ReadBook.durChapterIndex, resetPageOffset = false)
+                    refreshCurrentChapter()
                 }
             }
         }
@@ -128,8 +130,13 @@ class ContentEditDialog : BaseDialogFragment(R.layout.dialog_content_edit) {
                 .getChapter(book.bookUrl, ReadBook.durChapterIndex)
                 ?: return@async
             BookHelp.saveText(book, chapter, content)
-            ReadBook.loadContent(ReadBook.durChapterIndex, resetPageOffset = false)
+            refreshCurrentChapter()
         }
+    }
+
+    private fun refreshCurrentChapter() {
+        ReadBook.clearTextChapter()
+        postEvent(EventBus.UP_CONFIG, arrayListOf(5))
     }
 
     class ContentEditViewModel(application: Application) : BaseViewModel(application) {

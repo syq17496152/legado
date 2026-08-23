@@ -3,45 +3,113 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
 
-    <!-- 发现页顶栏 Compose 化（GlassTopAppBar + SettingsSearchBar，跟随昼夜主题） -->
-    <androidx.compose.ui.platform.ComposeView
-        android:id="@+id/compose_top_bar"
+    <io.legado.app.ui.widget.TitleBar
+        android:id="@+id/title_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:attachToActivity="false"
+        app:contentLayout="@layout/view_search"
+        app:layout_constraintTop_toTopOf="parent"
+        app:title="@string/discovery" />
 
-    <!-- D1: 标签模式 TabLayout（sourceGroupStyle!=0 && sourceGroupMode==0 时显示） -->
-    <com.google.android.material.tabs.TabLayout
-        android:id="@+id/tab_layout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:visibility="gone"
-        app:tabMode="scrollable"
-        app:layout_constraintTop_toBottomOf="@+id/compose_top_bar" />
-
-    <io.legado.app.ui.widget.recycler.RecyclerViewAtPager2
-        android:id="@+id/rv_find"
-        android:layout_width="match_parent"
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipe_refresh_layout"
+        android:layout_width="0dp"
         android:layout_height="0dp"
-        app:layout_constraintTop_toBottomOf="@+id/tab_layout"
         app:layout_constraintBottom_toBottomOf="parent"
-        tools:listitem="@layout/item_find_book" />
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/title_bar">
 
-    <TextView
-        android:id="@+id/tv_empty_msg"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        android:gravity="center"
-        android:visibility="gone"
-        android:text="@string/explore_empty"
-        app:layout_constraintTop_toBottomOf="@+id/tab_layout"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintRight_toRightOf="parent"
-        tools:text="TextView" />
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <FrameLayout
+                android:id="@+id/ll_modern_discovery"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:visibility="gone">
+
+                <FrameLayout
+                    android:id="@+id/fl_discover_books"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="@dimen/bookshelf_tag_bar_margin_horizontal"
+                    android:layout_marginEnd="@dimen/bookshelf_tag_bar_margin_horizontal"
+                    android:clipToPadding="false">
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rv_discover_books"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:clipToPadding="false"
+                        android:paddingBottom="14dp"
+                        tools:listitem="@layout/item_search_waterfall" />
+
+                    <androidx.compose.ui.platform.ComposeView
+                        android:id="@+id/compose_discover_books"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/tv_discover_empty"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:gravity="center"
+                        android:padding="24dp"
+                        android:text="@string/explore_empty"
+                        android:textColor="@color/secondaryText"
+                        android:textSize="14sp"
+                        android:visibility="gone" />
+
+                    <ProgressBar
+                        android:id="@+id/pb_discover_loading"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:layout_gravity="center"
+                        android:visibility="gone" />
+
+                </FrameLayout>
+
+                <io.legado.app.ui.widget.MainTopBarView
+                    android:id="@+id/top_bar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+
+            </FrameLayout>
+
+            <io.legado.app.ui.widget.recycler.RecyclerViewAtPager2
+                android:id="@+id/rv_find"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                tools:listitem="@layout/item_find_book" />
+
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/compose_discovery_suite"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/tv_empty_msg"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_margin="16dp"
+                android:gravity="center"
+                android:text="@string/explore_empty"
+                android:visibility="gone"
+                tools:text="TextView" />
+
+        </FrameLayout>
+
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

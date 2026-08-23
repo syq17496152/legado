@@ -99,6 +99,10 @@ object DirectLinkUpload {
         return getRule().summary
     }
 
+    fun getExpiryDate(): Int {
+        return 0 //口令有效期天数，0 表示永久（对齐 Archive 默认）
+    }
+
     @Keep
     data class Rule(
         var uploadUrl: String, //创建分享链接

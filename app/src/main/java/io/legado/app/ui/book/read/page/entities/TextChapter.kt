@@ -7,10 +7,12 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.help.HighlightRuleMatcher
 import io.legado.app.help.book.BookContent
+import io.legado.app.model.localBook.EpubFile
 import io.legado.app.ui.book.read.page.provider.LayoutProgressListener
 import io.legado.app.ui.book.read.page.provider.TextChapterLayout
 import io.legado.app.utils.fastBinarySearchBy
 import kotlinx.coroutines.CoroutineScope
+import org.jsoup.parser.Parser
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -58,7 +60,6 @@ data class TextChapter(
 
     var isCompleted = false
 
-    // F-P1-2: 高亮规则匹配结果缓存(随规则版本失效)
     var highlightRuleMatches: List<HighlightRuleMatcher.RuleMatch>? = null
     var highlightRuleMatchesVersion: Int = 0
 
@@ -191,13 +192,47 @@ data class TextChapter(
         val stringBuilder = StringBuilder()
         if (pages.isNotEmpty()) {
             for (index in pageIndex..min(pageEndIndex, pages.lastIndex)) {
-                stringBuilder.append(pages[index].text.replace(Regex("[袮꧁]"), " "))
+                val readText = pages[index].readAloudText()
+                if (readText.isNotBlank()) {
+                    stringBuilder.append(readText)
+                }
                 if (pageSplit && !stringBuilder.endsWith("\n")) {
                     stringBuilder.append("\n")
                 }
             }
         }
-        return stringBuilder.substring(startPos).toString()
+        val result = stringBuilder.toString()
+        return when {
+            startPos <= 0 -> result
+            startPos >= result.length -> ""
+            else -> result.substring(startPos)
+        }
+    }
+
+    private fun TextPage.readAloudText(): String {
+        val nativeText = if (isNativeEpubPage()) extractNativeText() else ""
+        return ReadAloudTextCleaner.cleanVisibleText(nativeText.ifBlank { text })
+    }
+
+    private fun String.cleanReadAloudMarkup(): String {
+        if (isBlank()) return ""
+        var result = this
+        if (result.trimStart().startsWith(EpubFile.NATIVE_CONTENT_FLAG, ignoreCase = true)) {
+            return ""
+        }
+        result = readAloudUseHtmlRegex.replace(result) { match ->
+            match.groupValues.getOrNull(1).orEmpty()
+        }
+        result = readAloudImgRegex.replace(result, "")
+        result = readAloudBreakTagRegex.replace(result, "\n")
+        result = readAloudTagRegex.replace(result, "")
+        result = Parser.unescapeEntities(result, false)
+        return result
+            .replace(Regex("[袮꧁]"), " ")
+            .replace(Regex("[\\t\\x0B\\f\\r ]+"), " ")
+            .replace(Regex(" *\\n+ *"), "\n")
+            .replace(Regex("\\n{3,}"), "\n\n")
+            .trim()
     }
 
     fun getParagraphNum(
@@ -314,6 +349,23 @@ data class TextChapter(
     }
 
     companion object {
+        private val readAloudUseHtmlRegex = Regex(
+            "<usehtml[^>]*>([\\s\\S]*?)</usehtml>",
+            RegexOption.IGNORE_CASE
+        )
+        private val readAloudImgRegex = Regex(
+            "<img\\b[^>]*>",
+            RegexOption.IGNORE_CASE
+        )
+        private val readAloudBreakTagRegex = Regex(
+            "</?(?:p|div|br|hr|h[1-6]|li|tr|table|section|article|dd|dl)[^>]*>",
+            RegexOption.IGNORE_CASE
+        )
+        private val readAloudTagRegex = Regex(
+            "</?[a-zA-Z][^>]*>",
+            RegexOption.IGNORE_CASE
+        )
+
         val emptyTextChapter = TextChapter(
             BookChapter(), -1, "emptyTextChapter", -1,
             sameTitleRemoved = false,

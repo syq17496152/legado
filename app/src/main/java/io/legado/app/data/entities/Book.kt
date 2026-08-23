@@ -427,6 +427,7 @@ data class Book(
     }
 
     fun save() {
+        sanitizeForStorage()
         runBlocking(IO) {
             if (appDb.bookDao.has(bookUrl)) {
                 appDb.bookDao.update(this@Book)
@@ -434,6 +435,46 @@ data class Book(
                 appDb.bookDao.insert(this@Book)
             }
         }
+    }
+
+    /**
+     * 存储前字段长度安全校验（对齐 Archive）
+     * - 长文本字段（intro/customIntro/variable）超限截断；带标记（useweb/usehtml/md）的保留标记只截内容
+     * - URL 字段（coverUrl/customCoverUrl）超限置空，防止异常封面撑爆数据库
+     */
+    fun sanitizeForStorage() {
+        intro = intro.limitBookTextField()
+        customIntro = customIntro.limitBookTextField()
+        variable = variable.limitBookTextField()
+        coverUrl = coverUrl.limitBookUrlField()
+        customCoverUrl = customCoverUrl.limitBookUrlField()
+    }
+
+    private fun String?.limitBookTextField(): String? {
+        val value = this ?: return null
+        if (value.length <= MaxBookTextFieldLength) {
+            return value
+        }
+        return when {
+            value.startsWith("<useweb>", ignoreCase = true) -> value.limitTaggedBookText("useweb")
+            value.startsWith("<usehtml>", ignoreCase = true) -> value.limitTaggedBookText("usehtml")
+            value.startsWith("<md>", ignoreCase = true) -> value.limitTaggedBookText("md")
+            else -> value.take(MaxBookTextFieldLength)
+        }
+    }
+
+    private fun String.limitTaggedBookText(tag: String): String {
+        val startTag = "<$tag>"
+        val endTag = "</$tag>"
+        val maxContentLength = (MaxBookTextFieldLength - startTag.length - endTag.length)
+            .coerceAtLeast(0)
+        val content = drop(startTag.length).substringBeforeLast(endTag)
+        return startTag + content.take(maxContentLength) + endTag
+    }
+
+    private fun String?.limitBookUrlField(): String? {
+        val value = this ?: return null
+        return if (value.length > MaxBookUrlFieldLength) null else value
     }
 
     fun delete() {
@@ -453,6 +494,8 @@ data class Book(
         const val imgStyleFull = "FULL"
         const val imgStyleText = "TEXT"
         const val imgStyleSingle = "SINGLE"
+        private const val MaxBookTextFieldLength = 262_144
+        private const val MaxBookUrlFieldLength = 32_768
     }
 
     @Parcelize
@@ -472,7 +515,14 @@ data class Book(
         var openCredits: Int = 0,       //音频片头
         var closeCredits: Int = 0,       //音频片尾
         var playMode: Int = 0,           //音频播放模式
-        var playSpeed: Float = 1.0f      //音频播放速度
+        var playSpeed: Float = 1.0f,     //音频播放速度
+        var mangaHorizontalScroll: Boolean? = null,
+        var mangaDisablePageAnim: Boolean? = null,
+        var mangaDisableHorizontalPageSnap: Boolean? = null,
+        var mangaDisableClickScroll: Boolean? = null,
+        var mangaDisableScale: Boolean? = null,
+        var mangaAutoPageSpeed: Int? = null,
+        var mangaPageAnim: Int? = null
     ) : Parcelable
 
     class Converters {

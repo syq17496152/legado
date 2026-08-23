@@ -1,6 +1,7 @@
 package io.legado.app.lib.theme.view
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.util.AttributeSet
 import android.view.LayoutInflater
@@ -45,6 +46,21 @@ class ThemeBottomNavigationVIew(context: Context, attrs: AttributeSet) :
         }
 
         ViewCompat.setOnApplyWindowInsetsListener(this, null)
+    }
+
+    fun createThemeColorStateList(): ColorStateList {
+        val bgColor = context.bottomBackground
+        val textColor = context.getSecondaryTextColor(ColorUtils.isColorLight(bgColor))
+        return Selector.colorBuild()
+            .setDefaultColor(textColor)
+            .setSelectedColor(ThemeStore.accentColor(context))
+            .create()
+    }
+
+    fun restoreThemeIconTint() {
+        val colorStateList = createThemeColorStateList()
+        itemIconTintList = colorStateList
+        itemTextColor = colorStateList
     }
 
     fun addBadgeView(index: Int): BadgeView {

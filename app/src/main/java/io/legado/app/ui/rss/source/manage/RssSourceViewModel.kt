@@ -65,6 +65,13 @@ class RssSourceViewModel(application: Application) : BaseViewModel(application) 
         }
     }
 
+    fun upOrder(sources: List<RssSource>) {
+        if (sources.isEmpty()) return
+        execute {
+            appDb.rssSourceDao.upOrder(sources)
+        }
+    }
+
     fun enableSelection(sources: List<RssSource>) {
         execute {
             val array = Array(sources.size) {

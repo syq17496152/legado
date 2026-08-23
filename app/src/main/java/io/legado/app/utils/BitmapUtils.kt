@@ -43,6 +43,30 @@ object BitmapUtils {
     }
 
     /**
+     * 从输入流工厂解码 Bitmap（archive ReadGoalWidgetProvider 依赖）
+     */
+    fun decodeBitmap(
+        inputFactory: () -> InputStream?,
+        width: Int,
+        height: Int? = null,
+        preferredConfig: Bitmap.Config? = null
+    ): Bitmap? {
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        inputFactory()?.use {
+            BitmapFactory.decodeStream(it, null, options)
+        } ?: return null
+        if (options.outWidth <= 0 || options.outHeight <= 0) return null
+        options.inSampleSize = calculateInSampleSize(options, width, height)
+        options.inJustDecodeBounds = false
+        preferredConfig?.let { options.inPreferredConfig = it }
+        return inputFactory()?.use {
+            BitmapFactory.decodeStream(it, null, options)
+        }
+    }
+
+    /**
      * 解析点九图片
      */
     @Throws(IOException::class)
@@ -346,4 +370,54 @@ fun Bitmap.getMeanColor(): Int {
         averagePixelBlue + 3
     )
 
+}
+
+/**
+ * 是否含透明像素（封面缩略图 PNG/JPG 选择依据）。
+ * 小图全扫，大图按步长采样，异常时回退到 hasAlpha()。
+ */
+fun Bitmap.hasTransparentPixels(): Boolean {
+    if (!hasAlpha() || width <= 0 || height <= 0 || isRecycled) return false
+    return runCatching {
+        val pixelCount = width.toLong() * height.toLong()
+        if (pixelCount <= TRANSPARENT_PIXEL_FULL_SCAN_LIMIT) {
+            val row = IntArray(width)
+            for (y in 0 until height) {
+                getPixels(row, 0, width, 0, y, width, 1)
+                for (pixel in row) {
+                    if (Color.alpha(pixel) < 255) return true
+                }
+            }
+            return false
+        }
+        val step = ceil(sqrt(pixelCount.toDouble() / TRANSPARENT_PIXEL_FULL_SCAN_LIMIT)).toInt()
+            .coerceAtLeast(2)
+        var y = 0
+        while (y < height) {
+            var x = 0
+            while (x < width) {
+                if (Color.alpha(getPixel(x, y)) < 255) return true
+                x += step
+            }
+            y += step
+        }
+        false
+    }.getOrDefault(hasAlpha())
+}
+
+private const val TRANSPARENT_PIXEL_FULL_SCAN_LIMIT = 512_000L
+
+/** 根据是否有透明像素返回封面缩略图扩展名。 */
+fun Bitmap.preferredCoverExtension(): String {
+    return if (hasTransparentPixels()) "png" else "jpg"
+}
+
+/** 有透明像素时按 PNG 无损压缩，否则按 JPEG 指定质量压缩。 */
+fun Bitmap.compressPreservingAlpha(outputStream: OutputStream, jpegQuality: Int = 90): Boolean {
+    val usePng = hasTransparentPixels()
+    return compress(
+        if (usePng) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG,
+        if (usePng) 100 else jpegQuality,
+        outputStream
+    )
 }

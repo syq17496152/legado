@@ -103,6 +103,8 @@ class AddToBookshelfDialog() : BaseDialogFragment(R.layout.dialog_add_to_bookshe
                             putExtra("name", it.name)
                             putExtra("author", it.author)
                             putExtra("bookUrl", it.bookUrl)
+                            putExtra("origin", it.origin)
+                            putExtra("originName", it.originName)
                         }
                         dismiss()
                     }

@@ -15,6 +15,16 @@ class GroupViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
+    fun upOrder(groups: List<BookGroup>) {
+        if (groups.isEmpty()) return
+        val normalized = groups.mapIndexed { index, group ->
+            group.copy(order = index + 1)
+        }
+        execute {
+            appDb.bookGroupDao.update(*normalized.toTypedArray())
+        }
+    }
+
     fun addGroup(
         groupName: String,
         bookSort: Int,

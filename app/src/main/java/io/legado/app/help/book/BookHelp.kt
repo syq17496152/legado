@@ -11,6 +11,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
+import io.legado.app.help.ai.AiImageGalleryManager
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.localBook.LocalBook
@@ -65,6 +66,10 @@ object BookHelp {
 
     val cachePath = FileUtils.getPath(downloadDir, cacheFolderName)
 
+    fun getCacheDir(book: Book): File {
+        return downloadDir.getFile(cacheFolderName, book.getFolderName())
+    }
+
     fun clearCache() {
         FileUtils.delete(
             FileUtils.getPath(downloadDir, cacheFolderName)
@@ -91,6 +96,60 @@ object BookHelp {
             newFolderName
         )
         FileUtils.move(oldFolderPath, newFolderPath)
+    }
+
+    /**
+     * 目录刷新后迁移章节缓存文件(nb 主内容 + nr 去重标题标记)
+     * 简化说明:按 URL 精确匹配 + 标题兜底(单匹配),仅处理在线书,跳过卷章节
+     * 升级路径:Phase 4/5 搬入 archive BookHelp 后替换为 contentCacheIdentity 全量迁移
+     */
+    fun remapContentCache(
+        book: Book,
+        oldChapters: List<BookChapter>,
+        newChapters: List<BookChapter>
+    ) {
+        if (book.isLocal || oldChapters.isEmpty() || newChapters.isEmpty()) return
+        val oldByUrl = oldChapters
+            .filter { !it.isVolume && it.url.isNotBlank() }
+            .associateBy { it.url }
+        val oldByTitle = oldChapters
+            .groupBy { it.title.trim() }
+            .mapValues { (_, value) -> value.singleOrNull() }
+        newChapters.forEach { newChapter ->
+            val oldChapter = oldByUrl[newChapter.url]
+                ?: oldByTitle[newChapter.title.trim()]
+                ?: return@forEach
+            migrateChapterCacheFile(book, oldChapter, newChapter, "nb")
+            migrateChapterCacheFile(book, oldChapter, newChapter, "nr")
+        }
+    }
+
+    private fun migrateChapterCacheFile(
+        book: Book,
+        oldChapter: BookChapter,
+        newChapter: BookChapter,
+        suffix: String
+    ) {
+        if (oldChapter.getFileName(suffix) == newChapter.getFileName(suffix)) return
+        val target = downloadDir.getFile(
+            cacheFolderName,
+            book.getFolderName(),
+            newChapter.getFileName(suffix)
+        )
+        if (target.exists()) return
+        val source = downloadDir.getFile(
+            cacheFolderName,
+            book.getFolderName(),
+            oldChapter.getFileName(suffix)
+        )
+        if (!source.exists()) return
+        target.createFileIfNotExist()
+        kotlin.runCatching {
+            source.copyTo(target, overwrite = true)
+            if (source.absolutePath != target.absolutePath) {
+                source.delete()
+            }
+        }
     }
 
     /**
@@ -158,6 +217,37 @@ object BookHelp {
                 imgFile.delete()
             }
         }
+    }
+
+    fun ensureLegacyContentAlias(
+        book: Book,
+        bookChapter: BookChapter,
+        content: String? = null,
+        suffix: String = "nb"
+    ) {
+        val legacyFile = getLegacyContentFile(book, bookChapter, suffix) ?: return
+        if (legacyFile.exists() && legacyFile.length() > 0) return
+        val sourceFile = getContentFileCandidates(book, bookChapter, suffix)
+            .firstOrNull { it.exists() && it.length() > 0 }
+        legacyFile.parentFile?.mkdirs()
+        if (sourceFile != null && sourceFile.absolutePath != legacyFile.absolutePath) {
+            kotlin.runCatching {
+                sourceFile.copyTo(legacyFile, overwrite = true)
+            }
+            return
+        }
+        if (!content.isNullOrEmpty()) {
+            legacyFile.createFileIfNotExist().writeText(content)
+        }
+    }
+
+    fun getChapterCacheFileNames(
+        book: Book,
+        chapter: BookChapter,
+        suffix: String = "nb"
+    ): Set<String> {
+        return getContentFileCandidates(book, chapter, suffix)
+            .mapTo(linkedSetOf()) { it.name }
     }
 
     suspend fun saveContent(
@@ -293,6 +383,38 @@ object BookHelp {
             cacheImageFolderName,
             "${MD5Utils.md5Encode16(src)}.${getImageSuffix(src)}"
         )
+    }
+
+    private fun getContentFileCandidates(book: Book, chapter: BookChapter, suffix: String = "nb"): List<File> {
+        val files = linkedSetOf<File>()
+        getPrimaryContentFile(book, chapter, suffix).let(files::add)
+        getLegacyContentFile(book, chapter, suffix)?.let(files::add)
+        return files.toList()
+    }
+
+    private fun getPrimaryContentFile(book: Book, chapter: BookChapter, suffix: String = "nb"): File {
+        return if (book.isLocal) {
+            downloadDir.getFile(cacheFolderName, book.getFolderName(), chapter.getFileName(suffix))
+        } else {
+            getStableContentFile(book, chapter, suffix)
+                ?: downloadDir.getFile(cacheFolderName, book.getFolderName(), chapter.getFileName(suffix))
+        }
+    }
+
+    private fun getLegacyContentFile(book: Book, chapter: BookChapter, suffix: String = "nb"): File? {
+        return if (book.isLocal) {
+            null
+        } else {
+            downloadDir.getFile(cacheFolderName, book.getFolderName(), chapter.getFileName(suffix))
+        }
+    }
+
+    private fun getStableContentFile(book: Book, chapter: BookChapter, suffix: String = "nb"): File? {
+        return if (book.isLocal) {
+            null
+        } else {
+            downloadDir.getFile(cacheFolderName, book.getFolderName(), chapter.contentCacheFileName(suffix))
+        }
     }
 
     @Synchronized
@@ -457,6 +579,27 @@ object BookHelp {
             book.getFolderName(),
             bookChapter.getFileName()
         ).delete()
+    }
+
+    /**
+     * 删除单章缓存。漫画会一并删除正文中引用的图片缓存。（Archive 回退引入）
+     */
+    fun delChapterCache(book: Book, bookChapter: BookChapter) {
+        if (book.isImage) {
+            delChapterImages(book, bookChapter)
+        }
+        delContent(book, bookChapter)
+    }
+
+    private fun delChapterImages(book: Book, bookChapter: BookChapter) {
+        val content = getContent(book, bookChapter) ?: return
+        val matcher = AppPattern.imgPattern.matcher(content)
+        while (matcher.find()) {
+            val src = matcher.group(1) ?: continue
+            if (AiImageGalleryManager.imageIdFromUri(src) != null) continue
+            val mSrc = NetworkUtils.getAbsoluteURL(bookChapter.url, src)
+            getImage(book, mSrc).takeIf { it.exists() }?.delete()
+        }
     }
 
     /**

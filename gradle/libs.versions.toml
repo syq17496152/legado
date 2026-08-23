@@ -9,6 +9,8 @@ miuix = "0.8.8"
 reorderable = "3.1.0"
 liquidglass = "1.0.3"
 lazyColumnScrollbar = "2.2.0"
+# P1E 后端支撑：Lottie 动画库（对齐 ARCHIVE tag，用于 Compose 主题动画组件）
+lottie = "6.6.6"
 appcompat = "1.7.1"
 colorpicker = "1.1.0"
 constraintlayout = "2.2.1"
@@ -71,6 +73,8 @@ commonsText = "1.13.1"
 rhino = "1.8.1"
 
 media3 = "1.10.1"
+# Cronet 500.0.1（cronet-bundled 单体构件：API+实现+libcronet.so 都随 AAR，替代本地 cronetlib/ 6 jar + jniLibs 内置 so）
+cronetBundled = "500.0.1"
 #noinspection GradleDependency
 gsyvideoplayer = "11.3.0"
 
@@ -146,6 +150,7 @@ lyricViewx = { module = "com.github.Moriafly:LyricViewX", version.ref = "lyricVi
 media-media = { module = "androidx.media:media", version.ref = "media" }
 media3-datasource-okhttp = { module = "androidx.media3:media3-datasource-okhttp", version.ref = "media3" }
 media3-datasource-cronet = { module = "androidx.media3:media3-datasource-cronet", version.ref = "media3" }
+cronet-bundled = { module = "org.chromium.net:cronet-bundled", version.ref = "cronetBundled" }
 media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
 media3-exoplayer-hls = { module = "androidx.media3:media3-exoplayer-hls", version.ref = "media3" }
 media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
@@ -158,7 +163,10 @@ danmakuFlameMaster = { module = "com.github.CarGuo.DanmakuFlameMaster:DanmakuFla
 markwon-core = { module = "io.noties.markwon:core", version.ref = "markwon" }
 markwon-image-glide = { module = "io.noties.markwon:image-glide", version.ref = "markwon" }
 markwon-ext-tables = { module = "io.noties.markwon:ext-tables", version.ref = "markwon" }
+markwon-ext-strikethrough = { module = "io.noties.markwon:ext-strikethrough", version.ref = "markwon" }
+markwon-ext-tasklist = { module = "io.noties.markwon:ext-tasklist", version.ref = "markwon" }
 markwon-html = { module = "io.noties.markwon:html", version.ref = "markwon" }
+markwon-linkify = { module = "io.noties.markwon:linkify", version.ref = "markwon" }
 
 
 nanohttpd-nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanoHttpd" }

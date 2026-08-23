@@ -3,7 +3,6 @@ package io.legado.app.ui.adapter
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
-import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.annotation.StringRes
 import androidx.core.graphics.ColorUtils
@@ -13,18 +12,13 @@ import io.legado.app.R
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.entities.SourceGroupCover
-import io.legado.app.databinding.DialogSourceFolderConfigBinding
 import io.legado.app.databinding.ItemSourceFolderGridBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.isDarkTheme
 import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.model.BookCover
-import io.legado.app.utils.checkByIndex
-import io.legado.app.utils.gone
-import io.legado.app.utils.getCheckedIndex
 import kotlin.math.max
 
 /**
@@ -151,84 +145,6 @@ class SourceFolderAdapter(
     }
 
     companion object {
-        /**
-         * source-layout-deep-refactor 显示布局配置对话框
-         *
-         * 配置项：分组样式(3) + 视图模式(7) + 排序(6) + 间距(0-60)
-         * 所有配置在此方法内保存，调用方通过 onConfigChanged 回调刷新视图。
-         *
-         * @param context 上下文
-         * @param onConfigChanged 配置变更回调（任意配置变更即触发）
-         * @param showGroupStyle 是否显示分组样式选项（管理页固定平铺时传 false 隐藏）
-         */
-        fun showConfigDialog(
-            context: Context,
-            isBookSource: Boolean,
-            showGroupStyle: Boolean = true,
-            onConfigChanged: () -> Unit
-        ) {
-            context.alert(titleResource = R.string.source_folder_config) {
-                val binding = DialogSourceFolderConfigBinding
-                    .inflate(LayoutInflater.from(context))
-                    .apply {
-                        if (showGroupStyle) {
-                            // D2 修复：订阅源也支持文件夹视图，不再隐藏分组样式选项
-                            spGroupStyle.setSelection(AppConfig.sourceGroupStyle)
-                        } else {
-                            llGroupStyle.gone()
-                        }
-                        // D1: 展示模式（标签/分组）
-                        spGroupMode.setSelection(AppConfig.sourceGroupMode)
-                        rgLayout.checkByIndex(AppConfig.sourceLayout)
-                        // C-01 修复：按 Activity 类型区分 bookSourceSort/rssSort
-                        rgSort.checkByIndex(if (isBookSource) AppConfig.bookSourceSort else AppConfig.rssSort)
-                        sbMargin.progress = AppConfig.sourceMargin
-                    }
-                customView { binding.root }
-                okButton {
-                    binding.apply {
-                        var changed = false
-                        if (showGroupStyle) {
-                            // D2 修复：书源和订阅源统一保存 sourceGroupStyle
-                            if (AppConfig.sourceGroupStyle != spGroupStyle.selectedItemPosition) {
-                                AppConfig.sourceGroupStyle = spGroupStyle.selectedItemPosition
-                                changed = true
-                            }
-                        }
-                        // D1: 保存展示模式（标签/分组）
-                        if (AppConfig.sourceGroupMode != spGroupMode.selectedItemPosition) {
-                            AppConfig.sourceGroupMode = spGroupMode.selectedItemPosition
-                            changed = true
-                        }
-                        val newLayout = rgLayout.getCheckedIndex()
-                        if (AppConfig.sourceLayout != newLayout) {
-                            AppConfig.sourceLayout = newLayout
-                            changed = true
-                        }
-                        val newSort = rgSort.getCheckedIndex()
-                        // C-01 修复：按 Activity 类型区分 bookSourceSort/rssSort
-                        if (isBookSource) {
-                            if (AppConfig.bookSourceSort != newSort) {
-                                AppConfig.bookSourceSort = newSort
-                                changed = true
-                            }
-                        } else {
-                            if (AppConfig.rssSort != newSort) {
-                                AppConfig.rssSort = newSort
-                                changed = true
-                            }
-                        }
-                        if (AppConfig.sourceMargin != sbMargin.progress) {
-                            AppConfig.sourceMargin = sbMargin.progress
-                            changed = true
-                        }
-                        if (changed) onConfigChanged()
-                    }
-                }
-                cancelButton()
-            }
-        }
-
         /**
          * F-P1-8 根据间距和屏幕宽度动态计算 Grid 列数。
          * 间距越大列数越少（卡片越大），最小 2 列。
