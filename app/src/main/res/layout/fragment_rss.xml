@@ -39,6 +39,15 @@
         app:spanCount="4"
         tools:listitem="@layout/item_rss" />
 
+    <!-- 订阅文件夹目录 ComposeView（对齐书架文件夹 FolderGroupGridContent 样式；isShowingFolder 时显示，隐藏 recycler_view） -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/folder_compose_view"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:visibility="gone"
+        app:layout_constraintTop_toBottomOf="@id/tab_layout"
+        app:layout_constraintBottom_toBottomOf="parent" />
+
     <TextView
         android:id="@+id/tv_empty_msg"
         android:layout_width="wrap_content"

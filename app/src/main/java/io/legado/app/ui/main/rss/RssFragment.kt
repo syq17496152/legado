@@ -8,9 +8,47 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.doOnLayout
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -40,6 +78,7 @@ import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.ui.adapter.FolderItem
 import io.legado.app.ui.adapter.SourceFolderAdapter
+import io.legado.app.ui.adapter.SourceFolderComposeGrid
 import io.legado.app.ui.adapter.SourceFolderConfigDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
@@ -137,6 +176,9 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         SourceFolderAdapter(requireContext(), SourceGroupCover.KIND_RSS, this)
     }
     private val gridSpacingDecoration = GridSpacingItemDecoration()
+    // folder-compose-refactor: Compose 文件夹目录数据（与 View 版 folderAdapter 共用同一来源，仅渲染层替换）
+    private var folderComposeItems by mutableStateOf(listOf<FolderItem>())
+    private var folderComposeCovers by mutableStateOf(mapOf<String, String?>())
     // source-folder-cover: 待设置封面的文件夹（选图返回后写入）
     private var pendingFolder: FolderItem? = null
     // source-folder-cover: 选择封面图片 → 复制到 covers 目录 + upsert 数据库
@@ -310,6 +352,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         binding.tvEmptyMsg.isGone = true
         initComposeTopBar()
         initTabLayout()  // D1: 初始化 TabLayout
+        initFolderComposeView()  // folder-compose-refactor: 初始化 Compose 文件夹目录
         // F-P1-8 初始化运行时状态：跟随用户偏好
         isShowingFolder = isFolderViewMode
         initRecyclerView()
@@ -943,6 +986,24 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         binding.recyclerView.adapter = folderAdapter
     }
 
+    // folder-compose-refactor: 初始化 Compose 文件夹目录（对齐书架文件夹 FolderGroupGridContent 样式）
+    private fun initFolderComposeView() {
+        binding.folderComposeView.setContent {
+            LegadoTheme {
+                SourceFolderComposeGrid(
+                    items = folderComposeItems,
+                    covers = folderComposeCovers,
+                    spanCount = SourceFolderAdapter.calculateSpanCount(
+                        requireContext(),
+                        AppConfig.sourceMargin
+                    ),
+                    onFolderClick = { onFolderClick(it) },
+                    onFolderLongClick = { onFolderSelectImage(it) },
+                )
+            }
+        }
+    }
+
     // D1: 初始化 TabLayout
     private fun initTabLayout() {
         tabLayout.setSelectedTabIndicatorColor(requireContext().accentColor)
@@ -986,11 +1047,15 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     // D1: 统一应用视图（根据 isShowingFolder / isTagMode 控制显示）
     private fun applyView() {
         if (isShowingFolder) {
-            // 分组模式：显示文件夹视图
+            // 分组模式：显示 Compose 文件夹目录（对齐书架文件夹样式），隐藏列表
             binding.tabLayout.visibility = View.GONE
-            applyFolderView()
+            binding.recyclerView.isGone = true
+            binding.folderComposeView.isVisible = true
+            upFolderView()
         } else {
             // 列表视图（标签模式 或 列表平铺 或 文件夹点击后）
+            binding.folderComposeView.isGone = true
+            binding.recyclerView.isVisible = true
             if (isTagMode) {
                 binding.tabLayout.visibility = View.VISIBLE
                 upTabLayout()
@@ -1084,6 +1149,8 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
             )
         }
         folderAdapter.setItems(folderList, folderAdapter.diffItemCallback)
+        // folder-compose-refactor: 同步更新 Compose 文件夹目录数据
+        folderComposeItems = folderList
         // source-folder-cover: 批量加载分组封面缓存
         viewLifecycleOwner.lifecycleScope.launch {
             kotlin.runCatching {
@@ -1092,6 +1159,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                 .associate { it.groupName to it.cover }
                 .let { covers ->
                     folderAdapter.upCovers(covers)
+                    folderComposeCovers = covers
                 }
         }
     }

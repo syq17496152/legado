@@ -45,7 +45,7 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.book.group.GroupManageDialog
 import io.legado.app.ui.book.group.GroupSelectDialog
-import io.legado.app.ui.book.info.BookInfoActivity
+import io.legado.app.ui.book.info.BookInfoNavigator
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.SelectActionBar
@@ -471,13 +471,7 @@ class BookshelfManageActivity :
     }
 
     override fun openBook(book: Book) {
-        startActivity<BookInfoActivity> {
-            putExtra("bookUrl", book.bookUrl)
-            putExtra("name", book.name)
-            putExtra("author", book.author)
-            putExtra("origin", book.origin)
-            putExtra("originName", book.originName)
-        }
+        BookInfoNavigator.open(this, book)
     }
 
     override fun sourceOnClick(source: BookSource) {

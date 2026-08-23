@@ -510,7 +510,7 @@ class BookInfoActivity :
                 }
             )
         }
-        viewModel.getBook()?.let { b ->
+        viewModel.getBook(false)?.let { b ->
             actions += MenuAction(
                 icon = Icons.Filled.ContentCopy,
                 title = getString(R.string.copy_book_url),

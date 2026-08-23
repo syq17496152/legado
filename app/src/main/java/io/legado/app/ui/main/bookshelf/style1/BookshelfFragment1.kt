@@ -15,7 +15,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.databinding.FragmentBookshelf1Binding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.book.group.GroupEditDialog
-import io.legado.app.ui.book.info.BookInfoActivity
+import io.legado.app.ui.book.info.BookInfoNavigator
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
 import io.legado.app.ui.main.bookshelf.BookshelfScreen
 import io.legado.app.ui.main.bookshelf.sortedByBook
@@ -90,13 +90,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             onGroupLongClick = { showDialogFragment(GroupEditDialog(it)) },
             onBookClick = { book -> startActivityForBook(book) },
             onBookLongClick = { book ->
-                startActivity<BookInfoActivity> {
-                    putExtra("bookUrl", book.bookUrl)
-                    putExtra("name", book.name)
-                    putExtra("author", book.author)
-                    putExtra("origin", book.origin)
-                    putExtra("originName", book.originName)
-                }
+                BookInfoNavigator.open(requireContext(), book)
             },
         )
     }
