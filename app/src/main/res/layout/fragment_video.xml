@@ -199,6 +199,19 @@
                 android:padding="12dp"
                 android:tint="#FFFFFF" />
 
+            <!-- 下载按钮（video-download-manager：全屏/收藏/设置旁，一键下载当前视频） -->
+            <ImageButton
+                android:id="@+id/btn_download"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_overlay_button"
+                android:contentDescription="@string/action_download"
+                android:src="@drawable/ic_download"
+                android:scaleType="centerInside"
+                android:padding="12dp"
+                android:tint="#FFFFFF" />
+
             <!-- video-gesture-overhaul: 快进按钮已移除，改为左右滑动 seek（R2/R3） -->
 
         </LinearLayout>

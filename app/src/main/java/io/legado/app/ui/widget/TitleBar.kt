@@ -20,6 +20,7 @@ import androidx.core.view.children
 import com.google.android.material.appbar.AppBarLayout
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.TopBarConfig
 import io.legado.app.lib.theme.elevation
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.transparentNavBar
@@ -62,6 +63,9 @@ class TitleBar @JvmOverloads constructor(
     private val attachToActivity: Boolean
     private val opaque: Boolean
 
+    /** bugfix ③: 主界面"我的/发现经典"头部读顶栏管理配色（含 TopBarConfig 底色）。默认 false 不污染子页面。 */
+    private val topBarColorManaged: Boolean
+
     init {
         val a = context.obtainStyledAttributes(
             attrs, R.styleable.TitleBar,
@@ -74,6 +78,7 @@ class TitleBar @JvmOverloads constructor(
         fitStatusBar = a.getBoolean(R.styleable.TitleBar_fitStatusBar, true)
         fitNavigationBar = a.getBoolean(R.styleable.TitleBar_fitNavigationBar, false)
         opaque = a.getBoolean(R.styleable.TitleBar_opaque, false)
+        topBarColorManaged = a.getBoolean(R.styleable.TitleBar_topBarColorManaged, false)
 
         val navigationIcon = a.getDrawable(R.styleable.TitleBar_navigationIcon)
         val navigationContentDescription =
@@ -186,7 +191,14 @@ class TitleBar @JvmOverloads constructor(
             } else if (!opaque && context.transparentNavBar) {
                 setBackgroundColor(Color.TRANSPARENT)
             } else {
-                setBackgroundColor(context.primaryColor)
+                // bugfix ③: 主界面头部(managed)读顶栏管理配色作为底色
+                setBackgroundColor(if (topBarColorManaged) {
+                    TopBarConfig.resolveBackgroundColor(
+                        TopBarConfig.currentConfig(context, AppConfig.isNightTheme)
+                    )
+                } else {
+                    context.primaryColor
+                })
                 elevation = context.elevation
             }
 
@@ -194,6 +206,15 @@ class TitleBar @JvmOverloads constructor(
         }
         a.recycle()
     }
+
+    /** bugfix ③: 顶栏管理配色变更后刷新(仅主界面 managed 头部生效)，保留默认行为不受影响。 */
+    fun refreshTopBarAppearance() {
+        if (!topBarColorManaged || !isEInkModeExcluded()) return
+        val config = TopBarConfig.currentConfig(context, AppConfig.isNightTheme)
+        setBackgroundColor(TopBarConfig.resolveBackgroundColor(config))
+    }
+
+    private fun isEInkModeExcluded(): Boolean = !AppConfig.isEInkMode
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- video-player-theme-unify：项目自建进度条 drawable，覆盖 GSY 库同名资源
+     中性色兜底（progress 白色），实际颜色由 VideoPlayer.applyThemeColors() 动态设为主题主色 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape>
+            <solid android:color="#4D999999" />
+            <size android:height="3dp" />
+            <corners android:radius="2dp" />
+        </shape>
+    </item>
+    <item android:id="@android:id/secondaryProgress">
+        <clip>
+            <shape>
+                <solid android:color="#B3FFFFFF" />
+                <size android:height="3dp" />
+                <corners android:radius="2dp" />
+            </shape>
+        </clip>
+    </item>
+    <item android:id="@android:id/progress">
+        <clip>
+            <shape>
+                <solid android:color="#FFFFFF" />
+                <size android:height="3dp" />
+                <corners android:radius="2dp" />
+            </shape>
+        </clip>
+    </item>
+</layer-list>

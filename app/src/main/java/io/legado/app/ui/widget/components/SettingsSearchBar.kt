@@ -89,7 +89,7 @@ fun SettingsSearchBar(
             .height(40.dp)
             .background(
                 MaterialTheme.colorScheme.surfaceVariant,
-                AppShapes.Button
+                AppShapes.Search
             )
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
     )

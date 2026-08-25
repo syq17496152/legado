@@ -6,8 +6,6 @@ import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.LayoutInflater
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
@@ -86,6 +84,7 @@ import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.ui.main.bookshelf.compose.BookshelfListRenderConfig
 import io.legado.app.ui.main.bookshelf.compose.rememberBookshelfListRenderConfig
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.AppManagementListRow
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
@@ -93,6 +92,7 @@ import io.legado.app.ui.widget.compose.appSettingPanelBackground
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -115,7 +115,7 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
     private var screenModeState by mutableStateOf<DiscoverySuiteManageMode>(DiscoverySuiteManageMode.List)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.titleBar.setNavigationOnClickListener { handleBackNavigation() }
+        initTopBar()
         onBackPressedDispatcher.addCallback(this) {
             handleBackNavigation()
         }
@@ -125,42 +125,11 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
         loadSourceOptions()
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        when (val mode = screenModeState) {
-            DiscoverySuiteManageMode.List -> {
-                menu.add(0, MENU_CREATE_SUITE, 0, R.string.discovery_suite_create).apply {
-                    setIcon(R.drawable.ic_add)
-                    setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                }
-            }
-            is DiscoverySuiteManageMode.Detail -> {
-                if (configState.suites.any { it.id == mode.suiteId }) {
-                    menu.add(0, MENU_ADD_WIDGET, 0, R.string.discovery_suite_add_widget).apply {
-                        setIcon(R.drawable.ic_add)
-                        setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-                    }
-                }
-            }
-            is DiscoverySuiteManageMode.WidgetEditor -> Unit
-        }
-        return true
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            MENU_CREATE_SUITE -> {
-                showCreateSuiteDialog()
-                return true
-            }
-            MENU_ADD_WIDGET -> {
-                val mode = screenModeState as? DiscoverySuiteManageMode.Detail ?: return true
-                configState.suites.firstOrNull { it.id == mode.suiteId }?.let {
-                    openWidgetEditor(it, null)
-                }
-                return true
-            }
-        }
-        return super.onCompatOptionsItemSelected(item)
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { handleBackNavigation() }
     }
 
     private fun initComposeContent() {
@@ -255,8 +224,8 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
         invalidateOptionsMenu()
     }
 
-    private fun updateTitleBar() {
-        binding.titleBar.title = when (val mode = screenModeState) {
+    private fun updateTitleBar() = binding.titleBar.run {
+        setTitle(when (val mode = screenModeState) {
             DiscoverySuiteManageMode.List -> getString(R.string.discovery_suite_manage_title)
             is DiscoverySuiteManageMode.Detail -> getString(R.string.discovery_suite_manage)
             is DiscoverySuiteManageMode.WidgetEditor -> {
@@ -268,6 +237,22 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
                     getString(R.string.edit)
                 }
             }
+        })
+        actionsBar.removeAllViews()
+        when (val mode = screenModeState) {
+            DiscoverySuiteManageMode.List -> {
+                addActionButton(R.drawable.ic_add, R.string.discovery_suite_create) {
+                    showCreateSuiteDialog()
+                }
+            }
+            is DiscoverySuiteManageMode.Detail -> {
+                configState.suites.firstOrNull { it.id == mode.suiteId }?.let { suite ->
+                    addActionButton(R.drawable.ic_add, R.string.discovery_suite_add_widget) {
+                        openWidgetEditor(suite, null)
+                    }
+                }
+            }
+            is DiscoverySuiteManageMode.WidgetEditor -> Unit
         }
     }
 
@@ -580,8 +565,6 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
 
     companion object {
         private const val MAX_MANAGER_SOURCES = 200
-        private const val MENU_CREATE_SUITE = 1
-        private const val MENU_ADD_WIDGET = 2
     }
 }
 

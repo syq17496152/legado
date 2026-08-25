@@ -84,7 +84,17 @@ object ImageUrlExtractor {
             level = AppLog.Level.INFO
         )
 
-        return try {
+        // rss-image-load-optimization: URL 解析结果缓存命中则直接返回，跳过网络请求与 WebView 嗅探
+        ImageUrlCache.get(article.link)?.let { cached ->
+            AppLog.putDebugWithTag(
+                AppLog.TAG_IMAGE_SNIFF,
+                "extractImageList cache hit: count=${cached.size} elapsedMs=${System.currentTimeMillis() - startTime}",
+                level = AppLog.Level.INFO
+            )
+            return cached
+        }
+
+        val result = try {
             withTimeoutOrNull(TOTAL_TIMEOUT_MS) {
                 val l1Urls = extractWithStatic(article, rssSource, ruleContent, ruleImage)
                 currentCoroutineContext().ensureActive()
@@ -141,6 +151,17 @@ object ImageUrlExtractor {
             )
             emptyList()
         }
+
+        // rss-image-load-optimization: 解析成功后写入 URL 缓存
+        if (result.isNotEmpty()) {
+            ImageUrlCache.put(article.link, result)
+            AppLog.putDebugWithTag(
+                AppLog.TAG_IMAGE_SNIFF,
+                "extractImageList cache written: count=${result.size} elapsedMs=${System.currentTimeMillis() - startTime}",
+                level = AppLog.Level.INFO
+            )
+        }
+        return result
     }
 
     // ==================== Layer 1: 静态解析 ====================

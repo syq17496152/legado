@@ -6,8 +6,8 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import androidx.activity.viewModels
-import androidx.appcompat.R as AppCompatR
-import androidx.appcompat.widget.SearchView
+import androidx.appcompat.widget.AppCompatImageButton
+import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.SimpleItemAnimator
@@ -21,12 +21,15 @@ import io.legado.app.help.AppCloudStorage
 import io.legado.app.lib.cloud.CloudStorageType
 import io.legado.app.lib.cloud.S3ContainerScope
 import io.legado.app.lib.dialogs.AndroidAlertBuilder
+import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.lib.theme.themeMutedColorOrDefault
+import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.gone
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.applyTint
@@ -59,14 +62,13 @@ class CacheManageActivity :
     private var lastMissingTaskReloadAt = 0L
     private val handledTerminalTaskReloads = hashSetOf<String>()
     private var cloudContainerId: String? = null
-    private var containerMenuItem: MenuItem? = null
-    private var sortMenuItem: MenuItem? = null
-    private var searchMenuItem: MenuItem? = null
+    private var containerActionButton: AppCompatImageButton? = null
     private var rawItems: List<CacheBookItem> = emptyList()
     private var searchKey: String = ""
     private var sortMode: CacheManageSortMode = CacheManageSortMode.RECENT
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initTopBar()
         initView()
         observeData()
         observeTasks()
@@ -79,7 +81,7 @@ class CacheManageActivity :
 
     override fun onResume() {
         super.onResume()
-        invalidateOptionsMenu()
+        updateContainerMenu()
     }
 
     private fun initView() = binding.run {
@@ -103,79 +105,60 @@ class CacheManageActivity :
         btnUploadAll.setOnClickListener { uploadAll() }
         btnDeleteAll.setOnClickListener { deleteAll() }
         updateTabs(CacheManageMode.BOOK)
-        updateSortButton()
+    }
+
+    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原工具栏搜索/排序/容器切换改为 action 插槽图标。 */
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.cache_manage_title))
+        // Mode.SUB 下 titleSelect 显示「标题+返回箭头」，点击回退
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
+        addActionButton(R.drawable.ic_search, R.string.cache_manage_search_book) {
+            showSearchDialog()
+        }
+        addActionButton(R.drawable.ic_baseline_sort_24, R.string.cache_manage_sort_title) {
+            showSortSelector()
+        }
+        containerActionButton = addActionButton(R.drawable.ic_outline_cloud_24, R.string.s3_bucket) {
+            showContainerSelector()
+        }
+        updateContainerMenu()
+    }
+
+    /** 搜索：弹出关键词输入框，就地过滤列表（原 ActionBar 折叠式搜索的等价替代）。 */
+    private fun showSearchDialog() {
+        val editText = androidx.appcompat.widget.AppCompatEditText(this).apply {
+            hint = getString(R.string.cache_manage_search_book)
+            setText(searchKey)
+            setSingleLine(true)
+        }
+        alert(getString(R.string.cache_manage_search_book), "") {
+            setCustomView(editText)
+            okButton {
+                updateSearchKey(editText.text?.toString().orEmpty().trim())
+            }
+            noButton()
+            onCancelled {
+                if (searchKey.isNotEmpty()) {
+                    updateSearchKey("")
+                }
+            }
+        }
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        searchMenuItem = menu.add(0, MENU_SEARCH, 0, R.string.cache_manage_search_book).apply {
-            setIcon(R.drawable.ic_search)
-            actionView = SearchView(this@CacheManageActivity).also(::setupSearchView)
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS or MenuItem.SHOW_AS_ACTION_COLLAPSE_ACTION_VIEW)
-            setOnActionExpandListener(object : MenuItem.OnActionExpandListener {
-                override fun onMenuItemActionExpand(item: MenuItem): Boolean = true
-
-                override fun onMenuItemActionCollapse(item: MenuItem): Boolean {
-                    updateSearchKey("")
-                    return true
-                }
-            })
-        }
-        sortMenuItem = menu.add(0, MENU_SORT, 1, R.string.cache_manage_sort_title).apply {
-            setIcon(R.drawable.ic_baseline_sort_24)
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-        }
-        containerMenuItem = menu.add(0, MENU_CONTAINER, 2, R.string.s3_bucket).apply {
-            setIcon(R.drawable.ic_outline_cloud_24)
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-        }
-        updateSortButton()
-        updateContainerMenu()
         return true
     }
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == MENU_SORT) {
-            showSortSelector()
-            return true
-        }
-        if (item.itemId == MENU_CONTAINER) {
-            showContainerSelector()
-            return true
-        }
         return super.onCompatOptionsItemSelected(item)
-    }
-
-    private fun setupSearchView(view: SearchView) {
-        view.applyTint(primaryTextColor)
-        view.queryHint = getString(R.string.cache_manage_search_book)
-        view.isSubmitButtonEnabled = false
-        view.maxWidth = Int.MAX_VALUE
-        hideSearchActionButtons(view)
-        view.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?): Boolean {
-                updateSearchKey(query.orEmpty())
-                view.clearFocus()
-                view.post { hideSearchActionButtons(view) }
-                return true
-            }
-
-            override fun onQueryTextChange(newText: String?): Boolean {
-                updateSearchKey(newText.orEmpty())
-                view.post { hideSearchActionButtons(view) }
-                return true
-            }
-        })
-    }
-
-    private fun hideSearchActionButtons(view: SearchView) {
-        view.findViewById<View?>(AppCompatR.id.search_close_btn)?.gone()
-        view.findViewById<View?>(AppCompatR.id.search_go_btn)?.gone()
-        view.findViewById<View?>(AppCompatR.id.search_voice_btn)?.gone()
     }
 
     private fun updateContainerMenu() {
         val containers = AppCloudStorage.listContainers().filter { it.enabled }
-        val item = containerMenuItem ?: return
+        val item = containerActionButton ?: return
         if (AppCloudStorage.type != CloudStorageType.S3) {
             cloudContainerId = containers.firstOrNull()?.id
             item.isVisible = false
@@ -184,9 +167,6 @@ class CacheManageActivity :
         cloudContainerId = AppCloudStorage.selectedContainer(S3ContainerScope.CACHE)?.id
             ?: containers.firstOrNull()?.id
         item.isVisible = true
-        item.title = containers.firstOrNull { it.id == cloudContainerId }
-            ?.let(AppCloudStorage::containerDisplayLabel)
-            ?: getString(R.string.s3_bucket)
     }
 
     private fun showContainerSelector() {
@@ -241,13 +221,8 @@ class CacheManageActivity :
             val mode = modes.getOrNull(index) ?: return@selector
             if (sortMode == mode) return@selector
             sortMode = mode
-            updateSortButton()
             applyFilters()
         }
-    }
-
-    private fun updateSortButton() {
-        sortMenuItem?.title = getString(R.string.cache_manage_sort_current, getString(sortMode.titleRes))
     }
 
     private fun applyFilters() {
@@ -589,9 +564,6 @@ private fun WebDavTaskStatus.isTerminalForListRefresh(): Boolean {
 private const val MISSING_TASK_RELOAD_INTERVAL_MS = 2500L
 private const val MISSING_TASK_RELOAD_DELAY_MS = 250L
 private const val TERMINAL_TASK_RELOAD_DELAY_MS = 600L
-private const val MENU_SEARCH = 0x53ff
-private const val MENU_SORT = 0x5400
-private const val MENU_CONTAINER = 0x5401
 
 enum class CacheManageSortMode(val titleRes: Int) {
     RECENT(R.string.cache_manage_sort_time),

@@ -261,7 +261,7 @@
     <string name="select_cancel_count">取消全选（%1$d/%2$d）</string>
     <string name="dark_theme">深色模式</string>
     <string name="welcome">启动页</string>
-    <string name="welcome_title">阅读</string>
+    <string name="welcome_title">阅读M</string>
     <string name="welcome_subtitle">享受美好时光</string>
     <string name="welcome_slogan">品读万千故事</string>
     <string name="download_start">开始下载</string>
@@ -406,6 +406,7 @@
     <string name="need_more_time_load_content">正文长度过长时，加载正文可能会花费更多时间</string>
     <string name="revert_selection">反选</string>
     <string name="search_book_key">搜索书名、作者</string>
+    <string name="my_search_hint">搜索设置项</string>
     <string name="rss_search_key">搜索订阅源内容</string>
     <string name="rss_source_manage">订阅源管理</string>
     <string name="rss_source_manage_summary">管理订阅源和源仓库。</string>
@@ -1580,7 +1581,7 @@
     <string name="source_sort_5">按URL</string>
     <string name="source_layout">视图</string>
     <string name="source_sort_label">排序</string>
-    <string name="about_description_sigma">\u3000\u3000阅读M继承自legado-E，旨在原版基础上完善和增加功能。</string>
+    <string name="about_description_sigma">\u3000\u3000阅读M继承自legado-E&amp;阅读 Archive，旨在原版基础上完善和增加功能。</string>
     <string name="contributors_summary_sigma">老登GTQ，详情请在 GitHub 中查看</string>
     <!-- HeatmapCalendar（task 12.39） -->
     <string name="rr_heatmap_count">阅读次数</string>
@@ -1935,7 +1936,7 @@
 	<string name="app_share_description_sigma">
         阅读Archive 下载地址：\nhttps://gitee.com/zziji/legado/releases\nGitHub 备用：\nhttps://github.com/Rimchars/legado/releases
     </string>
-	<string name="app_name_sigma">&#38405;&#35835;Archive</string>
+	<string name="app_name_sigma">阅读M</string>
 	<string name="show_source_comment">&#26174;&#31034;&#28304;&#27880;&#37322;</string>
 	<string name="custom_button">&#23450;&#21046;&#25353;&#38062;</string>
 	<string name="menu_page">&#31532; %d &#39029;</string>

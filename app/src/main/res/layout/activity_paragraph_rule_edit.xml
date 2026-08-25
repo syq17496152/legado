@@ -5,13 +5,10 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <io.legado.app.ui.widget.TitleBar
+    <io.legado.app.ui.widget.MainTopBarView
         android:id="@+id/title_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:contentInsetStartWithNavigation="0dp"
-        app:displayHomeAsUp="true"
-        app:title="@string/paragraph_rule_edit" />
+        android:layout_height="wrap_content" />
 
     <io.legado.app.ui.widget.NoChildScrollNestedScrollView
         android:layout_width="match_parent"

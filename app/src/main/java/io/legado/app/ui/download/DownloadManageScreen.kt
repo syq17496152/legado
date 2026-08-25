@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.service.DownloadStatus
+import io.legado.app.service.DownloadTaskType
 import io.legado.app.ui.book.cache.formatBytes
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.AppMenuSheet
@@ -62,7 +63,9 @@ data class DownloadDisplayItem(
     val url: String,
     val status: DownloadStatus,
     val totalSize: Int,
-    val downloadedSize: Int
+    val downloadedSize: Int,
+    val taskType: DownloadTaskType = DownloadTaskType.DIRECT,
+    val localPath: String? = null
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

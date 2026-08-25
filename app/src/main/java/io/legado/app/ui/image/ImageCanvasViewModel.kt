@@ -58,10 +58,14 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
     /**
      * 新增项事件 LiveData（修复 regression：notifyDataSetChanged 导致 Glide 请求被取消）
      *
-     * 触发时机：loadArticleInternal 成功后 postValue(startPos to itemCount)
+     * 触发时机：loadArticleInternal 成功后 setValue(startPos to itemCount)
      * Activity 观察后调用 notifyItemRangeInserted(startPos, itemCount) 精准插入，
      * 避免 notifyDataSetChanged 触发所有可见 ViewHolder 重新 bind → Glide.clear 取消
      * 正在进行的 downloadOnly 请求 → 图片永远加载不完的死循环。
+     *
+     * 修复（rss-image-load-optimization crash-fix）：postValue → setValue
+     * postValue 异步排队 + 值合并会导致 notifyItemRangeInserted 晚于 RecyclerView 布局触发，
+     * 数据源已追加而 adapter 未通知 → Inconsistency detected 崩溃。setValue 在主线程同步回调。
      */
     private val _newItemsEvent = MutableLiveData<Pair<Int, Int>>()
     val newItemsEvent: MutableLiveData<Pair<Int, Int>> = _newItemsEvent
@@ -160,7 +164,7 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
                 "ImageCanvas loadInitialArticle failed: rssSource=${rssSource == null} rssArticles=${rssArticles?.size ?: 0}",
                 null
             )
-            _loadState.postValue(ImageCanvasAdapter.LoadState.ERROR(
+            _loadState.setValue(ImageCanvasAdapter.LoadState.ERROR(
                 IllegalStateException("订阅源或文章列表为空")
             ))
             return
@@ -172,7 +176,7 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
                 "ImageCanvas loadInitialArticle failed: initialIndex=$initialIndex outOfRange (0, ${rssArticles.size})",
                 null
             )
-            _loadState.postValue(ImageCanvasAdapter.LoadState.ERROR(
+            _loadState.setValue(ImageCanvasAdapter.LoadState.ERROR(
                 IndexOutOfBoundsException("初始文章索引越界")
             ))
             return
@@ -230,7 +234,7 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
                 "loadNextArticle: no more articles, nextIndex=$nextIndex total=${rssArticles.size}",
                 level = AppLog.Level.INFO
             )
-            _loadState.postValue(ImageCanvasAdapter.LoadState.NO_MORE)
+            _loadState.setValue(ImageCanvasAdapter.LoadState.NO_MORE)
             return
         }
         if (ImagePlay.loadedArticleIndices.contains(nextIndex)) {
@@ -260,7 +264,7 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
         )
 
         isLaunching = true
-        _loadState.postValue(ImageCanvasAdapter.LoadState.LOADING)
+        _loadState.setValue(ImageCanvasAdapter.LoadState.LOADING)
 
         loadJob = execute {
             // AD-11: 协程取消检查（防止旧任务结果污染新数据）
@@ -333,8 +337,15 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
             startPos to itemCount
         }.onSuccess { range ->
             isLaunching = false
-            _loadState.postValue(ImageCanvasAdapter.LoadState.SUCCESS)
-            _newItemsEvent.postValue(range)
+            // 修复（rss-image-load-optimization crash-fix）：postValue → setValue 同步通知
+            // 根因：execute 内 appendItems 同步更新数据源，postValue 异步排队导致
+            // notifyItemRangeInserted 晚于布局触发 → RecyclerView 按新 itemCount 布局时
+            // 从 scrap 取旧位置 ViewHolder → IndexOutOfBoundsException: Inconsistency detected。
+            // 修复：onSuccess 运行在主线程，setValue 同步回调 observer，使 notifyItemRangeInserted
+            // 与数据源追加在同一主线程消息内完成，消除竞态窗口。
+            // 顺序：先插入新项（newItemsEvent）再更新 footer（loadState），避免 footer 位置越界。
+            _newItemsEvent.setValue(range)
+            _loadState.setValue(ImageCanvasAdapter.LoadState.SUCCESS)
         }.onError { e ->
             isLaunching = false
             // Coroutine 内部已守卫 CancellationException（重新抛出不触发 onError）
@@ -343,7 +354,7 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
                 "ImageCanvas loadArticleInternal failed: articleIndex=$articleIndex e=${e::class.simpleName} msg=${e.message?.take(200)}",
                 e
             )
-            _loadState.postValue(ImageCanvasAdapter.LoadState.ERROR(e))
+            _loadState.setValue(ImageCanvasAdapter.LoadState.ERROR(e))
         }
     }
 

@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 选集弹框容器：靠右全高。
+     video-player-theme-unify：背景改透明，由 ChoiceEpisodeDialog 动态设
+     ThemeStore.backgroundColor + UiCorner.panelRadius 圆角，跟随整体主题 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#80121212"
+    android:background="@null"
     android:orientation="vertical"
     android:paddingBottom="8dp">
 
@@ -13,8 +16,8 @@
         android:layout_margin="8dp"
         android:gravity="center"
         android:minEms="2"
-        android:text="选集"
-        android:textColor="#88ffffff" />
+        android:text="@string/video_episode_list"
+        android:textColor="@color/primaryText" />
 
     <ListView
         android:id="@+id/switch_dialog_list"

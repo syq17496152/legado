@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 文件夹视图卡片（样式完全对齐书架分组卡片 FolderGroupGridContent：7:10 封面 + 8dp 圆角 + 默认 FolderOpen 图标 + 分组名在封面下方跟随主题，showBookname 控制显隐） -->
+<!-- 文件夹视图卡片（样式完全对齐书架分组卡片 FolderGroupGridContent：3:4 封面 + 8dp 圆角 + 默认 FolderOpen 图标 + 分组名在封面下方跟随主题，showBookname 控制显隐） -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -29,7 +29,7 @@
             android:scrollbars="none">
 
             <!-- 文件夹封面区域：比例/圆角/默认图标样式完全对齐书架分组卡片（FolderGroupGridContent：
-                 7:10 比例 + 8dp 圆角；底色/图标 tint 由 SourceFolderAdapter 运行时注入——
+                 3:4 比例 + 8dp 圆角；底色/图标 tint 由 SourceFolderAdapter 运行时注入——
                  页面主题为 AppCompat（非 Material3），此处不可用 ?attr/colorSurfaceContainerHigh 等 M3 属性，否则运行时 InflateException） -->
             <com.google.android.material.imageview.ShapeableImageView
                 android:id="@+id/iv_folder_cover"
@@ -39,7 +39,7 @@
                 android:contentDescription="@string/folder_view"
                 android:scaleType="centerCrop"
                 android:transitionName="img_cover"
-                app:layout_constraintDimensionRatio="0.7"
+                app:layout_constraintDimensionRatio="0.75"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent"

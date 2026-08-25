@@ -43,6 +43,8 @@ import io.legado.app.ui.widget.compose.AppSettingSectionTitle
 import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.launch
 
@@ -57,7 +59,7 @@ class AppearanceKitEditActivity : BaseActivity<ActivityThemeManageBinding>() {
     private var nightOptions by mutableStateOf(AppearanceKitEditOptions())
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.titleBar.title = getString(R.string.edit)
+        initTopBar()
         binding.tabBar.visibility = View.GONE
         binding.tvSummary.visibility = View.GONE
         binding.recyclerView.visibility = View.GONE
@@ -82,6 +84,14 @@ class AppearanceKitEditActivity : BaseActivity<ActivityThemeManageBinding>() {
         }
         binding.root.addView(composeView, binding.root.indexOfChild(binding.recyclerView))
         loadKit()
+    }
+
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.edit))
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
     }
 
     private fun loadKit() {

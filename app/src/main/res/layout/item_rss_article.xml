@@ -35,12 +35,12 @@
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toLeftOf="@+id/image_view" />
 
-    <ImageView
+    <io.legado.app.ui.widget.image.FilletImageView
         android:id="@+id/image_view"
         android:layout_width="110dp"
         android:layout_height="68dp"
         android:contentDescription="@string/img_cover"
-        android:paddingLeft="16dp"
+        app:radius="12dp"
         android:visibility="gone"
         android:scaleType="centerCrop"
         android:src="@drawable/image_rss_article"

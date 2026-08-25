@@ -6,13 +6,11 @@
     android:layout_height="match_parent"
     tools:context=".ui.book.explore.ExploreShowActivity">
 
-    <io.legado.app.ui.widget.TitleBar
+    <io.legado.app.ui.widget.MainTopBarView
         android:id="@+id/title_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:contentInsetStartWithNavigation="0dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:title="@string/discovery" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <io.legado.app.ui.widget.dynamiclayout.DynamicFrameLayout
         android:id="@+id/content_view"

@@ -87,7 +87,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
 
     abstract fun gotoTop()
 
-    // 顶栏对齐 Archive MainTopBarView（BOOKSHELF 模式）：标题 + 搜索按钮 + 更多按钮；标题 style1 固定"书架"，style2 动态更新分组名
+    // 顶栏对齐 Archive MainTopBarView（BOOKSHELF 模式）：标题 + 搜索按钮 + 更多按钮；标题 style1 动态为当前分组名（updateHeaderTitle），style2 动态更新分组名
     protected var composeTopBarTitle: String = ""
 
     // 子类提供 MainTopBarView 顶栏（对应布局中的 top_bar）

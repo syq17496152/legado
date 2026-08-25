@@ -32,6 +32,8 @@ import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.lib.theme.themeMutedColorOrDefault
 import io.legado.app.lib.theme.uiTypeface
+import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
@@ -55,7 +57,7 @@ class AiImageGalleryActivity : BaseActivity<ActivityAiImageGalleryBinding>() {
         if (fixedBookKey.isNotBlank()) {
             currentFilter = GalleryFilter.BOOK(fixedBookKey)
         }
-        binding.titleBar.title = fixedTitle.ifBlank { getString(R.string.ai_image_gallery) }
+        initTopBar()
         binding.etSearch.background = UiCorner.panelRounded(
             this,
             themeCardColorOrDefault(),
@@ -89,6 +91,14 @@ class AiImageGalleryActivity : BaseActivity<ActivityAiImageGalleryBinding>() {
     override fun onResume() {
         super.onResume()
         reload()
+    }
+
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(fixedTitle.ifBlank { getString(R.string.ai_image_gallery) })
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
     }
 
     private fun reload() {

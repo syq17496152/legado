@@ -45,7 +45,7 @@ class MainTopBarView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : LinearLayout(context, attrs), StatusBarInsetAware {
 
-    enum class Mode { BOOKSHELF, DISCOVERY, RSS, READ_RECORD }
+    enum class Mode { BOOKSHELF, DISCOVERY, RSS, READ_RECORD, MY, SUB }
 
     val titleSelect = LinearLayout(context)
     val titleText = TextView(context)
@@ -54,6 +54,11 @@ class MainTopBarView @JvmOverloads constructor(
     private val searchEntryText = TextView(context)
     private val searchEntryIcon = AppCompatImageView(context)
     val moreButton = actionButton(R.drawable.ic_more_vert, R.string.menu)
+    /** subpage-topbar-unify: 子页动态图标菜单插槽（S3容器切换/排序/同步史等），宿主经 addActionButton 添加，样式统一走 TopBarConfig+主题 token。 */
+    val actionsBar = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+    }
     val searchButton = actionButton(R.drawable.ic_search, R.string.search)
     val filterButton = actionButton(R.drawable.ic_sort, R.string.sort)
     val starButton = actionButton(R.drawable.ic_star, R.string.favorite)
@@ -172,15 +177,30 @@ class MainTopBarView @JvmOverloads constructor(
 
     fun setMode(mode: Mode) {
         this.mode = mode
-        moreButton.isVisible = mode == Mode.BOOKSHELF || mode == Mode.READ_RECORD
-        searchButton.isVisible = mode == Mode.DISCOVERY || mode == Mode.RSS
+        moreButton.isVisible =
+            mode == Mode.BOOKSHELF || mode == Mode.READ_RECORD || mode == Mode.MY || mode == Mode.SUB
+        searchButton.isVisible = mode == Mode.DISCOVERY || mode == Mode.RSS || mode == Mode.MY
         filterButton.isVisible = mode == Mode.DISCOVERY
         starButton.isVisible = mode == Mode.RSS
         refreshButton.isVisible = mode == Mode.RSS
         loginButton.isVisible = mode == Mode.DISCOVERY || mode == Mode.RSS
         titleText.textSize = if (mode == Mode.BOOKSHELF) 24f else 20f
+        // subpage-topbar-unify: SUB 子页形态标题左侧显示返回箭头（替代下拉箭头），点击由宿主接 onBackPressed
+        titleArrow.setImageResource(
+            if (mode == Mode.SUB) R.drawable.ic_arrow_back else R.drawable.ic_arrow_drop_down
+        )
+        // SUB 子页为「返回箭头+标题」（箭头在前），主 Tab 保持「标题+下拉箭头」（箭头在后）
+        arrangeTitleSelect(arrowFirst = mode == Mode.SUB)
         titleText.applyUiTitleTypeface(context)
         applyTopBarStyle(force = true)
+    }
+
+    /** subpage-topbar-unify: 调整 titleSelect 内箭头与标题的排列顺序（主 Tab 下拉箭头在后，SUB 返回箭头在前）。 */
+    private fun arrangeTitleSelect(arrowFirst: Boolean) {
+        val wantArrowIndex = if (arrowFirst) 0 else 1
+        if (titleSelect.indexOfChild(titleArrow) == wantArrowIndex) return
+        titleSelect.removeView(titleArrow)
+        titleSelect.addView(titleArrow, wantArrowIndex)
     }
 
     fun setTitle(text: CharSequence) {
@@ -301,6 +321,27 @@ class MainTopBarView @JvmOverloads constructor(
         login?.let { loginButton.isVisible = it }
     }
 
+    /**
+     * subpage-topbar-unify: 子页动态图标菜单插槽入口（S3容器切换/排序/同步历史等高频图标操作）。
+     * 返回按钮引用供宿主更新可见性/状态；图标样式走 TopBarConfig + 主题 token（与内置动作按钮一致，
+     * 随顶栏/主题统一管理与刷新）。
+     */
+    fun addActionButton(
+        iconRes: Int,
+        contentDescRes: Int = 0,
+        onClick: (() -> Unit)? = null
+    ): AppCompatImageButton {
+        val button = actionButton(iconRes, if (contentDescRes != 0) contentDescRes else R.string.menu)
+        button.setOnClickListener { onClick?.invoke() }
+        actionsBar.addView(
+            button,
+            LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT).apply {
+                marginStart = 8.dp
+            }
+        )
+        return button
+    }
+
     private fun applyTopBarStyle(force: Boolean = false, resetFilters: Boolean = force) {
         val signature = "${TopBarConfig.currentSignature(AppConfig.isNightTheme)}|$mode"
         if (!force && styleSignature == signature) return
@@ -366,7 +407,7 @@ class MainTopBarView @JvmOverloads constructor(
         searchEntry.isVisible = false
         titleSelect.isVisible = true
         titleSpacer.isVisible = true
-        if (mode == Mode.BOOKSHELF) {
+        if (mode == Mode.BOOKSHELF || mode == Mode.MY) {
             searchButton.isVisible = showSearch
         }
         titleSelect.background = ContextCompat.getDrawable(context, R.drawable.bg_discover_embedded_action)
@@ -392,6 +433,7 @@ class MainTopBarView @JvmOverloads constructor(
         primaryBar.setSelectedBackgroundVisible(true)
         selectsBar.setSelectedBackgroundVisible(true)
         tagsBar.setSelectedBackgroundVisible(true)
+        styleActionSlotButtons(false)
     }
 
     private fun applyRegularStyle(config: TopBarConfig.Config) {
@@ -443,6 +485,32 @@ class MainTopBarView @JvmOverloads constructor(
         primaryBar.setSelectedBackgroundVisible(true)
         selectsBar.setSelectedBackgroundVisible(true)
         tagsBar.setSelectedBackgroundVisible(mode == Mode.DISCOVERY)
+        styleActionSlotButtons(true)
+    }
+
+    /** subpage-topbar-unify: 统一配置 action 插槽按钮在 default/regular 两种顶栏风格下的尺寸/背景/间距。 */
+    private fun styleActionSlotButtons(regular: Boolean) {
+        if (actionsBar.childCount == 0) return
+        val size = resources.getDimensionPixelSize(
+            if (regular) R.dimen.top_bar_regular_action_size else R.dimen.bookshelf_action_button_size
+        )
+        val bg = if (regular) {
+            null
+        } else {
+            ContextCompat.getDrawable(context, R.drawable.bg_discover_embedded_action)
+        }
+        val padding = if (regular) 8.dp else resources.getDimensionPixelSize(R.dimen.bookshelf_action_button_padding)
+        val margin = if (regular) 6.dp else 8.dp
+        for (i in 0 until actionsBar.childCount) {
+            val btn = actionsBar.getChildAt(i)
+            btn.background = bg
+            btn.layoutParams = (btn.layoutParams as? LayoutParams ?: LayoutParams(size, size)).apply {
+                width = size
+                height = size
+                marginStart = margin
+            }
+            btn.setPadding(padding, padding, padding, padding)
+        }
     }
 
     private fun buildTitleRow(): LinearLayout {
@@ -503,6 +571,7 @@ class MainTopBarView @JvmOverloads constructor(
             addAction(starButton)
             addAction(refreshButton)
             addAction(loginButton)
+            addView(actionsBar)
             addAction(moreButton)
         }
     }
@@ -546,6 +615,9 @@ class MainTopBarView @JvmOverloads constructor(
         searchEntryIcon.setColorFilter(color)
         listOf(moreButton, searchButton, filterButton, starButton, refreshButton, loginButton, filterToggleButton).forEach {
             it.setColorFilter(color)
+        }
+        for (i in 0 until actionsBar.childCount) {
+            (actionsBar.getChildAt(i) as? ImageView)?.setColorFilter(color)
         }
     }
 

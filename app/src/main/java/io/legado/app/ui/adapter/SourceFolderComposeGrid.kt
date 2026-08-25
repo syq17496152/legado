@@ -38,7 +38,7 @@ import io.legado.app.ui.widget.components.AppShapes
  * 订阅/书源文件夹目录 Compose 网格（对齐书架文件夹 FolderGroupGridContent 样式）。
  *
  * 视觉参数与书架完全一致：
- * - 封面 7:10（aspectRatio 0.7）+ AppShapes.Chip(8dp) 圆角 + surfaceContainerHigh 底色
+ * - 封面 3:4（aspectRatio 0.75）+ AppShapes.Chip(8dp) 圆角 + surfaceContainerHigh 底色
  * - 无封面时 FolderOpen 图标 + onSurfaceVariant tint（跟随主题）
  * - 分组名 bodySmall + Medium 加粗 + onSurface，居中 2 行，TopPadding 8dp
  * - 网格间距：水平 12dp / 垂直 16dp + contentPadding(12,8,12)
@@ -75,7 +75,7 @@ fun SourceFolderComposeGrid(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(0.7f)
+                        .aspectRatio(0.75f)
                         .clip(AppShapes.Chip)
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 ) {

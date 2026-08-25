@@ -5,8 +5,6 @@ import android.content.Intent
 import android.app.Activity
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,8 +38,10 @@ import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.book.read.ReadMenuButtonIconHelper
 import io.legado.app.ui.book.read.ReadMenuButtonConfig
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.utils.GSON
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.postEvent
@@ -133,8 +133,17 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         load()
     }
 
+    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原「重置」工具栏菜单改为 action 插槽图标。 */
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.read_menu_button_manage))
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
+        addActionButton(R.drawable.ic_restore, R.string.reset) { resetLayout() }
+    }
+
     private fun initView() = binding.run {
-        titleBar.title = getString(R.string.read_menu_button_manage)
         tabBar.background = UiCorner.opaqueRounded(
             themeMutedColorOrDefault(),
             UiCorner.panelRadius(this@ReadMenuButtonManageActivity)
@@ -177,21 +186,6 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         }
         root.applyUiBodyTypefaceDeep(this@ReadMenuButtonManageActivity.uiTypeface())
         updateTabs()
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(0, MENU_RESET, 0, R.string.reset).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        return true
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            MENU_RESET -> {
-                resetLayout()
-                true
-            }
-            else -> super.onCompatOptionsItemSelected(item)
-        }
     }
 
     private fun load() {
@@ -731,7 +725,6 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }
 
     companion object {
-        private const val MENU_RESET = 1
         private const val ICON_REQUEST = 1001
     }
 }

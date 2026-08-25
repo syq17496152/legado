@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- video-player-theme-unify：项目自建进度条圆点 drawable，覆盖 GSY 库同名资源
+     中性白圆点兜底，实际颜色由 VideoPlayer.applyThemeColors() 动态设为主题主色 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#FFFFFF" />
+    <size
+        android:width="14dp"
+        android:height="14dp" />
+</shape>

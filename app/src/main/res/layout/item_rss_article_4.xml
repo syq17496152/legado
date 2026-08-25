@@ -9,14 +9,14 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content">
 
-    <ImageView
+    <io.legado.app.ui.widget.image.FilletImageView
         android:id="@+id/image_view"
         android:layout_width="0dp"
         android:layout_height="182dp"
         android:contentDescription="@string/loading"
         android:visibility="visible"
         android:scaleType="centerCrop"
-        android:background="@drawable/bg_img_border"
+        app:radius="12dp"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"

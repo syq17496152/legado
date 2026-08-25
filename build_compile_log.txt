@@ -1,0 +1,82 @@
+﻿
+> Configure project :app
+========== PACKAGE INFO ==========
+Base applicationId: io.legado.miss.app
+Build type: debug
+Custom package: false
+==================================
+
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preAppDebugBuild UP-TO-DATE
+> Task :app:dataBindingMergeDependencyArtifactsAppDebug UP-TO-DATE
+> Task :app:generateAppDebugResources UP-TO-DATE
+> Task :modules:book:preBuild UP-TO-DATE
+> Task :modules:book:preDebugBuild UP-TO-DATE
+> Task :modules:book:generateDebugResources UP-TO-DATE
+> Task :modules:book:packageDebugResources UP-TO-DATE
+> Task :modules:rhino:preBuild UP-TO-DATE
+> Task :modules:rhino:preDebugBuild UP-TO-DATE
+> Task :modules:rhino:generateDebugResources UP-TO-DATE
+> Task :modules:rhino:packageDebugResources UP-TO-DATE
+> Task :app:mergeAppDebugResources UP-TO-DATE
+> Task :app:packageAppDebugResources UP-TO-DATE
+> Task :modules:book:processDebugNavigationResources UP-TO-DATE
+> Task :modules:rhino:processDebugNavigationResources UP-TO-DATE
+> Task :app:processAppDebugNavigationResources UP-TO-DATE
+> Task :app:parseAppDebugLocalResources UP-TO-DATE
+> Task :modules:book:parseDebugLocalResources UP-TO-DATE
+> Task :modules:book:generateDebugRFile UP-TO-DATE
+> Task :modules:rhino:parseDebugLocalResources UP-TO-DATE
+> Task :modules:rhino:generateDebugRFile UP-TO-DATE
+> Task :app:dataBindingGenBaseClassesAppDebug UP-TO-DATE
+> Task :app:generateAppDebugBuildConfig UP-TO-DATE
+> Task :modules:book:writeDebugAarMetadata UP-TO-DATE
+> Task :modules:rhino:writeDebugAarMetadata UP-TO-DATE
+> Task :app:checkAppDebugAarMetadata UP-TO-DATE
+> Task :app:compileAppDebugNavigationResources UP-TO-DATE
+> Task :app:mapAppDebugSourceSetPaths UP-TO-DATE
+> Task :app:createAppDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksAppDebug UP-TO-DATE
+> Task :modules:book:extractDeepLinksDebug UP-TO-DATE
+> Task :modules:book:processDebugManifest UP-TO-DATE
+> Task :modules:rhino:extractDeepLinksDebug UP-TO-DATE
+> Task :modules:rhino:processDebugManifest UP-TO-DATE
+> Task :app:processAppDebugMainManifest UP-TO-DATE
+> Task :app:processAppDebugManifest UP-TO-DATE
+> Task :app:processAppDebugManifestForPackage UP-TO-DATE
+> Task :modules:book:compileDebugLibraryResources UP-TO-DATE
+> Task :modules:rhino:compileDebugLibraryResources UP-TO-DATE
+> Task :app:processAppDebugResources UP-TO-DATE
+> Task :modules:book:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :modules:book:compileDebugKotlin NO-SOURCE
+> Task :modules:book:javaPreCompileDebug UP-TO-DATE
+> Task :modules:book:compileDebugJavaWithJavac UP-TO-DATE
+> Task :modules:book:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :modules:rhino:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :modules:rhino:compileDebugKotlin UP-TO-DATE
+> Task :modules:rhino:javaPreCompileDebug UP-TO-DATE
+> Task :modules:rhino:compileDebugJavaWithJavac NO-SOURCE
+> Task :modules:rhino:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :app:kspAppDebugKotlin
+w: [ksp] F:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/data/dao/RssArticleDao.kt:41:  io.legado.app.data.entities.RssArticle has some properties [description, content, variable] which are not returned by the query. If they are not supposed to be read from the result, you can mark them with @Ignore annotation. You can suppress this warning by annotating the function with @SuppressWarnings(RoomWarnings.QUERY_MISMATCH). Columns returned by the query: link, sort, origin, order, title, image, group, pubDate, type, durPos, read.
+
+> Task :app:kaptGenerateStubsAppDebugKotlin
+
+> Task :app:kaptAppDebugKotlin
+ע: [1] Wrote GeneratedAppGlideModule with: [com.bumptech.glide.integration.okhttp3.OkHttpLibraryGlideModule, ch.qoqa.glide.svg.SvgLibraryGlideModule]
+����: ����ѡ��δ���κδ������ʶ��: '[room.internal.schemaInput, room.schemaLocation, room.internal.schemaOutput, kapt.kotlin.generated, room.incremental, room.expandProjection]'
+
+> Task :app:copyRoomSchemas NO-SOURCE
+> Task :app:compileAppDebugKotlin
+
+[Incubating] Problems report is available at: file:///F:/myself/github/WeAgentChat/temp/legado/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14.4/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 2m 10s
+45 actionable tasks: 4 executed, 41 up-to-date

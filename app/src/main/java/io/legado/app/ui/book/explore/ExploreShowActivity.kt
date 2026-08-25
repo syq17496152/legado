@@ -1,8 +1,8 @@
 package io.legado.app.ui.book.explore
 
 import android.os.Bundle
-import android.view.MenuItem
 import androidx.activity.viewModels
+import androidx.appcompat.widget.AppCompatImageButton
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -14,8 +14,10 @@ import io.legado.app.data.entities.SearchBook
 import io.legado.app.databinding.ActivityExploreShowBinding
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.ui.book.SearchBookOpenHelper
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.number.NumberPickerDialog
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.stableSearchBookKey
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
@@ -41,37 +43,42 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
     private var oldPage = -1
     private var isClearAll = false
 
-    private val menuPage by lazy {
-        binding.titleBar.menu.add(getString(R.string.menu_page, 1)).apply {
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-            setOnMenuItemClickListener {
-                val page = viewModel.pageLiveData.value ?: 1
-                NumberPickerDialog(this@ExploreShowActivity)
-                    .setTitle(getString(R.string.change_page))
-                    .setMaxValue(999)
-                    .setMinValue(1)
-                    .setValue(page)
-                    .show { targetPage ->
-                        if (page != targetPage) {
-                            oldPage = targetPage
-                            viewModel.skipPage(targetPage)
-                            isClearAll = true
-                            composeBooks.clear()
-                            composeHasMore.value = true
-                            composeHasPrevious.value = targetPage > 1
-                            composeBottomError.value = null
-                            composeTopError.value = null
-                            composeTopLoading.value = false
-                            scrollToBottom(forceLoad = true)
-                        }
+    private var pageButton: AppCompatImageButton? = null
+
+    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原「第 N 页」菜单项改为页码切换 action 图标按钮。 */
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(intent.getStringExtra("exploreName"))
+        setSearchEntryVisible(false)
+        // Mode.SUB 下 titleSelect 显示「标题+返回箭头」，点击回退
+        titleSelect.setOnClickListener { finish() }
+        pageButton = addActionButton(R.drawable.ic_menu, R.string.menu_page) {
+            val page = viewModel.pageLiveData.value ?: 1
+            NumberPickerDialog(this@ExploreShowActivity)
+                .setTitle(getString(R.string.change_page))
+                .setMaxValue(999)
+                .setMinValue(1)
+                .setValue(page)
+                .show { targetPage ->
+                    if (page != targetPage) {
+                        oldPage = targetPage
+                        viewModel.skipPage(targetPage)
+                        isClearAll = true
+                        composeBooks.clear()
+                        composeHasMore.value = true
+                        composeHasPrevious.value = targetPage > 1
+                        composeBottomError.value = null
+                        composeTopError.value = null
+                        composeTopLoading.value = false
+                        scrollToBottom(forceLoad = true)
                     }
-                true
-            }
+                }
         }
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.titleBar.title = intent.getStringExtra("exploreName")
+        initTopBar()
         initComposeList()
         viewModel.booksData.observe(this) { upData(it) }
         viewModel.addBooksData.observe(this) { upDataTop(it) }
@@ -88,7 +95,7 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
             bookshelfTick.intValue++
         }
         viewModel.pageLiveData.observe(this) {
-            menuPage.title = getString(R.string.menu_page, it)
+            pageButton?.contentDescription = getString(R.string.menu_page, it)
         }
         viewModel.initData(intent)
     }

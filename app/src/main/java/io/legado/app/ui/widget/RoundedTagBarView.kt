@@ -31,7 +31,8 @@ class RoundedTagBarView @JvmOverloads constructor(
 
     data class Item(
         val text: CharSequence,
-        val alpha: Float = 1f
+        val alpha: Float = 1f,
+        val tag: Any? = null
     )
 
     private val layoutManager = LinearLayoutManager(context, RecyclerView.HORIZONTAL, false)

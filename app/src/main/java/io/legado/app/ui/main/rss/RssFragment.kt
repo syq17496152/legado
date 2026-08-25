@@ -57,7 +57,6 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
-import com.google.android.material.tabs.TabLayout
 import io.legado.app.R
 import io.legado.app.base.VMBaseFragment
 import io.legado.app.constant.AppLog
@@ -98,7 +97,6 @@ import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.RoundedTagBarView
 import io.legado.app.ui.widget.SourceSelectDialog
-import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.ui.widget.recycler.GridSpacingItemDecoration
 import io.legado.app.utils.applyMainBottomBarPadding
 import io.legado.app.utils.applyStatusBarPadding
@@ -166,7 +164,6 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     private var pendingRenderCurrentSort = false
     // 切换逻辑修复：经典形态一次性初始化标记（防 modern↔classic 反复切换重复添加 header/注册 tab 监听）
     private var classicHeaderReady = false
-    private var classicTabListenerReady = false
     // 切换逻辑修复：源切换版本号（防 sortUrls 慢返回用过期 currentSorts 覆盖当前源内容）
     private var rssSourceVersion = 0L
     private val adapter by lazy {
@@ -214,14 +211,15 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                             SourceGroupCover(SourceGroupCover.KIND_RSS, folder.groupKey, path)
                         )
                         folderAdapter.updateCover(folder.groupKey, path)
+                        // folder-cover-replace-bugfix: View 版 adapter 与 Compose 状态源必须同步更新，
+                        // 否则 SourceFolderComposeGrid 不重组、替换封面不生效（回归根因）
+                        folderComposeCovers = folderComposeCovers + (folder.groupKey to path)
                     }
                 }.onFailure {
                     appCtx.toastOnUi(it.localizedMessage)
                 }
             }
         }
-    // 顶栏状态：搜索词
-    private var composeSearchQuery by mutableStateOf("")
     // 更多菜单弹窗句柄（ModernActionPopup，生命周期由弹窗自身管理）
     private var rssMenuPopup: ModernActionPopup.Handle? = null
     // D1: 分组模式（sourceGroupStyle!=0 && sourceGroupMode==1）→ 文件夹视图
@@ -244,27 +242,42 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     // 修复：点击"全部分组"文件夹后 currentType=-1/currentGroup=null 但 isShowingFolder=false，应判定为子目录
     private val inSubDirectory: Boolean
         get() = isFolderViewMode && !isShowingFolder
-    // D1: 标签模式 TabLayout
-    private val tabLayout: TabLayout by lazy { binding.tabLayout }
+    // D1: 标签模式 分组/类型胶囊（复用 top_bar.primaryBar，与书架/发现同套、受主题管理）
+    private val groupTagItems = mutableListOf<RoundedTagBarView.Item>()
+    // D1: 二级源标签项（tagsBar，点击过滤到该源；首项"全部"=null）
+    private val rssTags = mutableListOf<RoundedTagBarView.Item>()
+    // D1: 当前二级源标签选中（null=全部）
+    private var selectedRssTag: String? = null
     private var groupsFlowJob: Job? = null
     private var rssFlowJob: Job? = null
     // 分组集合（Compose 菜单数据驱动，mutableStateOf 保证分组变化时菜单重组）
     private var groups by mutableStateOf(linkedSetOf<String>())
-    // D1: Tab 选中监听（用 tag 存选中项，避免 position 映射不稳定）
-    // D2: 按类型时 tag 存 Int(类型索引)，按分组时 tag 存 String(分组名)
-    private val tabSelectedListener = object : TabLayout.OnTabSelectedListener {
-        override fun onTabSelected(tab: TabLayout.Tab) {
+    // D1: 一级胶囊点击：按 index 映射回 类型(tag=Int)/分组(tag=String)，重设选中并刷新（对齐书架 primaryBar）
+    private val tagSelectedListener = { index: Int ->
+        run {
+            val item = groupTagItems.getOrNull(index) ?: return@run
+            @Suppress("UNCHECKED_CAST")
+            val tag = item.tag
             if (AppConfig.sourceGroupStyle == 1) {
-                currentType = (tab.tag as? Int) ?: -1
+                currentType = (tag as? Int) ?: -1
                 currentGroup = null
             } else {
-                currentGroup = tab.tag as? String
+                currentGroup = tag as? String
                 currentType = -1
             }
-            upRssFlowJob(composeSearchQuery)
+            selectedRssTag = null
+            upTabLayout()
+            upRssFlowJob()
         }
-        override fun onTabUnselected(tab: TabLayout.Tab) = Unit
-        override fun onTabReselected(tab: TabLayout.Tab) = Unit
+    }
+    // D1: 二级源标签点击：定位过滤到该源（首项"全部"=null）
+    private val tagsSelectedListener = { index: Int ->
+        run {
+            val item = rssTags.getOrNull(index) ?: return@run
+            @Suppress("UNCHECKED_CAST")
+            selectedRssTag = item.tag as? String
+            upRssFlowJob()
+        }
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
@@ -282,7 +295,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                             upFolderView()
                         } else {
                             applyView()
-                            upRssFlowJob(composeSearchQuery)
+                            upRssFlowJob()
                         }
                         requireActivity().invalidateOptionsMenu()
                     } else {
@@ -346,12 +359,10 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     private fun applyClassicRssMode() {
         destroyModernRssChildren()
         pendingRenderCurrentSort = false
-        binding.composeSearchBar.isVisible = true
-        binding.tabLayout.isVisible = true
         binding.recyclerView.isVisible = true
         binding.tvEmptyMsg.isGone = true
         initComposeTopBar()
-        initTabLayout()  // D1: 初始化 TabLayout
+        initTabLayout()  // D1: 初始化分组胶囊标签
         initFolderComposeView()  // folder-compose-refactor: 初始化 Compose 文件夹目录
         // F-P1-8 初始化运行时状态：跟随用户偏好
         isShowingFolder = isFolderViewMode
@@ -368,8 +379,6 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     private fun applyModernRssMode() {
         groupsFlowJob?.cancel()
         rssFlowJob?.cancel()
-        binding.composeSearchBar.gone()
-        binding.tabLayout.gone()
         binding.recyclerView.gone()
         binding.tvEmptyMsg.gone()
         binding.rssFragmentContainer.isGone = true
@@ -753,7 +762,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     // 刷新当前内容（对齐 Archive L625-645，本项目无 swipeRefreshLayout，下拉刷新由 refresh 按钮触发）
     private fun refreshCurrentRssContent(forceWebRefresh: Boolean = false) {
         if (!usingModernRss) {
-            upRssFlowJob(composeSearchQuery)
+            upRssFlowJob()
             return
         }
         selectedRssSource?.let { source ->
@@ -863,7 +872,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     }
 
     // 顶栏对齐 Archive MainTopBarView（RSS 模式）：标题 + 全局搜索 + 星标 + 刷新 + 更多菜单
-    // 内联搜索过滤保留在 compose_search_bar（按名称过滤 + 提交跳全局搜索）；
+    // 搜索按钮直接弹 RssSearchActivity 全屏搜索页（对齐发现页 SearchActivity 交互，无就地过滤 overlay）：
     // 本项目 RSS 为订阅源列表，需 更多菜单 容纳 分组配置/阅读记录/分组跳转/设置，故保留 moreButton
     private fun initComposeTopBar() {
         binding.topBar.applyStatusBarPadding(withInitialPadding = true)
@@ -876,13 +885,13 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         }
         // 刷新：重新加载当前列表流
         binding.topBar.refreshButton.setOnClickListener {
-            upRssFlowJob(composeSearchQuery)
+            upRssFlowJob()
         }
-        // RSS 全局搜索：顶栏搜索按钮 → 全局搜索页
+        // 顶栏搜索按钮：弹 RssSearchActivity 全屏搜索页（key=null 空关键词进入，与发现页 SearchActivity 一致）
         binding.topBar.searchButton.setOnClickListener {
             RssSearchActivity.start(requireContext(), null)
         }
-        // 登录为每源入口（列表长按菜单），不在订阅页顶栏显示；内联搜索承担正文搜索，隐藏内嵌搜索条
+        // 登录为每源入口（列表长按菜单），不在订阅页顶栏显示；搜索已改为弹全屏搜索页，隐藏内置搜索条
         binding.topBar.setSearchEntryVisible(false)
         binding.topBar.setActionsVisible(login = false)
         // 本项目 RSS 为订阅源列表，更多菜单容纳 分组配置/阅读记录/分组跳转/设置（Archive 的 RSS 为单源页故无此按钮）
@@ -890,35 +899,17 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         binding.topBar.moreButton.setOnClickListener {
             showRssMenu(it)
         }
-        // 内联搜索过滤（原 SettingsSearchBar，保留订阅源按名称过滤 + 提交跳全局搜索能力）
-        binding.composeSearchBar.setContent {
-            LegadoTheme {
-                SettingsSearchBar(
-                    query = composeSearchQuery,
-                    onQueryChange = {
-                        composeSearchQuery = it
-                        // 保留：按名称过滤订阅源列表
-                        upRssFlowJob(it)
-                    },
-                    placeholder = getString(R.string.rss_search_key),
-                    // rss-unified-search: 提交搜索时跳转到 RssSearchActivity
-                    onSearch = {
-                        val key = composeSearchQuery.trim()
-                        if (key.isNotEmpty()) {
-                            RssSearchActivity.start(requireContext(), key)
-                            composeSearchQuery = ""
-                        }
-                    }
-                )
-            }
-        }
     }
 
-    // 更多菜单数据（文件夹配置 + 阅读记录 + 动态分组 + 设置；星标收藏已并入顶栏星标按钮）
+    // 更多菜单数据（文件夹配置 + 分组管理 + 阅读记录 + 动态分组 + 设置；星标收藏已并入顶栏星标按钮）
     private fun showRssMenu(anchor: View) {
         val actions = buildList {
             add(ModernActionPopup.Action(getString(R.string.source_folder_config)) {
                 showFolderConfig()
+            })
+            // bugfix ⑪: 订阅页更多菜单加回"分组管理"入口（复用既有 GroupManageDialog，与 RssSourceActivity 一致）
+            add(ModernActionPopup.Action(getString(R.string.group_manage)) {
+                showDialogFragment<io.legado.app.ui.rss.source.manage.GroupManageDialog>()
             })
             add(ModernActionPopup.Action(getString(R.string.history)) {
                 showDialogFragment<ReadRecordDialog>()
@@ -926,7 +917,6 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
             groups.forEach { group ->
                 add(ModernActionPopup.Action(group) {
                     currentGroup = group
-                    composeSearchQuery = ""
                     upRssFlowJob()
                 })
             }
@@ -970,7 +960,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         val marginDp = AppConfig.sourceMargin
         gridSpacingDecoration.spacing = SourceFolderAdapter.spacingPx(requireContext(), marginDp)
         binding.recyclerView.addItemDecoration(gridSpacingDecoration)
-        val spanCount = SourceFolderAdapter.calculateSpanCount(requireContext(), marginDp)
+        val spanCount = effectiveSpanCount()
         binding.recyclerView.layoutManager = GridLayoutManager(context, spanCount)
         binding.recyclerView.adapter = adapter
     }
@@ -981,9 +971,16 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         val marginDp = AppConfig.sourceMargin
         gridSpacingDecoration.spacing = SourceFolderAdapter.spacingPx(requireContext(), marginDp)
         binding.recyclerView.addItemDecoration(gridSpacingDecoration)
-        val spanCount = SourceFolderAdapter.calculateSpanCount(requireContext(), marginDp)
+        val spanCount = effectiveSpanCount()
         binding.recyclerView.layoutManager = GridLayoutManager(context, spanCount)
         binding.recyclerView.adapter = folderAdapter
+    }
+
+    // bugfix ④: 订阅源网格列数读取 sourceLayout（Grid2-6 显式生效）；0/1（列表/紧凑，订阅源无此语义）回退屏幕自适应
+    private fun effectiveSpanCount(): Int {
+        val layout = AppConfig.sourceLayout
+        return if (layout in 2..6) layout
+        else SourceFolderAdapter.calculateSpanCount(requireContext(), AppConfig.sourceMargin)
     }
 
     // folder-compose-refactor: 初始化 Compose 文件夹目录（对齐书架文件夹 FolderGroupGridContent 样式）
@@ -993,10 +990,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                 SourceFolderComposeGrid(
                     items = folderComposeItems,
                     covers = folderComposeCovers,
-                    spanCount = SourceFolderAdapter.calculateSpanCount(
-                        requireContext(),
-                        AppConfig.sourceMargin
-                    ),
+                    spanCount = effectiveSpanCount(),
                     onFolderClick = { onFolderClick(it) },
                     onFolderLongClick = { onFolderSelectImage(it) },
                 )
@@ -1004,51 +998,47 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         }
     }
 
-    // D1: 初始化 TabLayout
+    // D1: 初始化分组胶囊标签（复用 top_bar.primaryBar/tagsBar，走主题管理，无需手动配色）。
+    // 每次进入经典形态重绑监听：classic/modern 共用顶栏 bar，需用当前模式监听覆盖，防 modern↔classic 切换后监听仍指向旧模式
     private fun initTabLayout() {
-        tabLayout.setSelectedTabIndicatorColor(requireContext().accentColor)
-        tabLayout.tabMode = TabLayout.MODE_SCROLLABLE
-        // 切换逻辑修复：仅首次进入经典形态注册监听，防 modern↔classic 反复切换监听累积
-        if (!classicTabListenerReady) {
-            classicTabListenerReady = true
-            tabLayout.addOnTabSelectedListener(tabSelectedListener)
-        }
+        binding.topBar.primaryBar.setOnTagClickListener(tagSelectedListener)
+        binding.topBar.tagsBar.setOnTagClickListener(tagsSelectedListener)
     }
 
-    // D1: 填充 Tab。D2: 按类型时显示类型 Tab，按分组时显示分组 Tab
+    // D1: 填充标签。D2: 按类型时显示类型标签，按分组时显示分组标签（tag 存类型/分组标识）
     private fun upTabLayout() {
-        tabLayout.removeOnTabSelectedListener(tabSelectedListener)
-        tabLayout.removeAllTabs()
+        groupTagItems.clear()
         if (AppConfig.sourceGroupStyle == 1) {
-            // D2: 按类型分组，Tab 显示类型名，tag 存类型索引
-            tabLayout.addTab(tabLayout.newTab().setText(R.string.all_groups).setTag(-1))
-            tabLayout.addTab(tabLayout.newTab().setText(R.string.type_web).setTag(0))
-            tabLayout.addTab(tabLayout.newTab().setText(R.string.type_image).setTag(1))
-            tabLayout.addTab(tabLayout.newTab().setText(R.string.type_video).setTag(2))
-            tabLayout.getTabAt((currentType + 1).coerceIn(0, 3))?.select()
+            // D2: 按类型分组，标签显示类型名，tag 存类型索引
+            groupTagItems.add(RoundedTagBarView.Item(getString(R.string.all_groups), tag = -1))
+            groupTagItems.add(RoundedTagBarView.Item(getString(R.string.type_web), tag = 0))
+            groupTagItems.add(RoundedTagBarView.Item(getString(R.string.type_image), tag = 1))
+            groupTagItems.add(RoundedTagBarView.Item(getString(R.string.type_video), tag = 2))
+            val selectedIndex = (currentType + 1).coerceIn(0, 3)
+            binding.topBar.setPrimaryItems(groupTagItems, selectedIndex)
         } else {
             // 按分组
-            tabLayout.addTab(tabLayout.newTab().setText(R.string.all_groups).setTag(null))
+            groupTagItems.add(RoundedTagBarView.Item(getString(R.string.all_groups), tag = null))
             val noGroup = getString(R.string.no_group)
-            tabLayout.addTab(tabLayout.newTab().setText(noGroup).setTag(noGroup))
+            groupTagItems.add(RoundedTagBarView.Item(noGroup, tag = noGroup))
             groups.forEach { group ->
-                tabLayout.addTab(tabLayout.newTab().setText(group).setTag(group))
+                groupTagItems.add(RoundedTagBarView.Item(group, tag = group))
             }
             val selectedIndex = when (currentGroup) {
                 null -> 0
                 noGroup -> 1
                 else -> 2 + groups.indexOf(currentGroup).coerceAtLeast(0)
             }
-            tabLayout.getTabAt(selectedIndex.coerceAtMost(tabLayout.tabCount - 1))?.select()
+            binding.topBar.setPrimaryItems(groupTagItems, selectedIndex.coerceAtMost(groupTagItems.lastIndex))
         }
-        tabLayout.addOnTabSelectedListener(tabSelectedListener)
     }
 
     // D1: 统一应用视图（根据 isShowingFolder / isTagMode 控制显示）
     private fun applyView() {
         if (isShowingFolder) {
-            // 分组模式：显示 Compose 文件夹目录（对齐书架文件夹样式），隐藏列表
-            binding.tabLayout.visibility = View.GONE
+            // 分组模式：显示 Compose 文件夹目录（对齐书架文件夹样式），隐藏列表与顶栏标签
+            binding.topBar.showTags(false)
+            binding.topBar.setPrimaryItems(emptyList(), 0)
             binding.recyclerView.isGone = true
             binding.folderComposeView.isVisible = true
             upFolderView()
@@ -1057,10 +1047,10 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
             binding.folderComposeView.isGone = true
             binding.recyclerView.isVisible = true
             if (isTagMode) {
-                binding.tabLayout.visibility = View.VISIBLE
                 upTabLayout()
             } else {
-                binding.tabLayout.visibility = View.GONE
+                binding.topBar.showTags(false)
+                binding.topBar.setPrimaryItems(emptyList(), 0)
             }
             applyListView()
         }
@@ -1082,13 +1072,12 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                     val newIsFolder = isFolderViewMode  // sourceGroupStyle!=0 && sourceGroupMode==1
                     if (newIsFolder != isShowingFolder) {
                         isShowingFolder = newIsFolder
-                        if (newIsFolder) composeSearchQuery = ""
                     }
                     applyView()
                     if (isShowingFolder) {
                         upFolderView()
                     } else {
-                        upRssFlowJob(composeSearchQuery)
+                        upRssFlowJob()
                     }
                     requireActivity().invalidateOptionsMenu()
                 }
@@ -1220,10 +1209,39 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                 AppDatabase.RSS_SOURCE_TABLE_NAME
             ).catch {
                 AppLog.put("订阅界面更新数据出错", it)
-            }.flowOn(IO).collect {
-                adapter.setItems(sortSources(it))
+            }.flowOn(IO).collect { list ->
+                val sorted = sortSources(list)
+                // D1: 二级源标签过滤到单个源（选中标签）/ 全部
+                adapter.setItems(
+                    if (selectedRssTag.isNullOrBlank()) sorted
+                    else sorted.filter { it.sourceName == selectedRssTag }
+                )
+                renderRssSecondaryTags(sorted)
             }
         }
+    }
+
+    // D1: 刷新二级源标签（当前分组的源快捷标签，对齐书架 tagsBar）；showTags(true) 使右侧向下箭头出现，点击箭头展开二级源标签
+    // rss-folder-subtag-fix: 二级源标签仅在标签样式(isTagMode)下展示；文件夹样式点进文件夹后的列表视图不显示标签栏与右侧向下箭头
+    private fun renderRssSecondaryTags(sources: List<RssSource>) {
+        if (!isTagMode) {
+            binding.topBar.showTags(false)
+            return
+        }
+        rssTags.clear()
+        if (sources.isEmpty()) {
+            binding.topBar.showTags(false)
+            return
+        }
+        rssTags.add(RoundedTagBarView.Item(getString(R.string.all_groups), tag = null))
+        sources.forEach { src ->
+            rssTags.add(RoundedTagBarView.Item(src.sourceName, tag = src.sourceName))
+        }
+        val selectedIdx = if (selectedRssTag == null) 0
+        else sources.indexOfFirst { it.sourceName == selectedRssTag }
+            .let { if (it < 0) 0 else it + 1 }
+        binding.topBar.showTags(true)
+        binding.topBar.tagsBar.submitItems(rssTags, selectedIdx.coerceAtMost(rssTags.lastIndex))
     }
 
     // D-2 修复：rssSort 配置驱动排序（0=手动/1=名称/2=启用/3=类型/4=分组/5=URL/6=更新时间），与管理页 RssSourceActivity 一致
@@ -1264,7 +1282,6 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                 else -> folder.groupKey
             }
         }
-        composeSearchQuery = ""  // 清空搜索词，不触发查询
         upRssFlowJob()  // 直接触发查询
     }
 
@@ -1283,6 +1300,8 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                     folder.groupKey
                 )
                 folderAdapter.updateCover(folder.groupKey, null)
+                // folder-cover-replace-bugfix: 恢复默认与替换一致，Compose 状态源需同步置 null
+                folderComposeCovers = folderComposeCovers + (folder.groupKey to null)
             }.onFailure {
                 appCtx.toastOnUi(it.localizedMessage)
             }

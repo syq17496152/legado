@@ -75,7 +75,7 @@
             android:layout_height="match_parent"
             android:gravity="center"
             android:minEms="2"
-            android:text="关弹幕"
+            android:text="@string/video_danmaku_off"
             android:textColor="#ffffff"
             android:visibility="gone"
             tools:visibility="visible" />
@@ -88,7 +88,7 @@
             android:minEms="2"
             android:paddingStart="8dp"
             android:paddingEnd="8dp"
-            android:text="倍速"
+            android:text="@string/video_speed"
             android:textColor="#ffffff" />
 
         <ImageView

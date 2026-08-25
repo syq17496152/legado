@@ -5,14 +5,18 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <io.legado.app.ui.widget.TitleBar
-        android:id="@+id/title_bar"
+    <!-- 我的页顶栏对齐 Archive MainTopBarView（与书架/订阅/发现同一组件，样式受顶栏/主题设置全量管理；Mode.MY） -->
+    <io.legado.app.ui.widget.MainTopBarView
+        android:id="@+id/top_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <!-- 设置项就地搜索框（默认隐藏，由顶栏搜索入口触发展开；保留 search_view id 以控制显隐/聚焦） -->
+    <include
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:attachToActivity="false"
-        app:title="@string/my" />
-
-    <include layout="@layout/view_search" />
+        android:visibility="gone"
+        layout="@layout/view_search" />
 
     <LinearLayout
         android:id="@+id/pre_fragment"

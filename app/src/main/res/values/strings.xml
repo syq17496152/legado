@@ -438,6 +438,7 @@
     <string name="need_more_time_load_content">When the body length is too long, it may take more time to load the text.</string>
     <string name="revert_selection">Inverse</string>
     <string name="search_book_key">Search book name/author</string>
+    <string name="my_search_hint">Search settings</string>
     <string name="rss_search_key">Search RSS content</string>
     <string name="rss_source_manage">RSS Sources management</string>
     <string name="rss_source_manage_summary">Manage RSS sources and source repositories.</string>
@@ -1090,6 +1091,14 @@
     <string name="wait_download">wait download</string>
     <string name="download_success">download success</string>
     <string name="download_error">download failure</string>
+    <string name="download_started">download started</string>
+    <string name="download_already_in_list">already in download list</string>
+    <string name="download_unfinished_tip">download incomplete, see Download folder</string>
+    <string name="download_fail_tip">download failed, see download management</string>
+    <string name="download_encrypt_unsupported">encrypted stream not supported</string>
+    <string name="download_hls_failed">m3u8 download failed</string>
+    <string name="download_file_not_found">local file not found</string>
+    <string name="video_download_no_url">video address unavailable, cannot download</string>
     <string name="downloading">downloading</string>
     <string name="unknown_state">unknown</string>
     <string name="disable_source">disable source</string>
@@ -1633,8 +1642,6 @@
     <string name="mute_on_start">默认静音</string>
     <!-- 12.4E: 视频设置面板 i18n（VideoFragment/VideoSettingsPanel） -->
     <string name="video_play_control">播放控制</string>
-    <string name="video_ratio">画面比例</string>
-    <string name="video_audio_track">音轨选择</string>
     <string name="video_play_info">播放信息</string>
     <string name="video_function">功能</string>
     <string name="video_play_setting">播放设置</string>
@@ -1920,7 +1927,7 @@
     <!-- D1: 展示模式（标签/分组），与 sourceGroupStyle 正交 -->
     <string name="source_group_mode">展示模式</string>
     <string name="source_group_mode_tag">标签</string>
-    <string name="source_group_mode_folder">分组</string>
+    <string name="source_group_mode_folder">文件夹</string>
     <string name="source_sort_0">Manual</string>
     <string name="source_sort_1">By Name</string>
     <string name="source_sort_2">By Enabled</string>
@@ -3093,4 +3100,22 @@ function login() {
 <string name="public_web_relay_config_error">配置错误：%1$s</string>
 <string name="public_web_relay_failed">连接失败：%1$s</string>
 <string name="public_web_relay_invalid_config">公网访问配置无效</string>
+    <!-- video-player-theme-unify：播放器主题统一文案资源化 -->
+    <string name="video_speed">倍速</string>
+    <string name="video_danmaku_off">关弹幕</string>
+    <string name="video_danmaku_on">开弹幕</string>
+    <string name="video_ratio">画面比例</string>
+    <string name="video_ratio_button">比例</string>
+    <string name="video_audio_track">音轨</string>
+    <string name="video_episode_list">选集（%1$d）</string>
+    <string name="video_episode_list_btn">选集</string>
+    <string name="video_ratio_default">默认</string>
+    <string name="video_ratio_16_9">16:9</string>
+    <string name="video_ratio_4_3">4:3</string>
+    <string name="video_ratio_fill">填充</string>
+    <string name="video_speed_playing">%1$s倍播放中</string>
+    <string name="video_speed_long_press">%1$s倍速播放中</string>
+    <string name="video_no_audio_track">无可用音轨</string>
+    <string name="video_ratio_playing">画面比例: %1$s</string>
+    <string name="video_audio_track_playing">音轨: %1$s</string>
 </resources>

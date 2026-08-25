@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 倍速面板容器：靠右垂直居中，wrap_content 高度，圆角半透明背景 -->
+<!-- 倍速面板容器：靠右垂直居中，wrap_content 高度。
+     video-player-theme-unify：背景改透明，由 ChoiceSpeedDialog 动态设
+     ThemeStore.backgroundColor + UiCorner.panelRadius 圆角，跟随整体主题 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/speed_dialog_panel_bg"
+    android:background="@null"
     android:paddingTop="6dp"
     android:paddingBottom="6dp">
 

@@ -22,9 +22,11 @@ import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.ui.book.read.config.AdvancedTitleConfigDialog
 import io.legado.app.ui.book.read.page.LottieImageBitmapCache
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
 import io.legado.app.ui.widget.compose.ComposeTextInputDialog
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.readBytes
 import io.legado.app.utils.readBytesLimited
@@ -83,9 +85,17 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.titleBar.title = getString(R.string.advanced_title_manage)
+        initTopBar()
         initComposeContent()
         loadEntries()
+    }
+
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.advanced_title_manage))
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
     }
 
     override fun onDestroy() {

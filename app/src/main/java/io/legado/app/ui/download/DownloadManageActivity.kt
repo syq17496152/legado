@@ -1,5 +1,6 @@
 package io.legado.app.ui.download
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,7 +24,7 @@ import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import splitties.systemservices.downloadManager
+import java.io.File
 
 /**
  * 下载管理页（precise-manage：聚合 DownloadService 任务，500ms 轮询系统 DownloadManager）
@@ -64,7 +65,7 @@ class DownloadManageActivity : BaseActivity<ActivityDownloadManageBinding>() {
                     onCancelTask = { cancelTask(it) },
                     onRetryTask = { retryTask(it) },
                     onOpenFile = { openFile(it) },
-                    onCopyPath = { sendToClip(it.fileName) },
+                    onCopyPath = { sendToClip(it.localPath ?: it.fileName) },
                     onClearCompleted = { clearCompletedTasks() },
                     onBack = { finish() }
                 )
@@ -89,7 +90,9 @@ class DownloadManageActivity : BaseActivity<ActivityDownloadManageBinding>() {
         url = url,
         status = status,
         totalSize = totalSize,
-        downloadedSize = downloadedSize
+        downloadedSize = downloadedSize,
+        taskType = taskType,
+        localPath = localPath
     )
 
     private fun filterTasks(tasks: List<DownloadTask>): List<DownloadTask> {
@@ -112,20 +115,23 @@ class DownloadManageActivity : BaseActivity<ActivityDownloadManageBinding>() {
     }
 
     private fun retryTask(item: DownloadDisplayItem) {
-        // 先移除旧的失败任务（系统侧记录一并清除），避免重试后新旧两条并存
         DownloadState.cancelDownload(item.id)
         io.legado.app.model.Download.start(
             this,
             item.url,
-            item.fileName
+            item.fileName,
+            item.taskType
         )
     }
 
     private fun openFile(item: DownloadDisplayItem) {
         kotlin.runCatching {
-            downloadManager.getUriForDownloadedFile(item.id)?.let { uri ->
-                openFileUri(uri, IntentType.from(item.fileName))
+            val path = item.localPath
+            if (path.isNullOrBlank()) {
+                toastOnUi(R.string.download_file_not_found)
+                return@runCatching
             }
+            openFileUri(Uri.fromFile(File(path)), IntentType.from(item.fileName))
         }.onFailure {
             AppLog.put("打开下载文件${item.fileName}出错", it)
             toastOnUi("${getString(R.string.error)}: ${it.localizedMessage}")

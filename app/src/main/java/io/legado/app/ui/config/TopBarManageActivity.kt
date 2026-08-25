@@ -7,8 +7,9 @@ import androidx.core.net.toUri
 import android.view.Menu
 import android.view.MenuItem
 import android.view.ViewGroup
-import android.widget.ImageButton
 import android.widget.LinearLayout
+import androidx.appcompat.widget.AppCompatImageButton
+import androidx.core.view.isVisible
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,6 +35,7 @@ import io.legado.app.ui.book.cache.WebDavTaskStatus
 import io.legado.app.ui.book.cache.WebDavTaskType
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.image.ImageCropContract
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppPackageManageItemCard
@@ -44,6 +46,7 @@ import io.legado.app.ui.widget.compose.showComposeNumberPickerDialog
 import io.legado.app.ui.widget.compose.showComposeSingleChoiceDialog
 import io.legado.app.utils.ImageCropHelper
 import io.legado.app.utils.ImageTypeUtils
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.dismissDialogFragment
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getFile
@@ -78,7 +81,7 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private val handledWebDavTasks = mutableSetOf<String>()
     private var loadVersion = 0
     private var cloudContainerId: String? = null
-    private var containerMenuItem: MenuItem? = null
+    private var containerActionButton: AppCompatImageButton? = null
     private var containerMenuPopup: ModernActionPopup.Handle? = null
     private val dateFormat by lazy { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
 
@@ -112,7 +115,7 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.titleBar.title = getString(R.string.top_bar_manage)
+        initTopBar()
         initComposeContent()
         loadPackages()
         observeWebDavTasks()
@@ -185,55 +188,41 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        containerMenuItem = menu.add(0, MENU_CONTAINER, 0, R.string.s3_bucket).apply {
-            setIcon(R.drawable.ic_outline_cloud_24)
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-            setActionView(R.layout.view_action_button)
-            actionView?.let { view ->
-                view.contentDescription = title
-                view.findViewById<ImageButton>(R.id.item)?.setImageDrawable(icon)
-                view.setOnClickListener { showContainerSelector(view) }
-            }
+    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，容器切换/同步任务改为 action 插槽图标。 */
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.top_bar_manage))
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
+        containerActionButton = addActionButton(R.drawable.ic_outline_cloud_24, R.string.s3_bucket) {
+            showContainerSelector()
         }
-        menu.add(0, MENU_SYNC_TASKS, 1, R.string.package_sync_task_menu).apply {
-            setIcon(R.drawable.ic_history)
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        addActionButton(R.drawable.ic_history, R.string.package_sync_task_menu) {
+            showTopBarSyncTasks()
         }
         updateContainerMenu()
+    }
+
+    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
         return true
     }
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            MENU_CONTAINER -> {
-                showContainerSelector(item.actionView)
-                true
-            }
-            MENU_SYNC_TASKS -> {
-                showTopBarSyncTasks()
-                true
-            }
-            else -> super.onCompatOptionsItemSelected(item)
-        }
+        return super.onCompatOptionsItemSelected(item)
     }
 
     private fun updateContainerMenu() {
         val containers = AppCloudStorage.listContainers().filter { it.enabled }
-        val item = containerMenuItem ?: return
+        val button = containerActionButton ?: return
         if (AppCloudStorage.type != CloudStorageType.S3) {
             cloudContainerId = containers.firstOrNull()?.id
-            item.isVisible = false
+            button.isVisible = false
             return
         }
         cloudContainerId = AppCloudStorage.selectedContainer(CLOUD_SCOPE)?.id
             ?: containers.firstOrNull()?.id
-        item.isVisible = true
-        val title = containers.firstOrNull { it.id == cloudContainerId }
-            ?.let(AppCloudStorage::containerDisplayLabel)
-            ?: getString(R.string.s3_bucket)
-        item.title = title
-        item.actionView?.contentDescription = title
+        button.isVisible = true
     }
 
     private fun showContainerSelector(anchor: android.view.View? = null) {
@@ -248,8 +237,8 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             val selected = cloudContainerId
                 ?: AppCloudStorage.selectedContainer(CLOUD_SCOPE)?.id
             val popupAnchor = anchor
-                ?: containerMenuItem?.actionView
-                ?: binding.titleBar.toolbar
+                ?: containerActionButton
+                ?: binding.titleBar.moreButton
             val actions = containers.map { container ->
                 ModernActionPopup.Action(AppCloudStorage.containerDisplayLabel(container)) {
                     if (container.id == selected) return@Action
@@ -839,8 +828,6 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     private companion object {
         private const val CLOUD_SCOPE = "theme"
-        private const val MENU_CONTAINER = 0x5401
-        private const val MENU_SYNC_TASKS = 0x5402
         const val COLOR_TAG_BAR = 5101
         const val COLOR_TAG_SELECTED = 5102
         const val REQUEST_WALLPAPER = 5103

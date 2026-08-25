@@ -121,6 +121,7 @@ OpenSpec 步骤 5→6 之间必须真机/模拟器验证，禁止只改代码不
 | 使用 Agent 子代理 | `sub-agent-quality-management.md` |
 | 书源/订阅源/RSS源 | `legado-source-creator/SKILL.md` |
 | 网络层/前端/协程/WebView 优化 | `forks-reference.md` |
+| 前端 UI 改造/样式统一/页面迁移 | `frontend-ui-standards.md` + `compose-ui-engineering` |
 | 打包构建/包名/APK发布 | `package-naming.md` + `apk-publish-workflow.md` |
 | 改动功能前（门禁） | `global-thinking-checklist.md`（前端入口+后端接口+数据库+覆盖安装+使用场景+回填点 6 维盘点） |
 | 数据库变更 | `database-migration-safety.md` |

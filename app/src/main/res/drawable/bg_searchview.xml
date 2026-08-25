@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" >
-    <!-- 角度 -->
-    <corners android:radius="35dp"/>
+    <!-- 角度：统一为 archive 订阅头部搜索框 18dp 口径（原 35dp 全胶囊形，与 SettingsSearchBar 不统一） -->
+    <corners android:radius="18dp"/>
     <!-- 填充色 -->
     <solid android:color="@color/transparent10" />
     <!-- 描边 设置线宽及颜色 -->

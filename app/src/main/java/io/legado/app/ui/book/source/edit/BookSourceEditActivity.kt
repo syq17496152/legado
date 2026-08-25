@@ -3,11 +3,11 @@ package io.legado.app.ui.book.source.edit
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.view.Menu
 import android.view.MenuItem
 import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.appcompat.widget.PopupMenu
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.tabs.TabLayout
@@ -38,6 +38,7 @@ import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.dialog.UrlOptionDialog
 import io.legado.app.ui.widget.dialog.VariableDialog
 import io.legado.app.ui.widget.keyboard.KeyboardToolPop
@@ -47,6 +48,7 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.imeHeight
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.launch
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.navigationBarHeight
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setEdgeEffectColor
@@ -102,6 +104,7 @@ class BookSourceEditActivity :
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         softKeyboardTool.attachToWindow(window)
+        initTopBar()
         initView()
         viewModel.initData(intent) {
             upSourceView(viewModel.bookSource)
@@ -115,15 +118,23 @@ class BookSourceEditActivity :
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.source_edit, menu)
-        return super.onCompatCreateOptionsMenu(menu)
+    /** subpage-topbar-unify: 书源编辑子页头部统一为 MainTopBarView，菜单（15+项）由 moreButton 弹 PopupMenu 承载。 */
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.edit_book_source))
+        titleSelect.setOnClickListener { finish() }
+        moreButton.setOnClickListener { showSourceEditMenu() }
     }
 
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        menu.findItem(R.id.menu_login)?.isVisible = !getSource().loginUrl.isNullOrBlank()
-        menu.findItem(R.id.menu_auto_complete)?.isChecked = viewModel.autoComplete
-        return super.onMenuOpened(featureId, menu)
+    private fun showSourceEditMenu() {
+        PopupMenu(this, binding.titleBar.moreButton).apply {
+            menuInflater.inflate(R.menu.source_edit, menu)
+            menu.findItem(R.id.menu_login)?.isVisible = !getSource().loginUrl.isNullOrBlank()
+            menu.findItem(R.id.menu_auto_complete)?.isChecked = viewModel.autoComplete
+            setOnMenuItemClickListener { onCompatOptionsItemSelected(it) }
+            show()
+        }
     }
 
     private val textEditLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->

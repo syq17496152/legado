@@ -3,6 +3,7 @@ package io.legado.app.help.gsyVideo
 import android.annotation.SuppressLint
 import android.app.Dialog
 import android.content.Context
+import android.graphics.drawable.GradientDrawable
 import android.widget.TextView
 import android.os.Bundle
 import android.view.Gravity
@@ -13,6 +14,8 @@ import android.widget.ArrayAdapter
 import android.widget.ListView
 import io.legado.app.R
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.lib.theme.ThemeStore
+import io.legado.app.lib.theme.UiCorner
 
 class ChoiceEpisodeDialog(private val mContext: Context) : Dialog(
     mContext, R.style.dialog_style
@@ -49,10 +52,21 @@ class ChoiceEpisodeDialog(private val mContext: Context) : Dialog(
         this.data = data
         val inflater = LayoutInflater.from(mContext)
         val view: View = inflater.inflate(R.layout.switch_episode_video_dialog, null)
-        view.findViewById<TextView>(R.id.listCount).text = "选集（${data.size}）"
+        // video-player-theme-unify：标题文案资源化（选集（N））
+        view.findViewById<TextView>(R.id.listCount).text =
+            mContext.getString(R.string.video_episode_list, data.size)
         listView = view.findViewById(R.id.switch_dialog_list)
         setContentView(view)
-        adapter = SwitchVideoAdapter(mContext, data) { item -> item.title }
+        // video-player-theme-unify：弹框容器动态设色（ThemeStore.backgroundColor + panelRadius 圆角），
+        // show 前读取最新主题，替代静态深色 #80121212
+        val radius = UiCorner.panelRadius(mContext).toFloat()
+        view.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = radius
+            setColor(ThemeStore.backgroundColor(mContext))
+        }
+        // video-player-theme-unify：初始选中集（initialSelection）传给 adapter 做高亮
+        adapter = SwitchVideoAdapter(mContext, data, { item -> item.title }, initialSelection)
         listView!!.setAdapter(adapter)
         if (initialSelection >= 0 && initialSelection < data.size) {
             listView!!.setSelectionFromTop(initialSelection, 0)

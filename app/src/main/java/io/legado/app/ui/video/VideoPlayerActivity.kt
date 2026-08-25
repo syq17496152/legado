@@ -17,8 +17,6 @@ import io.legado.app.lib.permission.PermissionsCompat
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.ArrayAdapter
-import android.widget.AdapterView
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -1051,20 +1049,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
         recyclerView.adapter = adapter
         scrollToDurChapter(recyclerView, VideoPlay.rssEpisodeIndex)
-        // R3 布局学习：多集时显示上一集/下一集按钮
-        if (episodes.size > 1) {
-            binding.rssEpisodesContainer.visible()
-            binding.btnPrevEpisode.setOnClickListener {
-                if (VideoPlay.upRssEpisodeIndex(-1, playerView)) {
-                    upRssEpisodesView()
-                }
-            }
-            binding.btnNextEpisode.setOnClickListener {
-                if (VideoPlay.upRssEpisodeIndex(1, playerView)) {
-                    upRssEpisodesView()
-                }
-            }
-        }
     }
 
     /**
@@ -1076,102 +1060,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             adapter?.updateSelectedPosition(VideoPlay.rssEpisodeIndex)
             scrollToDurChapter(binding.chapters, VideoPlay.rssEpisodeIndex)
         }
-    }
-
-    /**
-     * R2 调试日志：追加文本到调试面板
-     */
-    private fun appendDebugLog(text: String) {
-        val time = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
-            .format(java.util.Date())
-        binding.tvDebugLog.append("[$time] $text\n")
-    }
-
-    /**
-     * R2 调试日志：切换调试面板显示/隐藏
-     */
-    private fun toggleDebugPanel() {
-        if (binding.debugPanel.isShown) {
-            binding.debugPanel.gone()
-        } else {
-            binding.debugPanel.visible()
-        }
-    }
-
-    /**
-     * R3 修复：更新播放地址展示 + 复制按钮
-     * startPlay 异步赋值 videoUrl，setupRssVideoPanel 同步执行时可能为空，
-     * 需在 VIDEO_SUB_TITLE 事件（每次 player.setUp 后触发）中重复调用兜底。
-     */
-    private fun updateVideoUrlDisplay() {
-        val videoUrl = VideoPlay.videoUrl
-        if (!videoUrl.isNullOrEmpty()) {
-            binding.tvVideoUrl.text = getString(R.string.video_play_url_format, videoUrl)
-            binding.tvVideoUrl.visible()
-            binding.btnCopyUrl.visible()
-            binding.tvVideoUrl.setOnClickListener {
-                sendToClip(videoUrl)
-                toastOnUi(getString(R.string.video_play_url_copied))
-            }
-            binding.btnCopyUrl.setOnClickListener {
-                sendToClip(videoUrl)
-                toastOnUi(getString(R.string.video_play_url_copied))
-            }
-        }
-    }
-
-    /**
-     * R3 布局学习：初始化订阅源功能区按钮（播放地址/快进快退/倍速/调试/上一集下一集/简介）
-     */
-    private fun setupRssVideoPanel() {
-        // 播放地址展示 + 复制按钮（REQ-3.11 多行换行 / REQ-3.12 复制按钮）
-        updateVideoUrlDisplay()
-
-        // 快进快退按钮
-        binding.btnSkipBack30s.setOnClickListener { skipVideo(-30000) }
-        binding.btnSkipBack10s.setOnClickListener { skipVideo(-10000) }
-        binding.btnSkipFwd10s.setOnClickListener { skipVideo(10000) }
-        binding.btnSkipFwd30s.setOnClickListener { skipVideo(30000) }
-
-        // 倍速Spinner（1x/2x/3x/5x/10x，移除15x避免高倍速问题）
-        val speeds = arrayOf("1x", "2x", "3x", "5x", "10x")
-        val speedValues = floatArrayOf(1f, 2f, 3f, 5f, 10f)
-        // R3 布局优化：用自定义 item 布局（textSize=11sp）替代 simple_spinner_item（默认~14sp），与 Button 文字大小一致
-        val speedAdapter = ArrayAdapter(this, R.layout.item_spinner_speed, speeds)
-        speedAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.spinnerPlaybackRate.adapter = speedAdapter
-        binding.spinnerPlaybackRate.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                playerView.setSpeed(speedValues[position], true)
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
-
-        // 调试按钮
-        binding.btnToggleDebug.setOnClickListener { toggleDebugPanel() }
-
-        // 上一集/下一集按钮在 showRssEpisodes 中设置（rssEpisodes 就绪后才显示）
-
-        // 视频简介（从 rssStar/rssRecord 获取 description）
-        val description = VideoPlay.rssStar?.toRssArticle()?.description
-            ?: VideoPlay.rssRecord?.toRssArticle()?.description
-        if (!description.isNullOrEmpty()) {
-            binding.tvRssDescription.text = description
-            binding.tvRssDescription.visible()
-        }
-    }
-
-    /**
-     * R3 快进快退：跳转到当前位置 ± offset
-     */
-    private fun skipVideo(offsetMillis: Long) {
-        val player = playerView.getCurrentPlayer()
-        val currentPosition = VideoPlay.videoManager.currentPosition
-        val duration = VideoPlay.videoManager.duration
-        var target = currentPosition + offsetMillis
-        if (target < 0) target = 0
-        if (duration > 0 && target > duration) target = duration
-        player.seekTo(target)
     }
 
     private fun showVolumes(volumes: List<BookChapter>) {
@@ -1261,7 +1149,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 supportActionBar?.hide()
                 binding.chaptersContainer.gone()
                 binding.data.gone()
-                binding.rssVideoPanel.gone()
                 playerView.startWindowFullscreen(this, false, false)
             }
         } else {
@@ -1279,8 +1166,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                     binding.chaptersContainer.visible()
                     binding.data.visible()
                 } else {
-                    // R3 布局学习：订阅源退出全屏恢复功能区
-                    binding.rssVideoPanel.visible()
                     if (!VideoPlay.rssRoutes.isNullOrEmpty() || !VideoPlay.rssEpisodes.isNullOrEmpty()) {
                         // R3 多线路 / R1 多集：退出全屏恢复线路+集数列表
                         binding.chaptersContainer.visible()
@@ -1303,6 +1188,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     @SuppressLint("SwitchIntDef")
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        // video-player-theme-unify：配置变化兜底刷新播放器主题高亮
+        applyVideoThemeColors()
         if (isFullScreen) {
             window.clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN)
             window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
@@ -1325,6 +1212,16 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 }
             }
         }
+    }
+
+    /**
+     * video-player-theme-unify：刷新所有播放器实例的 View 侧主题高亮。
+     * 小屏（Fragment 持有）+ 大屏（lazy playerView）+ 全屏实例全量刷新。
+     */
+    private fun applyVideoThemeColors() {
+        playerView.applyThemeColors()
+        currentFragment?.playerView?.applyThemeColors()
+        playerView.getFullWindowPlayer()?.applyThemeColors()
     }
 
     private fun setupPlayerView() {
@@ -1484,6 +1381,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
     override fun observeLiveBus() {
 
+        // video-player-theme-unify：主题切换不重建（recreateOnThemeChange=false），
+        // 主动刷新播放器 View 侧主题高亮（进度条/缓冲/缩略图取 accentColor）
+        observeEvent<String>(EventBus.RECREATE) {
+            applyVideoThemeColors()
+        }
+
         observeEventSticky<String>(EventBus.VIDEO_SUB_TITLE) {
             if (useViewPagerMode) {
                 composeTitle = it
@@ -1557,10 +1460,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
 
         observeEvent<String>(EventBus.VIDEO_PLAY_ERROR) {
-            appendDebugLog(it)
-            if (!isFullScreen) {
-                binding.debugPanel.visible()
-            }
             // R3 阶段5：同步更新设置面板的调试日志
             settingsPanel?.appendDebugLog(it)
             // P0-1.4: 显示错误对话框，提供 WebView 降级选项（仅当存在建议时弹窗）

@@ -2,8 +2,6 @@ package io.legado.app.ui.config
 
 import android.os.Bundle
 import android.net.Uri
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.graphics.drawable.ColorDrawable
 import android.widget.ImageView
@@ -68,6 +66,7 @@ import io.legado.app.help.glide.ImageLoader
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.ui.book.cache.WebDavTaskType
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.AppSettingPalette
@@ -79,6 +78,7 @@ import io.legado.app.ui.widget.compose.releaseComposeImage
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.utils.externalFiles
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.getFile
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
@@ -87,11 +87,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-
-private const val MENU_CREATE = 1
-private const val MENU_IMPORT = 2
-private const val MENU_EXPORT = 3
-private const val MENU_SYNC_TASKS = 4
 
 class AppearanceKitActivity : BaseActivity<ActivityThemeManageBinding>() {
 
@@ -114,7 +109,7 @@ class AppearanceKitActivity : BaseActivity<ActivityThemeManageBinding>() {
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.titleBar.title = getString(R.string.appearance_kit_manage)
+        initTopBar()
         binding.tabBar.visibility = View.GONE
         binding.tvSummary.visibility = View.GONE
         binding.recyclerView.visibility = View.GONE
@@ -128,26 +123,17 @@ class AppearanceKitActivity : BaseActivity<ActivityThemeManageBinding>() {
         refreshKits()
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(0, MENU_CREATE, 0, R.string.appearance_kit_create)
-            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(0, MENU_IMPORT, 1, R.string.appearance_kit_import)
-            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(0, MENU_EXPORT, 2, R.string.appearance_kit_export)
-            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(0, MENU_SYNC_TASKS, 3, R.string.package_sync_task_title)
-            .setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        return true
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            MENU_CREATE -> { showCreateKitDialog(); true }
-            MENU_IMPORT -> { selectImportPackage(); true }
-            MENU_EXPORT -> { exportCurrentKit(); true }
-            MENU_SYNC_TASKS -> { showSyncTasks(); true }
-            else -> super.onCompatOptionsItemSelected(item)
-        }
+    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原「新建/导入/导出/同步任务」工具栏菜单改为 action 插槽图标。 */
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.appearance_kit_manage))
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
+        addActionButton(R.drawable.ic_add, R.string.appearance_kit_create) { showCreateKitDialog() }
+        addActionButton(R.drawable.ic_download, R.string.appearance_kit_import) { selectImportPackage() }
+        addActionButton(R.drawable.ic_export, R.string.appearance_kit_export) { exportCurrentKit() }
+        addActionButton(R.drawable.ic_history, R.string.package_sync_task_title) { showSyncTasks() }
     }
 
     private fun installComposeContent() {

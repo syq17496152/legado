@@ -5,6 +5,8 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
+import androidx.appcompat.widget.AppCompatImageButton
+import androidx.core.view.isVisible
 import android.view.Menu
 import android.view.MenuItem
 import android.view.Gravity
@@ -103,6 +105,7 @@ import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.font.FontSelectDialog
 import io.legado.app.ui.image.ImageCropContract
 import io.legado.app.ui.widget.ModernActionPopup
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.compose.AppManagementCard
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementPalette
@@ -115,6 +118,7 @@ import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.ImageCropHelper
 import io.legado.app.utils.ImageTypeUtils
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.fromJsonArray
@@ -185,7 +189,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private var pendingFontTarget = FontTarget.UI
     private var loadVersion = 0
     private var cloudContainerId: String? = null
-    private var containerMenuItem: MenuItem? = null
+    private var containerActionButton: AppCompatImageButton? = null
     private var containerMenuPopup: ModernActionPopup.Handle? = null
     private val pendingRemoteSyncTasks = linkedMapOf<String, RemoteSyncTask>()
     @Volatile
@@ -241,6 +245,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initTopBar()
         restorePendingRemoteSyncTasks()
         initView()
         lifecycleScope.launch {
@@ -256,7 +261,6 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     override fun onResume() {
         super.onResume()
-        invalidateOptionsMenu()
     }
 
     private fun initView() {
@@ -297,28 +301,27 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         container.addView(cv, index.coerceAtMost(container.childCount))
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        containerMenuItem = menu.add(0, MENU_CONTAINER, 0, R.string.theme_s3_container_switch).apply {
-            setIcon(R.drawable.ic_outline_cloud_24)
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，容器切换/同步任务改为 action 插槽图标。 */
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.theme_manage_title))
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
+        containerActionButton = addActionButton(R.drawable.ic_outline_cloud_24, R.string.theme_s3_container_switch) {
+            showContainerSelector()
         }
-        menu.add(0, MENU_SYNC_TASKS, 1, R.string.package_sync_task_menu).apply {
-            setIcon(R.drawable.ic_history)
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+        addActionButton(R.drawable.ic_history, R.string.package_sync_task_menu) {
+            showThemeSyncTasks()
         }
         updateContainerButton()
+    }
+
+    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
         return true
     }
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        if (item.itemId == MENU_CONTAINER) {
-            showContainerSelector()
-            return true
-        }
-        if (item.itemId == MENU_SYNC_TASKS) {
-            showThemeSyncTasks()
-            return true
-        }
         return super.onCompatOptionsItemSelected(item)
     }
 
@@ -326,15 +329,12 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         val containers = AppCloudStorage.listContainers().filter { it.enabled }
         if (AppCloudStorage.type != CloudStorageType.S3) {
             cloudContainerId = containers.firstOrNull()?.id
-            containerMenuItem?.isVisible = false
+            containerActionButton?.isVisible = false
             return
         }
         cloudContainerId = AppCloudStorage.selectedContainer(CLOUD_SCOPE)?.id
             ?: containers.firstOrNull()?.id
-        containerMenuItem?.isVisible = true
-        containerMenuItem?.title = containers.firstOrNull { it.id == cloudContainerId }
-            ?.let(AppCloudStorage::containerDisplayLabel)
-            ?: getString(R.string.s3_bucket)
+        containerActionButton?.isVisible = true
     }
 
     private fun showContainerSelector() {
@@ -355,7 +355,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                 }
             }
             containerMenuPopup = ModernActionPopup.show(
-                anchor = binding.titleBar.toolbar,
+                anchor = binding.titleBar.moreButton,
                 actions = actions,
                 previousPopup = containerMenuPopup
             )
@@ -2111,8 +2111,6 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         private const val colorUiFont = 411
         private const val colorTitleFont = 412
         private const val CLOUD_SCOPE = "theme"
-        private const val MENU_CONTAINER = 0x5401
-        private const val MENU_SYNC_TASKS = 0x5402
     }
 
     private enum class ThemeAction(val titleRes: Int) {

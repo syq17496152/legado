@@ -32,6 +32,7 @@
         <attr name="navigationContentDescription" format="reference|string" />
         <attr name="navigationIconTint" format="color|reference" />
         <attr name="themeMode" />
+        <attr name="topBarColorManaged" format="boolean" />
         <attr name="navigationIconTintMode" format="enum">
             <enum name="clear" value="0" />
             <enum name="src" value="1" />

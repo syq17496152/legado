@@ -24,8 +24,11 @@ import com.shuyu.gsyvideoplayer.video.base.GSYVideoView
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.RssEpisode
+import io.legado.app.help.download.ChunkDownloader
 import io.legado.app.help.gsyVideo.VideoPlayer
+import io.legado.app.model.Download
 import io.legado.app.model.VideoPlay
+import io.legado.app.service.DownloadTaskType
 import io.legado.app.data.PlayHistoryStore
 import io.legado.app.utils.gone
 import io.legado.app.utils.toastOnUi
@@ -108,6 +111,7 @@ class VideoFragment : Fragment() {
     private var btnStar: ImageButton? = null
     private var btnSettings: ImageButton? = null
     private var btnFullscreen: ImageButton? = null
+    private var btnDownload: ImageButton? = null
     // B1+ 修复：全屏模式下的悬浮返回按钮（F1 的 titleBarNew.gone() 隐藏了 TitleBar 返回按钮）
     private var btnBackOverlay: ImageButton? = null
 
@@ -217,6 +221,7 @@ class VideoFragment : Fragment() {
         btnStar = null
         btnSettings = null
         btnFullscreen = null
+        btnDownload = null
         btnBackOverlay = null
         gestureDetector = null
         scaleGestureDetector = null
@@ -715,6 +720,7 @@ class VideoFragment : Fragment() {
         btnStar = view.findViewById(R.id.btn_star)
         btnSettings = view.findViewById(R.id.btn_settings)
         btnFullscreen = view.findViewById(R.id.btn_fullscreen)
+        btnDownload = view.findViewById(R.id.btn_download)
         // B1+ 修复：初始化全屏模式悬浮返回按钮
         btnBackOverlay = view.findViewById(R.id.btn_back_overlay)
         btnBackOverlay?.setOnClickListener {
@@ -755,10 +761,30 @@ class VideoFragment : Fragment() {
             (activity as? VideoPlayerActivity)?.toggleFullScreen()
         }
 
+        // 2.8 下载按钮（video-download-manager）：用当前已解析的播放地址 + 防盗链头 + 视频标题发起下载
+        // 下载目标为 app 专属外部目录（无需 MANAGE_EXTERNAL_STORAGE 特殊权限），直接发起无需先申请权限
+        btnDownload?.setOnClickListener {
+            val url = VideoPlay.videoUrl
+            if (url.isNullOrBlank()) {
+                toastOnUi(R.string.video_download_no_url)
+                return@setOnClickListener
+            }
+            startDownload()
+        }
+
         // 用户需求：初始状态为 NORMAL（控件显示）
         // F2: onPrepared 后启动 3 秒自动隐藏；左右滑动/单击可切换显隐
         currentState = PlayState.NORMAL
         applyState(PlayState.NORMAL)
+    }
+
+    // ==================== 下载（video-download-manager） ====================
+    private fun startDownload() {
+        val url = VideoPlay.videoUrl ?: return
+        val title = VideoPlay.videoTitle ?: ""
+        val taskType =
+            if (url.contains(".m3u8", ignoreCase = true)) DownloadTaskType.HLS else DownloadTaskType.DIRECT
+        Download.start(requireContext(), url, title, taskType, ChunkDownloader.resolveHeaders())
     }
 
     // ==================== 线路选择器（REQ-17） ====================

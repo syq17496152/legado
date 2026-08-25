@@ -5,8 +5,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.view.Gravity
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -35,7 +33,9 @@ import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.lib.theme.themeMutedColorOrDefault
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.utils.MD5Utils
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -132,6 +132,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initTopBar()
         initView()
         load()
     }
@@ -142,8 +143,20 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
         super.onDestroy()
     }
 
+    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原「导入/导出 ZIP/新增分组/管理分组」工具栏菜单改为 action 插槽图标。 */
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle("智能音频")
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
+        addActionButton(R.drawable.ic_download, R.string.import_str) { showImportActions() }
+        addActionButton(R.drawable.ic_export, R.string.export) { exportCurrentAudioPackage() }
+        addActionButton(R.drawable.ic_add, R.string.add) { showGroupEditor() }
+        addActionButton(R.drawable.ic_folder_open, 0) { showGroupManage() }
+    }
+
     private fun initView() = binding.run {
-        titleBar.title = "智能音频"
         tabBar.visibility = View.VISIBLE
         tabBar.background = UiCorner.opaqueRounded(
             themeCardColorOrDefault(),
@@ -161,24 +174,6 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
         (recyclerView.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
         root.applyUiBodyTypefaceDeep(uiTypeface())
         updateAssetTabs()
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(0, MENU_IMPORT, 0, "导入").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(0, MENU_EXPORT_PACKAGE, 1, "导出 ZIP").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(0, MENU_ADD_GROUP, 2, "新增分组").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(0, MENU_MANAGE_GROUPS, 3, "管理分组").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            MENU_IMPORT -> showImportActions()
-            MENU_EXPORT_PACKAGE -> exportCurrentAudioPackage()
-            MENU_ADD_GROUP -> showGroupEditor()
-            MENU_MANAGE_GROUPS -> showGroupManage()
-        }
-        return true
     }
 
     private fun initBatchActionBar(root: View) {
@@ -1179,10 +1174,6 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     }
 
     companion object {
-        private const val MENU_IMPORT = 1
-        private const val MENU_EXPORT_PACKAGE = 2
-        private const val MENU_ADD_GROUP = 3
-        private const val MENU_MANAGE_GROUPS = 4
         private const val VIEW_TYPE_GROUP = 1
         private const val VIEW_TYPE_TRACK = 2
         private const val MAX_AUDIO_PACKAGE_CONFIG_BYTES = 1024 * 1024

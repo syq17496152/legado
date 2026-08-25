@@ -80,9 +80,17 @@ android {
         buildConfigField "String", "Cronet_Version", "\"$CronetVersion\""
         buildConfigField "String", "Cronet_Main_Version", "\"$CronetMainVersion\""
 
-        // 仅打包主流架构，x86/x86_64 仅模拟器使用，减少 APK 体积约 5MB
+        // ⑩ 按构建类型选择 ABI：debug 仅 arm64-v8a 精简体积（测试包常用 arm64 真机/模拟器）；
+        // release 双 ABI（arm64-v8a + armeabi-v7a）保旧机型兼容。IDE 同步无显式任务时默认双 ABI（release-safe），
+        // 避免误删 release 兼容性；CLI 走 `assembleAppDebug`/`assembleAppRelease` 即按目标精简。
         ndk {
-            abiFilters 'arm64-v8a', 'armeabi-v7a'
+            def gradleTasks = project.gradle.startParameter.taskNames*.toLowerCase()
+            def releaseBuild = gradleTasks.empty || gradleTasks.any { it.contains('release') }
+            if (releaseBuild) {
+                abiFilters 'arm64-v8a', 'armeabi-v7a'
+            } else {
+                abiFilters 'arm64-v8a'
+            }
         }
 
         // F-P1-7 打包压缩优化：仅保留项目已翻译语言，移除第三方库（Material Components/AppCompat 等）自带的其他语言资源
@@ -125,9 +133,7 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
         }
         debug {
-            if (storeFilePath != null) {
-                signingConfig signingConfigs.myConfig
-            }
+            // 测试包不套正式 release 签名，落回 AGP 默认 debug keystore（避免与发布签名耦合/混淆）
             manifestPlaceholders.put("app_name", "@string/app_name")
 
             applicationIdSuffix '.debug'

@@ -4,10 +4,10 @@ import android.app.Activity.RESULT_OK
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.widget.AppCompatImageButton
+import androidx.core.view.isVisible
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -32,12 +32,14 @@ import io.legado.app.ui.book.cache.WebDavTaskStatus
 import io.legado.app.ui.book.cache.WebDavTaskType
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
 import io.legado.app.ui.widget.compose.ComposeNumberPickerDialog
 import io.legado.app.ui.widget.compose.ComposeSingleChoiceDialog
 import io.legado.app.ui.widget.compose.ComposeTextInputDialog
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getFile
 import io.legado.app.utils.postEvent
@@ -65,7 +67,7 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private val activeDirNameState = mutableStateOf(BubblePackageManager.activeDirName())
     private val forceSoftwareBubbleState = mutableStateOf(AppConfig.forceSoftwareParagraphBubble)
     private var cloudContainerId: String? = null
-    private var containerMenuItem: MenuItem? = null
+    private var containerActionButton: AppCompatImageButton? = null
     private var editingConfig: BubblePackageManager.Config? = null
     private var editingEntry: BubblePackageManager.Entry? = null
     private var svgCursorPosition: Int = 0
@@ -117,15 +119,26 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initTopBar()
         initComposeContent()
         updateContainerMenu()
         loadPackages()
         observeWebDavTasks()
     }
 
-    override fun onResume() {
-        super.onResume()
-        invalidateOptionsMenu()
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.bubble_manage))
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
+        containerActionButton = addActionButton(R.drawable.ic_outline_cloud_24, R.string.s3_bucket) {
+            showContainerSelector()
+        }
+        addActionButton(R.drawable.ic_help, R.string.help) {
+            showBubbleHelp()
+        }
+        updateContainerMenu()
     }
 
     private fun initComposeContent() {
@@ -159,48 +172,16 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         container.addView(cv, index)
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        containerMenuItem = menu.add(0, MENU_CONTAINER, 0, R.string.s3_bucket).apply {
-            setIcon(R.drawable.ic_outline_cloud_24)
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-        }
-        menu.add(0, MENU_HELP, 1, R.string.help).apply {
-            setIcon(R.drawable.ic_help)
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-        }
-        updateContainerMenu()
-        return true
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            MENU_CONTAINER -> {
-                showContainerSelector()
-                true
-            }
-            MENU_HELP -> {
-                showBubbleHelp()
-                true
-            }
-            else -> super.onCompatOptionsItemSelected(item)
-        }
-    }
-
     private fun updateContainerMenu() {
         val containers = AppCloudStorage.listContainers().filter { it.enabled }
         if (AppCloudStorage.type != CloudStorageType.S3) {
             cloudContainerId = containers.firstOrNull()?.id
-            val item = containerMenuItem ?: return
-            item.isVisible = false
+            containerActionButton?.isVisible = false
             return
         }
         cloudContainerId =
             AppCloudStorage.selectedContainer(CLOUD_SCOPE)?.id ?: containers.firstOrNull()?.id
-        val item = containerMenuItem ?: return
-        item.isVisible = true
-        item.title = containers.firstOrNull { it.id == cloudContainerId }
-            ?.let(AppCloudStorage::containerDisplayLabel)
-            ?: getString(R.string.s3_bucket)
+        containerActionButton?.isVisible = true
     }
 
     private fun showContainerSelector() {
@@ -670,7 +651,5 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     private companion object {
         private const val CLOUD_SCOPE = "bubble"
-        private const val MENU_CONTAINER = 0x6801
-        private const val MENU_HELP = 0x6802
     }
 }

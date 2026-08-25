@@ -2,8 +2,6 @@ package io.legado.app.ui.book.read.config
 
 import android.os.Bundle
 import android.view.Gravity
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -25,8 +23,10 @@ import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.lib.theme.themeMutedColorOrDefault
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.ReadBook
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
@@ -49,12 +49,34 @@ class AiReadAloudUsageRecordActivity : BaseActivity<ActivityThemeManageBinding>(
     private var currentBookOnly = false
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initTopBar()
         initView()
         load()
     }
 
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle("消耗记录")
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
+        addActionButton(R.drawable.ic_screen, R.string.filter) {
+            showTypeFilter()
+        }
+        addActionButton(R.drawable.ic_bottom_books) {
+            currentBookOnly = !currentBookOnly
+            selectedIds.clear()
+            load()
+        }
+        addActionButton(R.drawable.ic_outline_delete, R.string.delete) {
+            deleteSelected()
+        }
+        addActionButton(R.drawable.ic_clear_all, R.string.clear) {
+            confirmClearAll()
+        }
+    }
+
     private fun initView() = binding.run {
-        titleBar.title = "消耗记录"
         tabBar.visibility = View.GONE
         btnAdd.text = "全选"
         btnAdd.background = UiCorner.actionSelector(
@@ -68,28 +90,6 @@ class AiReadAloudUsageRecordActivity : BaseActivity<ActivityThemeManageBinding>(
         recyclerView.adapter = adapter
         (recyclerView.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
         root.applyUiBodyTypefaceDeep(uiTypeface())
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(0, MENU_FILTER_TYPE, 0, "类型筛选").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(0, MENU_FILTER_BOOK, 1, "当前书/全部").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(0, MENU_DELETE_SELECTED, 2, "删除选中").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(0, MENU_CLEAR_ALL, 3, "清空全部").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            MENU_FILTER_TYPE -> showTypeFilter()
-            MENU_FILTER_BOOK -> {
-                currentBookOnly = !currentBookOnly
-                selectedIds.clear()
-                load()
-            }
-            MENU_DELETE_SELECTED -> deleteSelected()
-            MENU_CLEAR_ALL -> confirmClearAll()
-        }
-        return true
     }
 
     private fun load() {
@@ -309,11 +309,6 @@ class AiReadAloudUsageRecordActivity : BaseActivity<ActivityThemeManageBinding>(
     }
 
     companion object {
-        private const val MENU_FILTER_TYPE = 1
-        private const val MENU_FILTER_BOOK = 2
-        private const val MENU_DELETE_SELECTED = 3
-        private const val MENU_CLEAR_ALL = 4
-
         private val timeFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
 
         private fun typeLabel(type: String): String = when (type) {

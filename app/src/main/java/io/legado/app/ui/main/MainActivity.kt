@@ -99,6 +99,7 @@ import io.legado.app.ui.main.my.MyFragment
 import io.legado.app.ui.main.readrecord.ReadRecordFragment
 import io.legado.app.ui.main.rss.RssFragment
 import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.TitleBar
 import io.legado.app.ui.widget.StableLiquidGlassView
 import io.legado.app.ui.widget.compose.ComposeThemeImageLayer
 import io.legado.app.ui.widget.compose.ComposeThemeImageState
@@ -696,6 +697,9 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     private fun refreshMainTopBars(view: View) {
         if (view is MainTopBarView) {
             view.refreshStyle()
+        } else if (view is TitleBar) {
+            // bugfix ③: 主界面"我的/发现经典"的 managed TitleBar 刷新顶栏管理配色
+            view.refreshTopBarAppearance()
         }
         if (view is ViewGroup) {
             for (index in 0 until view.childCount) {

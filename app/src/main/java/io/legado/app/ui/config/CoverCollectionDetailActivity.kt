@@ -1,8 +1,6 @@
 package io.legado.app.ui.config
 
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
@@ -20,6 +18,8 @@ import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.lib.theme.uiTypeface
+import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.launch
@@ -46,6 +46,7 @@ class CoverCollectionDetailActivity : BaseActivity<ActivityCoverCollectionDetail
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initTopBar()
         isNight = intent.getBooleanExtra("isNight", false)
         collectionId = intent.getStringExtra("id")
         binding.root.applyUiBodyTypefaceDeep(uiTypeface())
@@ -59,16 +60,17 @@ class CoverCollectionDetailActivity : BaseActivity<ActivityCoverCollectionDetail
         loadCollection()
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(R.string.cover_collection_import_images).apply {
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原「导入图片」菜单项改为 action 图标按钮。 */
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.cover_collection_manage))
+        setSearchEntryVisible(false)
+        // Mode.SUB 下 titleSelect 显示「标题+返回箭头」，点击回退
+        titleSelect.setOnClickListener { finish() }
+        addActionButton(R.drawable.ic_import, R.string.cover_collection_import_images) {
+            importImages.launch("image/*")
         }
-        return true
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        importImages.launch("image/*")
-        return true
     }
 
     private fun loadCollection() {
@@ -81,7 +83,7 @@ class CoverCollectionDetailActivity : BaseActivity<ActivityCoverCollectionDetail
     private fun bindCollection() {
         val current = collection ?: return
         title = current.name
-        binding.titleBar.title = current.name
+        binding.titleBar.setTitle(current.name)
         adapter?.setItems(current.images)
     }
 

@@ -4,6 +4,7 @@ import android.app.Dialog
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -15,6 +16,8 @@ import android.widget.ListView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import io.legado.app.R
+import io.legado.app.lib.theme.ThemeStore
+import io.legado.app.lib.theme.UiCorner
 
 class ChoiceSpeedDialog(private val mContext: Context) : Dialog(
     mContext, R.style.dialog_style
@@ -55,6 +58,14 @@ class ChoiceSpeedDialog(private val mContext: Context) : Dialog(
         val view: View = inflater.inflate(R.layout.switch_speed_video_dialog, null)
         listView = view.findViewById(R.id.switch_dialog_list)
         setContentView(view)
+        // video-player-theme-unify：弹框容器动态设色（ThemeStore.backgroundColor + panelRadius 圆角），
+        // show 前读取最新主题，替代静态深色 speed_dialog_panel_bg
+        val radius = UiCorner.panelRadius(mContext).toFloat()
+        view.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = radius
+            setColor(ThemeStore.backgroundColor(mContext))
+        }
         val displayData = buildDisplayData(data)
         adapter = SpeedAdapter(mContext, displayData, currentSpeed)
         listView!!.adapter = adapter
@@ -132,26 +143,26 @@ class ChoiceSpeedDialog(private val mContext: Context) : Dialog(
                     val value = item as Float
                     textView.text = formatSpeed(value)
                     if (value == currentSpeed) {
-                        textView.setTextColor(ContextCompat.getColor(context, R.color.primary))
+                        // video-player-theme-unify：选中高亮动态取 ThemeStore.accentColor + 20% 透明圆角背景
+                        val accentColor = ThemeStore.accentColor(context)
+                        textView.setTextColor(accentColor)
                         textView.setTypeface(textView.typeface, Typeface.BOLD)
-                        // 选中高亮背景：主题 primary 色 20% 透明 + 圆角（对齐未选中卡片圆角，替代原直角 setBackgroundColor）
-                        val primaryColor = ContextCompat.getColor(context, R.color.primary)
-                        val radius = context.resources.getDimension(R.dimen.corner_small)
-                        val rounded = android.graphics.drawable.GradientDrawable().apply {
+                        val radius = UiCorner.panelRadius(context).toFloat()
+                        val rounded = GradientDrawable().apply {
                             cornerRadius = radius
                             setColor(
                                 Color.argb(
                                     0x33,
-                                    Color.red(primaryColor),
-                                    Color.green(primaryColor),
-                                    Color.blue(primaryColor)
+                                    Color.red(accentColor),
+                                    Color.green(accentColor),
+                                    Color.blue(accentColor)
                                 )
                             )
                         }
                         textView.background = rounded
                     } else {
-                        // 未选中文字用主题文字色（日/夜自适应），避免日间亮底白字不可读
-                        textView.setTextColor(ContextCompat.getColor(context, R.color.primaryText))
+                        // 未选中文字用 ThemeStore.textColorPrimary（日/夜自适应），避免日间亮底白字不可读
+                        textView.setTextColor(ThemeStore.textColorPrimary(context))
                         textView.setTypeface(textView.typeface, Typeface.NORMAL)
                         textView.background =
                             ContextCompat.getDrawable(context, R.drawable.card_video_background)

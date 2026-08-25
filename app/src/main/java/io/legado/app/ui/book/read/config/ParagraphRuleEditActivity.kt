@@ -3,10 +3,9 @@ package io.legado.app.ui.book.read.config
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
+import androidx.appcompat.widget.AppCompatImageButton
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
@@ -22,10 +21,12 @@ import io.legado.app.model.ReadBook
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.stackTraceStr
 import io.legado.app.ui.code.CodeEditActivity
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.code.addJsPattern
 import io.legado.app.utils.GSON
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getClipText
 import io.legado.app.utils.sendToClip
@@ -43,6 +44,12 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
     private var focusedEditText: EditText? = null
     private var bindToken = 0
     private var bindingLargeRuleFields = false
+    private var fullscreenActionButton: AppCompatImageButton? = null
+    private var saveActionButton: AppCompatImageButton? = null
+    private var debugActionButton: AppCompatImageButton? = null
+    private var copyActionButton: AppCompatImageButton? = null
+    private var pasteActionButton: AppCompatImageButton? = null
+    private var helpActionButton: AppCompatImageButton? = null
 
     private val textEditLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -55,6 +62,7 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initTopBar()
         initView()
         val id = intent.getLongExtra("id", 0L)
         lifecycleScope.launch {
@@ -63,44 +71,31 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.paragraph_rule_edit, menu)
-        updateActionItems(menu)
-        return super.onCompatCreateOptionsMenu(menu)
+    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原段落规则编辑菜单项迁为 action 插槽图标。 */
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.paragraph_rule_edit))
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
+        fullscreenActionButton = addActionButton(R.drawable.ic_code, R.string.edit_content) { onFullEditClicked() }
+        saveActionButton = addActionButton(R.drawable.ic_save, R.string.action_save) { save() }
+        debugActionButton = addActionButton(R.drawable.ic_bug_report, R.string.debug) { debugRule() }
+        copyActionButton = addActionButton(R.drawable.ic_export, R.string.copy_rule) { sendToClip(GSON.toJson(getRule())) }
+        pasteActionButton = addActionButton(R.drawable.ic_import, R.string.paste_rule) { pasteRule() }
+        helpActionButton = addActionButton(R.drawable.ic_help, R.string.help) { showHelp("paragraphRuleHelp") }
+        updateActionButtonStates()
     }
 
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        updateActionItems(menu)
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        if (bindingLargeRuleFields && item.itemId != R.id.menu_help) {
-            toastOnUi(R.string.data_loading)
-            return true
-        }
-        when (item.itemId) {
-            R.id.menu_fullscreen_edit -> onFullEditClicked()
-            R.id.menu_save -> save()
-            R.id.menu_debug_rule -> debugRule()
-            R.id.menu_copy_rule -> sendToClip(GSON.toJson(getRule()))
-            R.id.menu_paste_rule -> pasteRule()
-            R.id.menu_help -> showHelp("paragraphRuleHelp")
-        }
-        return true
-    }
-
-    private fun updateActionItems(menu: Menu) {
+    private fun updateActionButtonStates() {
         val enabled = !bindingLargeRuleFields
         listOf(
-            R.id.menu_fullscreen_edit,
-            R.id.menu_save,
-            R.id.menu_debug_rule,
-            R.id.menu_copy_rule,
-            R.id.menu_paste_rule
-        ).forEach { id ->
-            menu.findItem(id)?.isEnabled = enabled
-        }
+            fullscreenActionButton,
+            saveActionButton,
+            debugActionButton,
+            copyActionButton,
+            pasteActionButton
+        ).forEach { it?.isEnabled = enabled }
     }
 
     private fun initView() = binding.run {
@@ -122,7 +117,7 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
         val token = ++bindToken
         bindingLargeRuleFields = true
         setLargeEditorsEnabled(false)
-        invalidateOptionsMenu()
+        updateActionButtonStates()
         etName.setText(rule.name)
         etLoginUrl.setText(rule.loginUrl)
         etLoginUi.setText(rule.loginUi)
@@ -140,7 +135,7 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
                 etJsLib.setText(jsLib)
                 bindingLargeRuleFields = false
                 setLargeEditorsEnabled(true)
-                invalidateOptionsMenu()
+                updateActionButtonStates()
             }
         }
     }

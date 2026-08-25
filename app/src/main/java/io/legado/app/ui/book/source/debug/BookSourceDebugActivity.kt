@@ -2,11 +2,11 @@ package io.legado.app.ui.book.source.debug
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import androidx.activity.viewModels
 import androidx.appcompat.widget.SearchView
+import androidx.appcompat.widget.PopupMenu
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -17,8 +17,10 @@ import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.qrcode.QrCodeResult
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.utils.applyNavigationBarPadding
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.launch
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
@@ -36,7 +38,7 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
 
     private val adapter by lazy { BookSourceDebugAdapter(this) }
     private val searchView: SearchView by lazy {
-        binding.titleBar.findViewById(R.id.search_view)
+        binding.searchBar.searchView
     }
     private val qrCodeResult = registerForActivityResult(QrCodeResult()) {
         it?.let {
@@ -45,6 +47,7 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initTopBar()
         initRecyclerView()
         initSearchView()
         viewModel.init(intent.getStringExtra("key")) {
@@ -182,9 +185,21 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
         })
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.book_source_debug, menu)
-        return super.onCompatCreateOptionsMenu(menu)
+    /** subpage-topbar-unify: 书源调试子页头部统一为 MainTopBarView，搜索框解耦独立驻留，菜单由 moreButton 弹 PopupMenu 承载。 */
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.debug_source))
+        titleSelect.setOnClickListener { finish() }
+        moreButton.setOnClickListener { showDebugMenu() }
+    }
+
+    private fun showDebugMenu() {
+        PopupMenu(this, binding.titleBar.moreButton).apply {
+            menuInflater.inflate(R.menu.book_source_debug, menu)
+            setOnMenuItemClickListener { onCompatOptionsItemSelected(it) }
+            show()
+        }
     }
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {

@@ -3,8 +3,6 @@ package io.legado.app.ui.main.my
 import android.content.SharedPreferences
 import android.content.res.XmlResourceParser
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.widget.SearchView
@@ -40,6 +38,7 @@ import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.rss.search.RssSearchActivity
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
 import io.legado.app.ui.urlrecord.UrlRecordActivity
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import android.content.Context
 import androidx.compose.material.icons.Icons
@@ -47,6 +46,7 @@ import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Subscriptions
 import androidx.compose.material.icons.filled.Schedule
+import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.data.appDb
 import io.legado.app.ui.widget.components.MetricItem
@@ -65,6 +65,7 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.startActivity
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.LogUtils
 import org.xmlpull.v1.XmlPullParser
@@ -96,8 +97,8 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
     private val subSearchItems by lazy(LazyThreadSafetyMode.NONE) { buildSubSearchItems() }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        setSupportToolbar(binding.titleBar.toolbar)
         requireContext().putPrefBoolean(PreferKey.webService, WebService.isRun)
+        initTopBar()
         initSearchView()
         applySearchBarStyle()
         installComposeContent()
@@ -124,16 +125,6 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
         super.onPause()
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu) {
-        menuInflater.inflate(R.menu.main_my, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem) {
-        when (item.itemId) {
-            R.id.menu_help -> showHelp("appHelp")
-        }
-    }
-
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
             PreferKey.webService -> {
@@ -151,6 +142,23 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
 
             "recordLog" -> LogUtils.upLevel()
         }
+    }
+
+    // 顶栏对齐 Archive MainTopBarView（Mode.MY）：标题 + 搜索入口 + 更多菜单；样式受顶栏/主题设置全量管理
+    private fun initTopBar() {
+        binding.topBar.applyStatusBarPadding(withInitialPadding = true)
+        binding.topBar.setMode(MainTopBarView.Mode.MY)
+        binding.topBar.setTitle(getString(R.string.my))
+        binding.topBar.setSearchHint(getString(R.string.my_search_hint))
+        binding.topBar.searchEntry.setOnClickListener { showSettingsSearch() }
+        binding.topBar.searchButton.setOnClickListener { showSettingsSearch() }
+        binding.topBar.moreButton.setOnClickListener { showHelp("appHelp") }
+    }
+
+    // 顶栏搜索入口（searchEntry 胶囊 / searchButton 图标）点击 → 展开就地搜索框并聚焦
+    private fun showSettingsSearch() {
+        settingsSearchView.isVisible = true
+        settingsSearchView.requestFocus()
     }
 
     private fun installComposeContent() {
@@ -457,7 +465,7 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
                     actionRow("preciseManage", R.string.precise_manage, R.string.precise_manage_summary),
                     actionRow("bookmark", R.string.bookmark, R.string.all_bookmark),
                     actionRow("readRecord", R.string.read_record, R.string.read_record_summary),
-                    actionRow("fileManage", R.string.file_manage, R.string.file_manage_summary),
+                    // bugfix ⑥: 移除重复"文件管理"入口（精准管理 aggregated 文件管理，避免两个入口）
                     actionRow("about", R.string.about, null),
                     actionRow("exit", R.string.exit, null)
                 )

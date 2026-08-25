@@ -26,10 +26,19 @@ data class ThemeSpec(
 
 /**
  * 5 色→34 槽位公式（MoRealm 思路，仅算法参考不抄代码）：
- * - surface 族：背景色锚定中性面（明/暗模式混向白/黑 4%/10%，等价原 lerp 三件套）
+ * - surface 族：背景色锚定中性面（明/暗模式混向白/黑，等价原 lerp 三件套）
  * - 彩色角色：primary=accent、secondary=primary、tertiary=secondary
  * - on* 色：contrastOn（亮底黑 / 暗底白）
  * - error 固定 M3 标准红（暗 #FF5252 / 亮 #E53935）
+ *
+ * video-player-theme-unify 复诊：必须映射**全部 34 槽位**。此前仅映射 18 个，
+ * primaryContainer（开关选中轨道）/ surfaceContainerHigh（AlertDialog 容器）/
+ * onSecondaryContainer（PanelButton 文字）等 16 个槽位回落到 M3 内置默认紫色系，
+ * 导致视频设置面板的开关/单选弹框颜色不随主题。现全部从主题色推导：
+ * - primaryContainer = 主题色浅色调容器（开关轨道/进度条等高亮容器）
+ * - surfaceContainer 族 = 背景色中性面（弹框/浮层容器锚定主题背景色，非 M3 紫色）
+ * - on*Container = 主题文字色 onBg（可读性对齐 View 体系）
+ * - surfaceTint = primary（Elevation 表面色调随主题，杜绝紫色 tint）
  *
  * 生成后经 [withContrastGuard] 后处理（Archive 思路）：文字槽位对实际容器槽位
  * 校验最低对比度，撞色时跨昼夜取对比度更高的 M3 中性文字色兜底，
@@ -44,54 +53,99 @@ fun ThemeSpec.toM3Scheme(): ColorScheme {
     val primaryC = primary
     val secondaryC = secondary
 
-    val surface = lerp(bg, if (isLight) Color.White else Color.Black, if (isLight) 0.04f else 0.10f)
+    val neutral = if (isLight) Color.White else Color.Black
+    val surface = lerp(bg, neutral, if (isLight) 0.04f else 0.10f)
     val surfaceVariant = lerp(bg, onBg, if (isLight) 0.05f else 0.14f)
     val outline = lerp(bg, onBg, if (isLight) 0.12f else 0.24f)
 
     val onPrimary = contrastOn(primaryC)
     val onSecondary = contrastOn(secondaryC)
 
+    // 补全槽位推导（视频设置面板开关/单选弹框随主题的关键）
+    val primaryContainer = lerp(surface, primaryC, if (isLight) 0.12f else 0.30f)
+    val surfaceContainerLowest = lerp(bg, neutral, if (isLight) 0.02f else 0.06f)
+    val surfaceContainerLow = lerp(bg, neutral, if (isLight) 0.03f else 0.08f)
+    val surfaceContainerHigh = lerp(bg, neutral, if (isLight) 0.06f else 0.16f)
+    val surfaceContainerHighest = lerp(bg, neutral, if (isLight) 0.08f else 0.20f)
+    val error = if (isLight) Color(0xFFE53935) else Color(0xFFFF5252)
+    val onError = if (isLight) Color.White else Color.Black
+    val errorContainer = lerp(surface, error, if (isLight) 0.12f else 0.28f)
+    val inverseSurface = if (isLight) Color(0xFF322F35) else Color(0xFFE6E0E9)
+    val inverseOnSurface = contrastOn(inverseSurface)
+
     val scheme = if (isLight) {
         lightColorScheme(
             primary = primaryC,
+            onPrimary = onPrimary,
+            primaryContainer = primaryContainer,
+            onPrimaryContainer = onBg,
+            inversePrimary = primaryC,
             secondary = secondaryC,
-            tertiary = secondaryC,
-            background = bg,
-            surface = surface,
-            surfaceVariant = surfaceVariant,
+            onSecondary = onSecondary,
             secondaryContainer = surfaceVariant,
+            onSecondaryContainer = onBg,
+            tertiary = secondaryC,
+            onTertiary = onSecondary,
             tertiaryContainer = surfaceVariant,
+            onTertiaryContainer = onBg,
+            background = bg,
+            onBackground = onBg,
+            surface = surface,
+            onSurface = onBg,
+            surfaceVariant = surfaceVariant,
+            onSurfaceVariant = onBgVariant,
+            surfaceTint = primaryC,
+            surfaceContainerLowest = surfaceContainerLowest,
+            surfaceContainerLow = surfaceContainerLow,
+            surfaceContainer = surface,
+            surfaceContainerHigh = surfaceContainerHigh,
+            surfaceContainerHighest = surfaceContainerHighest,
+            inverseSurface = inverseSurface,
+            inverseOnSurface = inverseOnSurface,
             outline = outline,
             outlineVariant = outline.copy(alpha = 0.75f),
-            onPrimary = onPrimary,
-            onSecondary = onSecondary,
-            onTertiary = onSecondary,
-            onBackground = onBg,
-            onSurface = onBg,
-            onSurfaceVariant = onBgVariant,
-            error = Color(0xFFE53935),
-            onError = Color.White
+            scrim = Color.Black,
+            error = error,
+            onError = onError,
+            errorContainer = errorContainer,
+            onErrorContainer = error
         )
     } else {
         darkColorScheme(
             primary = primaryC,
+            onPrimary = onPrimary,
+            primaryContainer = primaryContainer,
+            onPrimaryContainer = onBg,
+            inversePrimary = primaryC,
             secondary = secondaryC,
-            tertiary = secondaryC,
-            background = bg,
-            surface = surface,
-            surfaceVariant = surfaceVariant,
+            onSecondary = onSecondary,
             secondaryContainer = surfaceVariant,
+            onSecondaryContainer = onBg,
+            tertiary = secondaryC,
+            onTertiary = onSecondary,
             tertiaryContainer = surfaceVariant,
+            onTertiaryContainer = onBg,
+            background = bg,
+            onBackground = onBg,
+            surface = surface,
+            onSurface = onBg,
+            surfaceVariant = surfaceVariant,
+            onSurfaceVariant = onBgVariant,
+            surfaceTint = primaryC,
+            surfaceContainerLowest = surfaceContainerLowest,
+            surfaceContainerLow = surfaceContainerLow,
+            surfaceContainer = surface,
+            surfaceContainerHigh = surfaceContainerHigh,
+            surfaceContainerHighest = surfaceContainerHighest,
+            inverseSurface = inverseSurface,
+            inverseOnSurface = inverseOnSurface,
             outline = outline,
             outlineVariant = outline.copy(alpha = 0.8f),
-            onPrimary = onPrimary,
-            onSecondary = onSecondary,
-            onTertiary = onSecondary,
-            onBackground = onBg,
-            onSurface = onBg,
-            onSurfaceVariant = onBgVariant,
-            error = Color(0xFFFF5252),
-            onError = Color.Black
+            scrim = Color.Black,
+            error = error,
+            onError = onError,
+            errorContainer = errorContainer,
+            onErrorContainer = error
         )
     }
     return scheme.withContrastGuard()

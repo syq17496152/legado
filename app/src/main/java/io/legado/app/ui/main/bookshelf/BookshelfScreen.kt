@@ -32,10 +32,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -54,20 +50,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.ImageView
 import io.legado.app.R
-import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.readProgress
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.config.TopBarConfig
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.primaryTextColor
-import io.legado.app.lib.theme.themeCardColorOrDefault
-import io.legado.app.lib.theme.themeColorOrNull
-import io.legado.app.lib.theme.themeMutedColorOrDefault
 import io.legado.app.model.BookCover
-import io.legado.app.utils.ColorUtils
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.components.ShelfGridSkeleton
 import io.legado.app.ui.widget.components.BadgeDot
@@ -90,11 +78,10 @@ fun BookshelfScreen(
     isFolder: Boolean,
     topScrollTrigger: Long = 0L,
     isRefreshing: Boolean = false,
-    topBarVersion: Int = 0,
     onRefresh: () -> Unit = {},
     onRetry: () -> Unit = {},
-    onGroupSelected: (Long) -> Unit,
-    onGroupLongClick: (BookGroup) -> Unit,
+    onGroupSelected: (Long) -> Unit = {},
+    onGroupLongClick: (BookGroup) -> Unit = {},
     onBookClick: (Book) -> Unit,
     onBookLongClick: (Book) -> Unit,
 ) {
@@ -117,15 +104,8 @@ fun BookshelfScreen(
                 }
                 return
             }
-        } else if (bookGroups.size > 1) {
-            BookGroupTabs(
-                bookGroups = bookGroups,
-                selected = groupId,
-                onGroupSelected = onGroupSelected,
-                onGroupLongClick = onGroupLongClick,
-                topBarVersion = topBarVersion,
-            )
         }
+        // 非文件夹（style1）不再在 Compose 侧渲染分组 Tab——分组切换由调用方 MainTopBarView 顶栏驱动
         if (loading) {
             // 骨架屏必须与最终布局一致，避免"先画双列再刷成单列"的闪变（bug7）
             if (layout >= 2) {
@@ -208,82 +188,6 @@ internal fun List<Book>.sortedByBook(sortType: Int): List<Book> {
 }
 
 @Composable
-private fun BookGroupTabs(
-    bookGroups: List<BookGroup>,
-    selected: Long,
-    onGroupSelected: (Long) -> Unit,
-    onGroupLongClick: (BookGroup) -> Unit,
-    topBarVersion: Int,
-) {
-    val context = LocalContext.current
-    // 顶栏设置变化（TOP_BAR_CHANGED）由调用方 bump topBarVersion 触发重组；
-    // 主题变化走 Activity 重建，重新组合时按最新配置取色。
-    val isNight = AppConfig.isNightTheme
-    val config = remember(topBarVersion, isNight) {
-        TopBarConfig.currentConfig(context, isNight)
-    }
-    // 取色逻辑对齐 RoundedTagBarView.applyTopBarStyle，保证顶栏设置/主题设置均生效。
-    val tagBarColor = config.tagBarColor
-        ?: if (config.style == TopBarConfig.STYLE_REGULAR) {
-            android.graphics.Color.WHITE
-        } else {
-            context.themeColorOrNull(PreferKey.themeTabBackgroundColor)
-                ?: context.themeMutedColorOrDefault()
-        }
-    val selectedBackground = TopBarConfig.withOpacity(
-        config.tagSelectedColor ?: context.themeCardColorOrDefault(),
-        config.tagSelectedAlpha
-    )
-    val selectedForeground = readableTagColor(context.accentColor, selectedBackground)
-    val normalForeground = context.primaryTextColor
-    val barBackground = TopBarConfig.withOpacity(tagBarColor, config.tagBarAlpha)
-    val selectedIndex = bookGroups.indexOfFirst { it.groupId == selected }.coerceAtLeast(0)
-    ScrollableTabRow(
-        selectedTabIndex = selectedIndex,
-        edgePadding = 8.dp,
-        containerColor = Color(barBackground),
-        indicator = { tabPositions ->
-            TabRowDefaults.SecondaryIndicator(
-                modifier = Modifier.tabIndicatorOffset(tabPositions[selectedIndex]),
-                color = Color(selectedBackground),
-            )
-        },
-    ) {
-        bookGroups.forEach { group ->
-            val isSelected = group.groupId == selected
-            Tab(
-                selected = isSelected,
-                onClick = { onGroupSelected(group.groupId) },
-                modifier = Modifier.combinedClickable(
-                    onClick = {},
-                    onLongClick = { onGroupLongClick(group) },
-                ),
-                text = {
-                    Text(
-                        text = group.groupName,
-                        color = if (isSelected) Color(selectedForeground) else Color(normalForeground),
-                    )
-                },
-            )
-        }
-    }
-}
-
-/** 对齐 RoundedTagBarView.readableTagTextColor 的可读文字色计算。 */
-private fun readableTagColor(preferredColor: Int, backgroundColor: Int): Int {
-    if (android.graphics.Color.alpha(backgroundColor) < 40) return preferredColor
-    val preferredIsLight = ColorUtils.isColorLight(preferredColor)
-    val backgroundIsLight = ColorUtils.isColorLight(backgroundColor)
-    return if (preferredIsLight != backgroundIsLight) {
-        preferredColor
-    } else if (backgroundIsLight) {
-        android.graphics.Color.BLACK
-    } else {
-        android.graphics.Color.WHITE
-    }
-}
-
-@Composable
 private fun FolderGroupList(
     bookGroups: List<BookGroup>,
     layout: Int,
@@ -328,7 +232,7 @@ private fun FolderGroupGridContent(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(0.7f)
+                        .aspectRatio(0.75f)
                         .clip(AppShapes.Chip)
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 ) {

@@ -3,11 +3,10 @@ package io.legado.app.ui.book.read.config
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.widget.AppCompatImageButton
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
@@ -16,8 +15,10 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReadMenuCustomButton
 import io.legado.app.databinding.ActivityParagraphRuleEditBinding
 import io.legado.app.ui.code.CodeEditActivity
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.code.addJsPattern
 import io.legado.app.utils.GSON
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getClipText
 import io.legado.app.utils.postEvent
@@ -34,6 +35,11 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
     override val binding by viewBinding(ActivityParagraphRuleEditBinding::inflate)
     private var button = ReadMenuCustomButton()
     private var focusedEditText: EditText? = null
+    private var fullscreenActionButton: AppCompatImageButton? = null
+    private var saveActionButton: AppCompatImageButton? = null
+    private var copyActionButton: AppCompatImageButton? = null
+    private var pasteActionButton: AppCompatImageButton? = null
+    private var helpActionButton: AppCompatImageButton? = null
 
     private val textEditLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -46,6 +52,7 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initTopBar()
         initView()
         val id = intent.getLongExtra("id", 0L)
         lifecycleScope.launch {
@@ -56,25 +63,21 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.paragraph_rule_edit, menu)
-        menu.findItem(R.id.menu_debug_rule)?.isVisible = false
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_fullscreen_edit -> onFullEditClicked()
-            R.id.menu_save -> save()
-            R.id.menu_copy_rule -> sendToClip(GSON.toJson(getButton()))
-            R.id.menu_paste_rule -> pasteButton()
-            R.id.menu_help -> showHelp("readMenuCustomButtonHelp")
-        }
-        return true
+    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原菜单项迁为 action 插槽图标（阅读菜单调试项原已隐藏，不添加）。 */
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.read_menu_custom_button_edit))
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
+        fullscreenActionButton = addActionButton(R.drawable.ic_code, R.string.edit_content) { onFullEditClicked() }
+        saveActionButton = addActionButton(R.drawable.ic_save, R.string.action_save) { save() }
+        copyActionButton = addActionButton(R.drawable.ic_export, R.string.copy_rule) { sendToClip(GSON.toJson(getButton())) }
+        pasteActionButton = addActionButton(R.drawable.ic_import, R.string.paste_rule) { pasteButton() }
+        helpActionButton = addActionButton(R.drawable.ic_help, R.string.help) { showHelp("readMenuCustomButtonHelp") }
     }
 
     private fun initView() = binding.run {
-        titleBar.title = getString(R.string.read_menu_custom_button_edit)
         tilScript.hint = getString(R.string.read_menu_button_script)
         listOf(etLoginUrl, etLoginUi, etScript, etJsLib).forEach { codeView ->
             codeView.addJsPattern()

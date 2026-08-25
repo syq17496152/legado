@@ -17,9 +17,11 @@ import io.legado.app.help.config.ShareNoteTemplateManager
 import io.legado.app.ui.book.read.ShareNoteImageRenderer
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.readBytes
 import io.legado.app.utils.readText
 import io.legado.app.utils.showDialogFragment
@@ -93,9 +95,17 @@ class ShareNoteTemplateManageActivity : BaseActivity<ActivityThemeManageBinding>
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.titleBar.title = "摘录分享模板"
+        initTopBar()
         initComposeContent()
         loadTemplates()
+    }
+
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle("摘录分享模板")
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
     }
 
     override fun onResume() {

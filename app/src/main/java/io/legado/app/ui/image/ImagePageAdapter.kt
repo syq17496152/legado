@@ -8,7 +8,6 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.load.resource.bitmap.DownsampleStrategy
 import com.bumptech.glide.request.RequestOptions
 import io.legado.app.R
 import io.legado.app.databinding.ItemImagePageBinding
@@ -48,6 +47,40 @@ class ImagePageAdapter(
     fun updateData(urls: List<String>) {
         imageUrls = urls
         notifyDataSetChanged()
+        // rss-image-load-optimization（AD-03）：文章图片列表就绪后并发预下载前 3 张到磁盘缓存，首屏秒开
+        preloadFirstImages()
+    }
+
+    /**
+     * 并发预下载前 [PRELOAD_COUNT] 张图片到磁盘缓存（并发由 Glide 内部线程池调度）
+     *
+     * 参考书源 BookHelp.saveImages 的 onEachParallel(concurrency) 并发下载思路，
+     * 仅 preload() 不占用内存，进入文章立即预热前几张。
+     */
+    private fun preloadFirstImages() {
+        val count = minOf(PRELOAD_COUNT, imageUrls.size)
+        for (i in 0 until count) {
+            val url = imageUrls[i]
+            io.legado.app.constant.AppLog.put("[ImageGallery] preload first image: index=$i, urlLen=${url.length}")
+            preload(url)
+        }
+    }
+
+    /**
+     * Glide preload 到磁盘缓存（带防盗链头注入）
+     *
+     * 幂等性：相同 URL + 相同尺寸的 preload 在 Glide 内部复用 in-flight 请求与缓存，不会重复下载。
+     */
+    private fun preload(url: String) {
+        ImageLoader.load(context, url).apply {
+            sourceOrigin?.let { origin ->
+                apply(RequestOptions().set(OkHttpModelLoader.sourceOriginOption, origin))
+            }
+            referer?.let { ref ->
+                apply(RequestOptions().set(OkHttpModelLoader.refererOption, ref))
+            }
+        }.diskCacheStrategy(DiskCacheStrategy.ALL)
+            .preload()
     }
 
     fun getDataSize(): Int = imageUrls.size
@@ -92,6 +125,10 @@ class ImagePageAdapter(
 
             // 加载图片（复用 OkHttpModelLoader 的 sourceOriginOption 注入 Referer/Cookie，解决防盗链）
             io.legado.app.constant.AppLog.put("[ImageGallery] ImagePageAdapter.bind: position=$position, urlLen=${imageUrl.length}, sourceOriginLen=${sourceOrigin?.length ?: 0}, refererLen=${referer?.length ?: 0}")
+            // rss-image-load-optimization（AD-02）：按屏幕尺寸采样解码（override 触发 Downsampler），
+            // 移除 DownsampleStrategy.NONE（该策略会让 Glide 忽略 override 尺寸全尺寸解码，是加载慢的直接原因）；
+            // thumbnail(0.1f) 先显示低分辨率模糊图再加载清晰图，首图快速可见
+            val screen = context.resources.displayMetrics
             ImageLoader.load(context, imageUrl).apply {
                 sourceOrigin?.let { origin ->
                     apply(RequestOptions().set(OkHttpModelLoader.sourceOriginOption, origin))
@@ -100,8 +137,9 @@ class ImagePageAdapter(
                     apply(RequestOptions().set(OkHttpModelLoader.refererOption, ref))
                 }
             }.error(R.drawable.image_loading_error)
+                .override(screen.widthPixels, screen.heightPixels)
                 .dontTransform()
-                .downsample(DownsampleStrategy.NONE)
+                .thumbnail(0.1f)
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .into(binding.photoView)
 
@@ -111,15 +149,7 @@ class ImagePageAdapter(
             if (nextPosition < imageUrls.size) {
                 val nextUrl = imageUrls[nextPosition]
                 io.legado.app.constant.AppLog.put("[ImageGallery] preload next image: position=$nextPosition, urlLen=${nextUrl.length}")
-                ImageLoader.load(context, nextUrl).apply {
-                    sourceOrigin?.let { origin ->
-                        apply(RequestOptions().set(OkHttpModelLoader.sourceOriginOption, origin))
-                    }
-                    referer?.let { ref ->
-                        apply(RequestOptions().set(OkHttpModelLoader.refererOption, ref))
-                    }
-                }.diskCacheStrategy(DiskCacheStrategy.ALL)
-                    .preload()
+                preload(nextUrl)
             }
 
             // 长按菜单回调
@@ -196,5 +226,10 @@ class ImagePageAdapter(
 
         /** 页码变化回调（更新页码显示） */
         fun onPageChanged(position: Int, total: Int)
+    }
+
+    companion object {
+        /** 进入文章时并发预下载的图片张数（rss-image-load-optimization AD-03，限制带宽消耗） */
+        const val PRELOAD_COUNT = 3
     }
 }

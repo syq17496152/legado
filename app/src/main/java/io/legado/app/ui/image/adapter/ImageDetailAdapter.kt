@@ -8,7 +8,6 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.load.resource.bitmap.DownsampleStrategy
 import com.bumptech.glide.request.RequestOptions
 import io.legado.app.R
 import io.legado.app.constant.AppLog
@@ -26,7 +25,7 @@ import io.legado.app.ui.widget.image.PhotoView
  *
  * 与 ImagePageAdapter 的区别：
  * 1. 数据源：从 ImagePlay.allImageUrls 过滤 ImageItem（剥离 ArticleDivider）
- * 2. 加载原图：不限制尺寸（ImageCanvasAdapter 是缩略图模式 override）
+ * 2. 采样解码：override 按屏幕尺寸采样（rss-image-load-optimization AD-02，与 ImageCanvasAdapter 缩略图模式一致）
  * 3. 长按保存：通过 OnImageDetailCallback 回调 Activity 处理（保存图片到相册）
  * 4. 旋转能力：保留 PhotoView 缩放/旋转/重置能力（迁移自 ImagePageAdapter）
  *
@@ -46,6 +45,9 @@ open class ImageDetailAdapter(
 
     /** 当前 ViewHolder 引用（供 Activity 调用旋转按钮） */
     private var currentHolder: ImageDetailViewHolder? = null
+
+    /** rss-image-load-optimization（AD-03）：进入大图/横向模式后是否已执行起点并发预下载（adapter 每次重建重置） */
+    private var initialPreloadDone = false
 
     /** 长按/单击/翻页回调 */
     private var callback: OnImageDetailCallback? = null
@@ -92,8 +94,8 @@ open class ImageDetailAdapter(
      * - 旋转按钮触发 photoView.rotate()（每张图独立 rotationDegree）
      * - 长按图片触发保存/分享/复制URL菜单回调
      * - 单击切换沉浸式工具栏显隐
-     * - 加载原图（不含 override 限制尺寸）
-     * - 预加载下一张图片到磁盘缓存（用户滑动到下一张时秒开）
+     * - 采样解码加载：override 按屏幕尺寸 + thumbnail 渐进（rss-image-load-optimization AD-02）
+     * - 起点并发预下载 3 张 + 预加载下一张到磁盘缓存（左右滑动秒开，AD-03）
      */
     inner class ImageDetailViewHolder(val binding: ItemImagePageBinding) :
         RecyclerView.ViewHolder(binding.root) {
@@ -114,7 +116,10 @@ open class ImageDetailAdapter(
                 level = AppLog.Level.INFO
             )
 
-            // 加载原图（不限制尺寸，区别于 ImageCanvasAdapter 的缩略图模式）
+            // rss-image-load-optimization（AD-02）：按屏幕尺寸采样解码（override 触发 Downsampler），
+            // 移除 DownsampleStrategy.NONE（该策略会让 Glide 忽略 override 尺寸全尺寸解码，是加载慢的直接原因）；
+            // thumbnail(0.1f) 先显示低分辨率模糊图再加载清晰图，首图快速可见
+            val screen = context.resources.displayMetrics
             ImageLoader.load(context, item.url).apply {
                 sourceOrigin?.let { origin ->
                     apply(RequestOptions().set(OkHttpModelLoader.sourceOriginOption, origin))
@@ -123,24 +128,29 @@ open class ImageDetailAdapter(
                     apply(RequestOptions().set(OkHttpModelLoader.refererOption, ref))
                 }
             }.error(R.drawable.image_loading_error)
+                .override(screen.widthPixels, screen.heightPixels)
                 .dontTransform()
-                .downsample(DownsampleStrategy.NONE)
+                .thumbnail(0.1f)
                 .diskCacheStrategy(DiskCacheStrategy.ALL)
                 .into(binding.photoView)
 
-            // 预加载下一张图片到磁盘缓存（用户滑动到下一张时秒开）
+            // rss-image-load-optimization（AD-03）：进入大图/横向模式首次 bind 时，
+            // 以当前定位为起点并发预下载 [PRELOAD_COUNT] 张到磁盘缓存（当前 + 后 N-1 张），左右滑动秒开
+            if (!initialPreloadDone) {
+                initialPreloadDone = true
+                preloadAroundPosition(position)
+            }
+
+            // 多线程预缓存：预加载下一张图片到磁盘缓存（用户滑动到下一张时秒开）
             val nextPosition = position + 1
             if (nextPosition < imageItems.size) {
                 val nextUrl = imageItems[nextPosition].url
-                ImageLoader.load(context, nextUrl).apply {
-                    sourceOrigin?.let { origin ->
-                        apply(RequestOptions().set(OkHttpModelLoader.sourceOriginOption, origin))
-                    }
-                    referer?.let { ref ->
-                        apply(RequestOptions().set(OkHttpModelLoader.refererOption, ref))
-                    }
-                }.diskCacheStrategy(DiskCacheStrategy.ALL)
-                    .preload()
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_IMAGE_DETAIL,
+                    "preload next image: position=$nextPosition urlLen=${nextUrl.length}",
+                    level = AppLog.Level.INFO
+                )
+                preload(nextUrl)
             }
 
             // 长按菜单回调（保存/分享/复制URL）
@@ -156,6 +166,42 @@ open class ImageDetailAdapter(
 
             // 通知页码更新（"文章N/M 图片X/Y"）
             callback?.onPageChanged(position, imageItems.size)
+        }
+
+        /**
+         * rss-image-load-optimization（AD-03）：以 [position] 为起点并发预下载 [PRELOAD_COUNT] 张到磁盘缓存
+         *
+         * 参考书源 BookHelp.saveImages 的 onEachParallel(concurrency) 并发下载思路，
+         * 仅 preload() 不占用内存（Glide 内部线程池调度并发）。
+         */
+        fun preloadAroundPosition(position: Int) {
+            val end = minOf(position + ImageDetailAdapter.PRELOAD_COUNT, imageItems.size)
+            for (i in position until end) {
+                val url = imageItems[i].url
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_IMAGE_DETAIL,
+                    "preload around position: index=$i urlLen=${url.length}",
+                    level = AppLog.Level.INFO
+                )
+                preload(url)
+            }
+        }
+
+        /**
+         * Glide preload 到磁盘缓存（带防盗链头注入）
+         *
+         * 幂等性：相同 URL 的 preload 在 Glide 内部复用 in-flight 请求与缓存，不会重复下载。
+         */
+        fun preload(url: String) {
+            ImageLoader.load(context, url).apply {
+                sourceOrigin?.let { origin ->
+                    apply(RequestOptions().set(OkHttpModelLoader.sourceOriginOption, origin))
+                }
+                referer?.let { ref ->
+                    apply(RequestOptions().set(OkHttpModelLoader.refererOption, ref))
+                }
+            }.diskCacheStrategy(DiskCacheStrategy.ALL)
+                .preload()
         }
 
         /**
@@ -218,5 +264,10 @@ open class ImageDetailAdapter(
 
         /** 页码变化回调（更新 TitleBar 页码 "文章N/M 图片X/Y"） */
         fun onPageChanged(position: Int, total: Int)
+    }
+
+    companion object {
+        /** rss-image-load-optimization（AD-03）：进入大图/横向模式时起点并发预下载的图片张数（限制带宽消耗） */
+        const val PRELOAD_COUNT = 3
     }
 }

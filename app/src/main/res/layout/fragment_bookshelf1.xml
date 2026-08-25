@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- 书架页顶栏对齐 Archive MainTopBarView（跟随昼夜主题；分组 Tab 由 BookshelfScreen 内 BookGroupTabs 渲染） -->
+    <!-- 书架页顶栏对齐 Archive MainTopBarView（跟随昼夜主题；分组切换由 titleSelect 下拉 + primaryBar 胶囊驱动） -->
     <io.legado.app.ui.widget.MainTopBarView
         android:id="@+id/top_bar"
         android:layout_width="match_parent"

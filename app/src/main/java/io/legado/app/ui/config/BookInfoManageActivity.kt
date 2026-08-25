@@ -11,6 +11,8 @@ import io.legado.app.databinding.ActivityThemeManageBinding
 import io.legado.app.help.config.BookInfoComponentConfig
 import io.legado.app.help.config.BookInfoComponentItem
 import io.legado.app.help.config.BookInfoPageStyle
+import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
@@ -22,7 +24,7 @@ class BookInfoManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     private val componentsState = mutableStateOf<List<BookInfoComponentItem>>(emptyList())
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.titleBar.title = getString(R.string.book_info_manage)
+        initTopBar()
 
         // Load initial state
         styleState.value = BookInfoComponentConfig.loadStyle()
@@ -34,6 +36,14 @@ class BookInfoManageActivity : BaseActivity<ActivityThemeManageBinding>() {
         binding.btnAdd.visibility = android.view.View.GONE
 
         initComposeContent()
+    }
+
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.book_info_manage))
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
     }
 
     private fun initComposeContent() {

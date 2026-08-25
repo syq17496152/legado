@@ -21,6 +21,9 @@ object AppShapes {
     /** 按钮（M3 默认 12dp 圆角即本值）：12dp */
     val Button: RoundedCornerShape = RoundedCornerShape(12.dp)
 
+    /** 搜索框（统一为 archive 订阅头部 searchEntry 口径）：18dp */
+    val Search: RoundedCornerShape = RoundedCornerShape(18.dp)
+
     /** 底部弹层顶角（ModalBottomSheet）：16dp */
     val SheetTop: RoundedCornerShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
 

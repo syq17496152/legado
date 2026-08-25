@@ -3,8 +3,6 @@ package io.legado.app.ui.book.read.config
 import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import androidx.lifecycle.lifecycleScope
@@ -37,11 +35,13 @@ import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.utils.GSON
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.readText
@@ -107,6 +107,7 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         bookUrl = intent.getStringExtra("bookUrl") ?: ReadBook.book?.bookUrl
         book = bookUrl?.let { appDb.bookDao.getBook(it) }
+        initTopBar()
         initView()
         load()
     }
@@ -120,8 +121,21 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
         load()
     }
 
+    private fun initTopBar() = binding.titleBar.run {
+        applyStatusBarPadding(withInitialPadding = true)
+        setMode(MainTopBarView.Mode.SUB)
+        setTitle(getString(R.string.paragraph_rule_manage))
+        setSearchEntryVisible(false)
+        titleSelect.setOnClickListener { finish() }
+        addActionButton(R.drawable.ic_import, R.string.import_str) {
+            showImportActions()
+        }
+        addActionButton(R.drawable.ic_help, R.string.help) {
+            showHelp("paragraphRuleHelp")
+        }
+    }
+
     private fun initView() = binding.run {
-        titleBar.title = getString(R.string.paragraph_rule_manage)
         tabBar.visibility = View.GONE
         btnAdd.text = getString(R.string.add)
         btnAdd.background = UiCorner.actionSelector(
@@ -139,20 +153,6 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
             isCanDrag = true
         }).attachToRecyclerView(recyclerView)
         root.applyUiBodyTypefaceDeep(this@ParagraphRuleManageActivity.uiTypeface())
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(0, MENU_IMPORT, 0, R.string.import_str).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(0, MENU_HELP, 1, R.string.help).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            MENU_IMPORT -> showImportActions()
-            MENU_HELP -> showHelp("paragraphRuleHelp")
-        }
-        return true
     }
 
     private fun showAddActions() {
@@ -474,10 +474,5 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
         COPY(R.string.copy_rule),
         VARS(R.string.paragraph_rule_vars),
         DELETE(R.string.delete)
-    }
-
-    companion object {
-        private const val MENU_IMPORT = 1
-        private const val MENU_HELP = 2
     }
 }

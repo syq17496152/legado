@@ -2,8 +2,14 @@ package io.legado.app.help.gsyVideo
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.drawable.ClipDrawable
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.LayerDrawable
 import android.util.AttributeSet
 import android.view.GestureDetector
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.Surface
 import android.view.SurfaceView
@@ -17,8 +23,11 @@ import com.shuyu.gsyvideoplayer.utils.CommonUtil
 import com.shuyu.gsyvideoplayer.utils.GSYVideoType
 import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer
 import com.shuyu.gsyvideoplayer.video.base.GSYVideoPlayer
+import androidx.core.graphics.ColorUtils
 import io.legado.app.R
 import io.legado.app.constant.AppLog
+import io.legado.app.lib.dialogs.alert
+import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.model.VideoPlay
 import master.flame.danmaku.controller.DrawHandler
 import master.flame.danmaku.danmaku.loader.IllegalDataException
@@ -247,6 +256,8 @@ class VideoPlayer: StandardGSYVideoPlayer {
     override fun init(context: Context) {
         super.init(context)
         initView()
+        // video-player-theme-unify：初始化即应用主题高亮（控制条深色悬浮层保持）
+        applyThemeColors()
         post {
             gestureDetector = GestureDetector(
                 getContext().applicationContext,
@@ -268,7 +279,7 @@ class VideoPlayer: StandardGSYVideoPlayer {
                         if (mCurrentState == CURRENT_STATE_PLAYING) {
                             val speed = VideoPlay.longPressSpeed / 10.0f
                             setVideoSpeed(speed)
-                            showOverlayTip("${speed}倍速播放中")
+                            showOverlayTip(context.getString(R.string.video_speed_long_press, speed))
                             isLongPressSpeed = true
                         }
                         super.onLongPress(e)
@@ -399,6 +410,76 @@ class VideoPlayer: StandardGSYVideoPlayer {
                 visibility = INVISIBLE
                 alpha = 0f
             }
+        }
+    }
+
+    /**
+     * video-player-theme-unify：主题化播放器控件
+     *
+     * 控制条保持深色半透明悬浮层（视频站标准，日夜间可读），仅让进度条/缓冲/缩略图
+     * 高亮元素动态取 ThemeStore.accentColor()，主题切换经 init / RECREATE /
+     * onConfigurationChanged 时机触发（页面 recreateOnThemeChange=false，静态色不自动刷新）。
+     *
+     * 说明：GSY 库内置 video_seek_progress 的 progress 层为 clip(shape solid style_color=#005fff)，
+     * 该结构下仅靠 progressTintList 不生效（进度条仍显库默认蓝色、不随主题），故此处动态重建
+     * LayerDrawable + ClipDrawable 并 setProgressDrawable/setThumb，100% 取主题主色。
+     */
+    fun applyThemeColors() {
+        val accent = ThemeStore.accentColor(context)
+        val buffer = ColorUtils.setAlphaComponent(accent, 0x66)
+        val secondary = ColorUtils.setAlphaComponent(accent, 0xB3)
+        // 主控制条进度条：动态重建 drawable，摆脱 GSY 库硬编码蓝色
+        mProgressBar?.let { seekBar ->
+            seekBar.progressDrawable = buildVideoSeekDrawable(accent, buffer)
+            seekBar.thumb = buildVideoThumbDrawable(accent)
+        }
+        // 底部迷你进度条：播放=主题色、缓冲=主题色半透明
+        mBottomProgressBar?.let { seekBar ->
+            seekBar.progressDrawable = buildVideoSeekDrawable(accent, secondary)
+        }
+        // tint 兜底（部分设备 layer-list 走 tint 路径时生效）
+        mProgressBar?.progressTintList = ColorStateList.valueOf(accent)
+        mProgressBar?.secondaryProgressTintList = ColorStateList.valueOf(buffer)
+        mProgressBar?.thumbTintList = ColorStateList.valueOf(accent)
+        mBottomProgressBar?.progressTintList = ColorStateList.valueOf(accent)
+    }
+
+    private fun buildVideoSeekDrawable(progressColor: Int, bufferColor: Int): Drawable {
+        val radius = 2f * context.resources.displayMetrics.density
+        val background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = radius
+            setColor(0x4D999999)
+        }
+        val bufferClip = ClipDrawable(
+            GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = radius
+                setColor(bufferColor)
+            },
+            Gravity.START, ClipDrawable.HORIZONTAL
+        )
+        val progressClip = ClipDrawable(
+            GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = radius
+                setColor(progressColor)
+            },
+            Gravity.START, ClipDrawable.HORIZONTAL
+        )
+        return LayerDrawable(arrayOf(background, bufferClip, progressClip)).apply {
+            setId(0, android.R.id.background)
+            setId(1, android.R.id.secondaryProgress)
+            setId(2, android.R.id.progress)
+        }
+    }
+
+    private fun buildVideoThumbDrawable(color: Int): Drawable {
+        val size = (14 * context.resources.displayMetrics.density).toInt()
+        return GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(color)
+            setSize(size, size)
         }
     }
 
@@ -536,10 +617,10 @@ class VideoPlayer: StandardGSYVideoPlayer {
         post {
             if (VideoPlay.danmakuShow) {
                 if (!mDanmakuView!!.isShown) mDanmakuView!!.show()
-                mToggleDanmaku?.text = "关弹幕"
+                mToggleDanmaku?.text = context.getString(R.string.video_danmaku_off)
             } else {
                 if (mDanmakuView!!.isShown) mDanmakuView!!.hide()
-                mToggleDanmaku?.text = "开弹幕"
+                mToggleDanmaku?.text = context.getString(R.string.video_danmaku_on)
             }
         }
     }
@@ -606,9 +687,9 @@ class VideoPlayer: StandardGSYVideoPlayer {
                 setSpeed(playSpeed, true)
                 if (playSpeed != 1.0f) {
                     playbackSpeed?.text = "${playSpeed}X"
-                    showOverlayTip("${playSpeed}倍播放中", 2000)
+                    showOverlayTip(context.getString(R.string.video_speed_playing, playSpeed), 2000)
                 } else {
-                    playbackSpeed?.text = "倍速"
+                    playbackSpeed?.text = context.getString(R.string.video_speed)
                 }
             }
 
@@ -619,23 +700,30 @@ class VideoPlayer: StandardGSYVideoPlayer {
         choiceSpeedDialog.show()
     }
 
-    @SuppressLint("SetTextI18n")
     private fun showRatioDialog() {
         isChanging = true
-        val ratios = arrayOf("默认", "16:9", "4:3", "填充")
-        androidx.appcompat.app.AlertDialog.Builder(mContext)
-            .setTitle("画面比例")
-            .setSingleChoiceItems(ratios, currentRatioIndex) { dialog, which ->
+        val ratios = arrayOf(
+            context.getString(R.string.video_ratio_default),
+            context.getString(R.string.video_ratio_16_9),
+            context.getString(R.string.video_ratio_4_3),
+            context.getString(R.string.video_ratio_fill)
+        )
+        // video-player-theme-unify：改 alert() 扩展走项目主题，替代原生 AlertDialog
+        context.alert(title = context.getString(R.string.video_ratio)) {
+            singleChoiceItems(ratios, currentRatioIndex) { dialog, which ->
                 currentRatioIndex = which
                 applyRatio(which)
-                tvRatio?.text = if (which == 0) "比例" else ratios[which]
+                tvRatio?.text = if (which == 0) {
+                    context.getString(R.string.video_ratio_button)
+                } else {
+                    ratios[which]
+                }
                 dialog.dismiss()
             }
-            .setOnDismissListener { isChanging = false }
-            .show()
+            onDismiss { isChanging = false }
+        }
     }
 
-    @SuppressLint("SetTextI18n")
     private fun applyRatio(index: Int) {
         val showType = when (index) {
             1 -> GSYVideoType.SCREEN_TYPE_16_9     // 16:9
@@ -646,29 +734,36 @@ class VideoPlayer: StandardGSYVideoPlayer {
         GSYVideoType.setShowType(showType)
         // 触发重新测量以应用新的比例
         mTextureView?.requestLayout()
-        val labels = arrayOf("默认", "16:9", "4:3", "填充")
-        showOverlayTip("画面比例: ${labels[index]}", 2000)
+        val labels = arrayOf(
+            context.getString(R.string.video_ratio_default),
+            context.getString(R.string.video_ratio_16_9),
+            context.getString(R.string.video_ratio_4_3),
+            context.getString(R.string.video_ratio_fill)
+        )
+        showOverlayTip(context.getString(R.string.video_ratio_playing, labels[index]), 2000)
     }
 
-    @SuppressLint("SetTextI18n")
     private fun showAudioTrackDialog() {
         val tracks = getGSYVideoManager().getAudioTracks()
         if (tracks.size <= 1) {
-            showOverlayTip("无可用音轨", 2000)
+            showOverlayTip(context.getString(R.string.video_no_audio_track), 2000)
             return
         }
         isChanging = true
         val labels = tracks.map { it.second }.toTypedArray()
-        androidx.appcompat.app.AlertDialog.Builder(mContext)
-            .setTitle("音轨")
-            .setItems(labels) { dialog, which ->
+        // video-player-theme-unify：改 alert() 扩展走项目主题，替代原生 AlertDialog
+        context.alert(title = context.getString(R.string.video_audio_track)) {
+            items(labels.toList()) { dialog, _, which ->
                 val trackIndex = tracks[which].first
                 getGSYVideoManager().selectAudioTrack(trackIndex)
-                showOverlayTip("音轨: ${labels[which]}", 2000)
+                showOverlayTip(
+                    context.getString(R.string.video_audio_track_playing, labels[which]),
+                    2000
+                )
                 dialog.dismiss()
             }
-            .setOnDismissListener { isChanging = false }
-            .show()
+            onDismiss { isChanging = false }
+        }
     }
 
     override fun updateStartImage() {
@@ -711,6 +806,8 @@ class VideoPlayer: StandardGSYVideoPlayer {
         val gsyBaseVideoPlayer = super.startWindowFullscreen(context, actionBar, statusBar)
         if (gsyBaseVideoPlayer != null) {
             val gsyVideoPlayer = gsyBaseVideoPlayer as VideoPlayer
+            // video-player-theme-unify：全屏新建实例同步应用主题高亮
+            gsyVideoPlayer.applyThemeColors()
             //对弹幕设置偏移记录
 //            gsyVideoPlayer.mDanmakuView = this.mDanmakuView
             gsyVideoPlayer.mDanmakuStartSeekPosition = this.getCurrentPositionWhenPlaying()
@@ -729,6 +826,8 @@ class VideoPlayer: StandardGSYVideoPlayer {
         gsyVideoPlayer: GSYVideoPlayer?
     ) {
         super.resolveNormalVideoShow(oldF, vp, gsyVideoPlayer)
+        // video-player-theme-unify：退出全屏后小屏播放器保持主题高亮
+        applyThemeColors()
         if (gsyVideoPlayer != null) {
             val videoPlayer = gsyVideoPlayer as VideoPlayer
             if (mDanmakuView != null && mDanmakuView!!.isPrepared) {
