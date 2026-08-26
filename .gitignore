@@ -69,6 +69,8 @@ ai_tests/venv/
 ai_tests/reports/
 ai_tests/__pycache__/
 ai_tests/cases/*/preconditions/
+# HLS 下载测试资源（ts 分片/密钥/截图等数据产物，不入库，2026-08-26）
+ai_tests/hls_test/
 ai_tests/lib/source_map.json.bak
 extracted/com/shuyu/gsyvideoplayer/GSYBaseActivityDetail.class
 

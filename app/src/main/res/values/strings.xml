@@ -438,7 +438,7 @@
     <string name="need_more_time_load_content">When the body length is too long, it may take more time to load the text.</string>
     <string name="revert_selection">Inverse</string>
     <string name="search_book_key">Search book name/author</string>
-    <string name="my_search_hint">Search settings</string>
+    
     <string name="rss_search_key">Search RSS content</string>
     <string name="rss_source_manage">RSS Sources management</string>
     <string name="rss_source_manage_summary">Manage RSS sources and source repositories.</string>
@@ -1098,6 +1098,32 @@
     <string name="download_encrypt_unsupported">encrypted stream not supported</string>
     <string name="download_hls_failed">m3u8 download failed</string>
     <string name="download_file_not_found">local file not found</string>
+    <string name="download_error_code">Error: %1$s</string>
+    <string name="download_error_http">HTTP error</string>
+    <string name="download_error_io">I/O error</string>
+    <string name="download_error_network">Network error</string>
+    <string name="download_error_encrypt">Encrypted stream unsupported</string>
+    <string name="download_error_remux">Video remux failed</string>
+    <string name="download_error_unsupported">Unsupported format</string>
+    <string name="download_error_incomplete">Incomplete file</string>
+    <string name="download_pause_task">Pause</string>
+    <string name="download_resume_task">Resume</string>
+    <string name="download_delete_only">Delete record (keep file)</string>
+    <string name="download_delete_with_files">Delete record and files</string>
+    <string name="download_confirm_delete_only">Delete this task record only?\nThe downloaded file will be kept.</string>
+    <string name="download_confirm_delete_with_files">Delete this task and its downloaded file?</string>
+    <string name="network_policy">Network policy</string>
+    <string name="download_network_any">Any network</string>
+    <string name="download_network_wifi_only">Wi-Fi only</string>
+    <string name="download_need_storage_permission">Download to public folder needs storage permission. Grant it in download settings.</string>
+    <string name="download_dir_setting">Download directory</string>
+    <string name="download_dir_default_summary">Default is the app-private folder, no permission needed; only a public path you fill in needs storage permission</string>
+    <string name="download_configure_dir">Configure directory</string>
+    <string name="download_storage_permission_action">Grant storage permission</string>
+    <string name="download_storage_permission_granted">Storage permission granted</string>
+    <string name="download_dir_saved">Download directory saved</string>
+    <string name="download_dir_reset_default">Download directory reset to default</string>
+    <string name="download_network_wifi_hint">Wi-Fi only: downloads pause on mobile data and auto-resume on Wi-Fi</string>
     <string name="video_download_no_url">video address unavailable, cannot download</string>
     <string name="downloading">downloading</string>
     <string name="unknown_state">unknown</string>
@@ -1439,6 +1465,7 @@
     <string name="download_summary">Downloading: %1$d  Completed: %2$d  Failed: %3$d</string>
     <string name="clear_completed_tasks">Clear completed</string>
     <string name="clear_completed_confirm">Clear completed and failed download tasks?</string>
+    <string name="download_play_with_builtin">Play</string>
     <string name="download_open_file">Open file</string>
     <string name="download_open_folder">Open folder</string>
     <string name="download_copy_path">Copy path</string>
@@ -1456,6 +1483,7 @@
     <string name="filter_success">Success</string>
     <string name="filter_failed">Failed</string>
     <string name="clear_filter">Clear filter</string>
+    <string name="url_record_no_values">No available values</string>
     <string name="export_to_obsidian">Export to Obsidian</string>
     <string name="export_book_to_obsidian">Export 《%1$s》 to Obsidian</string>
     <string name="export_method">Export method</string>
@@ -1870,6 +1898,8 @@
     <string name="highlight_underline_dotted">点线</string>
     <string name="highlight_underline_double">双线</string>
     <string name="highlight_rule_edit_title">编辑高亮规则</string>
+    <string name="highlight_rule_not_found">规则不存在</string>
+    <string name="highlight_rule_invalid">规则无效: %1$s</string>
     <string name="highlight_rule_pattern">匹配模式</string>
     <string name="highlight_rule_replacement">替换模板（可选，为捕获组套用样式标签，如 &lt;b&gt;&lt;font color=\"red\"&gt;$1&lt;/font&gt;&lt;/b&gt;&lt;i&gt;$2&lt;/i&gt;）</string>
     <string name="highlight_rule_dot_all">点号匹配换行</string>
@@ -1882,6 +1912,14 @@
     <string name="highlight_rule_group_add">Add</string>
     <string name="highlight_rule_group_view_all">View All Groups</string>
     <string name="highlight_rule_group_empty">No groups</string>
+    <string name="highlight_rule_group_rules_count">%1$d rules</string>
+    <string name="highlight_rule_group_name_blank">Group name cannot be empty</string>
+    <string name="highlight_rule_group_name_exists">Group name already exists</string>
+    <string name="highlight_rule_group_default_protected">The default group cannot be deleted</string>
+    <string name="delete_group">Delete group</string>
+    <string name="highlight_rule_group_delete_confirm">Rules in this group will be moved to the default group after deletion.</string>
+    <string name="highlight_rule_group_no_rule_export">No rules in this group to export</string>
+    <string name="highlight_rule_group_export_count">Copied %1$d rules</string>
     <string name="highlight_rule_empty_title">No highlight rules</string>
     <string name="highlight_rule_empty_subtitle">Tap + to add a rule</string>
     <string name="highlight_rule_preset_added_toast">Preset rule added: %1$s</string>
