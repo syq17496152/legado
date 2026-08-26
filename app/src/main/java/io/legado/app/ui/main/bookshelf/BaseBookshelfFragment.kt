@@ -104,7 +104,8 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
         topBar.applyStatusBarPadding(withInitialPadding = true)
         topBar.setMode(MainTopBarView.Mode.BOOKSHELF)
         topBar.setTitle(composeTopBarTitle)
-        topBar.setSearchHint(getString(R.string.search_book_key))
+        // header-search-unify：关闭无效 searchEntry 胶囊（仅保留 searchButton → SearchActivity 新页搜索），形态对齐订阅页
+        topBar.setSearchEntryVisible(false)
         // 搜索（原 main_bookshelf.xml 的 showAsAction="always" 项）
         topBar.setActionsVisible(search = true)
         topBar.searchButton.setOnClickListener {

@@ -425,6 +425,11 @@
             android:name=".ui.rss.search.RssSearchActivity"
             android:launchMode="standard"
             android:windowSoftInputMode="adjustResize|stateHidden" />
+        <!-- header-search-unify: 我的页全屏设置搜索页（头部搜索按钮弹开，复用 LegadoTheme+MySettingsScreen 主题零破坏） -->
+        <activity
+            android:name=".ui.main.my.SettingsSearchActivity"
+            android:launchMode="standard"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
         <!-- rss-unified-search: 订阅源文章详情页（搜索结果点击后进入） -->
         <activity
             android:name=".ui.rss.search.RssArticleInfoActivity"

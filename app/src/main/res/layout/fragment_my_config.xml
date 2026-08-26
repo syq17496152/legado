@@ -11,13 +11,6 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
 
-    <!-- 设置项就地搜索框（默认隐藏，由顶栏搜索入口触发展开；保留 search_view id 以控制显隐/聚焦） -->
-    <include
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:visibility="gone"
-        layout="@layout/view_search" />
-
     <LinearLayout
         android:id="@+id/pre_fragment"
         android:layout_width="match_parent"
