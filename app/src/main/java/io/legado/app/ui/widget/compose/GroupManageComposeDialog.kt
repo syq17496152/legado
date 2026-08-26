@@ -1,6 +1,8 @@
 package io.legado.app.ui.widget.compose
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -9,13 +11,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +37,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.MenuAction
 
 @Composable
 fun ComposeGroupManageDialogContent(
@@ -36,13 +46,27 @@ fun ComposeGroupManageDialogContent(
     onAddGroup: (String) -> Unit,
     onRenameGroup: (oldGroup: String, newGroup: String) -> Unit,
     onDeleteGroup: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    message: String? = null,
+    groupCountText: ((String) -> String?)? = null,
+    onSelectGroup: ((String) -> Unit)? = null,
+    onViewAll: (() -> Unit)? = null,
+    viewAllLabel: String = "",
+    moreActions: (String) -> List<MenuAction> = { emptyList() },
+    externalEdit: Pair<String?, Long>? = null
 ) {
     val style = rememberAppDialogStyle()
     val palette = style.toMiuixPalette()
     var editingGroup by remember { mutableStateOf<String?>(null) }
     var input by rememberSaveable { mutableStateOf("") }
     val isEditing = editingGroup != null
+
+    // 允许外部（如薄壳的「更多」菜单）请求触发内联编辑：second 为递增 key 保证可重复请求
+    LaunchedEffect(externalEdit?.second) {
+        val request = externalEdit ?: return@LaunchedEffect
+        editingGroup = request.first
+        input = request.first ?: ""
+    }
 
     fun startAdd() {
         editingGroup = null
@@ -142,6 +166,14 @@ fun ComposeGroupManageDialogContent(
             }
         },
         actions = {
+            if (onViewAll != null && viewAllLabel.isNotBlank()) {
+                LegadoMiuixActionButton(
+                    text = viewAllLabel,
+                    palette = palette,
+                    onClick = { onViewAll() }
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
             LegadoMiuixActionButton(
                 text = stringResource(R.string.close),
                 palette = palette,
@@ -193,11 +225,17 @@ private fun GroupManageRow(
     group: String,
     style: AppDialogStyle,
     palette: LegadoMiuixPalette,
+    onSelect: (() -> Unit)? = null,
+    secondaryText: String? = null,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    moreActions: List<MenuAction> = emptyList()
 ) {
+    var moreExpanded by remember { mutableStateOf(false) }
     LegadoMiuixCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onSelect != null) Modifier.clickable(onClick = onSelect) else Modifier),
         color = style.fieldSurface,
         contentColor = style.primaryText,
         cornerRadius = style.actionRadius,
@@ -207,15 +245,26 @@ private fun GroupManageRow(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = group,
-                modifier = Modifier.weight(1f),
-                color = style.primaryText,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = group,
+                    color = style.primaryText,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (secondaryText != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = secondaryText,
+                        color = style.secondaryText,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
             LegadoMiuixActionButton(
                 text = stringResource(R.string.edit),
                 palette = palette,
@@ -232,6 +281,27 @@ private fun GroupManageRow(
                 minHeight = 34.dp,
                 insidePadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp)
             )
+            if (moreActions.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Box {
+                    IconButton(
+                        onClick = { moreExpanded = true },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MoreVert,
+                            contentDescription = stringResource(R.string.more),
+                            tint = style.secondaryText,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    AppDropdownMenu(
+                        expanded = moreExpanded,
+                        onDismiss = { moreExpanded = false },
+                        actions = moreActions
+                    )
+                }
+            }
         }
     }
 }

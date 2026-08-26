@@ -1,92 +1,228 @@
 package io.legado.app.ui.highlight
 
 import android.os.Bundle
+import android.text.Spanned
+import android.text.style.BackgroundColorSpan
+import android.text.style.ForegroundColorSpan
 import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
-import io.legado.app.databinding.DialogHighlightPresetRuleBinding
-import io.legado.app.databinding.ItemHighlightPresetAddBinding
 import io.legado.app.help.HighlightRulePreview
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleGroupStore
 import io.legado.app.ui.book.read.config.HighlightRuleStore
-import io.legado.app.utils.setLayout
-import io.legado.app.utils.viewbindingdelegate.viewBinding
+import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.toMiuixPalette
 
 /**
- * F-P1-2 高亮预设规则 Dialog（借鉴蛋蛋Max,适配当前项目）
- *
- * 适配说明：
- * 1. shape_highlight_rule_sheet → shape_card_view
- * 2. GradientDrawable 动态背景 → shape_card_view 静态背景
- * 3. 移除 attachBottomSheetDismiss（当前项目无此扩展）
- * 4. 移除 observeEvent(EventBus.UP_CONFIG)（非必须主题切换监听）
- * 5. 移除 initTheme() 的复杂主题色计算（用 @color/primaryText/@color/secondaryText/@color/accent）
- * 6. HighlightRulePreview 用简化版（只 BackgroundColorSpan + ForegroundColorSpan）
- * 7. setLayout(MATCH_PARENT, 0.85f) + Gravity.BOTTOM 实现底部弹出
- * 8. adaptationSoftKeyboard=true + vw_bg.setOnClickListener{} 阻止冒泡
- * 已知上限：预览不显示下划线/着重号等高级样式 | 升级路径：移植 Span 类后可恢复
+ * 高亮预设规则弹框（Compose 化，底部弹出）。
+ * 原 View 版继承 BaseDialogFragment + dialog_highlight_preset_rule 布局；
+ * 迁移后继承 [ComposeDialogFragment]，LazyColumn 渲染 `defaultPresetRules`，
+ * 预览描线由 `HighlightRulePreview.build` 的 Span 转为 [AnnotatedString] 保持等价。
+ * T-B4：保留内置 id（避免新 id 落入 ViewModel.update 的静默丢弃分支），
+ * 重复添加走 replace 刷新防副本堆积。
  */
 class HighlightPresetRuleDialog @JvmOverloads constructor(
     private val defaultGroup: String? = null,
     private val onAddRule: (HighlightRule) -> Unit = {},
-) : BaseDialogFragment(R.layout.dialog_highlight_preset_rule, true) {
+) : ComposeDialogFragment() {
 
-    private val binding by viewBinding(DialogHighlightPresetRuleBinding::bind)
-    private val adapter by lazy { PresetRuleAdapter(requireContext()) }
-    private val presetRules by lazy { HighlightRuleStore.defaultPresetRules(requireContext()) }
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
+    override val dialogGravity: Int = Gravity.BOTTOM
 
-    override fun onStart() {
-        super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, 0.85f)
-        dialog?.window?.setGravity(Gravity.BOTTOM)
-    }
-
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        // 阻止内层卡片点击冒泡到根 view 触发 dismiss
-        binding.vwBg.setOnClickListener { }
-
-        binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        binding.recyclerView.adapter = adapter
-        adapter.setItems(presetRules)
-
-        binding.ivBack.setOnClickListener { dismiss() }
-    }
-
-    private inner class PresetRuleAdapter(context: android.content.Context) :
-        RecyclerAdapter<HighlightRule, ItemHighlightPresetAddBinding>(context) {
-
-        override fun getViewBinding(parent: ViewGroup): ItemHighlightPresetAddBinding {
-            return ItemHighlightPresetAddBinding.inflate(inflater, parent, false)
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                val style = rememberAppDialogStyle()
+                val context = LocalContext.current
+                val presetRules = remember { HighlightRuleStore.defaultPresetRules(context) }
+                AppDialogFrame(
+                    title = stringResource(R.string.highlight_rule_preset),
+                    message = stringResource(R.string.highlight_rule_preset_subtitle),
+                    content = {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(presetRules, key = { it.id }) { item ->
+                                PresetRuleCard(
+                                    rule = item,
+                                    accent = style.accent,
+                                    primaryText = style.primaryText,
+                                    secondaryText = style.secondaryText,
+                                    fieldSurface = style.fieldSurface,
+                                    stroke = style.stroke,
+                                    panelRadius = style.panelRadius,
+                                    onAdd = {
+                                        val groupToUse = defaultGroup
+                                            ?: HighlightRuleGroupStore.DEFAULT_GROUP
+                                        onAddRule(item.copy(group = groupToUse))
+                                        dismiss()
+                                    }
+                                )
+                            }
+                        }
+                    },
+                    actions = {
+                        LegadoMiuixActionButton(
+                            text = stringResource(R.string.close),
+                            palette = style.toMiuixPalette(),
+                            onClick = { dismissAllowingStateLoss() }
+                        )
+                    }
+                )
+            }
         }
+    }
 
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemHighlightPresetAddBinding,
-            item: HighlightRule,
-            payloads: MutableList<Any>
+    @Composable
+    private fun PresetRuleCard(
+        rule: HighlightRule,
+        accent: Color,
+        primaryText: Color,
+        secondaryText: Color,
+        fieldSurface: Color,
+        stroke: Color,
+        panelRadius: Dp,
+        onAdd: () -> Unit
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp),
+            shape = RoundedCornerShape(panelRadius),
+            color = fieldSurface,
+            contentColor = primaryText
         ) {
-            binding.tvTitle.text = item.name
-            binding.tvDesc.text = item.displayPattern()
-            binding.tvPreview.text = HighlightRulePreview.build(item)
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemHighlightPresetAddBinding) {
-            binding.ivAdd.setOnClickListener {
-                getItem(holder.layoutPosition)?.let { item ->
-                    val groupToUse = defaultGroup ?: HighlightRuleGroupStore.DEFAULT_GROUP
-                    // T-B4: 保留内置 id（去掉 System.currentTimeMillis() 覆盖）
-                    // 修复 R-P1-2 根因 b：原覆盖 id 后 ViewModel.update 走 idx>=0 替换分支
-                    // 但新 id 在 list 中必然 idx<0 被静默丢弃；现保留内置 id，配合 T-B3 upsert 语义
-                    // 重复添加走 replace 刷新防副本堆积
-                    onAddRule(item.copy(group = groupToUse))
-                    dismiss()
+            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = rule.name,
+                            color = primaryText,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = rule.displayPattern(),
+                            color = secondaryText,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clickable { onAdd() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_add),
+                            contentDescription = stringResource(R.string.add),
+                            tint = accent,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.preview),
+                    color = secondaryText,
+                    fontSize = 10.sp
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(panelRadius),
+                    color = Color.Transparent,
+                    border = BorderStroke(1.dp, stroke)
+                ) {
+                    Text(
+                        text = rule.toPreviewAnnotatedString(),
+                        color = primaryText,
+                        fontSize = 13.sp,
+                        lineHeight = 17.sp,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 将 [HighlightRulePreview.build] 的 Foreground/Background Span 转为 Compose AnnotatedString 描线预览 */
+private fun HighlightRule.toPreviewAnnotatedString(): AnnotatedString {
+    val preview = HighlightRulePreview.build(this)
+    val text = preview.toString()
+    val spanned = preview as? Spanned
+    return buildAnnotatedString {
+        append(text)
+        if (spanned != null) {
+            spanned.getSpans(0, text.length, ForegroundColorSpan::class.java).forEach { span ->
+                addStyle(
+                    SpanStyle(color = Color(span.foregroundColor)),
+                    spanned.getSpanStart(span),
+                    spanned.getSpanEnd(span)
+                )
+            }
+            spanned.getSpans(0, text.length, BackgroundColorSpan::class.java).forEach { span ->
+                addStyle(
+                    SpanStyle(background = Color(span.backgroundColor)),
+                    spanned.getSpanStart(span),
+                    spanned.getSpanEnd(span)
+                )
             }
         }
     }

@@ -1,23 +1,41 @@
 package io.legado.app.ui.highlight.edit
 
-import android.graphics.Typeface
+import android.net.Uri
 import android.os.Bundle
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.BackgroundColorSpan
-import android.text.style.ForegroundColorSpan
-import android.text.style.StrikethroughSpan
-import android.text.style.StyleSpan
-import android.text.style.UnderlineSpan
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
 import io.legado.app.data.entities.BookHighlight
-import io.legado.app.databinding.DialogHighlightRuleEditBinding
 import io.legado.app.help.HighlightColors
 import io.legado.app.help.HighlightStyle
 import io.legado.app.model.ReadBook
@@ -26,30 +44,42 @@ import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleStore
 import io.legado.app.ui.font.FontSelectDialog
 import io.legado.app.ui.highlight.HighlightRuleActivity
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.HighlightStyleSheet
+import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogStyle
+import io.legado.app.ui.widget.compose.AppDialogSwitchRow
+import io.legado.app.ui.widget.compose.AppRuleTextField
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
+import io.legado.app.ui.widget.compose.LegadoMiuixCard
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.GSON
-import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
  * F-P1-2 高亮规则系统（借鉴阅读T）
- * 编辑高亮规则(全屏对话框,与书签备注同视觉风格)。
- * 作为 [HighlightStyleDialog] 的 [HighlightStyleDialog.StyleHost]。
+ * 编辑高亮规则（Compose 化，全屏弹框）。
  *
- * 适配说明：
- * 1. id: Long → String（SharedPreferences 存储, 用 System.currentTimeMillis().toString()）
- * 2. appDb.highlightRuleDao.* → HighlightRuleStore.*（load/save 整个列表）
- * 3. 移除 scope/order 字段（当前项目用 targetScope:Int 枚举, UI 暂不暴露; order 用列表索引）
- * 4. rule.styleObj() → rule.toHighlightStyle(); rule.applyStyle(s) → rule.styleJson = GSON.toJson(s)
- * 5. rule.isValid() → 内联验证（pattern 非空, isRegex 时正则可编译）
- * 已知上限：UI 不暴露 targetScope 选择 | 升级路径：后续加 Spinner 选择 ALL/TITLE/BODY
+ * 原 View 版继承 BaseDialogFragment + dialog_highlight_rule_edit 布局 + 内嵌 HighlightStyleDialog 子弹框；
+ * 迁移后继承 [ComposeDialogFragment]，内容 = [AppDialogFrame]：
+ * - 基础字段区：name / pattern / replacement（[AppRuleTextField]）+ useRegex / dotAll（[AppDialogSwitchRow]）
+ * - 样式通道区：内联复用 [HighlightStyleSheet]（原 [HighlightStyleDialog] 的 Compose 内容组件）平铺，
+ *   取色/选字经宿主回调弹 ColorPickerDialog / FontSelectDialog；原「样式」按钮弹框层级消除
+ * - 预览（AD-04）：固定文案 `AnnotatedString` + SpanStyle 渲染 fill/textColor/bold/italic/underline/strike；
+ *   保留原局限（underline 不区分线型，box/emphasis/fontPath 不预览）
+ * - 保存链路不变：isValidRule → HighlightRuleStore.save → ReadBook.upHighlightRules() →
+ *   「批量」来源划线删除 → HighlightRuleActivity.refreshList() → dismiss
+ *
+ * 已知上限（阻塞点1，短期保留）：取色仍用第三方 ColorPickerDialog 并强制 R.style.AppTheme_Light 亮色；
+ * 升级路径：替换为 Compose 自绘色板（复用 HighlightColors 预设通道 + rememberAppDialogStyle 动态色）。
  */
-class HighlightRuleEditDialog : BaseDialogFragment(R.layout.dialog_highlight_rule_edit, true),
-    HighlightStyleDialog.StyleHost,
+class HighlightRuleEditDialog : ComposeDialogFragment(),
     FontSelectDialog.CallBack,
     ColorPickerDialogListener {
 
@@ -106,6 +136,7 @@ class HighlightRuleEditDialog : BaseDialogFragment(R.layout.dialog_highlight_rul
             listener: ColorPickerDialogListener
         ): ColorPickerDialog = dialog.also { it.setColorPickerDialogListener(listener) }
 
+        // 已知上限/compat：ColorPickerDialog 强制亮色主题是为避免暗色下预设色块全白（Issue-2 根因），保留现状
         fun createColorPickerDialog(
             dialogId: Int,
             initial: Int,
@@ -120,99 +151,204 @@ class HighlightRuleEditDialog : BaseDialogFragment(R.layout.dialog_highlight_rul
                 .setPresets(config.presets)
                 .setDialogId(config.dialogId)
                 .create()
-            // Issue-2 修复：强制 ColorPickerDialog 使用亮色主题，避免暗色主题下预设色块全显示白色
-            // 根因：ColorPickerDialog 在 onCreate 调用 setStyle(STYLE_NO_FRAME, 0)，0 表示用 Activity 主题
-            // 应用通过 setTheme(R.style.AppTheme_Dark) 设置暗色主题时，预设色块的渲染受暗色主题影响显示异常
-            // 方案：调用 DialogFragment.setStyle 强制使用 R.style.AppTheme_Light
-            // setStyle 是 androidx.fragment.app.DialogFragment 的 public 方法
             dialog.setStyle(androidx.fragment.app.DialogFragment.STYLE_NO_FRAME, R.style.AppTheme_Light)
             return bindColorPickerListener(dialog, listener)
         }
     }
 
-    private val binding by viewBinding(DialogHighlightRuleEditBinding::bind)
-    private var editingStyle = HighlightStyle()
-    private var styleDialog: HighlightStyleDialog? = null
+    override val dialogHeight: Int = ViewGroup.LayoutParams.MATCH_PARENT
+
     private var rule: HighlightRule? = null
 
-    override fun onStart() {
-        super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-    }
+    // --- Compose 状态（load 后填充，save 时读取） ---
+    private var nameValue by mutableStateOf(TextFieldValue(""))
+    private var patternValue by mutableStateOf(TextFieldValue(""))
+    private var replacementValue by mutableStateOf(TextFieldValue(""))
+    private var useRegex by mutableStateOf(false)
+    private var dotAll by mutableStateOf(false)
+    private var editingStyle by mutableStateOf(HighlightStyle())
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        // 修复：应用级暗色主题不激活 values-night 资源，需动态设置背景色
-        binding.vwBg.setBackgroundColor(io.legado.app.lib.theme.ThemeStore.backgroundColor())
-        binding.toolBar.setBackgroundColor(io.legado.app.lib.theme.ThemeStore.primaryColor())
-        binding.btnStyle.setOnClickListener {
-            val d = HighlightStyleDialog()
-            styleDialog = d
-            showDialogFragment(d)
-        }
-        binding.tvCancel.setOnClickListener { dismiss() }
-        binding.tvOk.setOnClickListener { save() }
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
         childFragmentManager.findFragmentByTag(COLOR_PICKER_TAG)
             ?.let { it as? ColorPickerDialog }
             ?.setColorPickerDialogListener(this)
-
-        val id = arguments?.getString("id")
-        if (!id.isNullOrBlank()) {
-            loadById(id)
-        } else {
-            fromArgs()
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    EditDialogContent()
+                }
+            }
         }
     }
 
-    /** 适配：从 Store.load 整个列表后按 id 查找 */
-    private fun loadById(id: String) {
-        lifecycleScope.launch {
-            val r = withContext(Dispatchers.IO) {
+    @Composable
+    private fun EditDialogContent() {
+        val style = rememberAppDialogStyle()
+        LaunchedEffect(Unit) { loadInitial() }
+        val palette = style.toMiuixPalette()
+        AppDialogFrame(
+            title = stringResource(R.string.highlight_rule_edit_title),
+            content = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AppRuleTextField(
+                        value = nameValue,
+                        onValueChange = { nameValue = it },
+                        label = stringResource(R.string.replace_rule_summary),
+                        singleLine = true,
+                        style = style
+                    )
+                    AppRuleTextField(
+                        value = patternValue,
+                        onValueChange = { patternValue = it },
+                        label = stringResource(R.string.highlight_rule_pattern),
+                        singleLine = true,
+                        style = style
+                    )
+                    AppRuleTextField(
+                        value = replacementValue,
+                        onValueChange = { replacementValue = it },
+                        label = stringResource(R.string.highlight_rule_replacement),
+                        minLines = 2,
+                        maxLines = 3,
+                        style = style
+                    )
+                    AppDialogSwitchRow(
+                        text = stringResource(R.string.use_regex),
+                        checked = useRegex,
+                        onCheckedChange = { useRegex = it }
+                    )
+                    AppDialogSwitchRow(
+                        text = stringResource(R.string.highlight_rule_dot_all),
+                        checked = dotAll,
+                        onCheckedChange = { dotAll = it }
+                    )
+                    StylePreviewBlock(
+                        target = editingStyle,
+                        dialogStyle = style
+                    )
+                    HighlightStyleSheet(
+                        style = editingStyle,
+                        onStyleChange = { editingStyle = it },
+                        onPickColor = { dialogId, initial, withAlpha ->
+                            pickColor(dialogId, initial, withAlpha)
+                        },
+                        onPickFont = { pickFont(it) },
+                        fontDisplayName = fontDisplayName(editingStyle.fontPath)
+                    )
+                }
+            },
+            actions = {
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.cancel),
+                    palette = palette,
+                    onClick = { dismissAllowingStateLoss() }
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.ok),
+                    palette = palette,
+                    primary = true,
+                    onClick = { save() }
+                )
+            }
+        )
+    }
+
+    /** 预览（AD-04）：SpanStyle 等价渲染 fill/textColor/bold/italic/underline/strike，保留原局限。 */
+    @Composable
+    private fun StylePreviewBlock(target: HighlightStyle, dialogStyle: AppDialogStyle) {
+        val sampleText = "预览文字 Preview"
+        val annotated = buildAnnotatedString {
+            withStyle(
+                SpanStyle(
+                    // Unspecified 视觉等价 null（无填充/保持外层字色），非空满足现有 SpanStyle 重载
+                    color = if (target.textColor != 0) {
+                        Color(target.textColor)
+                    } else {
+                        Color.Unspecified
+                    },
+                    background = if (target.fill != 0) {
+                        Color(target.fill)
+                    } else {
+                        Color.Unspecified
+                    },
+                    fontWeight = if (target.bold) FontWeight.Bold else FontWeight.Normal,
+                    fontStyle = if (target.italic) FontStyle.Italic else FontStyle.Normal,
+                    textDecoration = when {
+                        target.underline != null && target.strike != null ->
+                            TextDecoration.Underline + TextDecoration.LineThrough
+                        target.underline != null -> TextDecoration.Underline
+                        target.strike != null -> TextDecoration.LineThrough
+                        else -> TextDecoration.None
+                    }
+                )
+            ) { append(sampleText) }
+        }
+        LegadoMiuixCard(
+            modifier = Modifier.fillMaxWidth(),
+            color = dialogStyle.fieldSurface,
+            contentColor = dialogStyle.primaryText,
+            cornerRadius = dialogStyle.panelRadius,
+            insidePadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Text(text = annotated, fontSize = 15.sp, color = dialogStyle.primaryText)
+        }
+    }
+
+    /** 加载规则（edit(id)）或入参（create）到 Compose 状态。 */
+    private suspend fun loadInitial() {
+        val id = arguments?.getString("id")
+        val target = if (!id.isNullOrBlank()) {
+            withContext(Dispatchers.IO) {
                 HighlightRuleStore.load(requireContext()).firstOrNull { it.id == id }
             }
-            if (r != null) {
-                rule = r
-                upView(r)
-            } else {
-                requireActivity().toastOnUi("规则不存在")
-                dismiss()
-            }
+        } else {
+            val a = arguments ?: return
+            HighlightRule(
+                name = a.getString("pattern") ?: "",
+                pattern = a.getString("pattern") ?: "",
+                isRegex = a.getBoolean("isRegex", false),
+                styleJson = a.getString("style") ?: ""
+            )
         }
+        if (target == null) {
+            requireActivity().toastOnUi(getString(R.string.highlight_rule_not_found))
+            dismissAllowingStateLoss()
+            return
+        }
+        rule = target
+        fillFrom(target)
     }
 
-    private fun fromArgs() {
-        val a = arguments ?: return
-        val r = HighlightRule(
-            name = a.getString("pattern") ?: "",
-            pattern = a.getString("pattern") ?: "",
-            isRegex = a.getBoolean("isRegex", false),
-            styleJson = a.getString("style") ?: ""
-        )
-        rule = r
-        upView(r)
-    }
-
-    private fun upView(r: HighlightRule) = binding.run {
-        etName.setText(r.name)
-        etPattern.setText(r.pattern)
-        cbUseRegex.isChecked = r.isRegex
-        etReplacement.setText(r.replacement)
-        cbDotAll.isChecked = r.isDotAll
+    private fun fillFrom(r: HighlightRule) {
+        nameValue = TextFieldValue(r.name)
+        patternValue = TextFieldValue(r.pattern)
+        replacementValue = TextFieldValue(r.replacement)
+        useRegex = r.isRegex
+        dotAll = r.isDotAll
         editingStyle = r.toHighlightStyle()
-        upPreview()
     }
 
-    private fun getRule(): HighlightRule = binding.run {
+    private fun getRule(): HighlightRule {
         val r = rule ?: HighlightRule()
-        r.name = etName.text.toString()
-        r.pattern = etPattern.text.toString()
-        r.isRegex = cbUseRegex.isChecked
-        r.replacement = etReplacement.text.toString()
-        r.isDotAll = cbDotAll.isChecked
+        r.name = nameValue.text
+        r.pattern = patternValue.text
+        r.isRegex = useRegex
+        r.replacement = replacementValue.text
+        r.isDotAll = dotAll
         r.styleJson = GSON.toJson(editingStyle)
-        r
+        return r
     }
 
-    /** 适配：内联验证（pattern 非空, isRegex 时正则可编译） */
+    /** 内联验证（pattern 非空, isRegex 时正则可编译） */
     private fun isValidRule(r: HighlightRule): Boolean {
         if (r.pattern.isBlank()) return false
         if (r.isRegex) {
@@ -221,11 +357,11 @@ class HighlightRuleEditDialog : BaseDialogFragment(R.layout.dialog_highlight_rul
         return true
     }
 
-    /** 适配：load 整个列表 → 替换或追加 → save 整个列表 */
+    /** load 整个列表 → 替换或追加 → save 整个列表，链路保持与旧版一致 */
     private fun save() {
         val r = getRule()
         if (!isValidRule(r)) {
-            requireActivity().toastOnUi("规则无效: ${r.pattern}")
+            requireActivity().toastOnUi(getString(R.string.highlight_rule_invalid, r.pattern))
             return
         }
         lifecycleScope.launch {
@@ -243,50 +379,13 @@ class HighlightRuleEditDialog : BaseDialogFragment(R.layout.dialog_highlight_rul
             // 「批量」转化: 规则已接管该处文字, 删除发起的那条手动划线, 避免同段文字双份高亮
             val srcTime = arguments?.getLong("sourceHighlightTime", 0L) ?: 0L
             highlightToRemove(ReadBook.highlights, srcTime)?.let { ReadBook.removeHighlight(it) }
-            // 通知 Activity 刷新列表（修复：保存后列表不更新问题）
+            // 通知 Activity 刷新列表（保存后列表不更新问题）
             (activity as? HighlightRuleActivity)?.refreshList()
-            dismiss()
+            dismissAllowingStateLoss()
         }
     }
 
-    private fun upPreview() = binding.run {
-        // F-P1-2 Phase 8 23.48: 用 Span 渲染所有样式通道, 提升预览真实度
-        // 简化说明：underline 不分 kind（波浪/虚线/点线/双线都用实线 UnderlineSpan）; box/emphasis/fontPath 暂不支持
-        // 已知上限：不显示波浪/虚线/点线/双线/方框/着重号/自定义字体
-        // 升级路径：移植自定义 Span 类后可恢复完整预览
-        val sampleText = "预览文字 Preview"
-        val spannable = SpannableStringBuilder(sampleText)
-        val len = sampleText.length
-        if (editingStyle.fill != 0) {
-            spannable.setSpan(BackgroundColorSpan(editingStyle.fill), 0, len, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        }
-        if (editingStyle.textColor != 0) {
-            spannable.setSpan(ForegroundColorSpan(editingStyle.textColor), 0, len, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        }
-        if (editingStyle.bold) {
-            spannable.setSpan(StyleSpan(Typeface.BOLD), 0, len, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        }
-        if (editingStyle.italic) {
-            spannable.setSpan(StyleSpan(Typeface.ITALIC), 0, len, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        }
-        if (editingStyle.underline != null) {
-            spannable.setSpan(UnderlineSpan(), 0, len, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        }
-        if (editingStyle.strike != null) {
-            spannable.setSpan(StrikethroughSpan(), 0, len, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        }
-        tvStylePreview.text = spannable
-    }
-
-    // --- HighlightStyleDialog.StyleHost ---
-    override fun currentHighlightStyle(): HighlightStyle = editingStyle
-
-    override fun onHighlightStyleChanged(style: HighlightStyle) {
-        editingStyle = style
-        upPreview()
-    }
-
-    override fun pickHighlightColor(dialogId: Int, initial: Int, withAlpha: Boolean) {
+    private fun pickColor(dialogId: Int, initial: Int, withAlpha: Boolean) {
         createColorPickerDialog(
             dialogId = dialogId,
             initial = initial,
@@ -295,7 +394,7 @@ class HighlightRuleEditDialog : BaseDialogFragment(R.layout.dialog_highlight_rul
         ).show(childFragmentManager, COLOR_PICKER_TAG)
     }
 
-    override fun pickHighlightFont(current: String) {
+    private fun pickFont(current: String) {
         showDialogFragment(FontSelectDialog())
     }
 
@@ -304,16 +403,18 @@ class HighlightRuleEditDialog : BaseDialogFragment(R.layout.dialog_highlight_rul
 
     override fun selectFont(path: String) {
         editingStyle = editingStyle.copy(fontPath = path)
-        styleDialog?.refresh()
-        upPreview()
     }
 
     // --- ColorPickerDialogListener ---
     override fun onColorSelected(dialogId: Int, color: Int) {
         editingStyle = HighlightStyleDialog.applyChannelColor(editingStyle, dialogId, color)
-        styleDialog?.refresh()
-        upPreview()
     }
 
     override fun onDialogDismissed(dialogId: Int) {}
+
+    /** 字体路径转可读名（content uri 解码后取末段文件名）；空=默认 */
+    private fun fontDisplayName(path: String): String {
+        if (path.isEmpty()) return getString(R.string.highlight_font_default)
+        return Uri.decode(path)?.substringAfterLast('/')?.ifBlank { path } ?: path
+    }
 }

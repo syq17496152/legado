@@ -1,235 +1,184 @@
 package io.legado.app.ui.highlight
 
 import android.os.Bundle
-import android.text.InputType
 import android.view.Gravity
-import android.view.MenuItem
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
-import android.widget.LinearLayout
-import androidx.appcompat.widget.PopupMenu
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
-import io.legado.app.databinding.DialogHighlightRuleGroupManageBinding
-import io.legado.app.databinding.ItemHighlightRuleGroupBinding
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleGroupStore
 import io.legado.app.ui.book.read.config.HighlightRuleStore
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.ComposeGroupManageDialogContent
 import io.legado.app.utils.GSON
-import io.legado.app.utils.dpToPx
 import io.legado.app.utils.sendToClip
-import io.legado.app.utils.setLayout
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 /**
- * F-P1-2 高亮规则分组管理 Dialog（借鉴蛋蛋Max,适配当前项目）
+ * 高亮规则分组管理弹框（Compose 化，薄壳受控模式）。
  *
- * 适配说明：
- * 1. shape_highlight_rule_* drawable → shape_card_view + MaterialButton + ?attr/selectableItemBackground
- * 2. 自定义 ViewBindingHolder → 标准 ItemHighlightRuleGroupBinding（RecyclerAdapter 要求 VB : ViewBinding）
- * 3. 修复蛋蛋Max exportGroup 的 GBK 乱码（"璇ュ垎缁勬殏鏃犺鍒欏彲瀵煎嚭" → "该分组暂无规则可导出"）
- * 4. 移除 attachBottomSheetDismiss（当前项目无此扩展,用默认 dismiss）
- * 5. 移除 observeEvent(EventBus.UP_CONFIG)（非必须主题切换监听）
- * 6. 移除 initTheme() 的 cardBgColor（用 shape_card_view 默认背景）
- * 7. setLayout(MATCH_PARENT, 0.85f) + Gravity.BOTTOM 实现底部弹出
- * 8. adaptationSoftKeyboard=true + vw_bg.setOnClickListener{} 阻止冒泡,实现点击外部 dismiss
- * 已知上限：无主题切换实时响应 | 升级路径：后续接入 ThemeStore 监听
+ * 原 View 版继承 BaseDialogFragment + dialog_highlight_rule_group_manage 布局；
+ * 迁移后继承 [ComposeDialogFragment]，内容复用 [ComposeGroupManageDialogContent]：
+ * - 新增/重命名走内联编辑卡片（空名校验在组件 submit 兜底，重名校验在薄壳内 toast 拒绝）
+ * - 行尾「更多」菜单复现原 R.menu.highlight_rule_group_item（rename / export / delete），默认分组禁删
+ * - 删除确认子弹框 + 默认分组保护，删除后规则批量改回默认分组
+ * - 导出走 sendToClip(GSON.toJson(目标规则))
+ * - 行点击选中分组 / 「查看全部」保留原回调契约（onSelectGroup 由调用方决定行为）
  */
 class HighlightRuleGroupManageDialog @JvmOverloads constructor(
     private val onChanged: (oldGroup: String?, newGroup: String?) -> Unit = { _, _ -> },
     private val onSelectGroup: (String?) -> Unit = {},
-) : BaseDialogFragment(R.layout.dialog_highlight_rule_group_manage, true) {
+) : ComposeDialogFragment() {
 
-    private val binding by viewBinding(DialogHighlightRuleGroupManageBinding::bind)
-    private val adapter by lazy { GroupAdapter(requireContext()) }
-    private val groups = ArrayList<String>()
-    private val rules = ArrayList<HighlightRule>()
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
+    override val dialogGravity: Int = Gravity.BOTTOM
 
-    override fun onStart() {
-        super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, 0.85f)
-        dialog?.window?.setGravity(Gravity.BOTTOM)
-    }
-
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        // 阻止内层卡片点击冒泡到根 view 触发 dismiss
-        binding.vwBg.setOnClickListener { }
-
-        binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        binding.recyclerView.adapter = adapter
-        binding.ivBack.setOnClickListener { dismiss() }
-        binding.tvAddGroup.setOnClickListener { showGroupInputDialog(null) }
-        binding.llViewAll.setOnClickListener {
-            onSelectGroup(null)
-            dismiss()
-        }
-        loadData()
-    }
-
-    private fun loadData() {
-        groups.clear()
-        groups.addAll(HighlightRuleGroupStore.load(requireContext()))
-        rules.clear()
-        rules.addAll(HighlightRuleStore.load(requireContext()))
-        adapter.setItems(groups.toList())
-        binding.tvEmptyMsg.visibility = if (groups.isEmpty()) View.VISIBLE else View.GONE
-        binding.tvAllCount.text = "${rules.size} 条规则"
-    }
-
-    private fun showGroupInputDialog(source: String?) {
-        val editText = EditText(requireContext()).apply {
-            setText(source.orEmpty())
-            setSelection(text.length)
-            hint = "输入分组名称"
-            inputType = InputType.TYPE_CLASS_TEXT
-        }
-        val container = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(20.dpToPx(), 8.dpToPx(), 20.dpToPx(), 0)
-            addView(
-                editText,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                GroupManageDialogContent(
+                    onChanged = onChanged,
+                    onSelectGroup = onSelectGroup,
+                    onDismiss = { dismissAllowingStateLoss() }
                 )
+            }
+        }
+    }
+
+    @Composable
+    private fun GroupManageDialogContent(
+        onChanged: (oldGroup: String?, newGroup: String?) -> Unit,
+        onSelectGroup: (String?) -> Unit,
+        onDismiss: () -> Unit
+    ) {
+        val context = LocalContext.current
+        var groups by remember { mutableStateOf<List<String>>(HighlightRuleGroupStore.load(context)) }
+        var rules by remember { mutableStateOf<List<HighlightRule>>(HighlightRuleStore.load(context)) }
+        var editTarget by remember { mutableStateOf<String?>(null) }
+        var editSeq by remember { mutableStateOf(0L) }
+
+        fun saveAll() {
+            HighlightRuleGroupStore.save(context, groups)
+            HighlightRuleStore.save(context, rules)
+        }
+
+        fun exportGroup(group: String) {
+            val targetRules = rules.filter { it.group == group }
+            if (targetRules.isEmpty()) {
+                context.toastOnUi(context.getString(R.string.highlight_rule_group_no_rule_export))
+                return
+            }
+            context.sendToClip(GSON.toJson(targetRules))
+            context.toastOnUi(
+                context.getString(R.string.highlight_rule_group_export_count, targetRules.size)
             )
         }
-        alert(if (source == null) "新增分组" else "重命名分组") {
-            customView { container }
-            okButton {
-                val newName = editText.text?.toString()?.trim().orEmpty()
-                if (newName.isBlank()) {
-                    requireContext().toastOnUi("分组名称不能为空")
-                    return@okButton
-                }
-                if (groups.contains(newName) && newName != source) {
-                    requireContext().toastOnUi("分组名称已存在")
-                    return@okButton
-                }
-                if (source == null) {
-                    groups.add(newName)
-                    HighlightRuleGroupStore.save(requireContext(), groups)
-                    loadData()
-                    onChanged(null, null)
-                } else {
-                    val index = groups.indexOf(source)
-                    if (index >= 0) groups[index] = newName
-                    rules.replaceAll { rule ->
-                        if (rule.group == source) rule.copy(group = newName) else rule
-                    }
-                    HighlightRuleGroupStore.save(requireContext(), groups)
-                    HighlightRuleStore.save(requireContext(), rules)
-                    loadData()
-                    onChanged(source, newName)
-                }
-            }
-            cancelButton()
-        }
-    }
 
-    private fun deleteGroup(group: String) {
-        if (group == HighlightRuleGroupStore.DEFAULT_GROUP) {
-            context?.toastOnUi("默认分组不能删除")
-            return
-        }
-        alert("删除分组") {
-            setMessage("删除后，该分组下的规则会移动到默认分组。")
-            okButton {
-                groups.remove(group)
-                rules.replaceAll { rule ->
-                    if (rule.group == group) {
-                        rule.copy(group = HighlightRuleGroupStore.DEFAULT_GROUP)
-                    } else {
-                        rule
-                    }
-                }
-                HighlightRuleGroupStore.save(requireContext(), groups)
-                HighlightRuleStore.save(requireContext(), rules)
-                loadData()
-                onChanged(group, null)
-            }
-            cancelButton()
-        }
-    }
-
-    private fun exportGroup(group: String) {
-        val targetRules = rules.filter { it.group == group }
-        if (targetRules.isEmpty()) {
-            // 修复蛋蛋Max GBK 乱码："璇ュ垎缁勬殏鏃犺鍒欏彲瀵煎嚭" → "该分组暂无规则可导出"
-            context?.toastOnUi("该分组暂无规则可导出")
-            return
-        }
-        requireContext().sendToClip(GSON.toJson(targetRules))
-        // 修复蛋蛋Max GBK 乱码："宸插鍒?${targetRules.size} 鏉¤鍒?" → "已复制 ${targetRules.size} 条规则"
-        context?.toastOnUi("已复制 ${targetRules.size} 条规则")
-    }
-
-    private fun showItemMenu(group: String, anchor: View) {
-        PopupMenu(requireContext(), anchor).apply {
-            menuInflater.inflate(R.menu.highlight_rule_group_item, menu)
+        fun confirmDeleteGroup(group: String) {
             if (group == HighlightRuleGroupStore.DEFAULT_GROUP) {
-                menu.findItem(R.id.menu_delete)?.isVisible = false
+                context.toastOnUi(context.getString(R.string.highlight_rule_group_default_protected))
+                return
             }
-            setOnMenuItemClickListener { item: MenuItem ->
-                when (item.itemId) {
-                    R.id.menu_rename_group -> showGroupInputDialog(group)
-                    R.id.menu_export_group -> exportGroup(group)
-                    R.id.menu_delete -> deleteGroup(group)
-                    else -> return@setOnMenuItemClickListener false
+            alert(context.getString(R.string.delete_group)) {
+                setMessage(context.getString(R.string.highlight_rule_group_delete_confirm))
+                okButton {
+                    groups = groups.filterNot { it == group }
+                    rules = rules.map {
+                        if (it.group == group) it.copy(group = HighlightRuleGroupStore.DEFAULT_GROUP) else it
+                    }
+                    saveAll()
+                    onChanged(group, null)
                 }
-                true
+                cancelButton()
             }
-        }.show()
-    }
-
-    private fun groupCount(group: String): Int {
-        return rules.count { it.group == group }
-    }
-
-    private inner class GroupAdapter(context: android.content.Context) :
-        RecyclerAdapter<String, ItemHighlightRuleGroupBinding>(context) {
-
-        override fun getViewBinding(parent: ViewGroup): ItemHighlightRuleGroupBinding {
-            return ItemHighlightRuleGroupBinding.inflate(inflater, parent, false)
         }
 
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemHighlightRuleGroupBinding,
-            item: String,
-            payloads: MutableList<Any>
-        ) {
-            binding.tvTitle.text = item
-            binding.tvCount.text = "${groupCount(item)} 条规则"
+        fun moreActionsFor(group: String): List<MenuAction> {
+            val actions = mutableListOf(
+                MenuAction(
+                    icon = Icons.Filled.Edit,
+                    title = context.getString(R.string.edit),
+                    onClick = {
+                        editTarget = group
+                        editSeq++
+                    }
+                ),
+                MenuAction(
+                    icon = Icons.Filled.Share,
+                    title = context.getString(R.string.export),
+                    onClick = { exportGroup(group) }
+                )
+            )
+            if (group != HighlightRuleGroupStore.DEFAULT_GROUP) {
+                actions += MenuAction(
+                    icon = Icons.Filled.Delete,
+                    title = context.getString(R.string.delete),
+                    tint = androidx.compose.ui.graphics.Color(0xFFE53935),
+                    onClick = { confirmDeleteGroup(group) }
+                )
+            }
+            return actions
         }
 
-        override fun registerListener(holder: ItemViewHolder, binding: ItemHighlightRuleGroupBinding) {
-            binding.root.setOnClickListener {
-                getItem(holder.layoutPosition)?.let { group ->
-                    onSelectGroup(group)
-                    dismiss()
+        ComposeGroupManageDialogContent(
+            groups = groups,
+            message = context.getString(R.string.highlight_rule_group_rules_count, rules.size),
+            groupCountText = { group ->
+                context.getString(R.string.highlight_rule_group_rules_count, rules.count { it.group == group })
+            },
+            onAddGroup = { name ->
+                if (groups.contains(name)) {
+                    context.toastOnUi(context.getString(R.string.highlight_rule_group_name_exists))
+                } else {
+                    groups = groups + name
+                    saveAll()
+                    onChanged(null, null)
                 }
-            }
-            binding.root.setOnLongClickListener {
-                getItem(holder.layoutPosition)?.let { group ->
-                    showItemMenu(group, binding.root)
+            },
+            onRenameGroup = { old, new ->
+                if (groups.contains(new) && new != old) {
+                    context.toastOnUi(context.getString(R.string.highlight_rule_group_name_exists))
+                } else {
+                    groups = groups.map { if (it == old) new else it }
+                    rules = rules.map { if (it.group == old) it.copy(group = new) else it }
+                    saveAll()
+                    onChanged(old, new)
                 }
-                true
-            }
-            binding.tvEdit.setOnClickListener {
-                getItem(holder.layoutPosition)?.let(::showGroupInputDialog)
-            }
-            binding.tvMore.setOnClickListener {
-                getItem(holder.layoutPosition)?.let { group ->
-                    showItemMenu(group, binding.tvMore)
-                }
-            }
-        }
+            },
+            onDeleteGroup = { group -> confirmDeleteGroup(group) },
+            onSelectGroup = { group ->
+                onSelectGroup(group)
+                onDismiss()
+            },
+            onViewAll = {
+                onSelectGroup(null)
+                onDismiss()
+            },
+            viewAllLabel = context.getString(R.string.highlight_rule_group_view_all),
+            moreActions = { group -> moreActionsFor(group) },
+            externalEdit = editTarget to editSeq,
+            onDismiss = onDismiss
+        )
     }
 }
