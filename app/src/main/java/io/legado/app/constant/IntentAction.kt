@@ -8,6 +8,8 @@ object IntentAction {
     const val stop = "stop"
     const val resume = "resume"
     const val pause = "pause"
+    // 自动续传全部未完成任务（Service 重建/进程重启后由管理页触发）
+    const val resumeAll = "resumeAll"
     const val addTimer = "addTimer"
     const val setTimer = "setTimer"
     const val prevParagraph = "prevParagraph"

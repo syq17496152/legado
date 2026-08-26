@@ -47,6 +47,7 @@ import io.legado.app.data.dao.RuleSubDao
 import io.legado.app.data.dao.SearchBookDao
 import io.legado.app.data.dao.SearchKeywordDao
 import io.legado.app.data.dao.SourceGroupCoverDao
+import io.legado.app.data.dao.DownloadTaskDao
 import io.legado.app.data.dao.ServerDao
 import io.legado.app.data.dao.TxtTocRuleDao
 import io.legado.app.data.dao.UrlRecordDao
@@ -77,6 +78,7 @@ import io.legado.app.data.entities.Cookie
 import io.legado.app.data.entities.CoverGalleryGroup
 import io.legado.app.data.entities.CoverGalleryImage
 import io.legado.app.data.entities.DictRule
+import io.legado.app.data.entities.DownloadTaskEntity
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.data.entities.KeyboardAssist
 import io.legado.app.data.entities.ParagraphRule
@@ -121,7 +123,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 106,
+    version = 107,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -140,7 +142,8 @@ val appDb by lazy {
         ReadAloudSpeakerGroup::class, ReadAloudSpeakerGroupItem::class,
         AiReadAloudUsageRecord::class,
         AiAgentSession::class, AiAgentJob::class, AiAgentTrace::class,
-        AiMemoryItem::class, AiMemoryFragment::class, AiMemoryItemFts::class, AiMemoryFragmentFts::class],
+        AiMemoryItem::class, AiMemoryFragment::class, AiMemoryItemFts::class, AiMemoryFragmentFts::class,
+        DownloadTaskEntity::class],
     views = [BookSourcePart::class],
     autoMigrations = [
         AutoMigration(from = 43, to = 44),
@@ -200,6 +203,7 @@ val appDb by lazy {
         // source-folder-cover: 103→104 使用手动 Migration（DatabaseMigrations.migration_103_104），新增 source_group_covers 表（发现/订阅源分组封面）
         // archive-ui P1-B: 104→105 使用手动 Migration（DatabaseMigrations.migration_104_105），新增 6 张表（readRecordDaily/readRecentBooks/paragraph_rules/book_paragraph_rules/paragraph_rule_vars/read_menu_custom_buttons）
         // archive-ui P1-F: 105→106 使用手动 Migration（DatabaseMigrations.migration_105_106），新增 AI agent/images/memory/read-aloud bgm/speaker/book character/chapter summary 等共 19 张表（含 2 张 FTS4 虚拟表）
+        // download-manager: 106→107 使用手动 Migration（DatabaseMigrations.migration_106_107），新增 download_tasks 表（下载任务持久化）
     ]
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -246,6 +250,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract val aiReadAloudUsageRecordDao: AiReadAloudUsageRecordDao
     abstract val aiAgentDao: AiAgentDao
     abstract val aiMemoryDao: AiMemoryDao
+    abstract val downloadTaskDao: DownloadTaskDao
 
     companion object {
 

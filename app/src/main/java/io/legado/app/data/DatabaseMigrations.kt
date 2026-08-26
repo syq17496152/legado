@@ -25,7 +25,7 @@ object DatabaseMigrations {
             migration_93_94, migration_94_95, migration_95_96, migration_96_97,
             migration_97_98, migration_98_99, migration_99_100, migration_100_101,
             migration_101_102, migration_102_103, migration_103_104, migration_104_105,
-            migration_105_106
+            migration_105_106, migration_106_107
         )
     }
 
@@ -1362,6 +1362,47 @@ object DatabaseMigrations {
                 """ALTER TABLE `httpTTS` ADD COLUMN `emotionsJson` TEXT NOT NULL DEFAULT ''"""
             }
             AppLog.put("AppDatabase Migration 105→106: AI 相关 19 张新表创建成功")
+        }
+
+        private fun runCatchingSql(
+            db: SupportSQLiteDatabase,
+            tag: String,
+            sql: () -> String
+        ) {
+            sql().split(";").map { it.trim() }.filter { it.isNotBlank() }
+                .forEach { stmt ->
+                    kotlin.runCatching { db.execSQL(stmt) }
+                        .onFailure { e ->
+                            AppLog.put("AppDatabase Migration 105→106: [$tag] 执行失败: ${e.message}")
+                        }
+                }
+        }
+    }
+
+    private val migration_106_107 = object : Migration(106, 107) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            runCatchingSql(db, "106→107 download_tasks create") {
+                """CREATE TABLE IF NOT EXISTS `download_tasks` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `url` TEXT NOT NULL,
+                    `fileName` TEXT NOT NULL DEFAULT '',
+                    `taskType` TEXT NOT NULL DEFAULT 'DIRECT',
+                    `headersJson` TEXT,
+                    `status` TEXT NOT NULL DEFAULT 'WAITING',
+                    `progress` INTEGER NOT NULL DEFAULT 0,
+                    `totalSize` INTEGER NOT NULL DEFAULT 0,
+                    `downloadedSize` INTEGER NOT NULL DEFAULT 0,
+                    `speed` INTEGER NOT NULL DEFAULT 0,
+                    `errorCode` TEXT,
+                    `errorMsg` TEXT,
+                    `localPath` TEXT,
+                    `targetDir` TEXT,
+                    `resumePointJson` TEXT,
+                    `segmentsJson` TEXT,
+                    `startTime` INTEGER NOT NULL DEFAULT 0
+                )"""
+            }
+            AppLog.put("AppDatabase Migration 106→107: download_tasks 表创建成功")
         }
 
         private fun runCatchingSql(

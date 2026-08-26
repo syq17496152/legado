@@ -336,6 +336,23 @@ object ExoPlayerHelper {
     suspend fun sniffVideoType(url: String, headers: Map<String, String>): SniffResult {
         val startTime = System.currentTimeMillis()
 
+        // P0-fix: 本地文件短路（内置播放器播放下载产物 ts/mp4 等）
+        // 铁证（logs3 实测）：本地 file:// 走网络嗅探失败 → UNKNOWN → 默认降级链 [HLS, Progressive]
+        // → 本地 ts/mp4 被当 HLS 清单解析 → ERROR_CODE_PARSING_MANIFEST_MALFORMED (3002)。
+        // 本地文件无网络语义（无需 Range/Content-Type），直接按 Progressive 顺序媒体源播放。
+        // 注意：mimeType 必须为 null（不强制 VIDEO_MP4）——HLS 下载转码失败会回退保留 .ts，
+        // 若强制 video/mp4，Progressive 会用 Mp4Extractor 解析 ts 必然失败（铁证：用户实测
+        // "下载后 ts 还是打开不了内置视频播放器"）。不设 mimeType 时 ExoPlayer 按容器自动
+        // 嗅探（mp4/mpeg-ts/mkv...），mp4 与 ts 下载产物都能正常播放。
+        if (url.startsWith("file://")) {
+            return SniffResult(
+                contentType = C.TYPE_OTHER,
+                mimeType = null,
+                supportsRange = true,
+                finalUrl = url
+            )
+        }
+
         // P0-fix: URL 合法性校验（防止非 URL 字符串传入 sniffWithRangeRequestR4 导致 OkHttp 崩溃）
         // 铁证：书源 ruleContent 返回 m3u8 文件内容（#EXTM3U...）而非 URL 时，
         // OkHttp Request.Builder().url() 抛出 IllegalArgumentException 致 FATAL CRASH

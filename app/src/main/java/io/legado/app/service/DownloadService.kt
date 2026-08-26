@@ -1,19 +1,26 @@
 package io.legado.app.service
 
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import io.legado.app.R
 import io.legado.app.base.BaseService
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.IntentAction
 import io.legado.app.constant.NotificationId
+import io.legado.app.data.appDb
 import io.legado.app.help.download.ChunkDownloader
+import io.legado.app.help.download.DownloadError
 import io.legado.app.help.download.HlsDownloader
 import io.legado.app.help.download.HlsResult
 import io.legado.app.utils.IntentType
+import io.legado.app.utils.getPrefString
 import io.legado.app.utils.openFileUri
 import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
@@ -23,58 +30,172 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import org.json.JSONObject
 import splitties.init.appCtx
+import splitties.systemservices.connectivityManager
 import splitties.systemservices.notificationManager
 import java.io.File
-import java.io.IOException
-import java.util.concurrent.atomic.AtomicLong
 
 /**
- * 下载文件服务（video-download-manager）
+ * 下载文件服务（download-manager-maturity，扩展自 video-download-manager）
  *
  * 自研下载引擎调度，替换原系统 DownloadManager 方案：
- * - 直链：ChunkDownloader 多线程 Range 分片下载（IDM 式）
- * - m3u8：HlsDownloader 分片下载 + ts 转 mp4
- * - 状态写入 DownloadState（内存），前台 Service 保活，任务级通知展示进度
+ * - 直链：ChunkDownloader 多线程 Range 分片下载（IDM 式），断点续传按 .partN 长度推进
+ * - m3u8：HlsDownloader 分片下载 + ts 转 mp4，断点续传跳过已下分片
+ * - 调度：Semaphore 并发上限 + FIFO 顺序；暂停/恢复单任务（保留临时文件续传）
+ * - 失败：错误码落库 + 指数退避自动重试（ENCRYPT/UNSUPPORTED 等永久错误直接失败）
+ * - 通知 id 与任务 id 稳定映射（id.toInt()），杜绝多任务错位
+ * - 网络策略：仅 WiFi 下载时在移动网络下挂起、恢复 WiFi 自动继续（无限速）
+ * - 状态写入 DownloadState（Room 持久化），前台 Service 保活
  */
 class DownloadService : BaseService() {
 
+    companion object {
+        const val MAX_CONCURRENT = 3
+        const val MAX_AUTO_RETRY = 3
+        private const val BASE_RETRY_MS = 3_000L
+        private const val KEY_ONLY_WIFI = "downloadOnlyWifi"
+        /** 下载目标目录（用户可配置绝对路径，空 = 默认应用内置私有目录，无需权限） */
+        const val KEY_TARGET_DIR = "downloadTargetDir"
+
+        /** 默认内置私有下载目录：无需任何存储权限即可写入（应用专属），默认位置 */
+        fun defaultPublicDir(): File =
+            File(
+                appCtx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: appCtx.filesDir,
+                "Legado"
+            )
+
+        /** 目标根目录：用户配置优先；未配置时默认内置私有目录（无需授权） */
+        fun configuredTargetDir(): File {
+            val configured = appCtx.getPrefString(KEY_TARGET_DIR)
+            return if (configured.isNullOrBlank()) defaultPublicDir() else File(configured)
+        }
+
+        /** 下载目录是否落在公有存储区需授权：仅当用户显式填了公有路径才需要（默认私有无需授权） */
+        fun targetDirNeedsPermission(): Boolean {
+            val configured = appCtx.getPrefString(KEY_TARGET_DIR)
+            if (configured.isNullOrBlank()) return false
+            val publicParent = Environment.getExternalStorageDirectory().absolutePath
+            return File(configured).absolutePath.startsWith(publicParent)
+        }
+
+        /** 分版本存储权限判定：Android 11+ 需 MANAGE_EXTERNAL_STORAGE；8-9 需 WRITE_EXTERNAL_STORAGE；Android 10 无 File 公有写能力 */
+        fun storageWriteGranted(): Boolean = when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ->
+                runCatching { Environment.isExternalStorageManager() }.getOrDefault(false)
+            Build.VERSION.SDK_INT == Build.VERSION_CODES.Q -> false
+            else -> ContextCompat.checkSelfPermission(
+                appCtx, android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
     private val groupKey = "${appCtx.packageName}.download"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val downloads = hashMapOf<Long, DownloadInfo>()
-    private val downloadJobs = hashMapOf<Long, Job>()
-    private val idGenerator = AtomicLong(1)
+    private val semaphore = Semaphore(MAX_CONCURRENT)
+    private val runJobs = hashMapOf<Long, Job>()
+    private val downloadInfos = hashMapOf<Long, DownloadInfo>()
+
+    override fun onCreate() {
+        super.onCreate()
+        // 启动恢复：从 Room 重建内存缓存，并把崩溃/重建前正在跑的任务重新入队自动续传。
+        // 铁证（live_logcat 22:45 会话）：此前仅回填内存不重新调度，恢复的任务停在 PAUSED
+        // 从"下载中"消失，用户误以为"正在下载的任务丢失"。
+        resumeAllFromDb()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             IntentAction.start -> {
-                val url = intent.getStringExtra("url") ?: return super.onStartCommand(intent, flags, startId)
+                val url = intent.getStringExtra("url")
+                    ?: return super.onStartCommand(intent, flags, startId)
                 startDownload(
                     url,
                     intent.getStringExtra("fileName"),
                     intent.getStringExtra("taskType"),
-                    intent.getStringExtra("headers")
+                    intent.getStringExtra("headers"),
+                    intent.getBooleanExtra("autoStart", true),
+                    intent.getIntExtra("retry", MAX_AUTO_RETRY)
                 )
             }
 
             IntentAction.play -> {
                 val id = intent.getLongExtra("downloadId", 0)
-                val info = downloads[id]
-                if (info?.localPath != null) {
-                    openDownload(info.localPath, info.fileName)
+                val task = DownloadState.tasks.value[id]
+                if (task?.localPath != null) {
+                    openDownload(task.localPath, task.fileName)
                 } else {
                     toastOnUi(getString(R.string.download_unfinished_tip))
                 }
             }
 
             IntentAction.stop -> {
-                val downloadId = intent.getLongExtra("downloadId", 0)
-                removeDownload(downloadId)
+                removeDownload(intent.getLongExtra("downloadId", 0))
+            }
+
+            IntentAction.pause -> {
+                pauseDownload(intent.getLongExtra("downloadId", 0))
+            }
+
+            IntentAction.resume -> {
+                resumeDownload(intent.getLongExtra("downloadId", 0))
+            }
+
+            IntentAction.resumeAll -> {
+                // 管理页打开/进程重启后触发：自动续传所有未完成任务
+                resumeAllFromDb()
             }
         }
         return super.onStartCommand(intent, flags, startId)
+    }
+
+    override fun onDestroy() {
+        // 取消所有下载协程：防止旧实例 scope 的"幽灵协程"在 Service 重建后继续写同一文件、
+        // 覆盖新实例对任务状态的控制（铁证：旧 scope 不 cancel，重建后 RUNNING 任务被覆盖成
+        // PAUSED 时旧线程仍在跑，状态错乱）。取消后未完成任务保持 RUNNING 落库，下次恢复续传。
+        scope.cancel()
+        super.onDestroy()
+    }
+
+    /**
+     * 从 Room 恢复全部任务并自动续传未完成任务（崩溃/Service 重建/管理页打开时调用）。
+     * resumeFromDb 返回需自动续传的任务 id；schedule 幂等（已调度的 id 直接跳过），
+     * 避免 onCreate 与 resumeAll 动作重复调度产生重复下载线程。
+     *
+     * 除了内存缺失任务（autoResume），还必须把【内存中 RUNNING/WAITING 但无活跃 job】的任务
+     * 一并重新调度：Service 重建时 onDestroy 已 scope.cancel() 取消所有下载协程，但任务状态
+     * 停在 RUNNING/WAITING 不消失；若仅按"内存已有→保留"逻辑，这些任务永远不再被调度，
+     * 表现为"正在下载的任务卡死 / 新增任务后原任务丢失"（铁证：用户实测新增任务后正在下载
+     * 的任务消失）。
+     */
+    @Synchronized
+    private fun resumeAllFromDb() {
+        val autoResume = DownloadState.resumeFromDb()
+        val activeIds = runJobs.keys.toSet()
+        val toSchedule = LinkedHashSet<Long>()
+        toSchedule.addAll(autoResume)
+        DownloadState.queryAllTaskStatus().forEach { task ->
+            if (task.id !in activeIds &&
+                (task.status == DownloadStatus.RUNNING || task.status == DownloadStatus.WAITING)
+            ) {
+                toSchedule.add(task.id)
+            }
+        }
+        toSchedule.forEach { id ->
+            val entity = appDb.downloadTaskDao.loadById(id) ?: return@forEach
+            val taskType = runCatching { DownloadTaskType.valueOf(entity.taskType) }
+                .getOrDefault(DownloadTaskType.DIRECT)
+            downloadInfos[id] = DownloadInfo(
+                entity.url, entity.fileName, taskType, parseHeaders(entity.headersJson)
+            )
+            DownloadState.updateTask(id, DownloadStatus.WAITING)
+            schedule(id)
+        }
     }
 
     @Synchronized
@@ -82,9 +203,16 @@ class DownloadService : BaseService() {
         url: String,
         rawFileName: String?,
         taskTypeStr: String?,
-        headersJson: String?
+        headersJson: String?,
+        autoStart: Boolean = true,
+        maxRetry: Int = MAX_AUTO_RETRY
     ) {
-        if (downloads.values.any { it.url == url }) {
+        // 防重复：同一 url 且未完成的任务已存在则提示
+        val exists = DownloadState.queryAllTaskStatus().any {
+            it.url == url && (it.status == DownloadStatus.RUNNING ||
+                it.status == DownloadStatus.WAITING || it.status == DownloadStatus.PAUSED)
+        }
+        if (exists) {
             toastOnUi(R.string.download_already_in_list)
             return
         }
@@ -92,116 +220,300 @@ class DownloadService : BaseService() {
             ?: if (url.contains(".m3u8", ignoreCase = true)) DownloadTaskType.HLS else DownloadTaskType.DIRECT
         val headers = parseHeaders(headersJson)
         val fileName = resolveFileName(rawFileName, url, taskType)
-        val id = idGenerator.getAndIncrement()
-        val notificationId = NotificationId.Download + downloads.size
-        DownloadState.addTask(id, url, fileName, taskType = taskType)
-        downloads[id] = DownloadInfo(url, fileName, notificationId, null, taskType)
-
-        val job = scope.launch {
-            DownloadState.updateTask(id, DownloadStatus.RUNNING)
-            try {
-                val localPath = when (taskType) {
-                    DownloadTaskType.HLS -> downloadHls(url, fileName, headers, id, notificationId)
-                    DownloadTaskType.DIRECT -> downloadDirect(url, fileName, headers, id, notificationId)
-                }
-                val size = runCatching { File(localPath).length().coerceAtMost(Int.MAX_VALUE.toLong()).toInt() }
-                    .getOrDefault(0)
-                downloads[id]?.let { downloads[id] = it.copy(localPath = localPath) }
-                DownloadState.updateTask(
-                    id, DownloadStatus.COMPLETED, progress = 100, totalSize = size, downloadedSize = size,
-                    localPath = localPath
-                )
-                upDownloadNotification(
-                    notificationId, "${fileName} ${getString(R.string.download_success)}",
-                    size, size, downloads[id]?.startTime ?: 0L
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                AppLog.put("下载失败 $fileName", e)
-                DownloadState.updateTask(id, DownloadStatus.FAILED)
-                upDownloadNotification(
-                    notificationId, "$fileName ${getString(R.string.download_error)}",
-                    1, 0, downloads[id]?.startTime ?: 0L
-                )
-                toastOnUi(getString(R.string.download_fail_tip))
-            } finally {
-                downloadJobs.remove(id)
-                downloads.remove(id)
-                // 仅当所有任务都结束（downloads 为空）时才停止服务；
-                // 否则一个任务失败时误停服务会把其他正在下载的任务一并中断。
-                if (downloads.isEmpty()) stopSelf()
-            }
+        // id 由 Room 主键生成：进程被杀后可恢复续传，且作为通知 id 稳定映射
+        val id = DownloadState.addTask(url, fileName, taskType = taskType, headersJson = headersJson)
+        downloadInfos[id] = DownloadInfo(
+            url, fileName, taskType, headers, maxRetry = maxRetry.coerceAtLeast(0)
+        )
+        // autoStart=false：仅入队持久化，不自动开始，供后续手动恢复
+        if (!autoStart) {
+            DownloadState.updateTask(id, DownloadStatus.PAUSED)
+            maybeStopSelf()
+            return
         }
-        downloadJobs[id] = job
+        schedule(id)
         toastOnUi(R.string.download_started)
     }
 
-    private suspend fun downloadDirect(
-        url: String,
-        fileName: String,
-        headers: Map<String, String>,
-        id: Long,
-        notificationId: Int
-    ): String {
-        val localFile = uniqueFile(resolveTargetDir(DownloadTaskType.DIRECT), fileName)
-        val ok = ChunkDownloader.downloadDirect(url, localFile, headers) { done, total ->
-            updateProgress(id, notificationId, fileName, done, total)
+    /** 入队调度：Semaphore 并发控制，超出上限则 waiting 排队 */
+    @Synchronized
+    private fun schedule(id: Long) {
+        if (runJobs[id]?.isActive == true) return
+        val job = scope.launch {
+            semaphore.withPermit {
+                runTask(id)
+            }
         }
-        if (!ok) throw IOException("直链下载失败")
-        return localFile.path
+        runJobs[id] = job
+        job.invokeOnCompletion {
+            synchronized(runJobs) { runJobs.remove(id) }
+            maybeStopSelf()
+        }
     }
 
-    private suspend fun downloadHls(
-        url: String,
-        fileName: String,
-        headers: Map<String, String>,
+    /** 单任务执行循环：网络策略等待 + 下载 + 退避重试 */
+    private suspend fun runTask(id: Long) {
+        val info = downloadInfos[id] ?: return
+        var attempt = 0
+        while (runJobs[id]?.isActive == true) {
+            // 存储权限门禁（FR-11 公有下载目录）：目标为公有目录但无对应版本写入权限 → 挂起并引导授权
+            // 避免无权限直接写导致任务失败，授权后自动继续
+            if (targetDirNeedsPermission() && !storageWriteGranted()) {
+                DownloadState.updateTask(id, DownloadStatus.PAUSED)
+                maybeWarnStoragePermission()
+                delay(3_000)
+                continue
+            }
+            // 网络策略（FR-9）：仅 WiFi 开启且当前非 WiFi → 挂起轮询，恢复 WiFi 自动继续
+            if (onlyWifiEnabled() && !isWifiNetwork()) {
+                DownloadState.updateTask(id, DownloadStatus.PAUSED)
+                delay(2_000)
+                continue
+            }
+            DownloadState.updateTask(id, DownloadStatus.RUNNING)
+            val attemptResult = try {
+                executeAttempt(id, info)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLog.put("下载执行异常 ${info.fileName}", e)
+                DownloadAttempt(success = false, error = DownloadError.IO)
+            }
+            if (attemptResult.success) {
+                handleSuccess(id, info, attemptResult.path ?: "", attemptResult.totalSize)
+                return
+            }
+            val error = attemptResult.error ?: DownloadError.NETWORK
+            // 永久性错误直接判失败，不重试
+            if (error == DownloadError.ENCRYPT || error == DownloadError.UNSUPPORTED) {
+                handleFail(id, info, error)
+                return
+            }
+            if (attempt >= info.maxRetry) {
+                handleFail(id, info, error)
+                return
+            }
+            attempt++
+            // 退避等待（指数），期间展示 WAITING，避免与 RUNNING/暂停混淆
+            DownloadState.updateTask(id, DownloadStatus.WAITING)
+            delay(BASE_RETRY_MS * (1L shl attempt))
+        }
+    }
+
+    private suspend fun executeAttempt(id: Long, info: DownloadInfo): DownloadAttempt {
+        val headers = info.headers
+        return when (info.taskType) {
+            DownloadTaskType.DIRECT -> executeDirect(id, info, headers)
+            DownloadTaskType.HLS -> executeHls(id, info, headers)
+        }
+    }
+
+    private suspend fun executeDirect(
         id: Long,
-        notificationId: Int
-    ): String {
-        val mp4Name = if (fileName.endsWith(".mp4", ignoreCase = true)) fileName else "$fileName.mp4"
+        info: DownloadInfo,
+        headers: Map<String, String>
+    ): DownloadAttempt {
+        val localFile = uniqueFile(resolveTargetDir(DownloadTaskType.DIRECT), info.fileName)
+        // 记录最终文件路径，供删除时清理临时分片
+        downloadInfos[id] = info.copy(localFile = localFile.path)
+        val result = ChunkDownloader.downloadDirect(info.url, localFile, headers) { done, total ->
+            updateProgress(id, info.fileName, done, total)
+        }
+        if (!result.ok) {
+            return DownloadAttempt(success = false, error = result.error ?: DownloadError.NETWORK)
+        }
+        val size = localFile.length()
+            .coerceAtMost(Int.MAX_VALUE.toLong())
+            .toInt()
+        // 完整性校验（FR-10）：直链下载成功但产物为空 → 判 INCOMPLETE 可重试
+        if (size <= 0) {
+            return DownloadAttempt(success = false, error = DownloadError.INCOMPLETE)
+        }
+        return DownloadAttempt(true, localFile.path, size)
+    }
+
+    private suspend fun executeHls(
+        id: Long,
+        info: DownloadInfo,
+        headers: Map<String, String>
+    ): DownloadAttempt {
+        val mp4Name = if (info.fileName.endsWith(".mp4", ignoreCase = true)) info.fileName
+        else "${info.fileName}.mp4"
         val mp4File = uniqueFile(resolveTargetDir(DownloadTaskType.HLS), mp4Name)
+        downloadInfos[id] = info.copy(localFile = mp4File.path)
         val tempDir = File(cacheDir, "video_download_$id")
-        val result = HlsDownloader.download(url, mp4File, tempDir, headers) { done, total ->
-            val pct = if (total > 0) (done * 100f / total).toInt() else 0
-            DownloadState.updateTask(
-                id, status = DownloadStatus.RUNNING, progress = pct,
-                totalSize = total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-                downloadedSize = done.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        var mergedTsPath: String? = null
+        val result = HlsDownloader.download(
+            info.url, mp4File, tempDir, headers,
+            onProgress = { done, total ->
+                val pct = if (total > 0) (done * 100f / total).toInt() else 0
+                DownloadState.updateTask(
+                    id, status = DownloadStatus.RUNNING, progress = pct,
+                    totalSize = total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                    downloadedSize = done.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                )
+            },
+            // 分片合并为完整 ts 后立即落库"完成"（产物先指向 ts），再尝试 mp4 转码增强。
+            // 即便转码触发 native 崩溃杀进程（Java 层捕获不住的场景），任务也已在完成列表且 ts 完整可播。
+            onMerged = { tsFile ->
+                val targetTs = uniqueFile(
+                    resolveTargetDir(DownloadTaskType.HLS),
+                    mp4File.nameWithoutExtension + ".ts"
+                )
+                tsFile.copyTo(targetTs, overwrite = true)
+                mergedTsPath = targetTs.path
+                val size = targetTs.length().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                DownloadState.updateTask(
+                    id, DownloadStatus.COMPLETED, progress = 100,
+                    totalSize = size, downloadedSize = size,
+                    localPath = targetTs.path
+                )
+                downloadInfos[id] = info.copy(localFile = targetTs.path)
+            }
+        )
+        return when (result) {
+            is HlsResult.Mp4 -> {
+                // mp4 转码成功：清理 onMerged 时落位的 ts 副本，避免目标目录残留重复文件
+                mergedTsPath?.let { runCatching { File(it).delete() } }
+                DownloadAttempt(
+                    true, mp4File.path,
+                    mp4File.length().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                )
+            }
+            is HlsResult.TsFallback -> {
+                // onMerged 已把 ts 落位目标目录并落库完成，这里直接复用；兜底自行复制
+                val targetTs = mergedTsPath ?: run {
+                    val ts = File(tempDir, mp4File.nameWithoutExtension + ".ts")
+                    val dst = uniqueFile(
+                        resolveTargetDir(DownloadTaskType.HLS),
+                        mp4File.nameWithoutExtension + ".ts"
+                    )
+                    ts.copyTo(dst, overwrite = true)
+                    dst.path
+                }
+                DownloadAttempt(
+                    true, targetTs,
+                    File(targetTs).length().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                )
+            }
+            is HlsResult.UnsupportedCrypto -> DownloadAttempt(
+                success = false, error = DownloadError.ENCRYPT
+            )
+            is HlsResult.Failed -> DownloadAttempt(
+                success = false, error = result.error ?: DownloadError.NETWORK
             )
         }
-        return when (result) {
-            is HlsResult.Mp4 -> mp4File.path
-            is HlsResult.TsFallback -> {
-                val ts = File(tempDir, mp4File.nameWithoutExtension + ".ts")
-                // 转换失败保留 ts，移动到目标目录
-                val targetTs = uniqueFile(resolveTargetDir(DownloadTaskType.HLS), mp4File.nameWithoutExtension + ".ts")
-                ts.copyTo(targetTs, overwrite = true)
-                targetTs.path
-            }
-            is HlsResult.UnsupportedCrypto -> {
-                tempDir.deleteRecursively()
-                throw IOException(getString(R.string.download_encrypt_unsupported))
-            }
-            HlsResult.Failed -> {
-                tempDir.deleteRecursively()
-                throw IOException(getString(R.string.download_hls_failed))
-            }
-        }
     }
 
-    private fun resolveTargetDir(taskType: DownloadTaskType): File {
-        // Android 11+ 写公有 Downloads 目录需要 MANAGE_EXTERNAL_STORAGE 特殊权限，
-        // 该权限无法用运行时对话框申请（只能跳系统设置页），无授权时写入会直接抛异常导致任务全部失败。
-        // 统一改写入 app 专属外部下载目录：scoped storage 下无需任何权限，保证下载必然成功。
-        val base = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
-        val dir = if (taskType == DownloadTaskType.HLS) File(base, "m3u8") else base
-        if (!dir.exists()) dir.mkdirs()
-        return dir
+    private fun handleSuccess(id: Long, info: DownloadInfo, localPath: String, size: Int) {
+        DownloadState.updateTask(
+            id, DownloadStatus.COMPLETED, progress = 100, totalSize = size,
+            downloadedSize = size, localPath = localPath
+        )
+        upDownloadNotification(
+            id, "${info.fileName} ${getString(R.string.download_success)}", size, size
+        )
+        maybeStopSelf()
+    }
+
+    private fun handleFail(id: Long, info: DownloadInfo, error: DownloadError) {
+        DownloadState.updateTask(id, DownloadStatus.FAILED, errorCode = error.name)
+        upDownloadNotification(
+            id, "${info.fileName} ${getString(R.string.download_error)}", 1, 0
+        )
+        toastOnUi(getString(R.string.download_fail_tip))
+        maybeStopSelf()
+    }
+
+    /** 暂停单任务：取消协程（Chunk/Hls 保留临时文件供续传），置 PAUSED */
+    @Synchronized
+    private fun pauseDownload(id: Long) {
+        runJobs.remove(id)?.cancel()
+        DownloadState.updateTask(id, DownloadStatus.PAUSED)
+        maybeStopSelf()
+    }
+
+    /** 恢复单任务：从持久化任务重新入队续传 */
+    @Synchronized
+    private fun resumeDownload(id: Long) {
+        val entity = appDb.downloadTaskDao.loadById(id) ?: return
+        val taskType = runCatching { DownloadTaskType.valueOf(entity.taskType) }
+            .getOrDefault(DownloadTaskType.DIRECT)
+        downloadInfos[id] = DownloadInfo(
+            entity.url, entity.fileName, taskType, parseHeaders(entity.headersJson)
+        )
+        DownloadState.updateTask(id, DownloadStatus.WAITING)
+        schedule(id)
     }
 
     @Synchronized
-    private fun updateProgress(id: Long, notificationId: Int, fileName: String, done: Long, total: Long) {
+    private fun removeDownload(downloadId: Long) {
+        runJobs.remove(downloadId)?.cancel()
+        downloadInfos.remove(downloadId)?.let { info ->
+            deleteLocalFiles(downloadId, info)
+        }
+        DownloadState.removeTask(downloadId)
+        notificationManager.cancel(downloadId.toInt())
+        maybeStopSelf()
+    }
+
+    /** 清理任务关联的本地产物：最终文件 + 分片临时文件 + HLS 分片目录 */
+    private fun deleteLocalFiles(downloadId: Long, info: DownloadInfo) {
+        val dir = resolveTargetDir(info.taskType)
+        // 最终文件（或带序号变体）及其 .partN 分片
+        if (info.localFile != null) {
+            val f = File(info.localFile)
+            f.delete()
+            if (info.taskType == DownloadTaskType.DIRECT) {
+                for (i in 0 until ChunkDownloader.DEFAULT_CHUNKS) {
+                    File("${info.localFile}.part$i").delete()
+                }
+            }
+        } else {
+            File(dir, info.fileName).delete()
+            for (i in 0 until ChunkDownloader.DEFAULT_CHUNKS) {
+                File(dir, "${info.fileName}.part$i").delete()
+            }
+        }
+        // HLS 分片/临时 ts 目录（按任务 id 命名）
+        File(cacheDir, "video_download_$downloadId").deleteRecursively()
+    }
+
+    @Synchronized
+    private fun maybeStopSelf() {
+        val hasRunning = runJobs.values.any { it.isActive } ||
+            DownloadState.queryAllTaskStatus().any {
+                it.status == DownloadStatus.RUNNING || it.status == DownloadStatus.WAITING
+            }
+        if (!hasRunning) stopSelf()
+    }
+
+    private fun onlyWifiEnabled(): Boolean = appCtx.getPrefString(KEY_ONLY_WIFI) == "1"
+
+    private fun isWifiNetwork(): Boolean {
+        val network = connectivityManager.activeNetwork ?: return false
+        val nc = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
+            nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+    }
+
+    private fun parseHeaders(json: String?): Map<String, String> {
+        if (json.isNullOrBlank()) return ChunkDownloader.resolveHeaders()
+        return runCatching {
+            val obj = JSONObject(json)
+            val map = mutableMapOf<String, String>()
+            val it = obj.keys()
+            while (it.hasNext()) {
+                val k = it.next()
+                map[k] = obj.optString(k)
+            }
+            map
+        }.getOrDefault(ChunkDownloader.resolveHeaders())
+    }
+
+    @Synchronized
+    private fun updateProgress(id: Long, fileName: String, done: Long, total: Long) {
         val totalI = total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         val doneI = done.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         val pct = if (totalI > 0) (doneI * 100f / totalI).toInt() else 0
@@ -211,23 +523,41 @@ class DownloadService : BaseService() {
         )
         // 通知进度节流：仅整 5% 更新，降低省电
         if (pct % 5 == 0 || doneI >= totalI && totalI > 0) {
-            upDownloadNotification(
-                notificationId, "${fileName} ${getString(R.string.downloading)}",
-                totalI, doneI, downloads[id]?.startTime ?: 0L
-            )
+            upDownloadNotification(id, "${fileName} ${getString(R.string.downloading)}", totalI, doneI)
         }
     }
 
-    @Synchronized
-    private fun removeDownload(downloadId: Long) {
-        downloadJobs.remove(downloadId)?.cancel()
-        downloads.remove(downloadId)?.let { info ->
-            val dir = resolveTargetDir(info.taskType)
-            File(dir, info.fileName).delete()
-            File(cacheDir, "video_download_$downloadId").deleteRecursively()
+    /** 目标根目录：用户配置优先，否则默认公有 Downloads/Legado（FR-11） */
+    private fun configuredTargetDir(): File = DownloadService.configuredTargetDir()
+
+    /** 目标目录是否落在公有存储区（需存储权限才能 File 写入） */
+    private fun targetDirNeedsPermission(): Boolean = DownloadService.targetDirNeedsPermission()
+
+    /** 分版本存储权限判定：Android 11+ 需 MANAGE_EXTERNAL_STORAGE；8-9 需 WRITE_EXTERNAL_STORAGE；Android 10 无 File 公有写能力 */
+    private fun storageWriteGranted(): Boolean = DownloadService.storageWriteGranted()
+
+    /** 无存储权限时按去重逻辑提示，引导用户在管理页授权 */
+    private var lastPermWarnTs = 0L
+    private fun maybeWarnStoragePermission() {
+        val now = System.currentTimeMillis()
+        if (now - lastPermWarnTs < 30_000) return
+        lastPermWarnTs = now
+        toastOnUi(getString(R.string.download_need_storage_permission))
+    }
+
+    private fun resolveTargetDir(taskType: DownloadTaskType): File {
+        // 默认内置私有目录时无需任何权限，保证下载必然成功（稳定性优先）；
+        // 仅当用户显式配置了公有路径且未授权时，回落到应用私有外部目录，避免写入失败。
+        val base = if (targetDirNeedsPermission() && !storageWriteGranted()) {
+            File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir, "Legado")
+        } else {
+            configuredTargetDir()
         }
-        DownloadState.removeTask(downloadId)
-        notificationManager.cancel(downloadId.toInt())
+        val dir = if (taskType == DownloadTaskType.HLS) File(base, "m3u8") else base
+        if (!dir.exists()) {
+            runCatching { dir.mkdirs() }
+        }
+        return dir
     }
 
     private fun openDownload(localPath: String, fileName: String?) {
@@ -269,20 +599,6 @@ class DownloadService : BaseService() {
         return f
     }
 
-    private fun parseHeaders(json: String?): Map<String, String> {
-        if (json.isNullOrBlank()) return ChunkDownloader.resolveHeaders()
-        return runCatching {
-            val obj = JSONObject(json)
-            val map = mutableMapOf<String, String>()
-            val it = obj.keys()
-            while (it.hasNext()) {
-                val k = it.next()
-                map[k] = obj.optString(k)
-            }
-            map
-        }.getOrDefault(ChunkDownloader.resolveHeaders())
-    }
-
     override fun startForegroundNotification() {
         val notification = NotificationCompat.Builder(this, AppConst.channelIdDownload)
             .setSmallIcon(R.drawable.ic_download)
@@ -294,13 +610,9 @@ class DownloadService : BaseService() {
         startForeground(NotificationId.DownloadService, notification)
     }
 
-    private fun upDownloadNotification(
-        notificationId: Int,
-        content: String,
-        max: Int,
-        progress: Int,
-        startTime: Long
-    ) {
+    /** 通知 id 与任务 id 稳定映射：notificationId = id.toInt() */
+    private fun upDownloadNotification(taskId: Long, content: String, max: Int, progress: Int) {
+        val notificationId = taskId.toInt()
         val builder = NotificationCompat.Builder(this, AppConst.channelIdDownload)
             .setSmallIcon(R.drawable.ic_download)
             .setSubText(getString(R.string.action_download))
@@ -308,36 +620,35 @@ class DownloadService : BaseService() {
             .setOnlyAlertOnce(true)
             .setContentIntent(
                 servicePendingIntent<DownloadService>(IntentAction.play, notificationId) {
-                    putExtra("downloadId", downloadJobIdFor(notificationId))
+                    putExtra("downloadId", taskId)
                 }
             )
             .setDeleteIntent(
                 servicePendingIntent<DownloadService>(IntentAction.stop, notificationId) {
-                    putExtra("downloadId", downloadJobIdFor(notificationId))
+                    putExtra("downloadId", taskId)
                 }
             )
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setGroup(groupKey)
-            .setWhen(startTime)
         if (max > 0 && progress < max) {
             builder.setProgress(max, progress, false)
         }
         notificationManager.notify(notificationId, builder.build())
     }
 
-    /** notificationId → 任务 id 反向映射（notificationId 不稳定复用，用 index 反查） */
-    private fun downloadJobIdFor(notificationId: Int): Long {
-        val offset = notificationId - NotificationId.Download
-        val ids = downloads.keys.toList()
-        return ids.getOrNull(offset) ?: 0L
-    }
+    private data class DownloadAttempt(
+        val success: Boolean,
+        val path: String? = null,
+        val totalSize: Int = 0,
+        val error: DownloadError? = null
+    )
 
     private data class DownloadInfo(
         val url: String,
         val fileName: String,
-        val notificationId: Int,
-        val localPath: String?,
         val taskType: DownloadTaskType,
-        val startTime: Long = System.currentTimeMillis()
+        val headers: Map<String, String> = emptyMap(),
+        val localFile: String? = null,
+        val maxRetry: Int = MAX_AUTO_RETRY
     )
 }
