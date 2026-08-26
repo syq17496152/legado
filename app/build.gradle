@@ -133,7 +133,11 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
         }
         debug {
-            // 测试包不套正式 release 签名，落回 AGP 默认 debug keystore（避免与发布签名耦合/混淆）
+            // 三包统一正式签名（铁律 2026-08-25）：debug 也套 myConfig，保证测试包/正式包/共存包签名一致，可互相覆盖安装
+            // ⚠️ 禁止删掉此行！否则测试包回落 Android Debug 签名，与历史已装的正式签名测试包签名不一致，覆盖安装报 INSTALL_FAILED_UPDATE_INCOMPATIBLE
+            if (storeFilePath != null) {
+                signingConfig signingConfigs.myConfig
+            }
             manifestPlaceholders.put("app_name", "@string/app_name")
 
             applicationIdSuffix '.debug'
