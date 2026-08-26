@@ -40,17 +40,7 @@
                     android:id="@+id/fl_discover_books"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:layout_marginStart="@dimen/bookshelf_tag_bar_margin_horizontal"
-                    android:layout_marginEnd="@dimen/bookshelf_tag_bar_margin_horizontal"
                     android:clipToPadding="false">
-
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/rv_discover_books"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:clipToPadding="false"
-                        android:paddingBottom="14dp"
-                        tools:listitem="@layout/item_search_waterfall" />
 
                     <androidx.compose.ui.platform.ComposeView
                         android:id="@+id/compose_discover_books"

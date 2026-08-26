@@ -6,13 +6,13 @@
     android:orientation="vertical">
 
     <!-- L-B10 缓存管理页：顶栏 Compose 化（GlassTopAppBar + 下载/分组/更多菜单 AppDropdownMenu），
-         列表 + 分组加载 View 内核保留（AD-20 内核桥接） -->
+         列表 Compose 化（CacheScreen 纯 Compose），View 列表与 CacheAdapter 全量退役 -->
     <androidx.compose.ui.platform.ComposeView
         android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
 
-    <androidx.recyclerview.widget.RecyclerView
+    <androidx.compose.ui.platform.ComposeView
         android:id="@+id/recycler_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

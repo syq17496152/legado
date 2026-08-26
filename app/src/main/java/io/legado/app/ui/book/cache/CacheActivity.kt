@@ -17,17 +17,15 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.textfield.TextInputLayout
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -61,7 +59,6 @@ import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.ACache
 import io.legado.app.utils.FileDoc
-import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.checkWrite
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.enableCustomExport
@@ -87,8 +84,7 @@ import kotlin.math.max
 /**
  * cache/download 缓存界面
  */
-class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>(),
-    CacheAdapter.CallBack {
+class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>() {
 
     override val binding by viewBinding(ActivityCacheBookBinding::inflate)
     override val viewModel by viewModels<CacheViewModel>()
@@ -96,11 +92,15 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
 
     private val exportBookPathKey = "exportBookPath"
     private val exportTypes = arrayListOf("txt", "epub")
-    private val layoutManager by lazy { LinearLayoutManager(this) }
-    private val adapter by lazy { CacheAdapter(this, this) }
     private var booksFlowJob: Job? = null
     private val groupList = mutableStateListOf<BookGroup>()
     private var groupId: Long = -1
+
+    // 列表数据源与局部刷新 tick：书籍列表用 SnapshotStateList，事件驱动局部更新按 bookUrl bump tick
+    private val booksCache = mutableStateListOf<Book>()
+    private val refreshTicks = mutableStateMapOf<String, Long>()
+    // 导出目录选择回调待导出的书籍：单本=该书籍，全部导出=null
+    private var pendingExportBook: Book? = null
 
     // L-B10 顶栏 Compose 状态
     private var composeTitle by mutableStateOf("")
@@ -130,9 +130,9 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             return@registerForActivityResult
         }
         if (enableCustomExport()) {// 启用自定义导出 and 导出类型为Epub
-            configExportSection(dirPath, result.requestCode)
+            pendingExportBook?.let { configExportSection(dirPath, it) }
         } else {
-            startExport(dirPath, result.requestCode)
+            startExport(dirPath, pendingExportBook)
         }
     }
 
@@ -146,7 +146,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             }
         }
         initComposeTopBar()
-        initRecyclerView()
+        initComposeList()
         initGroupData()
         initBookData()
     }
@@ -220,7 +220,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                 else getString(R.string.menu_download_after),
                 onClick = {
                     if (!downloadRunning) sureCacheBook {
-                        adapter.getItems().forEach { book ->
+                        booksCache.forEach { book ->
                             CacheBook.start(
                                 this@CacheActivity,
                                 book,
@@ -238,7 +238,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                 getString(R.string.menu_download_all),
                 onClick = {
                     if (!downloadRunning) sureCacheBook {
-                        adapter.getItems().forEach { book ->
+                        booksCache.forEach { book ->
                             CacheBook.start(
                                 this@CacheActivity,
                                 book,
@@ -316,7 +316,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                 checked = AppConfig.parallelExportBook,
                 onClick = { AppConfig.parallelExportBook = !AppConfig.parallelExportBook }
             ),
-            MenuAction(Icons.Filled.Folder, getString(R.string.export_folder), onClick = { selectExportFolder(-1) }),
+            MenuAction(Icons.Filled.Folder, getString(R.string.export_folder), onClick = { selectExportFolder() }),
             MenuAction(Icons.Filled.List, getString(R.string.export_file_name), onClick = { alertExportFileName() }),
             MenuAction(
                 Icons.Filled.List,
@@ -339,10 +339,26 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         )
     }
 
-    private fun initRecyclerView() {
-        binding.recyclerView.layoutManager = layoutManager
-        binding.recyclerView.adapter = adapter
-        binding.recyclerView.applyNavigationBarPadding()
+    private fun initComposeList() {
+        binding.recyclerView.setContent {
+            LegadoTheme {
+                CacheScreen(
+                    books = booksCache,
+                    refreshTickOf = { refreshTicks[it] ?: 0L },
+                    cacheChaptersOf = { viewModel.cacheChapters[it] },
+                    exportMsgOf = { ExportBookService.exportMsg[it] },
+                    exportProgressOf = { ExportBookService.exportProgress[it] },
+                    onDownloadToggle = {
+                        if (CacheBook.cacheBookMap[it.bookUrl]?.isStop() == false) {
+                            CacheBook.remove(this, it.bookUrl)
+                        } else {
+                            CacheBook.start(this, it, 0, it.lastChapterIndex)
+                        }
+                    },
+                    onExport = { export(it) }
+                )
+            }
+        }
     }
 
     private fun initBookData() {
@@ -370,13 +386,13 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             ).catch {
                 AppLog.put("缓存管理界面获取书籍列表失败\n${it.localizedMessage}", it)
             }.flowOn(IO).conflate().collect { books ->
-                adapter.setItems(books)
+                booksCache.clear()
+                booksCache.addAll(books)
                 viewModel.loadCacheFiles(books)
             }
         }
     }
 
-    @SuppressLint("NotifyDataSetChanged")
     private fun initGroupData() {
         lifecycleScope.launch {
             appDb.bookGroupDao.flowAll().catch {
@@ -384,20 +400,13 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             }.flowOn(IO).conflate().collect {
                 groupList.clear()
                 groupList.addAll(it)
-                adapter.notifyDataSetChanged()
             }
         }
     }
 
     private fun notifyItemChanged(bookUrl: String) {
-        kotlin.runCatching {
-            adapter.getItems().forEachIndexed { index, book ->
-                if (bookUrl == book.bookUrl) {
-                    adapter.notifyItemChanged(index, true)
-                    return
-                }
-            }
-        }
+        // 按 bookUrl bump 局部刷新 tick，触发对应 Compose item 重组读取最新进度
+        refreshTicks[bookUrl] = (refreshTicks[bookUrl] ?: 0L) + 1L
     }
 
     override fun observeLiveBus() {
@@ -419,27 +428,29 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         }
     }
 
-    override fun export(position: Int) {
+    private fun export(book: Book) {
+        pendingExportBook = book
         val path = ACache.get().getAsString(exportBookPathKey)
         lifecycleScope.launch {
             if (path.isNullOrEmpty() ||
                 withContext(IO) { !FileDoc.fromDir(path).checkWrite() }
             ) {
-                selectExportFolder(position)
+                selectExportFolder()
             } else if (enableCustomExport()) {// 启用自定义导出 and 导出类型为Epub
-                configExportSection(path, position)
+                configExportSection(path, book)
             } else {
-                startExport(path, position)
+                startExport(path, book)
             }
         }
     }
 
     private fun exportAll() {
+        pendingExportBook = null
         val path = ACache.get().getAsString(exportBookPathKey)
         if (path.isNullOrEmpty()) {
-            selectExportFolder(-10)
+            selectExportFolder()
         } else {
-            startExport(path, -10)
+            startExport(path, null)
         }
     }
 
@@ -447,11 +458,11 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
      * 配置自定义导出对话框
      *
      * @param path  导出路径
-     * @param position  book位置
+     * @param book  待导出的书籍
      * @author Discut
      * @since 1.0.0
      */
-    private fun configExportSection(path: String, position: Int) {
+    private fun configExportSection(path: String, book: Book) {
 
         val alertBinding = DialogSelectSectionExportBinding.inflate(layoutInflater)
             .apply {
@@ -463,7 +474,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                 fun enableLyEtEpubFilenameIcon() {
                     lyEtEpubFilename.endIconMode = TextInputLayout.END_ICON_CUSTOM
                     lyEtEpubFilename.setEndIconOnClickListener {
-                        adapter.getItem(position)?.run {
+                        book.run {
                             lyEtEpubFilename.helperText =
                                 if (verifyExportFileNameJsStr(etEpubFilename.text.toString()))
                                     "${resources.getString(R.string.result_analyzed)}: ${
@@ -474,9 +485,6 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                                         )
                                     }"
                                 else "Error"
-                        } ?: run {
-                            lyEtEpubFilename.helperText = "Error"
-                            AppLog.put("未找到书籍，position is $position")
                         }
                     }
                 }
@@ -540,7 +548,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         alertDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             alertBinding.apply {
                 if (cbAllExport.isChecked) {
-                    startExport(path, position)
+                    startExport(path, book)
                     alertDialog.hide()
                     return@apply
                 }
@@ -551,15 +559,13 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                 }
                 etInputScope.error = null
                 val epubSize = etEpubSize.text.toString().toIntOrNull() ?: 1
-                adapter.getItem(position)?.let { book ->
-                    startService<ExportBookService> {
-                        action = IntentAction.start
-                        putExtra("bookUrl", book.bookUrl)
-                        putExtra("exportType", "epub")
-                        putExtra("exportPath", path)
-                        putExtra("epubSize", epubSize)
-                        putExtra("epubScope", epubScope)
-                    }
+                startService<ExportBookService> {
+                    action = IntentAction.start
+                    putExtra("bookUrl", book.bookUrl)
+                    putExtra("exportType", "epub")
+                    putExtra("exportPath", path)
+                    putExtra("epubSize", epubSize)
+                    putExtra("epubScope", epubScope)
                 }
                 alertDialog.hide()
             }
@@ -567,7 +573,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         }
     }
 
-    private fun selectExportFolder(exportPosition: Int) {
+    private fun selectExportFolder() {
         val default = arrayListOf<SelectItem<Int>>()
         val path = ACache.get().getAsString(exportBookPathKey)
         if (!path.isNullOrEmpty()) {
@@ -575,21 +581,21 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         }
         exportDir.launch {
             otherActions = default
-            requestCode = exportPosition
         }
     }
 
-    private fun startExport(path: String, exportPosition: Int) {
+    private fun startExport(path: String, book: Book?) {
         val exportType = when (AppConfig.exportType) {
             1 -> "epub"
             else -> "txt"
         }
-        if (exportPosition == -10) {
-            if (adapter.getItems().isNotEmpty()) {
-                adapter.getItems().forEach { book ->
+        if (book == null) {
+            // 全部导出
+            if (booksCache.isNotEmpty()) {
+                booksCache.forEach { item ->
                     startService<ExportBookService> {
                         action = IntentAction.start
-                        putExtra("bookUrl", book.bookUrl)
+                        putExtra("bookUrl", item.bookUrl)
                         putExtra("exportType", exportType)
                         putExtra("exportPath", path)
                     }
@@ -597,14 +603,12 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             } else {
                 toastOnUi(R.string.no_book)
             }
-        } else if (exportPosition >= 0) {
-            adapter.getItem(exportPosition)?.let { book ->
-                startService<ExportBookService> {
-                    action = IntentAction.start
-                    putExtra("bookUrl", book.bookUrl)
-                    putExtra("exportType", exportType)
-                    putExtra("exportPath", path)
-                }
+        } else {
+            startService<ExportBookService> {
+                action = IntentAction.start
+                putExtra("bookUrl", book.bookUrl)
+                putExtra("exportType", exportType)
+                putExtra("exportPath", path)
             }
         }
     }
@@ -700,12 +704,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                 }
             }
         }
-    }    override val cacheChapters: HashMap<String, HashSet<String>>
-        get() = viewModel.cacheChapters
-
-    override fun exportProgress(bookUrl: String): Int? {
-        return ExportBookService.exportProgress[bookUrl]
-    }
+    } 
 
     /**
      * B12 缓存并发率设置对话框
@@ -740,10 +739,6 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             }
             alertDialog.hide()
         }
-    }
-
-    override fun exportMsg(bookUrl: String): String? {
-        return ExportBookService.exportMsg[bookUrl]
     }
 
 }

@@ -2,6 +2,7 @@ package io.legado.app.ui.main.explore
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,10 +19,16 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import androidx.compose.foundation.lazy.staggeredgrid.items as staggeredItems
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items as lazyColumnItems
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -37,7 +44,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,6 +56,7 @@ import androidx.lifecycle.Lifecycle
 import io.legado.app.R
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.help.config.AppConfig
+import io.legado.app.ui.book.explore.exploreListIntro
 import io.legado.app.ui.main.bookshelf.compose.BookListCardSurface
 import io.legado.app.ui.main.bookshelf.compose.BookshelfListItemStyle
 import io.legado.app.ui.main.bookshelf.compose.BookshelfListRenderConfig
@@ -77,6 +87,23 @@ fun ExploreModernListScreen(
 ) {
     if (layoutMode == 3) {
         ExploreModernGridScreen(
+            books = books,
+            topPaddingPx = topPaddingPx,
+            scrollToTopSignal = scrollToTopSignal,
+            isLoading = isLoading,
+            hasMore = hasMore,
+            isInBookshelf = isInBookshelf,
+            onBookClick = onBookClick,
+            onLoadMore = onLoadMore,
+            onCanScrollBackwardChanged = onCanScrollBackwardChanged,
+            fragment = fragment,
+            lifecycle = lifecycle,
+            modifier = modifier
+        )
+        return
+    }
+    if (layoutMode == 2) {
+        ExploreModernWaterfallScreen(
             books = books,
             topPaddingPx = topPaddingPx,
             scrollToTopSignal = scrollToTopSignal,
@@ -309,6 +336,198 @@ private fun ExploreModernGridScreen(
             },
             modifier = Modifier.fillMaxSize()
         )
+    }
+}
+
+@Composable
+private fun ExploreModernWaterfallScreen(
+    books: List<SearchBook>,
+    topPaddingPx: Int,
+    scrollToTopSignal: Int,
+    isLoading: Boolean,
+    hasMore: Boolean,
+    isInBookshelf: (SearchBook) -> Boolean,
+    onBookClick: (SearchBook) -> Unit,
+    onLoadMore: () -> Unit,
+    onCanScrollBackwardChanged: (Boolean) -> Unit,
+    fragment: Fragment,
+    lifecycle: Lifecycle,
+    modifier: Modifier = Modifier
+) {
+    val gridState = rememberLazyStaggeredGridState()
+    val topPadding = with(LocalDensity.current) { topPaddingPx.toDp() }
+    val shouldLoadMore by remember(books, hasMore, isLoading) {
+        derivedStateOf {
+            val lastVisible = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            books.isNotEmpty() && hasMore && !isLoading && lastVisible >= books.lastIndex - 4
+        }
+    }
+    val canScrollBackward by remember {
+        derivedStateOf {
+            gridState.firstVisibleItemIndex > 0 ||
+                    gridState.firstVisibleItemScrollOffset > 0
+        }
+    }
+    val renderConfig = rememberBookshelfListRenderConfig()
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) onLoadMore()
+    }
+    LaunchedEffect(canScrollBackward) {
+        onCanScrollBackwardChanged(canScrollBackward)
+    }
+    LaunchedEffect(scrollToTopSignal) {
+        if (scrollToTopSignal > 0) {
+            if (AppConfig.isEInkMode) {
+                gridState.scrollToItem(0)
+            } else {
+                gridState.animateScrollToItem(0)
+            }
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(top = topPadding)
+            .clipToBounds()
+    ) {
+        LazyVerticalStaggeredGrid(
+            columns = StaggeredGridCells.Fixed(2),
+            state = gridState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 8.dp,
+                top = 8.dp,
+                end = 8.dp,
+                bottom = 86.dp
+            ),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalItemSpacing = 10.dp
+        ) {
+            staggeredItems(
+                items = books,
+                key = { book -> "${book.origin}|${book.bookUrl}" },
+                contentType = { "discover_waterfall_book" }
+            ) { book ->
+                ExploreWaterfallBookItem(
+                    book = book,
+                    inBookshelf = isInBookshelf(book),
+                    renderConfig = renderConfig,
+                    fragment = fragment,
+                    lifecycle = lifecycle,
+                    onClick = onBookClick
+                )
+            }
+            if (isLoading && books.isNotEmpty()) {
+                item(
+                    key = "discover_waterfall_loading_footer",
+                    span = StaggeredGridItemSpan.FullLine
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 18.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = renderConfig.palette.accent
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExploreWaterfallBookItem(
+    book: SearchBook,
+    inBookshelf: Boolean,
+    renderConfig: BookshelfListRenderConfig,
+    fragment: Fragment,
+    lifecycle: Lifecycle,
+    onClick: (SearchBook) -> Unit
+) {
+    val palette = renderConfig.palette
+    val context = LocalContext.current
+    val coverRatio = context.resources.getInteger(R.integer.waterfall_cover_height_ratio_x100)
+    val intro = remember(book.bookUrl, book.intro) { book.exploreListIntro(context) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(palette.panelRadius))
+            .background(Color(palette.rowColor))
+            .padding(8.dp)
+            .clickable { onClick(book) }
+    ) {
+        Box {
+            BookCoverImage(
+                book = book,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(100f / coverRatio),
+                style = CoverImageView.CoverStyle.GRID,
+                loadOnlyWifi = AppConfig.loadCoverOnlyWifi,
+                fragment = fragment,
+                lifecycle = lifecycle,
+                preferThumb = true,
+                fillBounds = true
+            )
+            if (inBookshelf) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(5.dp)
+                        .clip(CircleShape)
+                        .background(palette.accent)
+                        .size(10.dp)
+                )
+            }
+        }
+        Text(
+            text = book.name,
+            color = palette.primaryText,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = palette.titleFontFamily,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        if (!book.author.isNullOrBlank()) {
+            Text(
+                text = book.author,
+                color = palette.secondaryText,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 5.dp)
+            )
+        }
+        val latestChapter = book.latestChapterTitle
+        if (!latestChapter.isNullOrEmpty()) {
+            Text(
+                text = latestChapter,
+                color = palette.secondaryText,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 5.dp)
+            )
+        }
+        if (intro.isNotBlank()) {
+            Text(
+                text = intro,
+                color = palette.primaryText,
+                fontSize = 12.sp,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 7.dp)
+            )
+        }
     }
 }
 

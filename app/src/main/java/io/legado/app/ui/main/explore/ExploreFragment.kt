@@ -34,7 +34,6 @@ import androidx.appcompat.widget.SearchView
 import androidx.appcompat.widget.AppCompatSpinner
 import androidx.core.widget.NestedScrollView
 import com.google.android.flexbox.FlexboxLayout
-import androidx.core.os.bundleOf
 import androidx.core.view.doOnLayout
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
@@ -42,7 +41,6 @@ import com.bumptech.glide.Glide
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -51,7 +49,6 @@ import com.bumptech.glide.load.DecodeFormat
 import com.bumptech.glide.request.RequestOptions
 import com.script.rhino.runScriptWithContext
 import io.legado.app.R
-import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.base.VMBaseFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
@@ -91,7 +88,6 @@ import io.legado.app.lib.theme.UiCorner
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.ui.book.explore.ExploreShowActivity
 import io.legado.app.ui.book.explore.ExploreShowBookCallback
-import io.legado.app.ui.book.explore.ExploreShowWaterfallAdapter
 import io.legado.app.ui.book.SearchBookOpenHelper
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
@@ -172,8 +168,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     private val binding by viewBinding(FragmentExploreBinding::bind)
     private val adapter by lazy { ExploreAdapter(requireContext(), this) }
     private val linearLayoutManager by lazy { LinearLayoutManager(context) }
-    private var discoverBookAdapter: RecyclerAdapter<SearchBook, *>? = null
-    private var discoverBookLayoutMode = 0
     private val searchView: SearchView? by lazy {
         binding.titleBar.findViewById<SearchView?>(R.id.search_view)
     }
@@ -283,8 +277,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         }
         binding.rvFind.clipToPadding = false
         binding.rvFind.applyMainBottomBarPadding()
-        binding.rvDiscoverBooks.clipToPadding = false
-        binding.rvDiscoverBooks.applyMainBottomBarPadding(withInitialPadding = true)
         binding.composeDiscoverBooks.setViewCompositionStrategy(
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
@@ -402,10 +394,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         if (usingSuiteDiscovery && binding.composeDiscoverySuite.isVisible) {
             return if (composeSuiteCanScrollBackward) binding.composeDiscoverySuite else null
         }
-        return when {
-            usingModernDiscovery -> binding.rvDiscoverBooks
-            else -> binding.rvFind
-        }
+        return binding.rvFind
     }
 
     private fun scheduleDiscoveryWarmup() {
@@ -1700,15 +1689,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             updateModernTopBarOverlay()
         }
         applyDiscoverBookLayout(force = true)
-        binding.rvDiscoverBooks.setEdgeEffectColor(primaryColor)
-        binding.rvDiscoverBooks.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                super.onScrolled(recyclerView, dx, dy)
-                if (dy > 0 && !recyclerView.canScrollVertically(1)) {
-                    loadDiscoverBooks(reset = false)
-                }
-            }
-        })
         updateModernTopBarOverlay()
     }
 
@@ -1726,13 +1706,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                 binding.composeDiscoverBooks.paddingRight,
                 binding.composeDiscoverBooks.paddingBottom
             )
-            binding.rvDiscoverBooks.clipToPadding = true
-            binding.rvDiscoverBooks.setPadding(
-                binding.rvDiscoverBooks.paddingLeft,
-                topSpace,
-                binding.rvDiscoverBooks.paddingRight,
-                binding.rvDiscoverBooks.paddingBottom
-            )
             binding.swipeRefreshLayout.setProgressViewOffset(
                 true,
                 (topSpace - 28.dpToPx()).coerceAtLeast(0),
@@ -1744,39 +1717,10 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     }
 
     private fun applyDiscoverBookLayout(force: Boolean = false) {
-        val layoutMode = AppConfig.discoveryPageLayout
-        composeDiscoverLayoutMode.intValue = layoutMode
+        composeDiscoverLayoutMode.intValue = AppConfig.discoveryPageLayout
         composeDiscoverListStyle.intValue = AppConfig.bookshelfListItemStyle
-        val useComposeList = layoutMode != 2
-        binding.composeDiscoverBooks.isVisible = useComposeList
-        binding.rvDiscoverBooks.isGone = useComposeList
-        applyDiscoverBookContainerMargins(useComposeList)
-        if (useComposeList) {
-            discoverBookLayoutMode = layoutMode
-            discoverBookAdapter = null
-            binding.rvDiscoverBooks.adapter = null
-            syncDiscoverComposeState()
-            return
-        }
-        if (!force && discoverBookLayoutMode == layoutMode && discoverBookAdapter != null) return
-        discoverBookLayoutMode = layoutMode
-        binding.rvDiscoverBooks.layoutManager =
-            StaggeredGridLayoutManager(2, StaggeredGridLayoutManager.VERTICAL)
-        discoverBookAdapter = ExploreShowWaterfallAdapter(requireContext(), this, 2).also { adapter ->
-            binding.rvDiscoverBooks.adapter = adapter
-            if (discoverBooks.isNotEmpty()) {
-                adapter.setItems(discoverBooks.toList())
-            }
-        }
-    }
-
-    private fun applyDiscoverBookContainerMargins(useComposeList: Boolean) {
-        val margin = if (useComposeList) 0 else resources.getDimensionPixelSize(R.dimen.bookshelf_tag_bar_margin_horizontal)
-        val params = binding.flDiscoverBooks.layoutParams as? ViewGroup.MarginLayoutParams ?: return
-        if (params.marginStart == margin && params.marginEnd == margin) return
-        params.marginStart = margin
-        params.marginEnd = margin
-        binding.flDiscoverBooks.layoutParams = params
+        binding.composeDiscoverBooks.isVisible = true
+        syncDiscoverComposeState(forceBooks = force)
     }
 
     private fun syncDiscoverComposeState(forceBooks: Boolean = false) {
@@ -1833,7 +1777,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             } else if (clearOnMiss) {
                 discoverBooks.clear()
                 syncDiscoverComposeState(forceBooks = true)
-                discoverBookAdapter?.clearItems()
             }
         }
     }
@@ -1844,7 +1787,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         discoverPage = cache.nextPage.coerceAtLeast(2)
         discoverHasMore = cache.hasMore
         syncDiscoverComposeState(forceBooks = true)
-        discoverBookAdapter?.setItems(discoverBooks.toList())
         binding.tvDiscoverEmpty.gone()
     }
 
@@ -2126,14 +2068,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                             discoverBookshelf.add(it.bookUrl)
                         }
                     composeDiscoverBookshelfVersion.intValue += 1
-                    val bookAdapter = discoverBookAdapter
-                    if ((bookAdapter?.itemCount ?: 0) > 0) {
-                        bookAdapter?.notifyItemRangeChanged(
-                            0,
-                            bookAdapter.itemCount,
-                            bundleOf("isInBookshelf" to null)
-                        )
-                    }
                 }
         }
     }
@@ -2770,7 +2704,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         discoverCurrentUrl = AppConfig.modernDiscoveryTagUrl(source.bookSourceUrl)
         discoverBooks.clear()
         syncDiscoverComposeState()
-        discoverBookAdapter?.clearItems()
         restoreModernDiscoverCacheAsync(
             sourceUrl = source.bookSourceUrl,
             tagUrl = discoverCurrentUrl,
@@ -3427,7 +3360,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         discoverPage = 1
         discoverBooks.clear()
         syncDiscoverComposeState()
-        discoverBookAdapter?.clearItems()
         binding.tvDiscoverEmpty.text = message
         binding.tvDiscoverEmpty.visible()
     }
@@ -3464,7 +3396,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                 } else {
                     discoverBooks.clear()
                     syncDiscoverComposeState(forceBooks = true)
-                    discoverBookAdapter?.clearItems()
                 }
                 binding.tvDiscoverEmpty.gone()
             }
@@ -3506,7 +3437,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                         discoverHasMore = false
                     }
                     syncDiscoverComposeState()
-                    discoverBookAdapter?.setItems(discoverBooks.toList())
                     binding.tvDiscoverEmpty.gone()
                     saveModernDiscoverCacheAsync(
                         sourceUrl = sourceUrl,
@@ -3801,17 +3731,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
 
     fun compressExplore() {
         if (usingModernDiscovery) {
-            if (binding.composeDiscoverBooks.isVisible) {
-                composeDiscoverScrollToTopSignal.intValue++
-                return
-            }
-            if (binding.rvDiscoverBooks.canScrollVertically(-1)) {
-                if (AppConfig.isEInkMode) {
-                    binding.rvDiscoverBooks.scrollToPosition(0)
-                } else {
-                    binding.rvDiscoverBooks.smoothScrollToPosition(0)
-                }
-            }
+            composeDiscoverScrollToTopSignal.intValue++
             return
         }
         if (usingSuiteDiscovery) {
