@@ -10,10 +10,10 @@ import io.legado.app.base.BaseActivity
 import io.legado.app.data.appDb
 import io.legado.app.databinding.ActivityUrlRecordBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.compose.ComposeConfirmDialog
 import io.legado.app.utils.sendToClip
+import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.first
@@ -104,55 +104,63 @@ class UrlRecordActivity : BaseActivity<ActivityUrlRecordBinding>() {
     )
 
     private fun showFilterDialog() {
-        selector(
-            getString(R.string.url_record_filter),
-            listOf(
-                getString(R.string.url_record_filter_domain),
-                getString(R.string.url_record_filter_source),
-                getString(R.string.url_record_filter_method),
-                getString(R.string.url_record_filter_status),
-                getString(R.string.clear_filter)
-            )
-        ) { _, which ->
-            when (which) {
-                0 -> lifecycleScope.launch {
-                    val domains = withContext(IO) { appDb.urlRecordDao.flowAllDomains().first() }
-                    selector(getString(R.string.url_record_filter_domain), domains) { _, i ->
-                        filterDomain = domains[i]; loadData()
-                    }
-                }
-
-                1 -> lifecycleScope.launch {
-                    val sources = withContext(IO) { appDb.urlRecordDao.flowAllSourceNames().first() }
-                    selector(getString(R.string.url_record_filter_source), sources) { _, i ->
-                        filterSourceName = sources[i]; loadData()
-                    }
-                }
-
-                2 -> lifecycleScope.launch {
-                    val methods = withContext(IO) { appDb.urlRecordDao.flowAllMethods().first() }
-                    selector(getString(R.string.url_record_filter_method), methods) { _, i ->
-                        filterMethod = methods[i]; loadData()
-                    }
-                }
-
-                3 -> selector(
+        showDialogFragment(
+            UrlRecordFilterSheet.create(
+                title = getString(R.string.url_record_filter),
+                categories = listOf(
+                    getString(R.string.url_record_filter_domain),
+                    getString(R.string.url_record_filter_source),
+                    getString(R.string.url_record_filter_method),
                     getString(R.string.url_record_filter_status),
-                    listOf(getString(R.string.filter_success), getString(R.string.filter_failed))
-                ) { _, i ->
-                    filterSuccess = i == 0
-                    loadData()
-                }
-
-                4 -> {
+                    getString(R.string.clear_filter)
+                ),
+                clearIndex = 4,
+                onCategorySelected = { index, emit ->
+                    lifecycleScope.launch {
+                        val values = withContext(IO) {
+                            when (index) {
+                                0 -> appDb.urlRecordDao.flowAllDomains().first()
+                                1 -> appDb.urlRecordDao.flowAllSourceNames().first()
+                                2 -> appDb.urlRecordDao.flowAllMethods().first()
+                                3 -> listOf(
+                                    getString(R.string.filter_success),
+                                    getString(R.string.filter_failed)
+                                )
+                                else -> emptyList()
+                            }
+                        }
+                        emit(values)
+                    }
+                },
+                onValueSelected = { index, value ->
+                    when (index) {
+                        0 -> {
+                            filterDomain = value
+                            loadData()
+                        }
+                        1 -> {
+                            filterSourceName = value
+                            loadData()
+                        }
+                        2 -> {
+                            filterMethod = value
+                            loadData()
+                        }
+                        3 -> {
+                            filterSuccess = value == getString(R.string.filter_success)
+                            loadData()
+                        }
+                    }
+                },
+                onClearFilter = {
                     filterDomain = null
                     filterSourceName = null
                     filterMethod = null
                     filterSuccess = null
                     loadData()
                 }
-            }
-        }
+            )
+        )
     }
 
     private fun clearOldRecords(days: Int) {
@@ -172,9 +180,10 @@ class UrlRecordActivity : BaseActivity<ActivityUrlRecordBinding>() {
 
     private fun showDetailDialog(item: UrlRecordDisplayItem) {
         val domainText = item.domain.ifBlank { "—" }
-        alert(R.string.url_record_detail) {
-            setMessage(
-                getString(
+        showDialogFragment(
+            ComposeConfirmDialog.create(
+                title = getString(R.string.url_record_detail),
+                message = getString(
                     R.string.url_record_detail_message,
                     item.method,
                     if (item.errorMsg.isNullOrBlank()) "${item.responseCode}" else item.errorMsg!!,
@@ -183,12 +192,13 @@ class UrlRecordActivity : BaseActivity<ActivityUrlRecordBinding>() {
                     domainText,
                     item.url,
                     item.sourceName ?: "—"
-                )
+                ),
+                positiveText = getString(R.string.copy_url),
+                negativeText = getString(R.string.cancel),
+                onPositive = {
+                    sendToClip(item.url)
+                }
             )
-            positiveButton(R.string.copy_url) {
-                sendToClip(item.url)
-            }
-            negativeButton(R.string.cancel)
-        }
+        )
     }
 }
