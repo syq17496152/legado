@@ -717,11 +717,12 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             key = key,
             cacheName = "套件发现缓存"
         ) ?: return null
-        val snapshot = GSON.fromJsonObject<DiscoverySuitePageSnapshot>(raw)
-            .getOrNull()
-            ?.takeIf { it.suiteId == suiteId && it.signature == signature }
-            ?.compactForCache()
-            ?.takeIf { it.hasBooks() }
+        val snapshot = kotlin.runCatching {
+            // 同 readModernDiscoverCache 铁证：绕 reified TypeToken + runCatching 兜底 CCE
+            GSON.fromJson(raw, DiscoverySuitePageSnapshot::class.java)
+                ?.takeIf { it.suiteId == suiteId && it.signature == signature }
+                ?.compactForCache()
+        }.getOrNull()?.takeIf { it.hasBooks() }
         if (snapshot == null) {
             appDb.cacheDao.deleteIfValueMatches(key, raw)
             AppLog.put("套件发现缓存内容无效，已清理并重新加载")
@@ -1796,14 +1797,18 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             key = key,
             cacheName = "发现页面缓存"
         ) ?: return null
-        val cache = GSON.fromJsonObject<ModernDiscoverResultCache>(raw)
-            .getOrNull()
-            ?.takeIf { it.sourceUrl == sourceUrl && it.tagUrl == tagUrl }
-            ?.takeIf { it.books.isNotEmpty() }
-            ?.let { parsed ->
-                parsed.copy(books = parsed.books.mapNotNull(DiscoveryCachePolicy::compact))
-            }
-            ?.takeIf { it.books.isNotEmpty() }
+        val cache = kotlin.runCatching {
+            // 铁证 2026-08-29：reified TypeToken 在 R8 minify 下字段泛型可能失效（books 元素退化为
+            // LinkedTreeMap），真机读旧缓存必崩。改用 Class 字面量传 Type 绕开，并对 books 元素
+            // filterIsInstance 防御（instanceof 判断不触发 checkcast，脏元素直接丢弃→清缓存自愈）。
+            val parsed = GSON.fromJson(raw, ModernDiscoverResultCache::class.java)
+                ?.takeIf { it.sourceUrl == sourceUrl && it.tagUrl == tagUrl }
+                ?: return@runCatching null
+            parsed.copy(
+                books = parsed.books.filterIsInstance<SearchBook>()
+                    .mapNotNull(DiscoveryCachePolicy::compact)
+            )
+        }.getOrNull()?.takeIf { it.books.isNotEmpty() }
         if (cache == null) {
             appDb.cacheDao.deleteIfValueMatches(key, raw)
             AppLog.put("发现页面缓存内容无效，已清理并重新加载")
