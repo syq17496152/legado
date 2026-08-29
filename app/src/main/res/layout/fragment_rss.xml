@@ -41,7 +41,7 @@
         android:gravity="center"
         android:visibility="gone"
         android:text="@string/rss_source_empty"
-        app:layout_constraintTop_toBottomOf="@+id/tag_bar"
+        app:layout_constraintTop_toBottomOf="@id/top_bar"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
