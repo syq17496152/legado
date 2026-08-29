@@ -5,6 +5,16 @@
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
+# ============================================================================
+# 禁用混淆，保留压缩/资源收缩（2026-08-29 用户决策）
+# 铁证：R8 混淆导致 Gson 泛型反序列化失效（LinkedTreeMap cannot be cast to
+# SearchBook，ExploreFragment.readModernDiscoverCache 正式包崩溃）。
+# minifyEnabled 仍为 true（保留 tree-shaking 压缩收益），仅关闭类名/字段混淆，
+# 崩溃栈将直接显示原始类名行号，无需 mapping 还原。debug 包 minify 关闭不受影响。
+# ============================================================================
+-dontobfuscate
+
+
 # If your project uses WebView with JS, uncomment the following
 # and specify the fully qualified class name to the JavaScript interface
 # class:
