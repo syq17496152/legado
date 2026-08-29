@@ -19,7 +19,8 @@ static def releaseTime() {
 }
 
 def name = "legado"
-def version = "3." + releaseTime()
+// 版本号支持 -PappVersion 显式覆盖（双包同版本发版），缺省按构建时间生成
+def version = (project.findProperty("appVersion") as String) ?: "3." + releaseTime()
 def gitCommits = 1
 try {
     def result = 'git rev-list HEAD --count'.execute().text.trim()

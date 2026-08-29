@@ -26,6 +26,7 @@ setlocal
 ::    build-legado.bat release                  (release package, default)
 ::    build-legado.bat debug io.legado.app     (coexist package, with original legado-E)
 ::    build-legado.bat release io.legado.app   (coexist package, with original legado-E)
+::    build-legado.bat debug - 3.26.082918     (test package with explicit version, 与正式包版本对齐)
 ::    build-legado.bat clean
 :: ============================================================
 
@@ -45,9 +46,13 @@ set "BUILD_TYPE=debug"
 if /i "%~1"=="release" set "BUILD_TYPE=release"
 if /i "%~1"=="-r" set "BUILD_TYPE=release"
 
-:: Parse custom package name (2nd arg)
+:: Parse custom package name (2nd arg; "-" 或空 = 使用默认包名，为占位第3参版本号)
 set "CUSTOM_APP_ID="
-if not "%~2"=="" set "CUSTOM_APP_ID=%~2"
+if not "%~2"=="" if /i not "%~2"=="-" set "CUSTOM_APP_ID=%~2"
+
+:: Parse explicit version (3rd arg, e.g. 3.26.082918) - 保证双包同版本发版
+set "APP_VERSION="
+if not "%~3"=="" set "APP_VERSION=%~3"
 
 :: Determine final applicationId
 if "%CUSTOM_APP_ID%"=="" (
@@ -122,21 +127,16 @@ echo   applicationId = %FINAL_APP_ID%
 echo ============================================================
 echo.
 
-:: Build with optional custom applicationId
-if "%CUSTOM_APP_ID%"=="" (
-    :: Default package name - no -P flag needed
-    if "%BUILD_TYPE%"=="release" (
-        call "%PROJECT_DIR%\gradlew.bat" assembleAppRelease --no-daemon
-    ) else (
-        call "%PROJECT_DIR%\gradlew.bat" assembleAppDebug --no-daemon
-    )
+:: Assemble optional Gradle -P flags (custom package name / explicit version)
+set "P_FLAGS="
+if not "%CUSTOM_APP_ID%"=="" set "P_FLAGS=%P_FLAGS% -PcustomAppId=%CUSTOM_APP_ID%"
+if not "%APP_VERSION%"=="" set "P_FLAGS=%P_FLAGS% -PappVersion=%APP_VERSION%"
+
+:: Build with optional Gradle project properties
+if "%BUILD_TYPE%"=="release" (
+    call "%PROJECT_DIR%\gradlew.bat" assembleAppRelease --no-daemon %P_FLAGS%
 ) else (
-    :: Custom package name via Gradle project property
-    if "%BUILD_TYPE%"=="release" (
-        call "%PROJECT_DIR%\gradlew.bat" assembleAppRelease --no-daemon -PcustomAppId=%CUSTOM_APP_ID%
-    ) else (
-        call "%PROJECT_DIR%\gradlew.bat" assembleAppDebug --no-daemon -PcustomAppId=%CUSTOM_APP_ID%
-    )
+    call "%PROJECT_DIR%\gradlew.bat" assembleAppDebug --no-daemon %P_FLAGS%
 )
 
 if errorlevel 1 (
