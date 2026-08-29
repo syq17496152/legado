@@ -1,9 +1,7 @@
 package io.legado.app.ui.rss.source.manage
 
 import android.os.Bundle
-import android.view.Menu
 import android.view.MenuItem
-import android.view.SubMenu
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.viewModels
@@ -44,7 +42,6 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.transaction
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
@@ -66,7 +63,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     private val importRecordKey = "rssSourceRecordKey"
     private var sourceFlowJob: Job? = null
     private var groups = arrayListOf<String>()
-    private var groupMenu: SubMenu? = null
     private val sourcesState = mutableStateListOf<RssSource>()
     private val selectedUrls = mutableStateOf<Set<String>>(emptySet())
     private val isSelectMode = mutableStateOf(false)
@@ -207,53 +203,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         container.addView(cv, index)
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.rss_source, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        groupMenu = menu.findItem(R.id.menu_group)?.subMenu
-        upGroupMenu()
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_add -> startActivity<RssSourceEditActivity>()
-            R.id.menu_import_local -> importDoc.launch {
-                mode = HandleFileContract.FILE
-                allowExtensions = arrayOf("txt", "json")
-            }
-
-            R.id.menu_import_onLine -> showImportDialog()
-            R.id.menu_import_qr -> qrCodeResult.launch()
-            R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
-            R.id.menu_import_default -> viewModel.importDefault()
-            R.id.menu_enabled_group -> {
-                updateSearchQuery(getString(R.string.enabled))
-            }
-
-            R.id.menu_disabled_group -> {
-                updateSearchQuery(getString(R.string.disabled))
-            }
-
-            R.id.menu_group_login -> {
-                updateSearchQuery(getString(R.string.need_login))
-            }
-
-            R.id.menu_group_null -> {
-                updateSearchQuery(getString(R.string.no_group))
-            }
-
-            R.id.menu_help -> showHelp("SourceMRssHelp")
-            else -> if (item.groupId == R.id.source_group) {
-                updateSearchQuery("group:${item.title}")
-            }
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
-
     private fun showFilterMenu() {
         val fixedLabels = listOf(
             getString(R.string.group_manage),
@@ -313,7 +262,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
             appDb.rssSourceDao.flowGroups().conflate().collect {
                 groups.clear()
                 groups.addAll(it)
-                upGroupMenu()
             }
         }
     }
@@ -441,13 +389,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
                 isSelectMode.value = false
             }
         )
-    }
-
-    private fun upGroupMenu() = groupMenu?.transaction { menu ->
-        menu.removeGroup(R.id.source_group)
-        groups.forEach {
-            menu.add(R.id.source_group, Menu.NONE, Menu.NONE, it)
-        }
     }
 
     private fun upSourceFlow(searchKey: String? = null) {

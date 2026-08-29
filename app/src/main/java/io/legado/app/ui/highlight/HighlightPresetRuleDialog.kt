@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -54,6 +55,9 @@ import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.labelXSmall
+import io.legado.app.ui.theme.bodyTertiary
 
 /**
  * 高亮预设规则弹框（Compose 化，底部弹出）。
@@ -85,9 +89,13 @@ class HighlightPresetRuleDialog @JvmOverloads constructor(
                 AppDialogFrame(
                     title = stringResource(R.string.highlight_rule_preset),
                     message = stringResource(R.string.highlight_rule_preset_subtitle),
+                    // content 内 LazyColumn 自身滚动，外层禁用 verticalScroll（嵌套会收到无限高度约束崩溃）
+                    scrollContent = false,
                     content = {
                         LazyColumn(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 420.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(presetRules, key = { it.id }) { item ->
@@ -149,7 +157,7 @@ class HighlightPresetRuleDialog @JvmOverloads constructor(
                         Text(
                             text = rule.name,
                             color = primaryText,
-                            fontSize = 14.sp,
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -157,7 +165,7 @@ class HighlightPresetRuleDialog @JvmOverloads constructor(
                         Text(
                             text = rule.displayPattern(),
                             color = secondaryText,
-                            fontSize = 11.sp,
+                            fontSize = MaterialTheme.typography.labelSmall.fontSize,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -180,7 +188,7 @@ class HighlightPresetRuleDialog @JvmOverloads constructor(
                 Text(
                     text = stringResource(R.string.preview),
                     color = secondaryText,
-                    fontSize = 10.sp
+                    fontSize = MaterialTheme.typography.labelXSmall.fontSize
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Surface(
@@ -192,7 +200,7 @@ class HighlightPresetRuleDialog @JvmOverloads constructor(
                     Text(
                         text = rule.toPreviewAnnotatedString(),
                         color = primaryText,
-                        fontSize = 13.sp,
+                        fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                         lineHeight = 17.sp,
                         modifier = Modifier.padding(8.dp)
                     )

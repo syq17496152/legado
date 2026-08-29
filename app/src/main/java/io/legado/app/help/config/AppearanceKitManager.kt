@@ -38,6 +38,9 @@ object AppearanceKitManager {
     const val KIT_FLOATING_NO_SEARCH = "builtin_floating_no_search"
     const val KIT_REGULAR = "builtin_regular"
     const val KIT_SIDEBAR = "builtin_sidebar"
+    const val DARK_PURPLE_KIT_ID = "kit_dark_purple"
+    const val DARK_PURPLE_THEME_NAME = "暗夜紫"
+    const val DARK_PURPLE_TOP_BAR_NAME = "暗夜紫顶栏"
     private const val kitManifestName = "appearance_kit.json"
     private const val kitVersion = 1
     private const val maxKitManifestBytes = 1024L * 1024L
@@ -128,6 +131,57 @@ object AppearanceKitManager {
                 )
             }
             .sortedBy { it.name }
+    }
+
+    /**
+     * F-暗夜紫外观套件：确保「暗夜紫主题包 + 专属紫调顶栏包 + 外观套件索引」整套就绪（幂等）。
+     * - 老用户升级：仅补齐缺失组件（主题包/顶栏包/套件索引），不改变当前选择，完全无感；
+     * - 首次安装：调用方把返回的 kit 交给 [apply] 即自动套用整套（暗夜紫主题 + 紫调顶栏 + regular 布局）。
+     */
+    suspend fun ensureDarkPurpleKit(): StoredAppearanceKit? = withContext(IO) {
+        val darkPurple = ThemeConfig.configList.firstOrNull {
+            it.themeName == DARK_PURPLE_THEME_NAME && it.isNightTheme
+        } ?: return@withContext null
+        // 1) 暗夜紫主题包（进主题列表，切走后可回选）
+        val themeDir = if (ThemePackageManager.localThemeExists(true, DARK_PURPLE_THEME_NAME)) {
+            ThemePackageManager.loadLocalOnly(true)
+                .firstOrNull { it.packageInfo.name == DARK_PURPLE_THEME_NAME }?.dirName
+        } else {
+            ThemePackageManager.addFromConfig(darkPurple).dirName
+        } ?: DARK_PURPLE_THEME_NAME
+        // 2) 专属紫调顶栏包（幂等：已存在则按目标配置更新，保留原目录名）
+        val targetTopBar = TopBarConfig.Config(
+            name = DARK_PURPLE_TOP_BAR_NAME,
+            isNightMode = true,
+            style = TopBarConfig.STYLE_REGULAR,          // 胶囊搜索框+标签条
+            tagBarColor = 0xFF2A2138.toInt(),            // 深紫底（贴合暗夜紫卡片色）
+            tagBarAlpha = 100,
+            tagSelectedColor = 0xFFCE93D8.toInt(),       // 亮紫选中色（贴合主题 accent）
+            tagSelectedAlpha = 100,
+            cornerScale = 1f,                            // 贴卡片圆角
+            updatedAt = System.currentTimeMillis()
+        )
+        val existingTopBar = TopBarConfig.loadLocalOnlyForKit(true)
+            .firstOrNull { it.config.name == DARK_PURPLE_TOP_BAR_NAME }
+        val topBarDir = if (existingTopBar != null) {
+            TopBarConfig.addOrUpdate(targetTopBar, existingTopBar).dirName
+        } else {
+            TopBarConfig.addOrUpdate(targetTopBar).dirName
+        }
+        // 3) 外观套件索引（幂等：同 id 覆盖）
+        val kit = StoredAppearanceKit(
+            id = DARK_PURPLE_KIT_ID,
+            name = DARK_PURPLE_THEME_NAME,
+            binding = KitBinding(
+                preset = MainLayoutPresetConfig.PRESET_REGULAR,
+                nightTheme = ComponentRef(dirName = themeDir, name = DARK_PURPLE_THEME_NAME),
+                nightTopBar = ComponentRef(dirName = topBarDir, name = DARK_PURPLE_TOP_BAR_NAME)
+            ),
+            importedAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis()
+        )
+        saveOrReplaceKit(kit)
+        kit
     }
 
     fun currentKitId(): String {

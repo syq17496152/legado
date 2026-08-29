@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.OutlinedTextField
@@ -64,6 +66,7 @@ import io.legado.app.service.relay.RelaySecretStore
 import io.legado.app.service.relay.RelayService
 import io.legado.app.service.relay.RelayShareResult
 import io.legado.app.service.relay.RelayStateRepository
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.compose.AppManagementCard
 import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.AppSettingSectionTitle
@@ -77,6 +80,8 @@ import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 class RelaySettingsActivity : BaseActivity<ViewBinding>() {
     override val binding: ViewBinding by lazy {
@@ -343,7 +348,7 @@ private fun RelaySettingsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .statusBarsPadding()
+                    // 2.2.6：顶栏改 GlassTopAppBar（自带状态栏 inset），此处不再重复 statusBarsPadding
                     .navigationBarsPadding()
             ) {
                 RelayTopBar(onBack)
@@ -368,13 +373,13 @@ private fun RelaySettingsScreen(
                                 Text(
                                     text = stringResource(R.string.public_web_relay_enable),
                                     color = palette.settings.primaryText,
-                                    fontSize = 16.sp,
+                                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                                     fontWeight = FontWeight.Medium
                                 )
                                 Text(
                                     text = stateText,
                                     color = palette.settings.secondaryText,
-                                    fontSize = 13.sp,
+                                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                                     lineHeight = 18.sp,
                                     modifier = Modifier.padding(top = 3.dp)
                                 )
@@ -427,7 +432,7 @@ private fun RelaySettingsScreen(
                         Text(
                             text = stringResource(R.string.public_web_relay_pairing_summary),
                             color = palette.settings.secondaryText,
-                            fontSize = 13.sp,
+                            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                             lineHeight = 19.sp
                         )
                         Spacer(modifier = Modifier.height(10.dp))
@@ -459,7 +464,7 @@ private fun RelaySettingsScreen(
                             Text(
                                 text = operationMessage,
                                 color = palette.settings.secondaryText,
-                                fontSize = 13.sp,
+                                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                                 modifier = Modifier.padding(top = 8.dp)
                             )
                         }
@@ -497,7 +502,7 @@ private fun RelaySettingsScreen(
                         Text(
                             text = stringResource(R.string.public_web_relay_share_options_new_link),
                             color = palette.settings.secondaryText,
-                            fontSize = 12.sp,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
                             lineHeight = 17.sp,
                             modifier = Modifier.padding(top = 6.dp)
                         )
@@ -538,7 +543,7 @@ private fun RelaySettingsScreen(
                             Text(
                                 text = shareUrl,
                                 color = palette.settings.secondaryText,
-                                fontSize = 12.sp,
+                                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                                 maxLines = 3,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(top = 12.dp)
@@ -584,14 +589,14 @@ private fun RelaySettingsScreen(
                         Text(
                             text = stringResource(R.string.public_web_relay_security_summary),
                             color = palette.settings.secondaryText,
-                            fontSize = 13.sp,
+                            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                             lineHeight = 19.sp
                         )
                         if (android.os.Build.VERSION.SDK_INT >= 35) {
                             Text(
                                 text = stringResource(R.string.public_web_relay_android_limit),
                                 color = palette.settings.danger,
-                                fontSize = 13.sp,
+                                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                                 lineHeight = 19.sp,
                                 modifier = Modifier.padding(top = 10.dp)
                             )
@@ -599,7 +604,7 @@ private fun RelaySettingsScreen(
                         Text(
                             text = stringResource(R.string.public_web_relay_vivo_background_hint),
                             color = palette.settings.secondaryText,
-                            fontSize = 13.sp,
+                            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                             lineHeight = 19.sp,
                             modifier = Modifier.padding(top = 10.dp)
                         )
@@ -619,42 +624,12 @@ private fun RelaySettingsScreen(
 
 @Composable
 private fun RelayTopBar(onBack: () -> Unit) {
-    val palette = rememberAppManagementPalette()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(54.dp)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            modifier = Modifier
-                .size(42.dp)
-                .clickable(onClick = onBack),
-            shape = RoundedCornerShape(palette.miuix.actionRadius ?: 12.dp),
-            color = Color.Transparent
-        ) {
-            Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_arrow_back),
-                    contentDescription = null,
-                    tint = palette.settings.primaryText,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-        Text(
-            text = stringResource(R.string.public_web_relay),
-            color = palette.settings.primaryText,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = palette.settings.titleFontFamily,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        Spacer(modifier = Modifier.width(42.dp))
-    }
+    // 2.2.6 (2026-08-27)：自绘 Row 顶栏 → GlassTopAppBar，统一 Compose 顶栏基线（随顶栏管理消费 TopBarConfig）
+    GlassTopAppBar(
+        title = stringResource(R.string.public_web_relay),
+        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+        onNavClick = onBack
+    )
 }
 
 @Composable
@@ -702,12 +677,12 @@ private fun RelayOptionSwitch(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, color = palette.settings.primaryText, fontSize = 14.sp)
+            Text(text = title, color = palette.settings.primaryText, fontSize = MaterialTheme.typography.bodyMedium.fontSize)
             summary?.let {
                 Text(
                     text = it,
                     color = palette.settings.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     lineHeight = 17.sp,
                     modifier = Modifier.padding(top = 2.dp)
                 )
@@ -725,12 +700,12 @@ private fun RelayOptionSwitch(
 private fun RelayInfoLine(label: String, value: String) {
     val palette = rememberAppManagementPalette()
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(label, color = palette.settings.secondaryText, fontSize = 13.sp)
+        Text(label, color = palette.settings.secondaryText, fontSize = MaterialTheme.typography.bodyTertiary.fontSize)
         Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = value,
             color = palette.settings.primaryText,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)

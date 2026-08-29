@@ -1,5 +1,6 @@
 package io.legado.app.ui.config
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -112,6 +113,8 @@ import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.ColorUtils
@@ -148,6 +151,9 @@ import java.net.URLDecoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.labelXSmall
+import io.legado.app.ui.theme.bodyTertiary
 
 class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     ColorPickerDialogListener,
@@ -907,10 +913,10 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         row.tvValue.text = normalized ?: getString(R.string.theme_value_follow_default)
         normalized?.toColorInt()?.let { updateSwatch(row, it) }
         row.root.setOnClickListener {
-            selector(
+            showComposeChoiceListDialog(
                 getString(titleRes),
                 listOf(getString(R.string.theme_value_follow_default), getString(R.string.select_color))
-            ) { _, index ->
+            ) { index ->
                 if (index == 0) {
                     setOptionalColor(target, null)
                 } else {
@@ -1047,10 +1053,10 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         row.tvValue.text = colorText?.uppercase(Locale.ROOT) ?: getString(R.string.disable)
         colorText?.toColorInt()?.let { updateSwatch(row, it) }
         row.root.setOnClickListener {
-            selector(
+            showComposeChoiceListDialog(
                 getString(R.string.theme_panel_border_color),
                 listOf(getString(R.string.disable), getString(R.string.select_color))
-            ) { _, index ->
+            ) { index ->
                 if (index == 0) {
                     pendingPanelBorderColor = null
                     setupPanelBorderColorRow(row)
@@ -1118,10 +1124,10 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             ThemeImageTarget.BOOK_INFO -> R.string.theme_image_book_info_background
             ThemeImageTarget.PANEL -> R.string.theme_image_panel_background
         }
-        selector(
+        showComposeChoiceListDialog(
             getString(title),
             actions.map { getString(it.titleRes) }
-        ) { _, index ->
+        ) { index ->
             when (actions[index]) {
                 ThemeImageAction.BLUR -> showBlurDialog()
                 ThemeImageAction.SELECT -> selectImage.launch {
@@ -1160,10 +1166,10 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         updatePanelBackgroundModeRow(row)
         row.root.setOnClickListener {
             val modes = listOf(ThemeConfig.PANEL_BG_CROP, ThemeConfig.PANEL_BG_FIT)
-            selector(
+            showComposeChoiceListDialog(
                 getString(R.string.theme_image_panel_background_mode),
                 modes.map { panelBackgroundModeText(it) }
-            ) { _, index ->
+            ) { index ->
                 pendingPanelBackgroundScaleType = modes[index]
                 updatePanelBackgroundModeRow(row)
             }
@@ -1997,12 +2003,16 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }
 
     private fun confirmDelete(message: String, block: suspend () -> Unit) {
-        alert(getString(R.string.delete), message) {
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.delete),
+            message = message,
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 runAction(getString(R.string.delete_success), block)
             }
-            noButton()
-        }
+        )
     }
 
     private fun confirmDeleteTheme(
@@ -2224,7 +2234,7 @@ private fun ThemePackageManageScreen(
                 Text(
                     text = summaryText,
                     color = palette.settings.secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     lineHeight = 18.sp,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2337,7 +2347,7 @@ private fun ThemePackageTabButton(
             Text(
                 text = text,
                 color = if (selected) palette.settings.accent else palette.settings.primaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -2383,7 +2393,7 @@ private fun ThemePackageGridCard(
                 Text(
                     text = entry.packageInfo.name,
                     color = palette.settings.primaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     lineHeight = 18.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -2393,7 +2403,7 @@ private fun ThemePackageGridCard(
                 Text(
                     text = info,
                     color = palette.settings.secondaryText,
-                    fontSize = 11.sp,
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
                     lineHeight = 15.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -2480,7 +2490,7 @@ private fun ThemeColorDot(color: ComposeColor) {
     Box(
         modifier = Modifier
             .size(width = 18.dp, height = 8.dp)
-            .clip(RoundedCornerShape(4.dp))
+            .clip(AppShapes.rounded(4))
             .background(color)
     )
 }
@@ -2535,7 +2545,7 @@ private fun ThemePackagePreview(
             ) {
                 if (active) {
                     Surface(
-                        shape = RoundedCornerShape(999.dp),
+                        shape = AppShapes.Capsule,
                         color = palette.settings.accent.copy(alpha = 0.90f),
                         contentColor = palette.settings.onAccent,
                         tonalElevation = 0.dp,
@@ -2545,7 +2555,7 @@ private fun ThemePackagePreview(
                             text = stringResource(R.string.theme_applied_state),
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                             color = palette.settings.onAccent,
-                            fontSize = 10.sp,
+                            fontSize = MaterialTheme.typography.labelXSmall.fontSize,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1
                         )
@@ -2571,7 +2581,7 @@ private fun ThemePackagePreview(
                         modifier = Modifier
                             .width(48.dp)
                             .height(14.dp)
-                            .clip(RoundedCornerShape(999.dp))
+                            .clip(AppShapes.Capsule)
                             .background(ComposeColor(preview.tabBackgroundColor ?: preview.mutedColor ?: preview.cardColor ?: preview.bottomBackground).copy(alpha = 0.84f))
                     )
                     Spacer(modifier = Modifier.weight(1f))
@@ -2579,7 +2589,7 @@ private fun ThemePackagePreview(
                         modifier = Modifier
                             .width(42.dp)
                             .height(18.dp)
-                            .clip(RoundedCornerShape(999.dp))
+                            .clip(AppShapes.Capsule)
                             .background(ComposeColor(preview.accentColor).copy(alpha = 0.82f))
                     )
                 }

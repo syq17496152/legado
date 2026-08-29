@@ -34,4 +34,7 @@
     <item name="book_info_useweb_popup_host" type="id" />
     <item name="ai_markdown_link_tap_handler" type="id" />
 
+    <!-- X1 清理 activity_config.xml 后保留的代码引用 id（ConfigActivity 纯代码容器） -->
+    <item name="configFrameLayout" type="id" />
+
 </resources>

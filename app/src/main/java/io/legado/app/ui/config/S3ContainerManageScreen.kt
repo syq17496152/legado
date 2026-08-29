@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Surface
@@ -36,6 +38,7 @@ import io.legado.app.R
 import io.legado.app.help.AppCloudStorage
 import io.legado.app.lib.cloud.S3Container
 import io.legado.app.lib.cloud.S3ContainerScope
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.compose.AppManagementCard
 import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
@@ -43,6 +46,8 @@ import io.legado.app.ui.widget.compose.AppManagementMoreActionButton
 import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 @Composable
 internal fun S3ContainerManageScreen(
@@ -64,14 +69,14 @@ internal fun S3ContainerManageScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .statusBarsPadding()
+                    // H15：顶栏换 GlassTopAppBar（自带状态栏 inset），父容器移除重复 statusBarsPadding
                     .navigationBarsPadding()
             ) {
                 S3ContainerTopBar(onBack = onBack)
                 Text(
                     text = stringResource(R.string.s3_container_manage_summary),
                     color = palette.settings.secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     lineHeight = 18.sp,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -111,48 +116,12 @@ internal fun S3ContainerManageScreen(
 
 @Composable
 private fun S3ContainerTopBar(onBack: () -> Unit) {
-    val palette = rememberAppManagementPalette()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(54.dp)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            modifier = Modifier
-                .size(42.dp)
-                .clickable(onClick = onBack),
-            shape = RoundedCornerShape(palette.miuix.actionRadius ?: 12.dp),
-            color = Color.Transparent,
-            contentColor = palette.settings.primaryText,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_arrow_back),
-                    contentDescription = null,
-                    tint = palette.settings.primaryText,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-        Text(
-            text = stringResource(R.string.s3_container_manage),
-            color = palette.settings.primaryText,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = palette.settings.titleFontFamily,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        Spacer(modifier = Modifier.width(42.dp))
-    }
+    // H15（2026-08-28）：自绘 54dp 透明顶栏 → GlassTopAppBar（统一 Compose 顶栏基线，随顶栏管理消费 TopBarConfig）
+    GlassTopAppBar(
+        title = stringResource(R.string.s3_container_manage),
+        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+        onNavClick = onBack
+    )
 }
 
 @Composable
@@ -203,7 +172,7 @@ private fun S3ContainerCard(
                 Text(
                     text = displayName,
                     color = palette.settings.primaryText,
-                    fontSize = 16.sp,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -212,7 +181,7 @@ private fun S3ContainerCard(
                 Text(
                     text = "${container.bucket}/${container.prefix.trim('/')}",
                     color = palette.settings.secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -220,7 +189,7 @@ private fun S3ContainerCard(
                 Text(
                     text = capacityText,
                     color = palette.settings.secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -228,7 +197,7 @@ private fun S3ContainerCard(
                 Text(
                     text = stateText,
                     color = if (container.enabled) palette.settings.accent else palette.settings.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontWeight = if (container.enabled) FontWeight.Medium else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

@@ -56,6 +56,7 @@ import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.postEvent
+import androidx.compose.material3.MaterialTheme
 
 private data class PaddingItem(
     val label: String,
@@ -302,7 +303,7 @@ class PaddingConfigDialog : ComposeDialogFragment() {
                     Text(
                         text = title,
                         color = style.accent,
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         fontFamily = style.titleFontFamily,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -315,7 +316,7 @@ class PaddingConfigDialog : ComposeDialogFragment() {
                             text = stringResource(R.string.showLine),
                             modifier = Modifier.widthIn(max = 72.dp),
                             color = style.secondaryText,
-                            fontSize = 12.sp,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -450,7 +451,7 @@ class PaddingConfigDialog : ComposeDialogFragment() {
                         text = item.label,
                         modifier = Modifier.weight(1f),
                         color = style.primaryText,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -458,7 +459,7 @@ class PaddingConfigDialog : ComposeDialogFragment() {
                     Text(
                         text = item.value.toString(),
                         color = style.accent,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1
                     )

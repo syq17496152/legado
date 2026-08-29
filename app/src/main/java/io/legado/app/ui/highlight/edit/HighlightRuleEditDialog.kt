@@ -61,6 +61,8 @@ import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodySecondary
 
 /**
  * F-P1-2 高亮规则系统（借鉴阅读T）
@@ -241,7 +243,9 @@ class HighlightRuleEditDialog : ComposeDialogFragment(),
                             pickColor(dialogId, initial, withAlpha)
                         },
                         onPickFont = { pickFont(it) },
-                        fontDisplayName = fontDisplayName(editingStyle.fontPath)
+                        fontDisplayName = fontDisplayName(editingStyle.fontPath),
+                        // AppDialogFrame 外层已 verticalScroll，此处禁用内部滚动（嵌套会收到无限高度约束崩溃）
+                        scrollable = false
                     )
                 }
             },
@@ -299,7 +303,7 @@ class HighlightRuleEditDialog : ComposeDialogFragment(),
             cornerRadius = dialogStyle.panelRadius,
             insidePadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
         ) {
-            Text(text = annotated, fontSize = 15.sp, color = dialogStyle.primaryText)
+            Text(text = annotated, fontSize = MaterialTheme.typography.bodySecondary.fontSize, color = dialogStyle.primaryText)
         }
     }
 

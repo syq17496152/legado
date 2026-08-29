@@ -51,6 +51,8 @@ import io.legado.app.utils.getPrefString
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.putPrefStringSet
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodySecondary
 
 class ContentSelectMenuConfigDialog : ComposeDialogFragment() {
 
@@ -205,7 +207,7 @@ class ContentSelectMenuConfigDialog : ComposeDialogFragment() {
         Text(
             text = title,
             color = style.accent,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             fontWeight = FontWeight.Medium,
             fontFamily = style.titleFontFamily,
             modifier = Modifier
@@ -235,7 +237,7 @@ class ContentSelectMenuConfigDialog : ComposeDialogFragment() {
             Text(
                 text = title,
                 color = style.primaryText,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 modifier = Modifier.weight(1f)
             )
             Checkbox(
@@ -271,7 +273,7 @@ class ContentSelectMenuConfigDialog : ComposeDialogFragment() {
             Text(
                 text = title,
                 color = style.primaryText,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 modifier = Modifier.weight(1f)
             )
             RadioButton(

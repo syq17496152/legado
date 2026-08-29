@@ -2,12 +2,11 @@ package io.legado.app.ui.config
 
 import android.content.Context
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuInflater
-import android.view.MenuItem
 import android.view.View
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.filled.List
 import androidx.core.content.edit
-import androidx.core.view.MenuProvider
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
@@ -35,6 +34,7 @@ import io.legado.app.ui.config.compose.SettingPageSpec
 import io.legado.app.ui.config.compose.SettingSectionSpec
 import io.legado.app.ui.config.compose.SettingSwitchSpec
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
@@ -42,7 +42,6 @@ import io.legado.app.ui.widget.compose.showComposeMultiChoiceDialog
 import io.legado.app.ui.widget.compose.showComposeTextFormDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.utils.FileDoc
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.checkWrite
 import io.legado.app.utils.defaultSharedPreferences
 import io.legado.app.utils.getPrefString
@@ -61,7 +60,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 
-class BackupConfigFragment : ComposeSettingFragment(), MenuProvider {
+class BackupConfigFragment : ComposeSettingFragment() {
 
     private companion object {
         const val KEY_WEB_DAV_ACCOUNT_MANAGE = "webDavAccountManage"
@@ -130,27 +129,21 @@ class BackupConfigFragment : ComposeSettingFragment(), MenuProvider {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        activity?.addMenuProvider(this, viewLifecycleOwner)
+        // H6: 三点菜单改由 ConfigActivity 顶栏 AppDropdownMenu 承载（替代 MenuProvider 系统菜单）
+        // topbar-icon-semantics-fix 3.1：Help 恢复一级问号图标（对齐原版 backup_restore.xml showAsAction=always）
+        (activity as? ConfigActivity)?.setConfigMenuActions(
+            listOf(
+                MenuAction(Icons.AutoMirrored.Filled.Help, getString(R.string.help), alwaysShow = true) {
+                    showHelp("webDavHelp")
+                },
+                MenuAction(Icons.Default.List, getString(R.string.log)) {
+                    showDialogFragment<AppLogDialog>()
+                }
+            )
+        )
         if (!LocalConfig.backupHelpVersionIsLast) {
             showHelp("webDavHelp")
         }
-    }
-
-    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-        menuInflater.inflate(R.menu.backup_restore, menu)
-        menu.applyTint(requireContext())
-    }
-
-    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-        when (menuItem.itemId) {
-            R.id.menu_help -> {
-                showHelp("webDavHelp")
-                return true
-            }
-
-            R.id.menu_log -> showDialogFragment<AppLogDialog>()
-        }
-        return false
     }
 
     override fun buildPageSpec(): SettingPageSpec {

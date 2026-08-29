@@ -45,9 +45,9 @@ import java.io.File
  * 下载文件服务（download-manager-maturity，扩展自 video-download-manager）
  *
  * 自研下载引擎调度，替换原系统 DownloadManager 方案：
- * - 直链：ChunkDownloader 多线程 Range 分片下载（IDM 式），断点续传按 .partN 长度推进
+ * - 直链：ChunkDownloader IDM 动态文件分段（DFS）单文件下载，断点按 .part/.seg 恢复
  * - m3u8：HlsDownloader 分片下载 + ts 转 mp4，断点续传跳过已下分片
- * - 调度：Semaphore 并发上限 + FIFO 顺序；暂停/恢复单任务（保留临时文件续传）
+ * - 调度：Semaphore 并发上限（注：kotlinx Semaphore 不保证 FIFO 公平，注释修正于 D6）；暂停/恢复单任务（保留临时文件续传）
  * - 失败：错误码落库 + 指数退避自动重试（ENCRYPT/UNSUPPORTED 等永久错误直接失败）
  * - 通知 id 与任务 id 稳定映射（id.toInt()），杜绝多任务错位
  * - 网络策略：仅 WiFi 下载时在移动网络下挂起、恢复 WiFi 自动继续（无限速）
@@ -92,6 +92,66 @@ class DownloadService : BaseService() {
             else -> ContextCompat.checkSelfPermission(
                 appCtx, android.Manifest.permission.WRITE_EXTERNAL_STORAGE
             ) == PackageManager.PERMISSION_GRANTED
+        }
+
+        /** B5 磁盘预检阈值：HLS 分片目录与目标目录双份空间需求（经验值，防写满产生坏文件） */
+        private const val HLS_MIN_FREE_BYTES = 200L * 1024 * 1024
+        private const val DIRECT_MARGIN_BYTES = 32L * 1024 * 1024
+
+        /** 目标基础目录（静态版，实例 resolveTargetDir 与 UI 清理共用）：权限回退逻辑一致 */
+        fun resolveBaseDir(ctx: android.content.Context): File {
+            val base = if (targetDirNeedsPermission() && !storageWriteGranted()) {
+                File(
+                    ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: ctx.filesDir,
+                    "Legado"
+                )
+            } else {
+                configuredTargetDir()
+            }
+            return base
+        }
+
+        /** B5 磁盘空间预检：可用空间不足返回 false（探测失败视为通过，不误伤） */
+        fun ensureDiskSpace(dir: File, needBytes: Long): Boolean =
+            runCatching { dir.usableSpace > needBytes }.getOrDefault(true)
+
+        /**
+         * 清理任务本地产物（实例 deleteLocalFiles 与管理页 C3/C4 清除记录共用入口）：
+         * 最终文件 + DIRECT 的 .part/.seg/存量 .partN + HLS 分片缓存目录
+         */
+        fun deleteTaskFiles(
+            ctx: android.content.Context,
+            taskType: DownloadTaskType,
+            localPath: String?,
+            fileName: String,
+            taskId: Long
+        ) {
+            runCatching {
+                val base = resolveBaseDir(ctx)
+                val dir = if (taskType == DownloadTaskType.HLS) File(base, "m3u8") else base
+                if (localPath != null) {
+                    File(localPath).delete()
+                    if (taskType == DownloadTaskType.DIRECT) {
+                        File("$localPath.part").delete()
+                        File("$localPath.part.seg").delete()
+                        for (i in 0 until ChunkDownloader.DEFAULT_CHUNKS) {
+                            File("$localPath.part$i").delete()
+                        }
+                    }
+                } else {
+                    File(dir, fileName).delete()
+                    if (taskType == DownloadTaskType.DIRECT) {
+                        File(dir, "$fileName.part").delete()
+                        File(dir, "$fileName.part.seg").delete()
+                        for (i in 0 until ChunkDownloader.DEFAULT_CHUNKS) {
+                            File(dir, "$fileName.part$i").delete()
+                        }
+                    }
+                }
+                if (taskType == DownloadTaskType.HLS) {
+                    File(ctx.cacheDir, "video_download_$taskId").deleteRecursively()
+                }
+            }
         }
     }
 
@@ -190,6 +250,8 @@ class DownloadService : BaseService() {
             val entity = appDb.downloadTaskDao.loadById(id) ?: return@forEach
             val taskType = runCatching { DownloadTaskType.valueOf(entity.taskType) }
                 .getOrDefault(DownloadTaskType.DIRECT)
+            // B11 注记：恢复路径 DownloadInfo 未持久化 maxRetry，重建后回落默认 MAX_AUTO_RETRY；
+            // 实际语义为"重新获得完整自动重试预算"，对用户表现为恢复后重试次数重置，属可接受行为
             downloadInfos[id] = DownloadInfo(
                 entity.url, entity.fileName, taskType, parseHeaders(entity.headersJson)
             )
@@ -313,18 +375,31 @@ class DownloadService : BaseService() {
         info: DownloadInfo,
         headers: Map<String, String>
     ): DownloadAttempt {
-        val localFile = uniqueFile(resolveTargetDir(DownloadTaskType.DIRECT), info.fileName)
-        // 记录最终文件路径，供删除时清理临时分片
+        val dir = resolveTargetDir(DownloadTaskType.DIRECT)
+        // B5 磁盘空间预检：已知预期体积（DB totalSize 真源）时，可用空间不足直接失败可重试
+        val expectedTotal = runCatching { appDb.downloadTaskDao.loadById(id)?.totalSize ?: 0L }
+            .getOrDefault(0L)
+        if (expectedTotal > 0 && !ensureDiskSpace(dir, expectedTotal + DIRECT_MARGIN_BYTES)) {
+            AppLog.put("磁盘空间不足，暂停下载 ${info.fileName}")
+            return DownloadAttempt(success = false, error = DownloadError.IO)
+        }
+        val localFile = uniqueFile(dir, info.fileName)
+        // R-4：attempt 起始即落库最终路径（含 "(n)" 变体），删除清理全程可靠；
+        // .part/.seg 为其派生名，rename 前该路径不存在属预期（C1 存在性校验兜底）
         downloadInfos[id] = info.copy(localFile = localFile.path)
-        val result = ChunkDownloader.downloadDirect(info.url, localFile, headers) { done, total ->
+        DownloadState.updateTask(
+            id, DownloadStatus.RUNNING, localPath = localFile.path, targetDir = dir.path
+        )
+        val result = ChunkDownloader.downloadDirect(
+            info.url, localFile, headers, expectedTotal
+        ) { done, total ->
             updateProgress(id, info.fileName, done, total)
         }
         if (!result.ok) {
             return DownloadAttempt(success = false, error = result.error ?: DownloadError.NETWORK)
         }
+        // B9：体积全程 Long
         val size = localFile.length()
-            .coerceAtMost(Int.MAX_VALUE.toLong())
-            .toInt()
         // 完整性校验（FR-10）：直链下载成功但产物为空 → 判 INCOMPLETE 可重试
         if (size <= 0) {
             return DownloadAttempt(success = false, error = DownloadError.INCOMPLETE)
@@ -341,6 +416,18 @@ class DownloadService : BaseService() {
         else "${info.fileName}.mp4"
         val mp4File = uniqueFile(resolveTargetDir(DownloadTaskType.HLS), mp4Name)
         downloadInfos[id] = info.copy(localFile = mp4File.path)
+        // B5 磁盘空间预检：HLS 分片目录（cache）与目标目录双份空间需求
+        if (!ensureDiskSpace(cacheDir, HLS_MIN_FREE_BYTES) ||
+            !ensureDiskSpace(mp4File.parentFile ?: cacheDir, HLS_MIN_FREE_BYTES)
+        ) {
+            AppLog.put("磁盘空间不足，暂停 HLS 下载 ${info.fileName}")
+            return DownloadAttempt(success = false, error = DownloadError.IO)
+        }
+        // R-4：attempt 起始即落库最终路径，删除清理全程可靠（与 executeDirect 同策略）
+        DownloadState.updateTask(
+            id, DownloadStatus.RUNNING, localPath = mp4File.path,
+            targetDir = mp4File.parent
+        )
         val tempDir = File(cacheDir, "video_download_$id")
         var mergedTsPath: String? = null
         val result = HlsDownloader.download(
@@ -349,8 +436,7 @@ class DownloadService : BaseService() {
                 val pct = if (total > 0) (done * 100f / total).toInt() else 0
                 DownloadState.updateTask(
                     id, status = DownloadStatus.RUNNING, progress = pct,
-                    totalSize = total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-                    downloadedSize = done.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                    totalSize = total, downloadedSize = done
                 )
             },
             // 分片合并为完整 ts 后立即落库"完成"（产物先指向 ts），再尝试 mp4 转码增强。
@@ -362,7 +448,7 @@ class DownloadService : BaseService() {
                 )
                 tsFile.copyTo(targetTs, overwrite = true)
                 mergedTsPath = targetTs.path
-                val size = targetTs.length().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                val size = targetTs.length()
                 DownloadState.updateTask(
                     id, DownloadStatus.COMPLETED, progress = 100,
                     totalSize = size, downloadedSize = size,
@@ -377,7 +463,7 @@ class DownloadService : BaseService() {
                 mergedTsPath?.let { runCatching { File(it).delete() } }
                 DownloadAttempt(
                     true, mp4File.path,
-                    mp4File.length().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                    mp4File.length()
                 )
             }
             is HlsResult.TsFallback -> {
@@ -393,7 +479,7 @@ class DownloadService : BaseService() {
                 }
                 DownloadAttempt(
                     true, targetTs,
-                    File(targetTs).length().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                    File(targetTs).length()
                 )
             }
             is HlsResult.UnsupportedCrypto -> DownloadAttempt(
@@ -405,13 +491,16 @@ class DownloadService : BaseService() {
         }
     }
 
-    private fun handleSuccess(id: Long, info: DownloadInfo, localPath: String, size: Int) {
+    private fun handleSuccess(id: Long, info: DownloadInfo, localPath: String, size: Long) {
+        // B3：成功态显式清空历史 errorCode（失败→重试成功后不残留误导性错误码）
         DownloadState.updateTask(
             id, DownloadStatus.COMPLETED, progress = 100, totalSize = size,
-            downloadedSize = size, localPath = localPath
+            downloadedSize = size, localPath = localPath, clearError = true
         )
         upDownloadNotification(
-            id, "${info.fileName} ${getString(R.string.download_success)}", size, size
+            id, "${info.fileName} ${getString(R.string.download_success)}",
+            size.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+            size.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         )
         maybeStopSelf()
     }
@@ -449,35 +538,41 @@ class DownloadService : BaseService() {
     @Synchronized
     private fun removeDownload(downloadId: Long) {
         runJobs.remove(downloadId)?.cancel()
-        downloadInfos.remove(downloadId)?.let { info ->
-            deleteLocalFiles(downloadId, info)
+        // A4 孤儿治理：Service 重建后内存 downloadInfos 已清空，此时删除任务必须从 DB 实体
+        // 重建产物信息再清理文件，否则只删记录留下孤儿文件（铁证：重建后删除任务文件残留）
+        val info = downloadInfos.remove(downloadId) ?: appDb.downloadTaskDao.loadById(downloadId)?.let { entity ->
+            val taskType = runCatching { DownloadTaskType.valueOf(entity.taskType) }
+                .getOrDefault(DownloadTaskType.DIRECT)
+            DownloadInfo(
+                entity.url, entity.fileName, taskType, parseHeaders(entity.headersJson),
+                localFile = entity.localPath
+            )
         }
+        info?.let { deleteLocalFiles(downloadId, it) }
         DownloadState.removeTask(downloadId)
         notificationManager.cancel(downloadId.toInt())
         maybeStopSelf()
     }
 
-    /** 清理任务关联的本地产物：最终文件 + 分片临时文件 + HLS 分片目录 */
+    /** 清理任务关联的本地产物：最终文件 + .part/.seg/存量 .partN + HLS 分片目录（1A.7 批次E 产物兼容） */
     private fun deleteLocalFiles(downloadId: Long, info: DownloadInfo) {
-        val dir = resolveTargetDir(info.taskType)
-        // 最终文件（或带序号变体）及其 .partN 分片
-        if (info.localFile != null) {
-            val f = File(info.localFile)
-            f.delete()
-            if (info.taskType == DownloadTaskType.DIRECT) {
-                for (i in 0 until ChunkDownloader.DEFAULT_CHUNKS) {
-                    File("${info.localFile}.part$i").delete()
-                }
-            }
-        } else {
-            File(dir, info.fileName).delete()
-            for (i in 0 until ChunkDownloader.DEFAULT_CHUNKS) {
-                File(dir, "${info.fileName}.part$i").delete()
-            }
-        }
-        // HLS 分片/临时 ts 目录（按任务 id 命名）
-        File(cacheDir, "video_download_$downloadId").deleteRecursively()
+        deleteTaskFiles(
+            this, info.taskType, info.localFile, info.fileName, downloadId
+        )
     }
+
+    // region D5 划掉最近任务不中断下载
+
+    override val stopSelfOnTaskRemoved: Boolean = false
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // D5：划掉最近任务不再 stopSelf（任务已落库，进程存活则继续下载）；
+        // 但队列空闲时正常退场，避免空闲前台服务+通知常驻
+        maybeStopSelf()
+    }
+
+    // endregion
 
     @Synchronized
     private fun maybeStopSelf() {
@@ -512,18 +607,21 @@ class DownloadService : BaseService() {
         }.getOrDefault(ChunkDownloader.resolveHeaders())
     }
 
+    /** B9：进度全程 Long，去除 >2GB 截断 */
     @Synchronized
     private fun updateProgress(id: Long, fileName: String, done: Long, total: Long) {
-        val totalI = total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-        val doneI = done.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
-        val pct = if (totalI > 0) (doneI * 100f / totalI).toInt() else 0
+        val pct = if (total > 0) (done * 100f / total).toInt() else 0
         DownloadState.updateTask(
             id, status = DownloadStatus.RUNNING, progress = pct,
-            totalSize = totalI, downloadedSize = doneI
+            totalSize = total, downloadedSize = done
         )
-        // 通知进度节流：仅整 5% 更新，降低省电
-        if (pct % 5 == 0 || doneI >= totalI && totalI > 0) {
-            upDownloadNotification(id, "${fileName} ${getString(R.string.downloading)}", totalI, doneI)
+        // 通知进度节流：仅整 5% 更新，降低省电（通知进度条仍为 Int 口径）
+        if (pct % 5 == 0 || (done >= total && total > 0)) {
+            upDownloadNotification(
+                id, "${fileName} ${getString(R.string.downloading)}",
+                total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                done.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            )
         }
     }
 
@@ -548,12 +646,7 @@ class DownloadService : BaseService() {
     private fun resolveTargetDir(taskType: DownloadTaskType): File {
         // 默认内置私有目录时无需任何权限，保证下载必然成功（稳定性优先）；
         // 仅当用户显式配置了公有路径且未授权时，回落到应用私有外部目录，避免写入失败。
-        val base = if (targetDirNeedsPermission() && !storageWriteGranted()) {
-            File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir, "Legado")
-        } else {
-            configuredTargetDir()
-        }
-        val dir = if (taskType == DownloadTaskType.HLS) File(base, "m3u8") else base
+        val dir = if (taskType == DownloadTaskType.HLS) File(resolveBaseDir(this), "m3u8") else resolveBaseDir(this)
         if (!dir.exists()) {
             runCatching { dir.mkdirs() }
         }
@@ -636,10 +729,11 @@ class DownloadService : BaseService() {
         notificationManager.notify(notificationId, builder.build())
     }
 
+    /** B9：产物体积改 Long（>2GB 正确） */
     private data class DownloadAttempt(
         val success: Boolean,
         val path: String? = null,
-        val totalSize: Int = 0,
+        val totalSize: Long = 0L,
         val error: DownloadError? = null
     )
 

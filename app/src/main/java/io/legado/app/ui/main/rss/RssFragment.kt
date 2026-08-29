@@ -53,6 +53,7 @@ import androidx.core.view.doOnLayout
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.fragment.app.commit
+import androidx.fragment.app.commitNow
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -60,6 +61,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import io.legado.app.R
 import io.legado.app.base.VMBaseFragment
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.EventBus
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssSource
@@ -69,7 +71,7 @@ import io.legado.app.databinding.ItemRssBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.sortUrls
 import io.legado.app.help.webView.WebViewPool
-import io.legado.app.lib.dialogs.alert
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.applyUiTitleTypeface
 import io.legado.app.lib.theme.primaryColor
@@ -79,7 +81,6 @@ import io.legado.app.ui.adapter.FolderItem
 import io.legado.app.ui.adapter.SourceFolderAdapter
 import io.legado.app.ui.adapter.SourceFolderComposeGrid
 import io.legado.app.ui.adapter.SourceFolderConfigDialog
-import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.rss.article.ReadRecordDialog
@@ -103,15 +104,11 @@ import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.dpToPx
-import io.legado.app.utils.FileUtils
-import io.legado.app.utils.MD5Utils
-import io.legado.app.utils.externalFiles
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
 import io.legado.app.utils.gone
-import io.legado.app.utils.inputStream
 import io.legado.app.utils.navigationBarHeight
+import io.legado.app.utils.observeEvent
 import io.legado.app.utils.openUrl
-import io.legado.app.utils.readUri
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.showDialogFragment
@@ -121,14 +118,12 @@ import io.legado.app.utils.transaction
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import splitties.init.appCtx
-import java.io.FileOutputStream
 
 /**
  * 订阅界面
@@ -166,62 +161,21 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     private var classicHeaderReady = false
     // 切换逻辑修复：源切换版本号（防 sortUrls 慢返回用过期 currentSorts 覆盖当前源内容）
     private var rssSourceVersion = 0L
+    // S1: modern 顶栏布局监听引用（classic 模式需移除，防标题宽度被钳制）
+    private var updateSourceNameWidthListener: View.OnLayoutChangeListener? = null
     private val adapter by lazy {
         RssAdapter(requireContext(), this, this, viewLifecycleOwner.lifecycle)
     }
-    private val folderAdapter by lazy {
-        SourceFolderAdapter(requireContext(), SourceGroupCover.KIND_RSS, this)
-    }
+    // folder-compose-refactor: Compose 文件夹目录数据（渲染层 100% Compose，View 版 folderAdapter 已清理）
     private val gridSpacingDecoration = GridSpacingItemDecoration()
-    // folder-compose-refactor: Compose 文件夹目录数据（与 View 版 folderAdapter 共用同一来源，仅渲染层替换）
     private var folderComposeItems by mutableStateOf(listOf<FolderItem>())
     private var folderComposeCovers by mutableStateOf(mapOf<String, String?>())
-    // source-folder-cover: 待设置封面的文件夹（选图返回后写入）
-    private var pendingFolder: FolderItem? = null
-    // source-folder-cover: 选择封面图片 → 复制到 covers 目录 + upsert 数据库
-    private val selectFolderCover =
-        registerForActivityResult(HandleFileContract()) { result ->
-            val uri = result.uri ?: return@registerForActivityResult
-            val folder = pendingFolder ?: return@registerForActivityResult
-            pendingFolder = null
-            viewLifecycleOwner.lifecycleScope.launch {
-                kotlin.runCatching {
-                    var savedPath: String? = null
-                    withContext(IO) {
-                        readUri(uri) { fileDoc, inputStream ->
-                            var file = requireContext().externalFiles
-                            val suffix = if (fileDoc.name.contains(".9.png", true)) {
-                                ".9.png"
-                            } else {
-                                "." + fileDoc.name.substringAfterLast(".")
-                            }
-                            val fileName = uri.inputStream(requireContext()).getOrThrow().use { tmp ->
-                                MD5Utils.md5Encode(tmp) + suffix
-                            }
-                            file = FileUtils.createFileIfNotExist(file, "covers", fileName)
-                            FileOutputStream(file).use { outputStream ->
-                                inputStream.copyTo(outputStream)
-                            }
-                            savedPath = file.absolutePath
-                        }
-                    }
-                    // readUri 回调非挂持上下文, 挂起库操作移到此处执行
-                    savedPath?.let { path ->
-                        appDb.sourceGroupCoverDao.upsert(
-                            SourceGroupCover(SourceGroupCover.KIND_RSS, folder.groupKey, path)
-                        )
-                        folderAdapter.updateCover(folder.groupKey, path)
-                        // folder-cover-replace-bugfix: View 版 adapter 与 Compose 状态源必须同步更新，
-                        // 否则 SourceFolderComposeGrid 不重组、替换封面不生效（回归根因）
-                        folderComposeCovers = folderComposeCovers + (folder.groupKey to path)
-                    }
-                }.onFailure {
-                    appCtx.toastOnUi(it.localizedMessage)
-                }
-            }
-        }
+    // rss-classic-layout-align：margin/列数以 Compose State 持有，配置变更经 upFolderView 重写即触发重组
+    // （原 setContent 闭包静态捕获 AppConfig 值，需"切走再切回"重建 ComposeView 才生效）
+    private var folderComposeMargin by mutableStateOf(AppConfig.sourceMargin)
+    private var folderComposeSpanCount by mutableStateOf(2)
     // 更多菜单弹窗句柄（ModernActionPopup，生命周期由弹窗自身管理）
-    private var rssMenuPopup: ModernActionPopup.Handle? = null
+    private var groupMenuPopup: ModernActionPopup.Handle? = null
     // D1: 分组模式（sourceGroupStyle!=0 && sourceGroupMode==1）→ 文件夹视图
     private val isFolderViewMode: Boolean
         get() = AppConfig.sourceGroupStyle != 0 && AppConfig.sourceGroupMode == 1
@@ -282,6 +236,19 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         applyRssMode()
+        // S2: 订阅页模式切换即时生效（对齐 MainActivity NOTIFY_MAIN 消费；onResume 保留为兜底）
+        observeEvent<Boolean>(EventBus.NOTIFY_MAIN) {
+            if (usingModernRss != AppConfig.modernRssPage) {
+                applyRssMode()
+            }
+        }
+        // 跨页同步（rss-classic-layout-align S3）：书架布局弹框改 showBookname 等结构偏好后，
+        // 经典订阅文件夹/标签渲染同步刷新（AppConfig 直读，重组即生效；幂等无副作用）
+        observeEvent<String>(EventBus.BOOKSHELF_STRUCTURE_CHANGED) {
+            if (!usingModernRss) {
+                applyView()
+            }
+        }
         // D2-补丁：返回键处理——子目录内按返回键回文件夹列表/全部
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner,
             object : OnBackPressedCallback(true) {
@@ -310,14 +277,41 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
 
     override fun onResume() {
         super.onResume()
-        if (usingModernRss != AppConfig.modernRssPage) {
-            applyRssMode()
-        }
+        syncRssModeIfChanged()
         if (pendingRenderCurrentSort && usingModernRss) {
             binding.root.post {
                 if (pendingRenderCurrentSort) {
                     renderCurrentSort()
                 }
+            }
+        }
+    }
+
+    /**
+     * 幂等同步订阅双形态（config-needs-restart-fix 真机兜底）：
+     * 供 onResume / MainActivity 页面切换回调多锚点调用
+     *
+     * 终极兜底（真机多轮修复仍复现）：检测到配置与当前形态不一致时，直接 Activity 重建收敛——
+     * 等价"重启生效"的进程内复刻（重建后 onFragmentCreated 必读新配置），不依赖任何
+     * 事件/生命周期/渲染竞态链路；订阅模式切换为低频操作，闪屏可接受。
+     * 重建后 usingModernRss 以新配置初始化，needSwitch=false 不会循环重建。
+     * 模式一致时的残留自愈保留（异模式容器可见即重建当前模式）。
+     */
+    fun syncRssModeIfChanged() {
+        if (usingModernRss != AppConfig.modernRssPage) {
+            activity?.recreate()
+            return
+        }
+        if (view == null) return
+        if (!usingModernRss) {
+            // 经典态自愈：modern 文章/WebView 容器仍可见 = 残留，重建经典
+            if (binding.rssFragmentContainer.isVisible || binding.rssWebContainer.isVisible) {
+                applyClassicRssMode()
+            }
+        } else {
+            // 新版态自愈：经典网格/文件夹目录仍可见 = 残留，重建新版
+            if (binding.recyclerView.isVisible || binding.folderComposeView.isVisible) {
+                applyModernRssMode()
             }
         }
     }
@@ -347,6 +341,8 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     // F-4/6.x: 新版/经典订阅双形态分派（读 AppConfig.modernRssPage）
     private fun applyRssMode() {
         usingModernRss = AppConfig.modernRssPage
+        // S3/S4/S6: 模式切换统一重置运行时状态（防跨模式残留：分组/类型/源标签/overlay/sortHostViewModel）
+        resetRssModeState()
         if (usingModernRss) {
             applyModernRssMode()
         } else {
@@ -355,10 +351,45 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         activity?.invalidateOptionsMenu()
     }
 
+    // S3/S4/S5/S6: 切换时重置经典/现代运行时状态（初次进入为默认值，无副作用；onResume 同模式不触发）
+    private fun resetRssModeState() {
+        // P0 根因修复：无条件取消跨模式 collector。classic 路径原仅在 upRssFlowJob 时机取消，
+        // 文件夹视图路径完全不取消 → modern observeRssSources collector 存活，
+        // 返回 RESUMED 时 flowWithLifecycleAndDatabaseChange 重发，renderRssSourceSelector/selectSource
+        // 把 modern 源标签重新覆盖经典顶栏（"新版切经典顶栏残留"根因）
+        groupsFlowJob?.cancel()
+        groupsFlowJob = null
+        rssFlowJob?.cancel()
+        rssFlowJob = null
+        currentGroup = null
+        currentType = -1
+        selectedRssTag = null
+        rssTopOverlaySpace = 0
+        rssTopOverlayEnabled = false
+        pendingRenderCurrentSort = false
+        // S6: sortHostViewModel 跨模式隔离（切回 modern 前不残留旧源）
+        if (sortHostViewModel.url != null) {
+            sortHostViewModel.url = null
+            sortHostViewModel.sortUrl = null
+            sortHostViewModel.rssSource = null
+            sortHostViewModel.sourceName = null
+            sortHostViewModel.searchKey = null
+        }
+        // S5: per-mode 释放（adapter 复用，getHeaderCount 幂等兜底防重复挂载）
+        classicHeaderReady = false
+    }
+
     // 经典形态（对齐本项目增强：文件夹/标签/排序/内联搜索 + 更多菜单）
     private fun applyClassicRssMode() {
+        // S1: 移除 modern 顶栏 layout 监听（classic 下标题宽度不再被钳制 96~190dp）
+        updateSourceNameWidthListener?.let { binding.topBar.removeOnLayoutChangeListener(it) }
+        updateSourceNameWidthListener = null
         destroyModernRssChildren()
-        pendingRenderCurrentSort = false
+        // 双保险隐藏 modern 容器（rss_fragment_container/rss_web_container 为全屏 z 序最高，
+        // applyModernRssMode 置 visible 后 classic 不隐藏会盖住经典列表——真机实锤 2026-08-28）
+        binding.rssFragmentContainer.isGone = true
+        binding.rssWebContainer.isGone = true
+        binding.pbRssLoading.gone()
         binding.recyclerView.isVisible = true
         binding.tvEmptyMsg.isGone = true
         initComposeTopBar()
@@ -373,6 +404,18 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         } else {
             upRssFlowJob()
         }
+        // 二次收敛（rss-classic-layout-align 守卫补强）：延迟校验 modern 容器/胶囊是否被
+        // 日志静默区竞态重新渲染；是则强制再次清空。真机实锤"经典顶栏+modern 内容"混合态。
+        binding.root.postDelayed({
+            if (view == null || usingModernRss) return@postDelayed
+            if (binding.rssFragmentContainer.isVisible || binding.rssWebContainer.isVisible) {
+                binding.rssFragmentContainer.isGone = true
+                binding.rssWebContainer.isGone = true
+                destroyModernRssChildren()
+                binding.topBar.setPrimaryItems(emptyList(), 0)
+                binding.topBar.showTags(false)
+            }
+        }, 500)
     }
 
     // 现代形态（对齐 Archive：源标签 + 分类标签 + 内嵌文章预览 / WebView 单源渲染）
@@ -396,8 +439,9 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
             webView.destroy()
         }
         rssWebView = null
+        // commitNow 同步移除（commit 异步存在窗口期，文章列表会残留覆盖经典列表）
         childFragmentManager.findFragmentById(R.id.rss_fragment_container)?.let {
-            childFragmentManager.commit { remove(it) }
+            childFragmentManager.commitNow { remove(it) }
         }
     }
 
@@ -413,10 +457,11 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
             updateModernRssTopBarOverlay()
         }
         updateModernRssTopBarOverlay()
-        val updateSourceNameWidth = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+        // S1: 保存引用（classic 模式需移除）
+        updateSourceNameWidthListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             updateRssSourceNameWidth()
         }
-        binding.topBar.addOnLayoutChangeListener(updateSourceNameWidth)
+        binding.topBar.addOnLayoutChangeListener(updateSourceNameWidthListener)
         binding.topBar.post(::updateRssSourceNameWidth)
         // 源选择：点击标题 → 弹 SourceSelectDialog
         binding.topBar.titleSelect.setOnClickListener {
@@ -491,6 +536,8 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
 
     // 源名称最大宽度：减去右侧操作按钮宽度，避免标题挤压
     private fun updateRssSourceNameWidth() {
+        // S1: 经典形态不执行标题宽度钳制（防止切回 classic 后标题被截断）
+        if (!usingModernRss) return
         val rowWidth = binding.topBar.width
         if (rowWidth <= 0) return
         val actionsWidth = listOf(
@@ -559,19 +606,20 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
 
     // 选中源（对齐 Archive L436-460）
     private fun selectSource(source: RssSource, reload: Boolean) {
+        // 守卫（rss-classic-layout-align）：classic 态下任何 modern 渲染调用一律拒绝
+        if (!usingModernRss) return
         val changed = selectedRssSource?.sourceUrl != source.sourceUrl
         selectedRssSource = source
         AppConfig.modernRssSourceUrl = source.sourceUrl
         val hasSearch = !source.searchUrl.isNullOrBlank()
-        binding.topBar.setSearchEntryVisible(hasSearch)
+        // topbar-search-entry-align：不再重开 searchEntry 胶囊（初始化/空状态已关闭），
+        // 形态统一为纯搜索按钮（对齐发现/书架/我的）；titleSelect 源选择入口随胶囊关闭自动回归
         binding.topBar.setTitle(
             if (binding.topBar.isRegularStyle() && hasSearch) getString(R.string.rss) else source.sourceName
         )
         binding.topBar.setSearchHint(source.sourceName)
         binding.topBar.loginButton.isVisible = !source.loginUrl.isNullOrBlank()
-        binding.topBar.searchButton.isVisible = hasSearch && !binding.topBar.isRegularStyle()
-        binding.topBar.searchEntry.isEnabled = hasSearch
-        binding.topBar.searchEntry.alpha = if (hasSearch) 1f else 0.58f
+        binding.topBar.searchButton.isVisible = hasSearch
         binding.topBar.refreshButton.isVisible = source.ruleArticles.isNullOrBlank()
         renderRssSourceSelector()
         binding.topBar.post(::updateRssSourceNameWidth)
@@ -592,6 +640,8 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     // 渲染源：ruleArticles 源 → 分类标签 + 内嵌文章列表；无 ruleArticles 源 → WebView 单源（对齐 Archive L462-516）
     // sourceVersion 由 selectSource 传入，用于切换逻辑修复（丢弃过期源渲染结果）
     private suspend fun presentSource(source: RssSource, sourceVersion: Long = rssSourceVersion) {
+        // 守卫：classic 态拒绝 modern 渲染
+        if (!usingModernRss) return
         if (binding.pbRssLoading.isVisible) {
             binding.pbRssLoading.gone()
         } else {
@@ -657,6 +707,8 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
 
     // 渲染当前分类（内嵌 RssArticlesFragment 到 rss_fragment_container，对齐 Archive L518-553）
     private fun renderCurrentSort() {
+        // 守卫：classic 态拒绝 modern 渲染
+        if (!usingModernRss) return
         val source = selectedRssSource ?: return
         if (currentSorts.isEmpty()) {
             binding.pbRssLoading.gone()
@@ -702,6 +754,8 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     // WebView 单源渲染（无 ruleArticles 源，对齐 Archive L563-623）
     @SuppressLint("SetJavaScriptEnabled")
     private fun renderWebSource(source: RssSource) {
+        // 守卫：classic 态拒绝 modern 渲染
+        if (!usingModernRss) return
         if (!source.canRenderInModernPage()) {
             renderEmptyState()
             return
@@ -846,6 +900,8 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
 
     // 源标签条（primaryBar）渲染（对齐 Archive L726-731）
     private fun renderRssSourceSelector() {
+        // 守卫：classic 态拒绝 modern 源名胶囊提交
+        if (!usingModernRss) return
         binding.topBar.setPrimaryItems(
             rssSources.map { RoundedTagBarView.Item(it.sourceName) },
             rssSources.indexOfFirst { it.sourceUrl == selectedRssSource?.sourceUrl }
@@ -857,6 +913,19 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         val source = selectedRssSource ?: return
         if (source.searchUrl.isNullOrBlank()) return
         RssSearchActivity.start(requireContext(), null, source.sourceGroup)
+    }
+
+    // fix-rss-search-scope: 按当前浏览上下文计算搜索范围（分组/类型/未分组），全部时 null 保持全局
+    // 判定以 currentGroup 优先（与 upRssFlowJob 列表查询分支一致，兜底菜单分组跳转 L955-960 的并存状态）
+    private fun buildSearchScope(): String? {
+        return kotlin.runCatching {
+            when {
+                currentGroup == getString(R.string.no_group) -> "@no_group"
+                !currentGroup.isNullOrBlank() -> currentGroup
+                currentType >= 0 -> "@type:$currentType"
+                else -> null
+            }
+        }.getOrNull()
     }
 
     private fun openRssLogin(rssSource: RssSource) {
@@ -887,32 +956,39 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         binding.topBar.refreshButton.setOnClickListener {
             upRssFlowJob()
         }
-        // 顶栏搜索按钮：弹 RssSearchActivity 全屏搜索页（key=null 空关键词进入，与发现页 SearchActivity 一致）
+        // 顶栏搜索按钮：弹 RssSearchActivity 全屏搜索页（key=null 空关键词进入）
+        // fix-rss-search-scope: 按当前浏览上下文（分组/类型/未分组）限定搜索范围，根目录保持全局
         binding.topBar.searchButton.setOnClickListener {
-            RssSearchActivity.start(requireContext(), null)
+            RssSearchActivity.start(requireContext(), null, buildSearchScope())
         }
         // 登录为每源入口（列表长按菜单），不在订阅页顶栏显示；搜索已改为弹全屏搜索页，隐藏内置搜索条
         binding.topBar.setSearchEntryVisible(false)
         binding.topBar.setActionsVisible(login = false)
-        // 本项目 RSS 为订阅源列表，更多菜单容纳 分组配置/阅读记录/分组跳转/设置（Archive 的 RSS 为单源页故无此按钮）
-        binding.topBar.moreButton.isVisible = true
-        binding.topBar.moreButton.setOnClickListener {
-            showRssMenu(it)
+        // topbar-icon-semantics-fix 3.4：对齐原版 main_rss.xml always 四项——
+        // 星标=starButton（既有✓）；历史/分组/设置恢复一级图标（走 actionsBar 插槽统一染色与风格适配）；
+        // more 溢出无剩余项（RSS 模式默认隐藏，移除强制打开逻辑）
+        // 一级历史按钮：阅读记录（原版 menu_read_record always）
+        binding.topBar.addActionButton(R.drawable.ic_history, R.string.history) {
+            showDialogFragment<ReadRecordDialog>()
+        }
+        // 一级分组按钮：弹分组跳转子菜单（原版 menu_group always；含本项目进化的分组配置/分组管理入口）
+        val groupButton = binding.topBar.addActionButton(R.drawable.ic_groups, R.string.group)
+        groupButton.setOnClickListener { showGroupMenu(it) }
+        // 一级设置按钮：订阅源管理（原版 menu_rss_config always）
+        binding.topBar.addActionButton(R.drawable.ic_settings, R.string.setting) {
+            startActivity<RssSourceActivity>()
         }
     }
 
-    // 更多菜单数据（文件夹配置 + 分组管理 + 阅读记录 + 动态分组 + 设置；星标收藏已并入顶栏星标按钮）
-    private fun showRssMenu(anchor: View) {
+    // 分组子菜单（分组配置 + 分组管理 + 动态分组跳转；星标收藏已并入顶栏星标按钮）
+    private fun showGroupMenu(anchor: View) {
         val actions = buildList {
             add(ModernActionPopup.Action(getString(R.string.source_folder_config)) {
                 showFolderConfig()
             })
-            // bugfix ⑪: 订阅页更多菜单加回"分组管理"入口（复用既有 GroupManageDialog，与 RssSourceActivity 一致）
+            // bugfix ⑪: 分组子菜单加回"分组管理"入口（复用既有 GroupManageDialog，与 RssSourceActivity 一致）
             add(ModernActionPopup.Action(getString(R.string.group_manage)) {
                 showDialogFragment<io.legado.app.ui.rss.source.manage.GroupManageDialog>()
-            })
-            add(ModernActionPopup.Action(getString(R.string.history)) {
-                showDialogFragment<ReadRecordDialog>()
             })
             groups.forEach { group ->
                 add(ModernActionPopup.Action(group) {
@@ -920,11 +996,8 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                     upRssFlowJob()
                 })
             }
-            add(ModernActionPopup.Action(getString(R.string.setting)) {
-                startActivity<RssSourceActivity>()
-            })
         }
-        rssMenuPopup = ModernActionPopup.show(anchor, actions, rssMenuPopup)
+        groupMenuPopup = ModernActionPopup.show(anchor, actions, groupMenuPopup)
     }
 
     fun gotoTop() {
@@ -937,8 +1010,9 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
 
     private fun initRecyclerView() {
         binding.recyclerView.setEdgeEffectColor(primaryColor)
-        // 切换逻辑修复：仅首次进入经典形态添加 header，防 modern↔classic 反复切换重复堆积
-        if (!classicHeaderReady) {
+        // S5 (per-mode)：仅经典形态需要 header；classicHeaderReady 随模式释放 + getHeaderCount() 幂等兜底，
+        // 防 modern↔classic 反复切换重复堆积（adapter 复用，重复 addHeaderView 不去重）
+        if (!classicHeaderReady && adapter.getHeaderCount() == 0) {
             classicHeaderReady = true
             adapter.addHeaderView {
                 ItemRssBinding.inflate(layoutInflater, it, false).apply {
@@ -960,20 +1034,23 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         val marginDp = AppConfig.sourceMargin
         gridSpacingDecoration.spacing = SourceFolderAdapter.spacingPx(requireContext(), marginDp)
         binding.recyclerView.addItemDecoration(gridSpacingDecoration)
+        // 间距变更后必须触发 decoration 重算，否则视觉恒为初次值（"间距滑条不生效"根因）
+        binding.recyclerView.invalidateItemDecorations()
         val spanCount = effectiveSpanCount()
         binding.recyclerView.layoutManager = GridLayoutManager(context, spanCount)
         binding.recyclerView.adapter = adapter
     }
 
-    // F-P1-8 应用文件夹视图
-    private fun applyFolderView() {
-        binding.recyclerView.removeItemDecoration(gridSpacingDecoration)
-        val marginDp = AppConfig.sourceMargin
-        gridSpacingDecoration.spacing = SourceFolderAdapter.spacingPx(requireContext(), marginDp)
-        binding.recyclerView.addItemDecoration(gridSpacingDecoration)
-        val spanCount = effectiveSpanCount()
-        binding.recyclerView.layoutManager = GridLayoutManager(context, spanCount)
-        binding.recyclerView.adapter = folderAdapter
+    /** 分组配置弹框拖动边距滑条的实时预览（对齐书架 previewBookshelfMargin） */
+    private fun previewRssMargin(margin: Int) {
+        val normalized = margin.coerceIn(0, 60)
+        if (AppConfig.sourceMargin == normalized) return
+        AppConfig.sourceMargin = normalized
+        gridSpacingDecoration.spacing = SourceFolderAdapter.spacingPx(requireContext(), normalized)
+        binding.recyclerView.invalidateItemDecorations()
+        if (isShowingFolder) {
+            upFolderView()  // 文件夹视图 margin 由 Compose 重组读取
+        }
     }
 
     // bugfix ④: 订阅源网格列数读取 sourceLayout（Grid2-6 显式生效）；0/1（列表/紧凑，订阅源无此语义）回退屏幕自适应
@@ -983,14 +1060,16 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         else SourceFolderAdapter.calculateSpanCount(requireContext(), AppConfig.sourceMargin)
     }
 
-    // folder-compose-refactor: 初始化 Compose 文件夹目录（对齐书架文件夹 FolderGroupGridContent 样式）
+    // folder-compose-refactor: 初始化 Compose 文件夹目录（对齐书架文件夹 FolderGroupGridContent 样式；
+    // margin 单源驱动——sourceMargin 变更经 onConfigChanged→applyView→upFolderView 重组重读）
     private fun initFolderComposeView() {
         binding.folderComposeView.setContent {
             LegadoTheme {
                 SourceFolderComposeGrid(
                     items = folderComposeItems,
                     covers = folderComposeCovers,
-                    spanCount = effectiveSpanCount(),
+                    spanCount = folderComposeSpanCount,
+                    margin = folderComposeMargin,
                     onFolderClick = { onFolderClick(it) },
                     onFolderLongClick = { onFolderSelectImage(it) },
                 )
@@ -1062,6 +1141,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         showDialogFragment(
             SourceFolderConfigDialog.create(
                 isBookSource = false,  // C-01 修复：订阅源用 rssSort
+                onPreviewMarginChange = ::previewRssMargin,  // 滑条实时预览（rss-classic-layout-align）
                 onConfigChanged = {
                     // D1: 配置变更后根据新配置重新应用视图
                     // D2: 分组样式变更时重置 currentType 和 currentGroup，避免旧状态残留
@@ -1137,8 +1217,11 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                 groups.map { FolderItem(it, it, false) }
             )
         }
-        folderAdapter.setItems(folderList, folderAdapter.diffItemCallback)
-        // folder-compose-refactor: 同步更新 Compose 文件夹目录数据
+        // folder-compose-refactor: 同步更新 Compose 文件夹目录数据（View 版 folderAdapter 已清理）
+        // rss-classic-layout-align：margin/列数同为 Compose State，此处重写才触发重组
+        // （"文件夹间距不立即生效"根因：只写 AppConfig 不写 State，Compose 读到的仍是旧值）
+        folderComposeMargin = AppConfig.sourceMargin
+        folderComposeSpanCount = effectiveSpanCount()
         folderComposeItems = folderList
         // source-folder-cover: 批量加载分组封面缓存
         viewLifecycleOwner.lifecycleScope.launch {
@@ -1147,7 +1230,6 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
             }.getOrDefault(emptyList())
                 .associate { it.groupName to it.cover }
                 .let { covers ->
-                    folderAdapter.upCovers(covers)
                     folderComposeCovers = covers
                 }
         }
@@ -1286,10 +1368,13 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     }
 
     override fun onFolderSelectImage(folder: FolderItem) {
-        pendingFolder = folder
-        selectFolderCover.launch {
-            mode = HandleFileContract.IMAGE
+        // rss-folder-cover-dialog-align：长按直接弹标准封面编辑弹框（对齐书架 GroupEditDialog 交互），
+        // 预览/选图（http 直存）/恢复默认/编辑态确定落库均在弹框内完成
+        val dialog = RssFolderCoverDialog(folder)
+        dialog.onCoverApplied = { key, path ->
+            folderComposeCovers = folderComposeCovers + (key to path)
         }
+        showDialogFragment(dialog)
     }
 
     override fun onFolderRestoreCover(folder: FolderItem) {
@@ -1299,8 +1384,6 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                     SourceGroupCover.KIND_RSS,
                     folder.groupKey
                 )
-                folderAdapter.updateCover(folder.groupKey, null)
-                // folder-cover-replace-bugfix: 恢复默认与替换一致，Compose 状态源需同步置 null
                 folderComposeCovers = folderComposeCovers + (folder.groupKey to null)
             }.onFailure {
                 appCtx.toastOnUi(it.localizedMessage)
@@ -1363,13 +1446,16 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     }
 
     override fun del(rssSource: RssSource) {
-        alert(R.string.draw) {
-            setMessage(getString(R.string.sure_del) + "\n" + rssSource.sourceName)
-            noButton()
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.draw),
+            message = getString(R.string.sure_del) + "\n" + rssSource.sourceName,
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 viewModel.del(rssSource)
             }
-        }
+        )
     }
 
     override fun disable(rssSource: RssSource) {

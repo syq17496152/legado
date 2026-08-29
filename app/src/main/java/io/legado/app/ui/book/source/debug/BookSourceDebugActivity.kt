@@ -6,7 +6,6 @@ import android.view.MenuItem
 import android.view.View
 import androidx.activity.viewModels
 import androidx.appcompat.widget.SearchView
-import androidx.appcompat.widget.PopupMenu
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -14,11 +13,13 @@ import io.legado.app.databinding.ActivitySourceDebugBinding
 import io.legado.app.help.source.clearExploreKindsCache
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.lib.dialogs.selector
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.dialog.TextDialog
+import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.launch
@@ -45,6 +46,7 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
             startSearch(it)
         }
     }
+    private var debugMenuPopup: ModernActionPopup.Handle? = null
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initTopBar()
@@ -142,7 +144,10 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
             @Suppress("USELESS_ELVIS")
             exploreKinds?.map { it.title ?: "" }?.let { exploreKindTitles ->
                 binding.textFx.onLongClick {
-                    selector("选择发现", exploreKindTitles) { _, index ->
+                    this@BookSourceDebugActivity.showComposeChoiceListDialog(
+                        title = "选择发现",
+                        labels = exploreKindTitles
+                    ) { index ->
                         val explore = exploreKinds[index]
                         binding.textFx.text = "${explore.title}::${explore.url}"
                         searchView.setQuery(binding.textFx.text, true)
@@ -195,10 +200,12 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
     }
 
     private fun showDebugMenu() {
-        PopupMenu(this, binding.titleBar.moreButton).apply {
-            menuInflater.inflate(R.menu.book_source_debug, menu)
-            setOnMenuItemClickListener { onCompatOptionsItemSelected(it) }
-            show()
+        ModernActionPopup.showFromMenu(
+            anchor = binding.titleBar.moreButton,
+            menuRes = R.menu.book_source_debug,
+            previousPopup = debugMenuPopup
+        ) { menuItem ->
+            onCompatOptionsItemSelected(menuItem)
         }
     }
 

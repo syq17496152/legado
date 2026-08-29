@@ -100,7 +100,7 @@ if exist "%LOCALAPPDATA%\kotlin\daemon" (
 :: Stop stale Gradle daemons
 echo [CLEAN] Stopping stale Gradle daemons...
 cd /d "%PROJECT_DIR%"
-call gradlew.bat --stop >nul 2>&1
+call "%PROJECT_DIR%\gradlew.bat" --stop >nul 2>&1
 
 :: Ensure gradle-home dir exists
 if not exist "%GRADLE_USER_HOME%" mkdir "%GRADLE_USER_HOME%"
@@ -126,16 +126,16 @@ echo.
 if "%CUSTOM_APP_ID%"=="" (
     :: Default package name - no -P flag needed
     if "%BUILD_TYPE%"=="release" (
-        call gradlew.bat assembleAppRelease --no-daemon
+        call "%PROJECT_DIR%\gradlew.bat" assembleAppRelease --no-daemon
     ) else (
-        call gradlew.bat assembleAppDebug --no-daemon
+        call "%PROJECT_DIR%\gradlew.bat" assembleAppDebug --no-daemon
     )
 ) else (
     :: Custom package name via Gradle project property
     if "%BUILD_TYPE%"=="release" (
-        call gradlew.bat assembleAppRelease --no-daemon -PcustomAppId=%CUSTOM_APP_ID%
+        call "%PROJECT_DIR%\gradlew.bat" assembleAppRelease --no-daemon -PcustomAppId=%CUSTOM_APP_ID%
     ) else (
-        call gradlew.bat assembleAppDebug --no-daemon -PcustomAppId=%CUSTOM_APP_ID%
+        call "%PROJECT_DIR%\gradlew.bat" assembleAppDebug --no-daemon -PcustomAppId=%CUSTOM_APP_ID%
     )
 )
 
@@ -229,7 +229,7 @@ echo   Stopping build daemons to release memory...
 echo ============================================================
 cd /d "%PROJECT_DIR%"
 :: Stop Gradle daemon (also stops the Kotlin daemon it manages)
-call gradlew.bat --stop >nul 2>&1
+call "%PROJECT_DIR%\gradlew.bat" --stop >nul 2>&1
 :: Fallback: force-kill this project's leftover Kotlin daemon
 :: (filtered by marker path containing in-legado, avoid killing others)
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'java.exe' -and $_.CommandLine -like '*KotlinCompileDaemon*' -and $_.CommandLine -like '*in-legado*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" 2>nul
@@ -241,7 +241,7 @@ echo ============================================================
 echo   Cleaning...
 echo ============================================================
 cd /d "%PROJECT_DIR%"
-call gradlew.bat clean
+call "%PROJECT_DIR%\gradlew.bat" clean
 echo.
 echo   Done. Run: build-legado.bat [debug^|release] [package_name]
 echo.

@@ -20,10 +20,10 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReadAloudBgmGroup
 import io.legado.app.data.entities.ReadAloudBgmTrack
 import io.legado.app.databinding.ActivityThemeManageBinding
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.accentColor
@@ -227,9 +227,9 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
             toastOnUi(importingText.ifBlank { "正在导入，请稍候" })
             return
         }
-        selector(
-            "导入智能音频",
-            listOf(
+        showComposeChoiceListDialog(
+            title = "导入智能音频",
+            labels = listOf(
                 "批量导入${currentAssetLabel}",
                 "导入单个${currentAssetLabel}",
                 "导入配乐 ZIP",
@@ -237,7 +237,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                 "新增分组",
                 "管理分组"
             )
-        ) { _, index ->
+        ) { index ->
             when (index) {
                 0 -> importAudios.launch("audio/*")
                 1 -> importAudio.launch {
@@ -266,13 +266,13 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     private fun confirmImportAudioPackage(uri: Uri, assetType: String) {
         val normalized = ReadAloudBgmTrack.normalizeAssetType(assetType)
         val label = assetLabel(normalized)
-        selector(
-            "导入${label} ZIP",
-            listOf(
+        showComposeChoiceListDialog(
+            title = "导入${label} ZIP",
+            labels = listOf(
                 "清空旧${label}并导入",
                 "追加导入"
             )
-        ) { _, index ->
+        ) { index ->
             val replaceOld = index == 0
             lifecycleScope.launch {
                 setImporting(true, "正在导入${label} ZIP…")
@@ -403,25 +403,28 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     }
 
     private fun showGroupEditor(group: ReadAloudBgmGroup? = null) {
-        val binding = DialogEditTextBinding.inflate(layoutInflater).apply {
-            editView.hint = "分组名称"
-            editView.setText(group?.name.orEmpty())
-            editView.setSelection(editView.text?.length ?: 0)
-        }
-        alert(if (group == null) "新增分组" else "编辑分组") {
-            customView { binding.root }
-            okButton {
-                val name = binding.editView.text?.toString()?.trim().orEmpty()
-                if (name.isBlank()) {
+        showComposeTextInputDialog(
+            title = if (group == null) "新增分组" else "编辑分组",
+            hint = "分组名称",
+            initialValue = group?.name.orEmpty(),
+            positiveText = getString(android.R.string.ok),
+            negativeText = getString(android.R.string.cancel),
+            validateInput = { input ->
+                if (input.trim().isBlank()) {
                     toastOnUi("分组名称不能为空")
-                    return@okButton
+                    false
+                } else {
+                    true
                 }
+            },
+            onPositive = { name ->
+                val finalName = name.trim()
                 lifecycleScope.launch(Dispatchers.IO) {
                     val now = System.currentTimeMillis()
                     if (group == null) {
                         appDb.readAloudBgmDao.insertGroup(
                             ReadAloudBgmGroup(
-                                name = name,
+                                name = finalName,
                                 assetType = currentAssetType,
                                 sortOrder = (appDb.readAloudBgmDao.maxGroupOrderByType(currentAssetType) ?: 0) + 1,
                                 createdAt = now,
@@ -429,14 +432,13 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                             )
                         )
                     } else {
-                        appDb.readAloudBgmDao.updateGroup(group.copy(name = name, updatedAt = now))
+                        appDb.readAloudBgmDao.updateGroup(group.copy(name = finalName, updatedAt = now))
                     }
                     notifyAudioChanged()
                     launch(Dispatchers.Main) { load() }
                 }
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun showGroupManage() {
@@ -445,9 +447,15 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
             toastOnUi("暂无分组")
             return
         }
-        selector("管理分组", managedGroups.map { it.displayName() }) { _, index ->
+        showComposeChoiceListDialog(
+            title = "管理分组",
+            labels = managedGroups.map { it.displayName() }
+        ) { index ->
             val group = managedGroups[index]
-            selector(group.displayName(), listOf("编辑分组", "删除分组")) { _, action ->
+            showComposeChoiceListDialog(
+                title = group.displayName(),
+                labels = listOf("编辑分组", "删除分组")
+            ) { action ->
                 when (action) {
                     0 -> showGroupEditor(group)
                     1 -> confirmDeleteGroup(group)
@@ -461,9 +469,13 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
             toastOnUi("默认分组不能删除")
             return
         }
-        alert("删除分组") {
-            setMessage("确定删除“${group.displayName()}”？组内${currentAssetLabel}会移回默认分组，本地文件不会删除。")
-            okButton {
+        showComposeConfirmDialog(
+            title = "删除分组",
+            message = "确定删除“${group.displayName()}”？组内${currentAssetLabel}会移回默认分组，本地文件不会删除。",
+            positiveText = getString(android.R.string.ok),
+            negativeText = getString(android.R.string.cancel),
+            dangerPositive = true,
+            onPositive = {
                 lifecycleScope.launch(Dispatchers.IO) {
                     appDb.readAloudBgmDao.resetTrackGroup(group.id, currentAssetType)
                     appDb.readAloudBgmDao.deleteGroup(group.id, currentAssetType)
@@ -472,8 +484,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                     launch(Dispatchers.Main) { load() }
                 }
             }
-            cancelButton()
-        }
+        )
     }
 
     private suspend fun importTrack(uri: Uri) {
@@ -792,7 +803,10 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     }
 
     private fun showTrackActions(track: ReadAloudBgmTrack) {
-        selector(track.displayName(), listOf("编辑标签", "默认音量", "移动分组", "删除")) { _, index ->
+        showComposeChoiceListDialog(
+            title = track.displayName(),
+            labels = listOf("编辑标签", "默认音量", "移动分组", "删除")
+        ) { index ->
             when (index) {
                 0 -> showTagsEditor(track)
                 1 -> showVolumeEditor(track)
@@ -803,15 +817,14 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     }
 
     private fun showTagsEditor(track: ReadAloudBgmTrack) {
-        val binding = DialogEditTextBinding.inflate(layoutInflater).apply {
-            editView.hint = "标签用逗号分隔，例如 紧张,日常,战斗"
-            editView.setText(track.tags)
-            editView.setSelection(editView.text?.length ?: 0)
-        }
-        alert("编辑标签") {
-            customView { binding.root }
-            okButton {
-                val tags = binding.editView.text?.toString().orEmpty()
+        showComposeTextInputDialog(
+            title = "编辑标签",
+            hint = "标签用逗号分隔，例如 紧张,日常,战斗",
+            initialValue = track.tags,
+            positiveText = getString(android.R.string.ok),
+            negativeText = getString(android.R.string.cancel),
+            onPositive = { raw ->
+                val tags = raw
                     .split(',', '，')
                     .map { it.trim() }
                     .filter { it.isNotBlank() }
@@ -823,8 +836,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                     launch(Dispatchers.Main) { load() }
                 }
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun showVolumeEditor(track: ReadAloudBgmTrack) {
@@ -860,7 +872,10 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     private fun moveTracks(ids: List<Long>) {
         val options = listOf(ReadAloudBgmGroup(id = 0L, name = "默认分组", assetType = currentAssetType)) +
             groups.filterNot { it.isDefaultGroup() }
-        selector("选择分组", options.map { it.displayName() }) { _, index ->
+        showComposeChoiceListDialog(
+            title = "选择分组",
+            labels = options.map { it.displayName() }
+        ) { index ->
             val groupId = options[index].id
             lifecycleScope.launch(Dispatchers.IO) {
                 appDb.readAloudBgmDao.moveTracks(ids, groupId)
@@ -881,9 +896,13 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     }
 
     private fun confirmDelete(ids: List<Long>) {
-        alert("删除${currentAssetLabel}") {
-            setMessage("确定删除选中的 ${ids.size} 个${currentAssetLabel}？文件也会从本地移除。")
-            okButton {
+        showComposeConfirmDialog(
+            title = "删除${currentAssetLabel}",
+            message = "确定删除选中的 ${ids.size} 个${currentAssetLabel}？文件也会从本地移除。",
+            positiveText = getString(android.R.string.ok),
+            negativeText = getString(android.R.string.cancel),
+            dangerPositive = true,
+            onPositive = {
                 lifecycleScope.launch(Dispatchers.IO) {
                     ids.mapNotNull { appDb.readAloudBgmDao.track(it) }.forEach { track ->
                         runCatching { File(track.filePath).delete() }
@@ -894,8 +913,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                     launch(Dispatchers.Main) { load() }
                 }
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun String.toSafeFileName(extension: String): String {

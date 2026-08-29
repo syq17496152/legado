@@ -1,5 +1,6 @@
-﻿package io.legado.app.ui.main.ai.compose
+package io.legado.app.ui.main.ai.compose
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.widget.ImageView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -110,6 +111,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.min
 import kotlin.math.abs
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
 
 @Stable
 data class AiChatScreenActions(
@@ -621,6 +625,10 @@ fun AiChatScreen(
     }
 }
 
+/**
+ * AiChatTopBar（H15 豁免登记 2026-08-28）：AI 对话沉浸式头部——无固定底色、随对话页风格，
+ * 转 GlassTopAppBar 破坏沉浸设计，属豁免清单；抽屉面板本身已用主题 composerSurface 色。
+ */
 @Composable
 private fun AiChatTopBar(
     modelLabel: String,
@@ -678,7 +686,7 @@ private fun AiChatTopBar(
                         AiAgentMode.NORMAL -> ""
                     },
                     color = if (requesting) style.colors.secondaryText else style.colors.accent,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
@@ -695,7 +703,7 @@ private fun AiChatTopBar(
                 Text(
                     text = modelLabel,
                     color = if (requesting) style.colors.secondaryText else style.colors.accent,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
@@ -779,7 +787,7 @@ private fun AiModernTopMenu(
                         Text(
                             text = action.title,
                             color = style.colors.primaryText,
-                            fontSize = 14.sp,
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -848,7 +856,7 @@ private fun AiCompanionDrawer(
                 .clickable { onDismiss() }
         )
         Surface(
-            shape = RoundedCornerShape(0.dp),
+            shape = AppShapes.CornerZero,
             color = style.colors.composerSurface,
             tonalElevation = 0.dp,
             shadowElevation = 18.dp,
@@ -878,13 +886,13 @@ private fun AiCompanionDrawer(
                         Text(
                             text = "AI 酒馆",
                             color = style.colors.primaryText,
-                            fontSize = 20.sp,
+                            fontSize = MaterialTheme.typography.titleLarge.fontSize,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = "角色与会话",
                             color = style.colors.secondaryText,
-                            fontSize = 12.sp
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize
                         )
                     }
                     actions.onAddCompanion?.let { add ->
@@ -1013,7 +1021,7 @@ private fun AiCompanionSessionPanel(
                 Text(
                     text = "会话",
                     color = style.colors.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
@@ -1025,7 +1033,7 @@ private fun AiCompanionSessionPanel(
                     Text(
                         text = "新建",
                         color = style.colors.accent,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                     )
@@ -1035,7 +1043,7 @@ private fun AiCompanionSessionPanel(
                 Text(
                     text = "还没有历史会话",
                     color = style.colors.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     modifier = Modifier.padding(vertical = 5.dp)
                 )
             } else {
@@ -1052,7 +1060,7 @@ private fun AiCompanionSessionPanel(
                     Text(
                         text = "还有 ${sessions.size - 8} 个会话",
                         color = style.colors.secondaryText,
-                        fontSize = 11.sp,
+                        fontSize = MaterialTheme.typography.labelSmall.fontSize,
                         modifier = Modifier.padding(horizontal = 4.dp)
                     )
                 }
@@ -1070,7 +1078,7 @@ private fun DrawerSectionTitle(
     Text(
         text = text,
         color = style.colors.secondaryText,
-        fontSize = 12.sp,
+        fontSize = MaterialTheme.typography.bodySmall.fontSize,
         fontWeight = FontWeight.SemiBold,
         modifier = modifier.padding(horizontal = 2.dp, vertical = 4.dp)
     )
@@ -1103,7 +1111,7 @@ private fun AiCompanionDrawerItem(
             modifier = Modifier
                 .width(3.dp)
                 .height(38.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .clip(AppShapes.rounded(2))
                 .background(if (selected) style.colors.accent.copy(alpha = 0.72f) else Color.Transparent)
         )
         Spacer(modifier = Modifier.width(9.dp))
@@ -1116,7 +1124,7 @@ private fun AiCompanionDrawerItem(
             Text(
                 text = companion.name,
                 color = style.colors.primaryText,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1128,7 +1136,7 @@ private fun AiCompanionDrawerItem(
                     else -> "角色"
                 },
                 color = style.colors.secondaryText,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1165,7 +1173,7 @@ private fun AiSessionDrawerItem(
             modifier = Modifier
                 .width(3.dp)
                 .height(32.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .clip(AppShapes.rounded(2))
                 .background(if (selected) style.colors.accent else Color.Transparent)
         )
         Column(
@@ -1176,7 +1184,7 @@ private fun AiSessionDrawerItem(
             Text(
                 text = session.title.ifBlank { "未命名会话" },
                 color = style.colors.primaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1184,7 +1192,7 @@ private fun AiSessionDrawerItem(
             Text(
                 text = "${timeFormat.format(java.util.Date(session.updatedAt))} · ${session.messages.size} 条消息",
                 color = style.colors.secondaryText,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp)
@@ -1278,7 +1286,7 @@ private fun AiEmptyState(style: AiComposeStyle) {
                 Text(
                     text = stringResource(R.string.ai_chat_empty),
                     color = style.colors.secondaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     modifier = Modifier.padding(top = 12.dp)
                 )
             }
@@ -1431,7 +1439,7 @@ private fun AiAssistantTextPart(
                     Text(
                         text = part.content,
                         color = style.colors.primaryText,
-                        fontSize = 15.sp,
+                        fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                         lineHeight = 21.sp
                     )
                 }
@@ -1524,7 +1532,7 @@ private fun AiVariantSwitcher(
         Text(
             text = "${currentIndex + 1}/$total",
             color = style.colors.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             maxLines = 1
         )
         AiMessageIconButton(
@@ -1751,7 +1759,7 @@ private fun AiInfoPill(
         Text(
             text = text,
             color = style.colors.accent,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
         )
     }
@@ -1835,7 +1843,7 @@ private fun AiComposer(
                     Text(
                         text = stringResource(R.string.ai_chat_hint),
                         color = style.colors.secondaryText.copy(alpha = 0.72f),
-                        fontSize = 15.sp
+                        fontSize = MaterialTheme.typography.bodySecondary.fontSize
                     )
                 }
                 BasicTextField(
@@ -1852,7 +1860,7 @@ private fun AiComposer(
                     ),
                     textStyle = TextStyle(
                         color = style.colors.primaryText,
-                        fontSize = 15.sp,
+                        fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                         lineHeight = 21.sp
                     ),
                     modifier = Modifier.fillMaxWidth()

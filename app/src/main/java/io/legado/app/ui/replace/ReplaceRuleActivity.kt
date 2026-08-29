@@ -2,9 +2,6 @@ package io.legado.app.ui.replace
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
-import android.view.SubMenu
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
@@ -47,7 +44,6 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
-import io.legado.app.utils.transaction
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
@@ -71,7 +67,6 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
     private val selectedIds = mutableStateOf<Set<Long>>(emptySet())
     private val searchQueryState = mutableStateOf("")
     private var groups = arrayListOf<String>()
-    private var groupMenu: SubMenu? = null
     private var replaceRuleFlowJob: Job? = null
     private var dataInit = false
     private val qrCodeResult = registerForActivityResult(QrCodeResult()) {
@@ -241,10 +236,6 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
 
     private fun initSelectActionView() {
         binding.selectActionBar.setMainActionText(R.string.delete)
-        binding.selectActionBar.inflateMenu(R.menu.replace_rule_sel)
-        binding.selectActionBar.setOnMenuItemClickListener { item ->
-            onMenuItemClick(item)
-        }
         binding.selectActionBar.setCallBack(this)
     }
 
@@ -299,54 +290,13 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
             appDb.replaceRuleDao.flowGroups().collect {
                 groups.clear()
                 groups.addAll(it)
-                upGroupMenu()
             }
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.replace_rule, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        groupMenu = menu.findItem(R.id.menu_group)?.subMenu
-        upGroupMenu()
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_add_replace_rule ->
-                editActivity.launch(ReplaceEditActivity.startIntent(this))
-
-            R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
-            R.id.menu_enabled_group -> {
-                updateSearchQuery(getString(R.string.enabled))
-            }
-
-            R.id.menu_disabled_group -> {
-                updateSearchQuery(getString(R.string.disabled))
-            }
-            R.id.menu_del_selection -> viewModel.delSelection(getSelectedRules())
-            R.id.menu_import_onLine -> showImportDialog()
-            R.id.menu_import_local -> importDoc.launch {
-                mode = HandleFileContract.FILE
-                allowExtensions = arrayOf("txt", "json")
-            }
-
-            R.id.menu_import_qr -> qrCodeResult.launch()
-            R.id.menu_help -> showHelp("replaceRuleHelp")
-            R.id.menu_group_null -> {
-                updateSearchQuery(getString(R.string.no_group))
-            }
-
-            else -> if (item.groupId == R.id.replace_group) {
-                updateSearchQuery("group:${item.title}")
-            }
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
+    // H17（2026-08-28）：系统 options menu 链删除（onCompatCreateOptionsMenu/onPrepareOptionsMenu/
+    // onCompatOptionsItemSelected）——本页已全 Compose（AppManagementScaffold topActions 覆盖
+    // 分组/新增/导入/帮助），TitleBar 已 GONE，系统菜单为不可达死代码（菜单统一收敛）。
 
     private fun showFilterMenu() {
         val fixedLabels = listOf(
@@ -390,17 +340,6 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
         )
     }
 
-    private fun onMenuItemClick(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_enable_selection -> enableSelected()
-            R.id.menu_disable_selection -> disableSelected()
-            R.id.menu_top_sel -> viewModel.topSelect(getSelectedRules())
-            R.id.menu_bottom_sel -> viewModel.bottomSelect(getSelectedRules())
-            R.id.menu_export_selection -> exportSelected()
-        }
-        return true
-    }
-
     private fun enableSelected() {
         val selected = getSelectedRules()
         updateSelectedEnabled(enabled = true)
@@ -421,13 +360,6 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
                 GSON.toJson(getSelectedRules()).toByteArray(),
                 "application/json"
             )
-        }
-    }
-
-    private fun upGroupMenu() = groupMenu?.transaction { menu ->
-        menu.removeGroup(R.id.replace_group)
-        groups.forEach {
-            menu.add(R.id.replace_group, Menu.NONE, Menu.NONE, it)
         }
     }
 

@@ -55,6 +55,7 @@ import io.legado.app.ui.widget.components.EditField
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsSearchBar
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
@@ -108,19 +109,17 @@ class BookshelfManageActivity :
     private val waitDialog by lazy { WaitDialog(this) }
     private val exportDir = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
-            alert(R.string.export_success) {
-                if (uri.toString().isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
-                }
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = getString(R.string.path)
-                    editView.setText(uri.toString())
-                }
-                customView { alertBinding.root }
-                okButton {
+            showComposeTextInputDialog(
+                title = getString(R.string.export_success),
+                message = if (uri.toString().isAbsUrl()) DirectLinkUpload.getSummary() else null,
+                hint = getString(R.string.path),
+                initialValue = uri.toString(),
+                readOnly = true,
+                positiveText = getString(R.string.copy_text),
+                onPositive = {
                     sendToClip(uri.toString())
                 }
-            }
+            )
         }
     }
 

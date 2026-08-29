@@ -49,6 +49,7 @@ import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.toastOnUi
+import io.legado.app.ui.theme.bodyTertiary
 
 class RuleSubEditComposeDialog : ComposeDialogFragment() {
 
@@ -301,7 +302,7 @@ private fun RuleSubTypeRow(
         Text(
             text = stringResource(R.string.book_type),
             color = style.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.Medium
         )
         Row(
@@ -326,7 +327,7 @@ private fun RuleSubTypeRow(
                     Text(
                         text = label,
                         color = if (selected) style.accent else style.primaryText,
-                        fontSize = 13.sp,
+                        fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -355,7 +356,7 @@ private fun RuleSubTextField(
         Text(
             text = label,
             color = style.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.Medium
         )
         OutlinedTextField(
@@ -417,7 +418,7 @@ private fun RuleSubSwitchRow(
                     checked -> style.primaryText
                     else -> style.secondaryText
                 },
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -458,7 +459,7 @@ private fun RuleSubIntervalField(
         Text(
             text = stringResource(R.string.time_hour),
             color = if (enabled) style.primaryText else style.secondaryText.copy(alpha = 0.58f),
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             modifier = Modifier.padding(bottom = 14.dp)
         )
     }

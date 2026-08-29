@@ -25,7 +25,7 @@ object DatabaseMigrations {
             migration_93_94, migration_94_95, migration_95_96, migration_96_97,
             migration_97_98, migration_98_99, migration_99_100, migration_100_101,
             migration_101_102, migration_102_103, migration_103_104, migration_104_105,
-            migration_105_106, migration_106_107
+            migration_105_106, migration_106_107, migration_107_108
         )
     }
 
@@ -1416,6 +1416,64 @@ object DatabaseMigrations {
                     kotlin.runCatching { db.execSQL(stmt) }
                         .onFailure { e ->
                             AppLog.put("AppDatabase Migration 105→106: [$tag] 执行失败: ${e.message}")
+                        }
+                }
+        }
+    }
+
+    /**
+     * B8（download-manager-optimize）：download_tasks 删 3 个零写入僵尸列
+     * （errorMsg/resumePointJson/segmentsJson，@Update 全量回写有误用风险）。
+     * targetDir 列 v107 已存在（仅补代码写入）。SQLite minSdk=23 无 DROP COLUMN，走建新表迁数据。
+     * 注意新表 DDL 与实体 Room schema 严格一致（无 DEFAULT 子句）。
+     */
+    private val migration_107_108 = object : Migration(107, 108) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            runCatchingSql(db, "107→108 download_tasks rebuild drop dead columns") {
+                """CREATE TABLE IF NOT EXISTS `download_tasks_new` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `url` TEXT NOT NULL,
+                    `fileName` TEXT NOT NULL,
+                    `taskType` TEXT NOT NULL,
+                    `headersJson` TEXT,
+                    `status` TEXT NOT NULL,
+                    `progress` INTEGER NOT NULL,
+                    `totalSize` INTEGER NOT NULL,
+                    `downloadedSize` INTEGER NOT NULL,
+                    `speed` INTEGER NOT NULL,
+                    `errorCode` TEXT,
+                    `localPath` TEXT,
+                    `targetDir` TEXT,
+                    `startTime` INTEGER NOT NULL
+                )"""
+            }
+            runCatchingSql(db, "107→108 copy data") {
+                """INSERT INTO `download_tasks_new` (
+                    `id`, `url`, `fileName`, `taskType`, `headersJson`, `status`, `progress`,
+                    `totalSize`, `downloadedSize`, `speed`, `errorCode`, `localPath`, `targetDir`, `startTime`
+                ) SELECT
+                    `id`, `url`, `fileName`, `taskType`, `headersJson`, `status`, `progress`,
+                    `totalSize`, `downloadedSize`, `speed`, `errorCode`, `localPath`, `targetDir`, `startTime`
+                FROM `download_tasks`"""
+            }
+            runCatchingSql(db, "107→108 drop old") { "DROP TABLE `download_tasks`" }
+            runCatchingSql(db, "107→108 rename") {
+                "ALTER TABLE `download_tasks_new` RENAME TO `download_tasks`"
+            }
+            AppLog.put("AppDatabase Migration 107→108: download_tasks 僵尸列清理完成")
+        }
+
+        private fun runCatchingSql(
+            db: SupportSQLiteDatabase,
+            tag: String,
+            sql: () -> String
+        ) {
+            // 简化说明：execSQL 一次仅执行一条语句，分号拼接多条会漏执行；按分号拆分逐条执行（建表/索引导入语句内部无分号，安全）
+            sql().split(";").map { it.trim() }.filter { it.isNotBlank() }
+                .forEach { stmt ->
+                    kotlin.runCatching { db.execSQL(stmt) }
+                        .onFailure { e ->
+                            AppLog.put("AppDatabase Migration 107→108: [$tag] 执行失败: ${e.message}")
                         }
                 }
         }

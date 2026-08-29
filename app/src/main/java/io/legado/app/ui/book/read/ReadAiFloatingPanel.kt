@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.book.read
+package io.legado.app.ui.book.read
 
 import android.content.Intent
 import android.content.Context
@@ -7,7 +7,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
-import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -80,8 +79,6 @@ import io.legado.app.help.ai.AiMemoryStore
 import io.legado.app.help.ai.AiTaskKeepAlive
 import io.legado.app.help.ai.AiToolRegistry
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.ui.config.AiWorldBookManageActivity
 import io.legado.app.ui.main.ai.AiChatMessage
 import io.legado.app.ui.main.ai.AiWorldBookBinding
@@ -92,6 +89,10 @@ import io.legado.app.ui.main.ai.compose.AiProcessStepType
 import io.legado.app.ui.main.ai.compose.AiProcessStepUi
 import io.legado.app.ui.main.ai.compose.AiProcessTimelineCard
 import io.legado.app.ui.main.ai.compose.aiComposeStyle
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeMultiChoiceDialog
+import io.legado.app.utils.activity
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
@@ -107,6 +108,10 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.theme.bodyLargeX
 
 class ReadAiFloatingPanel @JvmOverloads constructor(
     context: Context,
@@ -563,16 +568,18 @@ class ReadAiFloatingPanel @JvmOverloads constructor(
 
     private fun confirmClearHistory() {
         val context = readContext ?: return
-        AlertDialog.Builder(this.context)
-            .setMessage(R.string.ai_read_clear_history_confirm)
-            .setNegativeButton(R.string.dialog_cancel, null)
-            .setPositiveButton(R.string.dialog_confirm) { _, _ ->
+        activity?.showComposeConfirmDialog(
+            title = resources.getString(R.string.draw),
+            message = resources.getString(R.string.ai_read_clear_history_confirm),
+            positiveText = resources.getString(R.string.dialog_confirm),
+            negativeText = resources.getString(R.string.dialog_cancel),
+            onPositive = {
                 AppConfig.aiReadHistoryList =
                     AppConfig.aiReadHistoryList.filterNot { it.bookUrl == context.bookUrl }
                 currentSessionId = ""
                 if (showingHistory) renderHistory() else renderCurrentSession()
             }
-            .show()
+        )
     }
 
     private fun updateCurrentSession(context: ReadContext, mapper: (ReadAiSession) -> ReadAiSession) {
@@ -791,14 +798,14 @@ class ReadAiFloatingPanel @JvmOverloads constructor(
             return
         }
         val providerNameMap = AppConfig.aiProviderList.associateBy({ it.id }, { it.name })
-        context.selector(
+        activity?.showComposeChoiceListDialog(
             context.getString(R.string.ai_current_model),
             models.map { model ->
                 providerNameMap[model.providerId]?.takeIf { it.isNotBlank() }
                     ?.let { "${model.modelId} - $it" }
                     ?: model.modelId
             }
-        ) { _, _, index ->
+        ) { index ->
             AppConfig.aiAskModelId = models[index].id
             modelLabel = currentModelLabel()
         }
@@ -809,7 +816,7 @@ class ReadAiFloatingPanel @JvmOverloads constructor(
             context.toastOnUi(R.string.ai_chat_wait_current)
             return
         }
-        context.selector(
+        activity?.showComposeChoiceListDialog(
             "当前窗口能力",
             listOf(
                 "新建对话",
@@ -819,7 +826,7 @@ class ReadAiFloatingPanel @JvmOverloads constructor(
                 "世界书：${activeReadAiWorldBookCount()} 个",
                 "清空 Skill/MCP"
             )
-        ) { _, _, index ->
+        ) { index ->
             when (index) {
                 0 -> startNewChat()
                 1 -> toggleHistory()
@@ -853,34 +860,35 @@ class ReadAiFloatingPanel @JvmOverloads constructor(
     private fun showReadAiWorldBookDialog() {
         val worldBooks = AppConfig.aiWorldBookList
         if (worldBooks.isEmpty()) {
-            context.selector("世界书", listOf("打开世界书管理")) { _, _, _ ->
+            activity?.showComposeChoiceListDialog("世界书", listOf("打开世界书管理")) { _ ->
                 openWorldBookManage()
             }
             return
         }
-        val selected = worldBooks.filter { book ->
-            book.bindings.any {
+        val checkedIndices = worldBooks.indices.filter { index ->
+            worldBooks[index].bindings.any {
                 it.enabled &&
                         it.targetType == AiWorldBookBinding.TARGET_COMPANION &&
                         it.targetKey == READ_AI_COMPANION_ID
             }
-        }.mapTo(linkedSetOf()) { it.id }
-        context.alert(title = "阅读页问 AI · 世界书") {
-            multiChoiceItems(
-                items = worldBooks.map { book ->
-                    "${book.name}${if (book.enabled) "" else "（停用）"}"
-                }.toTypedArray(),
-                checkedItems = BooleanArray(worldBooks.size) { index -> worldBooks[index].id in selected }
-            ) { _, which, isChecked ->
-                if (isChecked) selected += worldBooks[which].id else selected -= worldBooks[which].id
-            }
-            okButton {
+        }.toSet()
+        activity?.showComposeMultiChoiceDialog(
+            title = "阅读页问 AI · 世界书",
+            labels = worldBooks.map { book ->
+                "${book.name}${if (book.enabled) "" else "（停用）"}"
+            },
+            checkedIndices = checkedIndices,
+            neutralText = "管理",
+            onNeutral = { openWorldBookManage() },
+            onPositive = { checked ->
+                val finalSelected = worldBooks.indices.filter { checked[it] }
+                    .mapTo(linkedSetOf()) { worldBooks[it].id }
                 AppConfig.aiWorldBookList = worldBooks.map { book ->
                     val withoutReadAi = book.bindings.filterNot {
                         it.targetType == AiWorldBookBinding.TARGET_COMPANION &&
                                 it.targetKey == READ_AI_COMPANION_ID
                     }
-                    if (book.id in selected) {
+                    if (book.id in finalSelected) {
                         book.copy(
                             bindings = withoutReadAi + AiWorldBookBinding(
                                 targetType = AiWorldBookBinding.TARGET_COMPANION,
@@ -893,9 +901,7 @@ class ReadAiFloatingPanel @JvmOverloads constructor(
                     }
                 }
             }
-            neutralButton("管理") { openWorldBookManage() }
-            cancelButton()
-        }
+        )
     }
 
     private fun showWindowSkillDialog() {
@@ -904,24 +910,18 @@ class ReadAiFloatingPanel @JvmOverloads constructor(
             context.toastOnUi("没有可用 Skill")
             return
         }
-        val selected = windowSkillIds.toMutableSet()
-        context.alert(title = "当前窗口 Skill") {
-            multiChoiceItems(
-                items = skills.map { skill -> skill.name.ifBlank { "Skill" } }.toTypedArray(),
-                checkedItems = BooleanArray(skills.size) { index -> skills[index].id in selected }
-            ) { _, which, isChecked ->
-                if (isChecked) selected += skills[which].id else selected -= skills[which].id
+        val selected = skills.indices.filter { skills[it].id in windowSkillIds }.toSet()
+        activity?.showComposeMultiChoiceDialog(
+            title = "当前窗口 Skill",
+            labels = skills.map { skill -> skill.name.ifBlank { "Skill" } },
+            checkedIndices = selected,
+            neutralText = "清空",
+            onNeutral = { windowSkillIds = emptySet() },
+            onPositive = { checked ->
+                windowSkillIds = skills.indices.filter { checked[it] }
+                    .mapTo(linkedSetOf()) { skills[it].id }
             }
-            okButton {
-                windowSkillIds = selected.filterTo(linkedSetOf()) { id ->
-                    AppConfig.aiSkillList.any { it.id == id && it.enabled }
-                }
-            }
-            neutralButton("清空") {
-                windowSkillIds = emptySet()
-            }
-            cancelButton()
-        }
+        )
     }
 
     private fun showWindowMcpDialog() {
@@ -930,24 +930,18 @@ class ReadAiFloatingPanel @JvmOverloads constructor(
             context.toastOnUi("没有已启用 MCP")
             return
         }
-        val selected = windowMcpServerIds.toMutableSet()
-        context.alert(title = "当前窗口 MCP") {
-            multiChoiceItems(
-                items = servers.map { server -> server.name.ifBlank { "MCP" } }.toTypedArray(),
-                checkedItems = BooleanArray(servers.size) { index -> servers[index].id in selected }
-            ) { _, which, isChecked ->
-                if (isChecked) selected += servers[which].id else selected -= servers[which].id
+        val selected = servers.indices.filter { servers[it].id in windowMcpServerIds }.toSet()
+        activity?.showComposeMultiChoiceDialog(
+            title = "当前窗口 MCP",
+            labels = servers.map { server -> server.name.ifBlank { "MCP" } },
+            checkedIndices = selected,
+            neutralText = "清空",
+            onNeutral = { windowMcpServerIds = emptySet() },
+            onPositive = { checked ->
+                windowMcpServerIds = servers.indices.filter { checked[it] }
+                    .mapTo(linkedSetOf()) { servers[it].id }
             }
-            okButton {
-                windowMcpServerIds = selected.filterTo(linkedSetOf()) { id ->
-                    AppConfig.aiMcpServerList.any { it.id == id && it.enabled }
-                }
-            }
-            neutralButton("清空") {
-                windowMcpServerIds = emptySet()
-            }
-            cancelButton()
-        }
+        )
     }
 
     private fun activeWindowSkills() = AppConfig.aiSkillList.filter { it.id in windowSkillIds && it.enabled }
@@ -1340,7 +1334,7 @@ private fun ReadAiPanelContent(
                     Text(
                         text = stringResource(R.string.ask_ai),
                         color = style.colors.primaryText,
-                        fontSize = 17.sp,
+                        fontSize = MaterialTheme.typography.bodyLargeX.fontSize,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -1348,7 +1342,7 @@ private fun ReadAiPanelContent(
                     Text(
                         text = contextLabel,
                         color = style.colors.secondaryText,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         lineHeight = 16.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -1365,7 +1359,7 @@ private fun ReadAiPanelContent(
                         Text(
                             text = modelLabel,
                             color = if (requesting) style.colors.secondaryText else style.colors.accent,
-                            fontSize = 12.sp,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
@@ -1508,7 +1502,7 @@ private fun ReadAiTopMenu(
                         Text(
                             text = action.title,
                             color = style.colors.primaryText,
-                            fontSize = 14.sp,
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -1759,7 +1753,7 @@ private fun ReadAiHistoryList(
             Text(
                 text = stringResource(R.string.ai_read_history_empty),
                 color = style.colors.secondaryText,
-                fontSize = 13.sp
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize
             )
         }
         return
@@ -1784,7 +1778,7 @@ private fun ReadAiHistoryList(
                         Text(
                             text = session.title.ifBlank { stringResource(R.string.ai_new_chat) },
                             color = style.colors.primaryText,
-                            fontSize = 13.sp,
+                            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -1796,7 +1790,7 @@ private fun ReadAiHistoryList(
                                 append(timeFormat.format(Date(session.updatedAt)))
                             },
                             color = style.colors.secondaryText,
-                            fontSize = 11.sp,
+                            fontSize = MaterialTheme.typography.labelSmall.fontSize,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(top = 4.dp)
@@ -1810,7 +1804,7 @@ private fun ReadAiHistoryList(
                         Text(
                             text = stringResource(R.string.delete),
                             color = style.colors.accent,
-                            fontSize = 12.sp,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                         )
                     }
@@ -1832,7 +1826,7 @@ private fun ReadAiHistoryList(
                     Text(
                         text = stringResource(R.string.ai_read_clear_history),
                         color = style.colors.accent,
-                        fontSize = 13.sp,
+                        fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -1879,7 +1873,7 @@ private fun ReadAiComposer(
                     Text(
                         text = stringResource(R.string.ai_chat_hint),
                         color = style.colors.secondaryText.copy(alpha = 0.72f),
-                        fontSize = 15.sp
+                        fontSize = MaterialTheme.typography.bodySecondary.fontSize
                     )
                 }
                 BasicTextField(
@@ -1896,7 +1890,7 @@ private fun ReadAiComposer(
                     ),
                     textStyle = TextStyle(
                         color = style.colors.primaryText,
-                        fontSize = 15.sp,
+                        fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                         lineHeight = 21.sp
                     ),
                     modifier = Modifier

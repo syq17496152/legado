@@ -126,11 +126,8 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         invalidateOptionsMenu()
     }
 
-    override fun observeLiveBus() {
-        observeEvent<String>(EventBus.RECREATE) {
-            loadPackages()
-        }
-    }
+    // T8③（theme-arch-gap）：RECREATE 由基类统一订阅（整体重建后 loadPackages 随 onCreate 重载），
+    // 自订阅冗余已删
 
     private fun initComposeContent() {
         val container = binding.recyclerView.parent as? ViewGroup ?: return

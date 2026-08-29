@@ -21,7 +21,7 @@ import io.legado.app.R
 import io.legado.app.data.entities.Book
 import io.legado.app.help.config.CoverCollectionManager
 import io.legado.app.help.config.CoverCollectionManager.isRealCoverPath
-import io.legado.app.lib.dialogs.alert
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.applyUiInputStyle
 import io.legado.app.lib.theme.applyUiSectionTitleStyle
@@ -78,19 +78,19 @@ fun Context.showReadRecordBookActionDialog(
     fallbackName: String? = null,
     onDeleteRecord: () -> Unit
 ) {
-    alert(title) {
-        items(
-            listOf(
-                getString(R.string.read_record_open_book_info),
-                getString(R.string.read_record_delete_entry)
-            )
-        ) { _, _, index ->
+    showComposeChoiceListDialog(
+        title = title,
+        labels = listOf(
+            getString(R.string.read_record_open_book_info),
+            getString(R.string.read_record_delete_entry)
+        ),
+        onSelected = { index ->
             when (index) {
                 0 -> openReadRecordBookInfo(book, fallbackName)
                 1 -> onDeleteRecord()
             }
         }
-    }
+    )
 }
 
 fun ImageView.loadReadRecordCover(path: String?) {

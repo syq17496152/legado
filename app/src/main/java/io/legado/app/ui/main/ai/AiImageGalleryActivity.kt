@@ -16,13 +16,10 @@ import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.entities.AiGeneratedImage
 import io.legado.app.data.entities.AiImageGroup
 import io.legado.app.databinding.ActivityAiImageGalleryBinding
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.databinding.ItemAiGeneratedImageBinding
 import io.legado.app.help.ai.AiImageGalleryManager
 import io.legado.app.help.ai.AiImageGalleryManager.GalleryFilter
 import io.legado.app.help.glide.ImageLoader
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.applyUiLabelStyle
@@ -33,6 +30,9 @@ import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.lib.theme.themeMutedColorOrDefault
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.showDialogFragment
@@ -216,7 +216,10 @@ class AiImageGalleryActivity : BaseActivity<ActivityAiImageGalleryBinding>() {
         lifecycleScope.launch {
             val groups = withContext(Dispatchers.IO) { AiImageGalleryManager.listGroups() }
             val labels: List<CharSequence> = groups.map { it.name } + getString(R.string.ai_image_new_group)
-            selector(getString(R.string.ai_image_favorite_to), labels) { _, index ->
+            showComposeChoiceListDialog(
+                title = getString(R.string.ai_image_favorite_to),
+                labels = labels
+            ) { index ->
                 val group = groups.getOrNull(index)
                 if (group != null) {
                     moveSelectedToGroup(ids, group.id)
@@ -228,20 +231,19 @@ class AiImageGalleryActivity : BaseActivity<ActivityAiImageGalleryBinding>() {
     }
 
     private fun showCreateGroupDialog(ids: List<String>) {
-        val dialogBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-            editView.hint = getString(R.string.ai_image_new_group)
-        }
-        alert(getString(R.string.ai_image_new_group)) {
-            customView { dialogBinding.root }
-            okButton {
-                val name = dialogBinding.editView.text?.toString()?.trim().orEmpty()
+        showComposeTextInputDialog(
+            title = getString(R.string.ai_image_new_group),
+            hint = getString(R.string.ai_image_new_group),
+            positiveText = getString(android.R.string.ok),
+            negativeText = getString(android.R.string.cancel),
+            onPositive = { raw ->
+                val name = raw.trim()
                 if (name.isNotBlank()) {
                     val groupId = AiImageGalleryManager.createGroup(name).id
                     moveSelectedToGroup(ids, groupId)
                 }
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun moveSelectedToGroup(ids: List<String>, groupId: String?) {
@@ -258,8 +260,13 @@ class AiImageGalleryActivity : BaseActivity<ActivityAiImageGalleryBinding>() {
     private fun confirmBatchDelete() {
         val ids = selectedIds.toList()
         if (ids.isEmpty()) return
-        alert(title = getString(R.string.delete), message = "删除选中的 ${ids.size} 张图片？") {
-            okButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.delete),
+            message = "删除选中的 ${ids.size} 张图片？",
+            positiveText = getString(android.R.string.ok),
+            negativeText = getString(android.R.string.cancel),
+            dangerPositive = true,
+            onPositive = {
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) {
                         AiImageGalleryManager.deleteImages(ids)
@@ -268,8 +275,7 @@ class AiImageGalleryActivity : BaseActivity<ActivityAiImageGalleryBinding>() {
                     reload()
                 }
             }
-            cancelButton()
-        }
+        )
     }
 
     private inner class Adapter :

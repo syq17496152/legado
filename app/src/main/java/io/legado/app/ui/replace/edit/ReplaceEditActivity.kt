@@ -127,6 +127,20 @@ class ReplaceEditActivity :
                     navIcon = Icons.AutoMirrored.Filled.ArrowBack,
                     onNavClick = { finish() },
                     actions = {
+                        // topbar-icon-semantics-fix 3.2：代码/保存恢复一级图标
+                        //（对齐原版 replace_edit.xml showAsAction=always；tint 继承 actionIconContentColor 禁自传）
+                        IconButton(onClick = { onFullEditClicked() }) {
+                            Icon(
+                                imageVector = Icons.Filled.Code,
+                                contentDescription = getString(R.string.edit_content)
+                            )
+                        }
+                        IconButton(onClick = { saveReplaceRule() }) {
+                            Icon(
+                                imageVector = Icons.Filled.Save,
+                                contentDescription = getString(R.string.action_save)
+                            )
+                        }
                         Box {
                             IconButton(onClick = { menuExpanded = true }) {
                                 Icon(
@@ -176,17 +190,8 @@ class ReplaceEditActivity :
     }
 
     private fun buildMenuActions(): List<MenuAction> {
+        // 代码/保存已恢复为一级图标（3.2），不再进入溢出菜单
         return listOf(
-            MenuAction(
-                Icons.Filled.Code,
-                getString(R.string.edit_content),
-                onClick = { onFullEditClicked() }
-            ),
-            MenuAction(
-                Icons.Filled.Save,
-                getString(R.string.action_save),
-                onClick = { saveReplaceRule() }
-            ),
             MenuAction(
                 Icons.Filled.ContentCopy,
                 getString(R.string.copy_rule),

@@ -47,7 +47,6 @@ import io.legado.app.help.config.MainBottomNavConfig
 import io.legado.app.help.config.NavigationBarIconConfig
 import io.legado.app.lib.cloud.CloudStorageType
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.primaryTextColor
@@ -68,6 +67,8 @@ import io.legado.app.ui.widget.compose.AppPackageManageItemCard
 import io.legado.app.ui.widget.compose.AppPackageManageScreen
 import io.legado.app.ui.widget.compose.AppPackageManageSettingCard
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.utils.ImageCropHelper
 import io.legado.app.utils.applyStatusBarPadding
@@ -230,11 +231,8 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
         invalidateOptionsMenu()
     }
 
-    override fun observeLiveBus() {
-        observeEvent<String>(EventBus.RECREATE) {
-            loadPackages()
-        }
-    }
+    // T8②（theme-arch-gap）：RECREATE 由基类统一订阅（本页不豁免→整体重建，
+    // 重建后 onCreate→initView/loadPackages 已重载），自订阅 loadPackages 冗余已删
 
     private fun initView() {
         val container = binding.recyclerView.parent as? ViewGroup ?: return
@@ -501,14 +499,14 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
             applyUiBodyTypefaceDeep(this@NavigationBarManageActivity.uiTypeface())
             addView(PackageManageUi.nameInput(this@NavigationBarManageActivity, config.name, getString(R.string.navigation_bar_name)))
             addView(optionRow(getString(R.string.bottom_bar_layout_mode), layoutModeLabel(config.layoutMode)) {
-                selector(
+                showComposeChoiceListDialog(
                     getString(R.string.bottom_bar_layout_mode),
                     listOf(
                         getString(R.string.bottom_bar_layout_floating),
                         getString(R.string.bottom_bar_layout_standard),
                         getString(R.string.bottom_bar_layout_sidebar)
                     )
-                ) { _, index ->
+                ) { index ->
                     config.layoutMode = when (index) {
                         1 -> "standard"
                         2 -> "sidebar"
@@ -521,14 +519,14 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
             if (config.layoutMode != "sidebar") {
                 if (config.layoutMode == "floating") {
                     addView(optionRow(getString(R.string.bottom_bar_material_mode), effectModeLabel(config.effectMode)) {
-                        selector(
+                        showComposeChoiceListDialog(
                             getString(R.string.bottom_bar_material_mode),
                             listOf(
                                 getString(R.string.bottom_bar_effect_solid),
                                 getString(R.string.bottom_bar_effect_glass),
                                 getString(R.string.bottom_bar_effect_frosted)
                             )
-                        ) { _, index ->
+                        ) { index ->
                             config.effectMode = when (index) {
                                 0 -> "solid"
                                 2 -> "frosted"
@@ -579,7 +577,7 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
                         getString(R.string.theme_image_selected)
                     }
                 ) {
-                    selector(
+                    showComposeChoiceListDialog(
                         getString(R.string.navigation_bar_sidebar_background),
                         buildList {
                             add(getString(R.string.select_image))
@@ -587,7 +585,7 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
                                 add(getString(R.string.delete))
                             }
                         }
-                    ) { _, index ->
+                    ) { index ->
                         if (index == 0) {
                             pendingSidebarBackgroundEntry = currentEntry
                             selectSidebarBackground.launch {
@@ -629,13 +627,13 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
 
     private fun showBottomWallpaperSelector() {
         val hasWallpaper = !pendingConfig?.wallpaperPath.isNullOrBlank()
-        selector(
+        showComposeChoiceListDialog(
             getString(R.string.bottom_bar_wallpaper),
             buildList {
                 add(getString(R.string.theme_image_select))
                 if (hasWallpaper) add(getString(R.string.theme_image_delete))
             }
-        ) { _, index ->
+        ) { index ->
             if (index == 0) {
                 selectBottomWallpaper.launch {
                     mode = HandleFileContract.IMAGE
@@ -687,7 +685,7 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
     }
 
     private fun showOptionalColorSelector(title: String, color: Int?, target: Int) {
-        selector(title, listOf(getString(R.string.disable), getString(R.string.select_color))) { _, index ->
+        showComposeChoiceListDialog(title, listOf(getString(R.string.disable), getString(R.string.select_color))) { index ->
             if (index == 0) {
                 if (target == COLOR_BORDER) {
                     pendingConfig?.borderColor = null
@@ -782,10 +780,10 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
             )
             layoutParams = LinearLayout.LayoutParams(44.dp, 44.dp).apply { marginStart = 8.dp }
             setOnClickListener {
-                selector(
+                showComposeChoiceListDialog(
                     contentDescription,
                     listOf(getString(R.string.select_image), getString(R.string.delete))
-                ) { _, index ->
+                ) { index ->
                     if (index == 0) {
                         val code = requestSingleIconBase + NavigationBarIconConfig.extraItems.indexOf(item)
                         pendingIconRequest = IconRequest(code, entry, item, selected = false, single = true)
@@ -820,10 +818,10 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
             )
             layoutParams = LinearLayout.LayoutParams(44.dp, 44.dp).apply { marginStart = 8.dp }
             setOnClickListener {
-                selector(
+                showComposeChoiceListDialog(
                     contentDescription,
                     listOf(getString(R.string.select_image), getString(R.string.delete))
-                ) { _, index ->
+                ) { index ->
                     if (index == 0) {
                         val code = NavigationBarIconConfig.items.indexOf(item) * 2 + if (selected) 1 else 0
                         pendingIconRequest = IconRequest(code, entry, item, selected)
@@ -925,12 +923,16 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
         message: String,
         block: suspend () -> Unit
     ) {
-        alert(getString(R.string.delete), message) {
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.delete),
+            message = message,
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 runAction(block)
             }
-            noButton()
-        }
+        )
     }
 
     private fun applyPackage(entry: NavigationBarIconConfig.Entry) {

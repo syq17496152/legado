@@ -1,5 +1,6 @@
 package io.legado.app.ui.main.explore
 
+import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -73,6 +74,11 @@ import io.legado.app.ui.widget.compose.appSettingPanelBackground
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.ui.widget.image.CoverImageView
 import kotlin.math.roundToInt
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.theme.bodyLargeX
+import io.legado.app.ui.theme.headlineSmallX
 
 private const val BOOK_COVER_ASPECT_RATIO = 0.75f
 private val DiscoverySuiteEmphasizedEasing = CubicBezierEasing(0.20f, 0.00f, 0.00f, 1.00f)
@@ -282,7 +288,7 @@ private fun DiscoverySuiteSearchBar(
             Text(
                 text = context.getString(R.string.search),
                 color = palette.secondaryText,
-                fontSize = 16.sp,
+                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -373,14 +379,14 @@ private fun DiscoverySuiteEmptyState(
     ) {
         Text(
             text = title,
-            fontSize = 17.sp,
+            fontSize = MaterialTheme.typography.bodyLargeX.fontSize,
             fontWeight = FontWeight.SemiBold,
             fontFamily = palette.titleFontFamily,
             color = palette.primaryText
         )
         Text(
             text = summary,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             fontFamily = palette.bodyFontFamily,
             color = palette.secondaryText
         )
@@ -401,7 +407,7 @@ private fun DiscoverySuiteEmptyState(
             Text(
                 text = action,
                 fontWeight = FontWeight.Medium,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 color = palette.accent
             )
@@ -437,7 +443,7 @@ private fun DiscoverySuiteWidgetSection(
         if (showTitle) {
             Text(
                 text = widget.displayTitle(context),
-                fontSize = 21.sp,
+                fontSize = MaterialTheme.typography.headlineSmallX.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = palette.titleFontFamily,
                 color = palette.primaryText,
@@ -450,7 +456,7 @@ private fun DiscoverySuiteWidgetSection(
                 if (widget.targets.isEmpty()) {
                     Text(
                         text = LocalContext.current.getString(R.string.discovery_suite_widget_pending),
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         fontFamily = palette.bodyFontFamily,
                         color = palette.secondaryText
                     )
@@ -466,7 +472,7 @@ private fun DiscoverySuiteWidgetSection(
                 if (widget.targets.isEmpty()) {
                     Text(
                         text = LocalContext.current.getString(R.string.discovery_suite_widget_pending),
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         fontFamily = palette.bodyFontFamily,
                         color = palette.secondaryText
                     )
@@ -482,14 +488,14 @@ private fun DiscoverySuiteWidgetSection(
                 if (widget.targets.isEmpty()) {
                     Text(
                         text = LocalContext.current.getString(R.string.discovery_suite_widget_pending),
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         fontFamily = palette.bodyFontFamily,
                         color = palette.secondaryText
                     )
                 } else if (isLoading && rankedBooks.isEmpty()) {
                     Text(
                         text = LocalContext.current.getString(R.string.discovery_suite_widget_loading),
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         fontFamily = palette.bodyFontFamily,
                         color = palette.secondaryText
                     )
@@ -508,13 +514,13 @@ private fun DiscoverySuiteWidgetSection(
             }
             isLoading && books.isEmpty() -> Text(
                 text = LocalContext.current.getString(R.string.discovery_suite_widget_loading),
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 color = palette.secondaryText
             )
             books.isEmpty() -> Text(
                 text = LocalContext.current.getString(R.string.discovery_suite_widget_pending),
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 color = palette.secondaryText
             )
@@ -637,7 +643,7 @@ private fun DiscoverySuiteWaterfallBookCard(
             modifier = Modifier.padding(top = 8.dp),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             lineHeight = 18.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = palette.titleFontFamily,
@@ -652,7 +658,7 @@ private fun DiscoverySuiteWaterfallBookCard(
                 modifier = Modifier.padding(top = 3.dp),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 color = palette.secondaryText
             )
@@ -776,7 +782,7 @@ private fun DiscoverySuiteTagBarWidget(
                     text = target.title.compactTagTitle(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     fontWeight = FontWeight.Medium,
                     fontFamily = palette.bodyFontFamily,
                     color = palette.primaryText
@@ -819,7 +825,7 @@ private fun DiscoverySuiteRankButtonsWidget(
                             text = target.title.compactTagTitle(),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
-                            fontSize = 15.sp,
+                            fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                             lineHeight = 18.sp,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = palette.bodyFontFamily,
@@ -908,7 +914,7 @@ private fun DiscoverySuiteRankedListWidget(
                     val selected = index == selectedTargetIndex
                     Column(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(AppShapes.rounded(8))
                             .clickable {
                                 selectedTargetIndex = index
                             }
@@ -928,7 +934,7 @@ private fun DiscoverySuiteRankedListWidget(
                             modifier = Modifier
                                 .width(if (selected) 42.dp else 0.dp)
                                 .height(3.dp)
-                                .clip(RoundedCornerShape(2.dp))
+                                .clip(AppShapes.rounded(2))
                                 .background(if (selected) palette.accent else Color.Transparent)
                         )
                     }
@@ -952,7 +958,7 @@ private fun DiscoverySuiteRankedListWidget(
                     ) {
                         Text(
                             text = LocalContext.current.getString(R.string.discovery_suite_widget_pending),
-                            fontSize = 14.sp,
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                             fontFamily = palette.bodyFontFamily,
                             color = palette.secondaryText
                         )
@@ -1036,7 +1042,7 @@ private fun DiscoverySuiteRankedListBookRow(
                 text = book.name,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = palette.titleFontFamily,
                 color = palette.primaryText
@@ -1050,7 +1056,7 @@ private fun DiscoverySuiteRankedListBookRow(
                     modifier = Modifier.padding(top = 3.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontFamily = palette.bodyFontFamily,
                     color = palette.secondaryText
                 )
@@ -1172,7 +1178,7 @@ private fun DiscoverySuiteRefreshButton(
     ) {
         Text(
             text = LocalContext.current.getString(R.string.discovery_suite_refresh_batch),
-            fontSize = 15.sp,
+            fontSize = MaterialTheme.typography.bodySecondary.fontSize,
             fontWeight = FontWeight.SemiBold,
             fontFamily = palette.bodyFontFamily,
             color = palette.secondaryText
@@ -1226,13 +1232,13 @@ private fun DiscoverySuiteCoverBookItem(
                         .padding(7.dp)
                         .size(22.dp)
                         .align(Alignment.TopStart)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(AppShapes.rounded(8))
                         .background(Color(palette.rowColor).copy(alpha = 0.88f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = it.toString(),
-                        fontSize = 11.sp,
+                        fontSize = MaterialTheme.typography.labelSmall.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         fontFamily = palette.bodyFontFamily,
                         color = palette.accent

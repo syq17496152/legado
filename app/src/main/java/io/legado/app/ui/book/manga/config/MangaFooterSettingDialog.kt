@@ -43,6 +43,9 @@ import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.postEvent
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.theme.subtitleLarge
 
 class MangaFooterSettingDialog : ComposeDialogFragment() {
 
@@ -127,7 +130,7 @@ class MangaFooterSettingDialog : ComposeDialogFragment() {
                 Text(
                     text = stringResource(R.string.manga_footer_config),
                     color = style.accent,
-                    fontSize = 18.sp,
+                    fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = style.titleFontFamily,
                     maxLines = 1,
@@ -252,7 +255,7 @@ class MangaFooterSettingDialog : ComposeDialogFragment() {
         Text(
             text = title,
             color = style.accent,
-            fontSize = 15.sp,
+            fontSize = MaterialTheme.typography.bodySecondary.fontSize,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
         )

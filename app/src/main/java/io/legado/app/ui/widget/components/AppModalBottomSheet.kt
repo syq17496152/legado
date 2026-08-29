@@ -1,5 +1,6 @@
 package io.legado.app.ui.widget.components
 
+import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope

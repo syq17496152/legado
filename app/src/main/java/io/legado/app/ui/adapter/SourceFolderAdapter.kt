@@ -14,11 +14,11 @@ import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.entities.SourceGroupCover
 import io.legado.app.databinding.ItemSourceFolderGridBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.isDarkTheme
 import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.model.BookCover
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import kotlin.math.max
 
 /**
@@ -85,7 +85,10 @@ class SourceFolderAdapter(
         }
         binding.root.setOnLongClickListener {
             getItem(holder.layoutPosition)?.let { folder ->
-                context.selector(items = buildLongClickActions(folder)) { _, i ->
+                context.showComposeChoiceListDialog(
+                    title = "",
+                    labels = buildLongClickActions(folder)
+                ) { i ->
                     when (i) {
                         0 -> callBack.onFolderSelectImage(folder)
                         1 -> callBack.onFolderRestoreCover(folder)

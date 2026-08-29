@@ -67,6 +67,18 @@ class FilletImageView @JvmOverloads constructor(
         height = getHeight().toFloat()
     }
 
+    /**
+     * 运行时圆角设置（rss-classic-layout-align S4）：四角统一 radiusPx，
+     * 用于对齐主题圆角体系（UiCorner.actionRadius 等），替代 XML 硬编码。
+     */
+    fun setCornerRadius(radiusPx: Int) {
+        leftTopRadius = radiusPx
+        rightTopRadius = radiusPx
+        rightBottomRadius = radiusPx
+        leftBottomRadius = radiusPx
+        invalidate()
+    }
+
     override fun onDraw(canvas: Canvas) {
         //这里做下判断，只有图片的宽高大于设置的圆角距离的时候才进行裁剪
         val maxLeft = max(leftTopRadius, leftBottomRadius)

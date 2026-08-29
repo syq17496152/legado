@@ -17,8 +17,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.appcompat.app.AppCompatActivity
 import io.legado.app.R
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleGroupStore
 import io.legado.app.ui.book.read.config.HighlightRuleStore
@@ -26,6 +26,7 @@ import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.ComposeGroupManageDialogContent
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.utils.GSON
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
@@ -100,9 +101,13 @@ class HighlightRuleGroupManageDialog @JvmOverloads constructor(
                 context.toastOnUi(context.getString(R.string.highlight_rule_group_default_protected))
                 return
             }
-            alert(context.getString(R.string.delete_group)) {
-                setMessage(context.getString(R.string.highlight_rule_group_delete_confirm))
-                okButton {
+            (context as? AppCompatActivity)?.showComposeConfirmDialog(
+                title = context.getString(R.string.delete_group),
+                message = context.getString(R.string.highlight_rule_group_delete_confirm),
+                positiveText = context.getString(R.string.yes),
+                negativeText = context.getString(R.string.no),
+                dangerPositive = true,
+                onPositive = {
                     groups = groups.filterNot { it == group }
                     rules = rules.map {
                         if (it.group == group) it.copy(group = HighlightRuleGroupStore.DEFAULT_GROUP) else it
@@ -110,8 +115,7 @@ class HighlightRuleGroupManageDialog @JvmOverloads constructor(
                     saveAll()
                     onChanged(group, null)
                 }
-                cancelButton()
-            }
+            )
         }
 
         fun moreActionsFor(group: String): List<MenuAction> {

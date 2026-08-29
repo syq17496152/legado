@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.legado.app.ui.theme.labelXSmall
 
 /**
  * 圆点角标（替代 BadgedBox，对应 AD-17 策略）。
@@ -37,7 +38,7 @@ fun BadgeDot(
                 text = if (count > 99) "99+" else count.toString(),
                 color = if (badgeTextBright(contentColor)) Color.Black else Color.White,
                 // 角标紧凑字号豁免（比 labelSmall 11sp 更小，刻意不纳入 Typography，避免角标过大）
-                fontSize = 10.sp,
+                fontSize = MaterialTheme.typography.labelXSmall.fontSize,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
             )

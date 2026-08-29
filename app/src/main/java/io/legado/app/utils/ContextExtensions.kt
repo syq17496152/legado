@@ -317,7 +317,8 @@ fun Context.sendToClip(text: String) {
 fun Context.getClipText(): String? {
     clipboardManager.primaryClip?.let {
         if (it.itemCount > 0) {
-            return it.getItemAt(0).text.toString().trim()
+            // ClipDescription.MIMETYPE_TEXT_PLAIN/_HTML 时 text 才非空；图片/URI/Intent 项 text==null，需判空避免 NPE
+            return it.getItemAt(0).text?.toString()?.trim()
         }
     }
     return null

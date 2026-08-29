@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.MenuAction
+import androidx.compose.material3.MaterialTheme
 
 @Composable
 fun ComposeGroupManageDialogContent(
@@ -108,7 +109,7 @@ fun ComposeGroupManageDialogContent(
                             if (isEditing) R.string.group_edit else R.string.add_group
                         ),
                         color = style.primaryText,
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -203,7 +204,7 @@ private fun GroupManageTextField(
         textStyle = androidx.compose.ui.text.TextStyle(
             color = style.primaryText,
             fontFamily = style.bodyFontFamily,
-            fontSize = 14.sp
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize
         ),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(style.actionRadius),
         colors = OutlinedTextFieldDefaults.colors(
@@ -249,7 +250,7 @@ private fun GroupManageRow(
                 Text(
                     text = group,
                     color = style.primaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -259,7 +260,7 @@ private fun GroupManageRow(
                     Text(
                         text = secondaryText,
                         color = style.secondaryText,
-                        fontSize = 11.sp,
+                        fontSize = MaterialTheme.typography.labelSmall.fontSize,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )

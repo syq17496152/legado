@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.ui.widget.components.AppShapes
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
 import java.text.SimpleDateFormat
@@ -91,25 +92,10 @@ fun TimestampConvertScreen(
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.secondary,
-                    scrolledContainerColor = MaterialTheme.colorScheme.secondary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSecondary,
-                    titleContentColor = MaterialTheme.colorScheme.onSecondary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSecondary
-                ),
-                title = {
-                    Text(
-                        text = stringResource(R.string.debug_timestamp),
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                }
+            GlassTopAppBar(
+                title = stringResource(R.string.debug_timestamp),
+                navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                onNavClick = onBackClick
             )
         }
     ) { paddingValues ->

@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.read.config
 
 import android.app.Activity.RESULT_OK
+import android.app.Dialog
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -8,68 +9,67 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.viewModels
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
 import io.legado.app.data.entities.HttpTTS
-import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.composeActionRadius
-import io.legado.app.lib.theme.composePanelRadius
-import io.legado.app.lib.theme.primaryTextColor
-import io.legado.app.lib.theme.secondaryTextColor
-import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.AppDialogStyle
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.GSON
-import io.legado.app.utils.ColorUtils
-import io.legado.app.utils.dpToPx
 import io.legado.app.utils.isJsonArray
 import io.legado.app.utils.isJsonObject
 import io.legado.app.utils.sendToClip
-import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 
-class HttpTtsEditDialog() : BaseDialogFragment(0) {
+class HttpTtsEditDialog() : ComposeDialogFragment() {
+
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     constructor(id: Long) : this() {
         arguments = Bundle().apply {
@@ -89,9 +89,10 @@ class HttpTtsEditDialog() : BaseDialogFragment(0) {
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        return super.onCreateDialog(savedInstanceState).apply {
+            setCanceledOnTouchOutside(false)
+        }
     }
 
     override fun onCreateView(
@@ -102,32 +103,43 @@ class HttpTtsEditDialog() : BaseDialogFragment(0) {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                HttpTtsEditScreen(
-                    draft = draft,
-                    onDraftChange = { draft = it },
-                    onFocus = { focusedField = it },
-                    onSave = ::save,
-                    onLogin = ::saveAndLogin,
-                    onFullEdit = ::openFullEdit,
-                    onCopy = { context?.sendToClip(GSON.toJson(draft.toHttpTts(viewModel.id))) },
-                    onPaste = { viewModel.importFromClip { draft = it.toDraft() } },
-                    onShowLoginHeader = ::showLoginHeader,
-                    onClearLoginHeader = {
-                        val tts = draft.toHttpTts(viewModel.id)
-                        tts.removeLoginHeader()
-                        draft = tts.toDraft()
-                    },
-                    onLog = { showDialogFragment<AppLogDialog>() },
-                    onHelp = { showHelp("httpTTSHelp") },
-                    onClose = { dismiss() }
-                )
+                LaunchedEffect(Unit) {
+                    viewModel.initData(arguments) { draft = it.toDraft() }
+                }
+                LegadoTheme {
+                    val style = rememberAppDialogStyle()
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { dismiss() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        HttpTtsEditScreen(
+                            draft = draft,
+                            onDraftChange = { draft = it },
+                            onFocus = { focusedField = it },
+                            onSave = ::save,
+                            onLogin = ::saveAndLogin,
+                            onFullEdit = ::openFullEdit,
+                            onCopy = { context?.sendToClip(GSON.toJson(draft.toHttpTts(viewModel.id))) },
+                            onPaste = { viewModel.importFromClip { draft = it.toDraft() } },
+                            onShowLoginHeader = ::showLoginHeader,
+                            onClearLoginHeader = {
+                                val tts = draft.toHttpTts(viewModel.id)
+                                tts.removeLoginHeader()
+                                draft = tts.toDraft()
+                            },
+                            onLog = { showDialogFragment<AppLogDialog>() },
+                            onHelp = { showHelp("httpTTSHelp") },
+                            onClose = { dismiss() },
+                            style = style
+                        )
+                    }
+                }
             }
-        }
-    }
-
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        viewModel.initData(arguments) {
-            draft = it.toDraft()
         }
     }
 
@@ -329,86 +341,108 @@ private fun HttpTtsEditScreen(
     onClearLoginHeader: () -> Unit,
     onLog: () -> Unit,
     onHelp: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    style: AppDialogStyle
 ) {
-    val colors = rememberHttpTtsEditColors()
-    val context = LocalContext.current
-    CompositionLocalProvider(
-        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = FontFamily(context.uiTypeface()))
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = colors.page,
-            shape = RoundedCornerShape(context.composePanelRadius())
-        ) {
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp).imePadding()) {
-            Row {
-                Text(
-                    text = "HTTP 朗读规则",
-                    color = colors.text,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(onClick = onFullEdit) { Text("全屏", color = colors.accent) }
-                TextButton(onClick = onSave) { Text("保存", color = colors.accent) }
-                TextButton(onClick = onClose) { Text("关闭", color = colors.subText) }
-            }
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                HeaderAction("登录", colors, onLogin)
-                HeaderAction("复制", colors, onCopy)
-                HeaderAction("粘贴", colors, onPaste)
-                HeaderAction("登录头", colors, onShowLoginHeader)
-                HeaderAction("清登录头", colors, onClearLoginHeader)
-                HeaderAction("日志", colors, onLog)
-                HeaderAction("帮助", colors, onHelp)
-            }
+    val palette = style.toMiuixPalette()
+    AppDialogFrame(
+        modifier = Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null
+        ) {},
+        title = "HTTP 朗读规则",
+        scrollContent = true,
+        content = {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 12.dp)
-                    .verticalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                EditField(HttpTtsField.Name, draft.name, { onDraftChange(draft.copy(name = it)) }, onFocus, singleLine = true)
-                EditField(HttpTtsField.Speakers, draft.speakersJson, { onDraftChange(draft.copy(speakersJson = it)) }, onFocus, minLines = 4)
-                EditField(HttpTtsField.Emotions, draft.emotionsJson, { onDraftChange(draft.copy(emotionsJson = it)) }, onFocus, minLines = 3)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    HeaderActionChip("登录", style, onLogin)
+                    HeaderActionChip("复制", style, onCopy)
+                    HeaderActionChip("粘贴", style, onPaste)
+                    HeaderActionChip("登录头", style, onShowLoginHeader)
+                    HeaderActionChip("清登录头", style, onClearLoginHeader)
+                    HeaderActionChip("日志", style, onLog)
+                    HeaderActionChip("帮助", style, onHelp)
+                }
+                EditField(HttpTtsField.Name, draft.name, { onDraftChange(draft.copy(name = it)) }, onFocus, style, singleLine = true)
+                EditField(
+                    HttpTtsField.Speakers, draft.speakersJson,
+                    { onDraftChange(draft.copy(speakersJson = it)) }, onFocus, style,
+                    minLines = 4,
+                    supportingText = "可为空；为空时该 HTTP TTS 会作为普通发言人使用。"
+                )
+                EditField(
+                    HttpTtsField.Emotions, draft.emotionsJson,
+                    { onDraftChange(draft.copy(emotionsJson = it)) }, onFocus, style,
+                    minLines = 3,
+                    supportingText = "可为空；填写后角色和快捷选择可选默认情绪。"
+                )
                 SelectionContainer {
                     Text(
                         text = "发言人可填 [{\"speakerName\":\"晓晓\",\"toneID\":\"xxx\"}]，也可用 [{\"groupName\":\"女声\",\"items\":[...]}] 分组；情绪字段使用 emotionName / emotionTag。",
-                        color = colors.subText,
-                        fontSize = 12.sp,
+                        color = style.secondaryText,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         lineHeight = 18.sp
                     )
                 }
-                EditField(HttpTtsField.Url, draft.url, { onDraftChange(draft.copy(url = it)) }, onFocus, minLines = 4)
-                EditField(HttpTtsField.ContentType, draft.contentType, { onDraftChange(draft.copy(contentType = it)) }, onFocus, singleLine = true)
-                EditField(HttpTtsField.ConcurrentRate, draft.concurrentRate, { onDraftChange(draft.copy(concurrentRate = it)) }, onFocus, singleLine = true)
-                EditField(HttpTtsField.SynthesisThreadCount, draft.synthesisThreadCount, { onDraftChange(draft.copy(synthesisThreadCount = it)) }, onFocus, singleLine = true)
-                EditField(HttpTtsField.LoginUrl, draft.loginUrl, { onDraftChange(draft.copy(loginUrl = it)) }, onFocus, minLines = 2)
-                EditField(HttpTtsField.LoginUi, draft.loginUi, { onDraftChange(draft.copy(loginUi = it)) }, onFocus, minLines = 3)
-                EditField(HttpTtsField.LoginCheckJs, draft.loginCheckJs, { onDraftChange(draft.copy(loginCheckJs = it)) }, onFocus, minLines = 3)
-                EditField(HttpTtsField.Header, draft.header, { onDraftChange(draft.copy(header = it)) }, onFocus, minLines = 3)
-                EditField(HttpTtsField.JsLib, draft.jsLib, { onDraftChange(draft.copy(jsLib = it)) }, onFocus, minLines = 4)
-                Spacer(modifier = Modifier.height(18.dp))
+                EditField(HttpTtsField.Url, draft.url, { onDraftChange(draft.copy(url = it)) }, onFocus, style, minLines = 4)
+                EditField(HttpTtsField.ContentType, draft.contentType, { onDraftChange(draft.copy(contentType = it)) }, onFocus, style, singleLine = true)
+                EditField(HttpTtsField.ConcurrentRate, draft.concurrentRate, { onDraftChange(draft.copy(concurrentRate = it)) }, onFocus, style, singleLine = true)
+                EditField(HttpTtsField.SynthesisThreadCount, draft.synthesisThreadCount, { onDraftChange(draft.copy(synthesisThreadCount = it)) }, onFocus, style, singleLine = true)
+                EditField(HttpTtsField.LoginUrl, draft.loginUrl, { onDraftChange(draft.copy(loginUrl = it)) }, onFocus, style, minLines = 2)
+                EditField(HttpTtsField.LoginUi, draft.loginUi, { onDraftChange(draft.copy(loginUi = it)) }, onFocus, style, minLines = 3)
+                EditField(HttpTtsField.LoginCheckJs, draft.loginCheckJs, { onDraftChange(draft.copy(loginCheckJs = it)) }, onFocus, style, minLines = 3)
+                EditField(HttpTtsField.Header, draft.header, { onDraftChange(draft.copy(header = it)) }, onFocus, style, minLines = 3)
+                EditField(HttpTtsField.JsLib, draft.jsLib, { onDraftChange(draft.copy(jsLib = it)) }, onFocus, style, minLines = 4)
             }
-            }
+        },
+        actions = {
+            LegadoMiuixActionButton(
+                text = "全屏",
+                palette = palette,
+                onClick = onFullEdit,
+                cornerRadius = style.actionRadius
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            LegadoMiuixActionButton(
+                text = "保存",
+                palette = palette,
+                onClick = onSave,
+                primary = true,
+                cornerRadius = style.actionRadius
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            LegadoMiuixActionButton(
+                text = "关闭",
+                palette = palette,
+                onClick = onClose,
+                cornerRadius = style.actionRadius
+            )
         }
-    }
+    )
 }
 
 @Composable
-private fun HeaderAction(text: String, colors: HttpTtsEditColors, onClick: () -> Unit) {
+private fun HeaderActionChip(text: String, style: AppDialogStyle, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        color = colors.card,
-        shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-        border = BorderStroke(1.dp, colors.stroke)
+        color = style.fieldSurface,
+        contentColor = style.primaryText,
+        shape = RoundedCornerShape(style.actionRadius),
+        border = BorderStroke(1.dp, style.stroke)
     ) {
-        Text(text, color = colors.text, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+        Text(
+            text = text,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+        )
     }
 }
 
@@ -418,49 +452,40 @@ private fun EditField(
     value: String,
     onValueChange: (String) -> Unit,
     onFocus: (HttpTtsField) -> Unit,
+    style: AppDialogStyle,
     singleLine: Boolean = false,
-    minLines: Int = 2
+    minLines: Int = 2,
+    supportingText: String? = null
 ) {
-    val colors = rememberHttpTtsEditColors()
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(field.label) },
         singleLine = singleLine,
         minLines = if (singleLine) 1 else minLines,
+        maxLines = if (singleLine) 1 else 10,
         modifier = Modifier
             .fillMaxWidth()
             .onFocusChanged {
                 if (it.isFocused) onFocus(field)
             },
-        shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-        supportingText = when (field) {
-            HttpTtsField.Speakers -> ({ Text("可为空；为空时该 HTTP TTS 会作为普通发言人使用。", color = colors.subText) })
-            HttpTtsField.Emotions -> ({ Text("可为空；填写后角色和快捷选择可选默认情绪。", color = colors.subText) })
-            else -> null
+        shape = RoundedCornerShape(style.actionRadius),
+        textStyle = MaterialTheme.typography.bodyMedium.copy(color = style.primaryText),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = style.primaryText,
+            unfocusedTextColor = style.primaryText,
+            focusedContainerColor = style.fieldSurface,
+            unfocusedContainerColor = style.fieldSurface,
+            cursorColor = style.accent,
+            focusedBorderColor = style.accent.copy(alpha = 0.55f),
+            unfocusedBorderColor = style.stroke,
+            focusedLabelColor = style.secondaryText,
+            unfocusedLabelColor = style.secondaryText,
+            focusedSupportingTextColor = style.secondaryText,
+            unfocusedSupportingTextColor = style.secondaryText
+        ),
+        supportingText = supportingText?.let { helpText ->
+            { Text(helpText, color = style.secondaryText) }
         }
-    )
-}
-
-private data class HttpTtsEditColors(
-    val page: Color,
-    val card: Color,
-    val text: Color,
-    val subText: Color,
-    val stroke: Color,
-    val accent: Color
-)
-
-@Composable
-private fun rememberHttpTtsEditColors(): HttpTtsEditColors {
-    val context = LocalContext.current
-    val night = AppConfig.isNightTheme
-    return HttpTtsEditColors(
-        page = Color(if (night) 0xff15171b.toInt() else 0xffffffff.toInt()),
-        card = Color(if (night) 0xff20242a.toInt() else 0xfff6f7fa.toInt()),
-        text = Color(context.primaryTextColor),
-        subText = Color(context.secondaryTextColor),
-        stroke = Color(if (night) 0x26ffffff else 0x18000000),
-        accent = Color(ColorUtils.blendColors(context.accentColor, if (night) 0xffffffff.toInt() else 0xff000000.toInt(), 0.04f))
     )
 }

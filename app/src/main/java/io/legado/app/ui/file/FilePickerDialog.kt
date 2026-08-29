@@ -1,48 +1,73 @@
 package io.legado.app.ui.file
 
-import android.annotation.SuppressLint
 import android.content.DialogInterface
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
-import android.view.MenuItem
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.widget.Toolbar
-import androidx.core.content.res.ResourcesCompat
-import androidx.core.graphics.drawable.DrawableCompat
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.viewModels
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
-import io.legado.app.databinding.DialogEditTextBinding
-import io.legado.app.databinding.DialogFileChooserBinding
-import io.legado.app.databinding.ItemFilePickerBinding
-import io.legado.app.databinding.ItemPathPickerBinding
-import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.getPrimaryDisabledTextColor
-import io.legado.app.lib.theme.getPrimaryTextColor
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.file.HandleFileContract.Companion.FILE
 import io.legado.app.ui.file.utils.FilePickerIcon
-import io.legado.app.ui.widget.recycler.VerticalDivider
-import io.legado.app.utils.ConvertUtils
+import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.AppDialogStyle
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.LegadoComposeTheme
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.showComposeTextFormDialog
+import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.FileUtils
-import io.legado.app.utils.applyTint
-import io.legado.app.utils.getCompatColor
-import io.legado.app.utils.setLayout
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import java.io.File
 
-
-class FilePickerDialog : BaseDialogFragment(R.layout.dialog_file_chooser),
-    Toolbar.OnMenuItemClickListener {
+/**
+ * 文件选择器（View→Compose 迁移）
+ * 双 RecyclerView（路径面包屑 + 文件列表）→ Compose Row(horizontalScroll) + LazyColumn；
+ * 对外接口不变：[show]/[tag]/[CallBack]，浏览/选择/新建文件夹/onDismiss 结束宿主 Activity 语义保持一致。
+ */
+class FilePickerDialog() : ComposeDialogFragment() {
 
     companion object {
         const val tag = "FileChooserDialog"
@@ -67,87 +92,38 @@ class FilePickerDialog : BaseDialogFragment(R.layout.dialog_file_chooser),
         }
     }
 
-    private val binding by viewBinding(DialogFileChooserBinding::bind)
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
+
+    override val dialogWindowAnimations: Int = R.style.AnimDialogFade
+
     private val viewModel by viewModels<FilePickerViewModel>()
     private val dirParent = ".."
-    private val pathAdapter by lazy { PathAdapter() }
-    private val fileAdapter by lazy { FileAdapter() }
 
-    override fun onStart() {
-        super.onStart()
-        setLayout(0.9f, 0.8f)
-    }
+    private var filesState by mutableStateOf<List<File>>(emptyList())
+    private var selectFileState by mutableStateOf<File?>(null)
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        view.setBackgroundResource(R.color.background_card)
-        initMenu()
-        initContentView()
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
         viewModel.filesLiveData.observe(viewLifecycleOwner) {
-            fileAdapter.selectFile = null
-            fileAdapter.setItems(it)
+            selectFileState = null
+            filesState = it
         }
         viewModel.initData(arguments)
-        binding.toolBar.title = arguments?.getString("title") ?: let {
-            if (viewModel.isSelectDir) {
-                getString(R.string.folder_chooser)
-            } else {
-                getString(R.string.file_chooser)
-            }
-        }
     }
 
-    private fun initMenu() {
-        binding.toolBar.inflateMenu(R.menu.file_chooser)
-        binding.toolBar.menu.applyTint(requireContext())
-        binding.toolBar.setOnMenuItemClickListener(this)
-    }
-
-    private fun initContentView() {
-        binding.rvPath.layoutManager = LinearLayoutManager(activity, RecyclerView.HORIZONTAL, false)
-        binding.rvPath.adapter = pathAdapter
-
-        binding.rvFile.addItemDecoration(VerticalDivider(requireContext()))
-        binding.rvFile.layoutManager = LinearLayoutManager(activity)
-        binding.rvFile.adapter = fileAdapter
-
-        binding.tvOk.setOnClickListener {
-            if (viewModel.isSelectDir) {
-                viewModel.lastDir?.let {
-                    setResultData(it.path)
-                    dismissAllowingStateLoss()
-                }
-            } else {
-                val file = fileAdapter.selectFile
-                if (file == null) {
-                    toastOnUi("请选择文件")
-                } else {
-                    setResultData(file.path)
-                    dismissAllowingStateLoss()
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoComposeTheme {
+                    FilePickerContent()
                 }
             }
         }
-    }
-
-    override fun onMenuItemClick(item: MenuItem?): Boolean {
-        when (item?.itemId) {
-            R.id.menu_create -> alert(R.string.create_folder) {
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = "文件夹名"
-                }
-                customView { alertBinding.root }
-                okButton {
-                    val text = alertBinding.editView.text?.toString()
-                    if (text.isNullOrBlank()) {
-                        toastOnUi("文件夹名不能为空")
-                    } else {
-                        viewModel.createFolder(text.trim())
-                    }
-                }
-                cancelButton()
-            }
-        }
-        return true
     }
 
     private fun setResultData(path: String) {
@@ -161,135 +137,242 @@ class FilePickerDialog : BaseDialogFragment(R.layout.dialog_file_chooser),
         activity?.finish()
     }
 
-    @SuppressLint("SetTextI18n")
-    inner class PathAdapter :
-        RecyclerAdapter<File, ItemPathPickerBinding>(requireContext()) {
-
-        private val arrowIcon = ConvertUtils.toDrawable(FilePickerIcon.getArrow())
-
-        init {
-            addHeaderView {
-                ItemPathPickerBinding.inflate(inflater, it, false).apply {
-                    textView.text = "root"
-                    imageView.setImageDrawable(arrowIcon)
-                    root.setOnClickListener {
-                        viewModel.subDocs.clear()
-                        setItems(viewModel.subDocs)
-                        viewModel.upFiles(viewModel.rootDoc)
-                    }
-                }
-            }
-        }
-
-        override fun getViewBinding(parent: ViewGroup): ItemPathPickerBinding {
-            return ItemPathPickerBinding.inflate(inflater, parent, false).apply {
-                imageView.setImageDrawable(arrowIcon)
-            }
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemPathPickerBinding) {
-            binding.root.setOnClickListener {
-                viewModel.subDocs = viewModel.subDocs.subList(0, holder.layoutPosition)
-                setItems(viewModel.subDocs)
-                viewModel.upFiles(viewModel.subDocs.lastOrNull())
-            }
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemPathPickerBinding,
-            item: File,
-            payloads: MutableList<Any>
-        ) {
-            binding.textView.text = item.name
-        }
-
-    }
-
-    inner class FileAdapter : RecyclerAdapter<File, ItemFilePickerBinding>(requireContext()) {
-        private val primaryTextColor = context.getPrimaryTextColor(!AppConfig.isNightTheme)
-        private val disabledTextColor = context.getPrimaryDisabledTextColor(!AppConfig.isNightTheme)
-        private val upIcon = ConvertUtils.toDrawable(FilePickerIcon.getUpDir())!!
-        private val folderIcon = ConvertUtils.toDrawable(FilePickerIcon.getFolder())!!
-        private val fileIcon = ConvertUtils.toDrawable(FilePickerIcon.getFile())!!
-        private val selectDrawable =
-            ResourcesCompat.getDrawable(resources, R.drawable.shape_radius_1dp, null)!!.apply {
-                DrawableCompat.setTint(this, primaryTextColor)
-            }
-        var selectFile: File? = null
-
-        override fun getViewBinding(parent: ViewGroup): ItemFilePickerBinding {
-            return ItemFilePickerBinding.inflate(inflater, parent, false)
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemFilePickerBinding) {
-            binding.root.setOnClickListener {
-                val item = getItemByLayoutPosition(holder.layoutPosition)
-                item?.let {
-                    if (item == viewModel.lastDir) {
-                        viewModel.subDocs.removeLastOrNull()
-                        pathAdapter.setItems(viewModel.subDocs)
-                        viewModel.upFiles(viewModel.subDocs.lastOrNull() ?: viewModel.rootDoc)
-                    } else if (item.isDirectory) {
-                        viewModel.subDocs.add(item)
-                        pathAdapter.setItems(viewModel.subDocs)
-                        viewModel.upFiles(item)
-                    } else if (viewModel.isSelectFile) {
-                        viewModel.allowExtensions.let {
-                            if (it.isNullOrEmpty() || it.contains(FileUtils.getExtension(item.path))) {
-                                selectFile = item
-                                notifyItemRangeChanged(getHeaderCount(), itemCount, "selectFile")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemFilePickerBinding,
-            item: File,
-            payloads: MutableList<Any>
-        ) {
-            if (payloads.isEmpty()) {
-                if (item == viewModel.lastDir) {
-                    binding.imageView.setImageDrawable(upIcon)
-                    binding.textView.text = dirParent
-                } else if (item.isDirectory) {
-                    binding.imageView.setImageDrawable(folderIcon)
-                    binding.textView.text = item.name
-                } else {
-                    binding.imageView.setImageDrawable(fileIcon)
-                    binding.textView.text = item.name
-                }
-                if (item.isDirectory) {
-                    binding.textView.setTextColor(primaryTextColor)
-                } else {
-                    if (viewModel.isSelectDir) {
-                        binding.textView.setTextColor(disabledTextColor)
-                    } else {
-                        viewModel.allowExtensions?.let {
-                            if (it.isEmpty() || it.contains(FileUtils.getExtension(item.path))) {
-                                binding.textView.setTextColor(primaryTextColor)
-                            } else {
-                                binding.textView.setTextColor(disabledTextColor)
-                            }
-                        } ?: binding.textView.setTextColor(primaryTextColor)
-                    }
-                }
-            }
-            binding.root.isSelected = item == selectFile
-            if (item == selectFile) {
-                binding.root.background = selectDrawable
-            } else {
-                binding.root.setBackgroundColor(getCompatColor(R.color.transparent))
-            }
-        }
-
-    }
-
     interface CallBack {
         fun onResult(data: Intent)
+    }
+
+    @Composable
+    private fun FilePickerContent() {
+        val style = rememberAppDialogStyle()
+        val palette = style.toMiuixPalette()
+        var navVersion by remember { mutableIntStateOf(0) }
+        val dialogTitle = arguments?.getString("title") ?: if (viewModel.isSelectDir) {
+            stringResource(R.string.folder_chooser)
+        } else {
+            stringResource(R.string.file_chooser)
+        }
+
+        fun isFileEnabled(item: File): Boolean {
+            if (item.isDirectory || item == viewModel.lastDir) return true
+            if (viewModel.isSelectDir) return false
+            return viewModel.allowExtensions?.let {
+                it.isEmpty() || it.contains(FileUtils.getExtension(item.path))
+            } ?: true
+        }
+
+        fun navigateTo(file: File?) {
+            viewModel.upFiles(file)
+            navVersion++
+        }
+
+        fun onFileClick(item: File) {
+            when {
+                item == viewModel.lastDir -> {
+                    viewModel.subDocs.removeLastOrNull()
+                    navigateTo(viewModel.subDocs.lastOrNull() ?: viewModel.rootDoc)
+                }
+                item.isDirectory -> {
+                    viewModel.subDocs.add(item)
+                    navigateTo(item)
+                }
+                viewModel.isSelectFile && isFileEnabled(item) -> {
+                    selectFileState = item
+                }
+            }
+        }
+
+        fun onOkClick() {
+            if (viewModel.isSelectDir) {
+                viewModel.lastDir?.let {
+                    setResultData(it.path)
+                    dismissAllowingStateLoss()
+                }
+            } else {
+                val file = selectFileState
+                if (file == null) {
+                    toastOnUi("请选择文件")
+                } else {
+                    setResultData(file.path)
+                    dismissAllowingStateLoss()
+                }
+            }
+        }
+
+        fun showCreateFolderDialog() {
+            showComposeTextFormDialog(
+                title = getString(R.string.create_folder),
+                labels = listOf("文件夹名"),
+                initialValues = listOf(""),
+                positiveText = getString(android.R.string.ok),
+                negativeText = getString(android.R.string.cancel),
+                validateInput = { values ->
+                    if (values.getOrNull(0)?.trim().isNullOrBlank()) {
+                        toastOnUi("文件夹名不能为空")
+                        return@showComposeTextFormDialog false
+                    }
+                    true
+                },
+                onPositive = { values ->
+                    values.getOrNull(0)?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                        viewModel.createFolder(it)
+                    }
+                }
+            )
+        }
+
+        val subDocs = remember(navVersion) { viewModel.subDocs.toList() }
+
+        AppDialogFrame(
+            title = dialogTitle,
+            scrollContent = false,
+            content = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    PathChip(
+                        text = "root",
+                        style = style,
+                        onClick = {
+                            viewModel.subDocs.clear()
+                            navigateTo(viewModel.rootDoc)
+                        }
+                    )
+                    subDocs.forEachIndexed { index, dir ->
+                        PathChip(
+                            text = dir.name,
+                            style = style,
+                            onClick = {
+                                viewModel.subDocs = viewModel.subDocs
+                                    .subList(0, index + 1)
+                                    .toMutableList()
+                                navigateTo(viewModel.subDocs.lastOrNull())
+                            }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    items(items = filesState, key = { it.absolutePath }) { file ->
+                        FileRow(
+                            file = file,
+                            style = style,
+                            selected = file == selectFileState,
+                            enabled = isFileEnabled(file),
+                            onClick = { onFileClick(file) }
+                        )
+                    }
+                }
+            },
+            actions = {
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.create_folder),
+                    palette = palette,
+                    onClick = { showCreateFolderDialog() },
+                    cornerRadius = style.actionRadius
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.ok),
+                    palette = palette,
+                    onClick = { onOkClick() },
+                    primary = true,
+                    cornerRadius = style.actionRadius
+                )
+            }
+        )
+    }
+
+    @Composable
+    private fun FileRow(
+        file: File,
+        style: AppDialogStyle,
+        selected: Boolean,
+        enabled: Boolean,
+        onClick: () -> Unit
+    ) {
+        val isUpDir = file == viewModel.lastDir
+        val iconBytes = when {
+            isUpDir -> FilePickerIcon.getUpDir()
+            file.isDirectory -> FilePickerIcon.getFolder()
+            else -> FilePickerIcon.getFile()
+        }
+        val label = if (isUpDir) dirParent else file.name
+        val textColor = if (enabled) style.primaryText else style.secondaryText
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    color = if (selected) style.accent.copy(alpha = 0.14f) else Color.Transparent,
+                    shape = RoundedCornerShape(style.actionRadius)
+                )
+                .clickable(onClick = onClick)
+                .padding(horizontal = 10.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val bitmap = remember(iconBytes) {
+                BitmapFactory.decodeByteArray(iconBytes, 0, iconBytes.size)?.asImageBitmap()
+            }
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+            }
+            Text(
+                text = label,
+                color = textColor,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+
+    @Composable
+    private fun PathChip(
+        text: String,
+        style: AppDialogStyle,
+        onClick: () -> Unit
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = text,
+                color = style.primaryText,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(style.actionRadius))
+                    .clickable(onClick = onClick)
+                    .padding(horizontal = 4.dp, vertical = 4.dp)
+            )
+            val arrowBitmap = rememberArrowBitmap()
+            if (arrowBitmap != null) {
+                Image(
+                    bitmap = arrowBitmap,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun rememberArrowBitmap(): ImageBitmap? {
+        return remember {
+            val bytes = FilePickerIcon.getArrow()
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+        }
     }
 }

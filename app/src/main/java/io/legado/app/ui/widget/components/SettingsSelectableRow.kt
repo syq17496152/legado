@@ -31,11 +31,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
+import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 
 /**
  * 列表管理页通用「多选 + 开关 + 动作 + 拖拽排序」行（原 DictRule/AutoTask/TxtTocRule 三页私有行收敛，task 12.1A）。
@@ -65,6 +67,8 @@ fun SettingsSelectableRow(
     modifier: Modifier = Modifier
 ) {
     var menuVisible by remember { mutableStateOf(false) }
+    // H10/H11: 列表项直色（palette.settings.row），选中态用强调色低透明浮层（替代 M3 secondaryContainer/surface 派生色）
+    val palette = rememberAppSettingPalette()
 
     Row(
         modifier = modifier
@@ -72,10 +76,10 @@ fun SettingsSelectableRow(
             .height(72.dp)
             .background(
                 if (checked) {
-                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
+                    palette.accent.copy(alpha = 0.15f)
                 } else {
-                    MaterialTheme.colorScheme.surface
-                }
+                            Color(palette.row)
+                        }
             )
             .combinedClickable(
                 onClick = onClick,
@@ -100,9 +104,9 @@ fun SettingsSelectableRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 color = if (enabled) {
-                    MaterialTheme.colorScheme.onSurface
+                    palette.primaryText
                 } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    palette.primaryText.copy(alpha = 0.5f)
                 }
             )
             if (subtitle != null) {
@@ -112,7 +116,7 @@ fun SettingsSelectableRow(
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = palette.secondaryText
                 )
             }
         }
@@ -125,7 +129,7 @@ fun SettingsSelectableRow(
                 Icon(
                     imageVector = Icons.Default.Edit,
                     contentDescription = stringResource(R.string.edit),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = palette.secondaryText
                 )
             }
         }
@@ -134,7 +138,7 @@ fun SettingsSelectableRow(
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = stringResource(R.string.delete),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = palette.secondaryText
                 )
             }
         }
@@ -144,7 +148,7 @@ fun SettingsSelectableRow(
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = stringResource(R.string.more_menu),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = palette.secondaryText
                     )
                 }
                 AppDropdownMenu(
@@ -159,7 +163,7 @@ fun SettingsSelectableRow(
             Icon(
                 imageVector = Icons.Default.DragHandle,
                 contentDescription = stringResource(R.string.more_menu),
-                tint = MaterialTheme.colorScheme.outline,
+                tint = palette.divider,
                 modifier = Modifier
                     .padding(horizontal = 4.dp)
                     .pointerInput(title) {

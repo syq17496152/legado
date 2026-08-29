@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Surface
@@ -27,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -34,12 +37,17 @@ import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.help.book.library.LibraryContainerConfig
 import io.legado.app.help.book.library.LibraryContainerManager
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.rememberTopBarContentColor
 import io.legado.app.ui.widget.compose.AppManagementCard
 import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementMoreActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.subtitleLarge
 
 @Composable
 internal fun LibraryContainerManageScreen(
@@ -62,7 +70,7 @@ internal fun LibraryContainerManageScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .statusBarsPadding()
+                    // H15：顶栏换 GlassTopAppBar（自带状态栏 inset），父容器移除重复 statusBarsPadding
                     .navigationBarsPadding()
             ) {
                 LibraryContainerTopBar(
@@ -72,7 +80,7 @@ internal fun LibraryContainerManageScreen(
                 Text(
                     text = "书库容器只用于同步阅读章节缓存，不参与备份、主题、气泡或缓存包同步。阅读时会先读取目录索引，只有命中缓存章节才请求正文。",
                     color = palette.settings.secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     lineHeight = 18.sp,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -115,52 +123,20 @@ private fun LibraryContainerTopBar(
     onBack: () -> Unit,
     pageMenuActions: () -> List<AppManagementMenuAction>
 ) {
-    val palette = rememberAppManagementPalette()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(54.dp)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            modifier = Modifier
-                .size(42.dp)
-                .clickable(onClick = onBack),
-            shape = RoundedCornerShape(palette.miuix.actionRadius ?: 12.dp),
-            color = Color.Transparent,
-            contentColor = palette.settings.primaryText,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_arrow_back),
-                    contentDescription = null,
-                    tint = palette.settings.primaryText,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
+    // H15（2026-08-28）：自绘 54dp 顶栏 → GlassTopAppBar；硬编码中文"书库容器"/"更多"→ strings.xml
+    GlassTopAppBar(
+        title = stringResource(R.string.library_container_manage_title),
+        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+        onNavClick = onBack,
+        actions = {
+            AppManagementMoreActionButton(
+                actionsProvider = pageMenuActions,
+                palette = rememberAppManagementPalette(),
+                contentDescription = stringResource(R.string.more_menu),
+                tint = rememberTopBarContentColor()
+            )
         }
-        Text(
-            text = "书库容器",
-            color = palette.settings.primaryText,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = palette.settings.titleFontFamily,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        AppManagementMoreActionButton(
-            actionsProvider = pageMenuActions,
-            palette = palette,
-            contentDescription = "更多"
-        )
-    }
+    )
 }
 
 @Composable
@@ -198,7 +174,7 @@ private fun LibraryContainerCard(
                 Text(
                     text = displayName,
                     color = palette.settings.primaryText,
-                    fontSize = 16.sp,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -207,7 +183,7 @@ private fun LibraryContainerCard(
                 Text(
                     text = "${container.bucket}/${container.prefix.trim('/')}",
                     color = palette.settings.secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -215,7 +191,7 @@ private fun LibraryContainerCard(
                 Text(
                     text = capacityText,
                     color = palette.settings.secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -223,7 +199,7 @@ private fun LibraryContainerCard(
                 Text(
                     text = stateText,
                     color = if (container.enabled) palette.settings.accent else palette.settings.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontWeight = if (container.enabled) FontWeight.Medium else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -234,7 +210,7 @@ private fun LibraryContainerCard(
                 Text(
                     text = "✓",
                     color = palette.settings.accent,
-                    fontSize = 18.sp,
+                    fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
                     fontWeight = FontWeight.Bold
                 )
             }

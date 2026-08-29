@@ -45,7 +45,7 @@ import io.legado.app.databinding.ActivityRssSourceEditBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.SelectItem
-import io.legado.app.lib.dialogs.alert
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
@@ -137,15 +137,18 @@ class RssSourceEditActivity :
     override fun finish() {
         val source = getRssSource()
         if (!source.equal(viewModel.rssSource ?: RssSource())) {
-            alert(R.string.exit) {
-                setMessage(R.string.exit_no_save)
-                positiveButton(R.string.yes) {
+            showComposeConfirmDialog(
+                title = getString(R.string.exit),
+                message = getString(R.string.exit_no_save),
+                positiveText = getString(R.string.yes),
+                negativeText = getString(R.string.no),
+                onPositive = {
                     viewModel.save(source) { super.finish() }
-                }
-                negativeButton(R.string.no) {
+                },
+                onNegative = {
                     super.finish()
                 }
-            }
+            )
         } else {
             super.finish()
         }
@@ -172,6 +175,37 @@ class RssSourceEditActivity :
                     navIcon = Icons.AutoMirrored.Filled.ArrowBack,
                     onNavClick = { finish() },
                     actions = {
+                        // topbar-icon-semantics-fix 3.2：代码/保存/调试恢复一级图标
+                        //（对齐原版 source_edit.xml showAsAction=always；tint 继承 actionIconContentColor 禁自传）
+                        IconButton(onClick = { onFullEditClicked() }) {
+                            Icon(
+                                imageVector = Icons.Filled.Code,
+                                contentDescription = getString(R.string.edit_content)
+                            )
+                        }
+                        IconButton(onClick = {
+                            viewModel.save(getRssSource()) {
+                                setResult(RESULT_OK)
+                                finish()
+                            }
+                        }) {
+                            Icon(
+                                imageVector = Icons.Filled.Save,
+                                contentDescription = getString(R.string.action_save)
+                            )
+                        }
+                        IconButton(onClick = {
+                            viewModel.save(getRssSource()) { source ->
+                                startActivity<RssSourceDebugActivity> {
+                                    putExtra("key", source.sourceUrl)
+                                }
+                            }
+                        }) {
+                            Icon(
+                                imageVector = Icons.Filled.BugReport,
+                                contentDescription = getString(R.string.debug_source)
+                            )
+                        }
                         Box {
                             IconButton(onClick = { menuExpanded = true }) {
                                 Icon(
@@ -193,32 +227,7 @@ class RssSourceEditActivity :
 
     private fun buildMenuActions(): List<MenuAction> {
         val actions = mutableListOf<MenuAction>()
-        actions += MenuAction(
-            Icons.Filled.Code,
-            getString(R.string.edit_content),
-            onClick = { onFullEditClicked() }
-        )
-        actions += MenuAction(
-            Icons.Filled.Save,
-            getString(R.string.action_save),
-            onClick = {
-                viewModel.save(getRssSource()) {
-                    setResult(RESULT_OK)
-                    finish()
-                }
-            }
-        )
-        actions += MenuAction(
-            Icons.Filled.BugReport,
-            getString(R.string.debug_source),
-            onClick = {
-                viewModel.save(getRssSource()) { source ->
-                    startActivity<RssSourceDebugActivity> {
-                        putExtra("key", source.sourceUrl)
-                    }
-                }
-            }
-        )
+        // 代码/保存/调试已恢复为一级图标（3.2），不再进入溢出菜单
         if (!getRssSource().loginUrl.isNullOrBlank()) {
             actions += MenuAction(
                 Icons.Filled.Login,

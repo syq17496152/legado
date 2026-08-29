@@ -10,12 +10,13 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import androidx.viewbinding.ViewBinding
 import io.legado.app.base.BaseActivity
+import io.legado.app.R
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookCharacter
 import io.legado.app.help.character.BookCharacterIdentityMigrator
 import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
-import io.legado.app.lib.dialogs.alert
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.character.compose.CharacterManageScreen
 import io.legado.app.utils.startActivity
@@ -117,9 +118,13 @@ class BookCharacterManageActivity : BaseActivity<ViewBinding>(
     }
 
     private fun delete(character: BookCharacter) {
-        alert("删除角色") {
-            setMessage("确定删除「${character.displayName()}」？相关关系也会删除。")
-            yesButton {
+        showComposeConfirmDialog(
+            title = "删除角色",
+            message = "确定删除「${character.displayName()}」？相关关系也会删除。",
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 lifecycleScope.launch {
                     withContext(IO) {
                         appDb.bookCharacterDao.deleteCharacterWithRelations(character)
@@ -129,8 +134,7 @@ class BookCharacterManageActivity : BaseActivity<ViewBinding>(
                     setResult(Activity.RESULT_OK)
                 }
             }
-            noButton()
-        }
+        )
     }
 
     companion object {

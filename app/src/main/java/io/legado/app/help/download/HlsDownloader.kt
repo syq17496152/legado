@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.media.MediaMetadataRetriever
 import android.media.MediaMuxer
 import android.util.Log
 import io.legado.app.constant.AppLog
@@ -64,15 +65,55 @@ object HlsDownloader {
         onMerged: (tsFile: File) -> Unit = {}
     ): HlsResult {
         return runCatching {
-            var playlist = fetch(m3u8Url, headers)
-            var mediaUrl = m3u8Url
+            // 断点续传（用户2026-08-27反馈"杀进程重启后点继续直接下载失败"）：
+            // 1) 每次 attempt 都会重新拉取 m3u8 清单，很多视频站的 m3u8 URL 带时效签名，
+            //    进程被杀/重启后 URL 已失效（fetch 404/403）→ 整个任务失败。
+            // 2) 因此首次下载成功后把【媒体清单文本 + 实际媒体 URL】保存到 tempDir；
+            //    续传时若主清单拉取失败，回退使用已保存清单继续下载分片（分片路径通常无签名）。
+            tempDir.mkdirs()
+            val manifestFile = File(tempDir, "manifest_media.m3u8")
+            val mediaUrlFile = File(tempDir, "manifest_media_url.txt")
+            // 清理残留 .tmp（上次进程被强杀时正在写的半截分片）：不清理会干扰后续原子写
+            tempDir.listFiles()
+                ?.filter { it.name.endsWith(".tmp") }
+                ?.forEach { it.delete() }
 
-            // master 清单：选择 BANDWIDTH 最高的主码流
-            if (playlist.contains("#EXT-X-STREAM-INF")) {
-                val variant = pickBestVariant(playlist)
-                    ?: throw IOException("master 清单无法解析码流")
-                mediaUrl = resolve(mediaUrl, variant)
-                playlist = fetch(mediaUrl, headers)
+            val primaryFetch = runCatching {
+                var p = fetch(m3u8Url, headers)
+                var m = m3u8Url
+                // master 清单：选择 BANDWIDTH 最高的主码流
+                if (p.contains("#EXT-X-STREAM-INF")) {
+                    val variant = pickBestVariant(p)
+                        ?: throw IOException("master 清单无法解析码流")
+                    m = resolve(m, variant)
+                    p = fetch(m, headers)
+                }
+                p to m
+            }
+            val playlist: String
+            val mediaUrl: String
+            if (primaryFetch.isSuccess) {
+                val (p, m) = primaryFetch.getOrThrow()
+                playlist = p
+                mediaUrl = m
+                // 刷新保存的清单：续传成功后下次回退用最新内容
+                runCatching { manifestFile.writeText(playlist) }
+                runCatching { mediaUrlFile.writeText(mediaUrl) }
+            } else {
+                // 主清单拉取失败：回退到上次保存的清单（断点续传场景）
+                val savedUrl = mediaUrlFile.takeIf { it.exists() }?.readText()?.trim().orEmpty()
+                val savedManifest = manifestFile.takeIf { it.exists() }?.readText().orEmpty()
+                val primaryErr = primaryFetch.exceptionOrNull()
+                if (savedUrl.isNotBlank() && savedManifest.isNotBlank()) {
+                    AppLog.put(
+                        "Hls 主清单拉取失败(${primaryErr?.message?.take(60)}), " +
+                            "回退已保存清单续传 urlPath=${savedUrl.take(8)}***"
+                    )
+                    mediaUrl = savedUrl
+                    playlist = savedManifest
+                } else {
+                    throw (primaryErr ?: IOException("清单拉取失败"))
+                }
             }
 
             // 加密流处理：AES-128（标准 HLS 加密）与播放器能力对齐——播放器能播的分片下载也支持解密；
@@ -80,21 +121,25 @@ object HlsDownloader {
             val crypto = parseCrypto(mediaUrl, playlist, headers)
             if (crypto is Crypto.Unsupported) return HlsResult.UnsupportedCrypto
 
-            val segments = parseSegments(playlist)
+            // 清单含 EXT-X-DISCONTINUITY（广告/多段不同编码拼接）：MediaExtractor 单轨连续模型
+            // 在编码参数切换点会把后续样本视为新轨/结束当前轨，remux 会提前截断（铁证：用户反馈
+            // "带广告视频下载后 mp4 只播放前面十几秒广告"）。命中则直接保留完整 ts，跳过 mp4 重封装。
+            val hasDiscontinuity = playlist.contains("#EXT-X-DISCONTINUITY")
+            val (segments, totalDurationMs) = parseSegments(playlist)
             if (segments.isEmpty()) throw IOException("未解析到分片")
 
-            tempDir.mkdirs()
             val segFiles = mutableListOf<File>()
             val segUrls = segments.map { resolve(mediaUrl, it) }
             // 进度回调用"字节"而非"分片数"表示：累计每个分片实际下载字节数，
             // 用已完成分片的平均大小估算总字节数（下载进行中无法预先知道总大小）。
             // 断点续传：tempDir 中已存在的 seg_*.ts（进程被杀/暂停残留）按"已下"跳过并计入已有字节。
+            // 只统计正式分片（seg_*.ts），排除 .tmp 半截文件：半截分片续传时会重新下载，避免合并出损坏 ts。
             val totalSegments = segments.size
-            val existingBytes = tempDir.listFiles()
-                ?.filter { it.name.startsWith("seg_") && it.length() > 0 }
-                ?.sumOf { it.length() } ?: 0L
+            fun existingSegFiles(): List<File> =
+                tempDir.listFiles()?.filter { it.name.startsWith("seg_") && it.name.endsWith(".ts") } ?: emptyList()
+            val existingBytes = existingSegFiles().sumOf { it.length() }
             val doneBytes = AtomicLong(existingBytes)
-            val doneCount = AtomicInteger(tempDir.listFiles()?.count { it.name.startsWith("seg_") && it.length() > 0 } ?: 0)
+            val doneCount = AtomicInteger(existingSegFiles().size)
             val semaphore = Semaphore(SEG_CONCURRENCY)
 
             coroutineScope {
@@ -137,8 +182,15 @@ object HlsDownloader {
             // 再尝试 mp4 转码增强。即便转码触发 native 崩溃杀进程，用户也保有完成记录 + 完整 ts。
             onMerged(tsFile)
 
+            // 广告/多段拼接流（EXT-X-DISCONTINUITY）：remux 单轨模型必然截断，直接保留完整 ts
+            if (hasDiscontinuity) {
+                AppLog.put("Hls 清单含 EXT-X-DISCONTINUITY（广告/编码切换），保留完整 ts，跳过 mp4 重封装")
+                segFiles.forEach { it.delete() }
+                return HlsResult.TsFallback
+            }
+
             // ts → mp4 重封装（csd 严格校验不满足时跳过，保留 ts）
-            val ok = TsToMp4Remuxer.remux(tsFile, outputMp4)
+            val ok = TsToMp4Remuxer.remux(tsFile, outputMp4, expectedDurationMs = totalDurationMs)
             // 无论如何清理分片（网络/临时产物）；根据转换结果决定是否保留 ts
             segFiles.forEach { it.delete() }
             if (ok) {
@@ -193,8 +245,16 @@ object HlsDownloader {
             val raw = body.bytes()
             // AES-128 加密分片：下载原始密文后解密写入；明文分片直接落盘
             val data = if (crypto is Crypto.Aes128) crypto.decrypt(raw, segIndex) else raw
-            destFile.outputStream().use { out ->
-                out.write(data)
+            // 原子写：先写 .tmp 临时文件，完整后再 rename 为正式分片。
+            // 修复（用户2026-08-27 反馈断点续传失败）：进程被强杀时正在写的分片会留半截，
+            // 若直接写正式文件名，续传时 exists && length>0 会把它当成"已下分片"跳过，
+            // 合并的 ts 损坏（转 mp4 失败/内容残缺）。.tmp 残留不会被当分片，续传时重新下载。
+            val tmpFile = File(destFile.parentFile, destFile.name + ".tmp")
+            tmpFile.outputStream().use { out -> out.write(data) }
+            if (!tmpFile.renameTo(destFile)) {
+                // rename 失败（跨目录/被占用）：退化为复制
+                tmpFile.copyTo(destFile, overwrite = true)
+                tmpFile.delete()
             }
         }
     }
@@ -206,13 +266,19 @@ object HlsDownloader {
         /** 非 AES-128（DRM 等，拒绝） */
         object Unsupported : Crypto()
 
-        /** AES-128：key 已加载，按给定 IV（缺省用分片序号）CBC 解密 */
-        class Aes128(private val key: ByteArray, private val explicitIv: ByteArray?) : Crypto() {
+        /** AES-128：key 已加载，按给定 IV（缺省用媒体序号 = MEDIA-SEQUENCE 起点 + 分片序号）CBC 解密 */
+        class Aes128(
+            private val key: ByteArray,
+            private val explicitIv: ByteArray?,
+            // B4：缺省 IV 必须用媒体序号（#EXT-X-MEDIA-SEQUENCE 起点 + 分片索引），
+            // 而非清单内索引；非 0 起始清单按清单索引解密会得到乱码
+            private val mediaSequenceBase: Long
+        ) : Crypto() {
 
-            /** AES-128-CBC 解密单个分片；IV 缺省时按 HLS 规范取分片序号（大端 16 字节） */
+            /** AES-128-CBC 解密单个分片；IV 缺省时按 HLS 规范取媒体序号（大端 16 字节） */
             fun decrypt(cipherBytes: ByteArray, segIndex: Int): ByteArray {
                 val iv = explicitIv ?: ByteArray(16).also { arr ->
-                    var v = segIndex.toLong()
+                    var v = mediaSequenceBase + segIndex
                     for (i in 15 downTo 0) { arr[i] = (v and 0xFF).toByte(); v = v ushr 8 }
                 }
                 val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
@@ -263,8 +329,13 @@ object HlsDownloader {
             }
         }
         if (keyBytes.size != 16) throw IOException("AES-128 key 长度异常: ${keyBytes.size}")
-        AppLog.put("Hls 加密流: METHOD=AES-128, IV=${if (iv != null) "显式" else "分片序号"}")
-        return Crypto.Aes128(keyBytes, iv)
+        // B4：解析媒体序号起点（缺省 0），供缺省 IV = MEDIA-SEQUENCE + 分片索引
+        val mediaSequenceBase = Regex("""#EXT-X-MEDIA-SEQUENCE:\s*(\d+)""")
+            .find(playlist)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+        AppLog.put(
+            "Hls 加密流: METHOD=AES-128, IV=${if (iv != null) "显式" else "媒体序号($mediaSequenceBase)"}"
+        )
+        return Crypto.Aes128(keyBytes, iv, mediaSequenceBase)
     }
 
     private fun pickBestVariant(playlist: String): String? {
@@ -276,7 +347,9 @@ object HlsDownloader {
         while (i < lines.size) {
             val line = lines[i].trim()
             if (line.startsWith("#EXT-X-STREAM-INF")) {
-                val bw = Regex("""BANDWIDTH=(\d+)""").find(line)?.groupValues?.get(1)
+                // B10：剥离 AVERAGE-BANDWIDTH 干扰（否则 find() 会命中其子串取错码流）
+                val bw = Regex("""(?<![A-Z-])BANDWIDTH=(\d+)""")
+                    .find(line.replace("AVERAGE-BANDWIDTH", "X-BW"))?.groupValues?.get(1)
                     ?.toLongOrNull() ?: 0L
                 // 下一行是非 # 开头的码流 URI
                 var j = i + 1
@@ -297,13 +370,23 @@ object HlsDownloader {
         return bestUri
     }
 
-    private fun parseSegments(playlist: String): List<String> {
+    /**
+     * 解析媒体清单中的分片（#EXTINF 后跟的 URI）并累加 EXTINF 声明的总时长（毫秒）。
+     *
+     * 总时长用于 ts→mp4 重封装后的完整性校验（B 方案）：MediaExtractor 单轨模型在
+     * 编码参数切换点可能提前截断，mp4 实际时长会显著小于清单声明的总时长，据此回退保留 ts。
+     */
+    private fun parseSegments(playlist: String): Pair<List<String>, Long> {
         val result = mutableListOf<String>()
+        var totalMs = 0L
         val lines = playlist.lineSequence().toList()
         var i = 0
         while (i < lines.size) {
             val line = lines[i].trim()
             if (line.startsWith("#EXTINF")) {
+                // #EXTINF:10.000, 或 #EXTINF:10,title，取冒号后逗号前的秒数
+                Regex("""#EXTINF:\s*([0-9.]+)""").find(line)?.groupValues?.get(1)
+                    ?.toDoubleOrNull()?.let { totalMs += (it * 1000).toLong() }
                 var j = i + 1
                 while (j < lines.size && lines[j].trim().startsWith("#")) j++
                 if (j < lines.size) {
@@ -315,7 +398,7 @@ object HlsDownloader {
                 i++
             }
         }
-        return result
+        return result to totalMs
     }
 
     private fun resolve(base: String, path: String): String {
@@ -342,10 +425,15 @@ object HlsDownloader {
      */
     @SuppressLint("NewApi")
     object TsToMp4Remuxer {
-        /** 视频轨 csd-0 最小合法字节数（H264 SPS+PPS 约 20+ 字节，低于此值视为残缺流） */
+        /**
+         * 视频轨 csd-0 最小合法字节数（H264 SPS+PPS 约 20+ 字节，低于此值视为残缺流）
+         */
         private const val MIN_VIDEO_CSD_BYTES = 24
 
-        fun remux(tsFile: File, mp4File: File): Boolean {
+        /** mp4 实际时长低于清单声明总时长的此比例时判定重封装不完整（MediaExtractor 单轨模型截断） */
+        private const val DURATION_COVER_RATIO = 0.9
+
+        fun remux(tsFile: File, mp4File: File, expectedDurationMs: Long = 0): Boolean {
             return runCatching {
                 mp4File.delete()
                 val extractor = MediaExtractor()
@@ -461,6 +549,24 @@ object HlsDownloader {
                         }
                         extractor.unselectTrack(src)
                     }
+
+                    // B 方案：重封装完整性校验——mp4 实际时长须覆盖清单声明的总时长（比例下限）。
+                    // 否则判定 MediaExtractor 在编码参数切换点（广告/多段拼接）提前截断，
+                    // 返回 false 让上层回退保留完整 ts，避免"mp4 只播前面十几秒广告"。
+                    if (expectedDurationMs > 0) {
+                        val actual = mp4DurationMs(mp4File)
+                        if (actual > 0 && actual < expectedDurationMs * DURATION_COVER_RATIO) {
+                            Log.d(
+                                "HlsRemux",
+                                "mp4 duration too short: actual=${actual}ms expected=${expectedDurationMs}ms, fallback ts"
+                            )
+                            return@runCatching false
+                        }
+                        Log.d(
+                            "HlsRemux",
+                            "mp4 duration ok: actual=${actual}ms expected=${expectedDurationMs}ms"
+                        )
+                    }
                     mp4File.exists() && mp4File.length() > 0
                 } finally {
                     extractor.release()
@@ -480,6 +586,20 @@ object HlsDownloader {
                 i++
             }
             return false
+        }
+
+        /** 读取 mp4 容器时长（毫秒）；非 mp4（如 ts）或读取失败返回 0 */
+        private fun mp4DurationMs(f: File): Long {
+            return runCatching {
+                val mmr = MediaMetadataRetriever()
+                try {
+                    mmr.setDataSource(f.path)
+                    mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                        ?.toLongOrNull() ?: 0L
+                } finally {
+                    mmr.release()
+                }
+            }.getOrDefault(0L)
         }
     }
 }

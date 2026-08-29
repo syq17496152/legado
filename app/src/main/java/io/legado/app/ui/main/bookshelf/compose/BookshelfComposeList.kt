@@ -54,6 +54,9 @@ import io.legado.app.lib.theme.titleTextColor
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.widget.image.CoverImageView
 import io.legado.app.utils.BookIntroUtils
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.labelXSmall
+import io.legado.app.ui.theme.bodyTertiary
 
 object BookshelfListItemStyle {
     const val Classic = 0
@@ -323,7 +326,7 @@ private fun BookshelfUnreadBadge(
             .widthIn(min = 22.dp)
             .padding(horizontal = 6.dp, vertical = 2.dp),
         color = Color.White,
-        fontSize = 10.sp,
+        fontSize = MaterialTheme.typography.labelXSmall.fontSize,
         fontWeight = FontWeight.SemiBold,
         maxLines = 1
     )
@@ -364,7 +367,7 @@ private fun BookshelfListTextContent(
         Text(
             text = item.displayName,
             color = palette.primaryText,
-            fontSize = 16.sp,
+            fontSize = MaterialTheme.typography.bodyLarge.fontSize,
             fontWeight = FontWeight.Medium,
             fontFamily = palette.titleFontFamily,
             maxLines = 1,
@@ -384,7 +387,7 @@ private fun BookshelfListTextContent(
             is BookshelfFolderItemUi -> Text(
                 text = stringResource(R.string.bookshelf),
                 color = palette.secondaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -409,7 +412,7 @@ private fun BookshelfBookMeta(
                 .filter { !it.isNullOrBlank() }
                 .joinToString(" • "),
             color = palette.secondaryText,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             fontFamily = palette.bodyFontFamily,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -436,7 +439,7 @@ private fun BookshelfBookMeta(
             Text(
                 text = intro,
                 color = palette.secondaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 lineHeight = 17.sp,
                 fontFamily = palette.bodyFontFamily,
                 maxLines = introMaxLines,
@@ -478,7 +481,7 @@ private fun BookshelfMetaLine(
         Text(
             text = text,
             color = palette.secondaryText,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             fontFamily = palette.bodyFontFamily,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -500,7 +503,7 @@ private fun BookshelfTagChips(
             Text(
                 text = tag,
                 color = palette.accent,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -549,7 +552,7 @@ private fun BookshelfListStatus(
             Text(
                 text = it,
                 color = palette.secondaryText,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

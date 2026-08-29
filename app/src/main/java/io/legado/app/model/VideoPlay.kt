@@ -91,6 +91,14 @@ object VideoPlay : CoroutineScope by MainScope(){
         set(value) {
             videoPrefs.edit { putInt("longPressSpeed", value) }
         }
+    /**  滑动快进灵敏度（video-player-ux-fixes P2）：存 10 倍整数值（5=0.5x/7=0.7x/10=1.0x/15=1.5x/20=2.0x），默认 10=1.0x
+     *  seek 量 = 滑动比例 × (seekSensitivity / 10f) × 视频时长，变更即时生效
+     **/
+    var seekSensitivity
+        get() = videoPrefs.getInt("seekSensitivity", 10)
+        set(value) {
+            videoPrefs.edit { putInt("seekSensitivity", value) }
+        }
     /**  全屏底部进度条  **/
     var fullBottomProgressBar
         get() = videoPrefs.getBoolean("fullBottomProgressBar", true)
@@ -738,6 +746,65 @@ object VideoPlay : CoroutineScope by MainScope(){
             }
         }
     }
+    /**
+     * singleTask 复用（VideoPlayerActivity.onNewIntent）前重置播放会话状态
+     *
+     * 与 [releaseAllVideos] 的区别：
+     * - 不释放 videoManager 媒体播放器（ViewPager2 模式下各 Fragment 自行管理播放器，由 Activity 先释放旧 Fragment）
+     * - rssArticles 文章列表上下文由调用方（ReadRss/搜索链路）在 startActivity 前写入 VideoPlay，
+     *   新意图为订阅源文章时需保留（preserveRssArticlesContext=true），否则会被误清导致文章上下滑动模式丢失
+     *
+     * 用途：清空上一次播放会话残留字段，避免污染下一次播放
+     * （铁证：下载管理播放完下载视频后，再从订阅源在线播放，因旧 videoUrl/singleUrl 残留导致仍播旧视频）。
+     */
+    fun resetForNewIntent(preserveRssArticlesContext: Boolean = false) {
+        // 取消进行中的异步切换/抓取任务，避免旧会话回调写回新会话状态
+        switchArticleJob?.cancel()
+        playEpisodeJob?.cancel()
+        stopLoading()
+        isLoading = false
+        hasPlayedSuccessfully = false
+        isResumeFromFloat = false
+        release()
+        videoUrl = null
+        singleUrl = false
+        videoTitle = null
+        currentPlayHeaders = null
+        source = null
+        book = null
+        toc = null
+        chapter = null
+        volumes.clear()
+        episodes = null
+        chapterInVolumeIndex = 0
+        durVolumeIndex = 0
+        durVolume = null
+        durChapterPos = 0
+        inBookshelf = true
+        rssStar = null
+        rssRecord = null
+        danmakuStr = null
+        danmakuFile = null
+        lockCurScreen = false
+        isPortraitVideo = false
+        rssEpisodes = null
+        rssEpisodeIndex = 0
+        rssRoutes = null
+        rssRouteIndex = 0
+        if (!preserveRssArticlesContext) {
+            rssArticles = null
+            rssArticleIndex = 0
+            rssSortName = null
+            rssSortUrl = null
+            rssNextPageUrl = null
+            rssArticlePage = 1
+            rssArticlesHasMore = true
+            isLoadingMoreArticles = false
+            lastPlayedArticleLink = null
+        }
+        clearPreloadCache()
+    }
+
     /**
      * 暂停播放
      */

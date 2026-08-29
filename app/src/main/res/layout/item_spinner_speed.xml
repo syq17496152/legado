@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- R3 布局优化：Spinner 倍速选项 item 布局（textSize=11sp，与 VideoCtrlButton 一致） -->
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:padding="3dp"
-    android:textSize="@dimen/text_11sp"
-    android:textColor="@color/primaryText"
-    android:gravity="center" />

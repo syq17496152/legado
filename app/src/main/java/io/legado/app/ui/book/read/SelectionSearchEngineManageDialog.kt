@@ -1,280 +1,301 @@
 package io.legado.app.ui.book.read
 
 import android.os.Bundle
-import android.text.InputType
-import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.TextView
-import androidx.core.view.isVisible
-import androidx.recyclerview.widget.ItemTouchHelper
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
-import io.legado.app.databinding.DialogSelectionSearchEngineManageBinding
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.UiCorner
-import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.secondaryTextColor
-import io.legado.app.lib.theme.uiTypeface
-import io.legado.app.ui.book.read.config.ReaderSheetStyle
-import io.legado.app.ui.widget.recycler.ItemTouchCallback
-import io.legado.app.utils.dpToPx
-import io.legado.app.utils.setLayout
+import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.AppDialogStyle
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.LegadoComposeTheme
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
+import io.legado.app.ui.widget.compose.LegadoMiuixCard
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeTextFormDialog
+import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import splitties.views.onClick
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
+/**
+ * 划词搜索引擎管理（View→Compose 迁移）
+ * RecyclerView + ItemTouchHelper → LazyColumn + ReorderableItem 拖拽排序；
+ * 对外接口不变：构造参数 [onChanged]，增删改/拖拽排序/恢复默认行为语义保持一致。
+ */
 class SelectionSearchEngineManageDialog(
     private val onChanged: (() -> Unit)? = null
-) : BaseDialogFragment(R.layout.dialog_selection_search_engine_manage) {
+) : ComposeDialogFragment() {
 
-    private val binding by viewBinding(DialogSelectionSearchEngineManageBinding::bind)
-    private val adapter by lazy { EngineAdapter() }
-    private var engines: MutableList<ContentSelectConfig.SearchEngine> = mutableListOf()
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
 
-    override fun onStart() {
-        super.onStart()
-        setLayout(0.92f, 0.72f)
-    }
+    override val dialogWindowAnimations: Int = R.style.AnimDialogFade
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.root.applyUiBodyTypefaceDeep(requireContext().uiTypeface())
-        binding.toolBar.setBackgroundColor(primaryColor)
-        binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
-        binding.recyclerView.adapter = adapter
-        ItemTouchHelper(ItemTouchCallback(adapter).apply {
-            isCanDrag = true
-        }).attachToRecyclerView(binding.recyclerView)
-        engines = ContentSelectConfig.searchEngines(requireContext()).toMutableList()
-        renderList()
-        binding.tvCancel.onClick { dismissAllowingStateLoss() }
-        binding.tvAdd.onClick { showEditDialog(null) }
-        binding.tvRestoreDefault.onClick {
-            ContentSelectConfig.resetSearchEngines(requireContext())
-            engines = ContentSelectConfig.searchEngines(requireContext()).toMutableList()
-            renderList()
-            onChanged?.invoke()
-        }
-    }
+    private var engines: List<ContentSelectConfig.SearchEngine> by mutableStateOf(emptyList())
 
-    private fun renderList() {
-        adapter.setItems(engines)
-    }
-
-    private inner class EngineAdapter :
-        RecyclerView.Adapter<EngineViewHolder>(),
-        ItemTouchCallback.Callback {
-
-        private var isMoved = false
-        val items: MutableList<ContentSelectConfig.SearchEngine> = mutableListOf()
-
-        fun setItems(newItems: List<ContentSelectConfig.SearchEngine>) {
-            items.clear()
-            items.addAll(newItems)
-            notifyDataSetChanged()
-        }
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EngineViewHolder {
-            return EngineViewHolder(parent)
-        }
-
-        override fun getItemCount(): Int = items.size
-
-        override fun onBindViewHolder(holder: EngineViewHolder, position: Int) {
-            holder.bind(items[position])
-        }
-
-        override fun swap(srcPosition: Int, targetPosition: Int): Boolean {
-            if (srcPosition !in items.indices || targetPosition !in items.indices) return false
-            val item = items.removeAt(srcPosition)
-            items.add(targetPosition, item)
-            notifyItemMoved(srcPosition, targetPosition)
-            isMoved = true
-            return true
-        }
-
-        override fun onClearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
-            if (isMoved) {
-                engines = items.toMutableList()
-                ContentSelectConfig.saveSearchEngines(requireContext(), engines)
-                onChanged?.invoke()
-            }
-            isMoved = false
-        }
-    }
-
-    private inner class EngineViewHolder(parent: ViewGroup) : RecyclerView.ViewHolder(
-        LinearLayout(parent.context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(14.dpToPx(), 12.dpToPx(), 14.dpToPx(), 10.dpToPx())
-            layoutParams = RecyclerView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = 10.dpToPx()
-            }
-        }
-    ) {
-        private val rootView = itemView as LinearLayout
-        private val titleView = TextView(parent.context).apply {
-            textSize = 16f
-            typeface = requireContext().uiTypeface()
-            maxLines = 1
-        }
-        private val urlView = TextView(parent.context).apply {
-            textSize = 12f
-            typeface = requireContext().uiTypeface()
-            setTextColor(requireContext().secondaryTextColor)
-            setPadding(0, 5.dpToPx(), 0, 6.dpToPx())
-        }
-        private val cssView = TextView(parent.context).apply {
-            text = getString(R.string.selection_search_engine_hide_css_enabled)
-            textSize = 12f
-            typeface = requireContext().uiTypeface()
-            setPadding(0, 0, 0, 6.dpToPx())
-        }
-        private val editButton = rowButton(getString(R.string.edit))
-        private val deleteButton = rowButton(getString(R.string.delete))
-
-        init {
-            rootView.addView(titleView)
-            rootView.addView(urlView)
-            rootView.addView(cssView)
-            rootView.addView(LinearLayout(parent.context).apply {
-                gravity = Gravity.END or Gravity.CENTER_VERTICAL
-                orientation = LinearLayout.HORIZONTAL
-                addView(editButton)
-                addView(deleteButton)
-            })
-        }
-
-        fun bind(engine: ContentSelectConfig.SearchEngine) {
-            val palette = ReaderSheetStyle.resolve(requireContext())
-            rootView.background = UiCorner.panelRounded(
-                requireContext(),
-                palette.panel,
-                UiCorner.panelRadius(requireContext())
-            )
-            titleView.text = engine.name
-            titleView.setTextColor(palette.textColor)
-            urlView.text = engine.url
-            cssView.isVisible = !engine.hideCss.isNullOrBlank()
-            cssView.setTextColor(palette.accentColor)
-            editButton.setOnClickListener { showEditDialog(engine) }
-            deleteButton.setOnClickListener { confirmDelete(engine) }
-        }
-    }
-
-    private fun rowButton(text: String): TextView {
-        val palette = ReaderSheetStyle.resolve(requireContext())
-        return TextView(requireContext()).apply {
-            this.text = text
-            textSize = 13f
-            typeface = requireContext().uiTypeface()
-            gravity = Gravity.CENTER
-            setTextColor(palette.accentColor)
-            setPadding(12.dpToPx(), 7.dpToPx(), 12.dpToPx(), 7.dpToPx())
-            background = UiCorner.actionSelector(
-                palette.panel,
-                palette.panelStrong,
-                UiCorner.actionRadius(requireContext())
-            )
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                marginStart = 8.dpToPx()
-            }
-        }
-    }
-
-    private fun showEditDialog(engine: ContentSelectConfig.SearchEngine?) {
-        val nameEdit = EditText(requireContext()).apply {
-            hint = getString(R.string.selection_search_engine_name)
-            setSingleLine(true)
-            setText(engine?.name.orEmpty())
-        }
-        val urlEdit = EditText(requireContext()).apply {
-            hint = getString(R.string.selection_search_engine_url_hint)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            setSingleLine(true)
-            setText(engine?.url.orEmpty())
-        }
-        val cssEdit = EditText(requireContext()).apply {
-            hint = getString(R.string.selection_search_engine_hide_css_hint)
-            inputType = InputType.TYPE_CLASS_TEXT or
-                InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            gravity = Gravity.TOP or Gravity.START
-            minLines = 3
-            maxLines = 8
-            setSingleLine(false)
-            setHorizontallyScrolling(false)
-            setText(engine?.hideCss.orEmpty())
-        }
-        val input = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(16.dpToPx(), 4.dpToPx(), 16.dpToPx(), 0)
-            addView(nameEdit)
-            addView(urlEdit)
-            addView(cssEdit)
-        }
-        alert {
-            setTitle(if (engine == null) R.string.add else R.string.edit)
-            customView { input }
-            okButton {
-                val name = nameEdit.text?.toString()?.trim().orEmpty()
-                val url = urlEdit.text?.toString()?.trim().orEmpty()
-                if (name.isBlank() || url.isBlank()) {
-                    toastOnUi(R.string.cannot_empty)
-                    return@okButton
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        engines = ContentSelectConfig.searchEngines(requireContext())
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoComposeTheme {
+                    EngineManageContent()
                 }
-                if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) {
-                    toastOnUi(R.string.selection_search_engine_url_error)
-                    return@okButton
-                }
-                val edited = ContentSelectConfig.SearchEngine(
-                    id = engine?.id ?: "engine_${System.currentTimeMillis()}",
-                    name = name,
-                    url = url,
-                    hideCss = cssEdit.text?.toString()?.trim().orEmpty()
-                )
-                val index = engines.indexOfFirst { it.id == edited.id }
-                if (index >= 0) {
-                    engines[index] = edited
-                } else {
-                    engines += edited
-                }
-                saveAndRefresh()
             }
-            cancelButton()
         }
     }
 
-    private fun confirmDelete(engine: ContentSelectConfig.SearchEngine) {
-        alert {
-            setTitle(R.string.delete)
-            setMessage(engine.name)
-            yesButton {
-                engines.removeAll { it.id == engine.id }
-                if (engines.isEmpty()) {
-                    engines = ContentSelectConfig.defaultSearchEngines.toMutableList()
-                }
-                saveAndRefresh()
-            }
-            noButton()
-        }
+    private fun resetToDefault() {
+        ContentSelectConfig.resetSearchEngines(requireContext())
+        engines = ContentSelectConfig.searchEngines(requireContext())
+        onChanged?.invoke()
     }
 
     private fun saveAndRefresh() {
         ContentSelectConfig.saveSearchEngines(requireContext(), engines)
-        engines = ContentSelectConfig.searchEngines(requireContext()).toMutableList()
-        renderList()
+        engines = ContentSelectConfig.searchEngines(requireContext())
         onChanged?.invoke()
+    }
+
+    private fun showEditDialog(engine: ContentSelectConfig.SearchEngine?) {
+        showComposeTextFormDialog(
+            title = getString(if (engine == null) R.string.add else R.string.edit),
+            labels = listOf(
+                getString(R.string.selection_search_engine_name),
+                getString(R.string.selection_search_engine_url_hint),
+                getString(R.string.selection_search_engine_hide_css_hint)
+            ),
+            initialValues = listOf(
+                engine?.name.orEmpty(),
+                engine?.url.orEmpty(),
+                engine?.hideCss.orEmpty()
+            ),
+            positiveText = getString(android.R.string.ok),
+            negativeText = getString(android.R.string.cancel),
+            validateInput = { values ->
+                val name = values.getOrNull(0)?.trim().orEmpty()
+                val url = values.getOrNull(1)?.trim().orEmpty()
+                if (name.isBlank() || url.isBlank()) {
+                    toastOnUi(R.string.cannot_empty)
+                    return@showComposeTextFormDialog false
+                }
+                if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) {
+                    toastOnUi(R.string.selection_search_engine_url_error)
+                    return@showComposeTextFormDialog false
+                }
+                true
+            },
+            onPositive = { values ->
+                val name = values.getOrNull(0)?.trim().orEmpty()
+                val url = values.getOrNull(1)?.trim().orEmpty()
+                val edited = ContentSelectConfig.SearchEngine(
+                    id = engine?.id ?: "engine_${System.currentTimeMillis()}",
+                    name = name,
+                    url = url,
+                    hideCss = values.getOrNull(2)?.trim().orEmpty()
+                )
+                engines = engines.toMutableList().apply {
+                    val index = indexOfFirst { it.id == edited.id }
+                    if (index >= 0) {
+                        set(index, edited)
+                    } else {
+                        add(edited)
+                    }
+                }
+                saveAndRefresh()
+            }
+        )
+    }
+
+    private fun confirmDelete(engine: ContentSelectConfig.SearchEngine) {
+        showComposeConfirmDialog(
+            title = getString(R.string.delete),
+            message = engine.name,
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
+                engines = engines.filterNot { it.id == engine.id }
+                if (engines.isEmpty()) {
+                    engines = ContentSelectConfig.defaultSearchEngines
+                }
+                saveAndRefresh()
+            }
+        )
+    }
+
+    @Composable
+    private fun EngineManageContent() {
+        val style = rememberAppDialogStyle()
+        val palette = style.toMiuixPalette()
+        val lazyListState = rememberLazyListState()
+        val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
+            engines = engines.toMutableList().apply {
+                add(to.index, removeAt(from.index))
+            }
+        }
+        AppDialogFrame(
+            title = stringResource(R.string.selection_search_engine_manage),
+            scrollContent = false,
+            content = {
+                LazyColumn(
+                    state = lazyListState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 120.dp, max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(items = engines, key = { it.id }) { engine ->
+                        ReorderableItem(reorderState, key = engine.id) {
+                            EngineRow(
+                                engine = engine,
+                                style = style,
+                                dragHandle = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_drag_handle),
+                                        contentDescription = stringResource(R.string.sort),
+                                        tint = style.secondaryText,
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .draggableHandle(onDragStopped = { saveAndRefresh() })
+                                    )
+                                },
+                                onEdit = { showEditDialog(engine) },
+                                onDelete = { confirmDelete(engine) }
+                            )
+                        }
+                    }
+                }
+            },
+            actions = {
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.restore_default),
+                    palette = palette,
+                    onClick = { resetToDefault() },
+                    cornerRadius = style.actionRadius
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.cancel),
+                    palette = palette,
+                    onClick = { dismissAllowingStateLoss() },
+                    cornerRadius = style.actionRadius
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.add),
+                    palette = palette,
+                    onClick = { showEditDialog(null) },
+                    primary = true,
+                    cornerRadius = style.actionRadius
+                )
+            }
+        )
+    }
+
+    @Composable
+    private fun EngineRow(
+        engine: ContentSelectConfig.SearchEngine,
+        style: AppDialogStyle,
+        dragHandle: @Composable () -> Unit,
+        onEdit: () -> Unit,
+        onDelete: () -> Unit
+    ) {
+        val palette = style.toMiuixPalette()
+        LegadoMiuixCard(
+            modifier = Modifier.fillMaxWidth(),
+            color = style.fieldSurface,
+            contentColor = style.primaryText,
+            cornerRadius = style.actionRadius,
+            insidePadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                dragHandle()
+                Spacer(modifier = Modifier.width(6.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = engine.name,
+                        color = style.primaryText,
+                        fontSize = 16.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = engine.url,
+                        color = style.secondaryText,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 5.dp, bottom = 6.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (!engine.hideCss.isNullOrBlank()) {
+                        Text(
+                            text = stringResource(R.string.selection_search_engine_hide_css_enabled),
+                            color = style.accent,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.edit),
+                    palette = palette,
+                    onClick = onEdit,
+                    cornerRadius = style.actionRadius,
+                    minWidth = 58.dp,
+                    minHeight = 32.dp,
+                    insidePadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.delete),
+                    palette = palette,
+                    onClick = onDelete,
+                    cornerRadius = style.actionRadius,
+                    minWidth = 58.dp,
+                    minHeight = 32.dp,
+                    insidePadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+        }
     }
 }

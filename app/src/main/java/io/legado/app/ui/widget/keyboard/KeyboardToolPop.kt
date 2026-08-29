@@ -22,9 +22,9 @@ import io.legado.app.databinding.ItemFilletTextBinding
 import io.legado.app.databinding.PopupKeyboardToolBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.SelectItem
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.utils.activity
 import io.legado.app.utils.showDialogFragment
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.utils.windowSize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
@@ -142,10 +142,13 @@ class KeyboardToolPop(
             SelectItem(context.getString(R.string.assists_key_config), "keyConfig")
         )
         items.addAll(callBack.helpActions())
-        context.selector(context.getString(R.string.help), items) { _, selectItem, _ ->
-            when (selectItem.value) {
+        context.showComposeChoiceListDialog(
+            title = context.getString(R.string.help),
+            labels = items.map { it.title }
+        ) { index ->
+            when (items[index].value) {
                 "keyConfig" -> config()
-                else -> callBack.onHelpActionSelect(selectItem.value)
+                else -> callBack.onHelpActionSelect(items[index].value)
             }
         }
     }

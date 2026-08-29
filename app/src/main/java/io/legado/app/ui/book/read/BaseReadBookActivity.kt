@@ -26,8 +26,9 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.ThemeStore
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.model.CacheBook
 import io.legado.app.model.ReadBook
@@ -350,20 +351,16 @@ abstract class BaseReadBookActivity :
     }
 
     fun showCharsetConfig() {
-        alert(R.string.set_charset) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "charset"
-                editView.setFilterValues(charsets)
-                editView.setText(ReadBook.book?.charset)
+        showComposeTextInputDialog(
+            title = getString(R.string.set_charset),
+            hint = "charset",
+            initialValue = ReadBook.book?.charset ?: "",
+            positiveText = getString(R.string.ok),
+            negativeText = getString(R.string.cancel),
+            onPositive = { text ->
+                if (text.isNotBlank()) ReadBook.setCharset(text)
             }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    ReadBook.setCharset(it)
-                }
-            }
-            cancelButton()
-        }
+        )
     }
 
     fun showPageAnimConfig(success: () -> Unit) {
@@ -376,7 +373,10 @@ abstract class BaseReadBookActivity :
             getString(R.string.page_anim_scroll) to PageAnim.scrollPageAnim,
             getString(R.string.page_anim_none) to PageAnim.noAnim
         )
-        selector(R.string.page_anim, items.map { it.first }) { _, i ->
+        showComposeChoiceListDialog(
+            title = getString(R.string.page_anim),
+            labels = items.map { it.first }
+        ) { i ->
             ReadBook.book?.setPageAnim(items.getOrNull(i)?.second ?: -1)
             success()
         }

@@ -45,6 +45,9 @@ import io.legado.app.ui.main.ai.AiImagePreviewDialog
 import io.legado.app.ui.widget.image.CoverImageView
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodyLargeX
 
 @Composable
 fun AiToolPreviewDialog(
@@ -66,7 +69,7 @@ fun AiToolPreviewDialog(
                         Text(
                             text = payload.title,
                             color = style.colors.primaryText,
-                            fontSize = 17.sp,
+                            fontSize = MaterialTheme.typography.bodyLargeX.fontSize,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -85,7 +88,7 @@ fun AiToolPreviewDialog(
                     Text(
                         text = "关闭",
                         color = style.colors.accent,
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         modifier = Modifier
                             .clickable(onClick = onDismiss)
                             .padding(horizontal = 8.dp, vertical = 6.dp)
@@ -101,7 +104,7 @@ fun AiToolPreviewDialog(
                 Text(
                     text = "复制原始数据",
                     color = style.colors.accent,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     modifier = Modifier
                         .align(Alignment.End)
                         .padding(top = 14.dp)
@@ -168,7 +171,7 @@ private fun BookResultPreview(
                     Text(
                         text = book.name,
                         color = style.colors.primaryText,
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -177,7 +180,7 @@ private fun BookResultPreview(
                     Text(
                         text = listOf(book.author, book.originName).filter { it.isNotBlank() }.joinToString(" · "),
                         color = style.colors.secondaryText,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -217,7 +220,7 @@ private fun WebResultPreview(results: List<AiWebResultUi>, style: AiComposeStyle
                     Text(
                         text = item.title.ifBlank { item.url },
                         color = style.colors.primaryText,
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -334,7 +337,7 @@ private fun EmptyPreviewText(text: String, style: AiComposeStyle) {
         Text(
             text = text,
             color = style.colors.secondaryText,
-            fontSize = 13.sp
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize
         )
     }
 }

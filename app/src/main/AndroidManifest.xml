@@ -145,7 +145,7 @@
         <!-- 阅读界面 -->
         <activity
             android:name=".ui.book.read.ReadBookActivity"
-            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:exported="true"
             android:launchMode="singleTask">
             <intent-filter>
@@ -181,6 +181,7 @@
         <!-- 音频播放界面 -->
         <activity
             android:name="io.legado.app.ui.book.audio.AudioPlayActivity"
+            android:configChanges="uiMode"
             android:launchMode="singleTask" />
         <!-- 视频播放器界面 -->
         <activity
@@ -237,6 +238,7 @@
         <!-- 配置界面 -->
         <activity
             android:name=".ui.config.ConfigActivity"
+            android:configChanges="uiMode"
             android:launchMode="standard" />
         <!-- 外观套件（界面样式）管理 -->
         <activity

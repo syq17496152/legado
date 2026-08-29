@@ -57,6 +57,8 @@ import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.html.HtmlPlugin
 import io.noties.markwon.image.glide.GlideImagesPlugin
 import kotlinx.coroutines.delay
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodySecondary
 
 
 class TextDialog() : ComposeDialogFragment() {
@@ -150,7 +152,7 @@ class TextDialog() : ComposeDialogFragment() {
                             Text(
                                 text = "${countdownSeconds}s",
                                 color = style.accent,
-                                fontSize = 15.sp,
+                                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                                 fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier.padding(end = 8.dp)
                             )
@@ -240,7 +242,7 @@ private fun TextDialogContent(
                     Text(
                         text = displayText,
                         color = style.secondaryText,
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         lineHeight = 20.sp,
                         fontFamily = style.bodyFontFamily
                     )

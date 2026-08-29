@@ -50,7 +50,6 @@ import io.legado.app.help.webView.WebJsExtensions.Companion.nameCache
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameJava
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameSource
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.model.SourceCallBack
 import io.legado.app.model.remote.RemoteBookWebDav
 import io.legado.app.ui.book.audio.AudioPlayActivity
@@ -72,6 +71,8 @@ import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.main.ai.AiImageGalleryActivity
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.ui.widget.dialog.VariableDialog
 import io.legado.app.ui.widget.dialog.WaitDialog
@@ -773,10 +774,11 @@ class BookInfoComposeActivity :
             toastOnUi("Unexpected webFileData")
             return
         }
-        selector(
-            R.string.download_and_import_file,
-            webFiles
-        ) { _, webFile, _ ->
+        showComposeChoiceListDialog(
+            title = getString(R.string.download_and_import_file),
+            labels = webFiles.map { it.name }
+        ) { index ->
+            val webFile = webFiles[index]
             when {
                 webFile.isSupported -> {
                     viewModel.importOrDownloadWebFile<Book>(webFile) {
@@ -799,17 +801,17 @@ class BookInfoComposeActivity :
                 }
 
                 else -> {
-                    alert(
+                    showComposeConfirmDialog(
                         title = getString(R.string.draw),
-                        message = getString(R.string.file_not_supported, webFile.name)
-                    ) {
-                        neutralButton(R.string.open_fun) {
+                        message = getString(R.string.file_not_supported, webFile.name),
+                        positiveText = getString(R.string.open_fun),
+                        negativeText = getString(R.string.no),
+                        onPositive = {
                             viewModel.importOrDownloadWebFile<Uri>(webFile) {
                                 openFileUri(it, "*/*")
                             }
                         }
-                        noButton()
-                    }
+                    )
                 }
             }
         }
@@ -824,10 +826,11 @@ class BookInfoComposeActivity :
             toastOnUi(R.string.unsupport_archivefile_entry)
             return
         }
-        selector(
-            R.string.import_select_book,
-            fileNames
-        ) { _, name, _ ->
+        showComposeChoiceListDialog(
+            title = getString(R.string.import_select_book),
+            labels = fileNames
+        ) { index ->
+            val name = fileNames[index]
             viewModel.importArchiveBook(archiveFileUri, name) {
                 success?.invoke(it)
             }

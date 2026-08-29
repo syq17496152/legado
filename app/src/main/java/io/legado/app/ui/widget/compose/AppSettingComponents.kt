@@ -1,5 +1,6 @@
 package io.legado.app.ui.widget.compose
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
@@ -82,6 +83,8 @@ import io.legado.app.utils.ColorUtils
 import io.legado.app.lib.theme.composeActionRadius
 import io.legado.app.lib.theme.composePanelRadius
 import io.legado.app.ui.widget.ModernActionPopup
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodySecondary
 
 @Immutable
 data class AppSettingPalette(
@@ -364,7 +367,7 @@ fun AppManagementListRow(
                 Text(
                     text = title,
                     color = palette.settings.primaryText,
-                    fontSize = 15.sp,
+                    fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                     fontWeight = FontWeight.Medium,
                     fontFamily = palette.settings.bodyFontFamily,
                     maxLines = titleMaxLines,
@@ -374,7 +377,7 @@ fun AppManagementListRow(
                     Text(
                         text = it,
                         color = palette.settings.secondaryText,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         fontFamily = palette.settings.bodyFontFamily,
                         maxLines = subtitleMaxLines,
                         overflow = TextOverflow.Ellipsis,
@@ -511,7 +514,7 @@ private fun AppManagementCheckbox(
     Box(
         modifier = modifier
             .size(24.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(AppShapes.rounded(8))
             .background(palette.settings.accent.copy(alpha = checkedProgress))
             .border(
                 width = 1.2.dp,
@@ -520,7 +523,7 @@ private fun AppManagementCheckbox(
                 } else {
                     palette.settings.secondaryText.copy(alpha = 0.46f)
                 },
-                shape = RoundedCornerShape(8.dp)
+                shape = AppShapes.rounded(8)
             )
             .clickable(
                 enabled = onToggleSelection != null,
@@ -623,7 +626,7 @@ fun AppSettingSectionTitle(
     Text(
         text = title.toString(),
         color = palette.accent,
-        fontSize = 14.sp,
+        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
         fontWeight = FontWeight.Medium,
         fontFamily = palette.titleFontFamily,
         maxLines = 1,

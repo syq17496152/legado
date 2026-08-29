@@ -56,6 +56,7 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
     private var composeGroups by mutableStateOf(listOf<String>())
     private var currentGroup by mutableStateOf("")
     private var menuExpanded by mutableStateOf(false)
+    private var groupMenuExpanded by mutableStateOf(false)
     private var pendingDelete by mutableStateOf<PendingDelete?>(null)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
@@ -87,6 +88,8 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
     /**
      * L-D7 S2 改造：Compose 顶栏（GlassTopAppBar + 更多菜单 AppDropdownMenu），
      * 删除整组/删除全部/条目删除确认统一走 Compose ConfirmDialog。
+     * topbar-icon-semantics-fix 3.3：分组恢复一级图标（原版 rss_favorites menu_group always），
+     * 点击弹分组切换子菜单（对齐 CacheActivity 分组模式）。
      */
     private fun initComposeTopBar() {
         binding.composeTopBar.setContent {
@@ -97,6 +100,20 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
                         navIcon = Icons.AutoMirrored.Filled.ArrowBack,
                         onNavClick = { finish() },
                         actions = {
+                            // 分组一级图标：点击展开分组切换子菜单
+                            Box {
+                                IconButton(onClick = { groupMenuExpanded = true }) {
+                                    Icon(
+                                        Icons.Default.Folder,
+                                        contentDescription = getString(R.string.group)
+                                    )
+                                }
+                                AppDropdownMenu(
+                                    expanded = groupMenuExpanded,
+                                    onDismiss = { groupMenuExpanded = false },
+                                    actions = buildGroupMenuActions()
+                                )
+                            }
                             IconButton(onClick = { menuExpanded = true }) {
                                 Icon(Icons.Default.MoreVert, contentDescription = null)
                             }
@@ -129,9 +146,9 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
     }
 
     /**
-     * 顶栏更多菜单：分组跳转（当前分组勾选态）+ 删除整组 + 删除全部
+     * 分组切换子菜单（3.3：分组一级图标点击展开；当前分组勾选态）
      */
-    private fun buildMenuActions(): List<MenuAction> {
+    private fun buildGroupMenuActions(): List<MenuAction> {
         val actions = mutableListOf<MenuAction>()
         composeGroups.forEachIndexed { index, group ->
             actions += MenuAction(
@@ -139,11 +156,19 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
                 title = group,
                 checked = group == currentGroup,
                 onClick = {
-                    menuExpanded = false
+                    groupMenuExpanded = false
                     binding.viewPager.setCurrentItem(index)
                 }
             )
         }
+        return actions
+    }
+
+    /**
+     * 顶栏更多菜单：删除整组 + 删除全部（分组跳转已拆出至分组一级图标子菜单）
+     */
+    private fun buildMenuActions(): List<MenuAction> {
+        val actions = mutableListOf<MenuAction>()
         actions += MenuAction(
             icon = Icons.Default.DeleteSweep,
             title = getString(R.string.delete_select_group),

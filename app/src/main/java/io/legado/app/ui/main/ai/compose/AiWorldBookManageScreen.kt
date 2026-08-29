@@ -27,6 +27,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -60,12 +64,18 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.main.ai.AiWorldBookBinding
 import io.legado.app.ui.main.ai.AiWorldBookConfig
 import io.legado.app.ui.main.ai.AiWorldBookEntry
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.compose.LegadoMiuixActionRow
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.LegadoMiuixPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixSelectField
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodyLargeX
+import io.legado.app.ui.theme.subtitleLarge
+import io.legado.app.ui.theme.subtitleLargeX
 
 private data class WorldBookEditState(
     val id: String?,
@@ -360,7 +370,7 @@ private fun WorldBookMainScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
+            // 2.2.6：顶栏改 GlassTopAppBar（自带状态栏 inset），此处不再重复 statusBarsPadding
             .navigationBarsPadding()
             .imePadding()
             .padding(horizontal = 14.dp)
@@ -419,90 +429,66 @@ private fun WorldBookTopBar(
     onRefresh: (() -> Unit)? = null
 ) {
     var addMenuExpanded by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(58.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                painter = painterResource(R.drawable.ic_arrow_back),
-                contentDescription = "返回",
-                tint = style.colors.primaryText
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                color = style.colors.primaryText,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 19.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = subtitle,
-                color = style.colors.secondaryText,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        onRefresh?.let {
-            IconButton(onClick = it) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_refresh_black_24dp),
-                    contentDescription = "刷新",
-                    tint = style.colors.secondaryText
-                )
-            }
-        }
-        onAdd?.let { addAction ->
-            val palette = style.toWorldBookMiuixPalette()
-            Box {
-                IconButton(onClick = { addMenuExpanded = true }) {
+    // 2.2.6 (2026-08-27)：自绘 Row 顶栏 → GlassTopAppBar，统一 Compose 顶栏基线（随顶栏管理消费 TopBarConfig）
+    GlassTopAppBar(
+        title = title,
+        subtitle = subtitle,
+        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+        onNavClick = onBack,
+        actions = {
+            onRefresh?.let {
+                IconButton(onClick = it) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_add),
-                        contentDescription = "新增",
-                        tint = style.colors.accent
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "刷新"
                     )
                 }
-                if (addMenuExpanded) {
-                    Popup(
-                        alignment = Alignment.TopEnd,
-                        onDismissRequest = { addMenuExpanded = false },
-                        properties = PopupProperties(focusable = true)
-                    ) {
-                        LegadoMiuixCard(
-                            modifier = Modifier
-                                .width(188.dp)
-                                .padding(top = 46.dp),
-                            color = palette.surface,
-                            contentColor = palette.primaryText,
-                            cornerRadius = style.metrics.chipRadius,
-                            insidePadding = PaddingValues(vertical = 6.dp)
+            }
+            onAdd?.let { addAction ->
+                val palette = style.toWorldBookMiuixPalette()
+                Box {
+                    IconButton(onClick = { addMenuExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = "新增"
+                        )
+                    }
+                    if (addMenuExpanded) {
+                        Popup(
+                            alignment = Alignment.TopEnd,
+                            onDismissRequest = { addMenuExpanded = false },
+                            properties = PopupProperties(focusable = true)
                         ) {
-                            WorldBookAddMenuItem("新增世界书", palette, style) {
-                                addMenuExpanded = false
-                                addAction()
-                            }
-                            onImportLocal?.let { action ->
-                                WorldBookAddMenuItem("本地导入", palette, style) {
+                            LegadoMiuixCard(
+                                modifier = Modifier
+                                    .width(188.dp)
+                                    .padding(top = 46.dp),
+                                color = palette.surface,
+                                contentColor = palette.primaryText,
+                                cornerRadius = style.metrics.chipRadius,
+                                insidePadding = PaddingValues(vertical = 6.dp)
+                            ) {
+                                WorldBookAddMenuItem("新增世界书", palette, style) {
                                     addMenuExpanded = false
-                                    action()
+                                    addAction()
                                 }
-                            }
-                            onImportNetwork?.let { action ->
-                                WorldBookAddMenuItem("网络导入", palette, style) {
-                                    addMenuExpanded = false
-                                    action()
+                                onImportLocal?.let { action ->
+                                    WorldBookAddMenuItem("本地导入", palette, style) {
+                                        addMenuExpanded = false
+                                        action()
+                                    }
                                 }
-                            }
-                            onImportPaste?.let { action ->
-                                WorldBookAddMenuItem("粘贴导入", palette, style) {
-                                    addMenuExpanded = false
-                                    action()
+                                onImportNetwork?.let { action ->
+                                    WorldBookAddMenuItem("网络导入", palette, style) {
+                                        addMenuExpanded = false
+                                        action()
+                                    }
+                                }
+                                onImportPaste?.let { action ->
+                                    WorldBookAddMenuItem("粘贴导入", palette, style) {
+                                        addMenuExpanded = false
+                                        action()
+                                    }
                                 }
                             }
                         }
@@ -510,7 +496,7 @@ private fun WorldBookTopBar(
                 }
             }
         }
-    }
+    )
 }
 
 @Composable
@@ -583,7 +569,7 @@ private fun WorldBookCard(
                 Text(
                     text = book.name,
                     color = style.colors.primaryText,
-                    fontSize = 17.sp,
+                    fontSize = MaterialTheme.typography.bodyLargeX.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -591,7 +577,7 @@ private fun WorldBookCard(
                 Text(
                     text = book.description.ifBlank { "无描述" },
                     color = style.colors.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -623,7 +609,7 @@ private fun WorldBookCard(
         if (expanded) {
             Spacer(modifier = Modifier.height(10.dp))
             if (book.entries.isEmpty()) {
-                Text("暂无条目", color = style.colors.secondaryText, fontSize = 13.sp)
+                Text("暂无条目", color = style.colors.secondaryText, fontSize = MaterialTheme.typography.bodyTertiary.fontSize)
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     book.entries.forEach { entry ->
@@ -668,7 +654,7 @@ private fun EntryRow(
                 Text(
                     text = entry.content.replace(Regex("\\s+"), " ").trim(),
                     color = style.colors.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -705,7 +691,7 @@ private fun WorldBookJsonEditor(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
+            // 2.2.6：顶栏改 GlassTopAppBar（自带状态栏 inset），此处不再重复 statusBarsPadding
             .navigationBarsPadding()
             .imePadding()
             .padding(horizontal = 14.dp)
@@ -752,7 +738,7 @@ private fun WorldBookEditor(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
+            // 2.2.6：顶栏改 GlassTopAppBar（自带状态栏 inset），此处不再重复 statusBarsPadding
             .navigationBarsPadding()
             .imePadding()
             .padding(horizontal = 14.dp)
@@ -853,7 +839,7 @@ private fun WorldBookEntryEditor(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
+            // 2.2.6：顶栏改 GlassTopAppBar（自带状态栏 inset），此处不再重复 statusBarsPadding
             .navigationBarsPadding()
             .imePadding()
             .padding(horizontal = 14.dp)
@@ -934,7 +920,7 @@ private fun WorldBookEntryEditor(
                     )
                 }
                 if (!regexOk) {
-                    Text("正则表达式有错误，不能保存。", color = style.colors.danger, fontSize = 13.sp)
+                    Text("正则表达式有错误，不能保存。", color = style.colors.danger, fontSize = MaterialTheme.typography.bodyTertiary.fontSize)
                 }
                 SaveBar(
                     enabled = title.trim().isNotBlank() && content.trim().isNotBlank() && regexOk,
@@ -1073,7 +1059,7 @@ private fun InfoChip(
         Text(
             text = text,
             color = if (selected) style.colors.accent else style.colors.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -1090,7 +1076,7 @@ private fun SmallAction(
     Text(
         text = text,
         color = if (danger) style.colors.danger else style.colors.accent,
-        fontSize = 13.sp,
+        fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
         modifier = Modifier
             .clip(RoundedCornerShape(style.metrics.chipRadius))
             .clickable { onClick() }

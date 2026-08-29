@@ -73,6 +73,8 @@ import io.legado.app.utils.dpToPx
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.showDialogFragment
 import kotlin.math.roundToInt
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
     FontSelectDialog.CallBack {
@@ -237,13 +239,13 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                         text = stringResource(R.string.text_font_weight),
                         modifier = Modifier.weight(1f),
                         color = style.primaryText,
-                        fontSize = 13.sp,
+                        fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                         fontWeight = FontWeight(value)
                     )
                     Text(
                         text = value.toString(),
                         color = style.accent,
-                        fontSize = 13.sp,
+                        fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -373,7 +375,7 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                         text = label,
                         modifier = Modifier.weight(1f),
                         color = style.primaryText,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -381,7 +383,7 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                     Text(
                         text = valueText,
                         color = style.accent,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1
                     )
@@ -483,7 +485,7 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
             Text(
                 text = config.name.ifBlank { stringResource(R.string.text) },
                 color = if (selected) style.accent else style.secondaryText,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -525,7 +527,7 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
             Text(
                 text = stringResource(R.string.add),
                 color = style.secondaryText,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 5.dp)

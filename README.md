@@ -10,7 +10,7 @@
 
 自定义书源规则引擎 | CSS / JSONPath / XPath / 正则 / JS 五种解析
 
-继承自 [gedoor/legado](https://github.com/gedoor/legado)，基于 [Luoyacheng/legado-E](https://github.com/Luoyacheng/legado-E) 版本扩展更多功能
+本仓库 fork 自 **lyc — [Luoyacheng/legado-E](https://github.com/Luoyacheng/legado-E)（阅读Sigma，本项目功能基座）**，UI 体系深度对齐 **Archive — [Rimchars/legado](https://github.com/Rimchars/legado)（阅读Archive）**，并在此基础上扩展更多功能（详见下方「与上游参考版本的功能对比」）。
 
 </div>
 
@@ -37,16 +37,22 @@
 
 ## 版本亮点
 
-基于阅读M版本，扩展了以下核心功能：
+扩展了以下核心功能：
 
 - **内置视频播放器** — 抖音风格沉浸式竖屏布局，上下滑动切换文章，多线路多集选择，WebView降级播放，自动抓取视频链接
 - **高亮规则系统** — 正则/字面量匹配自动高亮，9种样式（背景色/文字色/加粗/斜体/下划线等），支持手动划线标注，内置12条预设规则
 - **自动任务系统** — cron定时执行JS脚本，自动刷新书籍目录、通知新书更新
-- **13+内置主题** — 护眼绿/黄/牛皮纸 + 暗夜护眼/绿/蓝/紫，支持自定义
 - **订阅源性能优化** — 列表并行解析+全局规则缓存+图片解密缓存+HTTP响应缓存+DNS容错
 - **书源/订阅源管理** — 标签/分组双展示模式，按类型/分组筛选，排序功能，紧凑列表/网格布局
 
 > 完整更新记录见 [更新日志](app/src/main/assets/updateLog.md)
+
+---
+
+## 与上游参考版本的功能对比
+
+> 本项目功能基座继承自 **lyc（阅读Sigma，[legado-E](https://github.com/Luoyacheng/legado-E)）**，UI Compose 化参照 **Archive（阅读Archive，[Rimchars/legado](https://github.com/Rimchars/legado)）**。下表中行为本项目相对两参考版本**额外实现或增强**的功能项。
+
 
 ---
 
@@ -98,17 +104,18 @@ build-legado.bat debug com.my.legado
 - [书源规则教程](https://mgz0227.github.io/The-tutorial-of-Legado/)
 - [更新日志](app/src/main/assets/updateLog.md)
 - [帮助文档](app/src/main/assets/web/help/md/appHelp.md)
-- [书源分享平台](https://www.yckceo.com/yuedu/shuyuans/index.html)（746+ 条书源合集）
-- [订阅源分享平台](https://www.yckceo.com/yuedu/rsss/index.html)（87+ 条订阅源合集）
 - [免责声明](https://gedoor.github.io/Disclaimer)
 
 ---
 
 ## 致谢
 
-感谢 [gedoor](https://github.com/gedoor) 及所有开源贡献者。
+特别感谢以下两个参考项目（本项目的功能基座与 UI 参照）：
 
-感谢 [Luoyacheng/legado-E](https://github.com/Luoyacheng/legado-E) 提供的阅读Sigma版本基础。
+- **lyc（阅读Sigma）** — [Luoyacheng/legado-E](https://github.com/Luoyacheng/legado-E)：本项目的 fork 源与功能基座。
+- **Archive（阅读Archive）** — [Rimchars/legado](https://github.com/Rimchars/legado)：UI Compose 化与 WebView 修复范式的深度参照。
+
+同时感谢 [gedoor](https://github.com/gedoor) 及所有开源贡献者。
 
 本项目基于 [Legado（阅读）](https://github.com/gedoor/legado) 开源项目，遵循原项目开源协议。
 

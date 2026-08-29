@@ -123,7 +123,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 107,
+    version = 108,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -204,6 +204,7 @@ val appDb by lazy {
         // archive-ui P1-B: 104→105 使用手动 Migration（DatabaseMigrations.migration_104_105），新增 6 张表（readRecordDaily/readRecentBooks/paragraph_rules/book_paragraph_rules/paragraph_rule_vars/read_menu_custom_buttons）
         // archive-ui P1-F: 105→106 使用手动 Migration（DatabaseMigrations.migration_105_106），新增 AI agent/images/memory/read-aloud bgm/speaker/book character/chapter summary 等共 19 张表（含 2 张 FTS4 虚拟表）
         // download-manager: 106→107 使用手动 Migration（DatabaseMigrations.migration_106_107），新增 download_tasks 表（下载任务持久化）
+        // download-manager-optimize B8: 107→108 使用手动 Migration（migration_107_108），download_tasks 删除 errorMsg/resumePointJson/segmentsJson 僵尸列（建新表迁数据）
     ]
 )
 abstract class AppDatabase : RoomDatabase() {

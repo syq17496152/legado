@@ -27,7 +27,6 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.widget.PopupMenu
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import io.legado.app.R
@@ -41,6 +40,7 @@ import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.book.read.config.ReaderSheetStyle
+import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.gone
@@ -67,6 +67,7 @@ class SelectionWebSearchDialog() : BottomSheetDialogFragment(R.layout.dialog_sel
     private var currentQuery: String = ""
     private var behavior: BottomSheetBehavior<View>? = null
     private var clearHistoryOnNextFinish = false
+    private var moreMenuPopup: ModernActionPopup.Handle? = null
     private var currentSearchEngine: ContentSelectConfig.SearchEngine? = null
     private var currentSearchRootHost: String? = null
     private var webViewUserAgent: String = ""
@@ -317,18 +318,18 @@ class SelectionWebSearchDialog() : BottomSheetDialogFragment(R.layout.dialog_sel
     }
 
     private fun showMoreMenu() {
-        PopupMenu(requireContext(), binding.btnMore, Gravity.NO_GRAVITY).apply {
-            menu.add(0, MENU_REFRESH, 0, R.string.refresh)
-            menu.add(0, MENU_EDIT, 1, R.string.edit)
-            setOnMenuItemClickListener {
-                when (it.itemId) {
-                    MENU_REFRESH -> webView.reload()
-                    MENU_EDIT -> showEngineManageDialog()
+        moreMenuPopup = ModernActionPopup.show(
+            binding.btnMore,
+            listOf(
+                ModernActionPopup.Action(getString(R.string.refresh)) {
+                    webView.reload()
+                },
+                ModernActionPopup.Action(getString(R.string.edit)) {
+                    showEngineManageDialog()
                 }
-                true
-            }
-            show()
-        }
+            ),
+            moreMenuPopup
+        )
     }
 
     private fun showEngineManageDialog() {

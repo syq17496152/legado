@@ -50,6 +50,8 @@ import io.legado.app.ui.widget.compose.LegadoMiuixPalette
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import java.util.Locale
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
 
 class TopBarEditDialog : ComposeDialogFragment() {
 
@@ -461,7 +463,7 @@ private fun TopBarEditTextField(
         Text(
             text = label,
             color = style.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.Medium,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
@@ -514,7 +516,7 @@ private fun TopBarEditOptionRow(
             Text(
                 text = title,
                 color = style.primaryText,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -535,7 +537,7 @@ private fun TopBarEditOptionRow(
             Text(
                 text = value,
                 color = style.secondaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

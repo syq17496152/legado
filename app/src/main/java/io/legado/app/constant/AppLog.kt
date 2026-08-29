@@ -117,8 +117,19 @@ object AppLog {
         mLogs.clear()
     }
 
+    /**
+     * recordLog 读取守卫：AppConfig <clinit> 依赖 splitties appCtx（反射 ActivityThread），
+     * 纯 JVM 单测环境无该类会抛 ExceptionInInitializerError/NoClassDefFoundError。
+     * 失败时按 recordLog=false 处理；真机 AppConfig 正常初始化，永不抛，行为不变。
+     */
+    private fun recordLogOrOff(): Boolean = try {
+        AppConfig.recordLog
+    } catch (t: Throwable) {
+        false
+    }
+
     fun putDebug(message: String?, throwable: Throwable? = null) {
-        if (AppConfig.recordLog) {
+        if (recordLogOrOff()) {
             putEntry(message, throwable, false, Level.DEBUG)
         }
     }
@@ -145,7 +156,7 @@ object AppLog {
         val safeMsg = truncateSafely(message)
         // V-004-P0-ImageLog: recordLog 关闭时，ERROR/WARN/INFO 级别仍输出到 logcat（确保关键日志可采集）
         // R3-P0: 新增 INFO 级别输出（视频预缓冲埋点需要 INFO 级别日志在 release 包可采集）
-        if (!AppConfig.recordLog) {
+        if (!recordLogOrOff()) {
             if (level == Level.ERROR || level == Level.WARN || level == Level.INFO) {
                 Log.e(tag, safeMsg, throwable)
             }

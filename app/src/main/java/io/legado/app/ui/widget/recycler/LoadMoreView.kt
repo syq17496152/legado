@@ -8,7 +8,8 @@ import android.widget.FrameLayout
 import androidx.annotation.ColorRes
 import io.legado.app.R
 import io.legado.app.databinding.ViewLoadMoreBinding
-import io.legado.app.lib.dialogs.alert
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.utils.activity
 import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.invisible
 import io.legado.app.utils.visible
@@ -93,14 +94,15 @@ class LoadMoreView(context: Context, attrs: AttributeSet? = null) : FrameLayout(
         if (errorMsg.isBlank()) {
             return false
         }
-        context.alert(R.string.error) {
-            setMessage(errorMsg)
-            if (onClickListener != null) {
-                neutralButton(R.string.retry) {
-                    onClickListener?.onClick(view)
-                }
+        activity?.showComposeConfirmDialog(
+            title = context.getString(R.string.error),
+            message = errorMsg,
+            positiveText = context.getString(R.string.retry),
+            showNegative = false,
+            onPositive = {
+                onClickListener?.onClick(view)
             }
-        }
+        )
         return true
     }
 

@@ -17,10 +17,10 @@ import androidx.compose.runtime.setValue
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.databinding.ActivityAutoTaskEditBinding
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.model.AutoTask
 import io.legado.app.model.AutoTaskRule
 import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.CronSchedule
@@ -205,13 +205,14 @@ class AutoTaskEditActivity :
         val base = originTask ?: task ?: AutoTaskRule()
         val current = buildTaskDraft()
         if (current != base) {
-            alert(R.string.exit) {
-                setMessage(R.string.exit_no_save)
-                positiveButton(R.string.yes)
-                negativeButton(R.string.no) {
-                    super.finish()
-                }
-            }
+            showComposeConfirmDialog(
+                title = getString(R.string.exit),
+                message = getString(R.string.exit_no_save),
+                positiveText = getString(R.string.yes),
+                negativeText = getString(R.string.no),
+                onPositive = { /* 保留当前页不退出 */ },
+                onNegative = { super.finish() }
+            )
         } else {
             super.finish()
         }

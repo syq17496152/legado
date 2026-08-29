@@ -18,8 +18,8 @@ import io.legado.app.databinding.ActivityBookshelfTagManageBinding
 import io.legado.app.help.book.BookTagManagement
 import io.legado.app.help.book.BookTagHelper
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
@@ -172,11 +172,12 @@ class BookshelfTagManageActivity : BaseActivity<ActivityBookshelfTagManageBindin
     }
 
     private fun confirmDeleteTag(group: BookshelfTagGroupUi, tag: String) {
-        alert(
+        showComposeConfirmDialog(
             title = getString(R.string.bookshelf_tag_delete_title),
-            message = getString(R.string.bookshelf_tag_delete_message, tag, group.groupName)
-        ) {
-            okButton {
+            message = getString(R.string.bookshelf_tag_delete_message, tag, group.groupName),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            onPositive = {
                 lifecycleScope.launch {
                     withContext(IO) {
                         appDb.withTransaction {
@@ -204,8 +205,7 @@ class BookshelfTagManageActivity : BaseActivity<ActivityBookshelfTagManageBindin
                     loadTags()
                 }
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun booksInGroup(

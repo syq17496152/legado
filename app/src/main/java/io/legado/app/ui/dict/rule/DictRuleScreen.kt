@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -55,6 +56,7 @@ import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsSelectableRow
 import io.legado.app.ui.widget.components.ShelfListSkeleton
+import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -113,15 +115,24 @@ fun DictRuleScreen(
             navIcon = Icons.AutoMirrored.Filled.ArrowBack,
             onNavClick = onBack,
             actions = {
-                Box {
-                    IconButton(onClick = { moreMenuVisible = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = null)
+                // topbar-icon-semantics-fix 3.3：alwaysShow 项直出一级图标（对齐原版 dict_rule.xml always）
+                topMenuActions.filter { it.alwaysShow }.forEach { action ->
+                    IconButton(onClick = action.onClick) {
+                        Icon(action.icon, contentDescription = action.title)
                     }
-                    AppDropdownMenu(
-                        expanded = moreMenuVisible,
-                        onDismiss = { moreMenuVisible = false },
-                        actions = topMenuActions
-                    )
+                }
+                val overflowActions = topMenuActions.filter { !it.alwaysShow }
+                if (overflowActions.isNotEmpty()) {
+                    Box {
+                        IconButton(onClick = { moreMenuVisible = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = null)
+                        }
+                        AppDropdownMenu(
+                            expanded = moreMenuVisible,
+                            onDismiss = { moreMenuVisible = false },
+                            actions = overflowActions
+                        )
+                    }
                 }
             }
         )
@@ -235,10 +246,12 @@ private fun SelectionActionBar(
     val enabled = selectionCount > 0
     val allSelected = totalCount > 0 && selectionCount >= totalCount
     var menuVisible by remember { mutableStateOf(false) }
+    // H10: 选择操作栏直色（palette.row = UiCorner.surfaceColor(cardColor)），替代 M3 surface 派生色
+    val palette = rememberAppSettingPalette()
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
+        color = Color(palette.row),
         shadowElevation = 8.dp
     ) {
         Row(
@@ -274,7 +287,7 @@ private fun SelectionActionBar(
                         stringResource(R.string.select_all_count, selectionCount, totalCount)
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = palette.primaryText
                 )
             }
             TextButton(
@@ -291,14 +304,14 @@ private fun SelectionActionBar(
                     imageVector = Icons.Default.Delete,
                     contentDescription = null,
                     tint = if (enabled) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                    else palette.primaryText.copy(alpha = 0.38f),
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = stringResource(R.string.delete),
                     color = if (enabled) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    else palette.primaryText.copy(alpha = 0.38f)
                 )
             }
             Box {
@@ -309,8 +322,8 @@ private fun SelectionActionBar(
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = null,
-                        tint = if (enabled) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        tint = if (enabled) palette.primaryText
+                        else palette.primaryText.copy(alpha = 0.38f)
                     )
                 }
                 AppDropdownMenu(

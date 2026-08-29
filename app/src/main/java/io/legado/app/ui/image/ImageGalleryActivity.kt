@@ -25,6 +25,8 @@ import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.image.adapter.ImageCanvasAdapter
 import io.legado.app.ui.image.adapter.ImageDetailAdapter
 import io.legado.app.ui.image.adapter.ImageDetailViewPagerAdapter
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.image.ImageCanvasItem
 import io.legado.app.ui.image.ImagePlay
 import io.legado.app.ui.rss.favorites.RssFavoritesDialog
@@ -367,8 +369,12 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
                     "onWebModeFallback: prompt user articleIndex=$articleIndex",
                     level = AppLog.Level.INFO
                 )
-                alert("图片加载失败", "已尝试所有自动恢复方案仍无法加载图片，是否切换到网页模式查看？") {
-                    positiveButton("切换网页模式") {
+                showComposeConfirmDialog(
+                    title = "图片加载失败",
+                    message = "已尝试所有自动恢复方案仍无法加载图片，是否切换到网页模式查看？",
+                    positiveText = "切换网页模式",
+                    negativeText = "取消",
+                    onPositive = {
                         AppLog.putDebugWithTag(
                             AppLog.TAG_IMAGE_CANVAS,
                             "onWebModeFallback: user confirm switch to ReadRssActivity articleIndex=$articleIndex",
@@ -384,8 +390,7 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
                             finish()
                         }
                     }
-                    negativeButton("取消")
-                }
+                )
             }
         )
         binding.recyclerView.apply {
@@ -726,15 +731,16 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
      */
     private fun showImageActionMenu(imageUrl: String) {
         currentImageUrl = imageUrl
-        alert("图片操作") {
-            items(listOf("保存图片", "分享图片", "复制URL")) { _, which ->
-                when (which) {
-                    0 -> saveImage(imageUrl)
-                    1 -> shareImage(imageUrl)
-                    2 -> {
-                        sendToClip(imageUrl)
-                        toastOnUi("图片链接已复制")
-                    }
+        showComposeActionListDialog(
+            title = "图片操作",
+            labels = listOf("保存图片", "分享图片", "复制URL")
+        ) { which ->
+            when (which) {
+                0 -> saveImage(imageUrl)
+                1 -> shareImage(imageUrl)
+                2 -> {
+                    sendToClip(imageUrl)
+                    toastOnUi("图片链接已复制")
                 }
             }
         }

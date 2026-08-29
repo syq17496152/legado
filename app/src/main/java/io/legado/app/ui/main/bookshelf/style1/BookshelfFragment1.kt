@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -31,9 +32,10 @@ import io.legado.app.data.entities.BookGroup
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1) {
 
@@ -53,6 +55,38 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     private var topScrollTrigger by mutableLongStateOf(0L)
     private var refreshing by mutableStateOf(false)
     private var booksJob: Job? = null
+    // 1.2：刷新复位协程单一 Job 管理（新刷新先 cancel 旧复位协程，防竞态）
+    private var refreshResetJob: Job? = null
+
+    // 受控布局配置（config-needs-restart-fix AD-04）：onFragmentCreated 中 migrate 后全量重读，
+    // REFRESH/STRUCTURE 事件回调重读传入 BookshelfScreen，替代 Screen 内 remember{AppConfig.x} 快照
+    private var shelfLayout by mutableIntStateOf(0)
+    private var shelfShowBookname by mutableIntStateOf(1)
+    private var shelfListItemStyle by mutableIntStateOf(0)
+    private var shelfIntroLines by mutableIntStateOf(2)
+    private var shelfMargin by mutableIntStateOf(12)
+    private var shelfShowUnread by mutableStateOf(false)
+    private var shelfShowReadProgress by mutableStateOf(false)
+    private var shelfShowLastUpdateTime by mutableStateOf(false)
+
+    private fun refreshShelfRenderConfig() {
+        shelfMargin = AppConfig.bookshelfMargin
+        shelfListItemStyle = AppConfig.bookshelfListItemStyle
+        shelfIntroLines = AppConfig.bookshelfListIntroLines
+        shelfShowUnread = AppConfig.showUnread
+        shelfShowReadProgress = AppConfig.showBookshelfReadProgress
+        shelfShowLastUpdateTime = AppConfig.showLastUpdateTime
+        // showBookname/layout 属结构类，REFRESH 场景不变；但重读无副作用，保持一致
+        shelfShowBookname = AppConfig.showBookname
+        shelfLayout = AppConfig.bookshelfLayout.coerceIn(0, 6)
+    }
+
+    private fun rebuildBookshelfContent() {
+        shelfLayout = AppConfig.bookshelfLayout.coerceIn(0, 6)
+        shelfShowBookname = AppConfig.showBookname
+        refreshShelfRenderConfig()
+        upConnect()
+    }
 
     private var bookSort: Int = 0
 
@@ -89,12 +123,25 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             isFolder = false,
             topScrollTrigger = topScrollTrigger,
             isRefreshing = refreshing,
+            layout = shelfLayout,
+            showBookname = shelfShowBookname,
+            listItemStyle = shelfListItemStyle,
+            introLines = shelfIntroLines,
+            margin = shelfMargin,
+            showUnread = shelfShowUnread,
+            showReadProgress = shelfShowReadProgress,
+            showLastUpdateTime = shelfShowLastUpdateTime,
             onRefresh = {
                 refreshing = true
                 activityViewModel.upToc(currentBooks, onlyUpdateRead)
-                lifecycleScope.launch {
-                    delay(1000)
-                    refreshing = false
+                // 1.2：事件驱动复位——upToc 队列排空（upTocIdle.first { it }）后收转圈，
+                // 5s 超时兜底防信号丢失；协程挂 viewLifecycleOwner（页面销毁自动取消，无冻结滞留）
+                refreshResetJob?.cancel()
+                refreshResetJob = viewLifecycleOwner.lifecycleScope.launch {
+                    val idle = withTimeoutOrNull(5_000) {
+                        activityViewModel.upTocIdle.first { it }
+                    }
+                    if (idle == true || refreshing) refreshing = false
                 }
             },
             onRetry = { upConnect() },
@@ -108,6 +155,9 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     override val topBar: MainTopBarView get() = binding.topBar
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
+        // K7 存量迁移（先于字段重读与首帧组合，幂等）
+        migrateLegacyShowBookname()
+        refreshShelfRenderConfig()
         initComposeTopBar()
         initTopBarTags()
         initBookGroupData()
@@ -141,7 +191,13 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     override fun observeLiveBus() {
         super.observeLiveBus()
         observeEvent<String>(EventBus.BOOKSHELF_REFRESH) {
+            // REFRESH：重读渲染配置（margin/style/introLines/数据类开关）+ 刷数据
+            refreshShelfRenderConfig()
             upConnect()
+        }
+        // STRUCTURE：layout/showBookname 结构变更 → 全量重建（config-needs-restart-fix 实锤 3）
+        observeEvent<String>(EventBus.BOOKSHELF_STRUCTURE_CHANGED) {
+            rebuildBookshelfContent()
         }
     }
 

@@ -30,6 +30,8 @@ import io.legado.app.ui.association.ImportDictRuleDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
@@ -70,19 +72,17 @@ class DictRuleActivity : VMBaseActivity<ActivityDictRuleBinding, DictRuleViewMod
     }
     private val exportResult = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
-            alert(R.string.export_success) {
-                if (uri.toString().isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
-                }
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = getString(R.string.path)
-                    editView.setText(uri.toString())
-                }
-                customView { alertBinding.root }
-                okButton {
+            showComposeTextInputDialog(
+                title = getString(R.string.export_success),
+                message = if (uri.toString().isAbsUrl()) DirectLinkUpload.getSummary() else null,
+                hint = getString(R.string.path),
+                initialValue = uri.toString(),
+                readOnly = true,
+                positiveText = getString(R.string.copy_text),
+                onPositive = {
                     sendToClip(uri.toString())
                 }
-            }
+            )
         }
     }
 
@@ -146,6 +146,8 @@ class DictRuleActivity : VMBaseActivity<ActivityDictRuleBinding, DictRuleViewMod
         MenuAction(
             icon = Icons.Default.Add,
             title = getString(R.string.add),
+            // topbar-icon-semantics-fix 3.3：新增恢复一级图标（原版 dict_rule.xml menu_add always）
+            alwaysShow = true,
             onClick = { showDialogFragment<DictRuleEditDialog>() }
         ),
         MenuAction(
@@ -225,14 +227,17 @@ class DictRuleActivity : VMBaseActivity<ActivityDictRuleBinding, DictRuleViewMod
     }
 
     private fun del(rule: DictRule) {
-        alert(R.string.draw) {
-            setMessage(getString(R.string.sure_del) + "\n" + rule.name)
-            noButton()
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.draw),
+            message = getString(R.string.sure_del) + "\n" + rule.name,
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 selectedNames.remove(rule.name)
                 viewModel.delete(rule)
             }
-        }
+        )
     }
 
     private fun toggleSelect(index: Int, checked: Boolean) {
@@ -274,13 +279,17 @@ class DictRuleActivity : VMBaseActivity<ActivityDictRuleBinding, DictRuleViewMod
     private fun delSelectionDialog() {
         val selection = selectedRules
         if (selection.isEmpty()) return
-        alert(titleResource = R.string.draw, messageResource = R.string.sure_del) {
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.draw),
+            message = getString(R.string.sure_del),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 selectedNames.clear()
                 viewModel.delete(*selection.toTypedArray())
             }
-            noButton()
-        }
+        )
     }
 
     /** 拖拽排序结束：按新顺序重排 sortNumber 并持久化（覆盖原 swap + upOrder 语义） */

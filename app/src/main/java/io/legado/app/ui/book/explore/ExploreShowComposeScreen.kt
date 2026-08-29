@@ -40,6 +40,8 @@ import io.legado.app.ui.widget.compose.SearchBookListItem
 import io.legado.app.ui.widget.compose.SearchBookPreviewOverlay
 import io.legado.app.ui.widget.compose.SearchBookPreviewState
 import io.legado.app.utils.stableSearchBookKey
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 @Composable
 fun ExploreShowComposeScreen(
@@ -159,7 +161,7 @@ fun ExploreShowComposeScreen(
             Text(
                 text = stringResource(R.string.explore_empty),
                 color = palette.secondaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 modifier = Modifier
                     .align(Alignment.Center)
@@ -209,7 +211,7 @@ private fun ExploreShowStatusRow(
             Text(
                 text = message,
                 color = palette.secondaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontFamily = palette.bodyFontFamily
             )
         }

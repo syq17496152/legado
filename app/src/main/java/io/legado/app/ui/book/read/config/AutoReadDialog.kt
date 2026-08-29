@@ -55,6 +55,8 @@ import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.LegadoMiuixPalette
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 class AutoReadDialog : ComposeDialogFragment() {
 
@@ -239,7 +241,7 @@ private fun AutoReadContent(
                         Text(
                             text = speedTitle,
                             color = textColor,
-                            fontSize = 14.sp,
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                             fontWeight = FontWeight.Medium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -248,7 +250,7 @@ private fun AutoReadContent(
                         Text(
                             text = "${speed}s",
                             color = secondaryTextColor,
-                            fontSize = 13.sp,
+                            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -336,7 +338,7 @@ private fun AutoReadModeButton(
         Text(
             text = text,
             color = if (selected) palette.accent else palette.primaryText,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             textAlign = TextAlign.Center,
             maxLines = 1,
@@ -375,7 +377,7 @@ private fun AutoReadAction(
         Text(
             text = text,
             color = textColor,
-            fontSize = 11.sp,
+            fontSize = MaterialTheme.typography.labelSmall.fontSize,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

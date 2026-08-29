@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.model.VideoPlay
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.components.SettingsClickRow
 import io.legado.app.ui.widget.components.SettingsToggleRow
 import io.legado.app.ui.widget.components.SingleChoiceDialog
@@ -41,6 +42,10 @@ import io.legado.app.ui.widget.components.SingleChoiceDialog
  * 由 [VideoSettingsPanel]（BottomSheetDialogFragment 壳）通过 ComposeView 承载。
  * 100% 保留旧 View 面板全部功能：播放控制 / 播放信息 / 功能菜单 / 调试日志 / 播放设置 / 播放器优化。
  * 仅依赖 [VideoPlay] 全局配置与外部回调，无 View 依赖。
+ *
+ * video-player-ux-fixes P3：取色同源治理（color.md 门禁）——MaterialTheme.colorScheme.* 全部替换
+ * 为 rememberAppDialogStyle()（themeUiPalette 同源），Dialog 壳/BottomSheet 壳双入口视觉统一。
+ * [showDragHandle]：拖拽手柄为 BottomSheet 专属视觉，Dialog 壳（SettingsDialog）传 false 隐藏。
  */
 @Composable
 fun VideoSettingsPanelContent(
@@ -60,6 +65,7 @@ fun VideoSettingsPanelContent(
     onLogin: () -> Unit,
     onLog: () -> Unit,
     onPickPressSpeed: () -> Unit,
+    showDragHandle: Boolean = true,
 ) {
     // 播放设置开关状态（初值读自 VideoPlay，变更即写回）
     var autoPlay by remember { mutableStateOf(VideoPlay.autoPlay) }
@@ -70,6 +76,7 @@ fun VideoSettingsPanelContent(
     var cacheSize by remember { mutableStateOf(VideoPlay.videoCacheSize) }
     var cachePlay by remember { mutableStateOf(VideoPlay.videoCache) }
     var playerType by remember { mutableStateOf(VideoPlay.playerType) }
+    var seekSensitivity by remember { mutableStateOf(VideoPlay.seekSensitivity) }
     var firstFramePreload by remember { mutableStateOf(VideoPlay.playerFirstFramePreload) }
     var bufferStrategy by remember { mutableStateOf(VideoPlay.playerBufferStrategy) }
     var historyEnabled by remember { mutableStateOf(VideoPlay.playerHistoryEnabled) }
@@ -77,6 +84,8 @@ fun VideoSettingsPanelContent(
     var autoReconnect by remember { mutableStateOf(VideoPlay.playerAutoReconnect) }
     var showDebug by remember { mutableStateOf(false) }
     var selection by remember { mutableStateOf<PanelSelection?>(null) }
+    // 取色同源（P3）：与 AppDialogFrame 规范壳共用一套色板
+    val style = rememberAppDialogStyle()
 
     Column(
         modifier = Modifier
@@ -85,22 +94,24 @@ fun VideoSettingsPanelContent(
             .verticalScroll(rememberScrollState())
             .padding(bottom = 16.dp)
     ) {
-        // 拖拽手柄
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-            contentAlignment = Alignment.Center
-        ) {
+        // 拖拽手柄（BottomSheet 专属，Dialog 壳隐藏）
+        if (showDragHandle) {
             Box(
                 modifier = Modifier
-                    .width(36.dp)
-                    .height(4.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                        shape = AppShapes.Tiny
-                    )
-            )
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(36.dp)
+                        .height(4.dp)
+                        .background(
+                            color = style.stroke,
+                            shape = AppShapes.Tiny
+                        )
+                )
+            }
         }
 
         // ====== 播放控制 ======
@@ -137,7 +148,7 @@ fun VideoSettingsPanelContent(
             Text(
                 text = stringResource(R.string.video_play_url_format, videoUrl ?: ""),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = style.secondaryText,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
@@ -149,7 +160,7 @@ fun VideoSettingsPanelContent(
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = style.secondaryText,
                 maxLines = 5,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
@@ -185,12 +196,12 @@ fun VideoSettingsPanelContent(
                 text = debugLog,
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = style.primaryText,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
                     .background(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        color = style.fieldSurface,
                         shape = AppShapes.Chip
                     )
                     .padding(8.dp)
@@ -242,6 +253,13 @@ fun VideoSettingsPanelContent(
             title = stringResource(R.string.press_speed),
             value = pressSpeedSummary,
             onClick = onPickPressSpeed
+        )
+        // video-player-ux-fixes P2: 滑动快进灵敏度（5 档，即时生效）
+        SettingsClickRow(
+            icon = null,
+            title = stringResource(R.string.seek_sensitivity),
+            value = stringResource(R.string.seek_sensitivity_multiplier_format, seekSensitivity / 10f),
+            onClick = { selection = PanelSelection.SeekSensitivity }
         )
         SettingsClickRow(
             icon = null,
@@ -369,6 +387,23 @@ fun VideoSettingsPanelContent(
                 onDismiss = { selection = null }
             )
         }
+        // video-player-ux-fixes P2: 滑动快进灵敏度 5 档（5=0.5x/7=0.7x/10=1.0x/15=1.5x/20=2.0x）
+        PanelSelection.SeekSensitivity -> {
+            val values = intArrayOf(5, 7, 10, 15, 20)
+            val options = values.map { stringResource(R.string.seek_sensitivity_multiplier_format, it / 10f) }
+            val index = values.indexOfFirst { it == seekSensitivity }.coerceAtLeast(0)
+            SingleChoiceDialog(
+                title = stringResource(R.string.seek_sensitivity),
+                options = options,
+                selectedIndex = index,
+                onSelect = {
+                    seekSensitivity = values[it]
+                    VideoPlay.seekSensitivity = values[it]
+                    selection = null
+                },
+                onDismiss = { selection = null }
+            )
+        }
         PanelSelection.BufferStrategy -> {
             val options = listOf(
                 stringResource(R.string.player_buffer_strategy_auto),
@@ -395,23 +430,25 @@ fun VideoSettingsPanelContent(
 /** 分区标题 */
 @Composable
 private fun SectionHeader(title: String) {
+    val style = rememberAppDialogStyle()
     Text(
         text = title,
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
+        color = style.primaryText,
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)
     )
 }
 
-/** 面板紧凑按钮（secondaryContainer 圆角） */
+/** 面板紧凑按钮（fieldSurface 圆角，取色同源 P3） */
 @Composable
 private fun PanelButton(text: String, onClick: () -> Unit) {
+    val style = rememberAppDialogStyle()
     Surface(
         onClick = onClick,
         shape = AppShapes.Chip,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+        color = style.fieldSurface,
+        contentColor = style.primaryText
     ) {
         Text(
             text = text,
@@ -422,7 +459,7 @@ private fun PanelButton(text: String, onClick: () -> Unit) {
 }
 
 /** 下拉选择类型 */
-private enum class PanelSelection { SkipTime, CacheSize, PlayerType, BufferStrategy }
+private enum class PanelSelection { SkipTime, CacheSize, PlayerType, SeekSensitivity, BufferStrategy }
 
 @Composable
 private fun playerTypeLabel(type: Int): String = when (type) {

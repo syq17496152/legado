@@ -19,6 +19,7 @@ import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
+import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.utils.SelectImageContract
 import io.legado.app.utils.checkWrite
 import io.legado.app.utils.externalFiles
@@ -102,88 +103,86 @@ class HandleFileActivity :
                 else -> return@let getString(R.string.select_file)
             }
         }
-        alert(title) {
-            items(selectList) { _, item, _ ->
-                when (item.value) {
-                    HandleFileContract.DIR -> kotlin.runCatching {
-                        selectDocTree.launch()
-                    }.onFailure {
-                        AppLog.put(getString(R.string.open_sys_dir_picker_error), it, true)
-                        checkPermissions {
-                            FilePickerDialog.show(
-                                supportFragmentManager,
-                                mode = HandleFileContract.DIR
-                            )
-                        }
-                    }
-
-                    HandleFileContract.FILE -> kotlin.runCatching {
-                        selectDoc.launch(typesOfExtensions(allowExtensions))
-                    }.onFailure {
-                        AppLog.put(getString(R.string.open_sys_dir_picker_error), it, true)
-                        checkPermissions {
-                            FilePickerDialog.show(
-                                supportFragmentManager,
-                                mode = HandleFileContract.FILE,
-                                allowExtensions = allowExtensions
-                            )
-                        }
-                    }
-
-                    HandleFileContract.IMAGE -> {
-                        selectImage.launch()
-                    }
-
-                    10 -> checkPermissions {
-                        @Suppress("DEPRECATION")
-                        lifecycleScope.launchWhenResumed {
-                            FilePickerDialog.show(
-                                supportFragmentManager,
-                                mode = HandleFileContract.DIR
-                            )
-                        }
-                    }
-
-                    11 -> checkPermissions {
-                        @Suppress("DEPRECATION")
-                        lifecycleScope.launchWhenResumed {
-                            FilePickerDialog.show(
-                                supportFragmentManager,
-                                mode = HandleFileContract.FILE,
-                                allowExtensions = allowExtensions
-                            )
-                        }
-                    }
-
-                    111 -> getFileData()?.let {
-                        viewModel.upload(it.first, it.second, it.third) { url ->
-                            val uri = url.toUri()
-                            setResult(RESULT_OK, Intent().setData(uri))
-                            finish()
-                        }
-                    }
-
-                    112 -> checkPermissions { // 手动输入目录路径
-                        showInputDirectoryDialog()
-                    }
-
-                    113 -> checkPermissions { // 手动输入图片链接
-                        showInputImgSrcDialog()
-                    }
-
-                    else -> {
-                        val path = item.title
-                        val uri = if (path.isContentScheme()) {
-                            path.toUri()
-                        } else {
-                            Uri.fromFile(File(path))
-                        }
-                        onResult(Intent().setData(uri))
+        showComposeActionListDialog(
+            title = title,
+            labels = selectList.map { it.title }
+        ) { index ->
+            when (selectList[index].value) {
+                HandleFileContract.DIR -> kotlin.runCatching {
+                    selectDocTree.launch()
+                }.onFailure {
+                    AppLog.put(getString(R.string.open_sys_dir_picker_error), it, true)
+                    checkPermissions {
+                        FilePickerDialog.show(
+                            supportFragmentManager,
+                            mode = HandleFileContract.DIR
+                        )
                     }
                 }
-            }
-            onCancelled {
-                finish()
+
+                HandleFileContract.FILE -> kotlin.runCatching {
+                    selectDoc.launch(typesOfExtensions(allowExtensions))
+                }.onFailure {
+                    AppLog.put(getString(R.string.open_sys_dir_picker_error), it, true)
+                    checkPermissions {
+                        FilePickerDialog.show(
+                            supportFragmentManager,
+                            mode = HandleFileContract.FILE,
+                            allowExtensions = allowExtensions
+                        )
+                    }
+                }
+
+                HandleFileContract.IMAGE -> {
+                    selectImage.launch()
+                }
+
+                10 -> checkPermissions {
+                    @Suppress("DEPRECATION")
+                    lifecycleScope.launchWhenResumed {
+                        FilePickerDialog.show(
+                            supportFragmentManager,
+                            mode = HandleFileContract.DIR
+                        )
+                    }
+                }
+
+                11 -> checkPermissions {
+                    @Suppress("DEPRECATION")
+                    lifecycleScope.launchWhenResumed {
+                        FilePickerDialog.show(
+                            supportFragmentManager,
+                            mode = HandleFileContract.FILE,
+                            allowExtensions = allowExtensions
+                        )
+                    }
+                }
+
+                111 -> getFileData()?.let {
+                    viewModel.upload(it.first, it.second, it.third) { url ->
+                        val uri = url.toUri()
+                        setResult(RESULT_OK, Intent().setData(uri))
+                        finish()
+                    }
+                }
+
+                112 -> checkPermissions { // 手动输入目录路径
+                    showInputDirectoryDialog()
+                }
+
+                113 -> checkPermissions { // 手动输入图片链接
+                    showInputImgSrcDialog()
+                }
+
+                else -> {
+                    val path = selectList[index].title
+                    val uri = if (path.isContentScheme()) {
+                        path.toUri()
+                    } else {
+                        Uri.fromFile(File(path))
+                    }
+                    onResult(Intent().setData(uri))
+                }
             }
         }
     }

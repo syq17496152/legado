@@ -15,6 +15,7 @@ import io.legado.app.databinding.ViewMangaMenuBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.getSourceType
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.primaryTextColor
@@ -175,13 +176,11 @@ class MangaMenu @JvmOverloads constructor(
         val chapterViewLongClickListener = OnLongClickListener {
             val url = tvChapterUrl.text.toString().trim()
             if (url.isNotBlank()) {
-                context.alert(R.string.open_fun) {
-                    setMessage(R.string.use_browser_open)
-                    okButton {
-                        context.openUrl(url)
-                    }
-                    noButton()
-                }
+                activity?.showComposeConfirmDialog(
+                    title = context.getString(R.string.open_fun),
+                    message = context.getString(R.string.use_browser_open),
+                    onPositive = { context.openUrl(url) }
+                )
             }
             true
         }

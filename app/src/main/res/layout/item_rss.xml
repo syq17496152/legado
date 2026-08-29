@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- rss-classic-layout-align S4：去除 item 自身 padding（与 GridSpacingItemDecoration margin 双份叠加），
+     间距单源由 decoration margin 驱动；圆角运行时经 setCornerRadius 对齐主题圆角 -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -7,7 +9,6 @@
     android:background="@drawable/bg_item_focused_on_tv"
     android:focusable="true"
     android:foreground="?android:attr/selectableItemBackground"
-    android:padding="16dp"
     android:scrollbars="none">
 
     <io.legado.app.ui.widget.image.FilletImageView

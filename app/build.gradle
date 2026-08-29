@@ -194,6 +194,13 @@ android {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
     }
+    testOptions {
+        unitTests {
+            // 纯 JVM 单测中 android.jar 方法（如 android.util.Log）返回默认值而非抛
+            // "not mocked"：AppLog 在 recordLog=false 分支仍会走 Log.e（2026-08-28）
+            returnDefaultValues = true
+        }
+    }
     packaging {
         resources.excludes.add('META-INF/*')
     }

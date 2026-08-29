@@ -108,7 +108,7 @@ object ThemeConfig {
         applyTheme(context, isNightTheme)
         initNightMode(isNightTheme)
         BookCover.upDefaultCover()
-        postEvent(EventBus.MAIN_THEME_BACKGROUND_CHANGED, isNightTheme)
+        // T6（theme-arch-gap）：MAIN_THEME_BACKGROUND_CHANGED 死事件已删（4 发 0 订阅），背景刷新统一走 RECREATE+ThemeSync
         postEvent(EventBus.RECREATE, "")
     }
 
@@ -480,7 +480,9 @@ object ThemeConfig {
                         if (downloaded) {
                             appCtx.toastOnUi(R.string.theme_background_downloaded)
                             if (notify) {
-                                postEvent(EventBus.MAIN_THEME_BACKGROUND_CHANGED, isNightTheme)
+                                // T13（theme-arch-gap）：补 ThemeSync.bump 与 applyTheme 路径对称，
+                                // 豁免页 Compose 侧背景相关读取即时失效重组；T6：死事件 MAIN 已删
+                                ThemeSync.bump()
                                 postEvent(EventBus.RECREATE, "")
                             }
                         }
@@ -532,7 +534,7 @@ object ThemeConfig {
             } else {
                 applyTheme(context)
                 BookCover.upDefaultCover()
-                postEvent(EventBus.MAIN_THEME_BACKGROUND_CHANGED, isNightTheme)
+                // T6（theme-arch-gap）：死事件 MAIN 已删，RECREATE 驱动刷新（applyTheme 末尾已 bump）
                 postEvent(EventBus.RECREATE, "")
             }
         } catch (e: Exception) {

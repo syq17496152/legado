@@ -35,6 +35,8 @@ import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import java.lang.ref.WeakReference
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.subtitleLarge
 
 class AudioSkipCredits : ComposeDialogFragment() {
 
@@ -101,7 +103,7 @@ class AudioSkipCredits : ComposeDialogFragment() {
                 Text(
                     text = stringResource(R.string.skip_book_credits),
                     color = style.accent,
-                    fontSize = 18.sp,
+                    fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = style.titleFontFamily,
                     maxLines = 1,

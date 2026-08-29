@@ -1,6 +1,7 @@
 package io.legado.app.ui.adapter
 
 import android.os.Bundle
+import android.content.DialogInterface
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -68,6 +69,9 @@ import io.legado.app.ui.widget.compose.toMiuixPalette
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.subtitleLarge
 
 private const val SOURCE_FOLDER_PANEL_ANIMATION_MS = 160
 private const val SOURCE_FOLDER_PANEL_DISMISS_MS = SOURCE_FOLDER_PANEL_ANIMATION_MS + 20L
@@ -89,6 +93,7 @@ data class SourceFolderConfigValues(
     val groupMode: Int,
     val layout: Int,
     val sort: Int,
+    val sortAscending: Boolean,
     val margin: Int
 )
 
@@ -111,6 +116,7 @@ private data class SourceFolderConfigTexts(
     val groupModeLabel: String,
     val layoutLabel: String,
     val sortLabel: String,
+    val sortAscendingLabel: String,
     val marginTitle: String,
     val marginLabel: String,
     val cancelLabel: String,
@@ -151,9 +157,13 @@ class SourceFolderConfigDialog : ComposeDialogFragment() {
         groupMode = 0,
         layout = 0,
         sort = 0,
+        sortAscending = true,
         margin = 12
     )
     private var onConfigChanged: (() -> Unit)? = null
+    private var onPreviewMarginChange: ((Int) -> Unit)? = null
+    private var previewMarginChanged = false
+    private var applied = false
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -177,7 +187,16 @@ class SourceFolderConfigDialog : ComposeDialogFragment() {
                             texts = texts,
                             style = style,
                             showGroupStyle = showGroupStyle,
-                            onValuesChange = { values = it }
+                            isBookSource = isBookSource,
+                            onValuesChange = { next ->
+                                val previous = values
+                                values = next
+                                // 边距滑条实时预览（rss-classic-layout-align：对齐书架体验）
+                                if (next.margin != previous.margin) {
+                                    previewMarginChanged = true
+                                    onPreviewMarginChange?.invoke(next.margin.coerceIn(0, 60))
+                                }
+                            }
                         )
                     },
                     actions = {
@@ -187,6 +206,7 @@ class SourceFolderConfigDialog : ComposeDialogFragment() {
                             applyLabel = texts.applyLabel,
                             onCancel = { dismissAllowingStateLoss() },
                             onApply = {
+                                applied = true
                                 applyConfig(values)
                                 dismissAllowingStateLoss()
                             }
@@ -194,6 +214,14 @@ class SourceFolderConfigDialog : ComposeDialogFragment() {
                     }
                 )
             }
+        }
+    }
+
+    override fun onDismiss(dialog: DialogInterface) {
+        super.onDismiss(dialog)
+        // 取消/dismiss 且滑条预览过：还原初始边距（未应用不残留）
+        if (!applied && previewMarginChanged) {
+            onPreviewMarginChange?.invoke(initialValues.margin.coerceIn(0, 60))
         }
     }
 
@@ -222,6 +250,11 @@ class SourceFolderConfigDialog : ComposeDialogFragment() {
                 changed = true
             }
         }
+        // 升降序接入（rss-classic-layout-align S2-a：原死配置补 UI 写入口）
+        if (!isBookSource && AppConfig.rssSortAscending != values.sortAscending) {
+            AppConfig.rssSortAscending = values.sortAscending
+            changed = true
+        }
         if (AppConfig.sourceMargin != values.margin) {
             AppConfig.sourceMargin = values.margin
             changed = true
@@ -232,28 +265,31 @@ class SourceFolderConfigDialog : ComposeDialogFragment() {
     }
 
     private fun buildSourceFolderConfigOptions(): SourceFolderConfigOptions {
+        // rss-classic-layout-align S2：显式 value 映射（防 mapIndexed 隐式赋值错位）；
+        // 移除「列表/紧凑列表」摆设项（订阅源固定卡片，sourceLayout 0/1 无列表实现），保留 自动/Grid2-6；
+        // 排序补第 7 项「更新时间」（RssFragment sortSources 已实现 6->lastUpdateTime 分支）
         return SourceFolderConfigOptions(
             groupStyles = resources.getStringArray(R.array.source_group_style_new)
                 .mapIndexed { index, label -> SourceFolderConfigOption(label, index) },
             groupModes = resources.getStringArray(R.array.source_group_mode_items)
                 .mapIndexed { index, label -> SourceFolderConfigOption(label, index) },
             layouts = listOf(
-                getString(R.string.layout_list),
-                getString(R.string.layout_list_compact),
-                getString(R.string.layout_grid2),
-                getString(R.string.layout_grid3),
-                getString(R.string.layout_grid4),
-                getString(R.string.layout_grid5),
-                getString(R.string.layout_grid6)
-            ).mapIndexed { index, label -> SourceFolderConfigOption(label, index) },
+                getString(R.string.source_layout_auto) to 0,
+                getString(R.string.layout_grid2) to 2,
+                getString(R.string.layout_grid3) to 3,
+                getString(R.string.layout_grid4) to 4,
+                getString(R.string.layout_grid5) to 5,
+                getString(R.string.layout_grid6) to 6
+            ).map { (label, value) -> SourceFolderConfigOption(label, value) },
             sorts = listOf(
-                getString(R.string.source_sort_0),
-                getString(R.string.source_sort_1),
-                getString(R.string.source_sort_2),
-                getString(R.string.source_sort_3),
-                getString(R.string.source_sort_4),
-                getString(R.string.source_sort_5)
-            ).mapIndexed { index, label -> SourceFolderConfigOption(label, index) }
+                getString(R.string.source_sort_0) to 0,
+                getString(R.string.source_sort_1) to 1,
+                getString(R.string.source_sort_2) to 2,
+                getString(R.string.source_sort_3) to 3,
+                getString(R.string.source_sort_4) to 4,
+                getString(R.string.source_sort_5) to 5,
+                getString(R.string.source_sort_6) to 6
+            ).map { (label, value) -> SourceFolderConfigOption(label, value) }
         )
     }
 
@@ -265,6 +301,7 @@ class SourceFolderConfigDialog : ComposeDialogFragment() {
             groupModeLabel = getString(R.string.source_group_mode),
             layoutLabel = getString(R.string.source_layout),
             sortLabel = getString(R.string.source_sort_label),
+            sortAscendingLabel = getString(R.string.source_sort_ascending),
             marginTitle = getString(R.string.margin),
             marginLabel = getString(R.string.margin),
             cancelLabel = getString(android.R.string.cancel),
@@ -283,17 +320,20 @@ class SourceFolderConfigDialog : ComposeDialogFragment() {
         fun create(
             isBookSource: Boolean,
             showGroupStyle: Boolean = true,
+            onPreviewMarginChange: ((Int) -> Unit)? = null,
             onConfigChanged: () -> Unit
         ): SourceFolderConfigDialog {
             return SourceFolderConfigDialog().apply {
                 this.isBookSource = isBookSource
                 this.showGroupStyle = showGroupStyle
                 this.onConfigChanged = onConfigChanged
+                this.onPreviewMarginChange = onPreviewMarginChange
                 initialValues = SourceFolderConfigValues(
                     groupStyle = AppConfig.sourceGroupStyle,
                     groupMode = AppConfig.sourceGroupMode,
                     layout = AppConfig.sourceLayout,
                     sort = if (isBookSource) AppConfig.bookSourceSort else AppConfig.rssSort,
+                    sortAscending = AppConfig.rssSortAscending,
                     margin = AppConfig.sourceMargin
                 )
             }
@@ -308,6 +348,7 @@ private fun SourceFolderConfigContent(
     texts: SourceFolderConfigTexts,
     style: AppDialogStyle,
     showGroupStyle: Boolean,
+    isBookSource: Boolean,
     onValuesChange: (SourceFolderConfigValues) -> Unit
 ) {
     val spec = SourceFolderConfigSpec()
@@ -361,6 +402,16 @@ private fun SourceFolderConfigContent(
             style = style,
             spec = spec
         )
+        // 升降序开关（rss-classic-layout-align S2-a）：仅订阅排序（书源排序无此键消费）
+        if (!isBookSource) {
+            Spacer(modifier = Modifier.height(spec.compactGap))
+            SourceFolderAscendingRow(
+                label = texts.sortAscendingLabel,
+                checked = values.sortAscending,
+                style = style,
+                onCheckedChange = { onValuesChange(values.copy(sortAscending = it)) }
+            )
+        }
     }
     SourceFolderConfigSection(
         title = texts.marginTitle,
@@ -409,7 +460,7 @@ private fun SourceFolderConfigPanel(
                 Text(
                     text = texts.title,
                     color = style.primaryText,
-                    fontSize = 18.sp,
+                    fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = style.titleFontFamily,
                     maxLines = 1,
@@ -450,7 +501,7 @@ private fun SourceFolderConfigSection(
             Text(
                 text = title,
                 color = style.accent,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(bottom = spec.compactGap),
                 maxLines = 1,
@@ -570,7 +621,7 @@ private fun SourceFolderSelectTile(
                 Text(
                     text = item.label,
                     color = style.secondaryText,
-                    fontSize = 11.sp,
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -578,7 +629,7 @@ private fun SourceFolderSelectTile(
                 Text(
                     text = selected?.label.orEmpty(),
                     color = if (expanded) style.accent else style.primaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     lineHeight = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
@@ -633,7 +684,7 @@ private fun SourceFolderChoicePopupPanel(
             Text(
                 text = item.label,
                 color = style.primaryText,
-                fontSize = 16.sp,
+                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                 fontFamily = style.titleFontFamily,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -691,10 +742,54 @@ private fun SourceFolderChoiceChip(
             Text(
                 text = option.label,
                 color = if (selected) style.accent else style.primaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun SourceFolderAscendingRow(
+    label: String,
+    checked: Boolean,
+    style: AppDialogStyle,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    // 升降序开关行（rss-classic-layout-align S2-a）：style 配色，无硬编码色
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(style.actionRadius),
+        color = style.surface,
+        contentColor = style.primaryText,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .clickable { onCheckedChange(!checked) }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                modifier = Modifier.weight(1f),
+                color = style.primaryText,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = if (checked) "↑" else "↓",
+                color = style.accent,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(end = 8.dp)
+            )
+            androidx.compose.material3.Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange
             )
         }
     }
@@ -728,7 +823,7 @@ private fun SourceFolderSliderRow(
                     text = title,
                     modifier = Modifier.weight(1f),
                     color = style.primaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -743,7 +838,7 @@ private fun SourceFolderSliderRow(
                     Text(
                         text = value.toString(),
                         color = style.accent,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                     )

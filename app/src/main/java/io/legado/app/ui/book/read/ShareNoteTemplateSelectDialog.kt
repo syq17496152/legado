@@ -44,6 +44,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import androidx.compose.material3.MaterialTheme
 
 class ShareNoteTemplateSelectDialog : ComposeDialogFragment() {
 
@@ -128,7 +129,7 @@ class ShareNoteTemplateSelectDialog : ComposeDialogFragment() {
                                             Text(
                                                 text = entry.meta.name,
                                                 color = palette.settings.primaryText,
-                                                fontSize = 16.sp,
+                                                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                                                 fontWeight = FontWeight.SemiBold,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
@@ -136,7 +137,7 @@ class ShareNoteTemplateSelectDialog : ComposeDialogFragment() {
                                             Text(
                                                 text = "${entry.meta.canvasLabel()} · ${entry.meta.sizeLabel()}",
                                                 color = palette.settings.secondaryText,
-                                                fontSize = 12.sp,
+                                                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier.padding(top = 4.dp)

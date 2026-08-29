@@ -48,11 +48,13 @@ import io.legado.app.help.book.tryParesExportFileName
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.model.CacheBook
 import io.legado.app.service.ExportBookService
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
@@ -637,34 +639,36 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
     }
 
     private fun showExportTypeConfig() {
-        selector(R.string.export_type, exportTypes) { _, i ->
+        showComposeChoiceListDialog(
+            title = getString(R.string.export_type),
+            labels = exportTypes,
+            selectedIndex = AppConfig.exportType
+        ) { i ->
             AppConfig.exportType = i
         }
     }
 
     private fun showCharsetConfig() {
-        alert(R.string.set_charset) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "charset name"
-                editView.setFilterValues(charsets)
-                editView.setText(AppConfig.exportCharset)
+        showComposeTextInputDialog(
+            title = getString(R.string.set_charset),
+            hint = "charset name",
+            initialValue = AppConfig.exportCharset,
+            positiveText = getString(R.string.ok),
+            negativeText = getString(R.string.cancel),
+            onPositive = { text ->
+                AppConfig.exportCharset = text.ifBlank { "UTF-8" }
             }
-            customView { alertBinding.root }
-            okButton {
-                AppConfig.exportCharset = alertBinding.editView.text?.toString() ?: "UTF-8"
-            }
-            cancelButton()
-        }
+        )
     }
 
     private fun sureCacheBook(action: () -> Unit) {
-        alert(R.string.draw) {
-            setMessage(R.string.sure_cache_book)
-            noButton()
-            yesButton {
-                action.invoke()
-            }
-        }
+        showComposeConfirmDialog(
+            title = getString(R.string.draw),
+            message = getString(R.string.sure_cache_book),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            onPositive = { action.invoke() }
+        )
     }
 
     /**
@@ -683,7 +687,10 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             }.toMutableList()
             val total = details.sumOf { it.bytes }
             names.add("${getString(R.string.cache_stats_total)}: ${formatBytes(total)}")
-            selector(R.string.cache_stats, names) { _, index ->
+            showComposeChoiceListDialog(
+                title = getString(R.string.cache_stats),
+                labels = names
+            ) { index ->
                 val detail = details.filter { it.bytes > 0L }[index]
                 deleteStorageTarget(detail)
             }
@@ -691,10 +698,13 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
     }
 
     private fun deleteStorageTarget(detail: CacheStorageDetail) {
-        alert(R.string.cache_stats) {
-            setMessage(getString(R.string.cache_stats_delete_msg, getString(detail.nameRes)))
-            noButton()
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.cache_stats),
+            message = getString(R.string.cache_stats_delete_msg, getString(detail.nameRes)),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 cacheManageViewModel.deleteStorageTarget(detail).onSuccess { success ->
                     if (success) {
                         toastOnUi(R.string.cache_stats_delete_success)
@@ -703,7 +713,7 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                     }
                 }
             }
-        }
+        )
     } 
 
     /**

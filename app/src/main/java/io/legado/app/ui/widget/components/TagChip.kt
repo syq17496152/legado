@@ -1,5 +1,6 @@
 package io.legado.app.ui.widget.components
 
+import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface

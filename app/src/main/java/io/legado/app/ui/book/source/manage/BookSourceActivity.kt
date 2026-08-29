@@ -2,10 +2,6 @@ package io.legado.app.ui.book.source.manage
 
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.view.Menu
-import android.view.MenuItem
-import androidx.appcompat.widget.PopupMenu
-import android.view.SubMenu
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -97,7 +93,6 @@ import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.transaction
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
@@ -114,7 +109,6 @@ import kotlinx.coroutines.launch
  * 书源管理界面
  */
 class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceViewModel>(),
-    PopupMenu.OnMenuItemClickListener,
     SelectActionBar.CallBack {
     override val binding by viewBinding(ActivityBookSourceBinding::inflate)
     override val viewModel by viewModels<BookSourceViewModel>()
@@ -122,7 +116,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     private var sourceFlowJob: Job? = null
     private var checkMessageRefreshJob: Job? = null
     private val groups = linkedSetOf<String>()
-    private var groupMenu: SubMenu? = null
     private var sort = BookSourceSort.Default
         private set
     private var sortAscending = true
@@ -311,116 +304,10 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         container.addView(cv, index)
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.book_source, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        groupMenu = menu.findItem(R.id.menu_group).subMenu
-        val sortSubMenu = menu.findItem(R.id.action_sort).subMenu!!
-        sortSubMenu.findItem(R.id.menu_sort_desc).isChecked = !sortAscending
-        sortSubMenu.setGroupCheckable(R.id.menu_group_sort, true, true)
-        upGroupMenu()
-        return super.onPrepareOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_add_book_source -> startActivity<BookSourceEditActivity>()
-            R.id.menu_import_qr -> qrResult.launch()
-            R.id.menu_group_manage -> showDialogFragment<GroupManageDialog>()
-            R.id.menu_import_local -> importDoc.launch {
-                mode = HandleFileContract.FILE
-                allowExtensions = arrayOf("txt", "json")
-            }
-
-            R.id.menu_import_onLine -> showImportDialog()
-
-            R.id.menu_sort_desc -> {
-                sortAscending = !sortAscending
-                item.isChecked = !sortAscending
-                refreshBookSources()
-            }
-
-            R.id.menu_sort_manual -> {
-                item.isChecked = true
-                sort = BookSourceSort.Default
-                refreshBookSources()
-            }
-
-            R.id.menu_sort_auto -> {
-                item.isChecked = true
-                sort = BookSourceSort.Weight
-                refreshBookSources()
-            }
-
-            R.id.menu_sort_name -> {
-                item.isChecked = true
-                sort = BookSourceSort.Name
-                refreshBookSources()
-            }
-
-            R.id.menu_sort_url -> {
-                item.isChecked = true
-                sort = BookSourceSort.Url
-                refreshBookSources()
-            }
-
-            R.id.menu_sort_time -> {
-                item.isChecked = true
-                sort = BookSourceSort.Update
-                refreshBookSources()
-            }
-
-            R.id.menu_sort_respondTime -> {
-                item.isChecked = true
-                sort = BookSourceSort.Respond
-                refreshBookSources()
-            }
-
-            R.id.menu_sort_enable -> {
-                item.isChecked = true
-                sort = BookSourceSort.Enable
-                refreshBookSources()
-            }
-
-            R.id.menu_enabled_group -> {
-                updateSearchQuery(getString(R.string.enabled))
-            }
-
-            R.id.menu_disabled_group -> {
-                updateSearchQuery(getString(R.string.disabled))
-            }
-
-            R.id.menu_group_login -> {
-                updateSearchQuery(getString(R.string.need_login))
-            }
-
-            R.id.menu_group_null -> {
-                updateSearchQuery(getString(R.string.no_group))
-            }
-
-            R.id.menu_enabled_explore_group -> {
-                updateSearchQuery(getString(R.string.enabled_explore))
-            }
-
-            R.id.menu_disabled_explore_group -> {
-                updateSearchQuery(getString(R.string.disabled_explore))
-            }
-
-            R.id.menu_group_sources_by_domain -> {
-                item.isChecked = !item.isChecked
-                setGroupSourcesByDomain(item.isChecked)
-            }
-
-            R.id.menu_help -> showHelp("SourceMBookHelp")
-        }
-        if (item.groupId == R.id.source_group) {
-            updateSearchQuery("group:${item.title}")
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
+    // H17（2026-08-28）：系统 options menu 链删除（onCompatCreateOptionsMenu/onPrepareOptionsMenu/
+    // onCompatOptionsItemSelected）——TitleBar 已 GONE，本页全 Compose（AppManagementScaffold），
+    // 排序/分组/导入/帮助等入口由 showSortMenu/showFilterMenu/pageMenuActions 覆盖，inflate book_source
+    // 为不可达死代码（菜单统一收敛）。
 
     private fun showSortMenu() {
         val labels = listOf(
@@ -674,7 +561,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 .collect {
                     groups.clear()
                     groups.addAll(it)
-                    upGroupMenu()
                     delay(500)
                 }
         }
@@ -711,32 +597,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 upCountView()
             }
         )
-    }
-
-    private fun initSelectActionBar() {
-        binding.selectActionBar.setMainActionText(R.string.delete)
-        binding.selectActionBar.inflateMenu(R.menu.book_source_sel)
-        binding.selectActionBar.setOnMenuItemClickListener(this)
-        binding.selectActionBar.setCallBack(this)
-    }
-
-    override fun onMenuItemClick(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_enable_selection -> enableSelected()
-            R.id.menu_disable_selection -> disableSelected()
-            R.id.menu_enable_explore -> enableExploreSelected()
-            R.id.menu_disable_explore -> disableExploreSelected()
-            R.id.menu_check_source -> checkSource()
-            R.id.menu_top_sel -> topSelected()
-            R.id.menu_bottom_sel -> bottomSelected()
-            R.id.menu_add_group -> selectionAddToGroups()
-            R.id.menu_remove_group -> selectionRemoveFromGroups()
-            R.id.menu_export_selection -> exportSelected()
-            R.id.menu_share_source -> shareSelected()
-
-            R.id.menu_check_selected_interval -> checkSelectedInterval()
-        }
-        return true
     }
 
     private fun enableSelected() {
@@ -865,13 +725,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 }
             }
         )
-    }
-
-    private fun upGroupMenu() = groupMenu?.transaction { menu ->
-        menu.removeGroup(R.id.source_group)
-        groups.forEach {
-            menu.add(R.id.source_group, Menu.NONE, Menu.NONE, it)
-        }
     }
 
     private fun showImportDialog() {

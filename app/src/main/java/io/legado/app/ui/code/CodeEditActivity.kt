@@ -42,10 +42,10 @@ import io.legado.app.databinding.ActivityCodeEditBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.dialogs.SelectItem
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.code.config.ChangeThemeDialog
 import io.legado.app.ui.code.config.SettingsDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
@@ -140,10 +140,13 @@ class CodeEditActivity :
                 super.finish()
             }
             check -> {
-                alert(R.string.exit) {
-                    setMessage(R.string.exit_no_save)
-                    positiveButton(R.string.yes)
-                    negativeButton(R.string.no) {
+                showComposeConfirmDialog(
+                    title = getString(R.string.exit),
+                    message = getString(R.string.exit_no_save),
+                    positiveText = getString(R.string.yes),
+                    negativeText = getString(R.string.no),
+                    onPositive = { /* 停留当前页，不退出 */ },
+                    onNegative = {
                         if (cursorPos > 0) {
                             val result = Intent().apply {
                                 putExtra("cursorPosition", cursorPos)
@@ -152,7 +155,7 @@ class CodeEditActivity :
                         }
                         super.finish()
                     }
-                }
+                )
             }
             else -> {
                 val result = Intent().apply {

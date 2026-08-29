@@ -71,6 +71,9 @@ import io.legado.app.ui.widget.compose.toMiuixPalette
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.subtitleLarge
 
 private const val BOOKSHELF_PANEL_ANIMATION_MS = 160
 private const val BOOKSHELF_PANEL_DISMISS_MS = BOOKSHELF_PANEL_ANIMATION_MS + 20L
@@ -252,9 +255,11 @@ class BookshelfConfigDialog : ComposeDialogFragment() {
                 getString(R.string.bookshelf_px_4),
                 getString(R.string.bookshelf_px_5)
             ).mapIndexed { index, label -> BookshelfConfigOption(label, index) },
+            // K7 语义修复（config-needs-restart-fix）：值映射对齐渲染语义
+            // 0=隐藏(渲染无书名) / 1=下方显示 / 2=封面遮罩
             bookNameModes = listOf(
-                getString(R.string.show),
                 getString(R.string.hide),
+                getString(R.string.show),
                 getString(R.string.overlay)
             ).mapIndexed { index, label -> BookshelfConfigOption(label, index) },
             listItemStyles = listOf(
@@ -478,7 +483,7 @@ private fun BookshelfConfigPanel(
                 Text(
                     text = texts.title,
                     color = style.primaryText,
-                    fontSize = 18.sp,
+                    fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = style.titleFontFamily,
                     maxLines = 1,
@@ -521,7 +526,7 @@ private fun ConfigSection(
             Text(
                 text = title,
                 color = style.accent,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(bottom = spec.compactGap),
                 maxLines = 1,
@@ -641,7 +646,7 @@ private fun BookshelfSelectTile(
                 Text(
                     text = item.label,
                     color = style.secondaryText,
-                    fontSize = 11.sp,
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -649,7 +654,7 @@ private fun BookshelfSelectTile(
                 Text(
                     text = selected?.label.orEmpty(),
                     color = if (expanded) style.accent else style.primaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     lineHeight = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
@@ -704,7 +709,7 @@ private fun BookshelfChoicePopupPanel(
             Text(
                 text = item.label,
                 color = style.primaryText,
-                fontSize = 16.sp,
+                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                 fontFamily = style.titleFontFamily,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -762,7 +767,7 @@ private fun BookshelfChoiceChip(
             Text(
                 text = option.label,
                 color = if (selected) style.accent else style.primaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -823,7 +828,7 @@ private fun BookshelfDisplaySummaryCard(
                 Text(
                     text = title,
                     color = style.secondaryText,
-                    fontSize = 11.sp,
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -896,7 +901,7 @@ private fun BookshelfSummaryChip(
         Text(
             text = text,
             color = if (active) style.accent else style.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -938,7 +943,7 @@ private fun BookshelfDisplayPopupPanel(
             Text(
                 text = title,
                 color = style.primaryText,
-                fontSize = 16.sp,
+                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                 fontFamily = style.titleFontFamily,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -989,7 +994,7 @@ private fun BookshelfDisplaySwitchRow(
             text = item.label,
             modifier = Modifier.weight(1f),
             color = if (item.checked) style.primaryText else style.secondaryText,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             fontWeight = if (item.checked) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -1064,7 +1069,7 @@ private fun BookshelfSliderRow(
                     text = title,
                     modifier = Modifier.weight(1f),
                     color = style.primaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1079,7 +1084,7 @@ private fun BookshelfSliderRow(
                     Text(
                         text = value.toString(),
                         color = style.accent,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                     )

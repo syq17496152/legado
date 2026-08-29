@@ -29,6 +29,8 @@ import io.legado.app.lib.theme.applyUiSectionTitleStyle
 import io.legado.app.lib.theme.applyUiSubtleButtonStyle
 import io.legado.app.lib.theme.applyUiTitleTypeface
 import io.legado.app.lib.theme.dialogSurfaceBackground
+import io.legado.app.lib.theme.secondaryTextColor
+import io.legado.app.lib.theme.themeDividerColorOrDefault
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.utils.dpToPx
@@ -239,14 +241,14 @@ class AdvancedTitleConfigDialog : DialogFragment() {
             textSize = 12f
             typeface = context.uiTypeface()
             setPadding(0, 4.dpToPx(), 0, 6.dpToPx())
-            setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray))
+            setTextColor(context.secondaryTextColor)
         })
         root.addView(View(context).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 1.dpToPx()
             ).apply { topMargin = 12.dpToPx() }
-            setBackgroundColor(ContextCompat.getColor(context, R.color.divider))
+            setBackgroundColor(context.themeDividerColorOrDefault())
         })
         root.addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL

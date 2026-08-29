@@ -44,6 +44,8 @@ import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import kotlinx.coroutines.delay
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.subtitleLarge
 
 class MangaColorFilterDialog : ComposeDialogFragment() {
 
@@ -133,7 +135,7 @@ class MangaColorFilterDialog : ComposeDialogFragment() {
                 Text(
                     text = stringResource(R.string.manga_color_filter),
                     color = style.accent,
-                    fontSize = 18.sp,
+                    fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = style.titleFontFamily,
                     maxLines = 1,

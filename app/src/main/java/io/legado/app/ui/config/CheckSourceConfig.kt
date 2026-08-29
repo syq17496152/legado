@@ -133,7 +133,7 @@ class CheckSourceConfig : ComposeDialogFragment() {
                     Text(
                         text = stringResource(R.string.check_source_item),
                         color = style.accent,
-                        fontSize = 14.sp
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize
                     )
                     CheckSourceChoiceRow(
                         text = stringResource(R.string.domain),
@@ -327,7 +327,7 @@ class CheckSourceConfig : ComposeDialogFragment() {
             Text(
                 text = text,
                 color = style.primaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 modifier = Modifier.weight(1f)
             )
             RadioButton(

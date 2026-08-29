@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read.config
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.content.DialogInterface
 import android.net.Uri
 import android.os.Bundle
@@ -60,9 +61,12 @@ import androidx.core.graphics.toColorInt
 import androidx.appcompat.widget.AppCompatImageView
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.AppLog
+import io.legado.app.ui.widget.compose.AppDialogStyle
+import io.legado.app.ui.widget.compose.AppThemedStepperSlider
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.constant.EventBus
+import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.DefaultData
 import io.legado.app.help.book.isImage
 import io.legado.app.help.config.ReadBookConfig
@@ -76,13 +80,12 @@ import io.legado.app.model.ReadBook
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.widget.compose.AppDialogStyle
-import io.legado.app.ui.widget.compose.AppThemedStepperSlider
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.widget.compose.toMiuixPalette
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
@@ -111,10 +114,23 @@ import io.legado.app.utils.toastOnUi
 import java.io.File
 import java.io.FileOutputStream
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlin.coroutines.CoroutineContext
 import splitties.init.appCtx
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.labelXSmall
+import io.legado.app.ui.theme.bodyTertiary
 
-class BgTextConfigDialog : BaseDialogFragment(0) {
+class BgTextConfigDialog() : ComposeDialogFragment() {
+
+    override val dialogTheme: Int = R.style.Theme_Legado_ComposeDialog_Bottom
+    override val dialogWidth: Int = ViewGroup.LayoutParams.MATCH_PARENT
+    override val dialogHeight: Int = ViewGroup.LayoutParams.WRAP_CONTENT
+    override val dialogGravity: Int = Gravity.BOTTOM
+    override val dialogWindowAnimations: Int = R.style.AnimDialogBottom
 
     companion object {
         const val TEXT_COLOR = 121
@@ -173,17 +189,20 @@ class BgTextConfigDialog : BaseDialogFragment(0) {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val style = rememberAppDialogStyle()
-                CompositionLocalProvider(
-                    LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
-                ) {
-                    BgTextConfigContent(style = style)
+                LegadoTheme {
+                    val style = rememberAppDialogStyle()
+                    CompositionLocalProvider(
+                        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
+                    ) {
+                        BgTextConfigContent(style = style)
+                    }
                 }
             }
         }
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
         (activity as ReadBookActivity).bottomDialog++
         presetBgImages = requireContext().assets.list("bg")?.toList().orEmpty()
     }
@@ -243,14 +262,14 @@ class BgTextConfigDialog : BaseDialogFragment(0) {
                 Text(
                     text = stringResource(R.string.style_name),
                     color = style.primaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = ReadBookConfig.durConfig.name.ifBlank { "文字" },
                     color = style.secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
@@ -268,7 +287,7 @@ class BgTextConfigDialog : BaseDialogFragment(0) {
                 Text(
                     text = stringResource(R.string.restore),
                     color = style.accent,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.clickable { restorePreset() }
                 )
@@ -390,14 +409,14 @@ class BgTextConfigDialog : BaseDialogFragment(0) {
                 Box(
                     modifier = Modifier
                         .size(18.dp)
-                        .clip(RoundedCornerShape(5.dp))
+                        .clip(AppShapes.rounded(5))
                         .background(color)
                 )
                 Spacer(modifier = Modifier.width(7.dp))
                 Text(
                     text = text,
                     color = style.primaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -472,7 +491,7 @@ class BgTextConfigDialog : BaseDialogFragment(0) {
                 Text(
                     text = text,
                     color = if (danger) style.danger else style.primaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -527,7 +546,7 @@ class BgTextConfigDialog : BaseDialogFragment(0) {
                 Text(
                     text = title,
                     color = style.primaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -535,7 +554,7 @@ class BgTextConfigDialog : BaseDialogFragment(0) {
                 Text(
                     text = valueText,
                     color = style.accent,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -609,7 +628,7 @@ class BgTextConfigDialog : BaseDialogFragment(0) {
                 Text(
                     text = stringResource(R.string.select_image),
                     color = style.secondaryText,
-                    fontSize = 11.sp,
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -650,7 +669,7 @@ class BgTextConfigDialog : BaseDialogFragment(0) {
                 Text(
                     text = imageName.substringBeforeLast("."),
                     color = style.secondaryText,
-                    fontSize = 10.sp,
+                    fontSize = MaterialTheme.typography.labelXSmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
@@ -744,6 +763,12 @@ class BgTextConfigDialog : BaseDialogFragment(0) {
         pendingSelfConfigEvents++
         postEvent(EventBus.UP_CONFIG, arrayListOf(*configKeys.toTypedArray()))
     }
+
+    private fun <T> execute(
+        scope: CoroutineScope = lifecycleScope,
+        context: CoroutineContext = Dispatchers.IO,
+        block: suspend CoroutineScope.() -> T
+    ) = Coroutine.async(scope, context) { block() }
 
     private fun launchImport() {
         selectImportDoc.launch {

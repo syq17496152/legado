@@ -1,5 +1,6 @@
 package io.legado.app.ui.widget.components
 
+import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box

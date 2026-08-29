@@ -1,5 +1,6 @@
 package io.legado.app.ui.config
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.widget.ImageView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -46,6 +47,8 @@ import io.legado.app.ui.widget.compose.AppManagementMoreActionButton
 import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 @Composable
 internal fun CoverCollectionManageScreen(
@@ -154,7 +157,7 @@ private fun TabButton(
         Text(
             text = text,
             color = if (selected) palette.settings.accent else palette.settings.primaryText,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             modifier = Modifier
                 .fillMaxWidth()
@@ -209,7 +212,7 @@ private fun CoverCollectionItemRow(
                 onRelease = { it.releaseComposeImage() },
                 modifier = Modifier
                     .size(width = 54.dp, height = 72.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(AppShapes.rounded(8))
             )
             Spacer(modifier = Modifier.width(12.dp))
             // Text info
@@ -219,7 +222,7 @@ private fun CoverCollectionItemRow(
                 Text(
                     text = collection.name,
                     color = palette.settings.primaryText,
-                    fontSize = 16.sp,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -228,7 +231,7 @@ private fun CoverCollectionItemRow(
                 Text(
                     text = infoText,
                     color = palette.settings.secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

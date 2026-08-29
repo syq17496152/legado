@@ -61,6 +61,9 @@ import io.legado.app.ui.widget.compose.LegadoMiuixFloatingPanel
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.putPrefInt
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.theme.bodyLargeX
 
 /**
  * Click area configuration.
@@ -227,7 +230,7 @@ class ClickActionConfigDialog : ComposeDialogFragment() {
                 Text(
                     text = stringResource(R.string.click_regional_config),
                     color = Color.White,
-                    fontSize = 16.sp,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = style.titleFontFamily,
                     maxLines = 1,
@@ -303,7 +306,7 @@ class ClickActionConfigDialog : ComposeDialogFragment() {
                 Text(
                     text = actionTitle,
                     color = Color.White,
-                    fontSize = 15.sp,
+                    fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     lineHeight = 20.sp,
                     maxLines = 3,
@@ -347,7 +350,7 @@ class ClickActionConfigDialog : ComposeDialogFragment() {
                 Text(
                     text = stringResource(R.string.select_action),
                     color = style.primaryText,
-                    fontSize = 17.sp,
+                    fontSize = MaterialTheme.typography.bodyLargeX.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = style.titleFontFamily,
                     maxLines = 1,

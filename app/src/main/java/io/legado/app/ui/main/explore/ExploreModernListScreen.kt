@@ -67,6 +67,8 @@ import io.legado.app.ui.widget.compose.SearchBookListItem
 import io.legado.app.ui.widget.compose.SearchBookPreviewOverlay
 import io.legado.app.ui.widget.compose.SearchBookPreviewState
 import io.legado.app.ui.widget.image.CoverImageView
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 @Composable
 fun ExploreModernListScreen(
@@ -490,7 +492,7 @@ private fun ExploreWaterfallBookItem(
         Text(
             text = book.name,
             color = palette.primaryText,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             fontWeight = FontWeight.Bold,
             fontFamily = palette.titleFontFamily,
             maxLines = 2,
@@ -501,7 +503,7 @@ private fun ExploreWaterfallBookItem(
             Text(
                 text = book.author,
                 color = palette.secondaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 5.dp)
@@ -512,7 +514,7 @@ private fun ExploreWaterfallBookItem(
             Text(
                 text = latestChapter,
                 color = palette.secondaryText,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 5.dp)
@@ -522,7 +524,7 @@ private fun ExploreWaterfallBookItem(
             Text(
                 text = intro,
                 color = palette.primaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 7.dp)
@@ -580,7 +582,7 @@ private fun ExploreGridBookItem(
         Text(
             text = book.name,
             color = palette.primaryText,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             fontWeight = FontWeight.Medium,
             fontFamily = palette.titleFontFamily,
             maxLines = 2,

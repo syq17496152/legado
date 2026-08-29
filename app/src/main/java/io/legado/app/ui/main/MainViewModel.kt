@@ -34,6 +34,9 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
@@ -58,6 +61,15 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
     private val eventListenerSource = ConcurrentHashMap<BookSource, Boolean>()
     val onUpBooksLiveData = MutableLiveData<Int>()
     private var upTocJob: Job? = null
+
+    /**
+     * upToc 更新队列空闲可观测状态（bookshelf-refresh-and-title-fix 1.1）：
+     * true = upTocJob 已排空，书架下拉刷新以 `first { it }` 事件驱动复位转圈。
+     * 置位时机：startUpTocJob 入口置 false；onCompletion 排空处置
+     * `waitUpTocBooks.isEmpty()`（AD-02 竞态：队列非空重启前保持 false，不虚假放行）。
+     */
+    private val _upTocIdle = MutableStateFlow(true)
+    val upTocIdle: StateFlow<Boolean> = _upTocIdle.asStateFlow()
     private var cacheBookJob: Job? = null
     val booksListRecycledViewPool = RecycledViewPool().apply {
         setMaxRecycledViews(0, 30)
@@ -157,6 +169,7 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
     private fun startUpTocJob() {
         upPool()
         postUpBooksLiveData()
+        _upTocIdle.value = false
         upTocJob = viewModelScope.launch(upTocPool) {
             flow {
                 while (true) {
@@ -172,6 +185,8 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
                 postUpBooksLiveData()
             }.onCompletion {
                 upTocJob = null
+                // 队列排空判定与重启判定同源：非空重启前保持 false，防虚假空闲信号
+                _upTocIdle.value = waitUpTocBooks.isEmpty()
                 if (waitUpTocBooks.isNotEmpty()) {
                     startUpTocJob()
                 }

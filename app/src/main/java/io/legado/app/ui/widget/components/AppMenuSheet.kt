@@ -35,6 +35,10 @@ data class MenuAction(
     val tint: androidx.compose.ui.graphics.Color? = null,
     val checked: Boolean? = null,
     val header: Boolean = false,
+    // 顶栏分级语义（topbar-icon-semantics-fix AD-01）：true=固定显示为顶栏一级图标（不进溢出菜单），
+    // false=溢出菜单（默认，向后兼容）。仅 ConfigTopBar 分级渲染消费；AppMenuSheet/AppDropdownMenu 忽略。
+    // 注意：header=true 是溢出菜单内分组标签，不得与 alwaysShow=true 组合。
+    val alwaysShow: Boolean = false,
     val onClick: () -> Unit
 )
 

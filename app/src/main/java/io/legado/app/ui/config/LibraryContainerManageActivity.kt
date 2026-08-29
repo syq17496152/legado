@@ -1,8 +1,6 @@
 package io.legado.app.ui.config
 
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.ViewGroup
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
@@ -101,26 +99,6 @@ class LibraryContainerManageActivity : BaseActivity<ActivityS3ContainerManageBin
             }
         }
         container.addView(cv)
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(0, MENU_IMPORT, 0, R.string.import_str).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(0, MENU_EXPORT_ALL, 1, "导出全部").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            MENU_IMPORT -> {
-                showImportActions()
-                true
-            }
-            MENU_EXPORT_ALL -> {
-                exportContainers(LibraryContainerManager.containers(), "library-containers.json")
-                true
-            }
-            else -> super.onCompatOptionsItemSelected(item)
-        }
     }
 
     private fun reload() {
@@ -619,8 +597,6 @@ class LibraryContainerManageActivity : BaseActivity<ActivityS3ContainerManageBin
         private const val FIELD_DAILY_UPLOAD_LIMIT = 11
         private const val CHECK_ENABLED = 0
         private const val CHECK_PATH_STYLE = 1
-        private const val MENU_IMPORT = 1
-        private const val MENU_EXPORT_ALL = 2
 
         private fun List<String>.fieldAt(index: Int): String = getOrNull(index).orEmpty()
 

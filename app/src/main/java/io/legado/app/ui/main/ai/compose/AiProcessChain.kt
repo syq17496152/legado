@@ -42,6 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 @Immutable
 data class AiProcessChainStep(
@@ -170,7 +172,7 @@ private fun StepCountChip(count: Int, style: AiComposeStyle) {
         Text(
             text = "$count 步",
             color = style.colors.accent,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.SemiBold
         )
     }
@@ -212,7 +214,7 @@ private fun AiProcessTimelineRow(
                 Text(
                     text = step.title,
                     color = style.colors.primaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -442,7 +444,7 @@ private fun ProcessChip(text: String, style: AiComposeStyle) {
         Text(
             text = text,
             color = style.colors.accent,
-            fontSize = 11.sp,
+            fontSize = MaterialTheme.typography.labelSmall.fontSize,
             lineHeight = 13.sp
         )
     }

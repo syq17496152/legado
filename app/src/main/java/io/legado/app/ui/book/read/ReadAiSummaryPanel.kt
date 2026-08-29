@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.content.Context
 import android.util.AttributeSet
 import android.view.MotionEvent
@@ -55,11 +56,12 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.ai.AiChapterSummaryService
 import io.legado.app.help.ai.AiTaskKeepAlive
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.main.ai.AiMarkdownRender
 import io.legado.app.ui.main.ai.compose.AiComposeStyle
 import io.legado.app.ui.main.ai.compose.aiComposeStyle
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.utils.activity
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.toastOnUi
 import io.noties.markwon.Markwon
@@ -73,6 +75,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import kotlin.math.max
 import kotlin.math.min
+import androidx.compose.material3.MaterialTheme
 
 class ReadAiSummaryPanel @JvmOverloads constructor(
     context: Context,
@@ -266,14 +269,14 @@ class ReadAiSummaryPanel @JvmOverloads constructor(
             return
         }
         val providerNameMap = AppConfig.aiProviderList.associateBy({ it.id }, { it.name })
-        context.selector(
+        activity?.showComposeChoiceListDialog(
             context.getString(R.string.ai_current_model),
             models.map { model ->
                 providerNameMap[model.providerId]?.takeIf { it.isNotBlank() }
                     ?.let { "${model.modelId} - $it" }
                     ?: model.modelId
             }
-        ) { _, _, index ->
+        ) { index ->
             AppConfig.aiSummaryModelId = models[index].id
             uiState = uiState.copy(modelLabel = currentModelLabel())
         }
@@ -379,7 +382,7 @@ private fun ReadAiSummaryContent(
 ) {
     val context = LocalContext.current
     val style = aiComposeStyle(context)
-    val panelShape = RoundedCornerShape(20.dp)
+    val panelShape = AppShapes.rounded(20)
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -406,7 +409,7 @@ private fun ReadAiSummaryContent(
                     Text(
                         text = state.modelLabel.ifBlank { "选择模型" },
                         color = if (state.requesting) style.colors.secondaryText else style.colors.accent,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
@@ -429,7 +432,7 @@ private fun ReadAiSummaryContent(
             Text(
                 text = state.title,
                 color = style.colors.secondaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 lineHeight = 16.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -489,7 +492,7 @@ private fun SummaryBody(
                     Text(
                         text = "正在总结",
                         color = style.colors.secondaryText,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         modifier = Modifier.padding(start = 8.dp)
                     )
                 }
@@ -499,7 +502,7 @@ private fun SummaryBody(
             Text(
                 text = line,
                 color = if (state.cached) style.colors.accent else style.colors.secondaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 fontWeight = if (state.cached) FontWeight.Medium else FontWeight.Normal
             )
         }

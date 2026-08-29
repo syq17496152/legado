@@ -36,10 +36,10 @@ import io.legado.app.data.entities.SearchKeyword
 import io.legado.app.databinding.ActivityBookSearchBinding
 import io.legado.app.help.book.isVideo
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.Selector
 import io.legado.app.lib.theme.TopBarSearchStyle
 import io.legado.app.lib.theme.UiCorner
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.secondaryTextColor
@@ -585,24 +585,27 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         }
         viewModel.searchFinishLiveData.observe(this) { isEmpty ->
             if (!isEmpty || viewModel.searchScope.isAll()) return@observe
-            alert("搜索结果为空") {
-                val precisionSearch = appCtx.getPrefBoolean(PreferKey.precisionSearch)
-                val displayScope = viewModel.searchScope.display
-                if (precisionSearch) {
-                    setMessage("${displayScope}分组搜索结果为空，是否关闭精准搜索？")
-                    yesButton {
+            val precisionSearch = appCtx.getPrefBoolean(PreferKey.precisionSearch)
+            val displayScope = viewModel.searchScope.display
+            showComposeConfirmDialog(
+                title = "搜索结果为空",
+                message = if (precisionSearch) {
+                    "${displayScope}分组搜索结果为空，是否关闭精准搜索？"
+                } else {
+                    "${displayScope}分组搜索结果为空，是否切换到全部分组？"
+                },
+                positiveText = getString(R.string.yes),
+                negativeText = getString(R.string.no),
+                onPositive = {
+                    if (precisionSearch) {
                         appCtx.putPrefBoolean(PreferKey.precisionSearch, false)
                         viewModel.searchKey = ""
                         viewModel.search(searchView.query.toString())
-                    }
-                } else {
-                    setMessage("${displayScope}分组搜索结果为空，是否切换到全部分组？")
-                    yesButton {
+                    } else {
                         viewModel.searchScope.update("")
                     }
                 }
-                noButton()
-            }
+            )
         }
     }
 
@@ -681,13 +684,14 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
     }
 
     private fun alertClearHistory() {
-        alert(R.string.draw) {
-            setMessage(R.string.sure_clear_search_history)
-            yesButton {
-                viewModel.clearHistory()
-            }
-            noButton()
-        }
+        showComposeConfirmDialog(
+            title = getString(R.string.draw),
+            message = getString(R.string.sure_clear_search_history),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = { viewModel.clearHistory() }
+        )
     }
 
     override fun finish() {

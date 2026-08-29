@@ -13,7 +13,7 @@ import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.databinding.ActivityCoverCollectionDetailBinding
 import io.legado.app.databinding.ItemCoverCollectionImageBinding
 import io.legado.app.help.config.CoverCollectionManager
-import io.legado.app.lib.dialogs.alert
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.themeCardColorOrDefault
@@ -88,12 +88,16 @@ class CoverCollectionDetailActivity : BaseActivity<ActivityCoverCollectionDetail
     }
 
     private fun confirmDeleteImage(imagePath: String) {
-        alert(getString(R.string.delete), getString(R.string.cover_collection_delete_image_confirm)) {
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.delete),
+            message = getString(R.string.cover_collection_delete_image_confirm),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 deleteImage(imagePath)
             }
-            noButton()
-        }
+        )
     }
 
     private fun deleteImage(imagePath: String) {

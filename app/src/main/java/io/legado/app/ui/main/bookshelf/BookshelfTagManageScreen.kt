@@ -61,6 +61,10 @@ import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.ui.widget.compose.toMiuixPalette
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.subtitleLarge
+import io.legado.app.ui.theme.subtitleLargeX
 
 internal data class BookshelfTagItemUi(
     val name: String,
@@ -220,7 +224,7 @@ private fun GroupSelector(
                 Text(
                     text = "${group.groupName} · ${group.tags.size}",
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                     maxLines = 1
                 )
@@ -253,7 +257,7 @@ private fun TagGroupContent(
                         Text(
                             text = group.groupName,
                             color = palette.settings.primaryText,
-                            fontSize = 18.sp,
+                            fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(modifier = Modifier.height(4.dp))
@@ -264,7 +268,7 @@ private fun TagGroupContent(
                                 group.tags.size
                             ),
                             color = palette.settings.secondaryText,
-                            fontSize = 13.sp
+                            fontSize = MaterialTheme.typography.bodyTertiary.fontSize
                         )
                     }
                     LegadoMiuixActionButton(
@@ -286,7 +290,7 @@ private fun TagGroupContent(
                             .fillMaxWidth()
                             .padding(vertical = 18.dp),
                         color = palette.settings.secondaryText,
-                        fontSize = 14.sp
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize
                     )
                 }
             }
@@ -321,7 +325,7 @@ private fun TagCard(
                 Text(
                     text = tag.name,
                     color = palette.settings.primaryText,
-                    fontSize = 16.sp,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -330,14 +334,14 @@ private fun TagCard(
                 Text(
                     text = stringResource(R.string.bookshelf_tag_book_count, tag.assignedCount),
                     color = palette.settings.secondaryText,
-                    fontSize = 12.sp
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = stringResource(R.string.bookshelf_tag_visible),
                     color = palette.settings.secondaryText,
-                    fontSize = 11.sp
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 LegadoMiuixSwitch(
@@ -380,7 +384,7 @@ private fun LoadingContent(palette: AppManagementPalette) {
 @Composable
 private fun EmptyContent(text: String, palette: AppManagementPalette) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text = text, color = palette.settings.secondaryText, fontSize = 14.sp)
+        Text(text = text, color = palette.settings.secondaryText, fontSize = MaterialTheme.typography.bodyMedium.fontSize)
     }
 }
 
@@ -429,14 +433,14 @@ private fun BookTagAddDialog(
             Text(
                 text = stringResource(R.string.bookshelf_tag_add_title),
                 color = style.primaryText,
-                fontSize = 19.sp,
+                fontSize = MaterialTheme.typography.subtitleLargeX.fontSize,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(3.dp))
             Text(
                 text = stringResource(R.string.bookshelf_tag_add_group, group.groupName),
                 color = style.secondaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -471,7 +475,7 @@ private fun BookTagAddDialog(
                     selectedTags.size
                 ),
                 color = style.secondaryText,
-                fontSize = 12.sp
+                fontSize = MaterialTheme.typography.bodySmall.fontSize
             )
             Spacer(modifier = Modifier.height(8.dp))
             if (reusableTags.isNotEmpty()) {
@@ -505,7 +509,7 @@ private fun BookTagAddDialog(
                         Text(
                             text = stringResource(R.string.bookshelf_tag_no_reusable),
                             color = style.secondaryText,
-                            fontSize = 14.sp
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize
                         )
                     }
                 }
@@ -517,7 +521,7 @@ private fun BookTagAddDialog(
                         Text(
                             text = stringResource(R.string.bookshelf_tag_no_matching_existing),
                             color = style.secondaryText,
-                            fontSize = 14.sp
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize
                         )
                     }
                 }
@@ -626,7 +630,7 @@ private fun BookTagAssignmentDialog(
             Text(
                 text = "${assignment.groupName} · ${assignment.tag}",
                 color = style.primaryText,
-                fontSize = 19.sp,
+                fontSize = MaterialTheme.typography.subtitleLargeX.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -691,7 +695,7 @@ private fun BookTagAssignmentDialog(
                     ),
                     modifier = Modifier.weight(1f),
                     color = style.secondaryText,
-                    fontSize = 12.sp
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize
                 )
                 LegadoMiuixActionButton(
                     text = stringResource(R.string.bookshelf_tag_select_results),
@@ -721,7 +725,7 @@ private fun BookTagAssignmentDialog(
                     Text(
                         text = stringResource(R.string.bookshelf_tag_no_matching_books),
                         color = style.secondaryText,
-                        fontSize = 14.sp
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize
                     )
                 }
             } else {

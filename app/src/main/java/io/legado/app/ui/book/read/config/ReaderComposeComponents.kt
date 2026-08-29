@@ -51,6 +51,9 @@ import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodyLargeX
 
 object ReaderSheetDefaults {
     val MaxHeightFraction = 0.72f
@@ -192,7 +195,7 @@ fun ReaderSheetHeader(
             Text(
                 text = title,
                 color = style.primaryText,
-                fontSize = 17.sp,
+                fontSize = MaterialTheme.typography.bodyLargeX.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -201,7 +204,7 @@ fun ReaderSheetHeader(
                 Text(
                     text = it,
                     color = style.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 3.dp)
@@ -241,7 +244,7 @@ fun ReaderSectionCard(
                 Text(
                     text = it,
                     color = style.accent,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -276,7 +279,7 @@ fun ReaderTextAction(
         Text(
             text = text,
             color = textColor,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -305,7 +308,7 @@ fun ReaderSwitchRow(
             Text(
                 text = title,
                 color = if (enabled) style.primaryText else style.secondaryText.copy(alpha = 0.55f),
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -313,7 +316,7 @@ fun ReaderSwitchRow(
                 Text(
                     text = it,
                     color = style.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 3.dp)
@@ -368,7 +371,7 @@ fun ReaderSegmentedOptions(
                     Text(
                         text = option.label,
                         color = textColor,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -400,7 +403,7 @@ fun ReaderSegmentedOptions(
                     Text(
                         text = option.label,
                         color = textColor,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis

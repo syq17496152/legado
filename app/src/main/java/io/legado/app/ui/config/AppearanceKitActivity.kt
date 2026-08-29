@@ -1,5 +1,6 @@
 package io.legado.app.ui.config
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.os.Bundle
 import android.net.Uri
 import android.view.View
@@ -87,6 +88,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.labelXSmall
 
 class AppearanceKitActivity : BaseActivity<ActivityThemeManageBinding>() {
 
@@ -509,7 +512,7 @@ private fun ActionRow(
             Text(
                 text = title,
                 color = palette.primaryText,
-                fontSize = 16.sp,
+                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -517,7 +520,7 @@ private fun ActionRow(
             Text(
                 text = summary,
                 color = palette.secondaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -526,7 +529,7 @@ private fun ActionRow(
             Text(
                 text = trailing,
                 color = palette.accent,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 maxLines = 1
             )
         }
@@ -535,7 +538,7 @@ private fun ActionRow(
             Text(
                 text = secondaryTrailing,
                 color = palette.accent,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 maxLines = 1,
                 modifier = Modifier.clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -549,7 +552,7 @@ private fun ActionRow(
             Text(
                 text = tertiaryTrailing,
                 color = palette.accent,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 maxLines = 1,
                 modifier = Modifier.clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -567,7 +570,7 @@ private fun KitPreview(seed: String, palette: AppSettingPalette) {
     Box(
         modifier = Modifier
             .size(width = 56.dp, height = 42.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(AppShapes.rounded(8))
             .background(Brush.linearGradient(colors))
             .padding(6.dp)
     ) {
@@ -576,7 +579,7 @@ private fun KitPreview(seed: String, palette: AppSettingPalette) {
                 .align(Alignment.BottomStart)
                 .fillMaxWidth(0.66f)
                 .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .clip(AppShapes.rounded(3))
                 .background(Color(palette.row).copy(alpha = 0.72f))
         )
     }
@@ -651,7 +654,7 @@ private fun AppearanceKitCard(
         Text(
             text = kit.name,
             color = palette.settings.primaryText,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             lineHeight = 18.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
@@ -661,7 +664,7 @@ private fun AppearanceKitCard(
         Text(
             text = kit.summary,
             color = palette.settings.secondaryText,
-            fontSize = 11.sp,
+            fontSize = MaterialTheme.typography.labelSmall.fontSize,
             lineHeight = 15.sp,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
@@ -672,7 +675,7 @@ private fun AppearanceKitCard(
                 Box(
                     modifier = Modifier
                         .size(width = 18.dp, height = 8.dp)
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(AppShapes.rounded(4))
                         .background(Color(it))
                 )
             }
@@ -731,7 +734,7 @@ private fun AppearanceKitPreview(
             ) {
                 if (active) {
                     Surface(
-                        shape = RoundedCornerShape(999.dp),
+                        shape = AppShapes.Capsule,
                         color = palette.settings.accent.copy(alpha = 0.92f),
                         contentColor = palette.settings.onAccent,
                         tonalElevation = 0.dp,
@@ -741,7 +744,7 @@ private fun AppearanceKitPreview(
                             text = stringResource(R.string.theme_applied_state),
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                             color = palette.settings.onAccent,
-                            fontSize = 10.sp,
+                            fontSize = MaterialTheme.typography.labelXSmall.fontSize,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1
                         )
@@ -753,14 +756,14 @@ private fun AppearanceKitPreview(
                     modifier = Modifier
                         .fillMaxWidth(0.72f)
                         .height(24.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(AppShapes.rounded(8))
                         .background(Color(preview.cardColor).copy(alpha = 0.86f))
                 )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(15.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(AppShapes.rounded(8))
                         .background(Color(preview.bottomColor).copy(alpha = 0.90f))
                 )
             }

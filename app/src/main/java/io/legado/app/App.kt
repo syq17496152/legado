@@ -6,10 +6,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.ComponentCallbacks2
 import android.content.Context
-import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
 import android.os.Build
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.graphics.toColorInt
 import com.bumptech.glide.Glide
 import com.github.liuyueyi.quick.transfer.constants.TransType
@@ -24,6 +24,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppConst.channelIdReadAloud
 import io.legado.app.constant.AppConst.channelIdWeb
 import io.legado.app.constant.AppConst.channelIdAiTask
+import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
@@ -45,17 +46,21 @@ import io.legado.app.help.LifecycleHelp
 import io.legado.app.help.MemoryPressure
 import io.legado.app.help.RuleBigDataHelp
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.config.AppearanceKitManager
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.config.ThemeConfig.applyDayNight
 import io.legado.app.help.config.ThemeConfig.applyDayNightInit
+import io.legado.app.help.config.ThemePackageManager
+import io.legado.app.help.config.TopBarConfig
 import io.legado.app.lib.theme.ThemeRuntimeKeys
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.model.ImageProvider
 import io.legado.app.ui.widget.image.CoverImageView
 import io.legado.app.utils.buildMainHandler
+import io.legado.app.utils.postEvent
 import kotlinx.coroutines.Dispatchers.IO
 import io.legado.app.help.http.Cronet
 import io.legado.app.help.http.ObsoleteUrlFactory
@@ -104,14 +109,32 @@ class App : Application() {
         // Cronet 500（cronet-bundled）不再暴露 org.chromium.base.ThreadUtils 的线程断言测试钩子
         // hasSubtleSideEffectsSetThreadAssertsDisabledForTesting（150 时代用于禁用线程断言），此处移除调用
         oldConfig = Configuration(resources.configuration)
-        // F-暗夜紫默认主题：首次安装时写入暗夜紫夜间主题配置（老用户 dNThemeName 已有值，不受影响）
-        if (getPrefString(PreferKey.dNThemeName).isNullOrBlank()) {
-            ThemeConfig.configList.firstOrNull { it.themeName == "暗夜紫" }?.let { c ->
-                appCtx.putPrefString(PreferKey.dNThemeName, c.themeName)
-                appCtx.putPrefInt(PreferKey.cNPrimary, c.primaryColor.toColorInt())
-                appCtx.putPrefInt(PreferKey.cNAccent, c.accentColor.toColorInt())
-                appCtx.putPrefInt(PreferKey.cNBackground, c.backgroundColor.toColorInt())
-                appCtx.putPrefInt(PreferKey.cNBBackground, c.bottomBackground.toColorInt())
+        // F-暗夜紫默认主题：首次安装时将暗夜紫设为夜间主题配置
+        // 语义：真·首次安装（夜间主题名与 themeMode 均未设置过）→ 预设暗夜紫配色 + 强制夜间模式（themeMode="2"）；
+        // 老用户（已设置过 themeMode 或夜间主题名）不受影响，仍保留原主题模式与配色。
+        val firstInstallDarkPurple = getPrefString(PreferKey.dNThemeName).isNullOrBlank()
+        if (firstInstallDarkPurple) {
+            // T12（theme-arch-gap）：字面量换 DARK_PURPLE_THEME_NAME 常量（单一来源）
+            val purple = ThemeConfig.configList.firstOrNull {
+                it.themeName == AppearanceKitManager.DARK_PURPLE_THEME_NAME
+            }
+            val presetMode = getPrefString(PreferKey.themeMode).isNullOrBlank()
+            if (purple != null || presetMode) {
+                // T11（theme-arch-gap）：首装预设合并单 editor 批量提交（原逐键多次 apply 非原子）
+                appCtx.defaultSharedPreferences.edit().apply {
+                    purple?.let { c ->
+                        putString(PreferKey.dNThemeName, c.themeName)
+                        putInt(PreferKey.cNPrimary, c.primaryColor.toColorInt())
+                        putInt(PreferKey.cNAccent, c.accentColor.toColorInt())
+                        putInt(PreferKey.cNBackground, c.backgroundColor.toColorInt())
+                        putInt(PreferKey.cNBBackground, c.bottomBackground.toColorInt())
+                    }
+                    if (presetMode) {
+                        putString(PreferKey.themeMode, "2")
+                        // 暗夜紫默认外观：顶栏用 regular（胶囊搜索框+标签条）；底栏保持 preset=default 的 floating+glass 形态
+                        putString(PreferKey.defaultTopBarStyle, TopBarConfig.STYLE_REGULAR)
+                    }
+                }
             }
         }
         applyDayNightInit(this)
@@ -176,6 +199,27 @@ class App : Application() {
             }
             //F-P1-1 自动任务调度恢复
             AutoTask.refreshSchedule()
+            // F-暗夜紫可回切：把内置暗夜紫主题注册进「主题包」体系，使其在主题列表(夜间)可见可选，避免切走后回不去
+            runCatching {
+                val darkPurple = ThemeConfig.configList.firstOrNull {
+                    it.themeName == "暗夜紫" && it.isNightTheme
+                }
+                if (darkPurple != null && !ThemePackageManager.localThemeExists(true, "暗夜紫")) {
+                    ThemePackageManager.addFromConfig(darkPurple)
+                }
+            }.onFailure {
+                AppLog.put("注册暗夜紫主题包失败\n${it.localizedMessage}", it)
+            }
+            // F-暗夜紫外观套件：确保「主题包+专属紫调顶栏包+外观套件索引」就绪；首次安装自动套用整套
+            runCatching {
+                AppearanceKitManager.ensureDarkPurpleKit()?.let { kit ->
+                    if (firstInstallDarkPurple) {
+                        AppearanceKitManager.apply(appCtx, kit.toAppearanceKit())
+                    }
+                }
+            }.onFailure {
+                AppLog.put("注册暗夜紫外观套件失败\n${it.localizedMessage}", it)
+            }
         }
     }
 
@@ -189,8 +233,32 @@ class App : Application() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         val diff = newConfig.diff(oldConfig)
-        if ((diff and ActivityInfo.CONFIG_UI_MODE) != 0) {
-            applyDayNight(this)
+        // T1（theme-arch-gap）跟随系统链路四件套：
+        // ①夜间位掩码收窄——修 CONFIG_UI_MODE 宽掩码（UI_MODE_TYPE 车载/底座/异形屏
+        //   等 uiMode 变化误触发全量重建），仅 UI_MODE_NIGHT 位变化才响应
+        // ②themeMode=="0"（跟随系统）前置——固定日/夜模式的用户不受系统深浅切换影响
+        // ③幂等防抖——目标夜间模式已生效（getDefaultNightMode==target）则跳过，
+        //   多屏/多窗口同帧多次回调不再重复全链 applyTheme+RECREATE
+        // ④AppearanceKit 先行——套件接管时由 Kit 投影主题（generation 防抖内建），
+        //   未接管才走 applyDayNight 全链；目标夜间态以新 config 为准显式传参
+        if ((diff and Configuration.UI_MODE_NIGHT_MASK) != 0 && AppConfig.themeMode == "0") {
+            val newNight = (newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                    Configuration.UI_MODE_NIGHT_YES
+            val targetMode =
+                if (newNight) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
+            if (AppCompatDelegate.getDefaultNightMode() != targetMode) {
+                Coroutine.async {
+                    runCatching {
+                        if (AppearanceKitManager.applyCurrentModeTheme(appCtx, newNight)) {
+                            postEvent(EventBus.RECREATE, "")
+                        } else {
+                            applyDayNight(appCtx, newNight)
+                        }
+                    }.onFailure {
+                        AppLog.put("applyDayNight onConfigChange failed\n${it.localizedMessage}", it)
+                    }
+                }
+            }
         }
         oldConfig = Configuration(newConfig)
     }

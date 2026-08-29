@@ -9,6 +9,7 @@ import io.legado.app.R
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.accentColor
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.text.StrokeTextView
 
 
@@ -41,12 +42,13 @@ class TextFontWeightConverter(context: Context, attrs: AttributeSet?) :
     }
 
     private fun selectType() {
-        context.alert(titleResource = R.string.text_font_weight_converter) {
-            items(context.resources.getStringArray(R.array.text_font_weight).toList()) { _, i ->
-                ReadBookConfig.textBold = i
-                upUi(i)
-                onChanged?.invoke()
-            }
+        context.showComposeChoiceListDialog(
+            title = context.getString(R.string.text_font_weight_converter),
+            labels = context.resources.getStringArray(R.array.text_font_weight).toList()
+        ) { i ->
+            ReadBookConfig.textBold = i
+            upUi(i)
+            onChanged?.invoke()
         }
     }
 

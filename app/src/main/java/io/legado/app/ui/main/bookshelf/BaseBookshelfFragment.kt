@@ -9,13 +9,15 @@ import io.legado.app.R
 import io.legado.app.base.VMBaseFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.PreferKey
+import io.legado.app.utils.getPrefBoolean
+import io.legado.app.utils.putPrefBoolean
+import splitties.init.appCtx
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.cache.CacheActivity
 import io.legado.app.ui.book.group.GroupManageDialog
@@ -29,6 +31,7 @@ import io.legado.app.ui.main.MainViewModel
 import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.dialog.WaitDialog
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.postEvent
@@ -58,19 +61,17 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
     }
     private val exportResult = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
-            alert(R.string.export_success) {
-                if (uri.toString().isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
-                }
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = getString(R.string.path)
-                    editView.setText(uri.toString())
-                }
-                customView { alertBinding.root }
-                okButton {
+            showComposeTextInputDialog(
+                title = getString(R.string.export_success),
+                message = if (uri.toString().isAbsUrl()) DirectLinkUpload.getSummary() else null,
+                hint = getString(R.string.path),
+                initialValue = uri.toString(),
+                readOnly = true,
+                positiveText = getString(R.string.copy_text),
+                onPositive = {
                     requireContext().sendToClip(uri.toString())
                 }
-            }
+            )
         }
     }
     abstract val groupId: Long
@@ -201,20 +202,15 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
 
     @SuppressLint("InflateParams")
     fun showAddBookByUrlAlert() {
-        alert(titleResource = R.string.add_book_url) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "url"
+        showComposeTextInputDialog(
+            title = getString(R.string.add_book_url),
+            hint = "url",
+            onPositive = {
+                waitDialog.setText("添加中...")
+                waitDialog.show()
+                viewModel.addBookByUrl(it)
             }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    waitDialog.setText("添加中...")
-                    waitDialog.show()
-                    viewModel.addBookByUrl(it)
-                }
-            }
-            cancelButton()
-        }
+        )
     }
 
     // 书架布局弹框：对齐 Archive BookshelfConfigDialog（Compose 弹框，分组样式/布局/排序/书名/列表样式/简介行数/边距）
@@ -297,6 +293,11 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
         val margin = values.margin.coerceIn(0, 60)
         var notifyMain = false
         var structureChanged = false
+        var refreshBookshelf = false
+        // 事件分类对齐 archive（config-needs-restart-fix AD-02 权威表）：
+        // STRUCTURE 仅 layout/showBookname；REFRESH 为 margin/listItemStyle/listIntroLines/
+        // showUnread/showLastUpdateTime/showFastScroller/showWaitUpCount（K3 OURS 无 postUpBooksLiveData）；
+        // sort 仅 upSort()；returnToTopAfterRead 仅存值；groupStyle 走 NOTIFY_MAIN
         if (AppConfig.bookGroupStyle != groupStyle) {
             AppConfig.bookGroupStyle = groupStyle
             notifyMain = true
@@ -307,40 +308,38 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
         }
         if (AppConfig.bookshelfMargin != margin) {
             AppConfig.bookshelfMargin = margin
-            structureChanged = true
+            refreshBookshelf = true
         }
         if (AppConfig.bookshelfListItemStyle != listItemStyle) {
             AppConfig.bookshelfListItemStyle = listItemStyle
-            structureChanged = true
+            refreshBookshelf = true
         }
         if (AppConfig.bookshelfListIntroLines != listIntroLines) {
             AppConfig.bookshelfListIntroLines = listIntroLines
-            structureChanged = true
+            refreshBookshelf = true
         }
         if (AppConfig.showUnread != values.showUnread) {
             AppConfig.showUnread = values.showUnread
-            structureChanged = true
+            refreshBookshelf = true
         }
         if (AppConfig.showLastUpdateTime != values.showLastUpdateTime) {
             AppConfig.showLastUpdateTime = values.showLastUpdateTime
-            structureChanged = true
+            refreshBookshelf = true
         }
         if (AppConfig.showWaitUpCount != values.showWaitUpCount) {
             AppConfig.showWaitUpCount = values.showWaitUpCount
-            structureChanged = true
+            refreshBookshelf = true
         }
         if (AppConfig.showBookshelfFastScroller != values.showFastScroller) {
             AppConfig.showBookshelfFastScroller = values.showFastScroller
-            structureChanged = true
+            refreshBookshelf = true
         }
         if (AppConfig.bookshelfReturnToTopAfterRead != values.returnToTopAfterRead) {
             AppConfig.bookshelfReturnToTopAfterRead = values.returnToTopAfterRead
-            structureChanged = true
         }
         if (previousSort != sort) {
             AppConfig.bookshelfSort = sort
             upSort()
-            structureChanged = true
         }
         if (previousLayout != layout) {
             AppConfig.bookshelfLayout = layout
@@ -354,30 +353,48 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
         if (notifyMain) {
             postEvent(EventBus.NOTIFY_MAIN, false)
         } else if (structureChanged) {
+            // 对齐 archive：延迟一帧发布，等弹框 dismiss 动画完成再重建
+            view?.post {
+                postEvent(EventBus.BOOKSHELF_STRUCTURE_CHANGED, "")
+            }
+        } else if (refreshBookshelf) {
             postEvent(EventBus.BOOKSHELF_REFRESH, "")
         }
     }
 
+    /**
+     * K7 存量迁移：showBookname 弹框/渲染语义错位修复（config-needs-restart-fix）。
+     * 历史弹框值 [显示→0, 隐藏→1] 与渲染语义 [1=显示, 0=无书名] 反转，意图无法恢复；
+     * 按用户裁决一次性重置为 1（显示）；2（遮罩）两端语义一致，保留。
+     */
+    protected fun migrateLegacyShowBookname() {
+        if (AppConfig.showBookname == 2) {
+            appCtx.putPrefBoolean(PreferKey.bookshelfShowBooknameMigrated, true)
+            return
+        }
+        if (appCtx.getPrefBoolean(PreferKey.bookshelfShowBooknameMigrated, false)) {
+            return
+        }
+        AppConfig.showBookname = 1
+        appCtx.putPrefBoolean(PreferKey.bookshelfShowBooknameMigrated, true)
+    }
+
 
     private fun importBookshelfAlert(groupId: Long) {
-        alert(titleResource = R.string.import_bookshelf) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "url/json"
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let {
-                    viewModel.importBookshelf(it, groupId)
-                }
-            }
-            cancelButton()
-            neutralButton(R.string.select_file) {
+        showComposeTextInputDialog(
+            title = getString(R.string.import_bookshelf),
+            hint = "url/json",
+            neutralText = getString(R.string.select_file),
+            onPositive = {
+                viewModel.importBookshelf(it, groupId)
+            },
+            onNeutral = {
                 importBookshelf.launch {
                     mode = HandleFileContract.FILE
                     allowExtensions = arrayOf("txt", "json")
                 }
             }
-        }
+        )
     }
 
 }

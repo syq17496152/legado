@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -51,6 +52,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
@@ -87,6 +89,8 @@ import top.yukonga.miuix.kmp.basic.Slider as MiuixSlider
 import top.yukonga.miuix.kmp.basic.SliderDefaults as MiuixSliderDefaults
 import top.yukonga.miuix.kmp.basic.Switch as MiuixSwitch
 import top.yukonga.miuix.kmp.basic.SwitchDefaults as MiuixSwitchDefaults
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodySecondary
 
 private const val MIUIX_PANEL_ANIMATION_MS = 160
 private const val MIUIX_PANEL_DISMISS_MS = MIUIX_PANEL_ANIMATION_MS + 20L
@@ -225,7 +229,7 @@ fun LegadoMiuixActionButton(
             Text(
                 text = text,
                 color = content,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 lineHeight = 20.sp,
                 fontWeight = if (primary) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,
@@ -255,7 +259,7 @@ fun LegadoMiuixActionButton(
             Text(
                 text = text,
                 color = content,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 lineHeight = 20.sp,
                 fontWeight = if (primary) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,
@@ -558,7 +562,7 @@ private fun StepperEndpointText(
         Text(
             text = text,
             color = if (enabled) palette.accent else palette.secondaryText.copy(alpha = 0.36f),
-            fontSize = 16.sp,
+            fontSize = MaterialTheme.typography.bodyLarge.fontSize,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1
         )
@@ -613,12 +617,17 @@ fun LegadoMiuixChoiceRow(
     showSelectedMark: Boolean = true,
     enabled: Boolean = true,
     leadingIconName: String? = null,
-    textAlign: TextAlign = TextAlign.Center
+    textAlign: TextAlign = TextAlign.Center,
+    // H16（菜单统一）：ImageVector 直绘图标（与 leadingIconName 互斥，MenuAction 场景用），
+    // tint=条目内容色覆盖（危险项 danger 红等），null 时回落选中/常规语义色
+    leadingIcon: ImageVector? = null,
+    tint: Color? = null
 ) {
     val actionRadius = palette.actionRadius ?: LocalContext.current.composeActionRadius()
     val contentAlpha = if (enabled) 1f else 0.42f
     val selectedColor = palette.accent.copy(alpha = contentAlpha)
     val primaryColor = palette.primaryText.copy(alpha = contentAlpha)
+    val effectiveColor = tint ?: if (selected) selectedColor else primaryColor
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -626,7 +635,7 @@ fun LegadoMiuixChoiceRow(
             .clickable(enabled = enabled, onClick = onClick),
         shape = RoundedCornerShape(actionRadius),
         color = if (selected) palette.accent.copy(alpha = 0.14f) else palette.surfaceVariant,
-        contentColor = if (selected) selectedColor else primaryColor,
+        contentColor = effectiveColor,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
@@ -640,12 +649,22 @@ fun LegadoMiuixChoiceRow(
                 ),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            leadingIconName?.let { iconName ->
-                LegadoResourceIcon(
-                    iconName = iconName,
-                    modifier = Modifier.size(if (compact) 28.dp else 34.dp)
+            if (leadingIcon != null) {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = tint ?: LocalContentColor.current,
+                    modifier = Modifier.size(22.dp)
                 )
                 Spacer(modifier = Modifier.width(if (compact) 9.dp else 12.dp))
+            } else {
+                leadingIconName?.let { iconName ->
+                    LegadoResourceIcon(
+                        iconName = iconName,
+                        modifier = Modifier.size(if (compact) 28.dp else 34.dp)
+                    )
+                    Spacer(modifier = Modifier.width(if (compact) 9.dp else 12.dp))
+                }
             }
             Column(
                 modifier = Modifier.weight(1f),
@@ -657,7 +676,7 @@ fun LegadoMiuixChoiceRow(
             ) {
                 Text(
                     text = text,
-                    color = if (selected) selectedColor else primaryColor,
+                    color = effectiveColor,
                     textAlign = textAlign,
                     modifier = Modifier.fillMaxWidth(),
                     fontSize = if (compact) 13.sp else 14.sp,
@@ -670,7 +689,7 @@ fun LegadoMiuixChoiceRow(
                     Text(
                         text = it,
                         color = palette.secondaryText.copy(alpha = contentAlpha),
-                        fontSize = 11.sp,
+                        fontSize = MaterialTheme.typography.labelSmall.fontSize,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -762,7 +781,7 @@ fun <T> LegadoMiuixSelectField(
         Text(
             text = label,
             color = palette.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -792,7 +811,7 @@ fun <T> LegadoMiuixSelectField(
                     Text(
                         text = optionLabel(selected),
                         color = palette.primaryText,
-                        fontSize = 15.sp,
+                        fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -802,7 +821,7 @@ fun <T> LegadoMiuixSelectField(
                         Text(
                             text = it,
                             color = palette.secondaryText,
-                            fontSize = 11.sp,
+                            fontSize = MaterialTheme.typography.labelSmall.fontSize,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -844,7 +863,7 @@ fun <T> LegadoMiuixSelectField(
                     Text(
                         text = it,
                         color = palette.primaryText,
-                        fontSize = 16.sp,
+                        fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -898,7 +917,7 @@ fun LegadoMiuixSection(
         Text(
             text = title,
             color = palette.accent,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(bottom = 8.dp),
             maxLines = 1,
@@ -932,7 +951,7 @@ fun LegadoMiuixActionRow(
             Text(
                 text = text,
                 color = if (danger) palette.danger else palette.primaryText,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontWeight = FontWeight.Medium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -942,7 +961,7 @@ fun LegadoMiuixActionRow(
                 Text(
                     text = it,
                     color = palette.secondaryText,
-                    fontSize = 11.sp,
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )

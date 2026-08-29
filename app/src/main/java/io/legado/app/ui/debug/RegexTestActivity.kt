@@ -3,11 +3,9 @@ package io.legado.app.ui.debug
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
-import io.legado.app.ui.theme.initLegadoComposeTheme
-import io.legado.app.ui.theme.setLegadoContent
+import io.legado.app.ui.debug.DebugBaseActivity
 
-class RegexTestActivity : AppCompatActivity() {
+class RegexTestActivity : DebugBaseActivity() {
 
     companion object {
         fun startIntent(
@@ -25,14 +23,13 @@ class RegexTestActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        initLegadoComposeTheme()
         super.onCreate(savedInstanceState)
 
         val pattern = intent.getStringExtra("pattern") ?: ""
         val replacement = intent.getStringExtra("replacement") ?: ""
         val isRegex = intent.getBooleanExtra("isRegex", true)
 
-        setLegadoContent {
+        setDebugContent {
             RegexTestScreen(
                 onBackClick = { finish() },
                 initialPattern = pattern,

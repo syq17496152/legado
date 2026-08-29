@@ -1,5 +1,6 @@
 package io.legado.app.ui.widget.components
 
+import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat

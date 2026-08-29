@@ -37,7 +37,6 @@ import io.legado.app.databinding.ActivityAudioPlayBinding
 import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.BookCover
 import io.legado.app.service.AudioPlayService
@@ -46,6 +45,7 @@ import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
@@ -90,6 +90,7 @@ class AudioPlayActivity :
     override val viewModel by viewModels<AudioPlayViewModel>()
 
     // 主题架构 v2：沉浸播放页不随主题事件重建（避免打断播放），Compose 侧经 ThemeSync 刷新
+    // T3（theme-arch-gap）核实：本页无 View 侧主题色消费，豁免+ThemeSync 覆盖完整（2026-08-28 审查）
     override val recreateOnThemeChange: Boolean
         get() = false
     private val timerSliderPopup by lazy { SliderPopup(this, TIMER) }
@@ -431,9 +432,12 @@ class AudioPlayActivity :
             callBackBookEnd()
             viewModel.removeFromBookshelf { super.finish() }
         } else {
-            alert(title = getString(R.string.add_to_bookshelf)) {
-                setMessage(getString(R.string.check_add_bookshelf, book.name))
-                okButton {
+            showComposeConfirmDialog(
+                title = getString(R.string.add_to_bookshelf),
+                message = getString(R.string.check_add_bookshelf, book.name),
+                positiveText = getString(R.string.ok),
+                negativeText = getString(R.string.no),
+                onPositive = {
                     val book = AudioPlay.book
                     book?.removeType(BookType.notShelf)
                     lifecycleScope.launch(IO) {
@@ -444,12 +448,12 @@ class AudioPlayActivity :
                             setResult(RESULT_OK)
                         }
                     }
-                }
-                noButton {
+                },
+                onNegative = {
                     callBackBookEnd()
                     viewModel.removeFromBookshelf { super.finish() }
                 }
-            }
+            )
         }
     }
 

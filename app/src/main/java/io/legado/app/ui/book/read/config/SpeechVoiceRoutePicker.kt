@@ -46,6 +46,9 @@ import io.legado.app.lib.theme.composePanelRadius
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.lib.theme.uiTypeface
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.subtitleLarge
 
 @Composable
 fun SpeechVoiceRoutePickerDialog(
@@ -83,7 +86,7 @@ fun SpeechVoiceRoutePickerDialog(
                         Text(
                             text = title,
                             color = colors.text,
-                            fontSize = 18.sp,
+                            fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -169,7 +172,7 @@ private fun EnginePickerList(
                 .heightIn(min = 160.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("暂无朗读引擎", color = colors.subText, fontSize = 14.sp)
+            Text("暂无朗读引擎", color = colors.subText, fontSize = MaterialTheme.typography.bodyMedium.fontSize)
         }
         return
     }
@@ -230,14 +233,14 @@ private fun SpeakerPickerList(
                 .padding(bottom = 10.dp),
             singleLine = true,
             placeholder = {
-                Text("搜索发言人 / toneID / 情绪", color = colors.subText, fontSize = 13.sp)
+                Text("搜索发言人 / toneID / 情绪", color = colors.subText, fontSize = MaterialTheme.typography.bodyTertiary.fontSize)
             }
         )
         if (group.warning.isNotBlank()) {
             Text(
                 text = group.warning,
                 color = colors.danger,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
         }
@@ -298,7 +301,7 @@ private fun SpeakerPickerList(
                 Text(
                     text = "登录 / 刷新授权",
                     color = colors.accent,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)
                 )
@@ -338,7 +341,7 @@ private fun PickerRow(
                 Text(
                     text = title,
                     color = colors.text,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -347,7 +350,7 @@ private fun PickerRow(
                     Text(
                         text = subtitle,
                         color = colors.subText,
-                        fontSize = 11.sp,
+                        fontSize = MaterialTheme.typography.labelSmall.fontSize,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 3.dp)
@@ -357,7 +360,7 @@ private fun PickerRow(
             Text(
                 text = if (selected) "当前" else trailing,
                 color = if (selected) colors.accent else colors.subText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
             )
         }
@@ -380,7 +383,7 @@ private fun EmotionChip(
         Text(
             text = text,
             color = if (selected) colors.accent else colors.text,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
         )
     }

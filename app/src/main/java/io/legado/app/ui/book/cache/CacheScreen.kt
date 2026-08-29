@@ -29,6 +29,8 @@ import io.legado.app.R
 import io.legado.app.data.entities.Book
 import io.legado.app.help.book.isLocal
 import io.legado.app.model.CacheBook
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
 
 /**
  * 缓存列表页纯 Compose 壳层：宿主（CacheActivity）提供数据源与回调，本 Screen 仅自绘列表。
@@ -88,14 +90,14 @@ private fun CacheBookItemRow(
                 Text(
                     text = book.name,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 15.sp,
+                    fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = stringResource(R.string.author_show, book.getRealAuthor()),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -104,7 +106,7 @@ private fun CacheBookItemRow(
                     else cacheChapterCount?.let { stringResource(R.string.download_count, it, book.totalChapterNum) }
                         ?: stringResource(R.string.loading),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -123,7 +125,7 @@ private fun CacheBookItemRow(
             Text(
                 text = stringResource(R.string.export),
                 color = MaterialTheme.colorScheme.primary,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 modifier = Modifier
                     .padding(horizontal = 12.dp, vertical = 8.dp)
                     .clickable(onClick = onExport)
@@ -134,7 +136,7 @@ private fun CacheBookItemRow(
             exportMsg != null -> Text(
                 text = exportMsg,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 modifier = Modifier.padding(top = 4.dp)
             )
             exportProgress != null -> LinearProgressIndicator(

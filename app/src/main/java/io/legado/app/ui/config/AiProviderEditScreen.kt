@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.ui.main.ai.AiModelConfig
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
@@ -58,37 +59,15 @@ import io.legado.app.ui.widget.compose.LegadoMiuixPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
 
 // ── Title Bar ────────────────────────────────────────────────────────────────
 
+// 2.2.6 (2026-08-27)：自绘 Row 顶栏 → GlassTopAppBar，统一 Compose 顶栏基线（随顶栏管理消费 TopBarConfig）
 @Composable
 fun AppDialogTitleBar(title: String) {
-    val style = rememberAppDialogStyle()
-    CompositionLocalProvider(
-        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .height(56.dp)
-                .padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = title,
-                color = style.primaryText,
-                fontFamily = style.titleFontFamily,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 12.dp)
-            )
-        }
-    }
+    GlassTopAppBar(title = title)
 }
 
 // ── Tab Bar ──────────────────────────────────────────────────────────────────
@@ -125,7 +104,7 @@ fun AiProviderTabBar(
                 Text(
                     text = label,
                     color = if (isSelected) style.accent else style.primaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontFamily = style.bodyFontFamily,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                     maxLines = 1,
@@ -200,7 +179,7 @@ fun AiProviderConfigTab(
             Text(
                 text = apiModeLabel,
                 color = style.primaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontFamily = style.bodyFontFamily,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -222,7 +201,7 @@ fun AiProviderConfigTab(
                     text = stringResource(R.string.ai_enable_prompt_cache_key),
                     modifier = Modifier.weight(1f),
                     color = if (promptCache) style.primaryText else style.secondaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontFamily = style.bodyFontFamily,
                     fontWeight = if (promptCache) FontWeight.SemiBold else FontWeight.Medium,
                     maxLines = 2,
@@ -266,7 +245,7 @@ private fun AiProviderTextField(
         Text(
             text = label,
             color = style.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.Medium,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
@@ -325,7 +304,7 @@ fun AiModelManageTab(
         Text(
             text = providerName,
             color = style.secondaryText,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             fontFamily = style.bodyFontFamily,
             modifier = Modifier.padding(start = 18.dp, top = 10.dp, end = 18.dp),
             maxLines = 1,
@@ -394,7 +373,7 @@ private fun AiModelItem(
                 Text(
                     text = model.modelId,
                     color = style.primaryText,
-                    fontSize = 16.sp,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = style.titleFontFamily,
                     maxLines = 1,
@@ -405,7 +384,7 @@ private fun AiModelItem(
                     Text(
                         text = stringResource(R.string.ai_current_model),
                         color = style.accent,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         fontFamily = style.bodyFontFamily,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -473,7 +452,7 @@ fun FetchedModelSelectorContent(
                     Text(
                         text = stringResource(R.string.screen_find),
                         color = style.secondaryText,
-                        fontSize = 14.sp
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize
                     )
                 },
                 shape = RoundedCornerShape(style.actionRadius),
@@ -496,7 +475,7 @@ fun FetchedModelSelectorContent(
             Text(
                 text = summaryText,
                 color = style.secondaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontFamily = style.bodyFontFamily,
                 modifier = Modifier.padding(vertical = 4.dp)
             )
@@ -604,7 +583,7 @@ private fun FetchedModelRow(
                 Text(
                     text = modelId,
                     color = style.primaryText,
-                    fontSize = 15.sp,
+                    fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                     fontWeight = FontWeight.Medium,
                     fontFamily = style.bodyFontFamily,
                     maxLines = 1,
@@ -618,7 +597,7 @@ private fun FetchedModelRow(
                         else -> stringResource(R.string.ai_fetch_models_click_add_long_select)
                     },
                     color = if (existing) style.accent else style.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontFamily = style.bodyFontFamily,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

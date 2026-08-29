@@ -14,7 +14,10 @@ import io.legado.app.data.entities.RssSource
 import io.legado.app.databinding.ItemRssBinding
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
+import io.legado.app.lib.theme.UiCorner
+import io.legado.app.lib.theme.titleTypeface
 import splitties.views.onLongClick
+import io.legado.app.ui.widget.ModernActionPopup
 
 class RssAdapter(
     context: Context,
@@ -22,6 +25,8 @@ class RssAdapter(
     private val callBack: CallBack,
     private val lifecycle: Lifecycle
 ) : RecyclerAdapter<RssSource, ItemRssBinding>(context) {
+
+    private var menuPopup: ModernActionPopup.Handle? = null
 
     override fun getViewBinding(parent: ViewGroup): ItemRssBinding {
         return ItemRssBinding.inflate(inflater, parent, false)
@@ -34,6 +39,9 @@ class RssAdapter(
         payloads: MutableList<Any>
     ) {
         binding.apply {
+            // rss-classic-layout-align S4：视效对齐书架基线——主题圆角（替代 XML 硬编码 12dp）+ 主题标题字体
+            ivIcon.setCornerRadius(UiCorner.actionRadius(context).toInt())
+            tvName.typeface = context.titleTypeface()
             tvName.text = item.sourceName
             val options = RequestOptions()
                 .set(OkHttpModelLoader.sourceOriginOption, item.sourceUrl)
@@ -62,10 +70,14 @@ class RssAdapter(
     }
 
     private fun showMenu(view: View, rssSource: RssSource) {
-        val popupMenu = PopupMenu(context, view)
-        popupMenu.inflate(R.menu.rss_main_item)
-        popupMenu.menu.findItem(R.id.menu_login).isVisible = !rssSource.loginUrl.isNullOrBlank()
-        popupMenu.setOnMenuItemClickListener {
+        menuPopup = ModernActionPopup.showFromMenu(
+            anchor = view,
+            menuRes = R.menu.rss_main_item,
+            previousPopup = menuPopup,
+            prepare = {
+                findItem(R.id.menu_login)?.isVisible = !rssSource.loginUrl.isNullOrBlank()
+            }
+        ) {
             when (it.itemId) {
                 R.id.menu_edit -> callBack.edit(rssSource)
                 R.id.menu_top -> callBack.toTop(rssSource)
@@ -75,7 +87,6 @@ class RssAdapter(
             }
             true
         }
-        popupMenu.show()
     }
 
     interface CallBack {

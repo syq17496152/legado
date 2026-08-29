@@ -12,6 +12,7 @@ import io.legado.app.data.entities.ReadRecordShow
 import io.legado.app.databinding.ActivityReadRecordBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
+import io.legado.app.ui.about.ReadRecordWidgetStore
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.cnCompare
@@ -117,6 +118,9 @@ class ReadRecordActivity : BaseActivity<ActivityReadRecordBinding>() {
     private fun clearAll() {
         lifecycleScope.launch(IO) {
             appDb.readRecordDao.clear()
+            appDb.readRecordDailyDao.clear()
+            appDb.readRecentBookDao.clear()
+            ReadRecordWidgetStore.clearRecentSnapshots()
         }
         loadData()
     }

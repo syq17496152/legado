@@ -4,18 +4,13 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -25,8 +20,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Surface
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -41,55 +37,49 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.HttpTTS
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.SpeechRouteSanitizer
 import io.legado.app.help.readaloud.speech.SpeechVoiceCatalogRepository
 import io.legado.app.help.readaloud.speech.SpeechVoiceEngineGroup
-import io.legado.app.help.readaloud.speech.SpeechVoiceOption
-import io.legado.app.lib.dialogs.SelectItem
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.composeActionRadius
 import io.legado.app.lib.theme.composePanelRadius
-import io.legado.app.lib.theme.primaryTextColor
-import io.legado.app.lib.theme.secondaryTextColor
-import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.association.ImportHttpTtsDialog
 import io.legado.app.ui.association.showShibbolethDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.theme.bodyLargeX
+import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.AppDialogStyle
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.ComposeSuggestionTextInputDialog
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
+import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.ACache
-import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.ShibbolethCodec
-import io.legado.app.utils.dpToPx
-import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.isAbsUrl
-import io.legado.app.utils.isJsonObject
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.sendToClip
-import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.startActivity
@@ -104,7 +94,9 @@ import java.io.File
 /**
  * TTS 引擎管理。
  */
-class SpeakEngineDialog : BaseDialogFragment(0), SpeakEngineDialogActions {
+class SpeakEngineDialog() : ComposeDialogFragment(), SpeakEngineDialogActions {
+
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     private val viewModel: SpeakEngineViewModel by viewModels()
     private val ttsUrlKey = "ttsUrlKey"
@@ -135,11 +127,6 @@ class SpeakEngineDialog : BaseDialogFragment(0), SpeakEngineDialogActions {
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, 0.9f)
-    }
-
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -148,17 +135,20 @@ class SpeakEngineDialog : BaseDialogFragment(0), SpeakEngineDialogActions {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                SpeakEngineScreen(
-                    ttsEngine = ttsEngine,
-                    httpTtsList = httpTtsList,
-                    pickerGroupKey = pickerGroupKey,
-                    actions = this@SpeakEngineDialog
-                )
+                LegadoTheme {
+                    SpeakEngineScreen(
+                        ttsEngine = ttsEngine,
+                        httpTtsList = httpTtsList,
+                        pickerGroupKey = pickerGroupKey,
+                        actions = this@SpeakEngineDialog
+                    )
+                }
             }
         }
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
         lifecycleScope.launch {
             appDb.httpTTSDao.flowAll()
                 .catch { AppLog.put("朗读引擎界面获取数据失败\n${it.localizedMessage}", it) }
@@ -269,26 +259,27 @@ class SpeakEngineDialog : BaseDialogFragment(0), SpeakEngineDialogActions {
             ?.splitNotBlank(",")
             ?.toMutableList()
             ?: mutableListOf()
-        alert(R.string.import_on_line) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "url"
-                editView.setFilterValues(cacheUrls)
-                editView.delCallBack = {
-                    cacheUrls.remove(it)
-                    aCache.put(ttsUrlKey, cacheUrls.joinToString(","))
-                }
-            }
-            customView { alertBinding.root }
-            okButton {
-                alertBinding.editView.text?.toString()?.let { url ->
+        showDialogFragment(
+            ComposeSuggestionTextInputDialog.create(
+                title = getString(R.string.import_on_line),
+                hint = "url",
+                suggestions = cacheUrls,
+                deletable = true,
+                positiveText = getString(R.string.ok),
+                negativeText = getString(R.string.cancel),
+                onPositive = { url ->
                     if (url.isAbsUrl() && !cacheUrls.contains(url)) {
                         cacheUrls.add(0, url)
                         aCache.put(ttsUrlKey, cacheUrls.joinToString(","))
                     }
                     showDialogFragment(ImportHttpTtsDialog(url))
+                },
+                onSuggestionDeleted = { removed ->
+                    cacheUrls.remove(removed)
+                    aCache.put(ttsUrlKey, cacheUrls.joinToString(","))
                 }
-            }
-        }
+            )
+        )
     }
 
     override fun exportAll() {
@@ -324,7 +315,7 @@ class SpeakEngineDialog : BaseDialogFragment(0), SpeakEngineDialogActions {
     }
 
     override fun clearCache() {
-        execute {
+        lifecycleScope.launch(IO) {
             notifyReadAloudEngineChanged()
             val ttsFolderPath = "${requireContext().cacheDir.absolutePath}${File.separator}httpTTS${File.separator}"
             FileUtils.listDirsAndFiles(ttsFolderPath)?.forEach {
@@ -368,71 +359,61 @@ private fun SpeakEngineScreen(
     pickerGroupKey: String?,
     actions: SpeakEngineDialogActions
 ) {
-    val context = LocalContext.current
-    val colors = rememberSpeakEngineColors()
+    val style = rememberAppDialogStyle()
+    val palette = style.toMiuixPalette()
     val groups = rememberSpeechGroups(httpTtsList)
     val currentRoute = SpeechRoute.fromTtsEngineValue(ttsEngine)
     var importDialogVisible by remember { mutableStateOf(false) }
     CompositionLocalProvider(
-        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = FontFamily(context.uiTypeface()))
+        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = colors.page,
-            shape = RoundedCornerShape(context.composePanelRadius())
-        ) {
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "朗读引擎",
-                    color = colors.text,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
+        AppDialogFrame(
+            title = "朗读引擎",
+            message = speechRouteSummary(currentRoute, groups, defaultText = "系统默认"),
+            scrollContent = false,
+            content = {
+                EngineTopActions(
+                    style = style,
+                    onAdd = actions::addHttpTts,
+                    onImport = { importDialogVisible = true },
+                    onExportAll = actions::exportAll,
+                    onClearCache = actions::clearCache
                 )
-                TextButton(onClick = actions::close) { Text("关闭", color = colors.subText) }
-            }
-            Text(
-                text = speechRouteSummary(currentRoute, groups, defaultText = "系统默认"),
-                color = colors.subText,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-            EngineTopActions(
-                colors = colors,
-                onAdd = actions::addHttpTts,
-                onImport = { importDialogVisible = true },
-                onExportAll = actions::exportAll,
-                onClearCache = actions::clearCache,
-                modifier = Modifier.padding(top = 12.dp)
-            )
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(top = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(groups, key = { it.key }) { group ->
-                    val httpTts = httpTtsForGroup(group, httpTtsList)
-                    EngineGroupRow(
-                        group = group,
-                        selected = routeMatchesGroup(currentRoute, group),
-                        colors = colors,
-                        onClick = { actions.openSpeakerPicker(group) },
-                        onLogin = if (!group.loginUrl.isNullOrBlank()) {
-                            { actions.login(group) }
-                        } else {
-                            null
-                        },
-                        onEdit = httpTts?.let { { actions.editHttpTts(it.id) } },
-                        onExport = httpTts?.let { { actions.exportHttpTts(it) } },
-                        onDelete = httpTts?.let { { actions.deleteHttpTts(it) } }
-                    )
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 440.dp)
+                        .padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(groups, key = { it.key }) { group ->
+                        val httpTts = httpTtsForGroup(group, httpTtsList)
+                        EngineGroupRow(
+                            group = group,
+                            selected = routeMatchesGroup(currentRoute, group),
+                            style = style,
+                            onClick = { actions.openSpeakerPicker(group) },
+                            onLogin = if (!group.loginUrl.isNullOrBlank()) {
+                                { actions.login(group) }
+                            } else {
+                                null
+                            },
+                            onEdit = httpTts?.let { { actions.editHttpTts(it.id) } },
+                            onExport = httpTts?.let { { actions.exportHttpTts(it) } },
+                            onDelete = httpTts?.let { { actions.deleteHttpTts(it) } }
+                        )
+                    }
                 }
+            },
+            actions = {
+                LegadoMiuixActionButton(
+                    text = "关闭",
+                    palette = palette,
+                    onClick = actions::close,
+                    cornerRadius = style.actionRadius
+                )
             }
-        }
+        )
         pickerGroupKey?.let { key ->
             SpeechVoiceRoutePickerDialog(
                 title = "选择发言人",
@@ -446,7 +427,7 @@ private fun SpeakEngineScreen(
         }
         if (importDialogVisible) {
             ImportChoiceDialog(
-                colors = colors,
+                style = style,
                 onDismiss = { importDialogVisible = false },
                 onDefault = {
                     importDialogVisible = false
@@ -461,7 +442,6 @@ private fun SpeakEngineScreen(
                     actions.importOnline()
                 }
             )
-            }
         }
     }
 }
@@ -472,15 +452,6 @@ private fun rememberSpeechGroups(httpTtsList: List<HttpTTS>): List<SpeechVoiceEn
     return SpeechVoiceCatalogRepository.allGroups(context, httpTtsList)
 }
 
-private fun selectedKeyFromEngine(ttsEngine: String?, httpTtsList: List<HttpTTS>): String {
-    val current = ttsEngine ?: return "system:"
-    if (current.isJsonObject()) {
-        val value = GSON.fromJsonObject<SelectItem<String>>(current).getOrNull()?.value.orEmpty()
-        return "system:$value"
-    }
-    return "http:$current".takeIf { httpTtsList.any { item -> item.id.toString() == current } } ?: "system:"
-}
-
 private fun httpTtsForGroup(group: SpeechVoiceEngineGroup, httpTtsList: List<HttpTTS>): HttpTTS? {
     val id = group.loginKey.toLongOrNull() ?: return null
     return httpTtsList.firstOrNull { it.id == id }
@@ -488,7 +459,7 @@ private fun httpTtsForGroup(group: SpeechVoiceEngineGroup, httpTtsList: List<Htt
 
 @Composable
 private fun EngineTopActions(
-    colors: SpeakEngineColors,
+    style: AppDialogStyle,
     onAdd: () -> Unit,
     onImport: () -> Unit,
     onExportAll: () -> Unit,
@@ -501,16 +472,16 @@ private fun EngineTopActions(
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        SmallEngineAction("新增", onAdd, colors)
-        SmallEngineAction("导入", onImport, colors)
-        SmallEngineAction("导出全部", onExportAll, colors)
-        SmallEngineAction("清缓存", onClearCache, colors)
+        SmallEngineAction("新增", onAdd, style)
+        SmallEngineAction("导入", onImport, style)
+        SmallEngineAction("导出全部", onExportAll, style)
+        SmallEngineAction("清缓存", onClearCache, style)
     }
 }
 
 @Composable
 private fun ImportChoiceDialog(
-    colors: SpeakEngineColors,
+    style: AppDialogStyle,
     onDismiss: () -> Unit,
     onDefault: () -> Unit,
     onLocal: () -> Unit,
@@ -519,24 +490,24 @@ private fun ImportChoiceDialog(
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.fillMaxWidth().widthIn(max = 360.dp),
-            color = colors.page,
+            color = style.surface,
             shape = RoundedCornerShape(LocalContext.current.composePanelRadius()),
-            border = BorderStroke(1.dp, colors.stroke)
+            border = BorderStroke(1.dp, style.stroke)
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "导入朗读规则",
-                        color = colors.text,
-                        fontSize = 17.sp,
+                        color = style.primaryText,
+                        fontSize = MaterialTheme.typography.bodyLargeX.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = onDismiss) { Text("关闭", color = colors.subText) }
+                    TextButton(onClick = onDismiss) { Text("关闭", color = style.secondaryText) }
                 }
-                ImportChoiceRow("默认规则", "导入内置 HTTP TTS 规则", colors, onDefault)
-                ImportChoiceRow("本地导入", "从本机 txt/json 文件导入", colors, onLocal)
-                ImportChoiceRow("在线导入", "通过 URL 导入朗读规则", colors, onOnline)
+                ImportChoiceRow("默认规则", "导入内置 HTTP TTS 规则", style, onDefault)
+                ImportChoiceRow("本地导入", "从本机 txt/json 文件导入", style, onLocal)
+                ImportChoiceRow("在线导入", "通过 URL 导入朗读规则", style, onOnline)
             }
         }
     }
@@ -546,19 +517,19 @@ private fun ImportChoiceDialog(
 private fun ImportChoiceRow(
     title: String,
     subtitle: String,
-    colors: SpeakEngineColors,
+    style: AppDialogStyle,
     onClick: () -> Unit
 ) {
     Surface(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        color = colors.card,
+        color = style.fieldSurface,
         shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-        border = BorderStroke(1.dp, colors.stroke)
+        border = BorderStroke(1.dp, style.stroke)
     ) {
         Column(modifier = Modifier.padding(horizontal = 13.dp, vertical = 11.dp)) {
-            Text(title, color = colors.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = colors.subText, fontSize = 11.sp, modifier = Modifier.padding(top = 3.dp))
+            Text(title, color = style.primaryText, fontSize = MaterialTheme.typography.bodyMedium.fontSize, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = style.secondaryText, fontSize = MaterialTheme.typography.labelSmall.fontSize, modifier = Modifier.padding(top = 3.dp))
         }
     }
 }
@@ -567,7 +538,7 @@ private fun ImportChoiceRow(
 private fun EngineGroupRow(
     group: SpeechVoiceEngineGroup,
     selected: Boolean,
-    colors: SpeakEngineColors,
+    style: AppDialogStyle,
     onClick: () -> Unit,
     onLogin: (() -> Unit)?,
     onEdit: (() -> Unit)?,
@@ -576,18 +547,18 @@ private fun EngineGroupRow(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        color = if (selected) colors.accent.copy(alpha = 0.15f) else colors.card,
+        color = if (selected) style.accent.copy(alpha = 0.15f) else style.fieldSurface,
         shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-        border = BorderStroke(1.dp, if (selected) colors.accent else colors.stroke)
+        border = BorderStroke(1.dp, if (selected) style.accent else style.stroke)
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(group.title, color = colors.text, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(group.subtitle, color = colors.subText, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(group.title, color = style.primaryText, fontSize = MaterialTheme.typography.bodyMedium.fontSize, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(group.subtitle, color = style.secondaryText, fontSize = MaterialTheme.typography.labelSmall.fontSize, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (selected) {
-                    Text("当前", color = colors.accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text("当前", color = style.accent, fontSize = MaterialTheme.typography.labelSmall.fontSize, fontWeight = FontWeight.SemiBold)
                 }
             }
             val explicitCount = group.options.count { it.explicitSpeaker }
@@ -597,10 +568,10 @@ private fun EngineGroupRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     if (explicitCount > 0) {
-                        InfoPill("${explicitCount}发言人", colors)
+                        InfoPill("${explicitCount}发言人", style)
                     }
                     if (group.emotions.isNotEmpty()) {
-                        InfoPill("${group.emotions.size}情绪", colors)
+                        InfoPill("${group.emotions.size}情绪", style)
                     }
                 }
             }
@@ -609,10 +580,10 @@ private fun EngineGroupRow(
                     modifier = Modifier.padding(top = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    onLogin?.let { InlineEngineAction("登录", colors.accent, it) }
-                    onEdit?.let { InlineEngineAction("编辑", colors.accent, it) }
-                    onExport?.let { InlineEngineAction("导出", colors.accent, it) }
-                    onDelete?.let { InlineEngineAction("删除", colors.danger, it) }
+                    onLogin?.let { InlineEngineAction("登录", style.accent, it) }
+                    onEdit?.let { InlineEngineAction("编辑", style.accent, it) }
+                    onExport?.let { InlineEngineAction("导出", style.accent, it) }
+                    onDelete?.let { InlineEngineAction("删除", style.danger, it) }
                 }
             }
         }
@@ -620,281 +591,33 @@ private fun EngineGroupRow(
 }
 
 @Composable
-private fun EngineManagementActions(
-    compact: Boolean,
-    colors: SpeakEngineColors,
-    actions: SpeakEngineDialogActions,
-    modifier: Modifier = Modifier
-) {
-    if (!compact) {
-        Row(
-            modifier = modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            SmallEngineAction("新增", actions::addHttpTts, colors)
-            SmallEngineAction("默认规则", actions::importDefault, colors)
-            SmallEngineAction("本地导入", actions::importLocal, colors)
-            SmallEngineAction("在线导入", actions::importOnline, colors)
-            SmallEngineAction("导出全部", actions::exportAll, colors)
-            SmallEngineAction("导出当前", actions::exportSelected, colors)
-        }
-        return
-    }
+private fun InfoPill(text: String, style: AppDialogStyle) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = colors.card,
-        shape = RoundedCornerShape(LocalContext.current.composePanelRadius()),
-        border = BorderStroke(1.dp, colors.stroke)
-    ) {
-        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("管理", color = colors.subText, fontSize = 12.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CompactEngineAction("新增", colors, Modifier.weight(1f), actions::addHttpTts)
-                CompactEngineAction("默认", colors, Modifier.weight(1f), actions::importDefault)
-                CompactEngineAction("在线", colors, Modifier.weight(1f), actions::importOnline)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CompactEngineAction("本地", colors, Modifier.weight(1f), actions::importLocal)
-                CompactEngineAction("导出全部", colors, Modifier.weight(1f), actions::exportAll)
-                CompactEngineAction("导出当前", colors, Modifier.weight(1f), actions::exportSelected)
-            }
-        }
-    }
-}
-
-@Composable
-private fun CompactEngineAction(
-    text: String,
-    colors: SpeakEngineColors,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = modifier.height(34.dp).clickable(onClick = onClick),
-        color = colors.page,
+        color = style.surface,
         shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-        border = BorderStroke(1.dp, colors.stroke)
+        border = BorderStroke(1.dp, style.stroke)
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(text, color = colors.text, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
-
-@Composable
-private fun EngineDetailCard(
-    group: SpeechVoiceEngineGroup?,
-    httpTts: HttpTTS?,
-    colors: SpeakEngineColors,
-    actions: SpeakEngineDialogActions,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        color = colors.card,
-        shape = RoundedCornerShape(LocalContext.current.composePanelRadius()),
-        border = BorderStroke(1.dp, colors.stroke)
-    ) {
-        EngineDetail(group = group, httpTts = httpTts, colors = colors, actions = actions)
-    }
-}
-
-@Composable
-@OptIn(ExperimentalLayoutApi::class)
-private fun EngineDetail(
-    group: SpeechVoiceEngineGroup?,
-    httpTts: HttpTTS?,
-    colors: SpeakEngineColors,
-    actions: SpeakEngineDialogActions
-) {
-    if (group == null) {
-        Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
-            Text("暂无朗读引擎", color = colors.subText, fontSize = 14.sp)
-        }
-        return
-    }
-    Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(group.title, color = colors.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                Text(group.subtitle, color = colors.subText, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-            }
-        }
-        if (!group.loginUrl.isNullOrBlank() || httpTts != null) {
-            Row(
-                modifier = Modifier.padding(top = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (!group.loginUrl.isNullOrBlank()) {
-                    DetailEngineAction("登录", colors.accent) { actions.login(group) }
-                }
-                httpTts?.let {
-                    DetailEngineAction("编辑", colors.accent) { actions.editHttpTts(it.id) }
-                    DetailEngineAction("删除", colors.danger) { actions.deleteHttpTts(it) }
-                }
-            }
-        }
-        Text(
-            "发言人列表",
-            color = colors.subText,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 14.dp)
-        )
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 74.dp, max = 300.dp)
-                .padding(top = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(group.options, key = { it.key }) { option ->
-                SpeakerOptionRow(option = option, colors = colors)
-            }
-        }
-        if (group.emotions.isNotEmpty()) {
-            Text(
-                "情绪",
-                color = colors.subText,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 14.dp)
-            )
-            FlowRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                group.emotions.forEach { emotion ->
-                    Surface(
-                        color = colors.page,
-                        shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-                        border = BorderStroke(1.dp, colors.stroke)
-                    ) {
-                        Text(emotion.emotionName, color = colors.text, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
-                    }
-                }
-            }
-        }
-        Text(
-            text = "选择此引擎后，普通朗读会使用该引擎；角色配音可在角色编辑页按发言人单独指定。",
-            color = colors.subText,
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
-            modifier = Modifier.padding(top = 14.dp)
-        )
-    }
-}
-
-@Composable
-private fun SpeakerOptionRow(option: SpeechVoiceOption, colors: SpeakEngineColors) {
-    Surface(
-        color = colors.page,
-        shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-        border = BorderStroke(1.dp, colors.stroke)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(option.speakerName, color = colors.text, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
-                    option.groupName.ifBlank { option.engineName },
-                    color = colors.subText,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (option.toneID.isNotBlank()) {
-                Text(
-                    option.toneID,
-                    color = colors.subText,
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 120.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun InfoPill(text: String, colors: SpeakEngineColors) {
-    Surface(
-        color = colors.page,
-        shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-        border = BorderStroke(1.dp, colors.stroke)
-    ) {
-        Text(text, color = colors.subText, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+        Text(text, color = style.secondaryText, fontSize = MaterialTheme.typography.labelSmall.fontSize, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
     }
 }
 
 @Composable
 private fun InlineEngineAction(text: String, color: Color, onClick: () -> Unit) {
     TextButton(onClick = onClick, modifier = Modifier.height(32.dp)) {
-        Text(text, color = color, fontSize = 12.sp)
+        Text(text, color = color, fontSize = MaterialTheme.typography.bodySmall.fontSize)
     }
 }
 
 @Composable
-private fun DetailEngineAction(text: String, color: Color, onClick: () -> Unit) {
+private fun SmallEngineAction(text: String, onClick: () -> Unit, style: AppDialogStyle) {
     Surface(
         modifier = Modifier.height(34.dp).clickable(onClick = onClick),
-        color = color.copy(alpha = 0.10f),
+        color = style.fieldSurface,
         shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.28f))
-    ) {
-        Box(modifier = Modifier.padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
-            Text(text, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
-
-@Composable
-private fun SmallEngineAction(text: String, onClick: () -> Unit, colors: SpeakEngineColors) {
-    Surface(
-        modifier = Modifier.height(34.dp).clickable(onClick = onClick),
-        color = colors.card,
-        shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-        border = BorderStroke(1.dp, colors.stroke)
+        border = BorderStroke(1.dp, style.stroke)
     ) {
         Box(modifier = Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-            Text(text, color = colors.text, fontSize = 12.sp)
+            Text(text, color = style.primaryText, fontSize = MaterialTheme.typography.bodySmall.fontSize)
         }
     }
-}
-
-private data class SpeakEngineColors(
-    val page: Color,
-    val card: Color,
-    val text: Color,
-    val subText: Color,
-    val stroke: Color,
-    val accent: Color,
-    val danger: Color
-)
-
-@Composable
-private fun rememberSpeakEngineColors(): SpeakEngineColors {
-    val context = LocalContext.current
-    val night = AppConfig.isNightTheme
-    val accent = context.accentColor
-    val page = Color(if (night) 0xff15171b.toInt() else 0xffffffff.toInt())
-    val card = Color(if (night) 0xff20242a.toInt() else 0xfff6f7fa.toInt())
-    val text = Color(context.primaryTextColor)
-    val subText = Color(context.secondaryTextColor)
-    val stroke = Color(if (night) 0x26ffffff else 0x18000000)
-    return SpeakEngineColors(
-        page = page,
-        card = card,
-        text = text,
-        subText = subText,
-        stroke = stroke,
-        accent = Color(accent),
-        danger = Color(ColorUtils.blendColors(0xffff4444.toInt(), accent, 0.08f))
-    )
 }

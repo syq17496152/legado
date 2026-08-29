@@ -1,8 +1,6 @@
 package io.legado.app.ui.rss.subscription
 
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.mutableStateListOf
@@ -52,17 +50,8 @@ class RuleSubActivity : BaseActivity<ActivityRuleSubBinding>(),
         initData()
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.source_subscription, menu)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_add -> addSubscription()
-        }
-        return super.onCompatOptionsItemSelected(item)
-    }
+    // H17（2026-08-28）：系统 options menu 链删除——TitleBar 已 GONE，本页全 Compose，
+    // 新增入口由 Compose 顶栏 onClick=::addSubscription 覆盖，inflate source_subscription 为不可达死代码。
 
     private fun initComposeContent() {
         binding.titleBar.visibility = View.GONE

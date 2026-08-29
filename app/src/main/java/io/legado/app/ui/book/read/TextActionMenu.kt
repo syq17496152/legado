@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.annotation.SuppressLint
 import android.app.SearchManager
 import android.content.Context
@@ -542,9 +543,9 @@ private fun TextActionChip(
             .width(width)
             .height(height)
             .padding(horizontal = 3.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(AppShapes.rounded(8))
             .background(background)
-            .border(1.dp, accent.copy(alpha = 0.16f), RoundedCornerShape(8.dp))
+            .border(1.dp, accent.copy(alpha = 0.16f), AppShapes.rounded(8))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -555,7 +556,7 @@ private fun TextActionChip(
         Text(
             text = action.title,
             color = textColor,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,

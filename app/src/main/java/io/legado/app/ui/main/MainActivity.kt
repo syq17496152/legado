@@ -77,6 +77,8 @@ import io.legado.app.lib.theme.applyUiTitleTypeface
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.service.BaseReadAloudService
@@ -419,12 +421,13 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
         rejectedShibbolethHash = null
         clearClip()
-        alert(R.string.shibboleth, R.string.shibboleth_import_confirm) {
-            positiveButton(R.string.sure) {
-                showDialogFragment(dialog)
-            }
-            cancelButton()
-        }
+        showComposeConfirmDialog(
+            title = getString(R.string.shibboleth),
+            message = getString(R.string.shibboleth_import_confirm),
+            positiveText = getString(R.string.sure),
+            negativeText = getString(R.string.cancel),
+            onPositive = { showDialogFragment(dialog) }
+        )
     }
 
     private fun notifyRejectedShibboleth(text: String) {
@@ -2146,16 +2149,20 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             return@sc
         }
         val privacyPolicy = String(assets.open("privacyPolicy.md").readBytes())
-        alert(getString(R.string.privacy_policy), privacyPolicy) {
-            positiveButton(R.string.agree) {
+        showComposeConfirmDialog(
+            title = getString(R.string.privacy_policy),
+            message = privacyPolicy,
+            positiveText = getString(R.string.agree),
+            negativeText = getString(R.string.refuse),
+            onPositive = {
                 LocalConfig.privacyPolicyOk = true
                 block.resume(true)
-            }
-            negativeButton(R.string.refuse) {
+            },
+            onNegative = {
                 finish()
                 block.resume(false)
             }
-        }
+        )
     }
 
     /**
@@ -2239,12 +2246,15 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             return
         }
         LocalConfig.appCrash = false
-        alert(getString(R.string.draw), "检测到阅读发生了崩溃，是否打开崩溃日志以便报告问题？") {
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.draw),
+            message = "检测到阅读发生了崩溃，是否打开崩溃日志以便报告问题？",
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            onPositive = {
                 showDialogFragment<CrashLogsDialog>()
             }
-            noButton()
-        }
+        )
     }
 
     /**
@@ -2259,12 +2269,13 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 withContext(IO) { AppCloudStorage.lastBackup().getOrNull() } ?: return@launch
             if (lastBackupFile.lastModify - LocalConfig.lastBackup > DateUtils.MINUTE_IN_MILLIS) {
                 LocalConfig.lastBackup = lastBackupFile.lastModify
-                alert(R.string.restore, R.string.webdav_after_local_restore_confirm) {
-                    cancelButton()
-                    okButton {
-                        viewModel.restoreWebDav(lastBackupFile.displayName)
-                    }
-                }
+                showComposeConfirmDialog(
+                    title = getString(R.string.restore),
+                    message = getString(R.string.webdav_after_local_restore_confirm),
+                    positiveText = getString(R.string.ok),
+                    negativeText = getString(R.string.cancel),
+                    onPositive = { viewModel.restoreWebDav(lastBackupFile.displayName) }
+                )
             }
         }
     }
@@ -2306,10 +2317,9 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             }
             onUpBooksBadgeView!!.setBadgeCount(it)
         }
-        observeEvent<String>(EventBus.RECREATE) {
-            refreshMainThemeBackground(force = true, scheduleWarmup = false)
-            recreate()
-        }
+        // T8①（theme-arch-gap）：RECREATE 统一由基类订阅驱动 recreate，
+        // 删自订阅消除双 observer 双 recreate；背景刷新由 recreate 后
+        // onCreate/onResume 链内 refreshMainThemeBackground 覆盖，行为等价
         observeEvent<Boolean>(EventBus.NAVIGATION_BAR_CHANGED) {
             if (it == AppConfig.isNightTheme) {
                 refreshAppearanceKit()
@@ -2437,6 +2447,12 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             updateSideNavigationItems()
             updateBottomNavigationIndicator(animate = true)
             scheduleLiquidGlassWarmup()
+            // 订阅 tab 被选中时强制幂等同步双形态（config-needs-restart-fix 真机兜底：
+            // 全屏设置覆盖期非粘性事件丢失的多锚点防御，消费幂等）
+            val fragmentId = realPositions.getOrNull(position) ?: getFragmentId(position)
+            if (fragmentId == idRss) {
+                (fragmentMap[idRss] as? RssFragment)?.syncRssModeIfChanged()
+            }
         }
 
     }

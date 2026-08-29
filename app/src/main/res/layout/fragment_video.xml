@@ -71,7 +71,8 @@
              根因：F1 真全屏修复中 titleBarNew.gone() 隐藏了整个 TitleBar 包括返回按钮，
              导致全屏模式下返回按钮不可见、不可点击（日志证据：全屏9秒内无VideoBack日志触发）。
              修复：添加独立的悬浮返回按钮，全屏时显示，参与 overlay controls 3秒自动隐藏。
-             非全屏时隐藏（由 titleBarNew 提供返回按钮）。 -->
+             非全屏时隐藏（由 titleBarNew 提供返回按钮）。
+             video-player-ux-fixes P5：padding 12→14dp，图标净尺寸 20dp 对齐 GlassTopAppBar R4 档。 -->
         <ImageButton
             android:id="@+id/btn_back_overlay"
             android:layout_width="48dp"
@@ -82,11 +83,34 @@
             android:contentDescription="@string/back"
             android:src="@drawable/ic_back"
             android:scaleType="centerInside"
-            android:padding="12dp"
+            android:padding="14dp"
             android:tint="#FFFFFF"
             android:visibility="gone"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintStart_toStartOf="parent" />
+
+        <!-- video-player-ux-fixes P4: 全屏态标题（左上角返回按钮右侧，垂直居中）
+             全屏时显示、左下角 tv_video_title 隐藏；退出全屏反向。
+             文本由 VideoFragment.setTitle() 统一双控件同步，随 overlay controls 3秒自动隐藏。 -->
+        <TextView
+            android:id="@+id/tv_title_fullscreen"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="48dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="#FFFFFF"
+            android:textSize="@dimen/text_14sp"
+            android:textStyle="bold"
+            android:shadowColor="#80000000"
+            android:shadowRadius="4"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="@id/btn_back_overlay"
+            app:layout_constraintBottom_toBottomOf="@id/btn_back_overlay"
+            app:layout_constraintStart_toEndOf="@id/btn_back_overlay"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHorizontal_bias="0.0" />
 
         <!-- 左下角区域：标题 + 线路选择器 + 集数选择器 + 全屏按钮
              占满宽度减去右侧按钮区域，内容左对齐，全屏按钮水平居中 -->

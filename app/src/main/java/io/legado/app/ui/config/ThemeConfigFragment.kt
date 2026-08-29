@@ -2,11 +2,9 @@ package io.legado.app.ui.config
 
 import android.os.Build
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuInflater
-import android.view.MenuItem
 import android.view.View
-import androidx.core.view.MenuProvider
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DarkMode
 import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
@@ -20,17 +18,26 @@ import io.legado.app.ui.config.compose.SettingChoiceSpec
 import io.legado.app.ui.config.compose.SettingPageSpec
 import io.legado.app.ui.config.compose.SettingSectionSpec
 import io.legado.app.ui.config.compose.SettingSwitchSpec
-import io.legado.app.utils.applyTint
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.startActivity
 
-class ThemeConfigFragment : ComposeSettingFragment(), MenuProvider {
+class ThemeConfigFragment : ComposeSettingFragment() {
 
     override val titleRes: Int = R.string.theme_setting
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        activity?.addMenuProvider(this, viewLifecycleOwner)
+        // H6: 三点菜单改由 ConfigActivity 顶栏 AppDropdownMenu 承载（替代 MenuProvider 系统菜单）
+        // topbar-icon-semantics-fix 3.1：DarkMode 恢复一级亮度图标（对齐原版 theme_config.xml showAsAction=always）
+        (activity as? ConfigActivity)?.setConfigMenuActions(
+            listOf(
+                MenuAction(Icons.Default.DarkMode, getString(R.string.theme_mode), alwaysShow = true) {
+                    AppConfig.isNightTheme = !AppConfig.isNightTheme
+                    ThemeConfig.applyDayNight(requireContext())
+                }
+            )
+        )
     }
 
     override fun buildPageSpec(): SettingPageSpec {
@@ -129,24 +136,6 @@ class ThemeConfigFragment : ComposeSettingFragment(), MenuProvider {
         )
     }
 
-    override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-        menuInflater.inflate(R.menu.theme_config, menu)
-        updateThemeModeMenu(menu)
-        menu.applyTint(requireContext())
-    }
-
-    override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-        when (menuItem.itemId) {
-            R.id.menu_theme_mode -> {
-                AppConfig.isNightTheme = !AppConfig.isNightTheme
-                menuItem.setIcon(themeModeIconRes())
-                ThemeConfig.applyDayNight(requireContext())
-                return true
-            }
-        }
-        return false
-    }
-
     override fun onSettingPreferenceChanged(key: String) {
         when (key) {
             PreferKey.launcherIcon -> LauncherIconHelp.changeIcon(
@@ -157,18 +146,6 @@ class ThemeConfigFragment : ComposeSettingFragment(), MenuProvider {
             PreferKey.transparentStatusBar,
             PreferKey.immersiveManageBar,
             PreferKey.immNavigationBar -> recreateActivities()
-        }
-    }
-
-    private fun updateThemeModeMenu(menu: Menu) {
-        menu.findItem(R.id.menu_theme_mode)?.setIcon(themeModeIconRes())
-    }
-
-    private fun themeModeIconRes(): Int {
-        return if (AppConfig.isNightTheme) {
-            R.drawable.ic_daytime
-        } else {
-            R.drawable.ic_brightness
         }
     }
 

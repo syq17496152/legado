@@ -4,12 +4,14 @@ import android.os.Bundle
 import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 import io.legado.app.R
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.EventBus
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
@@ -23,15 +25,17 @@ import io.legado.app.ui.main.bookshelf.BookshelfScreen
 import io.legado.app.ui.main.bookshelf.sortedByBook
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.utils.observeEvent
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2) {
 
@@ -51,6 +55,35 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
     private var refreshing by mutableStateOf(false)
     private var topScrollTrigger by mutableLongStateOf(0L)
     private var booksJob: Job? = null
+    // 1.3：刷新复位协程单一 Job 管理（同 1.2）
+    private var refreshResetJob: Job? = null
+
+    // 受控布局配置（config-needs-restart-fix AD-04/实锤2）：
+    // style2 原先零事件监听，配置变更完全无响应；现补 REFRESH+STRUCTURE 双监听（对齐 archive Fragment2:607-615）
+    private var shelfLayout by mutableIntStateOf(0)
+    private var shelfShowBookname by mutableIntStateOf(1)
+    private var shelfListItemStyle by mutableIntStateOf(0)
+    private var shelfIntroLines by mutableIntStateOf(2)
+    private var shelfMargin by mutableIntStateOf(12)
+    private var shelfShowUnread by mutableStateOf(false)
+    private var shelfShowReadProgress by mutableStateOf(false)
+    private var shelfShowLastUpdateTime by mutableStateOf(false)
+
+    private fun refreshShelfRenderConfig() {
+        shelfMargin = AppConfig.bookshelfMargin
+        shelfListItemStyle = AppConfig.bookshelfListItemStyle
+        shelfIntroLines = AppConfig.bookshelfListIntroLines
+        shelfShowUnread = AppConfig.showUnread
+        shelfShowReadProgress = AppConfig.showBookshelfReadProgress
+        shelfShowLastUpdateTime = AppConfig.showLastUpdateTime
+        shelfShowBookname = AppConfig.showBookname
+        shelfLayout = AppConfig.bookshelfLayout.coerceIn(0, 6)
+    }
+
+    private fun rebuildBookshelfContent() {
+        refreshShelfRenderConfig()
+        upConnect()
+    }
 
     override var groupId: Long
         get() = currentGroupId
@@ -73,12 +106,25 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
             isFolder = true,
             topScrollTrigger = topScrollTrigger,
             isRefreshing = refreshing,
+            layout = shelfLayout,
+            showBookname = shelfShowBookname,
+            listItemStyle = shelfListItemStyle,
+            introLines = shelfIntroLines,
+            margin = shelfMargin,
+            showUnread = shelfShowUnread,
+            showReadProgress = shelfShowReadProgress,
+            showLastUpdateTime = shelfShowLastUpdateTime,
             onRefresh = {
                 refreshing = true
                 activityViewModel.upToc(currentBooks, onlyUpdateRead)
-                lifecycleScope.launch {
-                    delay(1000)
-                    refreshing = false
+                // 1.3：事件驱动复位（同 1.2）——upToc 队列排空后收转圈，5s 超时兜底，
+                // 协程挂 viewLifecycleOwner（页面销毁自动取消，无冻结滞留）
+                refreshResetJob?.cancel()
+                refreshResetJob = viewLifecycleOwner.lifecycleScope.launch {
+                    val idle = withTimeoutOrNull(5_000) {
+                        activityViewModel.upTocIdle.first { it }
+                    }
+                    if (idle == true || refreshing) refreshing = false
                 }
             },
             onRetry = { upConnect() },
@@ -94,9 +140,19 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
     override val topBar: MainTopBarView get() = binding.topBar
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
+        // K7 存量迁移（先于字段重读与首帧组合，幂等）
+        migrateLegacyShowBookname()
+        refreshShelfRenderConfig()
         initComposeTopBar()
         initBookGroupData()
         initBooksData()
+        // REFRESH + STRUCTURE 双监听（对齐 archive Fragment2:607-615，config-needs-restart-fix 实锤 2）
+        observeEvent<String>(EventBus.BOOKSHELF_REFRESH) {
+            refreshShelfRenderConfig()
+        }
+        observeEvent<String>(EventBus.BOOKSHELF_STRUCTURE_CHANGED) {
+            rebuildBookshelfContent()
+        }
         binding.rvBookshelf.setContent {
             LegadoTheme {
                 BookshelfContent()

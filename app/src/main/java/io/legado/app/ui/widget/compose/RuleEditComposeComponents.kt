@@ -50,7 +50,7 @@ fun AppRuleTextField(
         Text(
             text = label,
             color = style.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.Medium,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
@@ -113,7 +113,7 @@ fun AppRuleSwitchRow(
                 text = text,
                 modifier = Modifier.weight(1f),
                 color = if (checked) style.primaryText else style.secondaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -155,7 +155,7 @@ fun AppRuleTabRow(
                 Text(
                     text = label,
                     color = if (selected) style.accent else style.primaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

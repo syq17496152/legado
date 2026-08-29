@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.widget.PopupMenu
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
@@ -14,7 +13,9 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.databinding.ItemChangeSourceBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
+import io.legado.app.ui.widget.ModernActionPopup
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.utils.activity
 import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
@@ -28,6 +29,8 @@ class ChangeBookSourceAdapter(
     val viewModel: ChangeBookSourceViewModel,
     val callBack: CallBack
 ) : DiffRecyclerAdapter<SearchBook, ItemChangeSourceBinding>(context) {
+
+    private var menuPopup: ModernActionPopup.Handle? = null
 
     override val diffItemCallback = object : DiffUtil.ItemCallback<SearchBook>() {
         override fun areItemsTheSame(oldItem: SearchBook, newItem: SearchBook): Boolean {
@@ -188,9 +191,11 @@ class ChangeBookSourceAdapter(
 
     private fun showMenu(view: View, searchBook: SearchBook?) {
         searchBook ?: return
-        val popupMenu = PopupMenu(context, view)
-        popupMenu.inflate(R.menu.change_source_item)
-        popupMenu.setOnMenuItemClickListener {
+        menuPopup = ModernActionPopup.showFromMenu(
+            anchor = view,
+            menuRes = R.menu.change_source_item,
+            previousPopup = menuPopup
+        ) {
             when (it.itemId) {
                 R.id.menu_top_source -> {
                     callBack.topSource(searchBook)
@@ -208,18 +213,20 @@ class ChangeBookSourceAdapter(
                     callBack.disableSource(searchBook)
                 }
 
-                R.id.menu_delete_source -> context.alert(R.string.draw) {
-                    setMessage(context.getString(R.string.sure_del) + "\n" + searchBook.originName)
-                    noButton()
-                    yesButton {
+                R.id.menu_delete_source -> view.activity?.showComposeConfirmDialog(
+                    title = context.getString(R.string.draw),
+                    message = context.getString(R.string.sure_del) + "\n" + searchBook.originName,
+                    positiveText = context.getString(R.string.yes),
+                    negativeText = context.getString(R.string.no),
+                    dangerPositive = true,
+                    onPositive = {
                         callBack.deleteSource(searchBook)
                         updateItems(0, itemCount, listOf<Int>())
                     }
-                }
+                )
             }
             true
         }
-        popupMenu.show()
     }
 
     interface CallBack {

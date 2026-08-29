@@ -37,6 +37,10 @@ import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.theme.bodyLargeX
 
 @Composable
 internal fun BookInfoManageScreen(
@@ -71,7 +75,7 @@ internal fun BookInfoManageScreen(
         Text(
             text = summaryText,
             color = palette.settings.secondaryText,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             modifier = Modifier.padding(horizontal = 18.dp),
             maxLines = 3,
             overflow = TextOverflow.Ellipsis
@@ -125,7 +129,7 @@ internal fun BookInfoManageScreen(
                     Text(
                         text = stringResource(R.string.book_info_style_immersive_title),
                         color = palette.settings.primaryText,
-                        fontSize = 17.sp,
+                        fontSize = MaterialTheme.typography.bodyLargeX.fontSize,
                         fontWeight = FontWeight.Medium,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -202,7 +206,7 @@ private fun StyleTabButton(
         Text(
             text = text,
             color = textColor,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -237,7 +241,7 @@ private fun ComponentItemRow(
                 Text(
                     text = stringResource(item.type.titleRes),
                     color = palette.settings.primaryText,
-                    fontSize = 15.sp,
+                    fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -246,7 +250,7 @@ private fun ComponentItemRow(
                 Text(
                     text = stringResource(item.type.hintRes),
                     color = palette.settings.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )

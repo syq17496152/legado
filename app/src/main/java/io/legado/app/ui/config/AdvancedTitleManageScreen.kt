@@ -1,5 +1,6 @@
 package io.legado.app.ui.config
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -57,6 +58,8 @@ import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 private val advancedTitleDateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
 
@@ -89,7 +92,7 @@ internal fun AdvancedTitleManageScreen(
                     LocalContext.current.getString(R.string.advanced_title_manage_summary)
                 },
                 color = palette.settings.secondaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 lineHeight = 18.sp,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
             )
@@ -159,7 +162,7 @@ private fun AdvancedTitleItem(
                 Text(
                     text = entry.name,
                     color = palette.settings.primaryText,
-                    fontSize = 16.sp,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -168,7 +171,7 @@ private fun AdvancedTitleItem(
                 Text(
                     text = buildEntryInfo(entry, active),
                     color = palette.settings.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -214,7 +217,7 @@ private fun AdvancedTitlePreview(
     }
     Surface(
         modifier = Modifier.size(width = 112.dp, height = 72.dp),
-        shape = RoundedCornerShape(10.dp),
+        shape = AppShapes.rounded(10),
         color = palette.miuix.surfaceVariant,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
@@ -286,7 +289,7 @@ private fun AdvancedTitleActionButton(
             Text(
                 text = text,
                 color = if (enabled) palette.accent else palette.secondaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 lineHeight = 18.sp,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,

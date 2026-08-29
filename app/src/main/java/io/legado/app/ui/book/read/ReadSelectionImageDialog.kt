@@ -1,38 +1,75 @@
 package io.legado.app.ui.book.read
 
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.core.view.isVisible
+import android.widget.ImageView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
-import io.legado.app.base.BaseDialogFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.data.entities.AiGeneratedImage
-import io.legado.app.databinding.DialogReadSelectionImageBinding
 import io.legado.app.help.ai.AiImageGalleryManager
 import io.legado.app.help.ai.AiImagePromptRewriter
 import io.legado.app.help.ai.AiImageService
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.glide.ImageLoader
-import io.legado.app.lib.theme.UiCorner
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.themeCardColorOrDefault
-import io.legado.app.lib.theme.themeMutedColorOrDefault
 import io.legado.app.model.ReadBook
-import io.legado.app.utils.gone
+import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
+import io.legado.app.ui.widget.compose.LegadoMiuixPalette
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.toMiuixPalette
+import io.legado.app.ui.widget.image.PhotoView
 import io.legado.app.utils.postEvent
-import io.legado.app.utils.setLayout
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class ReadSelectionImageDialog() : BaseDialogFragment(R.layout.dialog_read_selection_image) {
+class ReadSelectionImageDialog() : ComposeDialogFragment() {
+
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     constructor(prompt: String, paragraphIndex: Int, paragraphText: String) : this() {
         arguments = Bundle().apply {
@@ -42,8 +79,12 @@ class ReadSelectionImageDialog() : BaseDialogFragment(R.layout.dialog_read_selec
         }
     }
 
-    private val binding by viewBinding(DialogReadSelectionImageBinding::bind)
-    private var currentImage: AiGeneratedImage? = null
+    private var currentImage by mutableStateOf<AiGeneratedImage?>(null)
+    private var loading by mutableStateOf(true)
+    private var optimizing by mutableStateOf(false)
+    private var inserting by mutableStateOf(false)
+    private var errorMessage by mutableStateOf<String?>(null)
+    private var promptValue by mutableStateOf(TextFieldValue(""))
     private var generateJob: Job? = null
     private val prompt: String
         get() = arguments?.getString(EXTRA_PROMPT).orEmpty()
@@ -52,40 +93,131 @@ class ReadSelectionImageDialog() : BaseDialogFragment(R.layout.dialog_read_selec
     private val paragraphText: String
         get() = arguments?.getString(EXTRA_PARAGRAPH_TEXT).orEmpty()
 
-    override fun onStart() {
-        super.onStart()
-        setLayout(0.96f, ViewGroup.LayoutParams.WRAP_CONTENT)
-    }
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        promptValue = TextFieldValue(prompt)
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                val style = rememberAppDialogStyle()
+                val palette = style.toMiuixPalette()
+                LaunchedEffect(Unit) { generateImage() }
+                AppDialogFrame(
+                    title = stringResource(R.string.ai_image_generate),
+                    scrollContent = false,
+                    content = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(340.dp)
+                                .clip(RoundedCornerShape(style.actionRadius))
+                                .background(style.fieldSurface),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            when {
+                                loading -> {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(42.dp),
+                                        color = style.accent
+                                    )
+                                }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        binding.toolBar.setBackgroundColor(primaryColor)
-        binding.toolBar.setNavigationOnClickListener {
-            dismissAllowingStateLoss()
+                                errorMessage != null -> {
+                                    Text(
+                                        text = errorMessage.orEmpty(),
+                                        color = style.secondaryText,
+                                        fontSize = 14.sp,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(18.dp)
+                                    )
+                                }
+
+                                currentImage != null -> {
+                                    val target = currentImage
+                                    AndroidView(
+                                        factory = { ctx ->
+                                            PhotoView(ctx).apply {
+                                                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                                            }
+                                        },
+                                        update = { photoView ->
+                                            ImageLoader.load(requireContext(), target!!.localPath)
+                                                .error(R.drawable.image_loading_error)
+                                                .into(photoView)
+                                        },
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = promptValue,
+                            onValueChange = { promptValue = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 3,
+                            maxLines = 6,
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Sentences
+                            ),
+                            shape = RoundedCornerShape(style.actionRadius),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = style.primaryText,
+                                unfocusedTextColor = style.primaryText,
+                                focusedContainerColor = style.fieldSurface,
+                                unfocusedContainerColor = style.fieldSurface,
+                                cursorColor = style.accent,
+                                focusedBorderColor = style.accent.copy(alpha = 0.55f),
+                                unfocusedBorderColor = style.stroke,
+                                focusedPlaceholderColor = style.secondaryText,
+                                unfocusedPlaceholderColor = style.secondaryText
+                            ),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                color = style.primaryText,
+                                fontFamily = style.bodyFontFamily
+                            ),
+                            placeholder = {
+                                Text(
+                                    text = stringResource(R.string.ai_image_prompt_hint),
+                                    color = style.secondaryText,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        )
+                    },
+                    actions = {
+                        DialogActionButton(
+                            text = stringResource(R.string.ai_image_optimize_prompt),
+                            enabled = !loading && !optimizing,
+                            palette = palette,
+                            cornerRadius = style.actionRadius,
+                            onClick = { optimizePrompt() }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        DialogActionButton(
+                            text = stringResource(R.string.ai_image_regenerate),
+                            enabled = !loading,
+                            palette = palette,
+                            cornerRadius = style.actionRadius,
+                            onClick = { generateImage() }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        DialogActionButton(
+                            text = stringResource(R.string.ai_image_insert),
+                            enabled = !loading && !inserting && currentImage != null,
+                            palette = palette,
+                            cornerRadius = style.actionRadius,
+                            onClick = { insertCurrentImage() }
+                        )
+                    }
+                )
+            }
         }
-        val actionBackground = UiCorner.actionSelector(
-            requireContext().themeCardColorOrDefault(),
-            requireContext().themeMutedColorOrDefault(),
-            UiCorner.actionRadius(requireContext())
-        )
-        listOf(binding.btnOptimizePrompt, binding.btnRegenerate, binding.btnInsert).forEach {
-            it.background = actionBackground
-        }
-        binding.etPrompt.background = UiCorner.panelRounded(
-            requireContext(),
-            requireContext().themeCardColorOrDefault(),
-            UiCorner.panelRadius(requireContext())
-        )
-        binding.etPrompt.setText(prompt)
-        binding.btnOptimizePrompt.setOnClickListener {
-            optimizePrompt()
-        }
-        binding.btnRegenerate.setOnClickListener {
-            generateImage()
-        }
-        binding.btnInsert.setOnClickListener {
-            insertCurrentImage()
-        }
-        generateImage()
     }
 
     override fun onDestroyView() {
@@ -94,14 +226,15 @@ class ReadSelectionImageDialog() : BaseDialogFragment(R.layout.dialog_read_selec
     }
 
     private fun generateImage() {
-        val content = binding.etPrompt.text?.toString().orEmpty().trim()
+        val content = promptValue.text.trim()
         if (content.isBlank()) {
             showError(getString(R.string.ai_image_no_selection))
             return
         }
         generateJob?.cancel()
         currentImage = null
-        setLoading(true)
+        errorMessage = null
+        loading = true
         generateJob = lifecycleScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -112,12 +245,8 @@ class ReadSelectionImageDialog() : BaseDialogFragment(R.layout.dialog_read_selec
                 }
             }.onSuccess { image ->
                 currentImage = image
-                ImageLoader.load(requireContext(), image.localPath)
-                    .error(R.drawable.image_loading_error)
-                    .into(binding.photoView)
-                binding.tvState.gone()
-                binding.photoView.visible()
-                setLoading(false)
+                errorMessage = null
+                loading = false
             }.onFailure { error ->
                 showError(error.localizedMessage ?: getString(R.string.ai_image_generate_failed))
             }
@@ -125,30 +254,32 @@ class ReadSelectionImageDialog() : BaseDialogFragment(R.layout.dialog_read_selec
     }
 
     private fun optimizePrompt() {
-        val content = binding.etPrompt.text?.toString().orEmpty().trim()
+        val content = promptValue.text.trim()
         if (content.isBlank()) {
             showError(getString(R.string.ai_image_no_selection))
             return
         }
-        binding.btnOptimizePrompt.isEnabled = false
+        optimizing = true
         lifecycleScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
                     AiImagePromptRewriter.rewrite(content, paragraphText)
                 }
             }.onSuccess { rewritten ->
-                binding.etPrompt.setText(rewritten)
-                binding.etPrompt.setSelection(binding.etPrompt.text?.length ?: 0)
+                promptValue = TextFieldValue(
+                    rewritten,
+                    selection = TextRange(rewritten.length)
+                )
             }.onFailure { error ->
                 showError(error.localizedMessage ?: getString(R.string.ai_image_generate_failed))
             }
-            binding.btnOptimizePrompt.isEnabled = true
+            optimizing = false
         }
     }
 
     private fun insertCurrentImage() {
         val image = currentImage ?: return
-        binding.btnInsert.isEnabled = false
+        inserting = true
         lifecycleScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -166,7 +297,7 @@ class ReadSelectionImageDialog() : BaseDialogFragment(R.layout.dialog_read_selec
             }.onFailure { error ->
                 showError(error.localizedMessage ?: getString(R.string.ai_image_insert_failed))
             }
-            binding.btnInsert.isEnabled = currentImage != null
+            inserting = false
         }
     }
 
@@ -222,22 +353,26 @@ class ReadSelectionImageDialog() : BaseDialogFragment(R.layout.dialog_read_selec
             .trim()
     }
 
-    private fun setLoading(loading: Boolean) {
-        binding.progressBar.isVisible = loading
-        binding.tvState.gone()
-        binding.btnOptimizePrompt.isEnabled = !loading
-        binding.btnRegenerate.isEnabled = !loading
-        binding.btnInsert.isEnabled = !loading && currentImage != null
-        if (loading) {
-            binding.photoView.gone()
-        }
+    private fun showError(message: String) {
+        loading = false
+        errorMessage = message
     }
 
-    private fun showError(message: String) {
-        setLoading(false)
-        binding.photoView.gone()
-        binding.tvState.visible()
-        binding.tvState.text = message
+    @Composable
+    private fun DialogActionButton(
+        text: String,
+        enabled: Boolean,
+        palette: LegadoMiuixPalette,
+        cornerRadius: Dp,
+        onClick: () -> Unit
+    ) {
+        LegadoMiuixActionButton(
+            text = text,
+            palette = palette,
+            onClick = { if (enabled) onClick() },
+            cornerRadius = cornerRadius,
+            modifier = Modifier.alpha(if (enabled) 1f else 0.45f)
+        )
     }
 
     companion object {

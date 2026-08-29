@@ -12,7 +12,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -30,6 +29,7 @@ import io.legado.app.model.Download
 import io.legado.app.model.VideoPlay
 import io.legado.app.service.DownloadTaskType
 import io.legado.app.data.PlayHistoryStore
+import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.utils.gone
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.visible
@@ -105,7 +105,10 @@ class VideoFragment : Fragment() {
     private var controlsLayer: ConstraintLayout? = null
     private var leftBottomContainer: LinearLayout? = null
     private var tvVideoTitle: TextView? = null
+    // video-player-ux-fixes P4: 全屏态标题（左上角返回按钮右侧），与 tvVideoTitle 由 setTitle() 统一同步
+    private var tvTitleFullscreen: TextView? = null
     private var tvRouteSelector: TextView? = null
+    private var routeMenuPopup: ModernActionPopup.Handle? = null
     private var rvEpisodes: RecyclerView? = null
     private var rightButtons: LinearLayout? = null
     private var btnStar: ImageButton? = null
@@ -215,6 +218,7 @@ class VideoFragment : Fragment() {
         controlsLayer = null
         leftBottomContainer = null
         tvVideoTitle = null
+        tvTitleFullscreen = null
         tvRouteSelector = null
         rvEpisodes = null
         rightButtons = null
@@ -544,6 +548,10 @@ class VideoFragment : Fragment() {
             updateFullscreenButtonIcon(true)
             // B1+ 修复：全屏模式下显示悬浮返回按钮（titleBarNew 已被 gone() 隐藏）
             btnBackOverlay?.visible()
+            // video-player-ux-fixes P4: 全屏态标题移到左上角（返回按钮右侧），左下角标题隐藏
+            //（线路/集数选择器仍在左下角容器内，不受影响）
+            tvTitleFullscreen?.visible()
+            tvVideoTitle?.gone()
             scheduleAutoHide()  // F2: 显示控件后 3 秒自动隐藏
         } else {
             // 退出横屏全屏态
@@ -553,6 +561,9 @@ class VideoFragment : Fragment() {
             updateFullscreenButtonIcon(false)
             // B1+ 修复：退出全屏时隐藏悬浮返回按钮（titleBarNew 恢复显示提供返回按钮）
             btnBackOverlay?.gone()
+            // video-player-ux-fixes P4: 退出全屏恢复左下角标题，隐藏全屏态标题
+            tvVideoTitle?.visible()
+            tvTitleFullscreen?.gone()
             // 恢复全屏按钮显示逻辑（仅横屏视频显示）
             val pv = _playerView
             if (pv != null && pv.currentVideoWidth > 0 && pv.currentVideoHeight > 0) {
@@ -566,7 +577,18 @@ class VideoFragment : Fragment() {
      * 更新视频标题（由 Activity 在 VIDEO_SUB_TITLE 事件时调用）
      */
     fun updateVideoTitle(title: String) {
-        tvVideoTitle?.text = title
+        setTitle(title)
+    }
+
+    /**
+     * video-player-ux-fixes P4: 标题更新统一入口
+     * 双控件同步：非全屏 tv_video_title（左下角）/ 全屏 tv_title_fullscreen（返回按钮右侧）
+     * 所有标题赋值点必须走此方法，禁止直接操作单一控件（防双数据源分叉）
+     */
+    private fun setTitle(text: String?) {
+        val value = text ?: ""
+        tvVideoTitle?.text = value
+        tvTitleFullscreen?.text = value
     }
 
     /**
@@ -703,8 +725,13 @@ class VideoFragment : Fragment() {
         }
         // 右侧功能按钮容器（U1：现在包含全屏按钮作为第一个子控件）
         rightButtons?.let { list.add(it) }
-        // B1+ 修复：全屏模式悬浮返回按钮参与自动隐藏（仅全屏时 visible）
-        btnBackOverlay?.let { list.add(it) }
+        // B1+ 修复 + video-player-ux-fixes P4：全屏专属控件（悬浮返回按钮/全屏态标题）参与 3 秒自动隐藏
+        // 仅全屏态加入显隐组：showControlsAnimated 会无条件 visible GONE 控件，
+        // 非全屏时若加入列表会被单击误显（防 P4 新增全屏标题放大 B1+ 存量隐患）
+        if (currentState == PlayState.FULLSCREEN) {
+            btnBackOverlay?.let { list.add(it) }
+            tvTitleFullscreen?.let { list.add(it) }
+        }
         return list
     }
 
@@ -714,6 +741,8 @@ class VideoFragment : Fragment() {
         controlsLayer = view.findViewById(R.id.controlsLayer)
         leftBottomContainer = view.findViewById(R.id.left_bottom_container)
         tvVideoTitle = view.findViewById(R.id.tv_video_title)
+        // video-player-ux-fixes P4: 绑定全屏态标题
+        tvTitleFullscreen = view.findViewById(R.id.tv_title_fullscreen)
         tvRouteSelector = view.findViewById(R.id.tv_route_selector)
         rvEpisodes = view.findViewById(R.id.rv_episodes)
         rightButtons = view.findViewById(R.id.right_buttons)
@@ -721,6 +750,12 @@ class VideoFragment : Fragment() {
         btnSettings = view.findViewById(R.id.btn_settings)
         btnFullscreen = view.findViewById(R.id.btn_fullscreen)
         btnDownload = view.findViewById(R.id.btn_download)
+        // video-player-ux-fixes P1: 本地已下载视频（file:// 直连）无下载意义，隐藏下载按钮
+        // （判定链：DownloadManageActivity 播放时 putExtra videoUrl=Uri.fromFile(file)，
+        //   在线直链 http(s) 不受影响；Activity 生命周期内 videoUrl 不变，无需动态恢复）
+        if (VideoPlay.videoUrl?.startsWith("file://") == true) {
+            btnDownload?.gone()
+        }
         // B1+ 修复：初始化全屏模式悬浮返回按钮
         btnBackOverlay = view.findViewById(R.id.btn_back_overlay)
         btnBackOverlay?.setOnClickListener {
@@ -735,7 +770,7 @@ class VideoFragment : Fragment() {
                 VideoPlay.rssEpisodes?.getOrNull(episodeIndex)?.title ?: VideoPlay.videoTitle ?: ""
             else -> VideoPlay.videoTitle ?: ""
         }
-        tvVideoTitle?.text = title
+        setTitle(title)
 
         // R3 REQ-17 线路选择器（多线路时显示，标题下方）
         initRouteSelector()
@@ -791,7 +826,7 @@ class VideoFragment : Fragment() {
 
     /**
      * 初始化线路选择器
-     * 多线路时显示，点击弹出 PopupMenu 选择线路
+     * 多线路时显示，点击弹出 ModernActionPopup 选择线路
      */
     private fun initRouteSelector() {
         val routes = VideoPlay.rssRoutes
@@ -802,32 +837,44 @@ class VideoFragment : Fragment() {
         tvRouteSelector?.visible()
         updateRouteSelectorText()
         tvRouteSelector?.setOnClickListener { anchor ->
-            val popup = PopupMenu(requireContext(), anchor)
-            routes.forEachIndexed { index, route ->
-                popup.menu.add(0, index, index, route.name)
-            }
-            popup.setOnMenuItemClickListener { item ->
-                val newIndex = item.itemId
-                if (newIndex != VideoPlay.rssRouteIndex) {
-                    if (VideoPlay.isNewRoutesMode()) {
-                        // 新模式：异步按需采集新线路集数（switchToRoute 内部处理播放+UI更新）
-                        val player = _playerView?.currentPlayer
-                        if (player != null && VideoPlay.switchToRoute(newIndex, player)) {
-                            updateRouteSelectorText()
-                        }
-                    } else {
-                        // 旧模式：内存切换
-                        val episode = VideoPlay.switchRssRoute(newIndex)
-                        if (episode != null) {
-                            updateRouteSelectorText()
-                            updateEpisodeList()
-                            (activity as? VideoSettingsPanel.SettingsPanelCallback)?.onRouteChanged(episode)
-                        }
-                    }
+            showRouteSelector(anchor)
+        }
+    }
+
+    /** 弹出线路选择菜单（ModernActionPopup 动态菜单，ui-theme-gap-audit G7） */
+    private fun showRouteSelector(anchor: View) {
+        val routes = VideoPlay.rssRoutes ?: return
+        routeMenuPopup = ModernActionPopup.show(
+            anchor,
+            routes.mapIndexed { index, route ->
+                ModernActionPopup.Action(
+                    title = route.name,
+                    checked = index == VideoPlay.rssRouteIndex
+                ) {
+                    switchRoute(index)
                 }
-                true
+            },
+            routeMenuPopup
+        )
+    }
+
+    /** 切换线路（新/旧模式统一入口） */
+    private fun switchRoute(newIndex: Int) {
+        if (newIndex == VideoPlay.rssRouteIndex) return
+        if (VideoPlay.isNewRoutesMode()) {
+            // 新模式：异步按需采集新线路集数（switchToRoute 内部处理播放+UI更新）
+            val player = _playerView?.currentPlayer
+            if (player != null && VideoPlay.switchToRoute(newIndex, player)) {
+                updateRouteSelectorText()
             }
-            popup.show()
+        } else {
+            // 旧模式：内存切换
+            val episode = VideoPlay.switchRssRoute(newIndex)
+            if (episode != null) {
+                updateRouteSelectorText()
+                updateEpisodeList()
+                (activity as? VideoSettingsPanel.SettingsPanelCallback)?.onRouteChanged(episode)
+            }
         }
     }
 
@@ -871,8 +918,8 @@ class VideoFragment : Fragment() {
                     VideoPlay.playRssEpisode(pv, episode)
                     // 更新选中状态
                     (rv.adapter as? RssEpisodeAdapter)?.updateSelectedPosition(index)
-                    // 更新标题
-                    tvVideoTitle?.text = episode.title
+                    // 更新标题（P4: 双控件统一同步）
+                    setTitle(episode.title)
                 }
             }
         }
@@ -903,36 +950,11 @@ class VideoFragment : Fragment() {
             updateRouteSelectorText()
             // 重新绑定点击事件（线路列表已变化）
             tvRouteSelector?.setOnClickListener { anchor ->
-                val popup = PopupMenu(requireContext(), anchor)
-                routes.forEachIndexed { index, route ->
-                    popup.menu.add(0, index, index, route.name)
-                }
-                popup.setOnMenuItemClickListener { item ->
-                    val newIndex = item.itemId
-                    if (newIndex != VideoPlay.rssRouteIndex) {
-                        if (VideoPlay.isNewRoutesMode()) {
-                            // 新模式：异步按需采集新线路集数
-                            val player = _playerView?.currentPlayer
-                            if (player != null && VideoPlay.switchToRoute(newIndex, player)) {
-                                updateRouteSelectorText()
-                            }
-                        } else {
-                            // 旧模式：内存切换
-                            val episode = VideoPlay.switchRssRoute(newIndex)
-                            if (episode != null) {
-                                updateRouteSelectorText()
-                                updateEpisodeList()
-                                (activity as? VideoSettingsPanel.SettingsPanelCallback)?.onRouteChanged(episode)
-                            }
-                        }
-                    }
-                    true
-                }
-                popup.show()
+                showRouteSelector(anchor)
             }
         }
-        // 更新标题
-        tvVideoTitle?.text = VideoPlay.videoTitle ?: ""
+        // 更新标题（P4: 双控件统一同步）
+        setTitle(VideoPlay.videoTitle)
     }
 
     // video-gesture-overhaul: 快退/快进按钮已移除，改为左右滑动 seek（R2/R3）
@@ -1248,7 +1270,8 @@ class VideoFragment : Fragment() {
             return
         }
         val ratio = dx / screenWidth  // -1.0 ~ 1.0（左滑负/右滑正）
-        val offset = (ratio * duration).toLong()
+        // video-player-ux-fixes P2: 乘以用户可配置的滑动灵敏度（默认 10=1.0x 保持原行为）
+        val offset = (ratio * (VideoPlay.seekSensitivity / 10f) * duration).toLong()
         // 修复 seek 预览漂移: 基于 ACTION_DOWN 时记录的 slideSeekStartPos 计算，而非实时 currentPosition
         // 原因: currentPosition 在视频播放过程中持续增长，滑动过程中用它做基准会导致 seekTarget 不断漂移
         seekTarget = (slideSeekStartPos + offset).coerceIn(0, duration)

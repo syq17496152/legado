@@ -82,6 +82,7 @@ import io.legado.app.lib.theme.titleTypeface
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.utils.ColorUtils
 import kotlin.math.roundToInt
+import io.legado.app.ui.theme.bodySecondary
 
 private const val MAX_SAVEABLE_MULTI_CHOICE_ITEMS = 128
 private const val MAX_ACTION_LIST_ITEMS = 64
@@ -191,7 +192,7 @@ fun AppDialogFrame(
                 Text(
                     text = title,
                     color = style.primaryText,
-                    fontSize = 20.sp,
+                    fontSize = MaterialTheme.typography.titleLarge.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = style.titleFontFamily,
                     maxLines = 2,
@@ -264,7 +265,7 @@ private fun AppDialogMessageText(
         Text(
             text = message,
             color = style.secondaryText,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             lineHeight = 20.sp
         )
     }
@@ -292,7 +293,7 @@ private fun AppDialogTextField(
             Text(
                 text = it,
                 color = style.secondaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 fontWeight = FontWeight.Medium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -663,7 +664,7 @@ private fun SuggestionInputRow(
                 text = text,
                 modifier = Modifier.weight(1f),
                 color = style.primaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = FontWeight.Medium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -1006,7 +1007,7 @@ class ComposeNumberPickerDialog : ComposeDialogFragment() {
                                 Text(
                                     text = "${currentValue.coerceIn(safeMin, safeMax)}%",
                                     color = style.primaryText,
-                                    fontSize = 24.sp,
+                                    fontSize = MaterialTheme.typography.headlineSmall.fontSize,
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.fillMaxWidth(),
                                     textAlign = TextAlign.Center
@@ -1085,7 +1086,7 @@ class ComposeNumberPickerDialog : ComposeDialogFragment() {
                                 "${formatPickerValue(safeMin, isDecimalMode)} - ${formatPickerValue(safeMax, isDecimalMode)}"
                             },
                             color = style.secondaryText,
-                            fontSize = 12.sp,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Center
                         )
@@ -1195,7 +1196,7 @@ private fun NumberPickerStepButton(
             Text(
                 text = text,
                 color = if (enabled) palette.primaryText else palette.secondaryText.copy(alpha = 0.52f),
-                fontSize = 24.sp,
+                fontSize = MaterialTheme.typography.headlineSmall.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center
             )
@@ -1230,6 +1231,7 @@ class ComposeMultiChoiceDialog : ComposeDialogFragment() {
     private var onPositive: ((BooleanArray) -> Unit)? = null
     private var onItemCheckedChange: ((Int, Boolean) -> Unit)? = null
     private var onDismissAction: (() -> Unit)? = null
+    private var onNeutral: (() -> Unit)? = null
 
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
@@ -1277,6 +1279,7 @@ class ComposeMultiChoiceDialog : ComposeDialogFragment() {
                     .orEmpty()
                     .ifBlank { stringResource(R.string.cancel) }
                 val canSubmit = onPositive != null
+                val neutralText = args.getString(ARG_NEUTRAL_TEXT)?.takeIf { it.isNotBlank() }
                 AppDialogFrame(
                     title = args.getString(ARG_TITLE).orEmpty(),
                     message = args.getString(ARG_MESSAGE),
@@ -1321,6 +1324,17 @@ class ComposeMultiChoiceDialog : ComposeDialogFragment() {
                     },
                     actions = {
                         val palette = style.toMiuixPalette()
+                        if (neutralText != null && onNeutral != null) {
+                            LegadoMiuixActionButton(
+                                text = neutralText,
+                                palette = palette,
+                                onClick = {
+                                    dismissAllowingStateLoss()
+                                    onNeutral?.invoke()
+                                },
+                                cornerRadius = style.actionRadius
+                            )
+                        }
                         LegadoMiuixActionButton(
                             text = negativeText,
                             palette = palette,
@@ -1361,7 +1375,9 @@ class ComposeMultiChoiceDialog : ComposeDialogFragment() {
             negativeText: String,
             onItemCheckedChange: ((Int, Boolean) -> Unit)? = null,
             onDismissAction: (() -> Unit)? = null,
-            onPositive: ((BooleanArray) -> Unit)? = null
+            onPositive: ((BooleanArray) -> Unit)? = null,
+            neutralText: String? = null,
+            onNeutral: (() -> Unit)? = null
         ): ComposeMultiChoiceDialog {
             val safeLabels = labels.toList()
             return ComposeMultiChoiceDialog().apply {
@@ -1376,6 +1392,7 @@ class ComposeMultiChoiceDialog : ComposeDialogFragment() {
                 this.onPositive = onPositive
                 this.onItemCheckedChange = onItemCheckedChange
                 this.onDismissAction = onDismissAction
+                this.onNeutral = onNeutral
             }
         }
 
@@ -1385,6 +1402,7 @@ class ComposeMultiChoiceDialog : ComposeDialogFragment() {
         private const val ARG_MESSAGE = "message"
         private const val ARG_POSITIVE_TEXT = "positiveText"
         private const val ARG_NEGATIVE_TEXT = "negativeText"
+        private const val ARG_NEUTRAL_TEXT = "neutralText"
     }
 }
 
@@ -1819,7 +1837,7 @@ fun AppDialogSwitchRow(
                 text = text,
                 modifier = Modifier.weight(1f),
                 color = if (checked) style.primaryText else style.secondaryText,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -1848,7 +1866,7 @@ fun AppDialogOptionGroup(
         Text(
             text = title,
             color = style.accent,
-            fontSize = 15.sp,
+            fontSize = MaterialTheme.typography.bodySecondary.fontSize,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(vertical = 6.dp)
         )

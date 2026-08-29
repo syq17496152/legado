@@ -59,41 +59,11 @@ class RssArticlesAdapter4(context: Context, callBack: CallBack) :
                 tvTitle.setTextColor(context.getCompatColor(R.color.primaryText))
             }
             tvPubDate.text = item.pubDate
-            if (item.image.isNullOrBlank() && !callBack.isGridLayout) {
-                imageView.gone()
-            } else {
-                val options =
-                    RequestOptions().set(OkHttpModelLoader.sourceOriginOption, item.origin)
-                ImageLoader.load(context, item.image).apply(options).apply {
-                    if (callBack.isGridLayout) {
-                        placeholder(R.drawable.transparent_placeholder)
-                    } else {
-                        addListener(object : RequestListener<Drawable> {
-                            override fun onLoadFailed(
-                                e: GlideException?,
-                                model: Any?,
-                                target: Target<Drawable>,
-                                isFirstResource: Boolean
-                            ): Boolean {
-                                imageView.gone()
-                                return false
-                            }
-
-                            override fun onResourceReady(
-                                resource: Drawable,
-                                model: Any,
-                                target: Target<Drawable>?,
-                                dataSource: DataSource,
-                                isFirstResource: Boolean
-                            ): Boolean {
-                                imageView.visible()
-                                return false
-                            }
-
-                        })
-                    }
-                }.into(imageView)
-            }
+            loadArticleImage(
+                holder, imageView, item,
+                gridPlaceholder = R.drawable.transparent_placeholder,
+                hideWhenBlank = !callBack.isGridLayout
+            )
         }
     }
 

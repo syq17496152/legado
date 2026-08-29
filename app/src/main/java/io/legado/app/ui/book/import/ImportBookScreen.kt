@@ -87,15 +87,25 @@ fun ImportBookScreen(
             navIcon = Icons.AutoMirrored.Filled.ArrowBack,
             onNavClick = onBack,
             actions = {
-                Box {
-                    IconButton(onClick = { moreMenuVisible = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = null)
+                // topbar-icon-semantics-fix 3.3：alwaysShow 项直出一级图标
+                //（对齐原版 book_remote.xml/import_book.xml always：刷新/排序/选目录）
+                menuActions.filter { it.alwaysShow }.forEach { action ->
+                    IconButton(onClick = action.onClick) {
+                        Icon(action.icon, contentDescription = action.title)
                     }
-                    AppDropdownMenu(
-                        expanded = moreMenuVisible,
-                        onDismiss = { moreMenuVisible = false },
-                        actions = menuActions
-                    )
+                }
+                val overflowActions = menuActions.filter { !it.alwaysShow }
+                if (overflowActions.isNotEmpty()) {
+                    Box {
+                        IconButton(onClick = { moreMenuVisible = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = null)
+                        }
+                        AppDropdownMenu(
+                            expanded = moreMenuVisible,
+                            onDismiss = { moreMenuVisible = false },
+                            actions = overflowActions
+                        )
+                    }
                 }
             }
         )

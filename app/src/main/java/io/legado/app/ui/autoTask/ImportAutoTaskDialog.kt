@@ -50,6 +50,8 @@ import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.showDialogFragment
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 /**
  * 自动任务批量导入弹框（Compose 化，ViewModel 受控渲染）。
@@ -151,7 +153,7 @@ class ImportAutoTaskDialog() : ComposeDialogFragment(),
                     errorMsg != null -> Text(
                         text = errorMsg.orEmpty(),
                         color = style.secondaryText,
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -178,7 +180,7 @@ class ImportAutoTaskDialog() : ComposeDialogFragment(),
                     else -> Text(
                         text = stringResource(R.string.wrong_format),
                         color = style.secondaryText,
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -247,7 +249,7 @@ class ImportAutoTaskDialog() : ComposeDialogFragment(),
             Text(
                 text = task.name.ifBlank { task.id },
                 color = primaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
@@ -255,13 +257,13 @@ class ImportAutoTaskDialog() : ComposeDialogFragment(),
             Text(
                 text = statusText,
                 color = secondaryText,
-                fontSize = 12.sp
+                fontSize = MaterialTheme.typography.bodySmall.fontSize
             )
             TextButton(onClick = { onOpen() }) {
                 Text(
                     text = stringResource(R.string.open),
                     color = accent,
-                    fontSize = 13.sp
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize
                 )
             }
         }

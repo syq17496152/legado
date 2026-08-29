@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.ui.widget.components.AppShapes
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
@@ -70,25 +71,11 @@ fun PingTestScreen(
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.secondary,
-                    scrolledContainerColor = MaterialTheme.colorScheme.secondary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSecondary,
-                    titleContentColor = MaterialTheme.colorScheme.onSecondary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSecondary
-                ),
-                title = {
-                    Text(
-                        text = stringResource(R.string.debug_ping_test),
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
+            // H12: 裸 M3 TopAppBar → GlassTopAppBar（对齐 Debug 其余 6 页：primaryColor 主色 + 顶栏管理 TopBarConfig）
+            GlassTopAppBar(
+                title = stringResource(R.string.debug_ping_test),
+                navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                onNavClick = onBackClick,
                 actions = {
                     IconButton(onClick = {
                         val clipText = clipboardManager.getText()?.text ?: ""
@@ -621,7 +608,7 @@ private fun StatChip(
     Surface(
         color = color.copy(alpha = 0.1f),
         // 已知上限:16dp 全角 pill（StatChip）无对应 token，AppShapes.SheetTop 仅顶部圆角语义不符，暂保留硬编码
-        shape = RoundedCornerShape(16.dp)
+        shape = AppShapes.rounded(16)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),

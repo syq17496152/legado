@@ -188,9 +188,8 @@ private constructor(private val mContext: Context) : ThemeStoreInterface {
             )
         }
 
-        fun markChanged(context: Context) {
-            ThemeStore(context).apply()
-        }
+        // T12（theme-arch-gap）：markChanged 死代码已删（零调用；主题提交统一走 editTheme().apply()，
+        // 变更令牌经 VALUES_CHANGED 供 BaseActivity onResume 懒刷新）
 
         /**
          * 主题变更令牌（apply() 时打的时间戳）。供 BaseActivity 在 onResume 比对，

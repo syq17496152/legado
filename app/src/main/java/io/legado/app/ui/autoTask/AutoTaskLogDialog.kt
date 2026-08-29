@@ -28,6 +28,7 @@ import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.LogUtils
 import java.util.Date
+import androidx.compose.material3.MaterialTheme
 
 /**
  * 自动任务最近一次运行日志弹框（Compose 化）。
@@ -65,14 +66,14 @@ class AutoTaskLogDialog() : ComposeDialogFragment() {
                         Text(
                             text = LogUtils.logTimeFormat.format(Date(logData.first)),
                             color = style.secondaryText,
-                            fontSize = 12.sp
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         SelectionContainer {
                             Text(
                                 text = logData.second,
                                 color = style.primaryText,
-                                fontSize = 14.sp,
+                                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                                 lineHeight = 20.sp
                             )
                         }

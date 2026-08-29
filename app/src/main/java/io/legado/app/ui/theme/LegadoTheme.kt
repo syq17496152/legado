@@ -14,6 +14,7 @@ import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.ui.widget.components.ThemeSpec
 import io.legado.app.ui.widget.components.toM3Scheme
 import io.legado.app.utils.ColorUtils
+import io.legado.app.ui.theme.bodyTertiary
 
 /**
  * Legado Compose 主题（F-P0-1 调试工具集，借鉴蛋蛋Max）
@@ -50,9 +51,24 @@ val LegadoTypography = Typography(
     labelSmall = TextStyle(fontSize = 11.sp),
     // 展示/标题族保持 M3 层级
     displaySmall = TextStyle(fontSize = 36.sp),
+    displayMedium = TextStyle(fontSize = 32.sp),
     headlineMedium = TextStyle(fontSize = 28.sp),
     headlineSmall = TextStyle(fontSize = 24.sp)
 )
+
+// ui-theme-gap-audit G1：补齐开销号刻度（对齐 res/values/dimens.xml text_10~18sp 刻度表），
+// 供字号体系引用（fontScale 经 AppContextWrapper.configuration 全局生效，.sp 文本均随缩放）。
+// M3 Typography 构造参数固定，缺失刻度以扩展属性补充：MaterialTheme.typography.bodyTertiary.fontSize
+val Typography.labelXSmall: TextStyle get() = TextStyle(fontSize = 10.sp)
+val Typography.bodyTertiary: TextStyle get() = TextStyle(fontSize = 13.sp)
+val Typography.bodySecondary: TextStyle get() = TextStyle(fontSize = 15.sp)
+val Typography.bodyLargeX: TextStyle get() = TextStyle(fontSize = 17.sp)
+val Typography.subtitleLarge: TextStyle get() = TextStyle(fontSize = 18.sp)
+// G1 离群刻度补档（存量标题档精确保留，避免视觉漂移）：19=弹窗/区块标题高档、
+// 21=控件大标题、22=控件编辑页标题
+val Typography.subtitleLargeX: TextStyle get() = TextStyle(fontSize = 19.sp)
+val Typography.headlineSmallX: TextStyle get() = TextStyle(fontSize = 21.sp)
+val Typography.titleLargeX: TextStyle get() = TextStyle(fontSize = 22.sp)
 
 @Composable
 fun LegadoTheme(

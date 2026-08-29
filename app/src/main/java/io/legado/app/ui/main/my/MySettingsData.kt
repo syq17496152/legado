@@ -12,7 +12,6 @@ import io.legado.app.ui.about.AboutActivity
 import io.legado.app.ui.about.ReadRecordActivity
 import io.legado.app.ui.autoTask.AutoTaskActivity
 import io.legado.app.ui.book.bookmark.AllBookmarkActivity
-import io.legado.app.ui.book.cache.CacheManageActivity
 import io.legado.app.ui.book.source.manage.BookSourceActivity
 import io.legado.app.ui.book.toc.rule.TxtTocRuleActivity
 import io.legado.app.ui.config.AppearanceKitActivity
@@ -25,7 +24,6 @@ import io.legado.app.ui.highlight.HighlightRuleActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.rss.search.RssSearchActivity
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
-import io.legado.app.ui.urlrecord.UrlRecordActivity
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.putPrefBoolean
@@ -71,7 +69,8 @@ internal fun buildSettingsSections(context: Context): List<MySettingsSectionMode
                 actionRow("rssSourceManage", R.string.rss_source_manage, R.string.rss_source_manage_summary),
                 actionRow("txtTocRuleManage", R.string.txt_toc_rule, R.string.config_txt_toc_rule),
                 actionRow("replaceManage", R.string.replace_purify, R.string.replace_purify_desc),
-                actionRow("dictRuleManage", R.string.dict_rule, R.string.config_dict_rule)
+                actionRow("dictRuleManage", R.string.dict_rule, R.string.config_dict_rule),
+                actionRow("highlightRule", R.string.highlight_rule_manage, R.string.highlight_rule_manage_desc)
             )
         ),
         MySettingsSectionModel(
@@ -88,15 +87,13 @@ internal fun buildSettingsSections(context: Context): List<MySettingsSectionMode
                     title = context.getString(R.string.appearance_kit_manage),
                     summary = context.getString(R.string.appearance_kit_summary)
                 ),
-                actionRow("theme_setting", R.string.theme_setting, R.string.theme_setting_s),
-                actionRow("ai_setting", R.string.ai_setting, R.string.ai_setting_summary)
+                actionRow("theme_setting", R.string.theme_setting, R.string.theme_setting_s)
             )
         ),
         MySettingsSectionModel(
             title = context.getString(R.string.config_category_sync),
             rows = listOf(
                 actionRow("web_dav_setting", R.string.backup_restore, R.string.web_dav_set_import_old),
-                actionRow("cacheManage", R.string.cache_manage_title, R.string.cache_manage_summary),
                 actionRow(
                     "publicWebRelay",
                     R.string.public_web_relay,
@@ -113,16 +110,24 @@ internal fun buildSettingsSections(context: Context): List<MySettingsSectionMode
         MySettingsSectionModel(
             title = context.getString(R.string.config_category_tools),
             rows = listOf(
-                actionRow("setting", R.string.other_setting, R.string.other_setting_s),
-                actionRow("featureBooks", R.string.my_feature_books, R.string.my_feature_books_desc),
+                actionRow("ai_setting", R.string.ai_setting, R.string.ai_setting_summary),
                 actionRow("autoTask", R.string.auto_task_manage, R.string.auto_task_manage_desc),
-                actionRow("highlightRule", R.string.highlight_rule_manage, R.string.highlight_rule_manage_desc),
-                actionRow("urlRecord", R.string.url_record, R.string.url_record_summary),
                 actionRow("rssSearch", R.string.rss_search, R.string.rss_search_summary),
-                actionRow("preciseManage", R.string.precise_manage, R.string.precise_manage_summary),
+                actionRow("featureBooks", R.string.my_feature_books, R.string.my_feature_books_desc),
                 actionRow("bookmark", R.string.bookmark, R.string.all_bookmark),
                 actionRow("readRecord", R.string.read_record, R.string.read_record_summary),
-                // bugfix ⑥: 移除重复"文件管理"入口（精准管理 aggregated 文件管理，避免两个入口）
+                actionRow("setting", R.string.other_setting, R.string.other_setting_s)
+            )
+        ),
+        MySettingsSectionModel(
+            title = context.getString(R.string.precise_manage),
+            rows = listOf(
+                actionRow("preciseManage", R.string.precise_manage, R.string.precise_manage_summary)
+            )
+        ),
+        MySettingsSectionModel(
+            title = context.getString(R.string.config_category_about),
+            rows = listOf(
                 actionRow("about", R.string.about, null),
                 actionRow("exit", R.string.exit, null)
             )
@@ -264,7 +269,6 @@ internal fun Activity.handleSettingsRowClick(key: String, searchTarget: MySettin
 
         "publicWebRelay" -> startActivity<RelaySettingsActivity>()
 
-        "cacheManage" -> startActivity<CacheManageActivity>()
         "theme_setting" -> startActivity<ConfigActivity> {
             putExtra("configTag", ConfigTag.THEME_CONFIG)
         }
@@ -279,7 +283,6 @@ internal fun Activity.handleSettingsRowClick(key: String, searchTarget: MySettin
         "readRecord" -> startActivity<ReadRecordActivity>()
         "featureBooks" -> startActivity<MyFeatureBooksActivity>()
         "highlightRule" -> startActivity<HighlightRuleActivity>()
-        "urlRecord" -> startActivity<UrlRecordActivity>()
         "rssSearch" -> RssSearchActivity.start(this, null)
         "about" -> startActivity<AboutActivity>()
         "exit" -> finish()

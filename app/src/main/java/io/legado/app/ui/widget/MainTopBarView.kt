@@ -184,7 +184,9 @@ class MainTopBarView @JvmOverloads constructor(
         starButton.isVisible = mode == Mode.RSS
         refreshButton.isVisible = mode == Mode.RSS
         loginButton.isVisible = mode == Mode.DISCOVERY || mode == Mode.RSS
-        titleText.textSize = if (mode == Mode.BOOKSHELF) 24f else 20f
+        // 2.1（bookshelf-refresh-and-title-fix）：去除书架 24sp 特判，全主 Tab 统一 20sp
+        // （基线 = titleLarge 20sp/Medium，对齐 View ToolbarTitle，主题统一 AD-19）
+        titleText.textSize = 20f
         // subpage-topbar-unify: SUB 子页形态标题左侧显示返回箭头（替代下拉箭头），点击由宿主接 onBackPressed
         titleArrow.setImageResource(
             if (mode == Mode.SUB) R.drawable.ic_arrow_back else R.drawable.ic_arrow_drop_down

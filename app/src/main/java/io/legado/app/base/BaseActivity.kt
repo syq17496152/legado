@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Configuration
 import android.os.Build
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.util.AttributeSet
 import android.view.Menu
@@ -14,6 +15,7 @@ import android.widget.FrameLayout
 import androidx.activity.addCallback
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.constant.AppConst
@@ -109,6 +111,9 @@ abstract class BaseActivity<VB : ViewBinding>(
             if (recreateOnThemeChange) {
                 recreate()
             } else {
+                // T2（theme-arch-gap）：豁免页不重建，重刷底色 tint（initTheme 只在
+                // onCreate 走）+ 系统栏 + 背景图；Compose 侧经 ThemeSync 即时换肤
+                window.decorView.applyBackgroundTint(backgroundColor)
                 setupSystemBar()
                 upBackgroundImage()
             }
@@ -192,27 +197,51 @@ abstract class BaseActivity<VB : ViewBinding>(
             }
 
             else -> {
-                if (ColorUtils.isColorLight(primaryColor)) {
-                    setTheme(R.style.AppTheme_Light)
-                } else {
+                // T4（theme-arch-gap）：Auto 分支基础样式跟随主题模式判定，
+                // 修上游 isColorLight(primaryColor) 旧写法——深主色+日间场景误用 Dark 样式
+                if (AppConfig.isNightTheme) {
                     setTheme(R.style.AppTheme_Dark)
+                } else {
+                    setTheme(R.style.AppTheme_Light)
                 }
                window.decorView.applyBackgroundTint(backgroundColor)
             }
         }
+        if (!recreateOnThemeChange) {
+            // T7 补丁（theme-arch-gap）：豁免页锁定 localNightMode 为当前生效值，
+            // 阻断 AppCompatDelegate.setDefaultNightMode 变化时对所有 Activity 的
+            // 自动 recreate 穿透（真机铁证：阅读菜单开启态切系统深浅被强制关闭）。
+            // 豁免页改由 RECREATE 豁免分支原位刷新；锁定值随新实例 onCreate 重读
+            // （super.onCreate 前 setLocalNightMode 只存值不触发 recreate，安全）
+            delegate.setLocalNightMode(
+                if (AppConfig.isNightTheme) {
+                    AppCompatDelegate.MODE_NIGHT_YES
+                } else {
+                    AppCompatDelegate.MODE_NIGHT_NO
+                }
+            )
+        }
     }
 
     open fun upBackgroundImage() {
-        if (imageBg) {
-            try {
-                ThemeConfig.getBgImage(this, windowManager.windowSize)?.let { drawable ->
-                   window.decorView.background = drawable
-                }
-            } catch (_: OutOfMemoryError) {
-                toastOnUi("背景图片太大,内存溢出")
-            } catch (e: Exception) {
-                AppLog.put("加载背景出错\n${e.localizedMessage}", e)
-            }
+        if (!imageBg) return
+        // T2（theme-arch-gap）背景图回落四件套：
+        // ①getBgImage 返 null（未设置/背景不可用）时回落清 decorView 自定义背景，
+        //   恢复主题底色 tint（修旧图残留）②OOM/异常时同样回落不保留半态
+        val drawable: Drawable? = try {
+            ThemeConfig.getBgImage(this, windowManager.windowSize)
+        } catch (_: OutOfMemoryError) {
+            toastOnUi("背景图片太大,内存溢出")
+            null
+        } catch (e: Exception) {
+            AppLog.put("加载背景出错\n${e.localizedMessage}", e)
+            null
+        }
+        if (drawable != null) {
+            window.decorView.background = drawable
+        } else {
+            window.decorView.background = null
+            window.decorView.applyBackgroundTint(backgroundColor)
         }
     }
 

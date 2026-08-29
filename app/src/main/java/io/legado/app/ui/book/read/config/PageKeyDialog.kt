@@ -45,10 +45,13 @@ import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.hideSoftInput
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.setLayout
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 class PageKeyDialog(private val context: Context) : ComponentDialog(context) {
 
@@ -66,28 +69,30 @@ class PageKeyDialog(private val context: Context) : ComponentDialog(context) {
                 )
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
                 setContent {
-                    PageKeyContent(
-                        prevKeys = prevKeys,
-                        nextKeys = nextKeys,
-                        onPrevChange = { prevKeys = it },
-                        onNextChange = { nextKeys = it },
-                        onFocusChange = { field, focused ->
-                            if (focused) {
-                                focusedField = field
-                            } else if (focusedField == field) {
-                                focusedField = PageKeyField.None
+                    LegadoTheme {
+                        PageKeyContent(
+                            prevKeys = prevKeys,
+                            nextKeys = nextKeys,
+                            onPrevChange = { prevKeys = it },
+                            onNextChange = { nextKeys = it },
+                            onFocusChange = { field, focused ->
+                                if (focused) {
+                                    focusedField = field
+                                } else if (focusedField == field) {
+                                    focusedField = PageKeyField.None
+                                }
+                            },
+                            onReset = {
+                                prevKeys = ""
+                                nextKeys = ""
+                            },
+                            onConfirm = {
+                                context.putPrefString(PreferKey.prevKeys, prevKeys)
+                                context.putPrefString(PreferKey.nextKeys, nextKeys)
+                                dismiss()
                             }
-                        },
-                        onReset = {
-                            prevKeys = ""
-                            nextKeys = ""
-                        },
-                        onConfirm = {
-                            context.putPrefString(PreferKey.prevKeys, prevKeys)
-                            context.putPrefString(PreferKey.nextKeys, nextKeys)
-                            dismiss()
-                        }
-                    )
+                        )
+                    }
                 }
             }
         )
@@ -157,7 +162,7 @@ private fun PageKeyContent(
             Text(
                 text = stringResource(R.string.custom_page_key),
                 color = style.primaryText,
-                fontSize = 20.sp,
+                fontSize = MaterialTheme.typography.titleLarge.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = style.titleFontFamily,
                 maxLines = 1,
@@ -191,7 +196,7 @@ private fun PageKeyContent(
             Text(
                 text = stringResource(R.string.page_key_set_help),
                 color = style.secondaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 lineHeight = 18.sp
             )
             Spacer(modifier = Modifier.height(16.dp))

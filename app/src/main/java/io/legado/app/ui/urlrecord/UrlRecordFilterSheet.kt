@@ -32,6 +32,7 @@ import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixChoiceRow
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
+import androidx.compose.material3.MaterialTheme
 
 /**
  * 访问记录四维过滤弹框（Compose 底部弹框，两级合一，替代原 6 级嵌套 selector）。
@@ -112,7 +113,7 @@ class UrlRecordFilterSheet : ComposeDialogFragment() {
                             values.isEmpty() -> Text(
                                 text = stringResource(R.string.url_record_no_values),
                                 color = style.secondaryText,
-                                fontSize = 14.sp,
+                                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(min = 120.dp),

@@ -19,12 +19,12 @@ import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReadMenuCustomButton
 import io.legado.app.databinding.ActivityThemeManageBinding
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.databinding.ItemThemePackageBinding
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
@@ -109,14 +109,16 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         result.uri?.let { uri ->
             val url = uri.toString()
             if (url.startsWith("http://", true) || url.startsWith("https://", true)) {
-                alert(R.string.upload_url) {
-                    setMessage(url)
-                    positiveButton(R.string.copy_text) {
+                showComposeConfirmDialog(
+                    title = getString(R.string.upload_url),
+                    message = url,
+                    positiveText = getString(R.string.copy_text),
+                    negativeText = getString(R.string.cancel),
+                    onPositive = {
                         sendToClip(url)
                         toastOnUi(R.string.copy_complete)
                     }
-                    negativeButton(R.string.cancel)
-                }
+                )
             } else {
                 toastOnUi(R.string.export_success)
             }
@@ -259,10 +261,10 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             toastOnUi(R.string.read_menu_no_available_button)
             return
         }
-        selector(
-            getString(R.string.read_menu_add_button),
-            candidates.map { it.title }
-        ) { _, index ->
+        showComposeChoiceListDialog(
+            title = getString(R.string.read_menu_add_button),
+            labels = candidates.map { it.title }
+        ) { index ->
             when (val action = candidates[index].action) {
                 is AddAction.AddRef -> addButton(action.ref)
                 is AddAction.ExistingCustom -> showExistingCustomButtonActions(action.button)
@@ -325,10 +327,10 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }
 
     private fun showImportButtonActions() {
-        selector(
-            getString(R.string.import_str),
-            listOf(getString(R.string.import_str), getString(R.string.import_on_line))
-        ) { _, index ->
+        showComposeChoiceListDialog(
+            title = getString(R.string.import_str),
+            labels = listOf(getString(R.string.import_str), getString(R.string.import_on_line))
+        ) { index ->
             when (index) {
                 0 -> launchImportButtonFile()
                 1 -> showImportButtonUrlDialog()
@@ -345,17 +347,16 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }
 
     private fun showImportButtonUrlDialog() {
-        alert(R.string.import_on_line) {
-            val dialogBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "https://..."
-            }
-            customView { dialogBinding.root }
-            okButton {
-                val url = dialogBinding.editView.text?.toString().orEmpty().trim()
+        showComposeTextInputDialog(
+            title = getString(R.string.import_on_line),
+            hint = "https://...",
+            positiveText = getString(android.R.string.ok),
+            negativeText = getString(R.string.cancel),
+            onPositive = { input ->
+                val url = input.trim()
                 if (url.isNotEmpty()) importButtonsFromUrl(url)
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun importButtonsFromUrl(url: String) {
@@ -437,22 +438,29 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }
 
     private fun deleteButton(ref: ReadMenuButtonConfig.ButtonRef) {
-        alert(R.string.delete) {
-            setMessage(R.string.del_msg)
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.delete),
+            message = getString(R.string.del_msg),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 val row = currentRow().toMutableList()
                 row.remove(ref)
                 saveCurrentRow(row)
             }
-            noButton()
-        }
+        )
     }
 
     private fun deleteCustomButton(button: ReadMenuCustomButton) {
         val ref = customButtonRef(button)
-        alert(R.string.delete) {
-            setMessage(button.displayName())
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.delete),
+            message = button.displayName(),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 lifecycleScope.launch {
                     withContext(Dispatchers.IO) {
                         appDb.readMenuCustomButtonDao.delete(button)
@@ -463,8 +471,7 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     toastOnUi(R.string.delete_success)
                 }
             }
-            noButton()
-        }
+        )
     }
 
     private fun showExistingCustomButtonActions(button: ReadMenuCustomButton) {
@@ -480,22 +487,24 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             add(getString(R.string.delete) to { deleteCustomButton(button) })
             add(getString(R.string.export) to { exportButton(button) })
         }
-        selector(
-            button.displayName(),
-            actions.map { it.first }
-        ) { _, index ->
+        showComposeChoiceListDialog(
+            title = button.displayName(),
+            labels = actions.map { it.first }
+        ) { index ->
             actions[index].second.invoke()
         }
     }
 
     private fun resetLayout() {
-        alert(R.string.reset) {
-            setMessage(R.string.del_msg)
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.reset),
+            message = getString(R.string.del_msg),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            onPositive = {
                 saveLayout(ReadMenuButtonConfig.defaultLayout())
             }
-            noButton()
-        }
+        )
     }
 
     override fun swap(srcPosition: Int, targetPosition: Int): Boolean {
@@ -514,15 +523,15 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         val isNightButton = ref.type == ReadMenuButtonConfig.TYPE_BUILTIN &&
                 ref.id == ReadMenuButtonConfig.Builtin.NIGHT_THEME
         if (isNightButton) {
-            selector(
-                getString(R.string.change_icon),
-                listOf(
+            showComposeChoiceListDialog(
+                title = getString(R.string.change_icon),
+                labels = listOf(
                     getString(R.string.read_menu_icon_set_day),
                     getString(R.string.read_menu_icon_set_night),
                     getString(R.string.read_menu_icon_clear_day),
                     getString(R.string.read_menu_icon_clear_night)
                 )
-            ) { _, index ->
+            ) { index ->
                 when (index) {
                     0 -> selectIcon(ref, nightIcon = false)
                     1 -> selectIcon(ref, nightIcon = true)
@@ -531,10 +540,10 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                 }
             }
         } else {
-            selector(
-                getString(R.string.change_icon),
-                listOf(getString(R.string.change_icon), getString(R.string.clear))
-            ) { _, index ->
+            showComposeChoiceListDialog(
+                title = getString(R.string.change_icon),
+                labels = listOf(getString(R.string.change_icon), getString(R.string.clear))
+            ) { index ->
                 if (index == 0) selectIcon(ref, nightIcon = false) else clearIcon(ref, nightIcon = false)
             }
         }

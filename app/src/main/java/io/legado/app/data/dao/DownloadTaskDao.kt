@@ -26,11 +26,6 @@ interface DownloadTaskDao {
     @Query("select * from download_tasks order by startTime desc")
     fun loadAll(): List<DownloadTaskEntity>
 
-    @Query(
-        "select * from download_tasks where status in ('WAITING','RUNNING','PAUSED','FAILED') order by startTime"
-    )
-    fun loadUnfinished(): List<DownloadTaskEntity>
-
     @Query("select * from download_tasks where id = :id")
     fun loadById(id: Long): DownloadTaskEntity?
 

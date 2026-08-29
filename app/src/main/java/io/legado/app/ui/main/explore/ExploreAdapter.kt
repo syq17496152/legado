@@ -40,6 +40,7 @@ import io.legado.app.help.source.exploreKinds
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.login.SourceLoginJsExtensions
+import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.ui.widget.text.AccentTextView
 import io.legado.app.utils.InfoMap
@@ -78,6 +79,7 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
     private var lastClickTime: Long = 0
     private val sourceKinds = ConcurrentHashMap<String, List<ExploreKind>>()
     private var saveInfoMapJob: Job? = null
+    private var menuPopup: ModernActionPopup.Handle? = null
 
     override fun getViewBinding(parent: ViewGroup): ItemFindBookBinding {
         return ItemFindBookBinding.inflate(inflater, parent, false)
@@ -654,10 +656,14 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
 
     private fun showMenu(binding: ItemFindBookBinding, position: Int): Boolean {
         val source = getItem(position) ?: return true
-        val popupMenu = PopupMenu(context, binding.llTitle)
-        popupMenu.inflate(R.menu.explore_item)
-        popupMenu.menu.findItem(R.id.menu_login).isVisible = source.hasLoginUrl
-        popupMenu.setOnMenuItemClickListener {
+        menuPopup = ModernActionPopup.showFromMenu(
+            anchor = binding.llTitle,
+            menuRes = R.menu.explore_item,
+            previousPopup = menuPopup,
+            prepare = {
+                findItem(R.id.menu_login)?.isVisible = source.hasLoginUrl
+            }
+        ) {
             when (it.itemId) {
                 R.id.menu_edit -> callBack.editSource(source.bookSourceUrl)
                 R.id.menu_top -> callBack.toTop(source)
@@ -673,7 +679,6 @@ class ExploreAdapter(context: Context, val callBack: CallBack) :
             }
             true
         }
-        popupMenu.show()
         return true
     }
 

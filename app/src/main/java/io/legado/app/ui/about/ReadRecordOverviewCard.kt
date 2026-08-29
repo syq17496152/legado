@@ -1,5 +1,6 @@
 package io.legado.app.ui.about
 
+import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -51,6 +52,10 @@ import io.legado.app.ui.widget.compose.BookCoverImage
 import io.legado.app.ui.widget.compose.releaseComposeImage
 import io.legado.app.ui.widget.image.CircleImageView
 import io.legado.app.ui.widget.image.CoverImageView
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.theme.subtitleLarge
 
 @Immutable
 data class ReadRecordOverviewUi(
@@ -359,7 +364,7 @@ fun ReadRecordGoalCardContent(
             AndroidView(
                 modifier = Modifier
                     .size(64.dp)
-                    .clip(RoundedCornerShape(32.dp)),
+                    .clip(AppShapes.rounded(32)),
                 factory = { CircleImageView(it) },
                 update = { avatar ->
                     avatar.loadReadRecordAvatar(ui.avatar)
@@ -375,7 +380,7 @@ fun ReadRecordGoalCardContent(
                     Text(
                         text = ui.userName,
                         color = secondaryText,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         fontFamily = bodyFont,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -384,7 +389,7 @@ fun ReadRecordGoalCardContent(
                 Text(
                     text = ui.todayText,
                     color = primaryText,
-                    fontSize = 16.sp,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                     fontWeight = FontWeight.Bold,
                     fontFamily = titleFont,
                     maxLines = 1,
@@ -394,7 +399,7 @@ fun ReadRecordGoalCardContent(
                 Text(
                     text = ui.progressText,
                     color = secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     fontFamily = bodyFont,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -421,7 +426,7 @@ fun ReadRecordGoalCardContent(
             Text(
                 text = ui.totalText,
                 color = secondaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontFamily = bodyFont,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -431,7 +436,7 @@ fun ReadRecordGoalCardContent(
             Text(
                 text = ui.booksText,
                 color = secondaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontFamily = bodyFont,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -473,7 +478,7 @@ private fun ReadRecordRecentBookRow(
             Text(
                 text = item.name,
                 color = colors.primaryText,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontFamily = titleFont,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -481,7 +486,7 @@ private fun ReadRecordRecentBookRow(
             Text(
                 text = item.meta,
                 color = colors.secondaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 fontFamily = bodyFont,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -491,7 +496,7 @@ private fun ReadRecordRecentBookRow(
         Text(
             text = item.readTime,
             color = colors.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontFamily = bodyFont,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -522,7 +527,7 @@ private fun ReadRecordDayRow(
             Text(
                 text = item.title,
                 color = colors.primaryText,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontFamily = titleFont,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -530,7 +535,7 @@ private fun ReadRecordDayRow(
             Text(
                 text = item.subtitle,
                 color = colors.secondaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 fontFamily = bodyFont,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -540,7 +545,7 @@ private fun ReadRecordDayRow(
         Text(
             text = item.readTime,
             color = colors.primaryText,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             fontFamily = bodyFont,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -585,7 +590,7 @@ private fun ReadRecordRankRow(
             Text(
                 text = item.name,
                 color = colors.primaryText.copy(alpha = alpha),
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontWeight = FontWeight.Bold,
                 fontFamily = titleFont,
                 maxLines = 1,
@@ -594,7 +599,7 @@ private fun ReadRecordRankRow(
             Text(
                 text = item.meta,
                 color = colors.secondaryText.copy(alpha = alpha),
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 fontFamily = bodyFont,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -604,7 +609,7 @@ private fun ReadRecordRankRow(
         Text(
             text = item.readTime,
             color = colors.secondaryText.copy(alpha = alpha),
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontFamily = bodyFont,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -719,7 +724,7 @@ private fun ReadRecordOverviewMetric(
         Text(
             text = value,
             color = colors.primaryText,
-            fontSize = 18.sp,
+            fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
             fontWeight = FontWeight.Bold,
             fontFamily = titleFont,
             maxLines = 1,
@@ -728,7 +733,7 @@ private fun ReadRecordOverviewMetric(
         Text(
             text = label,
             color = colors.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontFamily = bodyFont,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

@@ -1,13 +1,16 @@
 package io.legado.app.ui.widget.number
 
 import android.content.Context
+import android.widget.EditText
 import android.widget.NumberPicker
 import androidx.appcompat.app.AlertDialog
 import io.legado.app.R
+import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.hideSoftInput
 
 class NumberPickerDialog(context: Context, private val isDecimalMode: Boolean = false) {
+    private val context = context
     private val builder = AlertDialog.Builder(context)
     private var numberPicker: NumberPicker? = null
     private var maxValue: Int? = null
@@ -61,6 +64,10 @@ class NumberPickerDialog(context: Context, private val isDecimalMode: Boolean = 
         val dialog = builder.show().applyTint()
         numberPicker = dialog.findViewById(R.id.number_picker)
         numberPicker?.let { np ->
+            for (i in 0 until np.childCount) {
+                (np.getChildAt(i) as? EditText)
+                    ?.setTextColor(ThemeStore.textColorPrimary(context))
+            }
             minValue?.let {
                 np.minValue = it
             }

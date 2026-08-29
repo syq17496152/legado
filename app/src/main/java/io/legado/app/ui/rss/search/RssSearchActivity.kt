@@ -29,11 +29,12 @@ import io.legado.app.data.entities.SearchKeyword
 import io.legado.app.data.entities.SearchRssArticle
 import io.legado.app.databinding.ActivityRssSearchBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
+
 import io.legado.app.lib.theme.Selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
 import io.legado.app.ui.theme.LegadoTheme
@@ -420,14 +421,16 @@ class RssSearchActivity :
     override fun observeLiveBus() {
         viewModel.searchFinishLiveData.observe(this) { isEmpty ->
             if (!isEmpty || viewModel.searchScope.isAll()) return@observe
-            alert("搜索结果为空") {
-                val displayScope = viewModel.searchScope.display
-                setMessage("${displayScope}分组搜索结果为空，是否切换到全部分组？")
-                yesButton {
+            val displayScope = viewModel.searchScope.display
+            showComposeConfirmDialog(
+                title = "搜索结果为空",
+                message = "${displayScope}分组搜索结果为空，是否切换到全部分组？",
+                positiveText = getString(R.string.yes),
+                negativeText = getString(R.string.no),
+                onPositive = {
                     viewModel.searchScope.update("")
                 }
-                noButton()
-            }
+            )
         }
     }
 
@@ -469,13 +472,14 @@ class RssSearchActivity :
     }
 
     private fun alertClearHistory() {
-        alert(R.string.draw) {
-            setMessage(R.string.sure_clear_search_history)
-            yesButton {
-                viewModel.clearHistory()
-            }
-            noButton()
-        }
+        showComposeConfirmDialog(
+            title = getString(R.string.draw),
+            message = getString(R.string.sure_clear_search_history),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = { viewModel.clearHistory() }
+        )
     }
 
     // rss-search-compose 壳层化：Compose 顶栏无 searchView 焦点拦截，直接退出

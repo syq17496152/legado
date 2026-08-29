@@ -8,14 +8,15 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import androidx.viewbinding.ViewBinding
+import io.legado.app.R
 import io.legado.app.base.BaseActivity
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookCharacter
 import io.legado.app.data.entities.BookCharacterRelation
 import io.legado.app.help.character.BookCharacterIdentityMigrator
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.book.character.compose.CharacterRelationScreen
 import io.legado.app.ui.book.character.compose.RelationEditDraft
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
@@ -160,9 +161,13 @@ class BookCharacterRelationActivity : BaseActivity<ViewBinding>(
     }
 
     private fun confirmDeleteRelation(relation: BookCharacterRelation) {
-        alert("删除关系") {
-            setMessage("确定删除「${relation.displayName()}」？")
-            yesButton {
+        showComposeConfirmDialog(
+            title = "删除关系",
+            message = "确定删除「${relation.displayName()}」？",
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 lifecycleScope.launch {
                     withContext(IO) {
                         appDb.bookCharacterDao.deleteRelation(relation)
@@ -171,8 +176,7 @@ class BookCharacterRelationActivity : BaseActivity<ViewBinding>(
                     load()
                 }
             }
-            noButton()
-        }
+        )
     }
 
     private fun openCharacterCard(character: BookCharacter) {

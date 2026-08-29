@@ -21,6 +21,7 @@ import io.legado.app.base.VMBaseActivity
 import io.legado.app.databinding.ActivityRssSourceDebugBinding
 import io.legado.app.help.source.sortUrls
 import io.legado.app.lib.dialogs.selector
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.theme.LegadoTheme
@@ -160,7 +161,10 @@ class RssSourceDebugActivity : VMBaseActivity<ActivityRssSourceDebugBinding, Rss
             @Suppress("USELESS_ELVIS")
             sortKinds?.map { it.first ?: "" }?.let { sortKindTitles ->
                 binding.textFl.onLongClick {
-                    selector(getString(R.string.select_kind), sortKindTitles) { _, index ->
+                    this@RssSourceDebugActivity.showComposeChoiceListDialog(
+                        title = getString(R.string.select_kind),
+                        labels = sortKindTitles
+                    ) { index ->
                         val sort = sortKinds[index]
                         binding.textFl.text = "${sort.first}::${sort.second}"
                         composeSearchQuery = binding.textFl.text.toString()

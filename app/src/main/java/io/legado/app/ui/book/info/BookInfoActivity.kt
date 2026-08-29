@@ -91,9 +91,10 @@ import io.legado.app.help.webView.WebJsExtensions.Companion.nameJava
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameSource
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.model.BookCover
 import io.legado.app.model.remote.RemoteBookWebDav
 import io.legado.app.ui.about.AppLogDialog
@@ -447,12 +448,13 @@ class BookInfoActivity :
             onClick = {
                 viewModel.getBook()?.let { b ->
                     b.getRemoteUrl()?.let {
-                        alert(R.string.draw, R.string.sure_upload) {
-                            okButton {
-                                upLoadBook(b)
-                            }
-                            cancelButton()
-                        }
+                        showComposeConfirmDialog(
+                            title = getString(R.string.draw),
+                            message = getString(R.string.sure_upload),
+                            positiveText = getString(R.string.ok),
+                            negativeText = getString(R.string.cancel),
+                            onPositive = { upLoadBook(b) }
+                        )
                     } ?: upLoadBook(b)
                 }
             }
@@ -1160,40 +1162,47 @@ class BookInfoActivity :
             toastOnUi(R.string.unexpected_web_file_data)
             return
         }
-        selector(
-            R.string.download_and_import_file,
-            webFiles
-        ) { _, webFile, _ ->
-            if (webFile.isSupported) {
-                /* import */
-                viewModel.importOrDownloadWebFile<Book>(webFile) {
-                    onClick?.invoke(it)
+        showComposeChoiceListDialog(
+            title = getString(R.string.download_and_import_file),
+            labels = webFiles.map { it.name }
+        ) { index ->
+            val webFile = webFiles[index]
+            when {
+                webFile.isSupported -> {
+                    /* import */
+                    viewModel.importOrDownloadWebFile<Book>(webFile) {
+                        onClick?.invoke(it)
+                    }
                 }
-            } else if (webFile.isSupportDecompress) {
-                /* 解压筛选后再选择导入项 */
-                viewModel.importOrDownloadWebFile<Uri>(webFile) { uri ->
-                    viewModel.getArchiveFilesName(uri) { fileNames ->
-                        if (fileNames.size == 1) {
-                            viewModel.importArchiveBook(uri, fileNames[0]) {
-                                onClick?.invoke(it)
+
+                webFile.isSupportDecompress -> {
+                    /* 解压筛选后再选择导入项 */
+                    viewModel.importOrDownloadWebFile<Uri>(webFile) { uri ->
+                        viewModel.getArchiveFilesName(uri) { fileNames ->
+                            if (fileNames.size == 1) {
+                                viewModel.importArchiveBook(uri, fileNames[0]) {
+                                    onClick?.invoke(it)
+                                }
+                            } else {
+                                showDecompressFileImportAlert(uri, fileNames, onClick)
                             }
-                        } else {
-                            showDecompressFileImportAlert(uri, fileNames, onClick)
                         }
                     }
                 }
-            } else {
-                alert(
-                    title = getString(R.string.draw),
-                    message = getString(R.string.file_not_supported, webFile.name)
-                ) {
-                    neutralButton(R.string.open_fun) {
-                        /* download only */
-                        viewModel.importOrDownloadWebFile<Uri>(webFile) {
-                            openFileUri(it, "*/*")
+
+                else -> {
+                    showComposeConfirmDialog(
+                        title = getString(R.string.draw),
+                        message = getString(R.string.file_not_supported, webFile.name),
+                        positiveText = getString(R.string.open_fun),
+                        negativeText = getString(R.string.no),
+                        onPositive = {
+                            /* download only */
+                            viewModel.importOrDownloadWebFile<Uri>(webFile) {
+                                openFileUri(it, "*/*")
+                            }
                         }
-                    }
-                    noButton()
+                    )
                 }
             }
         }
@@ -1208,10 +1217,11 @@ class BookInfoActivity :
             toastOnUi(R.string.unsupport_archivefile_entry)
             return
         }
-        selector(
-            R.string.import_select_book,
-            fileNames
-        ) { _, name, _ ->
+        showComposeChoiceListDialog(
+            title = getString(R.string.import_select_book),
+            labels = fileNames
+        ) { index ->
+            val name = fileNames[index]
             viewModel.importArchiveBook(archiveFileUri, name) {
                 success?.invoke(it)
             }

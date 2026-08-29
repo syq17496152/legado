@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -15,13 +14,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 
 /**
  * 列表条目卡片原语（S2 列表工具，公共组件库三期）。
  *
  * `Surface` clip 圆角 **18dp** + 背景 + `heightIn`；content 内边距由 [BookListCardMetrics] 传入（默认 h16）；
  * 布局与交互解耦，content 以 lambda 抛出；`combinedClickable`（点击+长按由调用方回调）。
- * 容器色默认 `surface`（暗色 `surfaceVariant` lerp 见 ui-standards §4.5，由调用方按需传入）。
+ * 容器色默认调色板直色 `palette.settings.row`（H10 归位，非 M3 surface），可由调用方按需传入覆盖。
  * 规格：ui-standards §3.4 `ListCard`（task 12.2F，from legado-archive BookListCardComponents）。
  */
 
@@ -38,9 +38,11 @@ fun ListCard(
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
     metrics: BookListCardMetrics = BookListCardMetrics(),
-    containerColor: Color = MaterialTheme.colorScheme.surface,
+    containerColor: Color? = null,
     content: @Composable () -> Unit,
 ) {
+    // H10: 默认走调色板直色（palette.row），不再隐式 M3 surface；调用方可按需显式覆盖
+            val rowColor = containerColor ?: Color(rememberAppSettingPalette().row)
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -48,7 +50,7 @@ fun ListCard(
             .clip(RoundedCornerShape(metrics.cornerRadius))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = RoundedCornerShape(metrics.cornerRadius),
-        color = containerColor,
+        color = rowColor,
     ) {
         Box(modifier = Modifier.padding(metrics.contentPadding)) {
             content()

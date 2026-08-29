@@ -103,8 +103,9 @@ import io.legado.app.help.storage.Backup
 import io.legado.app.lib.dialogs.AndroidAlertBuilder
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.UiCorner
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.applyUiTitleTypeface
@@ -990,10 +991,10 @@ class ReadBookActivity : BaseReadBookActivity(),
                         Book.imgStyleDefault, Book.imgStyleFull, Book.imgStyleText,
                         Book.imgStyleSingle
                     )
-                selector(
-                    R.string.image_style,
+                showComposeChoiceListDialog(
+                    getString(R.string.image_style),
                     imgStyles
-                ) { _, index ->
+                ) { index ->
                     val imageStyle = imgStyles[index]
                     ReadBook.book?.setImageStyle(imageStyle)
                     if (imageStyle == Book.imgStyleSingle) {
@@ -2764,18 +2765,18 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     private fun showEpubCoreScheduleModeDialog() {
         val modes = EpubCoreScheduleMode.values()
-        selector(
-            R.string.epub_core_schedule_mode,
+        showComposeChoiceListDialog(
+            getString(R.string.epub_core_schedule_mode),
             modes.map { getString(it.titleRes) }
-        ) { _, index ->
-            val mode = modes.getOrNull(index) ?: return@selector
-            if (AppConfig.epubCoreScheduleMode == mode.key) return@selector
+        ) { index ->
+            val mode = modes.getOrNull(index) ?: return@showComposeChoiceListDialog
+            if (AppConfig.epubCoreScheduleMode == mode.key) return@showComposeChoiceListDialog
             AppConfig.epubCoreScheduleMode = mode.key
             menu?.findItem(R.id.menu_epub_schedule_mode)?.title =
                 "${getString(R.string.epub_core_schedule_mode)} (${getString(mode.titleRes)})"
-            val book = ReadBook.book?.takeIf { it.isEpub } ?: return@selector
+            val book = ReadBook.book?.takeIf { it.isEpub } ?: return@showComposeChoiceListDialog
             cancelEpubCorePrefetchHard(book)
-            if (!epubCoreActive || epubCoreLoading) return@selector
+            if (!epubCoreActive || epubCoreLoading) return@showComposeChoiceListDialog
             val chapterIndex = binding.epubReadView.currentPage()?.chapterIndex ?: ReadBook.durChapterIndex
             scheduleEpubCorePrefetchWindow(chapterIndex)
         }
@@ -4065,21 +4066,25 @@ class ReadBookActivity : BaseReadBookActivity(),
         if (confirmRestoreProcess == true) {
             ReadBook.restoreLastBookProgress()
         } else if (confirmRestoreProcess == null) {
-            alert(R.string.draw) {
-                setMessage(R.string.restore_last_book_process)
-                yesButton {
+            showComposeConfirmDialog(
+                title = getString(R.string.draw),
+                message = getString(R.string.restore_last_book_process),
+                positiveText = getString(R.string.yes),
+                negativeText = getString(R.string.no),
+                dangerPositive = true,
+                onPositive = {
                     confirmRestoreProcess = true
                     ReadBook.restoreLastBookProgress() //恢复启动全文搜索前的进度
-                }
-                noButton {
+                },
+                onNegative = {
+                    ReadBook.clearLastBookProgress()
+                    confirmRestoreProcess = false
+                },
+                onDismissAction = {
                     ReadBook.clearLastBookProgress()
                     confirmRestoreProcess = false
                 }
-                onCancelled {
-                    ReadBook.clearLastBookProgress()
-                    confirmRestoreProcess = false
-                }
-            }
+            )
         }
     }
 
@@ -4764,10 +4769,10 @@ class ReadBookActivity : BaseReadBookActivity(),
             getString(R.string.menu_refresh_all)
         )
         binding.readMenu.runMenuOut()
-        selector(R.string.refresh, labels) { _, index ->
+        showComposeChoiceListDialog(getString(R.string.refresh), labels) { index ->
             if (ReadBook.bookSource == null) {
                 upContent()
-                return@selector
+                return@showComposeChoiceListDialog
             }
             ReadBook.book?.let { book ->
                 when (index) {
@@ -4855,7 +4860,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             Book.imgStyleText,
             Book.imgStyleSingle
         )
-        selector(R.string.image_style, imgStyles) { _, index ->
+        showComposeChoiceListDialog(getString(R.string.image_style), imgStyles) { index ->
             val imageStyle = imgStyles[index]
             ReadBook.book?.setImageStyle(imageStyle)
             if (imageStyle == Book.imgStyleSingle) {
@@ -5020,7 +5025,30 @@ class ReadBookActivity : BaseReadBookActivity(),
         return true
     }
 
+    /**
+     * T7（theme-arch-gap）：阅读器豁免 recreate（兑现 BaseActivity 注释承诺的沉浸页豁免），
+     * 主题切换不打断阅读/朗读；Compose 面板经 ThemeSync 即时换肤，View 链由 [upThemeInPlace] 原位刷新
+     */
+    override val recreateOnThemeChange: Boolean
+        get() = false
+
+    /** 阅读器主题原位刷新：系统栏沉浸 + 阅读区背景/样式/重绘 + View 菜单配色 */
+    private fun upThemeInPlace() = binding.run {
+        upSystemUiVisibility()
+        ChapterProvider.upStyle()
+        readView.upBg()
+        readView.upStyle()
+        readView.invalidateTextPage()
+        readView.submitRenderTask()
+        readMenu.refreshMenuColorFilter()
+        readMenu.upBookView()
+    }
+
     override fun observeLiveBus() = binding.run {
+        // T7（theme-arch-gap）：RECREATE 走基类豁免分支（不 recreate），View 链原位刷新
+        observeEvent<String>(EventBus.RECREATE) {
+            upThemeInPlace()
+        }
         observeEvent<String>(EventBus.TIME_CHANGED) { readView.upTime() }
         observeEvent<Int>(EventBus.BATTERY_CHANGED) { readView.upBattery(it) }
         observeEvent<Boolean>(EventBus.MEDIA_BUTTON) {

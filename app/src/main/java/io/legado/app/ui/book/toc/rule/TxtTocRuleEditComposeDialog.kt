@@ -268,7 +268,7 @@ private fun TxtTocRuleTextField(
         Text(
             text = label,
             color = style.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.Medium
         )
         Spacer(modifier = Modifier.height(4.dp))

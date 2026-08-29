@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.view.isVisible
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
@@ -117,7 +118,11 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
         binding.topBar.searchButton.setOnClickListener {
             SettingsSearchActivity.start(requireContext())
         }
-        binding.topBar.moreButton.setOnClickListener { showHelp("appHelp") }
+        // topbar-icon-semantics-fix 3.4：帮助恢复一级问号图标（原版 main_my.xml menu_help always；
+        // 此前 moreButton 点击直接弹帮助，视觉语义不符）。原版 main_my.xml 仅 help 一项，
+        // 恢复一级后溢出无剩余项，moreButton 隐藏（走 addActionButton/actionsBar 插槽统一染色与风格适配）
+        binding.topBar.addActionButton(R.drawable.ic_help, R.string.help) { showHelp("appHelp") }
+        binding.topBar.moreButton.isVisible = false
     }
 
     private fun installComposeContent() {

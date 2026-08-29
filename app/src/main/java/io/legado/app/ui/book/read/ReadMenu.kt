@@ -78,6 +78,7 @@ import io.legado.app.model.SourceCallBack
 import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.compose.AppDialogStyle
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.utils.activity
 import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.getPrefBoolean
@@ -548,14 +549,16 @@ class ReadMenu @JvmOverloads constructor(
                                 if (confirmSkipToChapter) {
                                     callBack.skipToChapter(progress)
                                 } else {
-                                    context.alert("章节跳转确认", "确定要跳转章节吗？") {
-                                        yesButton {
+                                    activity?.showComposeConfirmDialog(
+                                        title = "章节跳转确认",
+                                        message = "确定要跳转章节吗？",
+                                        onPositive = {
                                             confirmSkipToChapter = true
                                             callBack.skipToChapter(progress)
-                                        }
-                                        noButton { upSeekBar() }
-                                        onCancelled { upSeekBar() }
-                                    }
+                                        },
+                                        onNegative = { upSeekBar() },
+                                        onDismissAction = { upSeekBar() }
+                                    )
                                 }
                             }
                         }
@@ -712,11 +715,11 @@ class ReadMenu @JvmOverloads constructor(
     private fun handleChapterLongClick() {
         if (ReadBook.isLocalBook) return
         val url = currentChapterUrl?.trim().orEmpty().takeIf { it.isNotBlank() } ?: return
-        context.alert(R.string.open_fun) {
-            setMessage(R.string.use_browser_open)
-            okButton { context.openUrl(url) }
-            noButton()
-        }
+        activity?.showComposeConfirmDialog(
+            title = context.getString(R.string.open_fun),
+            message = context.getString(R.string.use_browser_open),
+            onPositive = { context.openUrl(url) }
+        )
     }
     // endregion
 

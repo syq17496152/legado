@@ -1,16 +1,13 @@
 package io.legado.app.ui.debug
 
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
-import io.legado.app.ui.theme.initLegadoComposeTheme
-import io.legado.app.ui.theme.setLegadoContent
+import io.legado.app.ui.debug.DebugBaseActivity
 
-class HttpDebugActivity : AppCompatActivity() {
+class HttpDebugActivity : DebugBaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        initLegadoComposeTheme()
         super.onCreate(savedInstanceState)
-        setLegadoContent {
+        setDebugContent {
             HttpDebugScreen(onBackClick = { finish() })
         }
     }

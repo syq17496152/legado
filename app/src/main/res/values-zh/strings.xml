@@ -1381,6 +1381,8 @@
     <string name="url_record_enable_hint">开启URL记录功能来采集访问数据</string>
     <string name="precise_manage">精准管理</string>
     <string name="precise_manage_summary">网址记录、存储、下载、文件管理</string>
+    <string name="data_manage">数据管理</string>
+    <string name="log_diagnostics">日志与诊断</string>
     <string name="storage_manage">存储管理</string>
     <string name="storage_manage_summary">查看与清理缓存存储</string>
     <string name="storage_total">总量</string>
@@ -1397,7 +1399,7 @@
     <string name="download_tab_completed">已完成</string>
     <string name="download_tab_failed">失败</string>
     <string name="download_summary">下载中:%1$d 已完成:%2$d 失败:%3$d</string>
-    <string name="clear_completed_tasks">清除已完成</string>
+    <string name="clear_completed_tasks">清除已完成/失败</string>
     <string name="clear_completed_confirm">确定清除已完成和失败的下载任务？</string>
     <string name="download_play_with_builtin">播放</string>
     <string name="download_open_file">打开文件</string>
@@ -1416,6 +1418,10 @@
     <string name="download_encrypt_unsupported">不支持加密流</string>
     <string name="download_hls_failed">播放列表下载失败</string>
     <string name="download_file_not_found">本地文件不存在</string>
+    <string name="download_file_missing">文件不存在或已被删除，可删除该记录</string>
+    <string name="download_eta_left">剩余 %1$s</string>
+    <string name="download_clear_success">已清除记录</string>
+    <string name="download_error_detail">失败详情</string>
     <string name="download_error_code">错误：%1$s</string>
     <string name="download_error_http">请求失败</string>
     <string name="download_error_io">读写文件失败</string>
@@ -1624,6 +1630,9 @@
     <string name="source_sort_3">按类型</string>
     <string name="source_sort_4">按分组</string>
     <string name="source_sort_5">按URL</string>
+    <string name="source_sort_6">按更新时间</string>
+    <string name="source_sort_ascending">升序排列</string>
+    <string name="source_layout_auto">自动列数</string>
     <string name="source_layout">视图</string>
     <string name="source_sort_label">排序</string>
     <string name="about_description_sigma">\u3000\u3000阅读M继承自legado-E&amp;阅读 Archive，旨在原版基础上完善和增加功能。</string>
@@ -2366,9 +2375,10 @@ bookUrl：%7$s
 <string name="expand">展开</string>
 <string name="collapse">收起</string>
 <string name="config_category_content">内容与规则</string>
-<string name="config_category_appearance">外观与 AI</string>
-<string name="config_category_sync">同步与服务</string>
-<string name="config_category_tools">工具与关于</string>
+    <string name="config_category_appearance">外观</string>
+    <string name="config_category_sync">同步与服务</string>
+    <string name="config_category_tools">工具</string>
+    <string name="config_category_about">关于</string>
 <string name="bookshelf_tag_manage">管理标签</string>
 <string name="bookshelf_tag_all">全部</string>
 <string name="bookshelf_tag_manage_hint">取消勾选会从当前书架分组的书籍中移除该标签。</string>
@@ -2629,6 +2639,7 @@ bookUrl：%7$s
 <string name="sync_theme_packages_summary">开启后保存主题、顶栏、底栏时会后台同步到云端</string>
 <string name="s3_container_manage">管理 S3 容器</string>
 <string name="s3_container_manage_summary">添加、编辑、测试和设置备份用 S3 容器</string>
+<string name="library_container_manage_title">书库容器</string>
 <string name="s3_auto_switch_container">自动切换 S3 容器</string>
 <string name="s3_auto_switch_container_summary">当前容器空间不足时，允许备份使用下一个可用容器</string>
 <string name="s3_container_add">添加 S3 容器</string>

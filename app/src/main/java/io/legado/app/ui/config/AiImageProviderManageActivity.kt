@@ -2,8 +2,6 @@ package io.legado.app.ui.config
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
@@ -122,25 +120,8 @@ class AiImageProviderManageActivity : BaseActivity<ActivityAiProviderManageBindi
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menu.add(0, MENU_IMPORT_RULE, 0, "导入规则").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        menu.add(0, MENU_EXPORT_RULES, 1, "导出规则").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
-        return super.onCompatCreateOptionsMenu(menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            MENU_IMPORT_RULE -> {
-                showImportActions()
-                true
-            }
-            MENU_EXPORT_RULES -> {
-                exportAllRules()
-                true
-            }
-            else -> super.onCompatOptionsItemSelected(item)
-        }
-    }
+    // H17（2026-08-28）：系统 options menu 链删除——本页已接 Compose 顶栏（onImportRules/onExportRules
+    // 直接消费 showImportActions/exportAllRules），menu.add 注入为不可达死代码。
 
     private fun openEdit(intent: Intent) {
         startActivity(intent)
@@ -515,8 +496,5 @@ class AiImageProviderManageActivity : BaseActivity<ActivityAiProviderManageBindi
         postEvent(EventBus.AI_CONFIG_CHANGED, true)
     }
 
-    companion object {
-        private const val MENU_IMPORT_RULE = 1
-        private const val MENU_EXPORT_RULES = 2
-    }
+    companion object
 }

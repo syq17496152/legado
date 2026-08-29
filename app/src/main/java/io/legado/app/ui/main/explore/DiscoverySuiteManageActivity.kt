@@ -101,6 +101,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.theme.subtitleLarge
+import io.legado.app.ui.theme.titleLargeX
 
 class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() {
 
@@ -661,7 +666,7 @@ private fun DiscoverySuiteListScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 18.dp, top = 14.dp, end = 18.dp),
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 color = palette.secondaryText
             )
@@ -747,7 +752,7 @@ private fun DiscoverySuiteDetailScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 18.dp, top = 14.dp, end = 18.dp),
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             fontFamily = palette.bodyFontFamily,
             color = palette.secondaryText
         )
@@ -757,7 +762,7 @@ private fun DiscoverySuiteDetailScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 18.dp, vertical = 48.dp),
-                fontSize = 16.sp,
+                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 color = palette.secondaryText
             )
@@ -773,7 +778,7 @@ private fun DiscoverySuiteDetailScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 18.dp, vertical = 24.dp),
-                    fontSize = 15.sp,
+                    fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                     fontFamily = palette.bodyFontFamily,
                     color = palette.secondaryText
                 )
@@ -848,14 +853,14 @@ private fun SuiteOpacityMultiplierRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "透明度倍率",
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontWeight = FontWeight.Medium,
                 fontFamily = palette.bodyFontFamily,
                 color = palette.primaryText
             )
             Text(
                 text = "当前 ${"%.2f".format(value)}x，仅增强套件页面板不透明度",
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 color = palette.secondaryText,
                 maxLines = 1,
@@ -983,7 +988,7 @@ private fun DiscoverySuiteWidgetEditorScreen(
                         } else {
                             "编辑控件"
                         },
-                        fontSize = 22.sp,
+                        fontSize = MaterialTheme.typography.titleLargeX.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         fontFamily = palette.titleFontFamily,
                         color = palette.primaryText
@@ -1058,7 +1063,7 @@ private fun DiscoverySuiteWidgetEditorScreen(
                             type == DiscoverySuiteWidgetType.WaterfallBooks.value -> "瀑布流控件会固定在所有控件底部；已选 ${selectedKeys.size} 个 Tag"
                             else -> "先选书源，再选择该书源下的 Tag；已选 ${selectedKeys.size} 个"
                         },
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         fontFamily = palette.bodyFontFamily,
                         color = palette.secondaryText
                     )
@@ -1091,7 +1096,7 @@ private fun DiscoverySuiteWidgetEditorScreen(
                             ) {
                                 Text(
                                     text = "已选 ${selectedKeys.size} 个",
-                                    fontSize = 13.sp,
+                                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                                     fontFamily = palette.bodyFontFamily,
                                     color = palette.secondaryText
                                 )
@@ -1189,7 +1194,7 @@ private fun SourceTagsStatePanel(
             text = text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             fontFamily = palette.bodyFontFamily,
             color = palette.secondaryText,
             modifier = Modifier.weight(1f)
@@ -1228,7 +1233,7 @@ private fun SourceOptionChip(
                 text = source.sourceName,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 fontFamily = palette.bodyFontFamily,
                 color = if (selected) palette.accent else palette.primaryText
@@ -1241,7 +1246,7 @@ private fun SourceOptionChip(
                 },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 color = palette.secondaryText
             )
@@ -1275,7 +1280,7 @@ private fun ClassicDiscoverPreview(
             text = "${source.sourceName} · 经典发现预览 · ${source.tags.size} 个可选 Tag",
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             fontWeight = FontWeight.Medium,
             fontFamily = palette.bodyFontFamily,
             color = palette.primaryText
@@ -1528,7 +1533,7 @@ private fun FilterChip(
             text = text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             fontFamily = palette.bodyFontFamily,
             color = if (selected) palette.accent else palette.primaryText
@@ -1550,7 +1555,7 @@ private fun EmptyManageState(
     ) {
         Text(
             text = "还没有套件",
-            fontSize = 18.sp,
+            fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
             fontWeight = FontWeight.SemiBold,
             fontFamily = palette.titleFontFamily,
             color = palette.primaryText
@@ -1597,14 +1602,14 @@ private fun WidgetManageRow(
                 },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontSize = 16.sp,
+                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = palette.bodyFontFamily,
                 color = palette.primaryText
             )
             Text(
                 text = "${widget.typeLabel()} · ${widget.targets.size} 个 Tag",
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 color = palette.secondaryText
             )
@@ -1634,7 +1639,7 @@ private fun WidgetTypeChip(
             text = text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             fontFamily = palette.bodyFontFamily,
             color = if (selected) palette.accent else palette.primaryText
@@ -1704,7 +1709,7 @@ private fun TagOptionRow(
                 text = option.tagTitle,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontWeight = FontWeight.Medium,
                 fontFamily = palette.bodyFontFamily,
                 color = palette.primaryText
@@ -1715,7 +1720,7 @@ private fun TagOptionRow(
                     .joinToString(" · "),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 color = palette.secondaryText
             )
@@ -1779,7 +1784,7 @@ private fun PrimaryTextButton(
             text = text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            fontSize = 15.sp,
+            fontSize = MaterialTheme.typography.bodySecondary.fontSize,
             fontWeight = FontWeight.SemiBold,
             fontFamily = palette.bodyFontFamily,
             color = palette.accent
@@ -1806,7 +1811,7 @@ private fun CompactAction(
             text = text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             fontWeight = FontWeight.Medium,
             fontFamily = palette.bodyFontFamily,
             color = if (danger) Color(0xFFD44848) else palette.accent

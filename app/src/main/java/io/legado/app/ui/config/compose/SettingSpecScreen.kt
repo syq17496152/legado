@@ -57,6 +57,8 @@ import io.legado.app.ui.widget.compose.appSettingRowDecoration
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.ui.widget.compose.toMiuixPalette
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 private val PanelHorizontalPadding = 12.dp
 
@@ -281,7 +283,7 @@ private fun SettingRow(
                     Text(
                         text = item.selectedLabel.toString(),
                         color = if (item.enabled) colors.accent else colors.disabledText,
-                        fontSize = 13.sp,
+                        fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -390,7 +392,7 @@ private fun SettingSliderRow(
             Text(
                 text = item.valueFormatter(sliderValue),
                 color = if (item.enabled) colors.accent else colors.disabledText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -422,7 +424,7 @@ private fun SettingText(
         Text(
             text = item.title.toString(),
             color = titleColor,
-            fontSize = 16.sp,
+            fontSize = MaterialTheme.typography.bodyLarge.fontSize,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -431,7 +433,7 @@ private fun SettingText(
             Text(
                 text = it.toString(),
                 color = summaryColor,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis
             )

@@ -18,49 +18,58 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.help.config.AppConfig
+import io.legado.app.lib.theme.UiCorner
+import io.legado.app.lib.theme.rememberThemeUiPalette
+import io.legado.app.lib.theme.titleTypeface
 import io.legado.app.model.BookCover
 import io.legado.app.ui.widget.components.AppShapes
+import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 
 /**
  * 订阅/书源文件夹目录 Compose 网格（对齐书架文件夹 FolderGroupGridContent 样式）。
  *
- * 视觉参数与书架完全一致：
- * - 封面 3:4（aspectRatio 0.75）+ AppShapes.Chip(8dp) 圆角 + surfaceContainerHigh 底色
- * - 无封面时 FolderOpen 图标 + onSurfaceVariant tint（跟随主题）
- * - 分组名 bodySmall + Medium 加粗 + onSurface，居中 2 行，TopPadding 8dp
- * - 网格间距：水平 12dp / 垂直 16dp + contentPadding(12,8,12)
+ * config-needs-restart-fix 对齐改造：
+ * - 间距由 sourceMargin 单源驱动（contentPadding/spacedBy 全 margin，原硬编码 12/8/12+12/16 不生效问题修复）
+ * - 取色归位：封面底色 cardColor 直色、图标 tint secondaryText（清除 M3 派生色）
+ * - 分组名对齐书架：12sp + titleTypeface + Medium + minLines=2 + top 6dp；showBookname==1 显示（K7 语义）
  *
- * 数据模型用 [FolderItem]（groupKey/groupLabel/isSpecial）+ 封面 URL 缓存 map，
- * 与 View 版 SourceFolderAdapter 共用同一份数据源，仅渲染层替换为 Compose。
+ * 数据模型用 [FolderItem]（groupKey/groupLabel/isSpecial）+ 封面 URL 缓存 map。
  */
 @Composable
 fun SourceFolderComposeGrid(
     items: List<FolderItem>,
     covers: Map<String, String?>,
     spanCount: Int,
+    margin: Int,
     onFolderClick: (FolderItem) -> Unit,
     onFolderLongClick: (FolderItem) -> Unit,
 ) {
-    val showBookname = AppConfig.showBookname
+    val context = LocalContext.current
+    val themeUiPalette = rememberThemeUiPalette()
+    val palette = rememberAppSettingPalette()
+    val coverBg = Color(UiCorner.surfaceColor(themeUiPalette.cardColor))
+    val m = margin.coerceAtLeast(2).dp
     LazyVerticalGrid(
         columns = GridCells.Fixed(spanCount),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 12.dp, top = 8.dp, end = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(start = m, top = m, end = m, bottom = m),
+        horizontalArrangement = Arrangement.spacedBy(m),
+        verticalArrangement = Arrangement.spacedBy(m),
     ) {
         items(items, key = { it.groupKey }) { item ->
             Column(
@@ -77,25 +86,30 @@ fun SourceFolderComposeGrid(
                         .fillMaxWidth()
                         .aspectRatio(0.75f)
                         .clip(AppShapes.Chip)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                        .background(coverBg),
                 ) {
                     SourceFolderCover(
                         cover = covers[item.groupKey],
+                        coverBg = coverBg,
+                        secondaryText = palette.secondaryText,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
-                if (showBookname != 1) {
+                // showBookname 语义（K7 修正后）：1=显示名字，与书架一致
+                if (AppConfig.showBookname == 1) {
                     Text(
                         text = item.groupLabel,
                         maxLines = 2,
+                        minLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily(context.titleTypeface()),
+                        color = palette.primaryText,
                         fontWeight = FontWeight.Medium,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp),
+                            .padding(top = 6.dp),
                     )
                 }
             }
@@ -104,22 +118,24 @@ fun SourceFolderComposeGrid(
 }
 
 /**
- * 文件夹封面：有自定义封面时加载 BookCover，否则 FolderOpen 图标 + onSurfaceVariant（对齐书架 GroupCover）。
+ * 文件夹封面：有自定义封面时加载 BookCover，否则 FolderOpen 图标（取色归位 AD-07 同型）。
  */
 @Composable
 private fun SourceFolderCover(
     cover: String?,
+    coverBg: Color,
+    secondaryText: Color,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     Box(
-        modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh),
+        modifier = modifier.background(coverBg),
     ) {
         if (cover.isNullOrBlank()) {
             Icon(
                 imageVector = Icons.Filled.FolderOpen,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = secondaryText,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .size(28.dp),

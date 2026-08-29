@@ -4,8 +4,6 @@ import android.app.DatePickerDialog
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -22,11 +20,11 @@ import io.legado.app.data.entities.Book
 import io.legado.app.databinding.ActivityReadRecordBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.TopBarConfig
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.ui.about.ReadHeatmapCell
@@ -313,37 +311,6 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
         }
     }
 
-    override fun onCompatCreateOptionsMenu(menu: Menu) {
-        menuInflater.inflate(R.menu.book_read_record, menu)
-    }
-
-    override fun onCompatOptionsItemSelected(item: MenuItem) {
-        when (item.itemId) {
-            R.id.menu_enable_record -> {
-                AppConfig.enableReadRecord = !item.isChecked
-                supportToolbar?.menu?.findItem(R.id.menu_enable_record)?.isChecked =
-                    AppConfig.enableReadRecord
-            }
-
-            R.id.menu_clear_record -> {
-                alert(R.string.delete, R.string.sure_del) {
-                    yesButton {
-                        lifecycleScope.launch {
-                            withContext(IO) {
-                                appDb.readRecordDao.clear()
-                                appDb.readRecordDailyDao.clear()
-                                appDb.readRecentBookDao.clear()
-                                ReadRecordWidgetStore.clearRecentSnapshots()
-                            }
-                            loadData(force = true)
-                        }
-                    }
-                    noButton()
-                }
-            }
-        }
-    }
-
     private fun preloadData() {
         loadData(force = true)
     }
@@ -358,8 +325,6 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             if (!force) return
             loadJob?.cancel()
         }
-        supportToolbar?.menu?.findItem(R.id.menu_enable_record)?.isChecked =
-            AppConfig.enableReadRecord
         loadJob = viewLifecycleOwner.lifecycleScope.launch {
             val loadDate = selectedDate
             val dashboard = withContext(IO) {
@@ -530,10 +495,10 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
 
     private fun showYearSelector() {
         val years = ((selectedDate.year - 5)..(selectedDate.year + 1)).toList()
-        requireContext().selector(
-            getString(R.string.read_record_select_year),
-            years.map { getString(R.string.read_record_year_value, it) }
-        ) { _, index ->
+        showComposeChoiceListDialog(
+            title = getString(R.string.read_record_select_year),
+            labels = years.map { getString(R.string.read_record_year_value, it) }
+        ) { index ->
             val targetYear = years[index]
             val targetMonth = YearMonth.of(targetYear, selectedDate.monthValue)
             selectedDate = targetMonth.atDay(selectedDate.dayOfMonth.coerceAtMost(targetMonth.lengthOfMonth()))
@@ -653,8 +618,13 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
 
     private fun confirmDeleteDailyRecord(index: Int) {
         val item = currentDailyTimeline.getOrNull(index) ?: return
-        alert(getString(R.string.delete), item.date.format(fullDayFormatter)) {
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.delete),
+            message = item.date.format(fullDayFormatter),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 lifecycleScope.launch {
                     withContext(IO) {
                         appDb.readRecordDailyDao.delete(item.date.toString())
@@ -662,8 +632,7 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
                     loadData(force = true)
                 }
             }
-            noButton()
-        }
+        )
     }
 
     private fun renderRecentCovers(items: List<ReadRecentVisualItem>) {

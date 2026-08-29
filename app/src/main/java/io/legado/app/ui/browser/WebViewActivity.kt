@@ -46,10 +46,10 @@ import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.help.http.CookieStore
 import io.legado.app.lib.dialogs.SelectItem
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.ui.association.OnLineImportActivity
+import io.legado.app.ui.widget.compose.showComposeActionListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.ACache
 import io.legado.app.utils.gone
@@ -289,15 +289,18 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
                     icon = Icons.Outlined.DeleteForever,
                     title = getString(R.string.delete_source),
                     onClick = {
-                        alert(R.string.draw) {
-                            setMessage(getString(R.string.sure_del) + "\n" + viewModel.sourceName)
-                            noButton()
-                            yesButton {
+                        showComposeConfirmDialog(
+                            title = getString(R.string.draw),
+                            message = getString(R.string.sure_del) + "\n" + viewModel.sourceName,
+                            positiveText = getString(R.string.yes),
+                            negativeText = getString(R.string.no),
+                            dangerPositive = true,
+                            onPositive = {
                                 viewModel.deleteSource {
                                     finish()
                                 }
                             }
-                        }
+                        )
                     }
                 )
             )
@@ -335,15 +338,16 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
             if (hitTestResult.type == WebView.HitTestResult.IMAGE_TYPE ||
                 hitTestResult.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
                 hitTestResult.extra?.let { webPic ->
-                    selector(
-                        arrayListOf(
-                            SelectItem(getString(R.string.action_save), "save"),
-                            SelectItem(getString(R.string.select_folder), "selectFolder")
+                    showComposeActionListDialog(
+                        title = "",
+                        labels = listOf(
+                            getString(R.string.action_save),
+                            getString(R.string.select_folder)
                         )
-                    ) { _, charSequence, _ ->
-                        when (charSequence.value) {
-                            "save" -> saveImage(webPic)
-                            "selectFolder" -> selectSaveFolder()
+                    ) { index ->
+                        when (index) {
+                            0 -> saveImage(webPic)
+                            1 -> selectSaveFolder()
                         }
                     }
                     return@setOnLongClickListener true

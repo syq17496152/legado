@@ -55,6 +55,10 @@ import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.windowSize
 import splitties.systemservices.windowManager
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.theme.subtitleLarge
+import io.legado.app.ui.theme.subtitleLargeX
 
 object SourceSelectDialog {
 
@@ -170,7 +174,7 @@ private fun <T> SourceSelectContent(
                 Text(
                     text = title,
                     color = style.primaryText,
-                    fontSize = 19.sp,
+                    fontSize = MaterialTheme.typography.subtitleLargeX.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = style.titleFontFamily,
                     maxLines = 2,
@@ -198,7 +202,7 @@ private fun <T> SourceSelectContent(
                 },
                 textStyle = LocalTextStyle.current.copy(
                     color = style.primaryText,
-                    fontSize = 15.sp
+                    fontSize = MaterialTheme.typography.bodySecondary.fontSize
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = style.primaryText,
@@ -223,7 +227,7 @@ private fun <T> SourceSelectContent(
                     Text(
                         text = stringResource(R.string.empty),
                         color = style.secondaryText,
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         textAlign = TextAlign.Center
                     )
                 }

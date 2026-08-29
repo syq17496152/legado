@@ -22,7 +22,6 @@ import android.widget.TextView
 import android.widget.ArrayAdapter
 import android.widget.AdapterView
 import android.widget.AutoCompleteTextView
-import android.view.SubMenu
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.mutableIntStateOf
@@ -73,7 +72,6 @@ import io.legado.app.help.glide.OkHttpModelLoader
 import io.legado.app.help.source.clearExploreKindsCache
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.help.webView.WebViewPool
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
@@ -119,7 +117,6 @@ import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.setSelectionSafely
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.transaction
 import io.legado.app.utils.visible
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.windowSize
@@ -174,7 +171,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     private val diffItemCallBack = ExploreDiffItemCallBack()
     private val groups = linkedSetOf<String>()
     private var exploreFlowJob: Job? = null
-    private var groupsMenu: SubMenu? = null
+    private var groupsMenuPopup: ModernActionPopup.Handle? = null
     private var oldModeInitialized = false
     private var modernModeInitialized = false
     private var discoveryPageMode = AppConfig.DISCOVERY_PAGE_MODE_MODERN
@@ -270,7 +267,9 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             }
         }
         binding.topBar.setMode(io.legado.app.ui.widget.MainTopBarView.Mode.DISCOVERY)
-        binding.topBar.setSearchEntryVisible(true)
+        // topbar-search-entry-align：关闭 searchEntry 胶囊（视觉像输入框），形态对齐书架/我的"纯搜索按钮"；
+        // 关胶囊后 titleSelect（源选择入口）自动回归，点击弹源选择菜单/长按弹分类
+        binding.topBar.setSearchEntryVisible(false)
         binding.topBar.applyStatusBarPadding(withInitialPadding = true)
         binding.topBar.doOnLayout {
             updateModernTopBarOverlay()
@@ -341,12 +340,10 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     override fun onCompatCreateOptionsMenu(menu: Menu) {
         super.onCompatCreateOptionsMenu(menu)
         if (usingModernDiscovery || usingSuiteDiscovery) {
-            groupsMenu = null
             return
         }
         menuInflater.inflate(R.menu.main_explore, menu)
-        groupsMenu = menu.findItem(R.id.menu_group)?.subMenu
-        upGroupsMenu()
+        // H17：分组子菜单已随 H7 转 ModernActionPopup（showExploreGroupPopup），无 SubMenu 注入
     }
 
     private fun applyDiscoveryMode(loadData: Boolean = true) {
@@ -1929,9 +1926,7 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             }
             true
         }
-        binding.topBar.searchEntry.setOnClickListener {
-            openDiscoverSearch()
-        }
+        // topbar-search-entry-align：searchEntry 胶囊已关闭，移除其点击绑定（搜索入口收敛为 searchButton）
         binding.topBar.loginButton.setOnClickListener {
             openSelectedSourceLogin()
         }
@@ -1978,11 +1973,10 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
 
     private fun updateDiscoverSearchButtonState() {
         val canSearch = !selectedDiscoverSource?.searchUrl.isNullOrBlank()
-        binding.topBar.searchButton.isVisible = canSearch && !binding.topBar.isRegularStyle()
+        // topbar-search-entry-align：胶囊已关闭，regular 风格下也显示搜索按钮（保证搜索入口可达）
+        binding.topBar.searchButton.isVisible = canSearch
         binding.topBar.searchButton.isEnabled = canSearch
         binding.topBar.searchButton.alpha = if (canSearch) 1f else 0.45f
-        binding.topBar.searchEntry.isEnabled = canSearch
-        binding.topBar.searchEntry.alpha = if (canSearch) 1f else 0.58f
         binding.topBar.post(::updateDiscoverSourceNameWidth)
     }
 
@@ -3504,7 +3498,6 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
                 .collect {
                     groups.clear()
                     groups.addAll(it)
-                    upGroupsMenu()
                     delay(DISCOVERY_CLASSIC_FLOW_COALESCE_DELAY_MS)
                 }
         }
@@ -3588,16 +3581,11 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         WebViewPool.destroyScope(WebViewPool.Scope.DISCOVERY)
         oldModeInitialized = false
         modernModeInitialized = false
-        groupsMenu = null
         super.onDestroyView()
     }
 
-    private fun upGroupsMenu() = groupsMenu?.transaction { subMenu ->
-        subMenu.removeGroup(R.id.menu_group_text)
-        groups.forEach {
-            subMenu.add(R.id.menu_group_text, Menu.NONE, Menu.NONE, it)
-        }
-    }
+    // H17：upGroupsMenu 死代码已删——main_explore.xml 分组子菜单已随 H7 转 ModernActionPopup
+    // （showExploreGroupPopup），SubMenu 注入链不可达。
 
     override val scope: CoroutineScope
         get() = viewLifecycleOwner.lifecycleScope
@@ -3605,9 +3593,17 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     override fun onCompatOptionsItemSelected(item: MenuItem) {
         super.onCompatOptionsItemSelected(item)
         if (usingModernDiscovery || usingSuiteDiscovery) return
-        if (item.groupId == R.id.menu_group_text) {
-            searchView?.setQuery("group:${item.title}", true) ?: upExploreData("group:${item.title}")
+        if (item.itemId == R.id.menu_group) showExploreGroupPopup()
+    }
+
+    /** H7: 经典模式「分组」系统子菜单 → ModernActionPopup（对齐全局菜单视觉） */
+    private fun showExploreGroupPopup() {
+        val actions = groups.map { g ->
+            ModernActionPopup.Action(title = g) {
+                searchView?.setQuery("group:$g", true) ?: upExploreData("group:$g")
+            }
         }
+        groupsMenuPopup = ModernActionPopup.show(binding.titleBar.toolbar, actions, groupsMenuPopup)
     }
 
     override fun scrollTo(pos: Int) {
@@ -3634,13 +3630,16 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     }
 
     override fun deleteSource(source: BookSourcePart) {
-        alert(R.string.draw) {
-            setMessage(getString(R.string.sure_del) + "\n" + source.bookSourceName)
-            noButton()
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.draw),
+            message = getString(R.string.sure_del) + "\n" + source.bookSourceName,
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 viewModel.deleteSource(source)
             }
-        }
+        )
     }
 
     override fun searchBook(bookSource: BookSourcePart) {

@@ -1,5 +1,6 @@
 package io.legado.app.ui.widget.components
 
+import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -54,6 +55,8 @@ import io.legado.app.ui.book.read.HighlightActionMenu
  * @param onPickColor 打开某通道取色器（dialogId 用 HL_*）
  * @param onPickFont 打开字体选择器（current 为当前字体路径）
  * @param fontDisplayName 当前字体的可读名（宿主算好传入；空=默认）
+ * @param scrollable 自身是否滚动；嵌入已滚动容器（如 AppDialogFrame scrollContent=true）时
+ * 必须传 false，避免 verticalScroll 嵌套收到无限高度约束导致测量崩溃
  */
 @Composable
 fun HighlightStyleSheet(
@@ -62,11 +65,18 @@ fun HighlightStyleSheet(
     onPickColor: (dialogId: Int, initial: Int, withAlpha: Boolean) -> Unit,
     onPickFont: (current: String) -> Unit,
     fontDisplayName: String,
+    scrollable: Boolean = true,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
+            .then(
+                if (scrollable) {
+                    Modifier.verticalScroll(rememberScrollState())
+                } else {
+                    Modifier
+                }
+            )
     ) {
         // ---------- 预设区：6 语义色格，3 列 2 行 ----------
         Text(

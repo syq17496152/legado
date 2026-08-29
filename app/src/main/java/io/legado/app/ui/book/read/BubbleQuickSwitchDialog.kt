@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -57,6 +58,7 @@ import io.legado.app.utils.SvgUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
+import androidx.compose.material3.MaterialTheme
 
 class BubbleQuickSwitchDialog : ComposeDialogFragment() {
 
@@ -145,7 +147,7 @@ class BubbleQuickSwitchDialog : ComposeDialogFragment() {
                                             Text(
                                                 text = entry.config.name,
                                                 color = if (active) palette.settings.accent else palette.settings.primaryText,
-                                                fontSize = 16.sp,
+                                                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                                                 fontWeight = FontWeight.SemiBold,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
@@ -153,7 +155,7 @@ class BubbleQuickSwitchDialog : ComposeDialogFragment() {
                                             Text(
                                                 text = if (active) "已应用" else bubbleSourceText(entry.source),
                                                 color = palette.settings.secondaryText,
-                                                fontSize = 12.sp,
+                                                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier.padding(top = 4.dp)
@@ -204,7 +206,7 @@ private fun BubblePreview(bitmap: Bitmap?) {
     Box(
         modifier = Modifier
             .size(58.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(AppShapes.rounded(8))
             .background(palette.miuix.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
@@ -215,7 +217,7 @@ private fun BubblePreview(bitmap: Bitmap?) {
                 modifier = Modifier.fillMaxSize()
             )
         } else {
-            Text(text = "气泡", color = palette.settings.secondaryText, fontSize = 12.sp)
+            Text(text = "气泡", color = palette.settings.secondaryText, fontSize = MaterialTheme.typography.bodySmall.fontSize)
         }
     }
 }

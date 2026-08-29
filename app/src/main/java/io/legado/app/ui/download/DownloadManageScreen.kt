@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Pause
@@ -34,13 +35,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryScrollableTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,15 +47,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.R
 import io.legado.app.service.DownloadStatus
 import io.legado.app.service.DownloadTaskType
 import io.legado.app.ui.book.cache.formatBytes
+import io.legado.app.ui.widget.RoundedTagBarView
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.AppEditDialog
 import io.legado.app.ui.widget.components.AppMenuSheet
 import io.legado.app.ui.widget.components.BookListCardMetrics
 import io.legado.app.ui.widget.components.ConfirmDialog
+import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.ui.widget.components.EditField
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.components.GlassTopAppBar
@@ -65,13 +67,31 @@ import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.ShelfListSkeleton
 import io.legado.app.ui.widget.components.VerticalScrollbar
 
+/** C6 单源：Tab 枚举唯一权威定义（Activity 与 Screen 共用，消除双份裸 Int 对齐） */
+enum class DownloadTab(val labelRes: Int) {
+    ALL(R.string.download_tab_all),
+    RUNNING(R.string.download_tab_running),
+    PAUSED(R.string.download_tab_paused),
+    COMPLETED(R.string.download_tab_completed),
+    FAILED(R.string.download_tab_failed)
+}
+
+/** C6 单源：本地视频扩展名（Activity 播放判定与 Screen 菜单判定共用） */
+val DOWNLOAD_VIDEO_EXTS = setOf(
+    "mp4", "mkv", "webm", "avi", "mov", "flv", "wmv",
+    "3gp", "m4v", "m2ts", "ts", "rmvb", "rm", "f4v"
+)
+
 data class DownloadDisplayItem(
     val id: Long,
     val fileName: String,
     val url: String,
     val status: DownloadStatus,
-    val totalSize: Int,
-    val downloadedSize: Int,
+    /** B9：体积全程 Long */
+    val totalSize: Long,
+    val downloadedSize: Long,
+    /** D1：实时速度（字节/秒），仅 RUNNING 有意义 */
+    val speed: Long = 0,
     val taskType: DownloadTaskType = DownloadTaskType.DIRECT,
     val localPath: String? = null,
     val errorCode: String? = null
@@ -86,7 +106,6 @@ fun DownloadManageScreen(
     onlyWifi: Boolean,
     onOnlyWifiChange: (Boolean) -> Unit,
     onTabChange: (Int) -> Unit,
-    onCancelTask: (DownloadDisplayItem) -> Unit,
     onPauseTask: (DownloadDisplayItem) -> Unit,
     onResumeTask: (DownloadDisplayItem) -> Unit,
     onDeleteTask: (DownloadDisplayItem, Boolean) -> Unit,
@@ -99,21 +118,20 @@ fun DownloadManageScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var moreMenuVisible by remember { mutableStateOf(false) }
-    var menuItem by remember { mutableStateOf<DownloadDisplayItem?>(null) }
-    var deleteChoiceItem by remember { mutableStateOf<DownloadDisplayItem?>(null) }
-    var confirmItem by remember { mutableStateOf<DownloadDisplayItem?>(null) }
-    var confirmDeleteFiles by remember { mutableStateOf(false) }
-    var clearConfirmVisible by remember { mutableStateOf(false) }
-    var dirSettingVisible by remember { mutableStateOf(false) }
+    // D4：旋转屏保持（布尔态直接 saveable；item 态存任务 id 回查列表，DisplayItem 非 Parcelable）
+    var moreMenuVisible by rememberSaveable { mutableStateOf(false) }
+    var menuItemId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var deleteChoiceItemId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var confirmItemId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var confirmDeleteFiles by rememberSaveable { mutableStateOf(false) }
+    var clearConfirmVisible by rememberSaveable { mutableStateOf(false) }
+    var dirSettingVisible by rememberSaveable { mutableStateOf(false) }
+    var errorDetailItemId by rememberSaveable { mutableStateOf<Long?>(null) }
 
-    val tabRes = listOf(
-        R.string.download_tab_all,
-        R.string.download_tab_running,
-        R.string.download_tab_paused,
-        R.string.download_tab_completed,
-        R.string.download_tab_failed
-    )
+    val menuItem = items.find { it.id == menuItemId }
+    val deleteChoiceItem = items.find { it.id == deleteChoiceItemId }
+    val confirmItem = items.find { it.id == confirmItemId }
+    val errorDetailItem = items.find { it.id == errorDetailItemId }
 
     val listState = rememberLazyListState()
 
@@ -177,17 +195,27 @@ fun DownloadManageScreen(
             }
         )
 
-        PrimaryScrollableTabRow(
-            selectedTabIndex = tabIndex.coerceIn(0, tabRes.lastIndex)
-        ) {
-            tabRes.forEachIndexed { index, res ->
-                Tab(
-                    selected = tabIndex == index,
-                    onClick = { onTabChange(index) },
-                    text = { Text(stringResource(res)) }
-                )
-            }
-        }
+        // 顶部标签栏：嵌入 RoundedTagBarView（与新版发现头部同一组件，样式/主题联动完全一致——
+        // 胶囊选中态 + tagBar 圆角底 + TopBarConfig 配色），对齐 bookshelf_tag_bar_height(38dp)
+        // C6：标签文案来自 DownloadTab 单源枚举
+        AndroidView(
+            factory = { ctx ->
+                RoundedTagBarView(ctx).apply {
+                    setOnTagClickListener { index ->
+                        if (index in DownloadTab.entries.indices) onTabChange(index)
+                    }
+                }
+            },
+            update = { view ->
+                val labelItems = DownloadTab.entries.map {
+                    RoundedTagBarView.Item(view.context.getString(it.labelRes))
+                }
+                view.submitItems(labelItems, tabIndex.coerceIn(0, DownloadTab.entries.lastIndex))
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(38.dp)
+        )
 
         when {
             isLoading && items.isEmpty() -> ShelfListSkeleton(compact = true)
@@ -210,7 +238,8 @@ fun DownloadManageScreen(
                     itemsIndexed(items, key = { _, item -> item.id }) { _, item ->
                         DownloadTaskItemRow(
                             item = item,
-                            onClick = { menuItem = item }
+                            onClick = { menuItemId = item.id },
+                            onErrorDetailClick = { errorDetailItemId = item.id }
                         )
                     }
                 }
@@ -231,31 +260,31 @@ fun DownloadManageScreen(
             actions = buildTaskMenuActions(
                 item = item,
                 onPause = {
-                    menuItem = null
+                    menuItemId = null
                     onPauseTask(item)
                 },
                 onResume = {
-                    menuItem = null
+                    menuItemId = null
                     onResumeTask(item)
                 },
                 onDelete = {
-                    menuItem = null
-                    deleteChoiceItem = item
+                    menuItemId = null
+                    deleteChoiceItemId = item.id
                 },
                 onOpen = {
-                    menuItem = null
+                    menuItemId = null
                     onOpenFile(item)
                 },
                 onOpenWithPlayer = {
-                    menuItem = null
+                    menuItemId = null
                     onOpenWithPlayer(item)
                 },
                 onCopy = {
-                    menuItem = null
+                    menuItemId = null
                     onCopyPath(item)
                 }
             ),
-            onDismiss = { menuItem = null }
+            onDismiss = { menuItemId = null }
         )
     }
 
@@ -268,22 +297,22 @@ fun DownloadManageScreen(
                     icon = Icons.Default.Delete,
                     title = stringResource(R.string.download_delete_only),
                     onClick = {
-                        deleteChoiceItem = null
+                        deleteChoiceItemId = null
                         confirmDeleteFiles = false
-                        confirmItem = item
+                        confirmItemId = item.id
                     }
                 ),
                 MenuAction(
                     icon = Icons.Default.DeleteSweep,
                     title = stringResource(R.string.download_delete_with_files),
                     onClick = {
-                        deleteChoiceItem = null
+                        deleteChoiceItemId = null
                         confirmDeleteFiles = true
-                        confirmItem = item
+                        confirmItemId = item.id
                     }
                 )
             ),
-            onDismiss = { deleteChoiceItem = null }
+            onDismiss = { deleteChoiceItemId = null }
         )
     }
 
@@ -300,10 +329,10 @@ fun DownloadManageScreen(
             cancelText = stringResource(R.string.cancel),
             destructive = true,
             onConfirm = {
-                confirmItem = null
+                confirmItemId = null
                 onDeleteTask(item, confirmDeleteFiles)
             },
-            onDismiss = { confirmItem = null }
+            onDismiss = { confirmItemId = null }
         )
     }
 
@@ -320,6 +349,20 @@ fun DownloadManageScreen(
                 onClearCompleted()
             },
             onDismiss = { clearConfirmVisible = false }
+        )
+    }
+
+    // D2：失败原因完整详情（errorText 单行省略 → 点击查看完整错误）
+    errorDetailItem?.let { item ->
+        ConfirmDialog(
+            title = stringResource(R.string.download_error_detail),
+            text = "${item.fileName}\n${errorText(item.errorCode)}" +
+                (item.errorCode?.let { "\n${stringResource(R.string.download_error_code, it)}" } ?: ""),
+            confirmText = stringResource(R.string.ok),
+            cancelText = stringResource(R.string.cancel),
+            destructive = false,
+            onConfirm = { errorDetailItemId = null },
+            onDismiss = { errorDetailItemId = null }
         )
     }
 
@@ -394,32 +437,29 @@ private fun buildTaskMenuActions(
     }
 }
 
-/** 按文件名扩展名判断是否为视频产物（与 Activity 端 VIDEO_EXTS 对齐） */
-private fun isVideoFileName(fileName: String): Boolean {
-    val ext = fileName.substringAfterLast(".", "").lowercase()
-    return ext in setOf(
-        "mp4", "mkv", "webm", "avi", "mov", "flv", "wmv",
-        "3gp", "m4v", "m2ts", "ts", "rmvb", "rm", "f4v"
-    )
-}
+/** 按文件名扩展名判断是否为视频产物（C6 单源：与 Activity 端共用 DOWNLOAD_VIDEO_EXTS） */
+private fun isVideoFileName(fileName: String): Boolean =
+    fileName.substringAfterLast(".", "").lowercase() in DOWNLOAD_VIDEO_EXTS
 
 @Composable
 private fun DownloadTaskItemRow(
     item: DownloadDisplayItem,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onErrorDetailClick: () -> Unit
 ) {
-    // S2 列表条目卡片原语：18dp 圆角 clip + surface 容器 + combinedClickable（ui-standards §3.4 ListCard）
-    ListCard(
-        onClick = onClick,
-        metrics = BookListCardMetrics(minHeight = 80.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-    ) {
+    val palette = rememberAppSettingPalette()
+    // H10: 列表项卡片直色（palette.row），与书源/订阅源管理列表项同源
+            ListCard(
+                onClick = onClick,
+                metrics = BookListCardMetrics(minHeight = 80.dp),
+                containerColor = Color(palette.row)
+            ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = item.fileName,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = palette.primaryText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
@@ -449,9 +489,10 @@ private fun DownloadTaskItemRow(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = sizeText(item),
+                        // D1：速度 + 剩余时间（ETA）
+                        text = speedText(item),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = palette.secondaryText
                     )
                 }
             } else {
@@ -459,24 +500,27 @@ private fun DownloadTaskItemRow(
                 Text(
                     text = sizeText(item),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = palette.secondaryText
                 )
                 if (item.status == DownloadStatus.FAILED && !item.errorCode.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
+                        // D2：点击查看失败详情
                         text = errorText(item.errorCode),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable(onClick = onErrorDetailClick)
                     )
                 }
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = item.url,
+                // D3：URL 脱敏展示（仅保留 host，路径/参数隐藏，降低截屏泄漏面）
+                text = maskUrl(item.url),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = palette.secondaryText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -495,10 +539,10 @@ private fun statusText(status: DownloadStatus): String = when (status) {
 
 @Composable
 private fun statusColor(status: DownloadStatus): Color = when (status) {
-    // 语义状态色：成功→colorScheme.primary，失败→colorScheme.error（M3 语义色收敛，原 0xFF43A047/0xFFE53935）
+    // 语义状态色：成功→primary，失败→error（M3 语义色收敛，原 0xFF43A047/0xFFE53935）；默认→palette.secondaryText（H10 归位）
     DownloadStatus.COMPLETED -> MaterialTheme.colorScheme.primary
     DownloadStatus.FAILED -> MaterialTheme.colorScheme.error
-    else -> MaterialTheme.colorScheme.onSurfaceVariant
+    else -> rememberAppSettingPalette().secondaryText
 }
 
 private fun progressFraction(item: DownloadDisplayItem): Float {
@@ -508,7 +552,7 @@ private fun progressFraction(item: DownloadDisplayItem): Float {
 
 /** 将错误码枚举 name 映射为本地化失败原因（无硬编码中文，逐一映射字符串资源） */
 @Composable
-private fun errorText(errorCode: String): String = when (errorCode) {
+private fun errorText(errorCode: String?): String = when (errorCode) {
     "HTTP" -> stringResource(R.string.download_error_http)
     "IO" -> stringResource(R.string.download_error_io)
     "NETWORK" -> stringResource(R.string.download_error_network)
@@ -516,12 +560,45 @@ private fun errorText(errorCode: String): String = when (errorCode) {
     "NATIVE_REMUX" -> stringResource(R.string.download_error_remux)
     "UNSUPPORTED" -> stringResource(R.string.download_error_unsupported)
     "INCOMPLETE" -> stringResource(R.string.download_error_incomplete)
+    null -> ""
     else -> stringResource(R.string.download_error_code, errorCode)
 }
 
 private fun sizeText(item: DownloadDisplayItem): String =
     if (item.totalSize > 0) {
-        "${formatBytes(item.downloadedSize.toLong())} / ${formatBytes(item.totalSize.toLong())}"
+        "${formatBytes(item.downloadedSize)} / ${formatBytes(item.totalSize)}"
     } else {
-        formatBytes(item.downloadedSize.toLong())
+        formatBytes(item.downloadedSize)
     }
+
+/** D1：速度 + 剩余时间（ETA = 剩余字节 / 速度） */
+@Composable
+private fun speedText(item: DownloadDisplayItem): String {
+    val sizePart = sizeText(item)
+    if (item.speed <= 0) return sizePart
+    val speedPart = stringResource(R.string.download_speed, formatBytes(item.speed))
+    val etaPart = if (item.totalSize > item.downloadedSize) {
+        val etaSeconds = (item.totalSize - item.downloadedSize) / item.speed
+        stringResource(R.string.download_eta_left, formatEta(etaSeconds))
+    } else ""
+    return listOf(sizePart, speedPart, etaPart).filter { it.isNotBlank() }.joinToString("  ")
+}
+
+/** ETA 秒数格式化：>1h → xh ym；>1min → xm ys；否则 xs */
+private fun formatEta(seconds: Long): String {
+    if (seconds <= 0) return "0s"
+    val h = seconds / 3600
+    val m = (seconds % 3600) / 60
+    val s = seconds % 60
+    return when {
+        h > 0 -> "${h}h ${m}m"
+        m > 0 -> "${m}m ${s}s"
+        else -> "${s}s"
+    }
+}
+
+/** D3：URL 脱敏（保留 scheme+host，路径与参数隐藏，降低截屏/录屏泄漏面） */
+private fun maskUrl(url: String): String = runCatching {
+    val uri = java.net.URI(url)
+    "${uri.scheme}://${uri.host}/…"
+}.getOrDefault(url.take(48) + "…")

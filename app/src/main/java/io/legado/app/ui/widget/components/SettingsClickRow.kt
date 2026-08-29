@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 
 /**
  * 设置点击行（36dp RowIcon 图标块 + 标题 + 副标题 + 尾值 + 右箭头）
@@ -37,6 +38,7 @@ fun SettingsClickRow(
     enabled: Boolean = true,
     trailing: (@Composable () -> Unit)? = null
 ) {
+    val palette = rememberAppSettingPalette()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -54,7 +56,7 @@ fun SettingsClickRow(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = palette.primaryText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -63,7 +65,7 @@ fun SettingsClickRow(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = palette.secondaryText,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -74,7 +76,7 @@ fun SettingsClickRow(
             Text(
                 text = value,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = palette.secondaryText,
                 maxLines = 1
             )
         }
@@ -85,7 +87,7 @@ fun SettingsClickRow(
             Icon(
                 imageVector = trailingIcon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = palette.secondaryText,
                 modifier = Modifier.width(20.dp)
             )
         }

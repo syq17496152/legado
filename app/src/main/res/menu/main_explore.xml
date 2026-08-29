@@ -6,10 +6,6 @@
         android:id="@+id/menu_group"
         android:title="@string/group"
         android:icon="@drawable/ic_groups"
-        app:showAsAction="always">
-
-        <menu />
-
-    </item>
+        app:showAsAction="always" />
 
 </menu>

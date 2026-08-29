@@ -1,5 +1,6 @@
 package io.legado.app.ui.widget.compose
 
+import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +39,7 @@ import io.legado.app.ui.main.bookshelf.compose.BookshelfListPalette
 import io.legado.app.ui.main.bookshelf.compose.BookshelfListRenderConfig
 import io.legado.app.ui.widget.image.CoverImageView
 import io.legado.app.utils.BookIntroUtils
+import androidx.compose.material3.MaterialTheme
 
 private val NormalSearchBookListItemHeight = 136.dp
 
@@ -126,14 +128,14 @@ private fun SearchBookListText(
                 Spacer(modifier = Modifier.width(8.dp))
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(AppShapes.rounded(10))
                         .background(palette.accent.copy(alpha = 0.16f))
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = originCount.toString(),
                         color = palette.accent,
-                        fontSize = 11.sp,
+                        fontSize = MaterialTheme.typography.labelSmall.fontSize,
                         fontFamily = palette.bodyFontFamily,
                         maxLines = 1
                     )
@@ -205,7 +207,7 @@ private fun SearchBookKindChip(
     Text(
         text = text,
         color = palette.accent,
-        fontSize = 11.sp,
+        fontSize = MaterialTheme.typography.labelSmall.fontSize,
         fontFamily = palette.bodyFontFamily,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,

@@ -32,6 +32,8 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.association.ImportTxtTocRuleDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.ACache
@@ -74,19 +76,17 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
     }
     private val exportResult = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
-            alert(R.string.export_success) {
-                if (uri.toString().isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
-                }
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = getString(R.string.path)
-                    editView.setText(uri.toString())
-                }
-                customView { alertBinding.root }
-                okButton {
+            showComposeTextInputDialog(
+                title = getString(R.string.export_success),
+                message = if (uri.toString().isAbsUrl()) DirectLinkUpload.getSummary() else null,
+                hint = getString(R.string.path),
+                initialValue = uri.toString(),
+                readOnly = true,
+                positiveText = getString(R.string.copy_text),
+                onPositive = {
                     sendToClip(uri.toString())
                 }
-            }
+            )
         }
     }
 
@@ -152,6 +152,8 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
         MenuAction(
             icon = Icons.Default.Add,
             title = getString(R.string.add),
+            // topbar-icon-semantics-fix 3.3：新增恢复一级图标（原版 txt_toc_rule.xml menu_add always）
+            alwaysShow = true,
             onClick = { showDialogFragment(TxtTocRuleEditComposeDialog.create()) }
         ),
         MenuAction(
@@ -253,14 +255,17 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
     }
 
     private fun del(source: TxtTocRule) {
-        alert(R.string.draw) {
-            setMessage(getString(R.string.sure_del) + "\n" + source.name)
-            noButton()
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.draw),
+            message = getString(R.string.sure_del) + "\n" + source.name,
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 selectedIds.remove(source.id)
                 viewModel.del(source)
             }
-        }
+        )
     }
 
     private fun toggleSelect(index: Int, checked: Boolean) {
@@ -302,13 +307,17 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
     private fun delSourceDialog() {
         val selection = selectedRules
         if (selection.isEmpty()) return
-        alert(titleResource = R.string.draw, messageResource = R.string.sure_del) {
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.draw),
+            message = getString(R.string.sure_del),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
                 selectedIds.clear()
                 viewModel.del(*selection.toTypedArray())
             }
-            noButton()
-        }
+        )
     }
 
     /** 拖拽排序结束：按新顺序重排 serialNumber 并持久化 */

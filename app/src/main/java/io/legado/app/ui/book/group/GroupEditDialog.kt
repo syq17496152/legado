@@ -46,13 +46,13 @@ import androidx.compose.ui.unit.dp
 import androidx.fragment.app.viewModels
 import io.legado.app.R
 import io.legado.app.data.entities.BookGroup
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.AppDialogStyle
-import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.BookCoverImage
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -149,12 +149,16 @@ class GroupEditDialog() : ComposeDialogFragment() {
                         },
                         onDelete = {
                             initialGroup?.let { group ->
-                                alert(R.string.delete, R.string.sure_del) {
-                                    yesButton {
+                                this@GroupEditDialog.showComposeConfirmDialog(
+                                    title = getString(R.string.delete),
+                                    message = getString(R.string.sure_del),
+                                    positiveText = getString(R.string.yes),
+                                    negativeText = getString(R.string.no),
+                                    dangerPositive = true,
+                                    onPositive = {
                                         viewModel.delGroup(group) { dismiss() }
                                     }
-                                    noButton()
-                                }
+                                )
                             }
                         },
                         onCancel = { dismiss() }

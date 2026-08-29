@@ -56,6 +56,10 @@ import io.legado.app.ui.widget.image.CoverImageView
 import io.legado.app.utils.BookIntroUtils
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.theme.headlineSmallX
 
 data class SearchBookPreviewState(
     val book: SearchBook,
@@ -234,7 +238,7 @@ private fun SearchBookPreviewContent(
                     text = book.name,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    fontSize = 21.sp,
+                    fontSize = MaterialTheme.typography.headlineSmallX.fontSize,
                     lineHeight = 25.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = palette.titleFontFamily,
@@ -248,7 +252,7 @@ private fun SearchBookPreviewContent(
                             text = meta,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            fontSize = 13.sp,
+                            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                             fontFamily = palette.bodyFontFamily,
                             color = palette.secondaryText
                         )
@@ -267,7 +271,7 @@ private fun SearchBookPreviewContent(
                 .heightIn(max = 84.dp),
             maxLines = 4,
             overflow = TextOverflow.Ellipsis,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             lineHeight = 21.sp,
             fontFamily = palette.bodyFontFamily,
             softWrap = true,
@@ -324,7 +328,7 @@ private fun SearchBookPreviewAction(
             text = text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            fontSize = 15.sp,
+            fontSize = MaterialTheme.typography.bodySecondary.fontSize,
             fontWeight = FontWeight.SemiBold,
             fontFamily = palette.bodyFontFamily,
             color = if (emphatic) palette.accent else palette.primaryText

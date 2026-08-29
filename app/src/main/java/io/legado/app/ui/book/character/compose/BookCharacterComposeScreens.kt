@@ -40,10 +40,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
@@ -90,12 +93,14 @@ import io.legado.app.help.readaloud.speech.SpeechVoiceOption
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.lib.theme.accentColor
+import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.lib.theme.composeActionRadius
 import io.legado.app.lib.theme.composePanelRadius
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.ui.book.read.config.SpeechVoiceRoutePickerDialog
 import io.legado.app.ui.book.read.config.speechRouteSummary
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.LegadoMiuixPalette
@@ -107,6 +112,12 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.labelXSmall
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.theme.bodyLargeX
+import io.legado.app.ui.theme.subtitleLarge
 
 @Immutable
 data class CharacterColors(
@@ -132,22 +143,24 @@ data class CharacterStyle(
 fun rememberCharacterStyle(): CharacterStyle {
     val context = LocalContext.current
     val night = AppConfig.isNightTheme
-    val accent = context.accentColor
-    val page = ContextCompat.getColor(context, if (night) R.color.md_grey_900 else R.color.white)
-    val card = if (night) 0xff202329.toInt() else 0xfff7f8fb.toInt()
-    val cardAlt = ColorUtils.blendColors(card, accent, if (night) 0.18f else 0.08f)
-    val text = context.primaryTextColor
-    val subText = context.secondaryTextColor
-    val stroke = if (night) 0x26ffffff else 0x17000000
+    // H14: page/card/cardAlt/stroke 归位调色板（替代 md_grey_900/white 与 0xff 硬编码），随主题/卡面色/文字色
+    val palette = rememberAppSettingPalette()
+    val accent = Color(context.accentColor)
+    val page = palette.page
+    val card = Color(palette.row)
+    val cardAlt = Color(ColorUtils.blendColors(palette.row, context.accentColor, if (night) 0.18f else 0.08f))
+    val text = palette.primaryText
+    val subText = palette.secondaryText
+    val stroke = palette.divider
     return CharacterStyle(
         colors = CharacterColors(
-            accent = Color(accent),
-            page = Color(page),
-            card = Color(card),
-            cardAlt = Color(cardAlt),
-            text = Color(text),
-            subText = Color(subText),
-            stroke = Color(stroke),
+            accent = accent,
+            page = page,
+            card = card,
+            cardAlt = cardAlt,
+            text = text,
+            subText = subText,
+            stroke = stroke,
             danger = Color(0xffe34f4f.toInt())
         ),
         radius = context.composePanelRadius(),
@@ -242,38 +255,16 @@ fun CharacterScaffold(
         modifier = Modifier
             .fillMaxSize()
             .background(style.colors.page)
-            .statusBarsPadding()
+        // H15：GlassTopAppBar 自带状态栏 inset，父容器移除重复 statusBarsPadding
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(onClick = onBack) {
-                Text("返回", color = style.colors.text)
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    color = style.colors.text,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (subtitle.isNotBlank()) {
-                    Text(
-                        text = subtitle,
-                        color = style.colors.subText,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), content = actions)
-        }
+        // H15（2026-08-28）：TextButton"返回"+自绘 Row → GlassTopAppBar（硬编码"返回"消除，随顶栏管理）
+        GlassTopAppBar(
+            title = title,
+            subtitle = subtitle.takeIf { it.isNotBlank() },
+            navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+            onNavClick = onBack,
+            actions = actions
+        )
         content()
     }
 }
@@ -416,7 +407,7 @@ private fun CharacterRoleBottomTabs(
                         Text(
                             text = section.title,
                             color = if (selected) style.colors.accent else style.colors.text,
-                            fontSize = 13.sp,
+                            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -424,7 +415,7 @@ private fun CharacterRoleBottomTabs(
                         Text(
                             text = "${section.items.size}",
                             color = style.colors.subText,
-                            fontSize = 10.sp,
+                            fontSize = MaterialTheme.typography.labelXSmall.fontSize,
                             maxLines = 1
                         )
                     }
@@ -446,11 +437,11 @@ private fun CharacterRoleSectionHeader(title: String, count: Int) {
         Text(
             text = title,
             color = style.colors.text,
-            fontSize = 15.sp,
+            fontSize = MaterialTheme.typography.bodySecondary.fontSize,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.weight(1f)
         )
-        Text("$count 个", color = style.colors.subText, fontSize = 12.sp)
+        Text("$count 个", color = style.colors.subText, fontSize = MaterialTheme.typography.bodySmall.fontSize)
     }
 }
 
@@ -469,11 +460,11 @@ private fun CharacterSummaryHeader(count: Int, onAdd: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("本书角色库", color = style.colors.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text("本书角色库", color = style.colors.text, fontSize = MaterialTheme.typography.subtitleLarge.fontSize, fontWeight = FontWeight.SemiBold)
                 Text(
                     text = if (count == 0) "角色卡会只绑定当前书籍" else "已记录 $count 个角色",
                     color = style.colors.subText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
@@ -518,7 +509,7 @@ fun CharacterListCard(
                     Text(
                         text = character.displayName(),
                         color = style.colors.text,
-                        fontSize = 17.sp,
+                        fontSize = MaterialTheme.typography.bodyLargeX.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -529,7 +520,7 @@ fun CharacterListCard(
                 Text(
                     text = character.summaryText(),
                     color = style.colors.subText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 7.dp)
@@ -542,7 +533,7 @@ fun CharacterListCard(
                     Text(
                         text = meta,
                         color = style.colors.subText,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 5.dp)
@@ -611,7 +602,7 @@ private fun MoreActionRow(
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text(title, color = if (danger) style.colors.danger else style.colors.text, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = style.colors.subText, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
+            Text(subtitle, color = style.colors.subText, fontSize = MaterialTheme.typography.bodySmall.fontSize, modifier = Modifier.padding(top = 3.dp))
         }
     }
 }
@@ -696,7 +687,7 @@ private fun CharacterHeroCard(
                     Text(
                         text = character.displayName(),
                         color = style.colors.text,
-                        fontSize = 24.sp,
+                        fontSize = MaterialTheme.typography.headlineSmall.fontSize,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -738,11 +729,11 @@ private fun CharacterHeroCard(
                             border = androidx.compose.foundation.BorderStroke(1.dp, style.colors.stroke)
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
-                                Text(label, color = style.colors.subText, fontSize = 12.sp)
+                                Text(label, color = style.colors.subText, fontSize = MaterialTheme.typography.bodySmall.fontSize)
                                 Text(
                                     value,
                                     color = style.colors.text,
-                                    fontSize = 14.sp,
+                                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.padding(top = 5.dp)
@@ -783,11 +774,11 @@ private fun CharacterSpeechRouteQuickSwitch(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("角色配音", color = style.colors.subText, fontSize = 12.sp)
+                Text("角色配音", color = style.colors.subText, fontSize = MaterialTheme.typography.bodySmall.fontSize)
                 Text(
                     text = speechRouteSummary(route, groups, defaultText = "使用默认朗读引擎"),
                     color = style.colors.text,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 3.dp)
@@ -822,7 +813,7 @@ private fun InfoPill(text: String, maxWidth: androidx.compose.ui.unit.Dp) {
         Text(
             text = text,
             color = style.colors.subText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp)
@@ -845,11 +836,11 @@ private fun CharacterSection(
         shape = RoundedCornerShape(style.radius)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(label, color = style.colors.subText, fontSize = 13.sp)
+            Text(label, color = style.colors.subText, fontSize = MaterialTheme.typography.bodyTertiary.fontSize)
             Text(
                 text = value.ifBlank { "未填写" },
                 color = style.colors.text,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 lineHeight = 22.sp,
                 modifier = Modifier.padding(top = 8.dp)
             )
@@ -895,7 +886,7 @@ fun CharacterEditScreen(
                     ) {
                         CharacterAvatar(draft.avatar, draft.name, 82)
                         Column(modifier = Modifier.padding(start = 14.dp)) {
-                            Text("角色头像", color = style.colors.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text("角色头像", color = style.colors.text, fontSize = MaterialTheme.typography.bodyLarge.fontSize, fontWeight = FontWeight.SemiBold)
                             Row(
                                 modifier = Modifier
                                     .padding(top = 8.dp)
@@ -945,18 +936,18 @@ private fun CharacterSpeechRouteEditor(
     var pickerVisible by remember { mutableStateOf(false) }
     Surface(color = style.colors.card, shape = RoundedCornerShape(style.radius)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("角色配音", color = style.colors.subText, fontSize = 13.sp)
+            Text("角色配音", color = style.colors.subText, fontSize = MaterialTheme.typography.bodyTertiary.fontSize)
             Text(
                 text = speechRouteSummary(route, groups, defaultText = "使用书籍或全局默认朗读引擎"),
                 color = style.colors.text,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 modifier = Modifier.padding(top = 8.dp)
             )
             if (groups.isEmpty()) {
                 Text(
                     text = "暂无可用朗读引擎。",
                     color = style.colors.subText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     lineHeight = 18.sp,
                     modifier = Modifier.padding(top = 10.dp)
                 )
@@ -992,7 +983,7 @@ private fun GenderSelector(gender: String, onGenderChange: (String) -> Unit) {
     val current = BookCharacter.normalizeGender(gender)
     Surface(color = style.colors.card, shape = RoundedCornerShape(style.radius)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("角色性别", color = style.colors.subText, fontSize = 13.sp)
+            Text("角色性别", color = style.colors.subText, fontSize = MaterialTheme.typography.bodyTertiary.fontSize)
             Row(
                 modifier = Modifier.padding(top = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1022,7 +1013,7 @@ private fun GenderSelector(gender: String, onGenderChange: (String) -> Unit) {
                             Text(
                                 text = label,
                                 color = if (selected) style.colors.accent else style.colors.text,
-                                fontSize = 13.sp,
+                                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                                 textAlign = TextAlign.Center,
                                 maxLines = 1
                             )
@@ -1039,7 +1030,7 @@ private fun RoleSelector(role: Int, onRoleChange: (Int) -> Unit) {
     val style = rememberCharacterStyle()
     Surface(color = style.colors.card, shape = RoundedCornerShape(style.radius)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("角色类型", color = style.colors.subText, fontSize = 13.sp)
+            Text("角色类型", color = style.colors.subText, fontSize = MaterialTheme.typography.bodyTertiary.fontSize)
             Row(
                 modifier = Modifier.padding(top = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1069,7 +1060,7 @@ private fun RoleSelector(role: Int, onRoleChange: (Int) -> Unit) {
                             Text(
                                 text = label,
                                 color = if (selected) style.colors.accent else style.colors.text,
-                                fontSize = 13.sp,
+                                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                                 lineHeight = 18.sp,
                                 textAlign = TextAlign.Center,
                                 maxLines = 1,
@@ -1234,7 +1225,7 @@ private fun CharacterCenterSelector(
                     Text(
                         text = character.displayName(),
                         color = if (selected) style.colors.accent else style.colors.text,
-                        fontSize = 13.sp,
+                        fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                         modifier = Modifier.padding(start = 8.dp),
                         maxLines = 1
                     )
@@ -1441,7 +1432,7 @@ private fun GraphRelationLabel(
     Text(
         text = relation.displayName(),
         color = style.colors.accent.copy(alpha = 0.92f),
-        fontSize = 11.sp,
+        fontSize = MaterialTheme.typography.labelSmall.fontSize,
         fontWeight = FontWeight.Medium,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -1803,8 +1794,8 @@ private fun RelationListPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("关系列表", color = style.colors.text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text("${relations.size} 条", color = style.colors.subText, fontSize = 12.sp, modifier = Modifier.padding(end = 12.dp))
-                Text(if (expanded) "收起" else "展开", color = style.colors.accent, fontSize = 13.sp)
+                Text("${relations.size} 条", color = style.colors.subText, fontSize = MaterialTheme.typography.bodySmall.fontSize, modifier = Modifier.padding(end = 12.dp))
+                Text(if (expanded) "收起" else "展开", color = style.colors.accent, fontSize = MaterialTheme.typography.bodyTertiary.fontSize)
             }
             if (!expanded) {
                 val first = relations.firstOrNull()
@@ -1816,7 +1807,7 @@ private fun RelationListPanel(
                 Text(
                     text = summary,
                     color = style.colors.subText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 12.dp)
@@ -1835,8 +1826,8 @@ private fun RelationListPanel(
                         Surface(color = style.colors.card, shape = RoundedCornerShape(style.smallRadius)) {
                             Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("$from → $to", color = style.colors.text, fontSize = 14.sp, maxLines = 1)
-                                    Text(relation.displayName(), color = style.colors.subText, fontSize = 12.sp, maxLines = 1)
+                                    Text("$from → $to", color = style.colors.text, fontSize = MaterialTheme.typography.bodyMedium.fontSize, maxLines = 1)
+                                    Text(relation.displayName(), color = style.colors.subText, fontSize = MaterialTheme.typography.bodySmall.fontSize, maxLines = 1)
                                 }
                                 TextButton(onClick = { onEdit(relation) }) { Text("编辑", color = style.colors.accent) }
                                 TextButton(onClick = { onDelete(relation) }) { Text("删除", color = style.colors.danger) }
@@ -1929,7 +1920,7 @@ private fun RelationEditSheet(
                     Text(
                         if (draft.id > 0) "编辑关系" else "添加关系",
                         color = style.colors.text,
-                        fontSize = 20.sp,
+                        fontSize = MaterialTheme.typography.titleLarge.fontSize,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -1947,7 +1938,7 @@ private fun RelationEditSheet(
                 item { CharacterTextField("关系属性", editing.relationType, { editing = editing.copy(relationType = it) }, singleLine = true) }
                 item {
                     Column {
-                        Text("关系强度 ${editing.strength}", color = style.colors.subText, fontSize = 13.sp)
+                        Text("关系强度 ${editing.strength}", color = style.colors.subText, fontSize = MaterialTheme.typography.bodyTertiary.fontSize)
                         LegadoMiuixSlider(
                             value = editing.strength.toFloat(),
                             onValueChange = { editing = editing.copy(strength = it.roundToInt().coerceIn(0, 100)) },
@@ -2022,7 +2013,7 @@ private fun CharacterSelectField(
 ) {
     val style = rememberCharacterStyle()
     Column {
-        Text(label, color = style.colors.subText, fontSize = 13.sp)
+        Text(label, color = style.colors.subText, fontSize = MaterialTheme.typography.bodyTertiary.fontSize)
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -2047,16 +2038,16 @@ private fun CharacterSelectField(
                     Text(
                         text = selected?.displayName() ?: "请选择角色",
                         color = style.colors.text,
-                        fontSize = 15.sp,
+                        fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     selected?.identity?.takeIf { it.isNotBlank() }?.let {
-                        Text(it, color = style.colors.subText, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(it, color = style.colors.subText, fontSize = MaterialTheme.typography.bodySmall.fontSize, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                Text("更换", color = style.colors.accent, fontSize = 13.sp)
+                Text("更换", color = style.colors.accent, fontSize = MaterialTheme.typography.bodyTertiary.fontSize)
             }
         }
     }
@@ -2118,13 +2109,13 @@ private fun CharacterSelectDialog(
                                 Text(
                                     character.identity.ifBlank { character.roleLabel() },
                                     color = style.colors.subText,
-                                    fontSize = 12.sp,
+                                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
                             if (selected) {
-                                Text("已选", color = style.colors.accent, fontSize = 12.sp)
+                                Text("已选", color = style.colors.accent, fontSize = MaterialTheme.typography.bodySmall.fontSize)
                             }
                         }
                     }
@@ -2164,7 +2155,7 @@ private fun SmallAction(text: String, onClick: () -> Unit, danger: Boolean = fal
         Text(
             text = text,
             color = if (danger) style.colors.danger else style.colors.accent,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
         )
     }
@@ -2183,7 +2174,7 @@ fun EmptyCharacterCard(text: String) {
         Text(
             text = text,
             color = style.colors.subText,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             modifier = Modifier.padding(22.dp)
         )
     }

@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.ui.widget.components.AppShapes
+import io.legado.app.ui.widget.components.GlassTopAppBar
 
 data class DebugTool(
     val titleRes: Int,
@@ -84,33 +85,11 @@ fun DebugToolsScreen(
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.secondary,
-                    scrolledContainerColor = MaterialTheme.colorScheme.secondary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSecondary,
-                    titleContentColor = MaterialTheme.colorScheme.onSecondary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSecondary
-                ),
-                title = {
-                    Column {
-                        Text(
-                            text = stringResource(R.string.debug_tools),
-                            // titleLarge 已统一为 20sp+Medium（对齐 View ToolbarTitle），无需再 copy 覆盖
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        Text(
-                            text = stringResource(R.string.debug_tools_desc),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                }
+            GlassTopAppBar(
+                title = stringResource(R.string.debug_tools),
+                subtitle = stringResource(R.string.debug_tools_desc),
+                navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                onNavClick = onBackClick
             )
         }
     ) { paddingValues ->

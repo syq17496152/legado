@@ -46,6 +46,9 @@ import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import java.util.Locale
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
 
 /**
  * Dialog for editing bubble config fields (name, colors, size scale, SVG template).
@@ -327,7 +330,7 @@ private fun AppDialogEditField(
         Text(
             text = label,
             color = style.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -374,7 +377,7 @@ private fun EditOptionRow(
             Text(
                 text = title,
                 color = style.primaryText,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
@@ -384,7 +387,7 @@ private fun EditOptionRow(
             Text(
                 text = value,
                 color = style.secondaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -415,7 +418,7 @@ private fun ColorOptionRow(
             Text(
                 text = title,
                 color = style.primaryText,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
@@ -435,7 +438,7 @@ private fun ColorOptionRow(
             Text(
                 text = colorHex.uppercase(Locale.ROOT),
                 color = style.secondaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

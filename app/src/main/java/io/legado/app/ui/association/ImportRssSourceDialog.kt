@@ -25,31 +25,23 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.viewModels
-import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
-import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssSource
-import io.legado.app.databinding.DialogCustomGroupBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.ImportItem
 import io.legado.app.ui.widget.components.ImportSourceSheet
 import io.legado.app.ui.widget.components.ImportState
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.showComposeTextFormDialogWithChecks
 import io.legado.app.ui.widget.dialog.CodeDialog
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.GSON
-import io.legado.app.utils.dpToPx
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.showDialogFragment
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.Dispatchers.Main
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * 导入rss源弹出窗口（S6 支干样板：改用 [ImportSourceSheet] Compose 组件渲染）。
@@ -234,26 +226,19 @@ class ImportRssSourceDialog() : ComposeDialogFragment(),
     }
 
     private fun alertCustomGroup() {
-        lifecycleScope.launch(IO) {
-            val groups = appDb.rssSourceDao.allGroups()
-            withContext(Main) {
-                alert(R.string.diy_edit_source_group) {
-                    val alertBinding = DialogCustomGroupBinding.inflate(layoutInflater).apply {
-                        textInputLayout.setHint(R.string.group_name)
-                        editView.setFilterValues(groups.toList())
-                        editView.dropDownHeight = 180.dpToPx()
-                    }
-                    customView {
-                        alertBinding.root
-                    }
-                    okButton {
-                        viewModel.isAddGroup = alertBinding.swAddGroup.isChecked
-                        viewModel.groupName = alertBinding.editView.text?.toString()
-                    }
-                    cancelButton()
-                }
+        showComposeTextFormDialogWithChecks(
+            title = getString(R.string.diy_edit_source_group),
+            labels = listOf(getString(R.string.group_name)),
+            initialValues = listOf(""),
+            checkboxLabels = listOf(getString(R.string.add_group)),
+            checkedIndices = emptySet(),
+            positiveText = getString(android.R.string.ok),
+            negativeText = getString(R.string.cancel),
+            onPositive = { values, checks ->
+                viewModel.isAddGroup = checks.getOrElse(0) { false }
+                viewModel.groupName = values.getOrNull(0)?.trim().orEmpty()
             }
-        }
+        )
     }
 
     override fun onCodeSave(code: String, requestId: String?) {

@@ -46,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -57,6 +58,7 @@ import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsSearchBar
+import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.ui.widget.components.SettingsSelectableRow
 import io.legado.app.ui.widget.components.ShelfListSkeleton
 import kotlin.math.max
@@ -277,10 +279,12 @@ private fun AutoTaskSelectionActionBar(
     val enabled = selectionCount > 0
     val allSelected = totalCount > 0 && selectionCount >= totalCount
     var menuVisible by remember { mutableStateOf(false) }
+    // H11: 选择操作栏直色（palette.row），替代 M3 surface 派生色
+    val palette = rememberAppSettingPalette()
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
+        color = Color(palette.row),
         shadowElevation = 8.dp
     ) {
         Row(
@@ -316,7 +320,7 @@ private fun AutoTaskSelectionActionBar(
                         stringResource(R.string.select_all_count, selectionCount, totalCount)
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = palette.primaryText
                 )
             }
             TextButton(
@@ -333,14 +337,14 @@ private fun AutoTaskSelectionActionBar(
                     imageVector = Icons.Default.Delete,
                     contentDescription = null,
                     tint = if (enabled) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                    else palette.primaryText.copy(alpha = 0.38f),
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = stringResource(R.string.delete),
                     color = if (enabled) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    else palette.primaryText.copy(alpha = 0.38f)
                 )
             }
             Box {
@@ -351,8 +355,8 @@ private fun AutoTaskSelectionActionBar(
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = null,
-                        tint = if (enabled) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        tint = if (enabled) palette.primaryText
+                        else palette.primaryText.copy(alpha = 0.38f)
                     )
                 }
                 AppDropdownMenu(

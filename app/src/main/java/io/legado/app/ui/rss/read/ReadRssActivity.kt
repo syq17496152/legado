@@ -127,6 +127,7 @@ import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 
 /**
  * rss阅读界面
@@ -425,15 +426,16 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
             if (hitTestResult.type == WebView.HitTestResult.IMAGE_TYPE ||
                 hitTestResult.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
                 hitTestResult.extra?.let { webPic ->
-                    selector(
-                        arrayListOf(
-                            SelectItem(getString(R.string.action_save), "save"),
-                            SelectItem(getString(R.string.select_folder), "selectFolder")
+                    showComposeChoiceListDialog(
+                        "",
+                        listOf(
+                            getString(R.string.action_save),
+                            getString(R.string.select_folder)
                         )
-                    ) { _, charSequence, _ ->
-                        when (charSequence.value) {
-                            "save" -> saveImage(webPic)
-                            "selectFolder" -> selectSaveFolder(null)
+                    ) { index ->
+                        when (index) {
+                            0 -> saveImage(webPic)
+                            1 -> selectSaveFolder(null)
                         }
                     }
                     return@setOnLongClickListener true

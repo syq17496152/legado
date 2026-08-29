@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -43,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -214,8 +216,9 @@ private fun HighlightRuleItem(
     onEnableToggle: (Boolean) -> Unit,
     onMore: () -> Unit
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
+    val palette = rememberAppSettingPalette()
+            Surface(
+                color = Color(palette.row),
         shape = AppShapes.Chip,
         modifier = Modifier
             .fillMaxWidth()
@@ -234,7 +237,7 @@ private fun HighlightRuleItem(
             Text(
                 text = rule.getDisplayName(),
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = palette.primaryText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier

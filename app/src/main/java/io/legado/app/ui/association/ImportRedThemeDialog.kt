@@ -34,6 +34,7 @@ import io.legado.app.utils.getFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import androidx.compose.material3.MaterialTheme
 
 class ImportRedThemeDialog() : ComposeDialogFragment() {
 
@@ -96,7 +97,7 @@ class ImportRedThemeDialog() : ComposeDialogFragment() {
                 Text(
                     text = message,
                     color = style.primaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 18.dp)

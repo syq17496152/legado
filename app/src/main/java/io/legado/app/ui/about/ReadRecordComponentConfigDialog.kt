@@ -45,6 +45,8 @@ import io.legado.app.utils.applyModernWindowStyle
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.setLayout
 import kotlin.math.min
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodySecondary
 
 object ReadRecordComponentConfigDialog {
 
@@ -196,7 +198,7 @@ private fun ReadRecordComponentConfigRow(
                 Text(
                     text = stringResource(item.type.titleRes),
                     color = palette.primaryText,
-                    fontSize = 15.sp,
+                    fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = titleFont,
                     maxLines = 1,
@@ -205,7 +207,7 @@ private fun ReadRecordComponentConfigRow(
                 Text(
                     text = stringResource(item.type.hintRes),
                     color = palette.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontFamily = bodyFont,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,

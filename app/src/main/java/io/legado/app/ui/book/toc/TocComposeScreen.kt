@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.toc
 
+import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -81,6 +82,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.theme.bodyLargeX
 
 private enum class TocPage {
     Chapters,
@@ -458,7 +463,7 @@ private fun TocEmptyState(text: String) {
             Text(
                 text = text,
                 color = palette.settings.secondaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = FontWeight.Medium,
                 fontFamily = palette.settings.bodyFontFamily,
                 modifier = Modifier.fillMaxWidth()
@@ -467,6 +472,10 @@ private fun TocEmptyState(text: String) {
     }
 }
 
+/**
+ * TocTopBar（H15/H3 豁免登记 2026-08-28）：阅读页章节目录浮层顶栏——父容器背景 Transparent，
+ * 转 GlassTopAppBar 会破坏浮层设计，属阅读沉浸红线，keep AppManagement palette（2.2.6 已登记）。
+ */
 @Composable
 private fun TocTopBar(
     selectedPage: TocPage,
@@ -504,7 +513,7 @@ private fun TocTopBar(
                     if (selectedPage == TocPage.Bookmarks) R.string.bookmark else R.string.chapter_list
                 ),
                 color = palette.settings.primaryText,
-                fontSize = 17.sp,
+                fontSize = MaterialTheme.typography.bodyLargeX.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = palette.settings.titleFontFamily,
                 maxLines = 1,
@@ -542,7 +551,7 @@ private fun TocSearchField(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(AppShapes.rounded(12))
             .background(Color(palette.settings.row))
             .padding(horizontal = 12.dp, vertical = 9.dp)
     ) {
@@ -559,7 +568,7 @@ private fun TocSearchField(
                 singleLine = true,
                 textStyle = TextStyle(
                     color = palette.settings.primaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontFamily = palette.settings.bodyFontFamily
                 ),
                 cursorBrush = SolidColor(palette.settings.accent),
@@ -571,7 +580,7 @@ private fun TocSearchField(
                         Text(
                             text = stringResource(R.string.search),
                             color = palette.settings.secondaryText,
-                            fontSize = 14.sp,
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                             fontFamily = palette.settings.bodyFontFamily
                         )
                     }
@@ -591,7 +600,7 @@ private fun TocTabs(
     val palette = rememberAppManagementPalette()
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(AppShapes.rounded(12))
             .background(Color(palette.settings.row))
             .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp)
@@ -623,7 +632,7 @@ private fun TocTabButton(
     Box(
         modifier = modifier
             .height(34.dp)
-            .clip(RoundedCornerShape(9.dp))
+            .clip(AppShapes.rounded(9))
             .background(
                 if (selected) palette.settings.accent.copy(alpha = 0.16f) else Color.Transparent
             )
@@ -637,7 +646,7 @@ private fun TocTabButton(
         Text(
             text = text,
             color = if (selected) palette.settings.accent else palette.settings.primaryText,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             fontFamily = palette.settings.bodyFontFamily,
             maxLines = 1,
@@ -731,13 +740,13 @@ private fun TocVolumeHeaderRow(
             modifier = Modifier
                 .padding(end = 10.dp)
                 .size(width = 3.dp, height = 16.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .clip(AppShapes.rounded(2))
                 .background(palette.settings.accent)
         )
         Text(
             text = title,
             color = palette.settings.primaryText,
-            fontSize = 15.sp,
+            fontSize = MaterialTheme.typography.bodySecondary.fontSize,
             fontWeight = FontWeight.Bold,
             fontFamily = palette.settings.titleFontFamily,
             maxLines = 1,
@@ -806,7 +815,7 @@ private fun TocChapterRow(
             Text(
                 text = title,
                 color = if (isCurrent) palette.settings.accent else palette.settings.primaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
                 fontFamily = palette.settings.bodyFontFamily,
                 maxLines = 1,
@@ -820,7 +829,7 @@ private fun TocChapterRow(
                 Text(
                     text = meta,
                     color = palette.settings.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontFamily = palette.settings.bodyFontFamily,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -892,7 +901,7 @@ private fun TocBookmarkRow(
         Text(
             text = bookmark.chapterName,
             color = palette.settings.primaryText,
-            fontSize = 15.sp,
+            fontSize = MaterialTheme.typography.bodySecondary.fontSize,
             fontWeight = FontWeight.SemiBold,
             fontFamily = palette.settings.bodyFontFamily,
             maxLines = 1,
@@ -902,7 +911,7 @@ private fun TocBookmarkRow(
             Text(
                 text = bookmark.bookText,
                 color = palette.settings.primaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontFamily = palette.settings.bodyFontFamily,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -913,7 +922,7 @@ private fun TocBookmarkRow(
             Text(
                 text = bookmark.content,
                 color = palette.settings.secondaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 fontFamily = palette.settings.bodyFontFamily,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -949,7 +958,7 @@ private fun TocBottomBar(
                 text = book?.let { "${it.durChapterTitle}(${it.durChapterIndex + 1}/${it.simulatedTotalChapterNum()})" }
                     ?: stringResource(R.string.chapter_list),
                 color = palette.settings.primaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 fontFamily = palette.settings.bodyFontFamily,
                 maxLines = 1,
                 overflow = TextOverflow.MiddleEllipsis

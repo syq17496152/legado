@@ -129,6 +129,11 @@ import kotlinx.coroutines.withContext
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToInt
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.theme.subtitleLarge
+import io.legado.app.ui.theme.subtitleLargeX
 
 @Immutable
 data class BookInfoChapterUi(
@@ -757,7 +762,7 @@ private fun BookInfoMetricBox(
                 Text(
                     text = value,
                     color = style.colors.metricText,
-                    fontSize = 18.sp,
+                    fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -767,7 +772,7 @@ private fun BookInfoMetricBox(
                     Text(
                         text = suffix,
                         color = style.colors.metricSecondaryText,
-                        fontSize = 11.sp,
+                        fontSize = MaterialTheme.typography.labelSmall.fontSize,
                         maxLines = 1
                     )
                 }
@@ -775,7 +780,7 @@ private fun BookInfoMetricBox(
             Text(
                 text = label,
                 color = style.colors.metricSecondaryText,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 4.dp)
@@ -928,7 +933,7 @@ private fun BookInfoTocMetricPreview(
         Text(
             text = stringResource(R.string.error_load_toc),
             color = style.colors.secondaryText,
-            fontSize = 13.sp
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize
         )
     } else {
         chapters.forEach { chapter ->
@@ -941,13 +946,13 @@ private fun BookInfoTocMetricPreview(
                 Text(
                     text = "#${chapter.index + 1}",
                     color = if (selected) style.colors.accent else style.colors.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
                 )
                 Text(
                     text = chapter.title,
                     color = if (selected) style.colors.primaryText else style.colors.secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
@@ -969,7 +974,7 @@ private fun BookInfoGalleryMetricPreview(
         Text(
             text = stringResource(R.string.ai_image_gallery_empty),
             color = style.colors.secondaryText,
-            fontSize = 13.sp
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize
         )
     } else {
         Text(
@@ -1010,7 +1015,7 @@ private fun BookInfoPreviewTitle(
     Text(
         text = text,
         color = style.colors.primaryText,
-        fontSize = 16.sp,
+        fontSize = MaterialTheme.typography.bodyLarge.fontSize,
         fontWeight = FontWeight.SemiBold,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis
@@ -1028,7 +1033,7 @@ private fun BookInfoPreviewLine(
         Text(
             text = label,
             color = style.colors.accent,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.Medium
         )
         Text(
@@ -1067,7 +1072,7 @@ private fun BookInfoMoreActionSheet(
             Text(
                 text = stringResource(if (showCloudOptions) R.string.book_cloud_entry_mode else R.string.more),
                 color = style.colors.primaryText,
-                fontSize = 19.sp,
+                fontSize = MaterialTheme.typography.subtitleLargeX.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(bottom = 6.dp)
             )
@@ -1167,7 +1172,7 @@ private fun BookInfoMoreActionItem(
     Text(
         text = text,
         color = if (danger) Color(0xffd64545) else style.colors.primaryText,
-        fontSize = 15.sp,
+        fontSize = MaterialTheme.typography.bodySecondary.fontSize,
         fontWeight = FontWeight.Medium,
         modifier = Modifier
             .fillMaxWidth()
@@ -1197,7 +1202,7 @@ private fun BookInfoToggleActionItem(
         Text(
             text = text,
             color = style.colors.primaryText,
-            fontSize = 15.sp,
+            fontSize = MaterialTheme.typography.bodySecondary.fontSize,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(1f)
         )
@@ -1237,7 +1242,7 @@ private fun BookInfoCloudEntrySelectorDialog(
         Text(
             text = stringResource(R.string.book_cloud_entry_mode),
             color = style.colors.primaryText,
-            fontSize = 19.sp,
+            fontSize = MaterialTheme.typography.subtitleLargeX.fontSize,
             fontWeight = FontWeight.SemiBold
         )
         BookInfoCloudEntryModeRow(
@@ -1294,7 +1299,7 @@ private fun BookInfoCloudEntryModeRow(
             Text(
                 text = title,
                 color = if (checked) style.colors.accent else style.colors.primaryText,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
@@ -1308,7 +1313,7 @@ private fun BookInfoCloudEntryModeRow(
             Text(
                 text = "✓",
                 color = style.colors.accent,
-                fontSize = 18.sp,
+                fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
                 fontWeight = FontWeight.SemiBold
             )
         }
@@ -1357,7 +1362,7 @@ private fun BookInfoQuickActionEditDialog(
         Text(
             text = stringResource(R.string.book_info_quick_action_edit),
             color = style.colors.primaryText,
-            fontSize = 19.sp,
+            fontSize = MaterialTheme.typography.subtitleLargeX.fontSize,
             fontWeight = FontWeight.SemiBold
         )
         draft.forEachIndexed { index, item ->
@@ -1470,14 +1475,14 @@ private fun BookInfoQuickActionEditRow(
                 Text(
                     text = item.type.editorTitle(),
                     color = style.colors.primaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontWeight = FontWeight.Medium
                 )
                 if (item.type == BookInfoQuickActionType.CUSTOM_BUTTON && state.sourceUrl.isNotBlank()) {
                     Text(
                         text = stringResource(R.string.book_info_quick_action_source_alias_hint),
                         color = style.colors.secondaryText,
-                        fontSize = 11.sp,
+                        fontSize = MaterialTheme.typography.labelSmall.fontSize,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1692,7 +1697,7 @@ private fun BookInfoPosterHero(
             Text(
                 text = state.name.ifBlank { stringResource(R.string.book_name) },
                 color = Color.White,
-                fontSize = 28.sp,
+                fontSize = MaterialTheme.typography.headlineMedium.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
@@ -1704,7 +1709,7 @@ private fun BookInfoPosterHero(
             Text(
                 text = state.author.ifBlank { stringResource(R.string.author) },
                 color = Color.White.copy(alpha = 0.82f),
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.combinedClickable(
@@ -1754,7 +1759,7 @@ private fun BookInfoPosterChip(
     Text(
         text = text,
         color = Color.White,
-        fontSize = 12.sp,
+        fontSize = MaterialTheme.typography.bodySmall.fontSize,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier
@@ -1901,7 +1906,7 @@ private fun BookInfoActionButton(
         Text(
             text = text,
             color = textColor,
-            fontSize = 15.sp,
+            fontSize = MaterialTheme.typography.bodySecondary.fontSize,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis

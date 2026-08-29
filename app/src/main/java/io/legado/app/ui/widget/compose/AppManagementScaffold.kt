@@ -2,6 +2,7 @@ package io.legado.app.ui.widget.compose
 
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -20,14 +21,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -38,9 +44,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.TopBarConfig
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.titleTextColor
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.ThemeSync
+import io.legado.app.ui.theme.subtitleLarge
+import io.legado.app.ui.theme.subtitleLargeX
+import io.legado.app.ui.widget.components.contrastOn
+import io.legado.app.ui.widget.components.decodeTopBarWallpaper
 
 data class AppManagementAction(
     val text: String,
@@ -109,61 +122,99 @@ private fun AppManagementTopBar(
     onBack: (() -> Unit)?
 ) {
     val context = LocalContext.current
-    val topBarColor = if (AppConfig.immersiveManageBar) {
-        context.backgroundColor
-    } else {
-        context.primaryColor
+    val themeVersion = ThemeSync.version
+    // H15（2026-08-28）：接入「顶栏管理」TopBarConfig——顶栏管理配置优先（STYLE_REGULAR 消费
+    // 背景色/壁纸/透明度/圆角，对齐 GlassTopAppBar/MainTopBarView renderBackgroundLayer），
+    // 未启用回落 immersiveManageBar 开关（页面底色 vs 主题主色，H1 AD-01 保留 48dp 自绘形态）
+    val config = remember(themeVersion) {
+        TopBarConfig.currentConfig(context, AppConfig.isNightTheme)
     }
-    val topBarContentColor = Color(context.titleTextColor)
-    Column(
+    val isRegular = config.style == TopBarConfig.STYLE_REGULAR
+    val wallpaperFile = remember(config.wallpaperPath, themeVersion) {
+        if (isRegular && !config.wallpaperPath.isNullOrBlank()) {
+            TopBarConfig.currentWallpaperFile(context, AppConfig.isNightTheme)
+        } else {
+            null
+        }
+    }
+    val wallpaper = remember(wallpaperFile) { wallpaperFile?.let(::decodeTopBarWallpaper) }
+    val topBarColor = when {
+        isRegular -> Color(
+            TopBarConfig.withOpacity(
+                TopBarConfig.resolveBackgroundColor(config),
+                config.wallpaperAlpha
+            )
+        )
+        AppConfig.immersiveManageBar -> Color(context.backgroundColor)
+        else -> Color(context.primaryColor)
+    }
+    val topBarContentColor = if (isRegular) contrastOn(topBarColor) else Color(context.titleTextColor)
+    val cornerRadius = if (isRegular) TopBarConfig.cornerRadius(context, config) else 0f
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(topBarColor))
-            .windowInsetsPadding(WindowInsets.statusBars)
+            .background(topBarColor)
+            .then(if (cornerRadius > 0f) Modifier.clip(RoundedCornerShape(cornerRadius)) else Modifier)
     ) {
-        Row(
+        if (wallpaper != null) {
+            Image(
+                bitmap = wallpaper.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alpha = config.wallpaperAlpha.coerceIn(0, 100) / 100f,
+                modifier = Modifier.matchParentSize()
+            )
+        }
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
-                .padding(start = 4.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .windowInsetsPadding(WindowInsets.statusBars)
         ) {
-            onBack?.let {
-                AppManagementIconAction(
-                    iconRes = R.drawable.ic_arrow_back,
-                    contentDescription = null,
-                    tint = topBarContentColor,
-                    onClick = it
-                )
-            }
-            Text(
-                text = title,
-                color = topBarContentColor,
-                fontSize = 19.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = palette.settings.titleFontFamily,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp)
-            )
-            actions.forEach { action ->
-                AppManagementTopAction(
-                    action = action,
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .padding(start = 4.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                onBack?.let {
+                    AppManagementIconAction(
+                        iconRes = R.drawable.ic_arrow_back,
+                        contentDescription = null,
+                        tint = topBarContentColor,
+                        onClick = it
+                    )
+                }
+                Text(
+                    text = title,
+                    color = topBarContentColor,
+                    // 2.3（bookshelf-refresh-and-title-fix）：19sp/SemiBold 孤例漂移归位
+                    // titleLarge（20sp/Medium）基线，与 GlassTopAppBar/ConfigTopBar/View TitleBar 对齐
+                    style = MaterialTheme.typography.titleLarge,
+                    fontFamily = palette.settings.titleFontFamily,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 12.dp)
+                )
+                actions.forEach { action ->
+                    AppManagementTopAction(
+                        action = action,
+                        palette = palette,
+                        contentColor = topBarContentColor
+                    )
+                }
+            }
+            if (onSearchChange != null) {
+                AppManagementSearchField(
+                    query = searchQuery.orEmpty(),
+                    hint = searchHint.orEmpty(),
                     palette = palette,
-                    contentColor = topBarContentColor
+                    onQueryChange = onSearchChange,
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
                 )
             }
-        }
-        if (onSearchChange != null) {
-            AppManagementSearchField(
-                query = searchQuery.orEmpty(),
-                hint = searchHint.orEmpty(),
-                palette = palette,
-                onQueryChange = onSearchChange,
-                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
-            )
         }
     }
 }
@@ -226,7 +277,7 @@ private fun AppManagementSearchField(
                 singleLine = true,
                 textStyle = TextStyle(
                     color = palette.settings.primaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontFamily = palette.settings.bodyFontFamily
                 ),
                 cursorBrush = SolidColor(palette.settings.accent),
@@ -237,7 +288,7 @@ private fun AppManagementSearchField(
                             Text(
                                 text = hint,
                                 color = palette.settings.secondaryText,
-                                fontSize = 14.sp,
+                                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                                 fontFamily = palette.settings.bodyFontFamily,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -283,7 +334,7 @@ private fun AppManagementSelectionBottomBar(
             Text(
                 text = stringResource(R.string.select_all_count, selectedCount, totalCount),
                 color = palette.settings.bottomBarText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = FontWeight.Medium,
                 fontFamily = palette.settings.bodyFontFamily,
                 maxLines = 1,

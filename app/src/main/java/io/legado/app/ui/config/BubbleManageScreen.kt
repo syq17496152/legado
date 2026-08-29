@@ -1,5 +1,6 @@
 package io.legado.app.ui.config
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -57,6 +58,8 @@ import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
 private val BUBBLE_ITEM_MIN_HEIGHT = 86.dp
@@ -95,7 +98,7 @@ internal fun BubbleManageScreen(
             Text(
                 text = summary,
                 color = palette.settings.secondaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
@@ -176,7 +179,7 @@ private fun BubbleItemRow(
             // Preview
             Surface(
                 modifier = Modifier.size(BUBBLE_PREVIEW_BOX),
-                shape = RoundedCornerShape(8.dp),
+                shape = AppShapes.rounded(8),
                 color = Color.Transparent,
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp
@@ -225,7 +228,7 @@ private fun BubbleItemRow(
                 Text(
                     text = entry.config.name,
                     color = palette.settings.primaryText,
-                    fontSize = 16.sp,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -234,7 +237,7 @@ private fun BubbleItemRow(
                 Text(
                     text = buildItemInfo(entry, active),
                     color = palette.settings.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -291,7 +294,7 @@ private fun ActionTextButton(
         Text(
             text = text,
             color = if (accent) palette.accent else palette.primaryText,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             lineHeight = 18.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier

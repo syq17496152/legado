@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.search
 
+import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +37,9 @@ import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.appSettingPanelBackground
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
 
 /**
  * 搜索页「输入帮助区」(书架命中 + 搜索历史)的 Compose 实现，
@@ -100,7 +104,7 @@ fun SearchInputHelpScreen(
                         Text(
                             text = stringResource(R.string.search_history_empty),
                             color = palette.settings.secondaryText,
-                            fontSize = 13.sp,
+                            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                             fontFamily = palette.settings.bodyFontFamily
                         )
                     }
@@ -150,7 +154,7 @@ private fun SearchHelpCard(
             Text(
                 text = title,
                 color = palette.settings.primaryText,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = palette.settings.titleFontFamily,
                 modifier = Modifier.weight(1f)
@@ -188,7 +192,7 @@ private fun SearchChip(
     Box(
         modifier = Modifier
             .heightIn(min = 30.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(AppShapes.rounded(14))
             .appSettingPanelBackground(
                 normalColor = palette.settings.rowPressed,
                 panelImage = null,
@@ -202,7 +206,7 @@ private fun SearchChip(
         Text(
             text = text,
             color = palette.settings.primaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontFamily = palette.settings.bodyFontFamily,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis

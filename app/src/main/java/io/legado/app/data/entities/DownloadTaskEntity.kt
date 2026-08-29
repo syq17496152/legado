@@ -39,16 +39,10 @@ data class DownloadTaskEntity(
     val speed: Long = 0,
     /** 失败错误码（DownloadError 名），成功为 null */
     val errorCode: String? = null,
-    /** 失败错误描述 */
-    val errorMsg: String? = null,
     /** 完成后的本地文件绝对路径 */
     val localPath: String? = null,
     /** 下载目标目录（FR-11 可配置），为 null 用默认公有 Downloads/Legado */
     val targetDir: String? = null,
-    /** 直链断点续传点 JSON（.partN 已下字节），P2 填充 */
-    val resumePointJson: String? = null,
-    /** m3u8 已下分片序号清单 JSON，P2 填充 */
-    val segmentsJson: String? = null,
     /** 任务创建时间 */
     val startTime: Long = System.currentTimeMillis()
 ) : Parcelable

@@ -34,6 +34,7 @@ import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
+import androidx.compose.material3.MaterialTheme
 
 @Composable
 internal fun RuleSubScreen(
@@ -78,7 +79,7 @@ internal fun RuleSubScreen(
             Text(
                 text = emptyMessage,
                 color = palette.settings.secondaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 lineHeight = 20.sp,
                 fontFamily = palette.settings.bodyFontFamily,
                 textAlign = TextAlign.Center,
@@ -144,7 +145,7 @@ private fun RuleSubTypeChip(
         Text(
             text = label,
             color = palette.settings.accent,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis

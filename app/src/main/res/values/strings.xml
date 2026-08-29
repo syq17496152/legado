@@ -1098,6 +1098,10 @@
     <string name="download_encrypt_unsupported">encrypted stream not supported</string>
     <string name="download_hls_failed">m3u8 download failed</string>
     <string name="download_file_not_found">local file not found</string>
+    <string name="download_file_missing">File missing or deleted, you can remove this record</string>
+    <string name="download_eta_left">%1$s left</string>
+    <string name="download_clear_success">Records cleared</string>
+    <string name="download_error_detail">Error details</string>
     <string name="download_error_code">Error: %1$s</string>
     <string name="download_error_http">HTTP error</string>
     <string name="download_error_io">I/O error</string>
@@ -1447,6 +1451,8 @@
     <string name="url_record_enable_hint">Enable URL record to collect access data</string>
     <string name="precise_manage">Precise manage</string>
     <string name="precise_manage_summary">URL records, storage, download, file manage</string>
+    <string name="data_manage">Data management</string>
+    <string name="log_diagnostics">Logs &amp; diagnostics</string>
     <string name="storage_manage">Storage manage</string>
     <string name="storage_manage_summary">View and clear cache storage</string>
     <string name="storage_total">Total</string>
@@ -1463,7 +1469,7 @@
     <string name="download_tab_completed">Completed</string>
     <string name="download_tab_failed">Failed</string>
     <string name="download_summary">Downloading: %1$d  Completed: %2$d  Failed: %3$d</string>
-    <string name="clear_completed_tasks">Clear completed</string>
+    <string name="clear_completed_tasks">Clear completed/failed</string>
     <string name="clear_completed_confirm">Clear completed and failed download tasks?</string>
     <string name="download_play_with_builtin">Play</string>
     <string name="download_open_file">Open file</string>
@@ -1674,6 +1680,11 @@
     <string name="video_function">功能</string>
     <string name="video_play_setting">播放设置</string>
     <string name="video_skip_time">快进/快退时间</string>
+    <!-- video-player-ux-fixes P2: 滑动快进灵敏度 -->
+    <string name="video_settings_title">视频设置</string>
+    <string name="seek_sensitivity">滑动快进灵敏度</string>
+    <string name="seek_sensitivity_summary">滑动快进灵敏度 %.1fx</string>
+    <string name="seek_sensitivity_multiplier_format">%.1fx</string>
     <string name="video_player_optimization">播放器优化</string>
     <string name="video_route_format">线路：%1$s ▼</string>
     <string name="video_unknown_route">未知</string>
@@ -1972,6 +1983,9 @@
     <string name="source_sort_3">By Type</string>
     <string name="source_sort_4">By Group</string>
     <string name="source_sort_5">By URL</string>
+    <string name="source_sort_6">By update time</string>
+    <string name="source_sort_ascending">Ascending order</string>
+    <string name="source_layout_auto">Auto columns</string>
     <string name="source_layout">View</string>
     <string name="source_sort_label">Sort</string>
     <!-- video-playback-issues-round1: ExoPlayer 失败降级 WebView 相关字符串 -->
@@ -2664,9 +2678,10 @@ Selected text or question:
 <string name="expand">Expand</string>
 <string name="collapse">Collapse</string>
 <string name="config_category_content">Content and rules</string>
-<string name="config_category_appearance">Appearance and AI</string>
-<string name="config_category_sync">Sync and services</string>
-<string name="config_category_tools">Tools and about</string>
+    <string name="config_category_appearance">Appearance</string>
+    <string name="config_category_sync">Sync and services</string>
+    <string name="config_category_tools">Tools</string>
+    <string name="config_category_about">About</string>
 <string name="resize">Resize</string>
 <string name="discover_group_other">Other</string>
 <string name="modern_rss_page_summary">Use the new RSS home layout with source switch, categories, and embedded content.</string>
@@ -3006,6 +3021,7 @@ function login() {
 <string name="cloud_storage">&#20113;&#23384;&#20648;</string>
 <string name="s3_container_manage">&#31649;&#29702; S3 &#23481;&#22120;</string>
 <string name="s3_container_manage_summary">&#28155;&#21152;&#12289;&#32534;&#36753;&#12289;&#27979;&#35797;&#21644;&#35774;&#32622;&#22791;&#20221;&#29992; S3 &#23481;&#22120;</string>
+<string name="library_container_manage_title">Library containers</string>
 <string name="s3_auto_switch_container">&#33258;&#21160;&#20999;&#25442; S3 &#23481;&#22120;</string>
 <string name="s3_auto_switch_container_summary">&#24403;&#24403;&#21069;&#23481;&#22120;&#31354;&#38388;&#19981;&#36275;&#26102;&#65292;&#20801;&#35768;&#22791;&#20221;&#20351;&#29992;&#19979;&#19968;&#20010;&#21487;&#29992;&#23481;&#22120;</string>
 <string name="s3_container_add">&#28155;&#21152; S3 &#23481;&#22120;</string>

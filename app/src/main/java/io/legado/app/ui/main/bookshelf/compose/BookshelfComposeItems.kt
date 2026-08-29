@@ -1,5 +1,6 @@
 package io.legado.app.ui.main.bookshelf.compose
 
+import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -37,6 +38,8 @@ import io.legado.app.lib.theme.rememberThemeUiPalette
 import io.legado.app.lib.theme.titleTypeface
 import io.legado.app.lib.theme.titleTextColor
 import io.legado.app.utils.toTimeAgo
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.labelXSmall
 
 sealed interface BookshelfItemUi {
     val key: String
@@ -160,7 +163,7 @@ fun BookshelfGridItem(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(4.dp)),
+                .clip(AppShapes.rounded(4)),
             contentAlignment = Alignment.TopEnd
         ) {
             BookshelfCover(
@@ -180,7 +183,7 @@ fun BookshelfGridItem(
                         .fillMaxWidth()
                         .padding(horizontal = 6.dp, vertical = 6.dp),
                     color = Color.White,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontFamily = titleFontFamily,
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,
@@ -195,7 +198,7 @@ fun BookshelfGridItem(
                     .fillMaxWidth()
                     .padding(top = 6.dp),
                 color = titleColor,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 fontFamily = titleFontFamily,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
@@ -249,7 +252,7 @@ private fun BookshelfStatusBadge(item: BookshelfBookItemUi) {
             .widthIn(min = 20.dp)
             .padding(horizontal = 6.dp, vertical = 2.dp),
         color = Color.White,
-        fontSize = 10.sp,
+        fontSize = MaterialTheme.typography.labelXSmall.fontSize,
         fontWeight = FontWeight.SemiBold,
         textAlign = TextAlign.Center,
         maxLines = 1

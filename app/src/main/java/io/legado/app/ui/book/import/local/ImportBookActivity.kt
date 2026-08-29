@@ -128,6 +128,8 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
         MenuAction(
             icon = Icons.Default.FolderOpen,
             title = getString(R.string.select_folder),
+            // topbar-icon-semantics-fix 3.3：选目录恢复一级图标（原版 import_book.xml menu_select_folder always）
+            alwaysShow = true,
             onClick = { selectFolder.launch() }
         ),
         MenuAction(

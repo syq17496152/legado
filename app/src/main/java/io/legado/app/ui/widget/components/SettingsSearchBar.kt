@@ -1,6 +1,8 @@
 package io.legado.app.ui.widget.components
 
+import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,11 +24,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
+import io.legado.app.help.config.AppConfig
+import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.lib.theme.rememberThemeUiPalette
 
 /**
  * 设置搜索栏（我的页顶部，Rimchars buildVisibleSections 模式的入口；发现/订阅/书源管理等多页共用）
@@ -35,6 +42,11 @@ import io.legado.app.R
  * 总高约 72dp 在顶部栏场景偏大。改为 BasicTextField 自定义实现，总高约 44dp（40dp 输入区 + 4dp×2
  * 上下留白），与全局字号/圆角 token（AppShapes.Button）统一；接口签名不变，18 处调用点无需改动。
  * 字号走 MaterialTheme.typography.bodyMedium（14sp，与全局刻度 text_14sp 一致），统一由主题管理。
+ *
+ * 取色说明（topbar-search-entry-align v3，2026-08-28）：背景消费 ThemeUiPalette.searchFieldBackgroundColor
+ * （themeSearchFieldBackgroundColor 自定义 key → background_menu 兜底，color.md 取色链）+ 统一 alpha
+ * （日 0.18/夜 0.42）与 1dp 描边，对齐 View 侧 TopBarSearchStyle 口径；彻底清除 M3 派生色
+ * surfaceVariant（color.md §五禁令 + how-to.md 严禁清单）。
  */
 @Composable
 fun SettingsSearchBar(
@@ -45,6 +57,14 @@ fun SettingsSearchBar(
     onSearch: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null
 ) {
+    // topbar-search-entry-align v3：palette 槽位取色（自定义 key → background_menu 兜底）+ alpha/描边对齐 View 侧 TopBarSearchStyle
+    val context = LocalContext.current
+    val themeUiPalette = rememberThemeUiPalette()
+    val isNight = AppConfig.isNightTheme
+    val fieldBackground = Color(themeUiPalette.searchFieldBackgroundColor)
+        .copy(alpha = if (isNight) 0.42f else 0.18f)
+    val fieldStroke = Color(context.primaryTextColor)
+        .copy(alpha = if (isNight) 0.10f else 0.08f)
     BasicTextField(
         value = query,
         onValueChange = onQueryChange,
@@ -87,10 +107,8 @@ fun SettingsSearchBar(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .height(40.dp)
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant,
-                AppShapes.Search
-            )
+            .background(fieldBackground, AppShapes.Search)
+            .border(1.dp, fieldStroke, AppShapes.Search)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
     )
 }

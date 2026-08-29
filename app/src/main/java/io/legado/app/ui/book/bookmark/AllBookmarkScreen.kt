@@ -15,9 +15,9 @@ import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,14 +31,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.data.entities.Bookmark
+import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.GroupHeader
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 
 /**
  * 全部书签页 Compose 受控组件（L-B5 枝叶页，S2 列表管理范式）。
@@ -76,19 +80,14 @@ fun AllBookmarkScreen(
                             contentDescription = stringResource(R.string.more_menu)
                         )
                     }
-                    DropdownMenu(
+                    AppDropdownMenu(
                         expanded = moreMenuVisible,
-                        onDismissRequest = { moreMenuVisible = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.export)) },
-                            onClick = { moreMenuVisible = false; onExportJson() }
+                        onDismiss = { moreMenuVisible = false },
+                        actions = listOf(
+                            MenuAction(Icons.Default.FileDownload, stringResource(R.string.export), onClick = onExportJson),
+                            MenuAction(Icons.Default.Description, stringResource(R.string.export_md), onClick = onExportMd)
                         )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.export_md)) },
-                            onClick = { moreMenuVisible = false; onExportMd() }
-                        )
-                    }
+                    )
                 }
             )
             if (groups.isEmpty()) {
@@ -142,8 +141,10 @@ private fun BookmarkItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
+    // H11: 列表项卡片直色（palette.row），文字 onSurface/onSurfaceVariant → primaryText/secondaryText
+    val palette = rememberAppSettingPalette()
     Surface(
-        color = MaterialTheme.colorScheme.surface,
+        color = Color(palette.row),
         shape = AppShapes.Chip,
         modifier = Modifier
             .fillMaxWidth()
@@ -154,7 +155,7 @@ private fun BookmarkItem(
             Text(
                 text = bookmark.chapterName,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = palette.primaryText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -162,7 +163,7 @@ private fun BookmarkItem(
                 Text(
                     text = bookmark.bookText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = palette.secondaryText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -171,7 +172,7 @@ private fun BookmarkItem(
                 Text(
                     text = bookmark.content,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = palette.secondaryText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

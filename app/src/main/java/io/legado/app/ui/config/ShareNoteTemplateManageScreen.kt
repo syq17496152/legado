@@ -42,6 +42,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.material3.MaterialTheme
 
 private val noteTemplateDateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
 
@@ -115,7 +116,7 @@ private fun ShareNoteStyleQuickCard(
         Text(
             text = "分享样式",
             color = palette.settings.primaryText,
-            fontSize = 16.sp,
+            fontSize = MaterialTheme.typography.bodyLarge.fontSize,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -123,7 +124,7 @@ private fun ShareNoteStyleQuickCard(
         Text(
             text = "快速切换摘录分享图片的配色和字体，预览与分享图片会同步更新。",
             color = palette.settings.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             lineHeight = 17.sp,
             modifier = Modifier.padding(top = 4.dp)
         )
@@ -131,7 +132,7 @@ private fun ShareNoteStyleQuickCard(
         Text(
             text = "配色",
             color = palette.settings.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -155,7 +156,7 @@ private fun ShareNoteStyleQuickCard(
         Text(
             text = "字体",
             color = palette.settings.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -213,7 +214,7 @@ internal fun ShareNoteTemplatePreview(
             Text(
                 text = "预览",
                 color = palette.settings.secondaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 textAlign = TextAlign.Center
             )
         }

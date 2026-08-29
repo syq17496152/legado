@@ -22,6 +22,7 @@ import io.legado.app.lib.theme.transparentNavBar
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.visible
+import io.legado.app.ui.widget.ModernActionPopup
 
 
 @Suppress("unused")
@@ -36,6 +37,8 @@ class SelectActionBar @JvmOverloads constructor(
 
     private var callBack: CallBack? = null
     private var selMenu: PopupMenu? = null
+    private var selMenuListener: PopupMenu.OnMenuItemClickListener? = null
+    private var selMenuPopup: ModernActionPopup.Handle? = null
     private val binding = ViewSelectActionBarBinding
         .inflate(LayoutInflater.from(context), this, true)
 
@@ -56,7 +59,7 @@ class SelectActionBar @JvmOverloads constructor(
             }
             binding.btnRevertSelection.setOnClickListener { callBack?.revertSelection() }
             binding.btnSelectActionMain.setOnClickListener { callBack?.onClickSelectBarMainAction() }
-            binding.ivMenuMore.setOnClickListener { selMenu?.show() }
+            binding.ivMenuMore.setOnClickListener { showSelMenu() }
             applyNavigationBarPadding()
         }
     }
@@ -83,7 +86,28 @@ class SelectActionBar @JvmOverloads constructor(
     }
 
     fun setOnMenuItemClickListener(listener: PopupMenu.OnMenuItemClickListener) {
-        selMenu?.setOnMenuItemClickListener(listener)
+        selMenuListener = listener
+    }
+
+    /** 展示多选菜单（ModernActionPopup 承载，ui-theme-gap-audit G7） */
+    private fun showSelMenu() {
+        val menu = selMenu?.menu ?: return
+        val items = mutableListOf<ModernActionPopup.Action>()
+        for (i in 0 until menu.size()) {
+            val item = menu.getItem(i)
+            if (item.isVisible) {
+                items.add(
+                    ModernActionPopup.Action(
+                        title = item.title.toString(),
+                        checked = item.isChecked,
+                        enabled = item.isEnabled
+                    ) {
+                        selMenuListener?.onMenuItemClick(item)
+                    }
+                )
+            }
+        }
+        selMenuPopup = ModernActionPopup.show(binding.ivMenuMore, items, selMenuPopup)
     }
 
     fun upCountView(selectCount: Int, allCount: Int) = binding.run {

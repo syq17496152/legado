@@ -17,7 +17,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -34,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.ui.main.ai.AiImageProviderConfig
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.compose.AppManagementCard
 import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
@@ -41,6 +45,9 @@ import io.legado.app.ui.widget.compose.AppManagementMoreActionButton
 import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
 
 @Composable
 internal fun AiImageProviderManageScreen(
@@ -65,7 +72,7 @@ internal fun AiImageProviderManageScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .statusBarsPadding()
+                    // H15：顶栏换 GlassTopAppBar（自带状态栏 inset），父容器移除重复 statusBarsPadding
                     .navigationBarsPadding()
             ) {
                 AiImageProviderTopBar(
@@ -76,7 +83,7 @@ internal fun AiImageProviderManageScreen(
                 Text(
                     text = stringResource(R.string.ai_image_provider_manage_summary),
                     color = palette.settings.secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     lineHeight = 18.sp,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -126,91 +133,26 @@ private fun AiImageProviderTopBar(
     onImportRules: () -> Unit,
     onExportRules: () -> Unit
 ) {
-    val palette = rememberAppManagementPalette()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(54.dp)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            modifier = Modifier
-                .size(42.dp)
-                .clickable(onClick = onBack),
-            shape = RoundedCornerShape(palette.miuix.actionRadius ?: 12.dp),
-            color = Color.Transparent,
-            contentColor = palette.settings.primaryText,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+    // H15（2026-08-28）：自绘 54dp 透明顶栏 → GlassTopAppBar，导入/导出动作迁 actions 槽
+    GlassTopAppBar(
+        title = stringResource(R.string.ai_image_provider_manage),
+        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+        onNavClick = onBack,
+        actions = {
+            IconButton(onClick = onImportRules) {
                 Icon(
-                    painter = painterResource(R.drawable.ic_arrow_back),
-                    contentDescription = null,
-                    tint = palette.settings.primaryText,
-                    modifier = Modifier.size(22.dp)
+                    painter = painterResource(R.drawable.ic_import),
+                    contentDescription = stringResource(R.string.import_str)
+                )
+            }
+            IconButton(onClick = onExportRules) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_export),
+                    contentDescription = stringResource(R.string.export_str)
                 )
             }
         }
-        Text(
-            text = stringResource(R.string.ai_image_provider_manage),
-            color = palette.settings.primaryText,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = palette.settings.titleFontFamily,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        AiImageProviderTopBarButton(
-            iconRes = R.drawable.ic_import,
-            contentDescription = stringResource(R.string.import_str),
-            palette = palette,
-            onClick = onImportRules
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        AiImageProviderTopBarButton(
-            iconRes = R.drawable.ic_export,
-            contentDescription = stringResource(R.string.export_str),
-            palette = palette,
-            onClick = onExportRules
-        )
-    }
-}
-
-@Composable
-private fun AiImageProviderTopBarButton(
-    iconRes: Int,
-    contentDescription: String,
-    palette: AppManagementPalette,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .size(42.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(palette.miuix.actionRadius ?: 12.dp),
-        color = Color.Transparent,
-        contentColor = palette.settings.primaryText,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                painter = painterResource(iconRes),
-                contentDescription = contentDescription,
-                tint = palette.settings.primaryText,
-                modifier = Modifier.size(22.dp)
-            )
-        }
-    }
+    )
 }
 
 @Composable
@@ -234,7 +176,7 @@ private fun AiImageProviderCard(
                     Text(
                         text = provider.displayName(),
                         color = palette.settings.primaryText,
-                        fontSize = 16.sp,
+                        fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -252,7 +194,7 @@ private fun AiImageProviderCard(
                         stringResource(R.string.ai_image_provider_js)
                     },
                     color = palette.settings.secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.MiddleEllipsis
                 )
@@ -262,7 +204,7 @@ private fun AiImageProviderCard(
                         if (provider.type == AiImageProviderConfig.TYPE_OPENAI) "gpt-image-1" else "JS"
                     },
                     color = palette.settings.secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -273,7 +215,7 @@ private fun AiImageProviderCard(
                         append(stringResource(if (provider.enabled) R.string.enabled else R.string.disabled))
                     },
                     color = if (current) palette.settings.accent else palette.settings.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontWeight = if (current) FontWeight.Medium else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -301,7 +243,7 @@ private fun AiImageProviderCurrentBadge(palette: AppManagementPalette) {
         Text(
             text = stringResource(R.string.ai_current_provider),
             color = palette.settings.accent,
-            fontSize = 11.sp,
+            fontSize = MaterialTheme.typography.labelSmall.fontSize,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -320,14 +262,14 @@ private fun AiImageProviderEmptyCard() {
         Text(
             text = stringResource(R.string.ai_image_provider_manage),
             color = palette.settings.primaryText,
-            fontSize = 15.sp,
+            fontSize = MaterialTheme.typography.bodySecondary.fontSize,
             fontWeight = FontWeight.Medium
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = stringResource(R.string.ai_image_provider_manage_summary),
             color = palette.settings.secondaryText,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             lineHeight = 18.sp
         )
     }

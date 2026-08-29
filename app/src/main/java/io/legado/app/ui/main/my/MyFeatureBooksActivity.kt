@@ -23,8 +23,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +51,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import io.legado.app.ui.theme.bodyTertiary
 
 /**
  * 特色播放列表页（8.11 特色入口）：从书架按类型筛选出 视频 与 图片/漫画 书，
@@ -118,19 +118,11 @@ private fun MyFeatureBooksScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(text = stringResource(R.string.my_feature_books))
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors()
+            // H3: 原生 M3 TopAppBar → GlassTopAppBar（primaryColor 主色 + 顶栏管理 TopBarConfig）
+            GlassTopAppBar(
+                title = stringResource(R.string.my_feature_books),
+                navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                onNavClick = onBack
             )
         }
     ) { innerPadding ->
@@ -146,7 +138,7 @@ private fun MyFeatureBooksScreen(
                     Text(
                         text = stringResource(R.string.loading),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 14.sp
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize
                     )
                 }
             }
@@ -162,7 +154,7 @@ private fun MyFeatureBooksScreen(
                     Text(
                         text = stringResource(R.string.my_feature_books_empty),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 14.sp
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize
                     )
                 }
             }
@@ -230,7 +222,7 @@ private fun FeatureBookRow(
                 Text(
                     text = readText,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     modifier = Modifier.padding(start = 8.dp)
                 )
             }
@@ -238,7 +230,7 @@ private fun FeatureBookRow(
         Text(
             text = book.author,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 2.dp)

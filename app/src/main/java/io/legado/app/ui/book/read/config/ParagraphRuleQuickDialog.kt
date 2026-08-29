@@ -51,6 +51,7 @@ import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.material3.MaterialTheme
 
 class ParagraphRuleQuickDialog : ReaderBottomSheetComposeDialogFragment() {
 
@@ -164,7 +165,7 @@ class ParagraphRuleQuickDialog : ReaderBottomSheetComposeDialogFragment() {
                 Text(
                     text = rule.displayName(),
                     color = if (checked) style.accent else style.primaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontWeight = if (checked) FontWeight.SemiBold else FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -189,7 +190,7 @@ class ParagraphRuleQuickDialog : ReaderBottomSheetComposeDialogFragment() {
                             Text(
                                 text = stringResource(R.string.login),
                                 color = style.accent,
-                                fontSize = 12.sp,
+                                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1
                             )

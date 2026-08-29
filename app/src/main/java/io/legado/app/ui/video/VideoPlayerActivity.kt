@@ -88,6 +88,7 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.model.VideoPlay
 import io.legado.app.service.VideoPlayService
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.model.SourceCallBack
 import io.legado.app.ui.association.OnLineImportActivity
@@ -207,6 +208,14 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     private var orientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
 
     /**
+     * singleTask 复用：ViewPager2 页面切换回调引用（onNewIntent 重置时需 unregister，防止重复注册）
+     */
+    private var pageChangeCallback: ViewPager2.OnPageChangeCallback? = null
+
+    /** initView 幂等守卫：onNewIntent 重初始化时避免重复注册 ViewModel 观察者 */
+    private var isViewInitialized = false
+
+    /**
      * T2.8: initSource 协程 Job 引用（onPause 时取消，解决 Bug-25：onPause 后 initSource 仍运行导致资源泄漏）
      */
     private var initSourceJob: Job? = null
@@ -323,11 +332,96 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
     @OptIn(UnstableApi::class)
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initFromIntent(intent)
+        initComposeTopBar()
+        onBackPressedDispatcher.addCallback(this) {
+            if (isFullScreen) {
+                toggleFullScreen()
+                return@addCallback
+            }
+            finish()
+        }
+    }
+
+    /**
+     * singleTask 复用：旧播放会话 Teardown + 按新 Intent 重建会话
+     *
+     * 根因（用户2026-08-26反馈）：VideoPlayerActivity 为 singleTask 启动模式，
+     * 已存在实例时新 Intent 走 onNewIntent，若不复用处理，新播放请求被静默忽略，
+     * VideoPlay 单例残留上一次播放状态（如下载视频的 videoUrl/singleUrl），
+     * 导致"下载管理播放完下载视频后，再从订阅源在线播放"仍播放旧视频，
+     * 破坏内置播放器的订阅源嗅探播放功能。
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val newIntent = intent
+        val isNewPlayRequest = intent.getBooleanExtra("isNew", true)
+        if (!isNewPlayRequest) {
+            // 悬浮窗/PiP 恢复会话（VideoPlayService 传 isNew=false）：继续原视频，禁止重置
+            AppLog.put("VideoPlayerActivity onNewIntent: isNew=false 悬浮窗恢复, skip reset")
+            return
+        }
+        AppLog.put("VideoPlayerActivity onNewIntent: singleTask 收到新播放意图, reset old session")
+        // 1. 取消进行中的 initSource 协程
+        if (initSourceJob?.isActive == true) {
+            initSourceJob?.cancel()
+            AppLog.put("VideoPlayerActivity onNewIntent: old initSourceJob cancelled")
+        }
+        // 2. 释放旧 Fragment 播放器 + 清空 ViewPager2（防止旧 Fragment 播放器/监听残留）
+        currentFragment?.deactivatePlayer()
+        currentFragment?.releasePlayer()
+        currentFragment = null
+        pageChangeCallback?.let { binding.viewPager.unregisterOnPageChangeCallback(it) }
+        pageChangeCallback = null
+        binding.viewPager.adapter = null
+        videoPagerAdapter = null
+        // 显式 FragmentTransaction API（不依赖 fragment-ktx 的顶层扩展）
+        supportFragmentManager.beginTransaction().apply {
+            supportFragmentManager.fragments.filterIsInstance<VideoFragment>()
+                .forEach { remove(it) }
+            commitAllowingStateLoss()
+        }
+        supportFragmentManager.executePendingTransactions()
+        // 旧会话若处于全屏态，复位为常规态（新视频从常态开始播放）
+        if (isFullScreen) {
+            isFullScreen = false
+            binding.composeTopBar.visible()
+            requestedOrientation = orientation
+        }
+        // 3. 重置 VideoPlay 单会话状态（订阅源文章列表上下文由 ReadRss 在 startActivity 前写入）
+        // 仅当新意图的 record 命中当前 VideoPlay.rssArticles 列表时才保留文章场景上下文；
+        // 否则（如历史记录单篇播放：同传 sourceKey+record 却不带文章列表）清空，
+        // 防止上一会话残留列表导致 ViewPager2 文章模式数据错配
+        val rssRecord = newIntent.getStringExtra("record")
+        val rssList = VideoPlay.rssArticles
+        val isRssArticleIntent = !rssList.isNullOrEmpty() && !rssRecord.isNullOrBlank() &&
+            rssList.any { it.link == rssRecord }
+        VideoPlay.resetForNewIntent(preserveRssArticlesContext = isRssArticleIntent)
+        // 4. 重新走初始化流程（与首次启动一致）
+        initFromIntent(newIntent)
+        initComposeTopBar()
+    }
+
+    /**
+     * 按 Intent 初始化播放会话（onActivityCreated 与 onNewIntent 共用）
+     */
+    private fun initFromIntent(intent: Intent) {
         isNew = intent.getBooleanExtra("isNew", true)
         if (isNew) {
             intent.getStringExtra("videoUrl")?.let {
                 VideoPlay.videoUrl = it
                 VideoPlay.singleUrl = true
+            } ?: run {
+                // 修复（用户2026-08-26 真机日志铁证）：新播放请求未带 videoUrl（订阅源/书源嗅探场景）时，
+                // 若上一会话残留单URL状态（如下载管理播放完下载视频后 Activity 销毁退出，VideoPlay 单例
+                // 未清理 singleUrl=true + videoUrl=file://），startPlay 会误进 singleUrl 分支播放旧下载视频。
+                // 此处清残留，让 startPlay 走 source（RssSource/BookSource）嗅探分支播放新内容。
+                if (VideoPlay.singleUrl || VideoPlay.videoUrl != null) {
+                    AppLog.put("VideoPlayerActivity initFromIntent: clear stale singleUrl state, singleUrl=${VideoPlay.singleUrl}, videoUrl=${VideoPlay.videoUrl?.take(2)}")
+                    VideoPlay.singleUrl = false
+                    VideoPlay.videoUrl = null
+                }
             }
             intent.getStringExtra("videoTitle")?.let {
                 VideoPlay.videoTitle = it
@@ -373,14 +467,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             switchToViewPagerMode()
             initView()
             upView()
-        }
-        initComposeTopBar()
-        onBackPressedDispatcher.addCallback(this) {
-            if (isFullScreen) {
-                toggleFullScreen()
-                return@addCallback
-            }
-            finish()
         }
     }
 
@@ -463,7 +549,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             // 书源/单URL模式禁用滑动
             isUserInputEnabled = !isSinglePage
             adapter = videoPagerAdapter
-            registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            pageChangeCallback = object : ViewPager2.OnPageChangeCallback() {
                 override fun onPageSelected(position: Int) {
                     super.onPageSelected(position)
                     // 旧 Fragment 暂停
@@ -498,7 +584,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                         VideoPlay.loadMoreArticles()
                     }
                 }
-            })
+            }
+            registerOnPageChangeCallback(pageChangeCallback!!)
         }
 
         // 文章列表模式：定位到用户点击的文章索引（非0时需设置）
@@ -556,6 +643,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     private fun initView() {
+        if (isViewInitialized) {
+            // onNewIntent 重初始化时已初始化过，避免重复注册 ViewModel 观察者
+            return
+        }
+        isViewInitialized = true
         viewModel.upStarMenuData.observe(this) { upStarMenu() }
         binding.root.setBackgroundColor(backgroundColor)
         // P0-1: 统一 ViewPager2 模式，旧版 UI 初始化全部移除
@@ -1609,9 +1701,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             callBackBookEnd()
             viewModel.removeFromBookshelf { super.finish() }
         } else {
-            alert(title = getString(R.string.add_to_bookshelf)) {
-                setMessage(getString(R.string.check_add_bookshelf, book.name))
-                okButton {
+            showComposeConfirmDialog(
+                title = getString(R.string.add_to_bookshelf),
+                message = getString(R.string.check_add_bookshelf, book.name),
+                positiveText = getString(android.R.string.ok),
+                negativeText = getString(android.R.string.no),
+                onPositive = {
                     val book = VideoPlay.book
                     book?.removeType(BookType.notShelf)
                     lifecycleScope.launch(IO) {
@@ -1621,12 +1716,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                             setResult(RESULT_OK)
                         }
                     }
-                }
-                noButton {
+                },
+                onNegative = {
                     callBackBookEnd()
                     viewModel.removeFromBookshelf { super.finish() }
                 }
-            }
+            )
         }
     }
 

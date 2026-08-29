@@ -1,5 +1,6 @@
 package io.legado.app.ui.config
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.os.Bundle
 import android.view.View
 import androidx.compose.foundation.background
@@ -284,7 +285,7 @@ private fun SettingPanel(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(AppShapes.rounded(14))
             .background(androidx.compose.ui.graphics.Color(palette.row)),
         content = content
     )
@@ -296,7 +297,7 @@ private fun SaveButton(palette: AppSettingPalette, onClick: () -> Unit) {
         text = "保存",
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(AppShapes.rounded(14))
             .background(palette.accent)
             .clickable(onClick = onClick)
             .padding(vertical = 13.dp),
@@ -311,7 +312,7 @@ private fun DeleteButton(palette: AppSettingPalette, onClick: () -> Unit) {
         text = "删除",
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(AppShapes.rounded(14))
             .background(androidx.compose.ui.graphics.Color(palette.row))
             .clickable(onClick = onClick)
             .padding(vertical = 13.dp),

@@ -36,6 +36,10 @@ import io.legado.app.ui.widget.compose.LegadoMiuixSlider
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import kotlin.math.roundToInt
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.subtitleLarge
+import io.legado.app.ui.theme.subtitleLargeX
 
 class MangaEpaperDialog : ComposeDialogFragment() {
 
@@ -76,7 +80,7 @@ class MangaEpaperDialog : ComposeDialogFragment() {
                         Text(
                             text = stringResource(R.string.manga_epaper_stting),
                             color = style.primaryText,
-                            fontSize = 19.sp,
+                            fontSize = MaterialTheme.typography.subtitleLargeX.fontSize,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = style.titleFontFamily
                         )
@@ -90,7 +94,7 @@ class MangaEpaperDialog : ComposeDialogFragment() {
                                 Text(
                                     text = threshold.roundToInt().toString(),
                                     color = palette.secondaryText,
-                                    fontSize = 13.sp
+                                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize
                                 )
                                 LegadoMiuixSlider(
                                     value = threshold,

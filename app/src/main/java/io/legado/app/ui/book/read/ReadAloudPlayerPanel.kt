@@ -174,6 +174,11 @@ import io.legado.app.utils.startActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.labelXSmall
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.theme.subtitleLarge
 
 class ReadAloudPlayerPanel @JvmOverloads constructor(
     context: Context,
@@ -2696,7 +2701,7 @@ private fun SceneFullscreenTopBar(
             Text(
                 text = title.ifBlank { "当前章节" },
                 color = colors.primaryText.copy(alpha = 0.92f),
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -2761,7 +2766,7 @@ private fun RoleAssignmentStatus(
             Text(
                 text = state.roleStatusText,
                 color = if (state.roleStatusError) Color(0xFFFF8A9A) else colors.primaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 lineHeight = 17.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -2813,13 +2818,13 @@ private fun RoleAssignmentProgressDialog(
                             Text(
                                 text = "多角色分配明细",
                                 color = colors.primaryText,
-                                fontSize = 16.sp,
+                                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
                                 text = roleState.chapterTitle.ifBlank { state.chapterTitle },
                                 color = colors.subtleText,
-                                fontSize = 12.sp,
+                                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(top = 2.dp)
@@ -2864,7 +2869,7 @@ private fun RoleDialogAction(
         Text(
             text = text,
             color = colors.primaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
         )
@@ -2881,7 +2886,7 @@ private fun AudioAssignmentSummary(
         Text(
             text = "智能音频",
             color = colors.subtleText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.SemiBold
         )
         Row(
@@ -2929,7 +2934,7 @@ private fun AudioAssignmentSummary(
             Text(
                 text = names,
                 color = colors.secondaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 lineHeight = 18.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -2940,7 +2945,7 @@ private fun AudioAssignmentSummary(
             Text(
                 text = audioInfo.error,
                 color = Color(0xFFFF8A9A),
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 lineHeight = 18.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -3027,7 +3032,7 @@ private fun RoleAssignmentSummary(
     Text(
         text = playerState.roleStatusText,
         color = colors.secondaryText,
-        fontSize = 12.sp,
+        fontSize = MaterialTheme.typography.bodySmall.fontSize,
         lineHeight = 18.sp,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
@@ -3037,7 +3042,7 @@ private fun RoleAssignmentSummary(
         Text(
             text = roleState.error,
             color = Color(0xFFFF8A9A),
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             lineHeight = 18.sp,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
@@ -3064,7 +3069,7 @@ private fun RoleSummaryChip(
     Text(
         text = text,
         color = if (danger) Color(0xFFFF8A9A) else colors.secondaryText,
-        fontSize = 11.sp,
+        fontSize = MaterialTheme.typography.labelSmall.fontSize,
         maxLines = 1,
         modifier = Modifier.padding(horizontal = 2.dp, vertical = 5.dp)
     )
@@ -3105,7 +3110,7 @@ private fun RolePreviewList(
                         else -> "暂无分配明细"
                     },
                     color = colors.secondaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     lineHeight = 19.sp
                 )
             }
@@ -3154,12 +3159,12 @@ private fun RolePreviewParagraphGroup(
                 Text(
                     text = "段落 ${paragraphIndex + 1}",
                     color = if (current) colors.accent else colors.subtleText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
                 if (current) {
-                    Text("当前朗读", color = colors.accent, fontSize = 11.sp)
+                    Text("当前朗读", color = colors.accent, fontSize = MaterialTheme.typography.labelSmall.fontSize)
                 }
             }
             segments.forEach { segment ->
@@ -3196,7 +3201,7 @@ private fun RolePreviewSegmentRow(
                         unboundVoice -> Color(0xFFFFC46B)
                         else -> colors.secondaryText
                     },
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -3205,13 +3210,13 @@ private fun RolePreviewSegmentRow(
                 Text(
                     text = "${(segment.confidence * 100).roundToInt()}%",
                     color = colors.subtleText,
-                    fontSize = 11.sp
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize
                 )
             }
             Text(
                 text = segment.text.ifBlank { "空片段" },
                 color = colors.primaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 lineHeight = 20.sp,
                 maxLines = 5,
                 overflow = TextOverflow.Ellipsis,
@@ -3281,13 +3286,13 @@ private fun RoleSegmentEditDialog(
                         Text(
                             text = "修改片段分配",
                             color = colors.primaryText,
-                            fontSize = 16.sp,
+                            fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
                             text = "段落 ${segment.paragraphIndex + 1}",
                             color = colors.subtleText,
-                            fontSize = 12.sp,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
                             modifier = Modifier.padding(top = 2.dp)
                         )
                     }
@@ -3296,7 +3301,7 @@ private fun RoleSegmentEditDialog(
                 Text(
                     text = segment.text,
                     color = colors.primaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     lineHeight = 20.sp,
                     maxLines = 4,
                     overflow = TextOverflow.Ellipsis
@@ -3337,7 +3342,7 @@ private fun RoleSegmentEditDialog(
                                     Text(
                                         text = "没有可选角色",
                                         color = colors.secondaryText,
-                                        fontSize = 13.sp,
+                                        fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                                         modifier = Modifier.padding(vertical = 12.dp)
                                     )
                                 }
@@ -3374,7 +3379,7 @@ private fun RoleSegmentEditDialog(
                         Text(
                             text = "保存",
                             color = if (canSave) colors.accent else colors.subtleText,
-                            fontSize = 13.sp,
+                            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 9.dp)
                         )
@@ -3401,7 +3406,7 @@ private fun RoleEditChoice(
         Text(
             text = text,
             color = if (selected) colors.accent else colors.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
         )
@@ -3436,7 +3441,7 @@ private fun RoleCharacterChoiceRow(
                 Text(
                     text = character.displayName(),
                     color = colors.primaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -3448,7 +3453,7 @@ private fun RoleCharacterChoiceRow(
                     Text(
                         text = detail,
                         color = colors.secondaryText,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 2.dp)
@@ -3456,7 +3461,7 @@ private fun RoleCharacterChoiceRow(
                 }
             }
             if (selected) {
-                Text("已选", color = colors.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text("已选", color = colors.accent, fontSize = MaterialTheme.typography.bodySmall.fontSize, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -3483,7 +3488,7 @@ private fun RoleTypeChip(
         Text(
             text = roleTypeLabel(roleType),
             color = color,
-            fontSize = 11.sp,
+            fontSize = MaterialTheme.typography.labelSmall.fontSize,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         )
     }
@@ -3644,7 +3649,7 @@ private fun ModeChip(
             Text(
                 text = text,
                 color = if (selected) colors.accentText else colors.secondaryText,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1
             )
@@ -3818,14 +3823,14 @@ private fun RoleAssigningBody(
             Text(
                 text = state.roleBlockingText.ifBlank { "当前章节角色分配中" },
                 color = colors.primaryText,
-                fontSize = 15.sp,
+                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center
             )
             Text(
                 text = "分配完成后再显示本章内容",
                 color = colors.secondaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 textAlign = TextAlign.Center
             )
         }
@@ -4214,7 +4219,7 @@ private fun SceneBubble(
                         Text(
                             text = it,
                             color = textColor.copy(alpha = 0.70f),
-                            fontSize = 10.sp,
+                            fontSize = MaterialTheme.typography.labelXSmall.fontSize,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.widthIn(max = 120.dp)
@@ -4225,7 +4230,7 @@ private fun SceneBubble(
                 Text(
                     text = segment.characterName,
                     color = textColor.copy(alpha = 0.86f),
-                    fontSize = 11.sp,
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -4238,7 +4243,7 @@ private fun SceneBubble(
                         Text(
                             text = it,
                             color = textColor.copy(alpha = 0.70f),
-                            fontSize = 10.sp,
+                            fontSize = MaterialTheme.typography.labelXSmall.fontSize,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.widthIn(max = 120.dp)
@@ -4778,7 +4783,7 @@ private fun MinimalProgress(
             Text(
                 text = state.chapterIndexText.ifBlank { "章节" },
                 color = colors.subtleText,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
@@ -4786,7 +4791,7 @@ private fun MinimalProgress(
             Text(
                 text = state.progressText,
                 color = colors.subtleText,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 maxLines = 1
             )
         }
@@ -4972,7 +4977,7 @@ private fun FeaturePill(
             Text(
                 text = text,
                 color = if (selected) colors.accentText else colors.primaryText,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -5070,13 +5075,13 @@ private fun ChapterSheet(
                 Text(
                     text = context.getString(R.string.chapter_list),
                     color = colors.primaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
                     text = state.chapterTitle.ifBlank { state.chapterIndexText },
                     color = colors.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 4.dp)
@@ -5085,7 +5090,7 @@ private fun ChapterSheet(
             Text(
                 text = "${state.chapterIndex.coerceIn(0, chapterCount - 1) + 1}/$chapterCount",
                 color = colors.primaryText,
-                fontSize = 18.sp,
+                fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
                 fontWeight = FontWeight.SemiBold
             )
         }
@@ -5165,7 +5170,7 @@ private fun ChapterPreviewRow(
             Text(
                 text = chapter.indexText,
                 color = if (chapter.current) colors.accentText else colors.subtleText,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 modifier = Modifier.width(56.dp)
@@ -5204,7 +5209,7 @@ private fun SheetActionButton(
             Text(
                 text = text,
                 color = colors.primaryText,
-                fontSize = 12.sp,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -5229,7 +5234,7 @@ private fun TimerSheet(
         Text(
             text = context.getString(R.string.set_timer),
             color = colors.primaryText,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             fontWeight = FontWeight.SemiBold
         )
         times.chunked(4).forEach { row ->
@@ -5251,7 +5256,7 @@ private fun TimerSheet(
                             Text(
                                 text = context.getString(R.string.timer_m, minute),
                                 color = if (selected) colors.accentText else colors.primaryText,
-                                fontSize = 12.sp,
+                                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                                 maxLines = 1
                             )
@@ -5278,7 +5283,7 @@ private fun EngineSheet(
         Text(
             text = "\u6717\u8bfb\u5f15\u64ce",
             color = colors.primaryText,
-            fontSize = 13.sp,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             fontWeight = FontWeight.SemiBold
         )
         LazyColumn(
@@ -5336,7 +5341,7 @@ private fun EngineRow(
                 Text(
                     text = engine.title,
                     color = if (engine.selected) colors.accentText else colors.primaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     fontWeight = if (engine.selected) FontWeight.SemiBold else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -5344,7 +5349,7 @@ private fun EngineRow(
                 Text(
                     text = engine.subtitle,
                     color = if (engine.selected) colors.accentText.copy(alpha = 0.72f) else colors.subtleText,
-                    fontSize = 10.sp,
+                    fontSize = MaterialTheme.typography.labelXSmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -5353,7 +5358,7 @@ private fun EngineRow(
                 Text(
                     text = "\u5f53\u524d",
                     color = colors.accentText,
-                    fontSize = 11.sp,
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -5380,14 +5385,14 @@ private fun CharactersSheet(
             Text(
                 text = "\u89d2\u8272",
                 color = colors.primaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
             Text(
                 text = "${state.characterPreview.size}",
                 color = colors.subtleText,
-                fontSize = 12.sp
+                fontSize = MaterialTheme.typography.bodySmall.fontSize
             )
         }
         if (state.characterPreview.isEmpty()) {
@@ -5400,7 +5405,7 @@ private fun CharactersSheet(
                 Text(
                     text = "\u6682\u65e0\u89d2\u8272",
                     color = colors.secondaryText,
-                    fontSize = 13.sp
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize
                 )
             }
         } else {
@@ -5452,7 +5457,7 @@ private fun CharacterPreviewRow(
             Text(
                 text = character.role,
                 color = colors.subtleText,
-                fontSize = 11.sp,
+                fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.width(66.dp)
@@ -5462,7 +5467,7 @@ private fun CharacterPreviewRow(
                 Text(
                     text = character.name,
                     color = colors.primaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -5470,7 +5475,7 @@ private fun CharacterPreviewRow(
                 Text(
                     text = character.summary,
                     color = colors.subtleText,
-                    fontSize = 10.sp,
+                    fontSize = MaterialTheme.typography.labelXSmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

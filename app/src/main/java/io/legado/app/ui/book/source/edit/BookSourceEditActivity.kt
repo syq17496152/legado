@@ -7,7 +7,6 @@ import android.view.MenuItem
 import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.appcompat.widget.PopupMenu
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.tabs.TabLayout
@@ -26,10 +25,11 @@ import io.legado.app.data.entities.rule.TocRule
 import io.legado.app.databinding.ActivityBookSourceEditBinding
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.SelectItem
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.search.SearchActivity
@@ -39,6 +39,7 @@ import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.dialog.UrlOptionDialog
 import io.legado.app.ui.widget.dialog.VariableDialog
 import io.legado.app.ui.widget.keyboard.KeyboardToolPop
@@ -101,6 +102,7 @@ class BookSourceEditActivity :
     private val softKeyboardTool by lazy {
         KeyboardToolPop(this, lifecycleScope, binding.root, this)
     }
+    private var sourceEditMenuPopup: ModernActionPopup.Handle? = null
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         softKeyboardTool.attachToWindow(window)
@@ -124,16 +126,41 @@ class BookSourceEditActivity :
         setMode(MainTopBarView.Mode.SUB)
         setTitle(getString(R.string.edit_book_source))
         titleSelect.setOnClickListener { finish() }
+        // topbar-icon-semantics-fix 3.2：代码/保存/调试恢复一级图标
+        //（对齐原版 source_edit.xml showAsAction=always；addActionButton 走 actionsBar 插槽，
+        //  updateIconColors 统一染色随主题/顶栏刷新，禁硬编码 tint）
+        addActionButton(R.drawable.ic_code, R.string.edit_content) { onFullEditClicked() }
+        addActionButton(R.drawable.ic_save, R.string.action_save) {
+            saveSource(getSource()) {
+                setResult(RESULT_OK, Intent().putExtra("origin", it.bookSourceUrl))
+                finish()
+            }
+        }
+        addActionButton(R.drawable.ic_bug_report, R.string.debug_source) {
+            saveSource(getSource()) { source ->
+                startActivity<BookSourceDebugActivity> {
+                    putExtra("key", source.bookSourceUrl)
+                }
+            }
+        }
         moreButton.setOnClickListener { showSourceEditMenu() }
     }
 
     private fun showSourceEditMenu() {
-        PopupMenu(this, binding.titleBar.moreButton).apply {
-            menuInflater.inflate(R.menu.source_edit, menu)
-            menu.findItem(R.id.menu_login)?.isVisible = !getSource().loginUrl.isNullOrBlank()
-            menu.findItem(R.id.menu_auto_complete)?.isChecked = viewModel.autoComplete
-            setOnMenuItemClickListener { onCompatOptionsItemSelected(it) }
-            show()
+        ModernActionPopup.showFromMenu(
+            anchor = binding.titleBar.moreButton,
+            menuRes = R.menu.source_edit,
+            previousPopup = sourceEditMenuPopup,
+            prepare = {
+                // 代码/保存/调试已恢复为一级图标（3.2），弹出菜单中隐藏避免重复入口
+                findItem(R.id.menu_fullscreen_edit)?.isVisible = false
+                findItem(R.id.menu_save)?.isVisible = false
+                findItem(R.id.menu_debug_source)?.isVisible = false
+                findItem(R.id.menu_login)?.isVisible = !getSource().loginUrl.isNullOrBlank()
+                findItem(R.id.menu_auto_complete)?.isChecked = viewModel.autoComplete
+            }
+        ) {
+            onCompatOptionsItemSelected(it)
         }
     }
 
@@ -271,13 +298,14 @@ class BookSourceEditActivity :
     override fun finish() {
         val source = getSource()
         if (!source.equal(viewModel.bookSource ?: BookSource())) {
-            alert(R.string.exit) {
-                setMessage(R.string.exit_no_save)
-                positiveButton(R.string.yes)
-                negativeButton(R.string.no) {
-                    super.finish()
-                }
-            }
+            showComposeConfirmDialog(
+                title = getString(R.string.exit),
+                message = getString(R.string.exit_no_save),
+                positiveText = getString(R.string.yes),
+                negativeText = getString(R.string.no),
+                onPositive = { /* 停留当前页，不退出 */ },
+                onNegative = { super.finish() }
+            )
         } else {
             super.finish()
         }
@@ -647,8 +675,11 @@ class BookSourceEditActivity :
             val groups = withContext(IO) {
                 appDb.bookSourceDao.allGroups()
             }
-            selector(groups) { _, s, _ ->
-                sendText(s)
+            showComposeChoiceListDialog(
+                title = "选择分组",
+                labels = groups
+            ) { index ->
+                sendText(groups[index])
             }
         }
     }
@@ -754,9 +785,12 @@ class BookSourceEditActivity :
                 lifecycleScope.launch {
                     val hasBooks = withContext(IO) { appDb.bookDao.hasBookByOrigin(oldUrl) }
                     if (hasBooks) {
-                        alert(R.string.migrate_book_origin_title) {
-                            setMessage(R.string.migrate_book_origin_msg)
-                            positiveButton(R.string.migrate_book_origin_yes) {
+                        showComposeConfirmDialog(
+                            title = getString(R.string.migrate_book_origin_title),
+                            message = getString(R.string.migrate_book_origin_msg),
+                            positiveText = getString(R.string.migrate_book_origin_yes),
+                            negativeText = getString(R.string.migrate_book_origin_no),
+                            onPositive = {
                                 lifecycleScope.launch {
                                     val affected = withContext(IO) {
                                         appDb.bookDao.updateOrigin(oldUrl, savedSource.bookSourceUrl)
@@ -768,11 +802,9 @@ class BookSourceEditActivity :
                                     )
                                     onSuccess?.invoke(savedSource)
                                 }
-                            }
-                            negativeButton(R.string.migrate_book_origin_no) {
-                                onSuccess?.invoke(savedSource)
-                            }
-                        }
+                            },
+                            onNegative = { onSuccess?.invoke(savedSource) }
+                        )
                     } else {
                         onSuccess?.invoke(savedSource)
                     }

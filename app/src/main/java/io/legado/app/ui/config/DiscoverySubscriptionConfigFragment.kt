@@ -12,6 +12,7 @@ import io.legado.app.ui.config.compose.SettingPageSpec
 import io.legado.app.ui.config.compose.SettingSectionSpec
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.utils.postEvent
+import io.legado.app.utils.postEventDelay
 
 class DiscoverySubscriptionConfigFragment : ComposeSettingFragment() {
 
@@ -116,7 +117,12 @@ class DiscoverySubscriptionConfigFragment : ComposeSettingFragment() {
             PreferKey.discoveryPageMode,
             PreferKey.modernDiscoveryPage,
             PreferKey.modernRssPage,
-            PreferKey.discoveryPageLayout -> postEvent(EventBus.NOTIFY_MAIN, false)
+            PreferKey.discoveryPageLayout -> {
+                postEvent(EventBus.NOTIFY_MAIN, false)
+                // 真机兜底（config-needs-restart-fix）：全屏设置覆盖时 MainActivity 可能 stop，
+                // 非粘性事件丢失（模拟器无法复现）；延迟补发时宿主已 onStart 必达，消费幂等
+                postEventDelay(EventBus.NOTIFY_MAIN, false, 800)
+            }
         }
     }
 

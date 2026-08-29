@@ -59,7 +59,6 @@ import io.legado.app.help.book.characterBookKey
 import io.legado.app.help.character.BookCharacterProfileMeta
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.ui.config.AiWorldBookManageActivity
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
@@ -70,6 +69,9 @@ import io.legado.app.ui.main.ai.compose.AiChatScreenActions
 import io.legado.app.ui.main.ai.compose.aiComposeStyle
 import io.legado.app.ui.book.character.compose.CharacterAvatar
 import io.legado.app.ui.widget.compose.BookCoverImage
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeMultiChoiceDialog
 import io.legado.app.ui.widget.image.CoverImageView
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -79,6 +81,10 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.theme.subtitleLarge
 
 class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
     fullScreen = false,
@@ -191,8 +197,8 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
             "Goal 模式：持续执行直到目标达成",
             "Plan 模式：只读分析，只写计划不执行"
         )
-        selector("Agent 模式", labels) { _, _, index ->
-            val mode = modes.getOrNull(index) ?: return@selector
+        showComposeChoiceListDialog("Agent 模式", labels) { index ->
+            val mode = modes.getOrNull(index) ?: return@showComposeChoiceListDialog
             viewModel.setAgentMode(mode)
             refreshToken.intValue += 1
             toastOnUi(
@@ -238,17 +244,18 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
             toastOnUi(R.string.ai_chat_wait_current)
             return
         }
-        alert(
+        showComposeConfirmDialog(
             title = getString(R.string.delete),
-            message = "删除此条及其之后的所有内容？"
-        ) {
-            okButton {
+            message = "删除此条及其之后的所有内容？",
+            positiveText = getString(R.string.ok),
+            negativeText = getString(R.string.cancel),
+            dangerPositive = true,
+            onPositive = {
                 if (viewModel.deleteFromMessage(messageId)) {
                     refreshToken.intValue += 1
                 }
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun openHistoryFromMenu() {
@@ -423,7 +430,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
         } else {
             listOf("编辑角色卡", "新建对话", "世界书", "移除角色助手")
         }
-        selector(companion.name.ifBlank { "助手" }, items) { _, _, index ->
+        showComposeChoiceListDialog(companion.name.ifBlank { "助手" }, items) { index ->
             if (isDefault) {
                 when (index) {
                     0 -> startNewChatForCompanion(companion.id)
@@ -501,64 +508,67 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
             toastOnUi("默认助手不能删除")
             return
         }
-        alert(
+        showComposeConfirmDialog(
             title = "删除角色助手",
-            message = "确定删除「${companion.name}」？它的聊天历史也会删除。"
-        ) {
-            okButton {
+            message = "确定删除「${companion.name}」？它的聊天历史也会删除。",
+            positiveText = getString(R.string.ok),
+            negativeText = getString(R.string.cancel),
+            dangerPositive = true,
+            onPositive = {
                 AppConfig.removeAiChatCompanion(companion.id)
                 viewModel.switchCompanion(AiChatCompanionConfig.DEFAULT_COMPANION_ID)
                 refreshToken.intValue += 1
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun showCompanionWorldBookDialog(companion: AiChatCompanionConfig = viewModel.currentCompanion()) {
         val worldBooks = AppConfig.aiWorldBookList
         if (worldBooks.isEmpty()) {
-            selector("世界书", listOf("打开世界书管理")) { _, _, _ ->
+            showComposeChoiceListDialog("世界书", listOf("打开世界书管理")) { _ ->
                 openWorldBookManage()
             }
             return
         }
         val visibleWorldBooks = worldBooks.filter { it.enabled && !it.isGlobalWorldBookEnabled() }
         if (visibleWorldBooks.isEmpty()) {
-            selector("世界书", listOf("没有可单独绑定到角色的世界书", "打开世界书管理")) { _, _, which ->
+            showComposeChoiceListDialog("世界书", listOf("没有可单独绑定到角色的世界书", "打开世界书管理")) { which ->
                 if (which == 1) openWorldBookManage()
             }
             return
         }
         val visibleIds = visibleWorldBooks.map { it.id }.toSet()
         val selected = companion.worldBookIds.filterTo(mutableSetOf()) { it in visibleIds }
-        alert(title = "${companion.name} · 世界书") {
-            multiChoiceItems(
-                items = visibleWorldBooks.map { book ->
-                    buildString {
-                        append(book.name)
-                        if (book.bindings.any { it.enabled && it.targetType == AiWorldBookBinding.TARGET_GLOBAL }) {
-                            append("（全局）")
-                        }
-                        if (!book.enabled) {
-                            append("（资料库停用）")
-                        }
+        showComposeMultiChoiceDialog(
+            title = "${companion.name} · 世界书",
+            labels = visibleWorldBooks.map { book ->
+                buildString {
+                    append(book.name)
+                    if (book.bindings.any { it.enabled && it.targetType == AiWorldBookBinding.TARGET_GLOBAL }) {
+                        append("（全局）")
                     }
-                }.toTypedArray(),
-                checkedItems = BooleanArray(visibleWorldBooks.size) { index ->
-                    visibleWorldBooks[index].id in selected
+                    if (!book.enabled) {
+                        append("（资料库停用）")
+                    }
                 }
-            ) { _, which, isChecked ->
-                if (isChecked) selected += visibleWorldBooks[which].id else selected -= visibleWorldBooks[which].id
-            }
-            okButton {
+            },
+            checkedIndices = visibleWorldBooks.indices.filter { visibleWorldBooks[it].id in selected }.toSet(),
+            positiveText = getString(R.string.ok),
+            negativeText = getString(R.string.cancel),
+            neutralText = "管理",
+            onNeutral = {
+                openWorldBookManage()
+            },
+            onPositive = { checked ->
+                val result = visibleWorldBooks.indices.filter { index -> checked.getOrNull(index) == true }
+                    .map { visibleWorldBooks[it].id }
+                    .filter { id -> id in visibleIds }
                 AppConfig.upsertAiChatCompanion(
-                    companion.copy(worldBookIds = selected.filter { id -> id in visibleIds })
+                    companion.copy(worldBookIds = result)
                 )
                 refreshToken.intValue += 1
             }
-            neutralButton("管理") { openWorldBookManage() }
-            cancelButton()
-        }
+        )
     }
 
     private fun showWindowAbilityDialog() {
@@ -566,7 +576,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
             toastOnUi(R.string.ai_chat_wait_current)
             return
         }
-        selector(
+        showComposeChoiceListDialog(
             "当前窗口能力",
             listOf(
                 "Skill：${viewModel.activeWindowSkillIds().size} 个",
@@ -574,7 +584,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                 "世界书：${activeCompanionWorldBookCount()} 个",
                 "清空 Skill/MCP"
             )
-        ) { _, _, index ->
+        ) { index ->
             when (index) {
                 0 -> showWindowSkillDialog()
                 1 -> showWindowMcpDialog()
@@ -608,23 +618,24 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
             return
         }
         val selected = viewModel.activeWindowSkillIds().toMutableSet()
-        alert(title = "当前窗口 Skill") {
-            multiChoiceItems(
-                items = skills.map { skill -> skill.name.ifBlank { "Skill" } }.toTypedArray(),
-                checkedItems = BooleanArray(skills.size) { index -> skills[index].id in selected }
-            ) { _, which, isChecked ->
-                if (isChecked) selected += skills[which].id else selected -= skills[which].id
-            }
-            okButton {
-                viewModel.setActiveWindowSkillIds(selected)
-                refreshToken.intValue += 1
-            }
-            neutralButton("清空") {
+        showComposeMultiChoiceDialog(
+            title = "当前窗口 Skill",
+            labels = skills.map { skill -> skill.name.ifBlank { "Skill" } },
+            checkedIndices = skills.indices.filter { skills[it].id in selected }.toSet(),
+            positiveText = getString(android.R.string.ok),
+            negativeText = getString(android.R.string.cancel),
+            neutralText = "清空",
+            onNeutral = {
                 viewModel.setActiveWindowSkillIds(emptySet())
                 refreshToken.intValue += 1
+            },
+            onPositive = { checked ->
+                val result = skills.indices.filter { index -> checked.getOrNull(index) == true }
+                    .map { skills[it].id }
+                viewModel.setActiveWindowSkillIds(result.toSet())
+                refreshToken.intValue += 1
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun showWindowMcpDialog() {
@@ -634,23 +645,24 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
             return
         }
         val selected = viewModel.activeWindowMcpServerIds().toMutableSet()
-        alert(title = "当前窗口 MCP") {
-            multiChoiceItems(
-                items = servers.map { server -> server.name.ifBlank { "MCP" } }.toTypedArray(),
-                checkedItems = BooleanArray(servers.size) { index -> servers[index].id in selected }
-            ) { _, which, isChecked ->
-                if (isChecked) selected += servers[which].id else selected -= servers[which].id
-            }
-            okButton {
-                viewModel.setActiveWindowMcpServerIds(selected)
-                refreshToken.intValue += 1
-            }
-            neutralButton("清空") {
+        showComposeMultiChoiceDialog(
+            title = "当前窗口 MCP",
+            labels = servers.map { server -> server.name.ifBlank { "MCP" } },
+            checkedIndices = servers.indices.filter { servers[it].id in selected }.toSet(),
+            positiveText = getString(android.R.string.ok),
+            negativeText = getString(android.R.string.cancel),
+            neutralText = "清空",
+            onNeutral = {
                 viewModel.setActiveWindowMcpServerIds(emptySet())
                 refreshToken.intValue += 1
+            },
+            onPositive = { checked ->
+                val result = servers.indices.filter { index -> checked.getOrNull(index) == true }
+                    .map { servers[it].id }
+                viewModel.setActiveWindowMcpServerIds(result.toSet())
+                refreshToken.intValue += 1
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun showHistoryDialog() {
@@ -663,7 +675,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
         items += sessions.map { session ->
             "${session.title}\n${historyTimeFormat.format(Date(session.updatedAt))}"
         }
-        selector(getString(R.string.ai_chat_history), items) { _, _, index ->
+        showComposeChoiceListDialog(getString(R.string.ai_chat_history), items) { index ->
             if (index == 0) {
                 confirmClearAllHistory()
             } else {
@@ -673,13 +685,13 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
     }
 
     private fun showHistorySessionActions(session: AiChatSession) {
-        selector(
+        showComposeChoiceListDialog(
             session.title,
             listOf(
                 getString(R.string.ai_history_open),
                 getString(R.string.ai_history_delete)
             )
-        ) { _, _, index ->
+        ) { index ->
             when (index) {
                 0 -> {
                     viewModel.loadSession(session.id)
@@ -691,29 +703,31 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
     }
 
     private fun confirmDeleteHistorySession(session: AiChatSession) {
-        alert(
+        showComposeConfirmDialog(
             title = getString(R.string.ai_history_delete),
-            message = getString(R.string.ai_history_delete_confirm, session.title)
-        ) {
-            okButton {
+            message = getString(R.string.ai_history_delete_confirm, session.title),
+            positiveText = getString(R.string.ok),
+            negativeText = getString(R.string.cancel),
+            dangerPositive = true,
+            onPositive = {
                 viewModel.deleteSession(session.id)
                 refreshToken.intValue += 1
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun confirmClearAllHistory() {
-        alert(
+        showComposeConfirmDialog(
             title = getString(R.string.ai_history_clear_all),
-            message = getString(R.string.ai_history_clear_all_confirm)
-        ) {
-            okButton {
+            message = getString(R.string.ai_history_clear_all_confirm),
+            positiveText = getString(R.string.ok),
+            negativeText = getString(R.string.cancel),
+            dangerPositive = true,
+            onPositive = {
                 viewModel.clearAllSessions()
                 refreshToken.intValue += 1
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun showModelSelectorDialog() {
@@ -727,14 +741,14 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
             return
         }
         val providerNameMap = AppConfig.aiProviderList.associateBy({ it.id }, { it.name })
-        selector(
+        showComposeChoiceListDialog(
             getString(R.string.ai_current_model),
             models.map { model ->
                 providerNameMap[model.providerId]?.takeIf { it.isNotBlank() }
                     ?.let { "${model.modelId} · $it" }
                     ?: model.modelId
             }
-        ) { _, _, index ->
+        ) { index ->
             AppConfig.aiCurrentModelId = models[index].id
             refreshToken.intValue += 1
         }
@@ -786,7 +800,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                             Text(
                                 text = "添加角色助手",
                                 color = style.colors.primaryText,
-                                fontSize = 18.sp,
+                                fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -795,7 +809,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                                 text = selectedGroup?.let { "从《${it.bookName.ifBlank { it.label }}》选择角色" }
                                     ?: "先选择书籍，再选择要添加到侧边栏的角色",
                                 color = style.colors.secondaryText,
-                                fontSize = 12.sp,
+                                fontSize = MaterialTheme.typography.bodySmall.fontSize,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(top = 2.dp)
@@ -804,7 +818,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                         Text(
                             text = "关闭",
                             color = style.colors.accent,
-                            fontSize = 14.sp,
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(style.metrics.chipRadius))
                                 .clickable(onClick = onDismiss)
@@ -825,7 +839,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                         Text(
                             text = "选择书籍",
                             color = style.colors.secondaryText,
-                            fontSize = 12.sp,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
@@ -881,7 +895,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                         Text(
                             text = "选择角色",
                             color = style.colors.secondaryText,
-                            fontSize = 12.sp,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
@@ -936,7 +950,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                     Text(
                         text = "搜索书名、作者或角色",
                         color = style.colors.secondaryText.copy(alpha = 0.72f),
-                        fontSize = 14.sp
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize
                     )
                 }
                 BasicTextField(
@@ -945,7 +959,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                     singleLine = true,
                     textStyle = TextStyle(
                         color = style.colors.primaryText,
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         lineHeight = 20.sp
                     ),
                     modifier = Modifier.fillMaxWidth()
@@ -963,7 +977,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                 .height(160.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = text, color = style.colors.secondaryText, fontSize = 14.sp)
+            Text(text = text, color = style.colors.secondaryText, fontSize = MaterialTheme.typography.bodyMedium.fontSize)
         }
     }
 
@@ -999,7 +1013,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                 Text(
                     text = group.bookName.ifBlank { group.label },
                     color = style.colors.primaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -1008,7 +1022,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                 Text(
                     text = "${group.characters.size} 个角色",
                     color = style.colors.secondaryText,
-                    fontSize = 11.sp,
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1054,7 +1068,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                     Text(
                         text = group.bookName.ifBlank { group.label },
                         color = style.colors.primaryText,
-                        fontSize = 15.sp,
+                        fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -1062,7 +1076,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                     Text(
                         text = "${group.author.ifBlank { "未知作者" }} · ${group.characters.size} 个角色",
                         color = style.colors.secondaryText,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 3.dp)
@@ -1071,7 +1085,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                 Text(
                     text = "换书",
                     color = style.colors.accent,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier
                         .clip(RoundedCornerShape(style.metrics.chipRadius))
@@ -1099,7 +1113,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
             Text(
                 text = "${filter.label} ${filter.count}",
                 color = if (selected) style.colors.accent else style.colors.secondaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
             )
@@ -1140,7 +1154,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                     Text(
                         text = character.displayName(),
                         color = style.colors.primaryText,
-                        fontSize = 15.sp,
+                        fontSize = MaterialTheme.typography.bodySecondary.fontSize,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -1151,7 +1165,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                             .joinToString(" · ")
                             .ifBlank { "角色卡" },
                         color = style.colors.secondaryText,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 2.dp)
@@ -1161,7 +1175,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                         Text(
                             text = summary,
                             color = style.colors.secondaryText,
-                            fontSize = 12.sp,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(top = 6.dp)
@@ -1171,7 +1185,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
                 Text(
                     text = if (added) "打开" else "添加",
                     color = if (added) style.colors.secondaryText else style.colors.accent,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 10.dp)
                 )

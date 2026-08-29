@@ -48,10 +48,14 @@ import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.ui.main.ai.AiImageProviderConfig
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
+import androidx.compose.material3.MaterialTheme
 
 @Composable
 internal fun AiImageProviderEditScreen(
@@ -126,7 +130,7 @@ internal fun AiImageProviderEditScreen(
                                     else R.string.ai_image_provider_js
                                 ),
                             color = style.primaryText,
-                            fontSize = 14.sp,
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -196,7 +200,7 @@ internal fun AiImageProviderEditScreen(
                         Text(
                             text = stringResource(R.string.enable),
                             color = style.primaryText,
-                            fontSize = 14.sp
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize
                         )
                     }
 
@@ -252,48 +256,12 @@ internal fun AiImageProviderEditScreen(
 
 @Composable
 private fun AiImageProviderEditTopBar(onBack: () -> Unit) {
-    val style = rememberAppDialogStyle()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(54.dp)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            modifier = Modifier
-                .size(42.dp)
-                .clickable(onClick = onBack),
-            shape = RoundedCornerShape(style.actionRadius),
-            color = Color.Transparent,
-            contentColor = style.primaryText,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_arrow_back),
-                    contentDescription = null,
-                    tint = style.primaryText,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-        Text(
-            text = stringResource(R.string.ai_image_provider_manage),
-            color = style.primaryText,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = style.titleFontFamily,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        Spacer(modifier = Modifier.width(42.dp))
-    }
+    // H4/2.2.6: 自绘 Row 顶栏 → GlassTopAppBar（统一 Compose 顶栏基线，随顶栏管理）
+    GlassTopAppBar(
+        title = stringResource(R.string.ai_image_provider_manage),
+        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+        onNavClick = onBack
+    )
 }
 
 @Composable
@@ -314,7 +282,7 @@ private fun EditTextField(
         Text(
             text = label,
             color = style.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.Medium,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
@@ -369,7 +337,7 @@ private fun EditCodeButton(
         Text(
             text = label,
             color = style.primaryText,
-            fontSize = 14.sp,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )

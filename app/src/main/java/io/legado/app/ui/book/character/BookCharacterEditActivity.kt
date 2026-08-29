@@ -40,6 +40,7 @@ import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
 import io.legado.app.help.readaloud.speech.SpeechVoiceCatalogRepository
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.applyUiLabelStyle
@@ -196,20 +197,20 @@ class BookCharacterEditActivity : BaseActivity<ViewBinding>(
     }
 
     private fun showOnlineAvatarDialog() {
-        val dialogBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-            editView.hint = "输入在线图片链接"
-            editView.setText(draft.avatar.takeIf { it.startsWith("http", ignoreCase = true) }.orEmpty())
-        }
-        alert("在线头像") {
-            customView { dialogBinding.root }
-            okButton {
-                val value = dialogBinding.editView.text?.toString()?.trim().orEmpty()
-                if (value.isNotBlank()) {
-                    draft = draft.copy(avatar = value)
+        val initial = draft.avatar.takeIf { it.startsWith("http", ignoreCase = true) }.orEmpty()
+        showComposeTextInputDialog(
+            title = "在线头像",
+            hint = "输入在线图片链接",
+            initialValue = initial,
+            positiveText = getString(android.R.string.ok),
+            negativeText = getString(android.R.string.cancel),
+            onPositive = { value ->
+                val trimmed = value.trim()
+                if (trimmed.isNotBlank()) {
+                    draft = draft.copy(avatar = trimmed)
                 }
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun showGalleryAvatarSelector() {
@@ -340,19 +341,18 @@ class BookCharacterEditActivity : BaseActivity<ViewBinding>(
             toastOnUi("未配置生图供应商")
             return
         }
-        val dialogBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-            editView.hint = "输入角色头像提示词"
-            editView.minLines = 5
-            editView.setText(buildAvatarPrompt())
-        }
-        alert("生成角色头像") {
-            customView { dialogBinding.root }
-            okButton {
-                val prompt = dialogBinding.editView.text?.toString()?.trim().orEmpty()
-                if (prompt.isNotBlank()) generateAvatar(prompt)
+        showComposeTextInputDialog(
+            title = "生成角色头像",
+            hint = "输入角色头像提示词",
+            initialValue = buildAvatarPrompt(),
+            minLines = 5,
+            maxLines = 8,
+            positiveText = getString(android.R.string.ok),
+            negativeText = getString(android.R.string.cancel),
+            onPositive = { prompt ->
+                if (prompt.trim().isNotBlank()) generateAvatar(prompt.trim())
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun buildAvatarPrompt(): String {

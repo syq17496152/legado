@@ -53,6 +53,8 @@ import io.legado.app.ui.config.AdvancedTitleManageActivity
 import io.legado.app.utils.hexString
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.postEvent
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 class TipConfigDialog : ReaderBottomSheetComposeDialogFragment() {
 
@@ -339,7 +341,7 @@ private fun TipCompactSlider(
         Text(
             text = label,
             color = style.primaryText,
-            fontSize = 11.sp,
+            fontSize = MaterialTheme.typography.labelSmall.fontSize,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -348,7 +350,7 @@ private fun TipCompactSlider(
         Text(
             text = value.toString(),
             color = style.accent,
-            fontSize = 11.sp,
+            fontSize = MaterialTheme.typography.labelSmall.fontSize,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             modifier = Modifier.width(32.dp)
@@ -463,7 +465,7 @@ private fun TipValueRow(
             Text(
                 text = title,
                 color = style.primaryText,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -472,7 +474,7 @@ private fun TipValueRow(
             Text(
                 text = value,
                 color = style.accent,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -503,14 +505,14 @@ private fun TipCompactValue(
         Text(
             text = title,
             color = style.secondaryText,
-            fontSize = 11.sp,
+            fontSize = MaterialTheme.typography.labelSmall.fontSize,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
         Text(
             text = value,
             color = style.primaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis

@@ -78,9 +78,9 @@ import io.legado.app.help.webView.WebJsExtensions.Companion.nameUrl
 import io.legado.app.help.webView.WebViewPool.BLANK_HTML
 import io.legado.app.help.webView.WebViewPool.DATA_HTML
 import io.legado.app.lib.dialogs.SelectItem
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.model.Download
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
@@ -381,15 +381,16 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
             if (hitTestResult.type == WebView.HitTestResult.IMAGE_TYPE ||
                 hitTestResult.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
                 hitTestResult.extra?.let { webPic ->
-                    requireContext().selector(
-                        arrayListOf(
-                            SelectItem(getString(R.string.action_save), "save"),
-                            SelectItem(getString(R.string.select_folder), "selectFolder")
+                    showComposeActionListDialog(
+                        title = "",
+                        labels = listOf(
+                            getString(R.string.action_save),
+                            getString(R.string.select_folder)
                         )
-                    ) { _, charSequence, _ ->
-                        when (charSequence.value) {
-                            "save" -> saveImage(webPic)
-                            "selectFolder" -> selectSaveFolder(null)
+                    ) { index ->
+                        when (index) {
+                            0 -> saveImage(webPic)
+                            1 -> selectSaveFolder(null)
                         }
                     }
                     return@setOnLongClickListener true

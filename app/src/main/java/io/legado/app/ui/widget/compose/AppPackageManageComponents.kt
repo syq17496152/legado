@@ -45,6 +45,8 @@ import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.R
 import io.legado.app.ui.widget.ModernActionPopup
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 @Composable
 fun AppPackageManageScreen(
@@ -83,7 +85,7 @@ fun AppPackageManageScreen(
                     Text(
                         text = summaryText,
                         color = palette.settings.secondaryText,
-                        fontSize = 13.sp,
+                        fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                         lineHeight = 18.sp,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -138,7 +140,7 @@ fun AppPackageManageSettingCard(
                 Text(
                     text = title,
                     color = palette.settings.primaryText,
-                    fontSize = 16.sp,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -147,7 +149,7 @@ fun AppPackageManageSettingCard(
                 Text(
                     text = info,
                     color = palette.settings.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -197,7 +199,7 @@ fun AppPackageManageItemCard(
                 Text(
                     text = title,
                     color = palette.settings.primaryText,
-                    fontSize = 16.sp,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -206,7 +208,7 @@ fun AppPackageManageItemCard(
                 Text(
                     text = info,
                     color = palette.settings.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -276,7 +278,7 @@ fun AppPackageManageActionButton(
             Text(
                 text = text,
                 color = content,
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -403,7 +405,7 @@ private fun AppPackageManageTabButton(
             Text(
                 text = text,
                 color = if (selected) palette.settings.accent else palette.settings.primaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

@@ -31,6 +31,7 @@ import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixChoiceRow
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
+import androidx.compose.material3.MaterialTheme
 
 class ParagraphRuleOnlineImportDialog : ComposeDialogFragment() {
 
@@ -89,7 +90,7 @@ class ParagraphRuleOnlineImportDialog : ComposeDialogFragment() {
                                     conflictCount
                                 ),
                                 color = style.primaryText,
-                                fontSize = 14.sp,
+                                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                                 fontWeight = FontWeight.Medium
                             )
                             Spacer(modifier = Modifier.height(10.dp))

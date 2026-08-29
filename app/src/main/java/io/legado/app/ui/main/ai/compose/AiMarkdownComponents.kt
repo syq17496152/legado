@@ -1,5 +1,6 @@
 package io.legado.app.ui.main.ai.compose
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.net.Uri
 import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
@@ -59,6 +60,9 @@ import io.legado.app.utils.parseToUri
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import kotlin.math.min
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.bodySecondary
 
 @Composable
 internal fun AiCopyTextButton(
@@ -73,7 +77,7 @@ internal fun AiCopyTextButton(
     Text(
         text = label,
         color = style.colors.accent,
-        fontSize = 12.sp,
+        fontSize = MaterialTheme.typography.bodySmall.fontSize,
         fontWeight = FontWeight.Medium,
         modifier = modifier
             .clip(RoundedCornerShape(style.metrics.chipRadius))
@@ -224,7 +228,7 @@ private fun AiMarkdownListLine(
         Text(
             text = prefix,
             color = style.colors.secondaryText,
-            fontSize = 15.sp,
+            fontSize = MaterialTheme.typography.bodySecondary.fontSize,
             lineHeight = 21.sp,
             modifier = Modifier.width(24.dp)
         )
@@ -250,7 +254,7 @@ private fun AiMarkdownQuote(
             modifier = Modifier
                 .width(3.dp)
                 .heightIn(min = 22.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .clip(AppShapes.rounded(2))
                 .background(style.colors.accent.copy(alpha = 0.46f))
         )
         AiMarkdownInlineContent(
@@ -292,7 +296,7 @@ private fun AiMarkdownCodeBlock(
                 Text(
                     text = text,
                     color = style.colors.primaryText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     lineHeight = 18.sp,
                     fontFamily = FontFamily.Monospace,
                     modifier = Modifier
@@ -433,7 +437,7 @@ private fun AiMarkdownTableRow(
                                         text = piece.text.trim(),
                                         style = style,
                                         color = if (header) style.colors.accent else style.colors.primaryText,
-                                        fontSize = 13.sp,
+                                        fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                                         lineHeight = 18.sp,
                                         fontWeight = if (header) FontWeight.SemiBold else null
                                     )

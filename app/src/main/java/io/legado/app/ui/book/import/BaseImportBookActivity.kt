@@ -9,10 +9,10 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.databinding.ActivityImportBookBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.utils.ArchiveUtils
 import io.legado.app.utils.FileDoc
 import io.legado.app.utils.startActivityForBook
@@ -56,21 +56,25 @@ abstract class BaseImportBookActivity<VM : ViewModel> :
         //测试读写??
         val storageHelp = String(assets.open("storageHelp.md").readBytes())
         val hint = getString(R.string.select_book_folder)
-        alert(hint, storageHelp) {
-            okButton {
+        showComposeConfirmDialog(
+            title = hint,
+            message = storageHelp,
+            positiveText = getString(R.string.ok),
+            negativeText = getString(R.string.cancel),
+            onPositive = {
                 localBookTreeSelect.launch {
                     title = hint
                 }
-            }
-            cancelButton {
+            },
+            onNegative = {
+                localBookTreeSelectListener = null
+                block.resume(false)
+            },
+            onDismissAction = {
                 localBookTreeSelectListener = null
                 block.resume(false)
             }
-            onCancelled {
-                localBookTreeSelectListener = null
-                block.resume(false)
-            }
-        }
+        )
     }
 
     abstract fun onSearchTextChange(newText: String?)
@@ -100,10 +104,11 @@ abstract class BaseImportBookActivity<VM : ViewModel> :
             toastOnUi(R.string.unsupport_archivefile_entry)
             return
         }
-        selector(
-            R.string.start_read,
+        showComposeChoiceListDialog(
+            getString(R.string.start_read),
             fileNames
-        ) { _, name, _ ->
+        ) { index ->
+            val name = fileNames[index]
             lifecycleScope.launch {
                 withContext(IO) { appDb.bookDao.getBookByFileName(name) }?.let {
                     startReadBook(it)
@@ -127,17 +132,17 @@ abstract class BaseImportBookActivity<VM : ViewModel> :
 
     /* 提示是否重新导入所点击的压缩文件 */
     private fun showImportAlert(fileDoc: FileDoc, fileName: String) {
-        alert(
-            R.string.draw,
-            R.string.no_book_found_bookshelf
-        ) {
-            okButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.draw),
+            message = getString(R.string.no_book_found_bookshelf),
+            positiveText = getString(R.string.ok),
+            negativeText = getString(R.string.no),
+            onPositive = {
                 addArchiveToBookShelf(fileDoc, fileName) {
                     startReadBook(it)
                 }
             }
-            noButton()
-        }
+        )
     }
 
 }

@@ -13,8 +13,8 @@ import io.legado.app.databinding.ActivityTranslucenceBinding
 import io.legado.app.exception.InvalidBooksDirException
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.BubblePackageManager
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.permission.Permissions
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.FileUtils
@@ -106,20 +106,15 @@ class FileAssociationActivity :
         }
         viewModel.notSupportedLiveData.observe(this) { data ->
             binding.rotateLoading.gone()
-            alert(
+            showComposeConfirmDialog(
                 title = appCtx.getString(R.string.draw),
-                message = appCtx.getString(R.string.file_not_supported, data.second)
-            ) {
-                yesButton {
-                    importBook(data.first)
-                }
-                noButton {
-                    finish()
-                }
-                onCancelled {
-                    finish()
-                }
-            }
+                message = appCtx.getString(R.string.file_not_supported, data.second),
+                positiveText = getString(R.string.yes),
+                negativeText = getString(R.string.no),
+                onPositive = { importBook(data.first) },
+                onNegative = { finish() },
+                onDismissAction = { finish() }
+            )
         }
         intent.data?.let { data ->
             if (data.isContentScheme() && data.canRead()) {

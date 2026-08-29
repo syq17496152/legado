@@ -60,6 +60,8 @@ import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.AppThemedStepperSlider
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.dpToPx
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.subtitleLarge
 
 private const val MENU_BUTTONS_PER_PAGE = 4
 private val READ_MENU_BUTTON_MIN_HEIGHT = 52.dp
@@ -161,7 +163,7 @@ fun ReadMenuTitleBar(
             Text(
                 text = state.bookName ?: "",
                 color = style.primaryText,
-                fontSize = 18.sp,
+                fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -336,7 +338,7 @@ fun ReadMenuActionBar(
                     Text(
                         text = it,
                         color = style.primaryText,
-                        fontSize = 14.sp,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -426,7 +428,7 @@ fun ReadMenuActionBar(
                     Text(
                         text = state.sourceName ?: bookSourceTitle,
                         color = style.primaryText,
-                        fontSize = 12.sp,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -720,7 +722,7 @@ private fun ReadMenuButton(
         Text(
             text = title,
             color = style.primaryText,
-            fontSize = 11.sp,
+            fontSize = MaterialTheme.typography.labelSmall.fontSize,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,

@@ -42,6 +42,7 @@ import io.legado.app.ui.widget.compose.appSettingRowDecoration
 import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.ui.widget.components.MetricGrid
 import io.legado.app.ui.widget.components.MetricItem
+import androidx.compose.material3.MaterialTheme
 
 internal enum class MySettingsRowKind {
     Action,
@@ -286,7 +287,7 @@ private fun SettingsActionRow(
             Text(
                 text = item.row.title,
                 color = textColor,
-                fontSize = 16.sp,
+                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -295,7 +296,7 @@ private fun SettingsActionRow(
                 Text(
                     text = item.summary,
                     color = colors.secondaryText,
-                    fontSize = 14.sp,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -343,7 +344,7 @@ private fun WebServiceRow(
             Text(
                 text = item.row.title,
                 color = colors.primaryText,
-                fontSize = 16.sp,
+                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -351,7 +352,7 @@ private fun WebServiceRow(
             Text(
                 text = state.summary,
                 color = colors.secondaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -396,7 +397,7 @@ private fun EmptySettingsFrame(
             Text(
                 text = "没有匹配的设置",
                 color = colors.secondaryText,
-                fontSize = 14.sp
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize
             )
         }
     }

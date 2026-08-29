@@ -25,6 +25,8 @@ import io.legado.app.model.AutoTaskRule
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.ACache
@@ -69,19 +71,17 @@ class AutoTaskActivity : VMBaseActivity<ActivityAutoTaskBinding, AutoTaskViewMod
     }
     private val exportResult = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
-            alert(R.string.export_success) {
-                if (uri.toString().isAbsUrl()) {
-                    setMessage(DirectLinkUpload.getSummary())
-                }
-                val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                    editView.hint = getString(R.string.path)
-                    editView.setText(uri.toString())
-                }
-                customView { alertBinding.root }
-                okButton {
+            showComposeTextInputDialog(
+                title = getString(R.string.export_success),
+                message = if (uri.toString().isAbsUrl()) DirectLinkUpload.getSummary() else null,
+                hint = getString(R.string.path),
+                initialValue = uri.toString(),
+                readOnly = true,
+                positiveText = getString(R.string.copy_text),
+                onPositive = {
                     sendToClip(uri.toString())
                 }
-            }
+            )
         }
     }
 
@@ -290,10 +290,14 @@ class AutoTaskActivity : VMBaseActivity<ActivityAutoTaskBinding, AutoTaskViewMod
     private fun deleteSelection() {
         val selection = selectedItems()
         if (selection.isEmpty()) return
-        alert(R.string.draw, R.string.sure_del) {
-            yesButton { viewModel.delete(selection.map { it.id }) }
-            noButton()
-        }
+        showComposeConfirmDialog(
+            title = getString(R.string.draw),
+            message = getString(R.string.sure_del),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = { viewModel.delete(selection.map { it.id }) }
+        )
     }
 
     // ---- 条目操作 ----
@@ -309,11 +313,14 @@ class AutoTaskActivity : VMBaseActivity<ActivityAutoTaskBinding, AutoTaskViewMod
 
     private fun delete(index: Int) {
         val item = currentItems().getOrNull(index) ?: return
-        alert(R.string.draw) {
-            setMessage(getString(R.string.auto_task_delete) + "\n" + item.name)
-            noButton()
-            yesButton { viewModel.delete(item) }
-        }
+        showComposeConfirmDialog(
+            title = getString(R.string.draw),
+            message = getString(R.string.auto_task_delete) + "\n" + item.name,
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = { viewModel.delete(item) }
+        )
     }
 
     private fun showLog(index: Int) {

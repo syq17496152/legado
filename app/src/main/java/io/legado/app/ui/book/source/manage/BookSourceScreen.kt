@@ -35,6 +35,8 @@ import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 @Composable
 internal fun BookSourceScreen(
@@ -167,7 +169,7 @@ private fun BookSourceHostHeader(
     Text(
         text = hostText,
         color = palette.settings.accent,
-        fontSize = 13.sp,
+        fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
         fontWeight = FontWeight.Medium,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,

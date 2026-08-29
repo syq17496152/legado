@@ -5,6 +5,7 @@ object EventBus {
     const val RECREATE = "RECREATE"
     const val UP_BOOKSHELF = "upBookToc"
     const val BOOKSHELF_REFRESH = "bookshelfRefresh"
+    const val BOOKSHELF_STRUCTURE_CHANGED = "bookshelfStructureChanged"
     const val ALOUD_STATE = "aloud_state"
     const val READ_ALOUD_PLAYBACK_STATE = "readAloudPlaybackState"
     const val TTS_PROGRESS = "ttsStart"
@@ -63,7 +64,7 @@ object EventBus {
     const val ARTICLES_LOADED = "articlesLoaded"
     // 阅读页滚动模式顶部下拉快速书签 (R5)
     const val PULL_DOWN_BOOKMARK = "pullDownBookmark"
-    const val MAIN_THEME_BACKGROUND_CHANGED = "mainThemeBackgroundChanged"
+    // T6（theme-arch-gap）：MAIN_THEME_BACKGROUND_CHANGED 死事件常量已删（4 发 0 订阅）
     // P1E：外观套件切换信号（AppearanceKitManager 等 config 类使用）
     const val MAIN_APPEARANCE_KIT_CHANGED = "mainAppearanceKitChanged"
     // Archive 主界面：导航栏 / 顶栏重载信号

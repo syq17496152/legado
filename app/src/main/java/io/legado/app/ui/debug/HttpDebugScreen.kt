@@ -44,7 +44,10 @@ import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.StrResponse
 import io.legado.app.help.http.newCallStrResponse
+import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.AppShapes
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
@@ -195,39 +198,24 @@ fun HttpDebugScreen(
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.secondary,
-                    scrolledContainerColor = MaterialTheme.colorScheme.secondary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSecondary,
-                    titleContentColor = MaterialTheme.colorScheme.onSecondary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSecondary
-                ),
-                title = {
-                    Text(
-                        text = stringResource(R.string.debug_http_request),
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                // 右侧菜单
+            GlassTopAppBar(
+                title = stringResource(R.string.debug_http_request),
+                navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                onNavClick = onBackClick,
+                // 右侧菜单：H12 顶栏归位 + H8 裸 M3 DropdownMenu → AppDropdownMenu（视觉与全局菜单一致）
                 actions = {
                     Box {
                         IconButton(onClick = { showMenu = true }) {
                             Icon(Icons.Default.MoreVert, contentDescription = "更多")
                         }
-                        DropdownMenu(
+                        AppDropdownMenu(
                             expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
-                        ) {
-                            // 查看响应源码
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.debug_response_src)) },
-                                onClick = {
+                            onDismiss = { showMenu = false },
+                            actions = listOf(
+                                MenuAction(
+                                    icon = Icons.Default.Http,
+                                    title = stringResource(R.string.debug_response_src)
+                                ) {
                                     showMenu = false
                                     // 直接跳转到代码编辑界面
                                     lastResponse?.let { response ->
@@ -240,7 +228,7 @@ fun HttpDebugScreen(
                                         }
                                         sb.append("\n=== 响应体 ===\n")
                                         sb.append(response.body)
-                                        
+
                                         val intent = android.content.Intent(context, io.legado.app.ui.code.CodeEditActivity::class.java).apply {
                                             putExtra("text", sb.toString())
                                             putExtra("title", context.getString(R.string.debug_response_src))
@@ -248,28 +236,17 @@ fun HttpDebugScreen(
                                         context.startActivity(intent)
                                     }
                                 },
-                                enabled = lastResponse != null,
-                                leadingIcon = {
-                                    Icon(Icons.Default.Http, contentDescription = null)
-                                }
-                            )
-                            // 查看请求源码
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.debug_request_src)) },
-                                onClick = {
+                                MenuAction(
+                                    icon = Icons.Default.Upload,
+                                    title = stringResource(R.string.debug_request_src)
+                                ) {
                                     showMenu = false
                                     showRequestSrcDialog = true
                                 },
-                                enabled = lastRequestSrc != null,
-                                leadingIcon = {
-                                    Icon(Icons.Default.Upload, contentDescription = null)
-                                }
-                            )
-                            HorizontalDivider()
-                            // 清空
-                            DropdownMenuItem(
-                                text = { Text("清空") },
-                                onClick = {
+                                MenuAction(
+                                    icon = Icons.Default.Clear,
+                                    title = "清空"
+                                ) {
                                     showMenu = false
                                     url = ""
                                     headers = ""
@@ -278,12 +255,9 @@ fun HttpDebugScreen(
                                     responseBody = ""
                                     lastResponse = null
                                     lastRequestSrc = null
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Clear, contentDescription = null)
                                 }
                             )
-                        }
+                        )
                     }
                 }
             )

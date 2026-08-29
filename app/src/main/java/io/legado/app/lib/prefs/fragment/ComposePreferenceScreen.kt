@@ -1,5 +1,6 @@
 package io.legado.app.lib.prefs.fragment
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -30,6 +31,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -62,6 +64,7 @@ import io.legado.app.lib.prefs.Preference as LegadoPreference
 import io.legado.app.lib.prefs.SwitchPreference as LegadoSwitchPreference
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.composeActionRadius
+import io.legado.app.ui.theme.bodyTertiary
 import io.legado.app.ui.widget.compose.AppSettingPalette
 import io.legado.app.ui.widget.compose.AppSettingSectionTitle
 import io.legado.app.ui.widget.compose.AppThemedStepperSlider
@@ -301,7 +304,7 @@ private fun PreferenceText(
             Text(
                 text = it.toString(),
                 color = titleColor,
-                fontSize = 16.sp,
+                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -311,7 +314,7 @@ private fun PreferenceText(
             Text(
                 text = it.toString(),
                 color = summaryColor,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis
             )
@@ -357,7 +360,7 @@ private fun PreferenceWidget(
                 Text(
                     text = entry,
                     color = if (enabled) colors.accent else colors.disabledText,
-                    fontSize = 13.sp,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
@@ -392,7 +395,7 @@ private fun DrawablePreview(
     val alpha = if (enabled) 1f else 0.42f
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(AppShapes.rounded(12))
             .drawWithCache {
                 onDrawBehind {
                     drawIntoCanvas { canvas ->
@@ -462,7 +465,7 @@ private fun SeekBarPreferenceRow(
             Text(
                 text = sliderValue.toString(),
                 color = if (enabled) colors.accent else colors.disabledText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = FontWeight.Medium
             )
         }

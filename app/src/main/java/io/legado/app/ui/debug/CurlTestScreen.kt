@@ -23,7 +23,10 @@ import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.help.http.StrResponse
 import io.legado.app.help.http.newCallStrResponse
+import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.AppShapes
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers
@@ -155,25 +158,10 @@ fun CurlTestScreen(
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.secondary,
-                    scrolledContainerColor = MaterialTheme.colorScheme.secondary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSecondary,
-                    titleContentColor = MaterialTheme.colorScheme.onSecondary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSecondary
-                ),
-                title = {
-                    Text(
-                        text = stringResource(R.string.debug_curl_test),
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
+            GlassTopAppBar(
+                title = stringResource(R.string.debug_curl_test),
+                navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                onNavClick = onBackClick,
                 actions = {
                     IconButton(onClick = {
                         val clipText = clipboardManager.getText()?.text ?: ""
@@ -401,39 +389,35 @@ fun CurlTestScreen(
                                 IconButton(onClick = { expanded = true }) {
                                     Icon(Icons.Default.MoreVert, contentDescription = "更多")
                                 }
-                                DropdownMenu(
+                                // H17：裸 M3 DropdownMenu → AppDropdownMenu（菜单基线，随主题取色）
+                                AppDropdownMenu(
                                     expanded = expanded,
-                                    onDismissRequest = { expanded = false }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.debug_copy)) },
-                                        onClick = {
-                                            expanded = false
+                                    onDismiss = { expanded = false },
+                                    actions = listOf(
+                                        MenuAction(
+                                            icon = Icons.Default.ContentCopy,
+                                            title = stringResource(R.string.debug_copy)
+                                        ) {
                                             context.sendToClip(responseBody)
                                         },
-                                        leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null) }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.debug_format_json)) },
-                                        onClick = {
-                                            expanded = false
+                                        MenuAction(
+                                            icon = Icons.Default.FormatAlignLeft,
+                                            title = stringResource(R.string.debug_format_json)
+                                        ) {
                                             responseBody = tryFormatJson(responseBody)
                                         },
-                                        leadingIcon = { Icon(Icons.Default.FormatAlignLeft, contentDescription = null) }
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.debug_view_source)) },
-                                        onClick = {
-                                            expanded = false
+                                        MenuAction(
+                                            icon = Icons.Default.Code,
+                                            title = stringResource(R.string.debug_view_source)
+                                        ) {
                                             val intent = android.content.Intent(context, io.legado.app.ui.code.CodeEditActivity::class.java).apply {
                                                 putExtra("text", responseBody)
                                                 putExtra("title", context.getString(R.string.debug_response_body))
                                             }
                                             context.startActivity(intent)
-                                        },
-                                        leadingIcon = { Icon(Icons.Default.Code, contentDescription = null) }
+                                        }
                                     )
-                                }
+                                )
                             }
                         }
                         

@@ -17,9 +17,9 @@ import io.legado.app.databinding.ActivityImageDetailBinding
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.image.adapter.ImageDetailAdapter
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.utils.ACache
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
@@ -279,13 +279,14 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding>(),
             level = AppLog.Level.INFO
         )
         currentLongClickUrl = imageUrl
-        alert("图片操作") {
-            items(listOf("保存图片", "分享图片", "复制URL")) { _, which ->
-                when (which) {
-                    0 -> saveImage(imageUrl)
-                    1 -> shareImage(imageUrl)
-                    2 -> copyImageUrl(imageUrl)
-                }
+        showComposeChoiceListDialog(
+            title = "图片操作",
+            labels = listOf("保存图片", "分享图片", "复制URL")
+        ) { which ->
+            when (which) {
+                0 -> saveImage(imageUrl)
+                1 -> shareImage(imageUrl)
+                2 -> copyImageUrl(imageUrl)
             }
         }
     }

@@ -10,11 +10,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -35,49 +37,45 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.lifecycleScope
-import io.legado.app.R
+import androidx.viewbinding.ViewBinding
 import io.legado.app.base.BaseActivity
-import io.legado.app.base.BaseDialogFragment
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.data.entities.ReadAloudSpeakerGroup
 import io.legado.app.data.entities.ReadAloudSpeakerGroupItem
-import io.legado.app.help.config.AppConfig
 import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
+import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.SpeechVoiceCatalogRepository
 import io.legado.app.help.readaloud.speech.SpeechVoiceEngineGroup
 import io.legado.app.help.readaloud.speech.SpeechVoiceGroupRepository
 import io.legado.app.help.readaloud.speech.SpeechVoiceOption
-import io.legado.app.help.readaloud.speech.SpeechRoute
-import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.composeActionRadius
 import io.legado.app.lib.theme.composePanelRadius
-import io.legado.app.lib.theme.primaryTextColor
-import io.legado.app.lib.theme.secondaryTextColor
-import io.legado.app.lib.theme.uiTypeface
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.theme.subtitleLarge
+import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.AppDialogStyle
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
-import io.legado.app.utils.ColorUtils
-import io.legado.app.utils.setLayout
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
-import androidx.viewbinding.ViewBinding
 
 class SpeakerGroupManageActivity : BaseActivity<ViewBinding>(
     fullScreen = false,
@@ -103,16 +101,18 @@ class SpeakerGroupManageActivity : BaseActivity<ViewBinding>(
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         composeView.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         composeView.setContent {
-            SpeakerGroupManageScreen(
-                groups = groups,
-                speakerItems = items,
-                httpTtsList = httpTtsList,
-                editorTarget = editorTarget,
-                editingNew = editingNew,
-                pickerTarget = pickerTarget,
-                deleteTarget = deleteTarget,
-                actions = this@SpeakerGroupManageActivity
-            )
+            LegadoTheme {
+                SpeakerGroupManageScreen(
+                    groups = groups,
+                    speakerItems = items,
+                    httpTtsList = httpTtsList,
+                    editorTarget = editorTarget,
+                    editingNew = editingNew,
+                    pickerTarget = pickerTarget,
+                    deleteTarget = deleteTarget,
+                    actions = this@SpeakerGroupManageActivity
+                )
+            }
         }
         lifecycleScope.launch {
             combine(
@@ -247,7 +247,9 @@ class SpeakerGroupManageActivity : BaseActivity<ViewBinding>(
     }
 }
 
-class SpeakerGroupManageDialog : BaseDialogFragment(0), SpeakerGroupManageActions {
+class SpeakerGroupManageDialog() : ComposeDialogFragment(), SpeakerGroupManageActions {
+
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
 
     private var groups by mutableStateOf<List<ReadAloudSpeakerGroup>>(emptyList())
     private var items by mutableStateOf<List<ReadAloudSpeakerGroupItem>>(emptyList())
@@ -257,11 +259,6 @@ class SpeakerGroupManageDialog : BaseDialogFragment(0), SpeakerGroupManageAction
     private var pickerTarget by mutableStateOf<ReadAloudSpeakerGroup?>(null)
     private var deleteTarget by mutableStateOf<ReadAloudSpeakerGroup?>(null)
 
-    override fun onStart() {
-        super.onStart()
-        setLayout(ViewGroup.LayoutParams.MATCH_PARENT, 0.88f)
-    }
-
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -270,21 +267,24 @@ class SpeakerGroupManageDialog : BaseDialogFragment(0), SpeakerGroupManageAction
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                SpeakerGroupManageScreen(
-                    groups = groups,
-                    speakerItems = items,
-                    httpTtsList = httpTtsList,
-                    editorTarget = editorTarget,
-                    editingNew = editingNew,
-                    pickerTarget = pickerTarget,
-                    deleteTarget = deleteTarget,
-                    actions = this@SpeakerGroupManageDialog
-                )
+                LegadoTheme {
+                    SpeakerGroupManageScreen(
+                        groups = groups,
+                        speakerItems = items,
+                        httpTtsList = httpTtsList,
+                        editorTarget = editorTarget,
+                        editingNew = editingNew,
+                        pickerTarget = pickerTarget,
+                        deleteTarget = deleteTarget,
+                        actions = this@SpeakerGroupManageDialog
+                    )
+                }
             }
         }
     }
 
-    override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
         lifecycleScope.launch {
             combine(
                 appDb.readAloudSpeakerGroupDao.flowGroups(),
@@ -451,62 +451,68 @@ private fun SpeakerGroupManageScreen(
     deleteTarget: ReadAloudSpeakerGroup?,
     actions: SpeakerGroupManageActions
 ) {
-    val colors = rememberSpeakerManageColors()
+    val style = rememberAppDialogStyle()
+    val palette = style.toMiuixPalette()
     val context = LocalContext.current
     val engineGroups = remember(httpTtsList) {
         SpeechVoiceCatalogRepository.allGroups(context, httpTtsList, includeSystem = true)
     }
     CompositionLocalProvider(
-        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = FontFamily(context.uiTypeface()))
+        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = colors.page,
-            shape = RoundedCornerShape(0.dp)
-        ) {
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("发言人管理", color = colors.text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "多角色自动分配会优先使用这里启用的发言人",
-                        color = colors.subText,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-                TextButton(onClick = actions::close) { Text("关闭", color = colors.subText) }
-            }
-            Row(
-                modifier = Modifier.padding(top = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SpeakerActionButton("新建分组", colors, modifier = Modifier.weight(1f), onClick = actions::openNewGroupEditor)
-            }
-            if (groups.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("暂无发言人分组", color = colors.subText, fontSize = 14.sp)
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(top = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(groups, key = { it.id }) { group ->
-                        SpeakerGroupCard(
-                            group = group,
-                            items = speakerItems.filter { it.groupId == group.id },
-                            colors = colors,
-                            actions = actions
-                        )
+        AppDialogFrame(
+            title = "发言人管理",
+            message = "多角色自动分配会优先使用这里启用的发言人",
+            scrollContent = false,
+            content = {
+                if (groups.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("暂无发言人分组", color = style.secondaryText, fontSize = MaterialTheme.typography.bodyMedium.fontSize)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 460.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(groups, key = { it.id }) { group ->
+                            SpeakerGroupCard(
+                                group = group,
+                                items = speakerItems.filter { it.groupId == group.id },
+                                style = style,
+                                actions = actions
+                            )
+                        }
                     }
                 }
+            },
+            actions = {
+                LegadoMiuixActionButton(
+                    text = "新建分组",
+                    palette = palette,
+                    onClick = actions::openNewGroupEditor,
+                    primary = true,
+                    cornerRadius = style.actionRadius
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                LegadoMiuixActionButton(
+                    text = "关闭",
+                    palette = palette,
+                    onClick = actions::close,
+                    cornerRadius = style.actionRadius
+                )
             }
-        }
+        )
         if (editingNew || editorTarget != null) {
             GroupEditorDialog(
                 group = editorTarget,
-                colors = colors,
+                style = style,
                 onDismiss = actions::closeGroupEditor,
                 onSave = { name, enabled -> actions.saveGroup(editorTarget, name, enabled) }
             )
@@ -516,7 +522,7 @@ private fun SpeakerGroupManageScreen(
                 targetGroup = group,
                 engineGroups = engineGroups,
                 existingItems = speakerItems.filter { it.groupId == group.id },
-                colors = colors,
+                style = style,
                 onDismiss = actions::closeSpeakerPicker,
                 onConfirm = { actions.addSpeakers(group, it) }
             )
@@ -524,11 +530,10 @@ private fun SpeakerGroupManageScreen(
         deleteTarget?.let { group ->
             ConfirmDeleteGroupDialog(
                 group = group,
-                colors = colors,
+                style = style,
                 onDismiss = actions::closeDeleteGroup,
                 onConfirm = { actions.deleteGroup(group) }
             )
-            }
         }
     }
 }
@@ -537,29 +542,29 @@ private fun SpeakerGroupManageScreen(
 private fun SpeakerGroupCard(
     group: ReadAloudSpeakerGroup,
     items: List<ReadAloudSpeakerGroupItem>,
-    colors: SpeakerManageColors,
+    style: AppDialogStyle,
     actions: SpeakerGroupManageActions
 ) {
     val invalidGroup = SpeechVoiceGroupRepository.isInvalidGroup(group)
-    val switchPalette = rememberAppDialogStyle().toMiuixPalette()
+    val switchPalette = style.toMiuixPalette()
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = colors.card,
+        color = style.fieldSurface,
         shape = RoundedCornerShape(LocalContext.current.composePanelRadius()),
-        border = BorderStroke(1.dp, colors.stroke)
+        border = BorderStroke(1.dp, style.stroke)
     ) {
         Column(modifier = Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(group.displayName(), color = colors.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(group.displayName(), color = style.primaryText, fontSize = MaterialTheme.typography.bodyLarge.fontSize, fontWeight = FontWeight.SemiBold)
                     Text(
                         if (invalidGroup) {
                             "${items.size} 个失效发言人 · 不参与自动分配"
                         } else {
                             "${items.size} 个发言人 · ${if (group.enabled) "已启用" else "已停用"}"
                         },
-                        color = colors.subText,
-                        fontSize = 12.sp,
+                        color = style.secondaryText,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
                         modifier = Modifier.padding(top = 3.dp)
                     )
                 }
@@ -574,25 +579,25 @@ private fun SpeakerGroupCard(
             if (items.isEmpty()) {
                 Text(
                     if (invalidGroup) "没有被标记失效的发言人" else "这个分组还没有发言人",
-                    color = colors.subText,
-                    fontSize = 12.sp
+                    color = style.secondaryText,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize
                 )
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items.take(8).forEach { item ->
-                        SpeakerItemRow(item = item, colors = colors, onDelete = { actions.deleteItem(item) })
+                        SpeakerItemRow(item = item, style = style, onDelete = { actions.deleteItem(item) })
                     }
                     if (items.size > 8) {
-                        Text("还有 ${items.size - 8} 个发言人未展开", color = colors.subText, fontSize = 11.sp)
+                        Text("还有 ${items.size - 8} 个发言人未展开", color = style.secondaryText, fontSize = MaterialTheme.typography.labelSmall.fontSize)
                     }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!invalidGroup) {
-                    SpeakerActionButton("添加发言人", colors, Modifier.weight(1f)) { actions.openSpeakerPicker(group) }
-                    SpeakerSubActionButton("重命名", colors, Modifier.weight(1f)) { actions.openGroupEditor(group) }
+                    SpeakerActionButton("添加发言人", style, Modifier.weight(1f)) { actions.openSpeakerPicker(group) }
+                    SpeakerSubActionButton("重命名", style, Modifier.weight(1f)) { actions.openGroupEditor(group) }
                 }
-                SpeakerSubActionButton("删除", colors, Modifier.weight(1f), danger = true) {
+                SpeakerSubActionButton("删除", style, Modifier.weight(1f), danger = true) {
                     actions.requestDeleteGroup(group)
                 }
             }
@@ -603,13 +608,13 @@ private fun SpeakerGroupCard(
 @Composable
 private fun SpeakerItemRow(
     item: ReadAloudSpeakerGroupItem,
-    colors: SpeakerManageColors,
+    style: AppDialogStyle,
     onDelete: () -> Unit
 ) {
     Surface(
-        color = colors.page,
+        color = style.surface,
         shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-        border = BorderStroke(1.dp, colors.stroke)
+        border = BorderStroke(1.dp, style.stroke)
     ) {
         val blocked = SpeechVoiceGroupRepository.isBlockedItem(item)
         Row(
@@ -617,7 +622,7 @@ private fun SpeakerItemRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(item.displayName(), color = colors.text, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(item.displayName(), color = style.primaryText, fontSize = MaterialTheme.typography.bodyTertiary.fontSize, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     listOf(
                         "已失效".takeIf { blocked },
@@ -625,13 +630,13 @@ private fun SpeakerItemRow(
                         item.sourceGroupName,
                         item.toneID
                     ).filterNotNull().filter { it.isNotBlank() }.joinToString(" · "),
-                    color = colors.subText,
-                    fontSize = 11.sp,
+                    color = style.secondaryText,
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            TextButton(onClick = onDelete) { Text("移除", color = colors.danger, fontSize = 12.sp) }
+            TextButton(onClick = onDelete) { Text("移除", color = style.danger, fontSize = MaterialTheme.typography.bodySmall.fontSize) }
         }
     }
 }
@@ -639,22 +644,22 @@ private fun SpeakerItemRow(
 @Composable
 private fun GroupEditorDialog(
     group: ReadAloudSpeakerGroup?,
-    colors: SpeakerManageColors,
+    style: AppDialogStyle,
     onDismiss: () -> Unit,
     onSave: (String, Boolean) -> Unit
 ) {
     var name by remember(group?.id) { mutableStateOf(group?.name.orEmpty()) }
     var enabled by remember(group?.id) { mutableStateOf(group?.enabled ?: true) }
-    val switchPalette = rememberAppDialogStyle().toMiuixPalette()
+    val switchPalette = style.toMiuixPalette()
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp),
-            color = colors.page,
+            color = style.surface,
             shape = RoundedCornerShape(LocalContext.current.composePanelRadius()),
-            border = BorderStroke(1.dp, colors.stroke)
+            border = BorderStroke(1.dp, style.stroke)
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(if (group == null) "新建分组" else "编辑分组", color = colors.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text(if (group == null) "新建分组" else "编辑分组", color = style.primaryText, fontSize = MaterialTheme.typography.subtitleLarge.fontSize, fontWeight = FontWeight.SemiBold)
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -663,7 +668,7 @@ private fun GroupEditorDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("启用分组", color = colors.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Text("启用分组", color = style.primaryText, fontSize = MaterialTheme.typography.bodyMedium.fontSize, modifier = Modifier.weight(1f))
                     LegadoMiuixSwitch(
                         checked = enabled,
                         onCheckedChange = { enabled = it },
@@ -671,8 +676,8 @@ private fun GroupEditorDialog(
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SpeakerSubActionButton("取消", colors, Modifier.weight(1f), onClick = onDismiss)
-                    SpeakerActionButton("保存", colors, Modifier.weight(1f)) { onSave(name, enabled) }
+                    SpeakerSubActionButton("取消", style, Modifier.weight(1f), onClick = onDismiss)
+                    SpeakerActionButton("保存", style, Modifier.weight(1f)) { onSave(name, enabled) }
                 }
             }
         }
@@ -684,7 +689,7 @@ private fun SpeakerMultiSelectDialog(
     targetGroup: ReadAloudSpeakerGroup,
     engineGroups: List<SpeechVoiceEngineGroup>,
     existingItems: List<ReadAloudSpeakerGroupItem>,
-    colors: SpeakerManageColors,
+    style: AppDialogStyle,
     onDismiss: () -> Unit,
     onConfirm: (List<SpeechVoiceOption>) -> Unit
 ) {
@@ -708,17 +713,17 @@ private fun SpeakerMultiSelectDialog(
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp),
-            color = colors.page,
+            color = style.surface,
             shape = RoundedCornerShape(LocalContext.current.composePanelRadius()),
-            border = BorderStroke(1.dp, colors.stroke)
+            border = BorderStroke(1.dp, style.stroke)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("添加发言人", color = colors.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                        Text(targetGroup.displayName(), color = colors.subText, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("添加发言人", color = style.primaryText, fontSize = MaterialTheme.typography.subtitleLarge.fontSize, fontWeight = FontWeight.SemiBold)
+                        Text(targetGroup.displayName(), color = style.secondaryText, fontSize = MaterialTheme.typography.bodySmall.fontSize, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    TextButton(onClick = onDismiss) { Text("关闭", color = colors.subText) }
+                    TextButton(onClick = onDismiss) { Text("关闭", color = style.secondaryText) }
                 }
                 Row(
                     modifier = Modifier
@@ -731,7 +736,7 @@ private fun SpeakerMultiSelectDialog(
                         EngineChip(
                             title = group.title,
                             selected = selectedEngineKey == group.key,
-                            colors = colors,
+                            style = style,
                             onClick = { selectedEngineKey = group.key }
                         )
                     }
@@ -756,7 +761,7 @@ private fun SpeakerMultiSelectDialog(
                                 modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("没有匹配的发言人", color = colors.subText, fontSize = 14.sp)
+                                Text("没有匹配的发言人", color = style.secondaryText, fontSize = MaterialTheme.typography.bodyMedium.fontSize)
                             }
                         }
                     } else {
@@ -774,7 +779,7 @@ private fun SpeakerMultiSelectDialog(
                                     allSelected = allSelected,
                                     selectableCount = selectableKeys.size,
                                     selectedCount = selectableKeys.count { it in selectedKeys },
-                                    colors = colors,
+                                    style = style,
                                     onExpandToggle = {
                                         expandedGroupKeys = if (expanded) {
                                             expandedGroupKeys - sourceGroup.key
@@ -805,7 +810,7 @@ private fun SpeakerMultiSelectDialog(
                                         option = option,
                                         selected = selected,
                                         exists = exists,
-                                        colors = colors
+                                        style = style
                                     ) {
                                         if (!exists) {
                                             selectedKeys = if (selected) selectedKeys - key else selectedKeys + key
@@ -817,8 +822,8 @@ private fun SpeakerMultiSelectDialog(
                     }
                 }
                 Row(modifier = Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SpeakerSubActionButton("取消", colors, Modifier.weight(1f), onClick = onDismiss)
-                    SpeakerActionButton("添加 ${selectedKeys.size}", colors, Modifier.weight(1f)) {
+                    SpeakerSubActionButton("取消", style, Modifier.weight(1f), onClick = onDismiss)
+                    SpeakerActionButton("添加 ${selectedKeys.size}", style, Modifier.weight(1f)) {
                         val picked = engineGroups
                             .flatMap { it.options }
                             .filter { option ->
@@ -846,16 +851,16 @@ private fun SpeakerSourceGroupHeaderRow(
     allSelected: Boolean,
     selectableCount: Int,
     selectedCount: Int,
-    colors: SpeakerManageColors,
+    style: AppDialogStyle,
     onExpandToggle: () -> Unit,
     onSelectToggle: () -> Unit
 ) {
     Surface(
         onClick = onExpandToggle,
         modifier = Modifier.fillMaxWidth(),
-        color = colors.card,
+        color = style.fieldSurface,
         shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-        border = BorderStroke(1.dp, colors.stroke)
+        border = BorderStroke(1.dp, style.stroke)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -864,8 +869,8 @@ private fun SpeakerSourceGroupHeaderRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     sourceGroup.title,
-                    color = colors.text,
-                    fontSize = 14.sp,
+                    color = style.primaryText,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -876,8 +881,8 @@ private fun SpeakerSourceGroupHeaderRow(
                         add(sourceGroup.subtitle)
                         if (selectedCount > 0) add("已选 $selectedCount")
                     }.filter { it.isNotBlank() }.joinToString(" · "),
-                    color = colors.subText,
-                    fontSize = 11.sp,
+                    color = style.secondaryText,
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 2.dp)
@@ -889,8 +894,8 @@ private fun SpeakerSourceGroupHeaderRow(
             ) {
                 Text(
                     if (allSelected) "取消全选" else "全选",
-                    color = if (selectableCount > 0) colors.accent else colors.subText,
-                    fontSize = 12.sp,
+                    color = if (selectableCount > 0) style.accent else style.secondaryText,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -903,19 +908,19 @@ private fun SpeakerOptionSelectRow(
     option: SpeechVoiceOption,
     selected: Boolean,
     exists: Boolean,
-    colors: SpeakerManageColors,
+    style: AppDialogStyle,
     onClick: () -> Unit
 ) {
     Surface(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         color = when {
-            exists -> colors.card.copy(alpha = 0.55f)
-            selected -> colors.accent.copy(alpha = 0.14f)
-            else -> colors.card
+            exists -> style.fieldSurface.copy(alpha = 0.55f)
+            selected -> style.accent.copy(alpha = 0.14f)
+            else -> style.fieldSurface
         },
         shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-        border = BorderStroke(1.dp, if (selected) colors.accent else colors.stroke)
+        border = BorderStroke(1.dp, if (selected) style.accent else style.stroke)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
@@ -923,18 +928,18 @@ private fun SpeakerOptionSelectRow(
         ) {
             Checkbox(checked = selected || exists, onCheckedChange = { onClick() }, enabled = !exists)
             Column(modifier = Modifier.weight(1f).padding(start = 4.dp)) {
-                Text(option.speakerName, color = colors.text, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(option.speakerName, color = style.primaryText, fontSize = MaterialTheme.typography.bodyMedium.fontSize, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     listOf(option.engineName, option.groupName, option.toneID).filter { it.isNotBlank() }.joinToString(" · ")
                         .ifBlank { option.engineName },
-                    color = colors.subText,
-                    fontSize = 11.sp,
+                    color = style.secondaryText,
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
             if (exists) {
-                Text("已在组内", color = colors.subText, fontSize = 11.sp)
+                Text("已在组内", color = style.secondaryText, fontSize = MaterialTheme.typography.labelSmall.fontSize)
             }
         }
     }
@@ -943,23 +948,23 @@ private fun SpeakerOptionSelectRow(
 @Composable
 private fun ConfirmDeleteGroupDialog(
     group: ReadAloudSpeakerGroup,
-    colors: SpeakerManageColors,
+    style: AppDialogStyle,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier.fillMaxWidth().widthIn(max = 380.dp),
-            color = colors.page,
+            color = style.surface,
             shape = RoundedCornerShape(LocalContext.current.composePanelRadius()),
-            border = BorderStroke(1.dp, colors.stroke)
+            border = BorderStroke(1.dp, style.stroke)
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("删除分组", color = colors.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Text("确定删除“${group.displayName()}”？不会删除原始 TTS 引擎。", color = colors.subText, fontSize = 13.sp)
+                Text("删除分组", color = style.primaryText, fontSize = MaterialTheme.typography.subtitleLarge.fontSize, fontWeight = FontWeight.SemiBold)
+                Text("确定删除“${group.displayName()}”？不会删除原始 TTS 引擎。", color = style.secondaryText, fontSize = MaterialTheme.typography.bodyTertiary.fontSize)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SpeakerSubActionButton("取消", colors, Modifier.weight(1f), onClick = onDismiss)
-                    SpeakerSubActionButton("删除", colors, Modifier.weight(1f), danger = true, onClick = onConfirm)
+                    SpeakerSubActionButton("取消", style, Modifier.weight(1f), onClick = onDismiss)
+                    SpeakerSubActionButton("删除", style, Modifier.weight(1f), danger = true, onClick = onConfirm)
                 }
             }
         }
@@ -970,19 +975,19 @@ private fun ConfirmDeleteGroupDialog(
 private fun EngineChip(
     title: String,
     selected: Boolean,
-    colors: SpeakerManageColors,
+    style: AppDialogStyle,
     onClick: () -> Unit
 ) {
     Surface(
         onClick = onClick,
-        color = if (selected) colors.accent.copy(alpha = 0.14f) else colors.card,
+        color = if (selected) style.accent.copy(alpha = 0.14f) else style.fieldSurface,
         shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-        border = BorderStroke(1.dp, if (selected) colors.accent else colors.stroke)
+        border = BorderStroke(1.dp, if (selected) style.accent else style.stroke)
     ) {
         Text(
             title,
-            color = if (selected) colors.accent else colors.text,
-            fontSize = 12.sp,
+            color = if (selected) style.accent else style.primaryText,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -993,18 +998,18 @@ private fun EngineChip(
 @Composable
 private fun SpeakerActionButton(
     text: String,
-    colors: SpeakerManageColors,
+    style: AppDialogStyle,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Surface(
         onClick = onClick,
         modifier = modifier.height(42.dp),
-        color = colors.accent,
+        color = style.accent,
         shape = RoundedCornerShape(LocalContext.current.composeActionRadius())
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(text, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text(text, color = style.onAccent, fontSize = MaterialTheme.typography.bodyTertiary.fontSize, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -1012,49 +1017,23 @@ private fun SpeakerActionButton(
 @Composable
 private fun SpeakerSubActionButton(
     text: String,
-    colors: SpeakerManageColors,
+    style: AppDialogStyle,
     modifier: Modifier = Modifier,
     danger: Boolean = false,
     onClick: () -> Unit
 ) {
-    val tint = if (danger) colors.danger else colors.text
+    val tint = if (danger) style.danger else style.primaryText
     Surface(
         onClick = onClick,
         modifier = modifier.height(42.dp),
-        color = if (danger) colors.danger.copy(alpha = 0.10f) else colors.card,
+        color = if (danger) style.danger.copy(alpha = 0.10f) else style.fieldSurface,
         shape = RoundedCornerShape(LocalContext.current.composeActionRadius()),
-        border = BorderStroke(1.dp, if (danger) colors.danger.copy(alpha = 0.28f) else colors.stroke)
+        border = BorderStroke(1.dp, if (danger) style.danger.copy(alpha = 0.28f) else style.stroke)
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(text, color = tint, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text(text, color = tint, fontSize = MaterialTheme.typography.bodyTertiary.fontSize, fontWeight = FontWeight.SemiBold)
         }
     }
-}
-
-private data class SpeakerManageColors(
-    val page: Color,
-    val card: Color,
-    val text: Color,
-    val subText: Color,
-    val stroke: Color,
-    val accent: Color,
-    val danger: Color
-)
-
-@Composable
-private fun rememberSpeakerManageColors(): SpeakerManageColors {
-    val context = LocalContext.current
-    val night = AppConfig.isNightTheme
-    val accent = context.accentColor
-    return SpeakerManageColors(
-        page = Color(if (night) 0xff15171b.toInt() else 0xffffffff.toInt()),
-        card = Color(if (night) 0xff20242a.toInt() else 0xfff6f7fa.toInt()),
-        text = Color(context.primaryTextColor),
-        subText = Color(context.secondaryTextColor),
-        stroke = Color.Transparent,
-        accent = Color(accent),
-        danger = Color(ColorUtils.blendColors(0xffff4444.toInt(), accent, 0.08f))
-    )
 }
 
 private fun speakerItemKey(

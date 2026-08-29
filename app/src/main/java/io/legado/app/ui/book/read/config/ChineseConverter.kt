@@ -7,9 +7,10 @@ import android.text.style.ForegroundColorSpan
 import android.util.AttributeSet
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.accentColor
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.text.StrokeTextView
+import io.legado.app.utils.activity
 
 
 class ChineseConverter(context: Context, attrs: AttributeSet?) : StrokeTextView(context, attrs) {
@@ -38,12 +39,13 @@ class ChineseConverter(context: Context, attrs: AttributeSet?) : StrokeTextView(
     }
 
     private fun selectType() {
-        context.alert(titleResource = R.string.chinese_converter) {
-            items(context.resources.getStringArray(R.array.chinese_mode).toList()) { _, i ->
-                AppConfig.chineseConverterType = i
-                upUi(i)
-                onChanged?.invoke()
-            }
+        activity?.showComposeChoiceListDialog(
+            title = context.getString(R.string.chinese_converter),
+            labels = context.resources.getStringArray(R.array.chinese_mode).toList()
+        ) { i ->
+            AppConfig.chineseConverterType = i
+            upUi(i)
+            onChanged?.invoke()
         }
     }
 

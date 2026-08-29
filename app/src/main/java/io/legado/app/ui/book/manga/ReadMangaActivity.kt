@@ -37,10 +37,11 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.storage.Backup
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.dialogs.selector
 import io.legado.app.model.ReadManga
 import io.legado.app.receiver.NetworkChangedListener
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.book.info.BookInfoStartActivityContract
 import io.legado.app.ui.book.manga.config.MangaColorFilterConfig
 import io.legado.app.ui.book.manga.config.MangaColorFilterDialog
@@ -805,7 +806,10 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             getString(R.string.manga_epaper_stting),
             getString(R.string.enable_manga_gray).removePrefix("开启").removePrefix("Enable ")
         )
-        selector(R.string.manga_config, items) { _, index ->
+        showComposeChoiceListDialog(
+            title = getString(R.string.manga_config),
+            labels = items
+        ) { index ->
             when (index) {
                 0 -> triggerMangaMenuItem(R.id.menu_pre_manga_number)
                 1 -> triggerMangaMenuItem(R.id.menu_disable_manga_scale)
@@ -918,16 +922,19 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         if (!AppConfig.showAddToShelfAlert) {
             viewModel.removeFromBookshelf { super.finish() }
         } else {
-            alert(title = getString(R.string.add_to_bookshelf)) {
-                setMessage(getString(R.string.check_add_bookshelf, book.name))
-                okButton {
+            showComposeConfirmDialog(
+                title = getString(R.string.add_to_bookshelf),
+                message = getString(R.string.check_add_bookshelf, book.name),
+                positiveText = getString(R.string.ok),
+                negativeText = getString(R.string.no),
+                onPositive = {
                     ReadManga.book?.removeType(BookType.notShelf)
                     ReadManga.book?.save()
                     ReadManga.inBookshelf = true
                     setResult(RESULT_OK)
-                }
-                noButton { viewModel.removeFromBookshelf { super.finish() } }
-            }
+                },
+                onNegative = { viewModel.removeFromBookshelf { super.finish() } }
+            )
         }
     }
 

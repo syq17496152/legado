@@ -12,9 +12,9 @@ import io.legado.app.constant.AppConst
 import io.legado.app.data.appDb
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.model.remote.RemoteBook
 import io.legado.app.ui.about.AppLogDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.book.import.BaseImportBookActivity
 import io.legado.app.ui.book.import.ImportBookDisplayItem
 import io.legado.app.ui.book.import.ImportBookScreen
@@ -129,6 +129,8 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
         MenuAction(
             icon = Icons.Default.Refresh,
             title = getString(R.string.refresh),
+            // topbar-icon-semantics-fix 3.3：刷新恢复一级图标（原版 book_remote.xml menu_refresh always）
+            alwaysShow = true,
             onClick = { upPath() }
         ),
         MenuAction(
@@ -306,17 +308,17 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
         remoteBook: RemoteBook,
         onDownloadFinish: (() -> Unit)? = null
     ) {
-        alert(
-            R.string.draw,
-            R.string.archive_not_found
-        ) {
-            okButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.draw),
+            message = getString(R.string.archive_not_found),
+            positiveText = getString(R.string.ok),
+            negativeText = getString(R.string.no),
+            onPositive = {
                 viewModel.addToBookshelf(hashSetOf(remoteBook)) {
                     onDownloadFinish?.invoke()
                 }
             }
-            noButton()
-        }
+        )
     }
 
     fun startRead(remoteBook: RemoteBook) {
@@ -343,15 +345,18 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
     }
 
     fun addToBookShelfAgain(remoteBook: RemoteBook) {
-        alert(getString(R.string.sure), getString(R.string.re_add_to_bookshelf)) {
-            yesButton {
+        showComposeConfirmDialog(
+            title = getString(R.string.sure),
+            message = getString(R.string.re_add_to_bookshelf),
+            positiveText = getString(R.string.ok),
+            negativeText = getString(R.string.no),
+            onPositive = {
                 composeIsLoading = true
                 viewModel.addToBookshelf(hashSetOf(remoteBook)) {
                     composeIsLoading = false
                 }
             }
-            noButton()
-        }
+        )
     }
 
 }

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.toMiuixPalette
+import androidx.compose.material3.MaterialTheme
 
 /**
  * Load state for import dialogs.
@@ -74,7 +75,7 @@ fun ImportSourceItemRow(
             Text(
                 text = name,
                 color = style.primaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = FontWeight.Medium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -83,7 +84,7 @@ fun ImportSourceItemRow(
                 Text(
                     text = comment,
                     color = style.secondaryText,
-                    fontSize = 12.sp,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
                     maxLines = if (commentExpanded) 39 else 3,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
@@ -96,7 +97,7 @@ fun ImportSourceItemRow(
         Text(
             text = stateText,
             color = style.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             fontWeight = FontWeight.Medium
         )
         if (onCodeView != null) {

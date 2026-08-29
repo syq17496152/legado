@@ -163,3 +163,11 @@ scripts/publish_config.json
 /.trae/read76_*.txt
 /.trae/memory/*.bak_archived
 /.trae/tmp/
+/.trae/memory/archived
+/temp_cronet_so_backup
+
+# === 编译/测试运行临时日志（2026-08-29 规整，不入库）===
+/compile_*.txt
+/compile_*.txt.err
+/ai_tests/reports_run_*.txt
+/ai_tests/reports_run_*.txt.err

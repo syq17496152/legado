@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.read
 
+import io.legado.app.ui.widget.components.AppShapes
 import android.animation.ValueAnimator
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
@@ -104,6 +105,8 @@ import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.putPrefInt
 import kotlin.math.roundToInt
+import androidx.compose.material3.MaterialTheme
+import io.legado.app.ui.theme.bodyTertiary
 
 private const val EDGE_WINDOW_SIZE_DP = 60
 private const val EDGE_BALL_SIZE_DP = 56
@@ -1136,7 +1139,7 @@ private fun FloatingReaderTopBar(
             Text(
                 text = state.chapterTitle.ifBlank { "当前章节" },
                 color = colors.primaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1274,7 +1277,7 @@ private fun ColumnScope.FloatingChapterPicker(
         Text(
             text = "切换章节",
             color = colors.secondaryText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
         )
         LazyColumn(
@@ -1299,13 +1302,13 @@ private fun ColumnScope.FloatingChapterPicker(
                         Text(
                             text = chapter.indexText,
                             color = if (chapter.current) colors.accentText else colors.subtleText,
-                            fontSize = 11.sp,
+                            fontSize = MaterialTheme.typography.labelSmall.fontSize,
                             modifier = Modifier.width(58.dp)
                         )
                         Text(
                             text = chapter.title,
                             color = if (chapter.current) colors.accentText else colors.primaryText,
-                            fontSize = 14.sp,
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
@@ -1346,7 +1349,7 @@ private fun FloatingChapterStepButton(
     colors: PlayerColors,
     enabled: Boolean,
     modifier: Modifier = Modifier,
-    shape: RoundedCornerShape = RoundedCornerShape(14.dp),
+    shape: RoundedCornerShape = AppShapes.rounded(14),
     onClick: () -> Unit
 ) {
     Surface(
@@ -1360,7 +1363,7 @@ private fun FloatingChapterStepButton(
             Text(
                 text = text,
                 color = colors.primaryText.copy(alpha = if (enabled) 1f else 0.38f),
-                fontSize = 13.sp,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -1418,7 +1421,7 @@ private fun ColumnScope.FloatingReaderSettings(
         Text(
             text = "透明度过高时，原文在复杂背景上可能不易阅读。",
             color = colors.subtleText,
-            fontSize = 12.sp,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
             lineHeight = 18.sp
         )
     }
@@ -1439,11 +1442,11 @@ private fun FloatingSettingSlider(
             Text(
                 text = title,
                 color = colors.primaryText,
-                fontSize = 14.sp,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f)
             )
-            Text(text = valueText, color = colors.secondaryText, fontSize = 13.sp)
+            Text(text = valueText, color = colors.secondaryText, fontSize = MaterialTheme.typography.bodyTertiary.fontSize)
         }
         Slider(
             value = value.coerceIn(range.start, range.endInclusive),
