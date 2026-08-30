@@ -85,8 +85,8 @@ build-legado.bat
 # 正式包
 build-legado.bat release
 
-# 共存包（自定义包名）
-build-legado.bat debug com.my.legado
+# 共存包（与原版 io.legado.app 共存）
+build-legado.bat debug io.legado.app
 ```
 
 ---

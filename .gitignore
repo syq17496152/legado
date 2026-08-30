@@ -172,3 +172,10 @@ scripts/publish_config.json
 /compile_*.txt.err
 /ai_tests/reports_run_*.txt
 /ai_tests/reports_run_*.txt.err
+
+# === ai_tests 本地测试产物（2026-08-30 规整，不入库）===
+ai_tests/*.png
+ai_tests/ui_*.xml
+ai_tests/testdata/_local_*.txt
+ai_tests/testdata/image_gallery_source.json
+ai_tests/testdata/image_gallery_srv/

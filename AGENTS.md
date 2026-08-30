@@ -24,7 +24,7 @@
 | 规则引擎 | `app/src/main/java/io/legado/app/model/analyzeRule/AnalyzeRule.kt` |
 | 阅读核心（全局单例） | `app/src/main/java/io/legado/app/model/ReadBook.kt` |
 | 网络书核心 | `app/src/main/java/io/legado/app/model/webBook/WebBook.kt` |
-| 数据库 | `app/src/main/java/io/legado/app/data/AppDatabase.kt`（Room，legado.db，当前 v89，schema 在 `app/schemas/`） |
+| 数据库 | `app/src/main/java/io/legado/app/data/AppDatabase.kt`（Room，legado.db，当前 v108，schema 在 `app/schemas/`；**版本号以 AppDatabase.kt `version` 字段为准，文档禁止硬编码快照**） |
 | 依赖版本 | `gradle/libs.versions.toml` |
 
 ## 代码约束
