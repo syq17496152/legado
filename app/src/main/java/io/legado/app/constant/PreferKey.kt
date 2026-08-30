@@ -289,8 +289,9 @@ object PreferKey {
     const val highlightRuleBuiltinMergedV2 = "highlightRuleBuiltinMergedV2"
 
     // F-P1-8 书源/订阅源文件夹视图模式（0=列表视图, 1=文件夹视图）—— 已废弃，保留兼容
+    // （theme-rss-header-layout-sync F4: 原 rssViewMode 0 引用已删除；sourceViewMode 仍被
+    //   AppConfig.migrateSourceConfigIfNeeded 迁移链引用，删除会破坏老用户数据迁移，保留）
     const val sourceViewMode = "sourceViewMode"
-    const val rssViewMode = "rssViewMode"
     // F-P6 文件夹视图配置（分组样式/间距）—— 已废弃，保留兼容
     const val sourceFolderStyle = "sourceFolderStyle"
     const val sourceFolderMargin = "sourceFolderMargin"

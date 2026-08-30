@@ -56,8 +56,8 @@ class HighlightRuleActivity :
                     onExport = { exportRules() },
                     onItemClick = { edit(it) },
                     onEnableToggle = { rule, enabled ->
-                        rule.enabled = enabled
-                        viewModel.update(rule)
+                        // copy 新实例触发重组：原地修改后同实例回流列表，强跳过模式按引用比较会跳过行重组（对齐全项目 copy 先例）
+                        viewModel.update(rule.copy(enabled = enabled))
                     },
                     onDelete = { showDeleteDialog(it) },
                     onToTop = { viewModel.toTop(it) },

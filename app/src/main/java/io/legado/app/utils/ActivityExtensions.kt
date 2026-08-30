@@ -43,7 +43,17 @@ inline fun <reified T : DialogFragment> AppCompatActivity.dismissDialogFragment(
 }
 
 fun AppCompatActivity.showDialogFragment(dialogFragment: DialogFragment) {
-    dialogFragment.show(supportFragmentManager, dialogFragment::class.simpleName)
+    // H6(sniff-regression-rss-image-crash): 延迟触达路径（如图片加载失败降级弹框经 itemView.post）
+    // 可能在 onStop/onSaveInstanceState 之后才 show()，抛 IllegalStateException 崩溃；
+    // 非 RESUMED 态兜底走 commitAllowingStateLoss（等价 showAllowingStateLoss，
+    // 该 API 在当前 androidx.fragment 版本不可用），把崩溃转化为可接受的弹框展示
+    if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+        dialogFragment.show(supportFragmentManager, dialogFragment::class.simpleName)
+    } else {
+        supportFragmentManager.beginTransaction()
+            .add(dialogFragment, dialogFragment::class.simpleName)
+            .commitAllowingStateLoss()
+    }
 }
 
 val WindowManager.windowSize: DisplayMetrics

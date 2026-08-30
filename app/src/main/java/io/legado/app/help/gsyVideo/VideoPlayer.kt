@@ -27,6 +27,7 @@ import androidx.core.graphics.ColorUtils
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.ui.video.ImageEnhanceController
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.model.VideoPlay
 import master.flame.danmaku.controller.DrawHandler
@@ -329,6 +330,11 @@ class VideoPlayer: StandardGSYVideoPlayer {
             val tracks = getGSYVideoManager().getAudioTracks()
             tvAudio?.visibility = if (tracks.size > 1) VISIBLE else GONE
         }
+        // video-player-image-enhance A1.2: 播放准备完成后应用画质增强滤镜
+        //（K2 实证：GSY 播放状态变化会重置渲染视图，必须在此重新应用，切集/重播均会触发本回调）
+        post { ImageEnhanceController.apply(this) }
+        // video-player-image-enhance B2.3: 锐化/降噪效果链注入（每次播放管线构建时生效，主线程回调安全）
+        post { ImageEnhanceController.applyEffectsToPlayer() }
     }
     private fun onPrepareDanmaku(gsyVideoPlayer: VideoPlayer) {
         val view = gsyVideoPlayer.mDanmakuView

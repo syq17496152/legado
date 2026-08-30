@@ -627,7 +627,7 @@
     <string name="view_mode">視圖模式</string>
     <string name="list_view">列表視圖</string>
     <string name="folder_view">資料夾視圖</string>
-    <string name="all_groups">全部分組</string>
+    <string name="all_groups">全部</string>
     <string name="prev_sentence">上一句</string>
     <string name="next_sentence">下一句</string>
     <string name="other_folder">其它目錄</string>

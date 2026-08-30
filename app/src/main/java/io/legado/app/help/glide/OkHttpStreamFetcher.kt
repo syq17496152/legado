@@ -12,6 +12,7 @@ import com.script.rhino.runScriptWithContext
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.MemoryPressure
 import io.legado.app.help.http.addHeaders
 import io.legado.app.help.http.StreamResetRetryInterceptor
 import io.legado.app.help.http.okHttpClient
@@ -56,6 +57,9 @@ class OkHttpStreamFetcher(
         private const val TAG = "ImgDecrypt"
         // F-P1-C4 修复无界 HashSet 内存泄漏 | 已知上限：200 条失败 URL | 升级路径：无
         private val failUrl = android.util.LruCache<String, Boolean>(200)
+
+        /** H3(sniff-regression-rss-image-crash): 小内存设备超过该大小的图片跳过解密透传（10MB） */
+        internal const val SKIP_DECODE_SIZE_BYTES = 10L * 1024 * 1024
     }
 
     override fun loadData(priority: Priority, callback: DataFetcher.DataCallback<in InputStream>) {
@@ -171,10 +175,20 @@ class OkHttpStreamFetcher(
                         ReadManga.book
                     )?.inputStream()
                 } else {
-                    ImageUtils.decode(
-                        analyzedUrl.toStringUrl(), responseBody!!.byteStream(),
-                        isCover = true, source
-                    )
+                    // H3(sniff-regression-rss-image-crash): 小内存设备（heap≤320MB）超大图跳过解密
+                    // 根因：decode(InputStream) 内 readBytes() 全量读入，解密期间原始+结果双份 byte[]
+                    // 存活（峰值 2×图体积），256MB heap 上多张并发极易触顶 OOM；
+                    // 超大图（>10MB）加密概率极低（已知格式本来就会被文件头检测跳过），直接透传
+                    val contentLength = responseBody?.contentLength() ?: -1
+                    if (MemoryPressure.isSmallHeap && contentLength > SKIP_DECODE_SIZE_BYTES) {
+                        Log.e(TAG, "small-heap skip decode: len=$contentLength url=${analyzedUrl.toStringUrl().take(60)}")
+                        responseBody!!.byteStream()
+                    } else {
+                        ImageUtils.decode(
+                            analyzedUrl.toStringUrl(), responseBody!!.byteStream(),
+                            isCover = true, source
+                        )
+                    }
                 }
             }
             onStreamReady(decodeResult)

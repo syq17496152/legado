@@ -739,7 +739,7 @@
     <string name="view_mode">视图模式</string>
     <string name="list_view">列表视图</string>
     <string name="folder_view">文件夹视图</string>
-    <string name="all_groups">全部分组</string>
+    <string name="all_groups">全部</string>
     <string name="prev_sentence">上一句</string>
     <string name="next_sentence">下一句</string>
     <string name="other_folder">其它目录</string>

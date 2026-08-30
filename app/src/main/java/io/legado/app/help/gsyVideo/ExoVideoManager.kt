@@ -5,6 +5,9 @@ import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import com.shuyu.gsyvideoplayer.GSYVideoBaseManager
 import io.legado.app.R
+import io.legado.app.constant.AppLog
+import io.legado.app.help.exoplayer.ImageEnhanceEffects
+import io.legado.app.model.VideoPlay
 
 /**
 基类管理器
@@ -104,6 +107,29 @@ class ExoVideoManager: GSYVideoBaseManager() {
             exoPlayer?.releaseSniffResources()
         } catch (e: Exception) {
             // 忽略释放异常，避免影响 onDestroyView 流程
+        }
+    }
+
+    /**
+     * video-player-image-enhance B2.1: 应用画质增强效果链（锐化/降噪 media3-effect）
+     * playerManager 为 protected，访问链（playerManager→getMediaPlayer→exoPlayerInstance）
+     * 必须在管理器内部完成（同 getAudioTracks/releaseSniffResources 先例）。
+     * 档位全关时 setVideoEffects(空列表) 显式清空（K4 防池化实例跨会话残留）。
+     */
+    @OptIn(UnstableApi::class)
+    fun applyImageEnhanceEffects() {
+        try {
+            val exoManager = playerManager as? ExoPlayerManager ?: return
+            val mediaPlayer = exoManager.getMediaPlayer() as? Exo2MediaPlayer ?: return
+            val player = mediaPlayer.exoPlayerInstance ?: return
+            val effects = ImageEnhanceEffects.buildEffects(
+                VideoPlay.enhanceSharpenLevel,
+                VideoPlay.enhanceDenoiseLevel
+            )
+            player.setVideoEffects(effects)
+        } catch (t: Throwable) {
+            // 效果链注入失败不影响播放（media3 管线异常兜底）
+            AppLog.put("ImageEnhance: setVideoEffects failed: ${t.message}")
         }
     }
 

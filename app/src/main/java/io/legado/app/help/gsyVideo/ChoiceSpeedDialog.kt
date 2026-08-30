@@ -15,6 +15,9 @@ import android.widget.ArrayAdapter
 import android.widget.ListView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import io.legado.app.help.config.AppConfig
+import io.legado.app.lib.theme.themeDividerColorOrDefault
+import io.legado.app.utils.ColorUtils
 import io.legado.app.R
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.UiCorner
@@ -164,8 +167,24 @@ class ChoiceSpeedDialog(private val mContext: Context) : Dialog(
                         // 未选中文字用 ThemeStore.textColorPrimary（日/夜自适应），避免日间亮底白字不可读
                         textView.setTextColor(ThemeStore.textColorPrimary(context))
                         textView.setTypeface(textView.typeface, Typeface.NORMAL)
-                        textView.background =
-                            ContextCompat.getDrawable(context, R.drawable.card_video_background)
+                        // video-player-image-enhance 样式专项：未选中背景动态取色（替换静态 card_video_background
+                        // water 色板），fieldSurface=背景色混 accent + UiCorner.actionRadius + divider 描边，主题联动
+                        val surface = ThemeStore.backgroundColor(context)
+                        val accent = ThemeStore.accentColor(context)
+                        val field = ColorUtils.blendColors(
+                            surface,
+                            accent,
+                            if (AppConfig.isNightTheme) 0.10f else 0.05f
+                        )
+                        val radius = UiCorner.actionRadius(context).toFloat()
+                        textView.background = GradientDrawable().apply {
+                            cornerRadius = radius
+                            setColor(field)
+                            setStroke(
+                                context.resources.displayMetrics.density.toInt().coerceAtLeast(1),
+                                context.themeDividerColorOrDefault()
+                            )
+                        }
                     }
                     view
                 }

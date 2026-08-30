@@ -107,6 +107,8 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.applyMainBottomBarPadding
 import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.applyTint
+import io.legado.app.constant.EventBus
+import io.legado.app.utils.observeEvent
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
 import io.legado.app.utils.fromJsonObject
@@ -240,6 +242,14 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         usingModernDiscovery = discoveryPageMode == AppConfig.DISCOVERY_PAGE_MODE_MODERN
         usingSuiteDiscovery = discoveryPageMode == AppConfig.DISCOVERY_PAGE_MODE_SUITE
         discoveryModeLoaded = false
+        // theme-rss-header-layout-sync F2: 发现页原零事件订阅，设置页改发现模式/布局后仅 onResume 兜底不即时；
+        // 订阅 NOTIFY_MAIN + 值比对（幂等防抖，与 onResume 共用同一同步函数防逻辑双写漂移），
+        // LiveData 语义在 Fragment 重新 STARTED 时也会补发最新值，覆盖"设置页覆盖期事件丢失"场景
+        observeEvent<Boolean>(EventBus.NOTIFY_MAIN) {
+            if (isAdded) {
+                syncDiscoveryConfigIfNeeded()
+            }
+        }
         binding.swipeRefreshLayout.setColorSchemeColors(accentColor)
         binding.swipeRefreshLayout.setProgressViewOffset(true, (-28).dpToPx(), 56.dpToPx())
         binding.swipeRefreshLayout.setOnChildScrollUpCallback { _, _ ->
@@ -3539,8 +3549,9 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         }
     }
 
-    override fun onResume() {
-        super.onResume()
+    // theme-rss-header-layout-sync F2: 发现页配置同步（onResume 与 NOTIFY_MAIN 事件回调共用）。
+    // 值比对保证幂等：模式变化→整形态切换；布局变化→仅重排布局；无变化→零动作（防 800ms 双发重复刷新）
+    private fun syncDiscoveryConfigIfNeeded() {
         if (discoveryPageMode != AppConfig.discoveryPageMode || !discoveryModeLoaded) {
             applyDiscoveryMode(loadData = true)
             discoveryModeLoaded = true
@@ -3550,6 +3561,11 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         } else if (usingSuiteDiscovery) {
             refreshSuiteConfig()
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        syncDiscoveryConfigIfNeeded()
         if (!usingModernDiscovery && !usingSuiteDiscovery) {
             adapter.upResumed(true)
         }

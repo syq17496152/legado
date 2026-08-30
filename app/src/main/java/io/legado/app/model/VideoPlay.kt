@@ -99,6 +99,58 @@ object VideoPlay : CoroutineScope by MainScope(){
         set(value) {
             videoPrefs.edit { putInt("seekSensitivity", value) }
         }
+
+    // ==================== 画质增强（video-player-image-enhance A 期） ====================
+    // 存储模式（AD-04）：Int 十倍值。亮度/对比度/色温 -500~500（实际 -50.0~50.0），饱和度 -1000~1000（实际 -100.0~100.0）
+
+    /** 画质增强总开关（关闭时完全回退原画渲染） */
+    var enhanceEnabled
+        get() = videoPrefs.getBoolean("enhanceEnabled", false)
+        set(value) {
+            videoPrefs.edit { putBoolean("enhanceEnabled", value) }
+        }
+    /** 亮度（实际 -50.0~50.0，0 原画） */
+    var enhanceBrightness
+        get() = videoPrefs.getInt("enhanceBrightness", 0)
+        set(value) {
+            videoPrefs.edit { putInt("enhanceBrightness", value) }
+        }
+    /** 对比度（实际 -50.0~50.0，0 原画） */
+    var enhanceContrast
+        get() = videoPrefs.getInt("enhanceContrast", 0)
+        set(value) {
+            videoPrefs.edit { putInt("enhanceContrast", value) }
+        }
+    /** 饱和度（实际 -100.0~100.0，0 原画） */
+    var enhanceSaturation
+        get() = videoPrefs.getInt("enhanceSaturation", 0)
+        set(value) {
+            videoPrefs.edit { putInt("enhanceSaturation", value) }
+        }
+    /** 色温（实际 -50.0 冷 ~ +50.0 暖，0 原画） */
+    var enhanceColorTemp
+        get() = videoPrefs.getInt("enhanceColorTemp", 0)
+        set(value) {
+            videoPrefs.edit { putInt("enhanceColorTemp", value) }
+        }
+    /** 预设：0 原画 / 1 护眼 / 2 鲜艳 / 3 自定义 */
+    var enhancePreset
+        get() = videoPrefs.getInt("enhancePreset", 0)
+        set(value) {
+            videoPrefs.edit { putInt("enhancePreset", value) }
+        }
+    /** B 批：锐化档位 0 关 / 1 轻 / 2 中 / 3 强（默认关，低端机保护 RB6） */
+    var enhanceSharpenLevel
+        get() = videoPrefs.getInt("enhanceSharpenLevel", 0)
+        set(value) {
+            videoPrefs.edit { putInt("enhanceSharpenLevel", value) }
+        }
+    /** B 批：降噪档位 0 关 / 1 轻 / 2 中（默认关） */
+    var enhanceDenoiseLevel
+        get() = videoPrefs.getInt("enhanceDenoiseLevel", 0)
+        set(value) {
+            videoPrefs.edit { putInt("enhanceDenoiseLevel", value) }
+        }
     /**  全屏底部进度条  **/
     var fullBottomProgressBar
         get() = videoPrefs.getBoolean("fullBottomProgressBar", true)

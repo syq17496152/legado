@@ -1232,5 +1232,14 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         }
     }
 
+    /**
+     * video-player-image-enhance B 批（AD-03）：对外暴露内部 ExoPlayer 实例
+     * 供画质增强运行时调用 `player.setVideoEffects(...)`（ExoPlayer 接口公开 API，支持热更新；
+     * 绕开 PlayerInstancePool 池化复用分支不重建实例导致 Builder 注入失效的问题）。
+     * internal 作用域（模块内可见），mInternalPlayer 为父类 protected 字段。
+     */
+    internal val exoPlayerInstance: ExoPlayer?
+        get() = mInternalPlayer
+
 
 }

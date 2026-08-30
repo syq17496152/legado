@@ -1,6 +1,7 @@
 package io.legado.app.ui.video
 
 import android.content.Intent
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -19,6 +20,8 @@ import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.BookSource
 import io.legado.app.help.gsyVideo.VideoPlayer
 import io.legado.app.model.VideoPlay
+import io.legado.app.lib.theme.ThemeStore
+import io.legado.app.lib.theme.UiCorner
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.login.SourceLoginActivity
@@ -101,13 +104,15 @@ class VideoSettingsPanel : BottomSheetDialogFragment() {
         super.onStart()
         // 修复：应用级暗色主题不激活 values-night 资源, 需动态设置 sheet 背景色
         // Compose 内容由 LegadoTheme 适配, 此处仅设置外层 sheet 容器背景
+        // video-player-image-enhance 样式专项：圆角接 UiCorner.panelRadius（跟随全局圆角缩放 uiCornerScale，
+        // 对齐 ChoiceSpeedDialog/ChoiceEpisodeDialog/ModernActionPopup 同族实现）
         dialog?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             ?.let { sheet ->
-                val radius = resources.getDimension(R.dimen.corner_large)
-                sheet.background = android.graphics.drawable.GradientDrawable().apply {
-                    shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                val radius = UiCorner.panelRadius(requireContext())
+                sheet.background = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
                     cornerRadii = floatArrayOf(radius, radius, radius, radius, 0f, 0f, 0f, 0f)
-                    setColor(io.legado.app.lib.theme.ThemeStore.backgroundColor())
+                    setColor(ThemeStore.backgroundColor())
                 }
                 sheet.clipToOutline = true
             }

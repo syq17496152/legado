@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +36,7 @@ import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.components.SettingsClickRow
 import io.legado.app.ui.widget.components.SettingsToggleRow
 import io.legado.app.ui.widget.components.SingleChoiceDialog
+import kotlin.math.roundToInt
 
 /**
  * R3 阶段5：视频设置面板（Compose 化内容，task 12.4B L-D9 视频设置弹框改造）
@@ -77,6 +79,16 @@ fun VideoSettingsPanelContent(
     var cachePlay by remember { mutableStateOf(VideoPlay.videoCache) }
     var playerType by remember { mutableStateOf(VideoPlay.playerType) }
     var seekSensitivity by remember { mutableStateOf(VideoPlay.seekSensitivity) }
+    // video-player-image-enhance A2.2: 画质增强状态（初值读自 VideoPlay，变更即写回+实时预览）
+    var enhanceEnabled by remember { mutableStateOf(VideoPlay.enhanceEnabled) }
+    var enhanceBrightness by remember { mutableStateOf(VideoPlay.enhanceBrightness) }
+    var enhanceContrast by remember { mutableStateOf(VideoPlay.enhanceContrast) }
+    var enhanceSaturation by remember { mutableStateOf(VideoPlay.enhanceSaturation) }
+    var enhanceColorTemp by remember { mutableStateOf(VideoPlay.enhanceColorTemp) }
+    var enhancePreset by remember { mutableStateOf(VideoPlay.enhancePreset) }
+    // video-player-image-enhance B 批：锐化/降噪档位（0 关 / 1 轻 / 2 中 / 3 强）
+    var enhanceSharpenLevel by remember { mutableStateOf(VideoPlay.enhanceSharpenLevel) }
+    var enhanceDenoiseLevel by remember { mutableStateOf(VideoPlay.enhanceDenoiseLevel) }
     var firstFramePreload by remember { mutableStateOf(VideoPlay.playerFirstFramePreload) }
     var bufferStrategy by remember { mutableStateOf(VideoPlay.playerBufferStrategy) }
     var historyEnabled by remember { mutableStateOf(VideoPlay.playerHistoryEnabled) }
@@ -289,6 +301,86 @@ fun VideoSettingsPanelContent(
             onClick = { selection = PanelSelection.PlayerType }
         )
 
+        // ====== 画质增强（video-player-image-enhance A2.2） ======
+        SectionHeader(stringResource(R.string.image_enhance))
+        Text(
+            text = stringResource(R.string.image_enhance_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = style.secondaryText,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+        )
+        SettingsToggleRow(
+            icon = null,
+            title = stringResource(R.string.image_enhance_enable),
+            checked = enhanceEnabled,
+            onCheckedChange = {
+                enhanceEnabled = it
+                VideoPlay.enhanceEnabled = it
+                ImageEnhanceController.applyToRegistered()
+            }
+        )
+        if (enhanceEnabled) {
+            EnhanceSliderRow(
+                label = stringResource(R.string.image_enhance_brightness),
+                value = enhanceBrightness / 10f,
+                valueRange = -50f..50f,
+                onCommit = {
+                    enhanceBrightness = it
+                    VideoPlay.enhanceBrightness = it
+                    ImageEnhanceController.applyToRegistered()
+                }
+            )
+            EnhanceSliderRow(
+                label = stringResource(R.string.image_enhance_contrast),
+                value = enhanceContrast / 10f,
+                valueRange = -50f..50f,
+                onCommit = {
+                    enhanceContrast = it
+                    VideoPlay.enhanceContrast = it
+                    ImageEnhanceController.applyToRegistered()
+                }
+            )
+            EnhanceSliderRow(
+                label = stringResource(R.string.image_enhance_saturation),
+                value = enhanceSaturation / 10f,
+                valueRange = -100f..100f,
+                onCommit = {
+                    enhanceSaturation = it
+                    VideoPlay.enhanceSaturation = it
+                    ImageEnhanceController.applyToRegistered()
+                }
+            )
+            EnhanceSliderRow(
+                label = stringResource(R.string.image_enhance_color_temp),
+                value = enhanceColorTemp / 10f,
+                valueRange = -50f..50f,
+                onCommit = {
+                    enhanceColorTemp = it
+                    VideoPlay.enhanceColorTemp = it
+                    ImageEnhanceController.applyToRegistered()
+                }
+            )
+            SettingsClickRow(
+                icon = null,
+                title = stringResource(R.string.image_enhance_preset),
+                value = presetLabel(enhancePreset),
+                onClick = { selection = PanelSelection.EnhancePreset }
+            )
+            // B 批：锐化/降噪档位（进阶档，media3-effect 效果链）
+            SettingsClickRow(
+                icon = null,
+                title = stringResource(R.string.image_enhance_sharpen),
+                value = sharpenLabel(enhanceSharpenLevel),
+                onClick = { selection = PanelSelection.EnhanceSharpen }
+            )
+            SettingsClickRow(
+                icon = null,
+                title = stringResource(R.string.image_enhance_denoise),
+                value = denoiseLabel(enhanceDenoiseLevel),
+                onClick = { selection = PanelSelection.EnhanceDenoise }
+            )
+        }
+
         // ====== 播放器优化 ======
         SectionHeader(stringResource(R.string.video_player_optimization))
         SettingsToggleRow(
@@ -404,6 +496,79 @@ fun VideoSettingsPanelContent(
                 onDismiss = { selection = null }
             )
         }
+        // video-player-image-enhance A2.2: 预设选择（应用后写回四参数并联动滑条）
+        PanelSelection.EnhancePreset -> {
+            val options = listOf(
+                stringResource(R.string.image_enhance_preset_original),
+                stringResource(R.string.image_enhance_preset_eye_care),
+                stringResource(R.string.image_enhance_preset_vivid),
+                stringResource(R.string.image_enhance_preset_custom)
+            )
+            SingleChoiceDialog(
+                title = stringResource(R.string.image_enhance_preset),
+                options = options,
+                selectedIndex = enhancePreset.coerceIn(0, 3),
+                onSelect = {
+                    enhancePreset = it
+                    VideoPlay.enhancePreset = it
+                    when (it) {
+                        0 -> { enhanceBrightness = 0; enhanceContrast = 0; enhanceSaturation = 0; enhanceColorTemp = 0 }
+                        1 -> { enhanceBrightness = -50; enhanceContrast = 0; enhanceSaturation = 0; enhanceColorTemp = 300 }
+                        2 -> { enhanceBrightness = 0; enhanceContrast = 120; enhanceSaturation = 300; enhanceColorTemp = 0 }
+                    }
+                    if (it != 3) {
+                        VideoPlay.enhanceBrightness = enhanceBrightness
+                        VideoPlay.enhanceContrast = enhanceContrast
+                        VideoPlay.enhanceSaturation = enhanceSaturation
+                        VideoPlay.enhanceColorTemp = enhanceColorTemp
+                        ImageEnhanceController.applyToRegistered()
+                    }
+                    selection = null
+                },
+                onDismiss = { selection = null }
+            )
+        }
+        // video-player-image-enhance B 批：锐化档位（0 关 / 1 轻 / 2 中 / 3 强）
+        PanelSelection.EnhanceSharpen -> {
+            val options = listOf(
+                stringResource(R.string.image_enhance_level_off),
+                stringResource(R.string.image_enhance_level_light),
+                stringResource(R.string.image_enhance_level_medium),
+                stringResource(R.string.image_enhance_level_strong)
+            )
+            SingleChoiceDialog(
+                title = stringResource(R.string.image_enhance_sharpen),
+                options = options,
+                selectedIndex = enhanceSharpenLevel.coerceIn(0, 3),
+                onSelect = {
+                    enhanceSharpenLevel = it
+                    VideoPlay.enhanceSharpenLevel = it
+                    ImageEnhanceController.applyEffectsToPlayer()
+                    selection = null
+                },
+                onDismiss = { selection = null }
+            )
+        }
+        // video-player-image-enhance B 批：降噪档位（0 关 / 1 轻 / 2 中）
+        PanelSelection.EnhanceDenoise -> {
+            val options = listOf(
+                stringResource(R.string.image_enhance_level_off),
+                stringResource(R.string.image_enhance_level_light),
+                stringResource(R.string.image_enhance_level_medium)
+            )
+            SingleChoiceDialog(
+                title = stringResource(R.string.image_enhance_denoise),
+                options = options,
+                selectedIndex = enhanceDenoiseLevel.coerceIn(0, 2),
+                onSelect = {
+                    enhanceDenoiseLevel = it
+                    VideoPlay.enhanceDenoiseLevel = it
+                    ImageEnhanceController.applyEffectsToPlayer()
+                    selection = null
+                },
+                onDismiss = { selection = null }
+            )
+        }
         PanelSelection.BufferStrategy -> {
             val options = listOf(
                 stringResource(R.string.player_buffer_strategy_auto),
@@ -459,13 +624,77 @@ private fun PanelButton(text: String, onClick: () -> Unit) {
 }
 
 /** 下拉选择类型 */
-private enum class PanelSelection { SkipTime, CacheSize, PlayerType, SeekSensitivity, BufferStrategy }
+private enum class PanelSelection { SkipTime, CacheSize, PlayerType, SeekSensitivity, EnhancePreset, EnhanceSharpen, EnhanceDenoise, BufferStrategy }
 
 @Composable
 private fun playerTypeLabel(type: Int): String = when (type) {
     1 -> stringResource(R.string.player_type_exo)
     2 -> stringResource(R.string.player_type_webview)
     else -> stringResource(R.string.player_type_auto)
+}
+
+/** video-player-image-enhance A2.2: 预设标签 */
+@Composable
+private fun presetLabel(preset: Int): String = when (preset) {
+    1 -> stringResource(R.string.image_enhance_preset_eye_care)
+    2 -> stringResource(R.string.image_enhance_preset_vivid)
+    3 -> stringResource(R.string.image_enhance_preset_custom)
+    else -> stringResource(R.string.image_enhance_preset_original)
+}
+
+/** video-player-image-enhance B 批: 锐化档位标签 */
+@Composable
+private fun sharpenLabel(level: Int): String = when (level) {
+    1 -> stringResource(R.string.image_enhance_level_light)
+    2 -> stringResource(R.string.image_enhance_level_medium)
+    3 -> stringResource(R.string.image_enhance_level_strong)
+    else -> stringResource(R.string.image_enhance_level_off)
+}
+
+/** video-player-image-enhance B 批: 降噪档位标签 */
+@Composable
+private fun denoiseLabel(level: Int): String = when (level) {
+    1 -> stringResource(R.string.image_enhance_level_light)
+    2 -> stringResource(R.string.image_enhance_level_medium)
+    else -> stringResource(R.string.image_enhance_level_off)
+}
+
+/**
+ * video-player-image-enhance A2.2: 画质增强滑条行（RA2 拖动即时生效）
+ * onCommit 收十倍整值（与 VideoPlay 存储一致），拖动过程实时写回+刷新滤镜
+ */
+@Composable
+private fun EnhanceSliderRow(
+    label: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    onCommit: (Int) -> Unit
+) {
+    val style = rememberAppDialogStyle()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = style.primaryText,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = String.format("%+.1f", value),
+                style = MaterialTheme.typography.bodySmall,
+                color = style.secondaryText
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = { onCommit((it * 10).roundToInt()) },
+            valueRange = valueRange
+        )
+    }
 }
 
 @Composable

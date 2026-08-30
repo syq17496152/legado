@@ -24,7 +24,9 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
+import androidx.lifecycle.Observer
 import io.legado.app.R
+import io.legado.app.constant.EventBus
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.TopBarConfig
 import io.legado.app.lib.theme.TopBarSearchStyle
@@ -39,6 +41,7 @@ import io.legado.app.ui.widget.compose.ComposeThemeImageCrop
 import io.legado.app.ui.widget.compose.ComposeThemeImageState
 import io.legado.app.utils.ImageTypeUtils
 import io.legado.app.utils.StatusBarInsetAware
+import io.legado.app.utils.eventObservable
 
 class MainTopBarView @JvmOverloads constructor(
     context: Context,
@@ -172,7 +175,35 @@ class MainTopBarView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        registerTopBarChangeListener()
         applyTopBarStyle(force = true)
+    }
+
+    override fun onDetachedFromWindow() {
+        unregisterTopBarChangeListener()
+        super.onDetachedFromWindow()
+    }
+
+    // theme-rss-header-layout-sync F3: 第二刷新通道——自订阅 TOP_BAR_CHANGED（原全靠宿主 refreshMainTopBars/recreate 驱动，
+    // 宿主覆盖不到的场景无兜底）。View 无 LifecycleOwner，observeForever 手工配对取消防泄漏；
+    // refreshStyle 幂等可重入（清签名+force+requestLayout），与 MainActivity.refreshMainTopBars 双路径无冲突。
+    private var topBarChangeObserver: Observer<Boolean>? = null
+
+    private fun registerTopBarChangeListener() {
+        if (topBarChangeObserver != null) return
+        val observer = Observer<Boolean> { isNight ->
+            // 对齐 MainActivity 过滤口径：过期日夜标志事件不处理
+            if (isNight == AppConfig.isNightTheme) refreshStyle()
+        }
+        topBarChangeObserver = observer
+        eventObservable<Boolean>(EventBus.TOP_BAR_CHANGED).observeForever(observer)
+    }
+
+    private fun unregisterTopBarChangeListener() {
+        topBarChangeObserver?.let {
+            eventObservable<Boolean>(EventBus.TOP_BAR_CHANGED).removeObserver(it)
+        }
+        topBarChangeObserver = null
     }
 
     fun setMode(mode: Mode) {
@@ -486,7 +517,8 @@ class MainTopBarView @JvmOverloads constructor(
         tagsBar.setBackgroundOverrideColor(null)
         primaryBar.setSelectedBackgroundVisible(true)
         selectsBar.setSelectedBackgroundVisible(true)
-        tagsBar.setSelectedBackgroundVisible(mode == Mode.DISCOVERY)
+        // theme-rss-header-layout-sync F1: RSS 模式源标签(tagsBar)选中背景对齐 DISCOVERY/default（原仅 DISCOVERY 显示，选中态不可见）
+        tagsBar.setSelectedBackgroundVisible(mode == Mode.DISCOVERY || mode == Mode.RSS)
         styleActionSlotButtons(true)
     }
 

@@ -60,9 +60,11 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.ActivityMainBinding
+import io.legado.app.constant.AppLog
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.CrashHandler
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.MainBottomNavConfig
 import io.legado.app.help.config.NavigationBarIconConfig
@@ -2242,10 +2244,31 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     private fun notifyAppCrash() {
-        if (!LocalConfig.appCrash || BuildConfig.DEBUG) {
+        if (LocalConfig.appCrash) {
+            LocalConfig.appCrash = false
+            // sniff-regression-rss-image-crash: 崩溃栈取证回灌——崩溃文件（cache/crash/crash-*.log）
+            // 常不在用户导出的日志包内（logs.zip 只有 logcat + logs/appLog），启动时把最近崩溃栈
+            // 回灌进本次 appLog，保证任意日志导出流程都能携带完整崩溃栈（分块绕开 AppLog 2000 字符截断）
+            kotlin.runCatching {
+                CrashHandler.readLatestCrashLog()?.let { crashLog ->
+                    val chunkSize = 1800
+                    var index = 1
+                    var start = 0
+                    while (start < crashLog.length) {
+                        val end = minOf(start + chunkSize, crashLog.length)
+                        AppLog.putDebugWithTag(
+                            "CrashReport",
+                            "上次会话崩溃栈回灌($index)：\n${crashLog.substring(start, end)}"
+                        )
+                        start = end
+                        index++
+                    }
+                }
+            }
+        }
+        if (BuildConfig.DEBUG) {
             return
         }
-        LocalConfig.appCrash = false
         showComposeConfirmDialog(
             title = getString(R.string.draw),
             message = "检测到阅读发生了崩溃，是否打开崩溃日志以便报告问题？",

@@ -771,7 +771,7 @@
     <string name="view_mode">View mode</string>
     <string name="list_view">List view</string>
     <string name="folder_view">Folder view</string>
-    <string name="all_groups">All groups</string>
+    <string name="all_groups">All</string>
     <string name="prev_sentence">Prior sentence</string>
     <string name="next_sentence">Next sentence</string>
     <string name="other_folder">Other folder</string>
@@ -1670,7 +1670,7 @@
     <string name="press_speed">长按倍速</string>
     <string name="press_speed_summary">长按倍速 %.1f</string>
     <string name="full_bottom_progress">全屏时显示底部进度条</string>
-    <string name="cache_play">边下边播</string>
+    <string name="cache_play">播放时缓存</string>
     <string name="video_cache_size">视频缓存容量</string>
     <string name="video_cache_size_summary">%1$d MB（重启生效）</string>
     <string name="mute_on_start">默认静音</string>
@@ -1685,6 +1685,25 @@
     <string name="seek_sensitivity">滑动快进灵敏度</string>
     <string name="seek_sensitivity_summary">滑动快进灵敏度 %.1fx</string>
     <string name="seek_sensitivity_multiplier_format">%.1fx</string>
+    <!-- video-player-image-enhance A 期: 画质增强 -->
+    <string name="image_enhance">画质增强</string>
+    <string name="image_enhance_note">仅内置播放器（ExoPlayer）生效，网页播放模式不适用</string>
+    <string name="image_enhance_enable">启用画质增强</string>
+    <string name="image_enhance_brightness">亮度</string>
+    <string name="image_enhance_contrast">对比度</string>
+    <string name="image_enhance_saturation">饱和度</string>
+    <string name="image_enhance_color_temp">色温</string>
+    <string name="image_enhance_preset">预设</string>
+    <string name="image_enhance_preset_original">原画</string>
+    <string name="image_enhance_preset_eye_care">护眼</string>
+    <string name="image_enhance_preset_vivid">鲜艳</string>
+    <string name="image_enhance_preset_custom">自定义</string>
+    <string name="image_enhance_sharpen">锐化强度</string>
+    <string name="image_enhance_denoise">降噪强度</string>
+    <string name="image_enhance_level_off">关</string>
+    <string name="image_enhance_level_light">轻</string>
+    <string name="image_enhance_level_medium">中</string>
+    <string name="image_enhance_level_strong">强</string>
     <string name="video_player_optimization">播放器优化</string>
     <string name="video_route_format">线路：%1$s ▼</string>
     <string name="video_unknown_route">未知</string>

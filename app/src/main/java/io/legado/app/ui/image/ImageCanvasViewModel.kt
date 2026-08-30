@@ -309,21 +309,31 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
                 )
             }
 
-            // 修复 regression：记录新增项的起始 position 和数量
-            // appendItems 前的 allImageUrls.size 即为新增项的起始 position
-            val startPos = ImagePlay.allImageUrls.value.size
-            val dividerCount = if (!isInitial) 1 else 0
-            val itemCount = dividerCount + imageItems.size
-
-            // W5: 文章分隔符插入（首篇文章除外，isInitial=true 时由 Activity 直接展示无需分隔符）
-            if (!isInitial) {
+            // H7(sniff-regression-rss-image-crash) 真实崩溃根因修复（模拟器 2026-08-30 复现实锤：
+            // FATAL IndexOutOfBoundsException Inconsistency detected，与用户真机崩溃同型）：
+            // 原实现 appendItems 在 execute(IO 线程) 内同步更新 StateFlow 数据源，而
+            // notifyItemRangeInserted 在主线程 onSuccess 才发生——窗口期内任何布局读到
+            // "数据源已变大但 RecyclerView 未收到通知"的 itemCount → Invalid view holder
+            // adapter position。旧注释"onSuccess 与 append 同一主线程消息"假设错误：append
+            // 并不在主线程。修复：execute 只返回待追加数据（divider + items），
+            // 数据源追加全部移入主线程 onSuccess，与 notify 同一主线程消息内完成。
+            val divider = if (!isInitial) {
+                // W5: 文章分隔符插入（首篇文章除外，isInitial=true 时由 Activity 直接展示无需分隔符）
                 val articleTitle = article.title.takeIf { it.isNotBlank() } ?: article.origin
-                ImagePlay.appendItems(listOf(ImageCanvasItem.ArticleDivider(articleIndex, articleTitle)))
+                ImageCanvasItem.ArticleDivider(articleIndex, articleTitle)
+            } else {
+                null
             }
-
-            // 写入 ImagePlay 单例（StateFlow 封装，线程安全）
+            divider to imageItems
+        }.onSuccess { (divider, imageItems) ->
+            isLaunching = false
+            // 主线程：先追加数据源，同一消息内立即 notify（setValue 同步回调观察者），
+            // 布局永远不会观察到中间态
+            val startPos = ImagePlay.allImageUrls.value.size
+            divider?.let { ImagePlay.appendItems(listOf(it)) }
             ImagePlay.appendItems(imageItems)
             ImagePlay.loadedArticleIndices.add(articleIndex)
+            val itemCount = (if (divider != null) 1 else 0) + imageItems.size
 
             AppLog.putDebugWithTag(
                 AppLog.TAG_IMAGE_CANVAS,
@@ -331,20 +341,10 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
                 level = AppLog.Level.INFO
             )
 
-            // 修复 regression：返回新增项的范围，onSuccess 中 postValue 给 Activity
             // Activity 调用 notifyItemRangeInserted 精准插入，避免 notifyDataSetChanged
             // 触发所有可见 ViewHolder 重新 bind → Glide.clear 取消正在进行的 downloadOnly
-            startPos to itemCount
-        }.onSuccess { range ->
-            isLaunching = false
-            // 修复（rss-image-load-optimization crash-fix）：postValue → setValue 同步通知
-            // 根因：execute 内 appendItems 同步更新数据源，postValue 异步排队导致
-            // notifyItemRangeInserted 晚于布局触发 → RecyclerView 按新 itemCount 布局时
-            // 从 scrap 取旧位置 ViewHolder → IndexOutOfBoundsException: Inconsistency detected。
-            // 修复：onSuccess 运行在主线程，setValue 同步回调 observer，使 notifyItemRangeInserted
-            // 与数据源追加在同一主线程消息内完成，消除竞态窗口。
             // 顺序：先插入新项（newItemsEvent）再更新 footer（loadState），避免 footer 位置越界。
-            _newItemsEvent.setValue(range)
+            _newItemsEvent.setValue(startPos to itemCount)
             _loadState.setValue(ImageCanvasAdapter.LoadState.SUCCESS)
         }.onError { e ->
             isLaunching = false

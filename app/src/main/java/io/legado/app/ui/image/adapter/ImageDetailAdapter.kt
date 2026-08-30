@@ -83,7 +83,13 @@ open class ImageDetailAdapter(
             currentHolder = null
         }
         // E6: 清理 Glide 资源避免内存泄漏（大图模式左右滑动时旧图片未释放）
-        com.bumptech.glide.Glide.with(context).clear(holder.binding.photoView)
+        // H4(sniff-regression-rss-image-crash): Activity 销毁后回收 ViewHolder 时
+        // Glide.with(activity) 抛 IllegalArgumentException（与 crash-2026-07-26 同型，
+        // ImageCanvasAdapter.isGlideUsable 已有同款守卫，此处补齐漏配）
+        val ctx = holder.binding.root.context
+        if (ctx !is android.app.Activity || (!ctx.isDestroyed && !ctx.isFinishing)) {
+            com.bumptech.glide.Glide.with(ctx).clear(holder.binding.photoView)
+        }
     }
 
     /**

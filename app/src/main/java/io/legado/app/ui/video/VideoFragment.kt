@@ -179,6 +179,8 @@ class VideoFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         _playerView = view.findViewById(R.id.playerView)
+        // video-player-image-enhance A1.3: 注册播放器视图（设置面板实时刷新通道）+ 立即应用已保存的滤镜
+        ImageEnhanceController.registerPlayerView(_playerView)
         // F1: 获取 GSY 底部进度条引用（用于更新 secondaryProgress 显示缓冲进度）
         // 诊断日志：确认 playerView 和 bottomProgressbar 初始化状态（排查进度条消失问题）
         bottomProgressbar = _playerView?.findViewById(R.id.bottom_progressbar)
@@ -417,6 +419,9 @@ class VideoFragment : Fragment() {
         // 重置激活标志，让 activatePlayer 重新走完整 ExoPlayer 设置流程
         isActivated = false
         activatePlayer()
+        // video-player-image-enhance A1.3: 降级返回后重新应用画质增强滤镜
+        //（WebView 模式不适用滤镜，切回 Exo 后由 activatePlayer→onPrepared 链路恢复，此处兜底立即应用）
+        _playerView?.let { ImageEnhanceController.apply(it) }
         // P0 日志规范：播放器状态切换（切换回 ExoPlayer）永久日志
         AppLog.put("retryExoPlayback: episode=$episodeIndex, isWebViewMode=false")
     }
@@ -552,6 +557,8 @@ class VideoFragment : Fragment() {
             //（线路/集数选择器仍在左下角容器内，不受影响）
             tvTitleFullscreen?.visible()
             tvVideoTitle?.gone()
+            // video-player-image-enhance A1.3: 全屏切换可能重建渲染视图，重新应用画质增强滤镜
+            _playerView?.let { ImageEnhanceController.apply(it) }
             scheduleAutoHide()  // F2: 显示控件后 3 秒自动隐藏
         } else {
             // 退出横屏全屏态
@@ -564,6 +571,8 @@ class VideoFragment : Fragment() {
             // video-player-ux-fixes P4: 退出全屏恢复左下角标题，隐藏全屏态标题
             tvVideoTitle?.visible()
             tvTitleFullscreen?.gone()
+            // video-player-image-enhance A1.3: 退出全屏重新应用画质增强滤镜
+            _playerView?.let { ImageEnhanceController.apply(it) }
             // 恢复全屏按钮显示逻辑（仅横屏视频显示）
             val pv = _playerView
             if (pv != null && pv.currentVideoWidth > 0 && pv.currentVideoHeight > 0) {

@@ -78,6 +78,16 @@ object WebViewPool {
         }
     }
 
+    /**
+     * 全局是否空闲（所有 scope 的 inUsePool 均为空）
+     * sniff-regression-rss-image-crash: pauseTimers/resumeTimers 为进程级 API，
+     * 守卫条件的作用域必须与其一致：scoped 池只隔离缓存容量与闲置回收，
+     * 不隔离进程级副作用（回归修复 bbc9d0a89）
+     */
+    private fun isGlobalIdle(): Boolean = synchronized(this) {
+        pools.values.all { it.inUsePool.isEmpty() }
+    }
+
     // 获取一个WebView
     @Synchronized
     fun acquire(context: Context, scope: Scope = Scope.GLOBAL): PooledWebView {
@@ -95,9 +105,9 @@ object WebViewPool {
         }
         pooledWebView.upContext(context).apply {
             realWebView.settings.setDarkeningAllowed(AppConfig.isNightTheme) //设置是否夜间
-            if (scopePool.inUsePool.isEmpty()) {
-                realWebView.resumeTimers()
-            }
+            // sniff-regression-rss-image-crash: resumeTimers 为进程级 API，取用时无条件恢复，
+            // 防止其他 scope 的 pauseTimers 误冻结本实例（嗅探 6s 窗口内 JS 被冻结导致超时）
+            realWebView.resumeTimers()
             isDestroyed = false
             isInUse = true
         }
@@ -165,7 +175,11 @@ object WebViewPool {
                             loadWithOverviewMode = false // 恢复默认
                             textZoom = 100
                         }
-                        if (scopePool.inUsePool.isEmpty()) {
+                        // sniff-regression-rss-image-crash: pauseTimers 为进程级 API（冻结进程内所有
+                        // WebView 的 JS 定时器与解析），bbc9d0a89 分层后此处只按单 scope 判断，导致
+                        // 发现页/订阅页释放时误冻结 GLOBAL 池中正在嗅探的 WebView；守卫改为跨全部
+                        // scope 的 inUsePool 全局判断（等价恢复分层前"全进程互斥"语义）
+                        if (isGlobalIdle()) {
                             webview.pauseTimers()
                         }
                         webview.onPause()

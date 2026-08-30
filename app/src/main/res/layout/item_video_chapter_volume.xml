@@ -17,7 +17,6 @@
         android:gravity="center"
         android:padding="4dp"
         android:textSize="@dimen/text_11sp"
-        android:textStyle="bold"
-        android:background="@drawable/card_video_background" />
+        android:textStyle="bold" />
 
 </androidx.cardview.widget.CardView>

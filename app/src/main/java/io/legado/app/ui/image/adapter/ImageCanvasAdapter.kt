@@ -779,6 +779,14 @@ class ImageCanvasAdapter(
             if (!isGlideUsable()) return
             // Phase 3.3: 高度自适应（按宽高比折算，上限 4 倍屏高，fitCenter 不变形不裁剪）
             val targetH = ImagePyramidLoader.normalDisplayHeight(imgW, imgH, screenW, screenH)
+            // H1(sniff-regression-rss-image-crash): 小内存设备（heap≤320MB）解码高度收敛到屏高，
+            // 普通竖图解码峰值从最高 4×屏高（约 25MB/张）降到 ≤1×屏高（约 6MB/张），
+            // 布局高度不变，仅降低解码分辨率（PhotoView 放大时轻微模糊可接受）
+            val decodeH = if (io.legado.app.help.MemoryPressure.isSmallHeap) {
+                minOf(targetH, screenH)
+            } else {
+                targetH
+            }
             val lp = itemView.layoutParams
             if (lp.height != targetH) {
                 lp.height = targetH
@@ -789,7 +797,7 @@ class ImageCanvasAdapter(
             binding.photoView.visibility = View.VISIBLE
             Glide.with(itemView.context)
                 .load(file)
-                .override(screenW, targetH)
+                .override(screenW, decodeH)
                 .dontTransform()
                 .thumbnail(0.1f)
                 .diskCacheStrategy(DiskCacheStrategy.ALL)

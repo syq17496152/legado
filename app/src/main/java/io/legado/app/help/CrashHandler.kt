@@ -168,6 +168,18 @@ class CrashHandler(val context: Context) : Thread.UncaughtExceptionHandler {
         }
 
         /**
+         * sniff-regression-rss-image-crash: 读取最近一次崩溃日志全文（启动时取证回灌到 appLog 用）
+         */
+        fun readLatestCrashLog(): String? {
+            return kotlin.runCatching {
+                appCtx.externalCacheDir?.getFile("crash")?.listFiles()
+                    ?.filter { it.name.startsWith("crash-") && it.name.endsWith(".log") }
+                    ?.maxByOrNull { it.lastModified() }
+                    ?.readText()
+            }.getOrNull()?.takeIf { it.isNotBlank() }
+        }
+
+        /**
          * 进行堆转储
          */
         fun doHeapDump(manually: Boolean = false) {

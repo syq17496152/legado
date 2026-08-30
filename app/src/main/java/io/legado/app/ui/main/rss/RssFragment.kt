@@ -1341,7 +1341,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     }
 
     // F-P1-8 文件夹点击回调：点击文件夹 → 临时切换到列表视图并按分组筛选
-    // 注意：不修改 rssViewMode（用户偏好），仅修改 isShowingFolder（运行时状态）
+    // 注意：不持久化本次切换（保持用户偏好的视图模式），仅修改 isShowingFolder（运行时状态）
     // 这样再次进入或用户点击菜单"文件夹视图"时，仍会显示文件夹视图
     override fun onFolderClick(folder: FolderItem) {
         isShowingFolder = false
