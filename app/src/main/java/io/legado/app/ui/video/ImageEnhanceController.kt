@@ -27,6 +27,18 @@ object ImageEnhanceController {
     @Volatile
     private var currentPlayerView: java.lang.ref.WeakReference<View>? = null
 
+    /** AD-04: 缓存 Paint（复用实例，避免滑条拖动帧级 new Paint） */
+    @Volatile
+    private var cachedPaint: Paint? = null
+
+    /** AD-04: 最近一次应用的四参数指纹（b/c/s/t 打包），未变化时跳过重建 */
+    @Volatile
+    private var lastFingerprint: Long = Long.MIN_VALUE
+
+    /** AD-04: 最近一次应用滤镜的视图（GSY 重建 TextureView 后指纹虽同仍需重挂层） */
+    @Volatile
+    private var lastAppliedView: java.lang.ref.WeakReference<View>? = null
+
     /** 注册当前播放器视图并立即应用滤镜（VideoFragment.onViewCreated 调用） */
     fun registerPlayerView(v: View?) {
         currentPlayerView = v?.let { java.lang.ref.WeakReference(it) }
@@ -95,23 +107,39 @@ object ImageEnhanceController {
     /**
      * 对 playerView 视图树中的 TextureView 应用画质增强滤镜
      * 由播放事件钩子调用（onPrepared/全屏切换/切集数/降级返回后）
+     * AD-04: 参数指纹未变且目标视图未重建时直接短路返回，消除拖动帧级硬件层重建
      */
     fun apply(root: View?) {
         root ?: return
         val tv = findTextureView(root) ?: return
         if (VideoPlay.enhanceEnabled) {
-            tv.setLayerType(
-                View.LAYER_TYPE_HARDWARE,
-                Paint().apply { colorFilter = ColorMatrixColorFilter(buildColorMatrix()) }
-            )
+            val fingerprint = enhanceFingerprint()
+            val sameAsLast = fingerprint == lastFingerprint &&
+                cachedPaint != null && lastAppliedView?.get() === tv
+            android.util.Log.d("EnhanceGov", "apply fp=$fingerprint shortCircuit=$sameAsLast")
+            if (!sameAsLast) {
+                val paint = cachedPaint ?: Paint().also { cachedPaint = it }
+                paint.colorFilter = ColorMatrixColorFilter(buildColorMatrix())
+                lastFingerprint = fingerprint
+                lastAppliedView = java.lang.ref.WeakReference(tv)
+                tv.setLayerType(View.LAYER_TYPE_HARDWARE, paint)
+            }
         } else {
             reset(root)
         }
     }
 
+    /** AD-04: 四参数（b/c/s/t 十倍整值，范围均落在 16bit 内）打包指纹 */
+    private fun enhanceFingerprint(): Long =
+        (VideoPlay.enhanceBrightness.toLong() and 0xFFFF) or
+            ((VideoPlay.enhanceContrast.toLong() and 0xFFFF) shl 16) or
+            ((VideoPlay.enhanceSaturation.toLong() and 0xFFFF) shl 32) or
+            ((VideoPlay.enhanceColorTemp.toLong() and 0xFFFF) shl 48)
+
     /** 回退原画（移除滤镜层） */
     fun reset(root: View?) {
         root ?: return
+        lastAppliedView = null
         findTextureView(root)?.setLayerType(View.LAYER_TYPE_NONE, null)
     }
 

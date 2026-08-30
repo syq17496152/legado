@@ -32,8 +32,10 @@ import okhttp3.Response
 import okhttp3.ResponseBody
 import splitties.init.appCtx
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.io.SequenceInputStream
 
 
 class OkHttpStreamFetcher(
@@ -60,6 +62,29 @@ class OkHttpStreamFetcher(
 
         /** H3(sniff-regression-rss-image-crash): 小内存设备超过该大小的图片跳过解密透传（10MB） */
         internal const val SKIP_DECODE_SIZE_BYTES = 10L * 1024 * 1024
+
+        /** AD-03: 有界缓冲读取结果（exceeded=true 表示超过 limit，调用方透传） */
+        private class BoundedRead(val bytes: ByteArray, val exceeded: Boolean)
+
+        /**
+         * AD-03(enhance-switch-governance-fix): 有界缓冲读取——增量读入至 limit+1 上限
+         * 内存峰值 ≤ limit + 单块缓冲，与既有 decode readBytes 路径等价量级，堵住 chunked
+         * 无长度响应绕过小内存 OOM 守卫的缺口；恰好等于 limit 时视为未超限（与既有
+         * contentLength > SKIP 语义一致）
+         */
+        internal fun readBounded(body: ResponseBody, limit: Long): BoundedRead {
+            val input = body.byteStream()
+            val out = ByteArrayOutputStream(if (limit < Int.MAX_VALUE) (limit / 4).coerceAtMost(4L * 1024 * 1024).toInt() else Int.MAX_VALUE)
+            val buf = ByteArray(64 * 1024)
+            var total = 0L
+            while (true) {
+                val n = input.read(buf)
+                if (n == -1) return BoundedRead(out.toByteArray(), false)
+                out.write(buf, 0, n)
+                total += n
+                if (total > limit) return BoundedRead(out.toByteArray(), true)
+            }
+        }
     }
 
     override fun loadData(priority: Priority, callback: DataFetcher.DataCallback<in InputStream>) {
@@ -179,15 +204,36 @@ class OkHttpStreamFetcher(
                     // 根因：decode(InputStream) 内 readBytes() 全量读入，解密期间原始+结果双份 byte[]
                     // 存活（峰值 2×图体积），256MB heap 上多张并发极易触顶 OOM；
                     // 超大图（>10MB）加密概率极低（已知格式本来就会被文件头检测跳过），直接透传
+                    // AD-03(enhance-switch-governance-fix)：chunked/无长度响应 contentLength=-1 绕过守卫，
+                    // 改为有界缓冲探测——增量读至 SKIP+1 上限，超限透传，未超限对缓冲字节走 decode
                     val contentLength = responseBody?.contentLength() ?: -1
-                    if (MemoryPressure.isSmallHeap && contentLength > SKIP_DECODE_SIZE_BYTES) {
-                        Log.e(TAG, "small-heap skip decode: len=$contentLength url=${analyzedUrl.toStringUrl().take(60)}")
-                        responseBody!!.byteStream()
-                    } else {
-                        ImageUtils.decode(
-                            analyzedUrl.toStringUrl(), responseBody!!.byteStream(),
-                            isCover = true, source
-                        )
+                    when {
+                        MemoryPressure.isSmallHeap && contentLength > SKIP_DECODE_SIZE_BYTES -> {
+                            Log.e(TAG, "small-heap skip decode: len=$contentLength url=${analyzedUrl.toStringUrl().take(60)}")
+                            responseBody!!.byteStream()
+                        }
+                        MemoryPressure.isSmallHeap && contentLength < 0 -> {
+                            val bounded = readBounded(responseBody!!, SKIP_DECODE_SIZE_BYTES)
+                            if (bounded.exceeded) {
+                                Log.e(TAG, "small-heap skip decode: len=unknown(>limit) url=${analyzedUrl.toStringUrl().take(60)}")
+                                SequenceInputStream(
+                                    ByteArrayInputStream(bounded.bytes),
+                                    responseBody!!.byteStream()
+                                )
+                            } else {
+                                ImageUtils.decode(
+                                    analyzedUrl.toStringUrl(),
+                                    ByteArrayInputStream(bounded.bytes),
+                                    isCover = true, source
+                                )
+                            }
+                        }
+                        else -> {
+                            ImageUtils.decode(
+                                analyzedUrl.toStringUrl(), responseBody!!.byteStream(),
+                                isCover = true, source
+                            )
+                        }
                     }
                 }
             }

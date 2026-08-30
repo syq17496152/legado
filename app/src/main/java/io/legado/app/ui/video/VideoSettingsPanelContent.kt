@@ -317,6 +317,8 @@ fun VideoSettingsPanelContent(
                 enhanceEnabled = it
                 VideoPlay.enhanceEnabled = it
                 ImageEnhanceController.applyToRegistered()
+                // AD-01b：立即治理 B 批效果链（守卫返回空链 → setVideoEffects 清空残留，当前播放实例即刻生效）
+                ImageEnhanceController.applyEffectsToPlayer()
             }
         )
         if (enhanceEnabled) {
@@ -327,6 +329,11 @@ fun VideoSettingsPanelContent(
                 onCommit = {
                     enhanceBrightness = it
                     VideoPlay.enhanceBrightness = it
+                    // AD-02：手动调节即偏离预设，联动「自定义」
+                    if (enhancePreset != 3) {
+                        enhancePreset = 3
+                        VideoPlay.enhancePreset = 3
+                    }
                     ImageEnhanceController.applyToRegistered()
                 }
             )
@@ -337,6 +344,11 @@ fun VideoSettingsPanelContent(
                 onCommit = {
                     enhanceContrast = it
                     VideoPlay.enhanceContrast = it
+                    // AD-02：手动调节即偏离预设，联动「自定义」
+                    if (enhancePreset != 3) {
+                        enhancePreset = 3
+                        VideoPlay.enhancePreset = 3
+                    }
                     ImageEnhanceController.applyToRegistered()
                 }
             )
@@ -347,6 +359,11 @@ fun VideoSettingsPanelContent(
                 onCommit = {
                     enhanceSaturation = it
                     VideoPlay.enhanceSaturation = it
+                    // AD-02：手动调节即偏离预设，联动「自定义」
+                    if (enhancePreset != 3) {
+                        enhancePreset = 3
+                        VideoPlay.enhancePreset = 3
+                    }
                     ImageEnhanceController.applyToRegistered()
                 }
             )
@@ -357,6 +374,11 @@ fun VideoSettingsPanelContent(
                 onCommit = {
                     enhanceColorTemp = it
                     VideoPlay.enhanceColorTemp = it
+                    // AD-02：手动调节即偏离预设，联动「自定义」
+                    if (enhancePreset != 3) {
+                        enhancePreset = 3
+                        VideoPlay.enhancePreset = 3
+                    }
                     ImageEnhanceController.applyToRegistered()
                 }
             )
