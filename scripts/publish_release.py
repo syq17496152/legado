@@ -406,10 +406,15 @@ def find_sdk_tool(tool_name: str) -> Optional[Path]:
 
 
 def check_libcronet(apk: Path) -> bool:
-    """libcronet.so 存在性校验（R4，zipfile 直查，不依赖 bat 内校验）"""
+    """libcronet 存在校验（R4，zipfile 直查，不依赖 bat 内校验）。
+
+    cronet-bundled Maven 迁移后 so 带版本号（如 libcronet.151.0.7922.47.so），
+    故用 libcronet*.so 前缀匹配而非精确名。
+    """
     try:
         with zipfile.ZipFile(apk) as z:
-            return "lib/arm64-v8a/libcronet.so" in z.namelist()
+            return any(n.startswith("lib/arm64-v8a/libcronet") and n.endswith(".so")
+                       for n in z.namelist())
     except zipfile.BadZipFile:
         return False
 
@@ -478,8 +483,13 @@ def stage3_verify(config: dict, version: str, dry_run: bool) -> Tuple[Dict[str, 
             log("VERIFY", f"[{pkg}] 包名不一致: 期望 {EXPECTED_PACKAGES[pkg]}，实际 {pkg_name}", "ERROR")
             sys.exit(1)
         if ver_name != version:
-            log("VERIFY", f"[{pkg}] 版本不一致: 期望 {version}，实际 {ver_name}", "ERROR")
-            sys.exit(1)
+            # debug 构建的 versionName 带 versionNameSuffix 后缀（如 3.26.083022debug），
+            # 允许"精确相等或以版本号为前缀"；其余不一致为致命错误
+            if ver_name.startswith(version):
+                log("VERIFY", f"[{pkg}] versionName 含构建后缀: {ver_name}（基版本 {version} 匹配）")
+            else:
+                log("VERIFY", f"[{pkg}] 版本不一致: 期望 {version}，实际 {ver_name}", "ERROR")
+                sys.exit(1)
         log("VERIFY", f"[{pkg}] 验签通过 包名={pkg_name} 版本={ver_name}")
 
     # 建议项（WARN 不阻断）：版本日期与今天偏差

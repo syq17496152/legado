@@ -187,22 +187,32 @@ if "!APK_FOUND!"=="0" (
 :: libcronet.so 打包验证（强制）
 :: 来源: 2026-07-30 用户决策，m3u8播放依赖Cronet Native引擎
 :: 详见: docs/project-rules/package-naming.md "libcronet.so 打包强制规范"
+:: 2026-08-30 修复三处潜在缺陷（启用延迟扩展后首次真正运行时暴露）:
+::   1) Expand-Archive 不支持 .apk 扩展名 → 弃用解压方案
+::   2) Expand-Archive 对 APK 内中日文 UTF-8 条目名崩溃（Illegal characters in path）
+::      → 改用 .NET ZipFile.OpenRead 流式读取（不解压/无临时文件/支持 UTF-8 条目名）
+::   3) 原命令单引号包裹 $env:TEMP 路径致 PowerShell 不展开（恒找不到 so）；
+::      校验逻辑改为"任一包失败即失败"（原最后一包通过则整体通过）
+::   4) cronet-bundled Maven 迁移后 so 带版本号（libcronet.151.x.x.x.so），
+::      旧精确名 libcronet.so 永远匹配失败 → 改为 libcronet*.so 模式匹配
+::   5) 校验范围改为本次构建产物（APK_BUILD_DIR）——dist 目录含迁移前动态下载
+::      模式的历史归档包（本就无内置 so），不应参与本次门禁
 :: ============================================================
 if "!APK_FOUND!"=="1" (
     echo.
     echo ============================================================
     echo   Verifying libcronet.so in APK...
     echo ============================================================
-    set "VERIFY_OK=0"
-    for %%f in ("%DIST_DIR%\*.apk") do (
-        powershell -NoProfile -Command "Expand-Archive -Path '%%f' -DestinationPath $env:TEMP\apk_check -Force; $so = Get-ChildItem -Path '$env:TEMP\apk_check\lib\arm64-v8a\libcronet.so' -ErrorAction SilentlyContinue; if ($so) { Write-Host '[OK] %%~nxf: libcronet.so packed' -ForegroundColor Green; exit 0 } else { Write-Host '[FAIL] %%~nxf: libcronet.so MISSING! m3u8 playback will fail!' -ForegroundColor Red; exit 1 }" && (
-            set "VERIFY_OK=1"
+    set "VERIFY_BAD=0"
+    for %%f in ("%APK_BUILD_DIR%\*.apk") do (
+        powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%%f'); $found = $z.Entries | Where-Object { $_.FullName -like 'lib/arm64-v8a/libcronet*.so' }; $z.Dispose(); if ($found) { exit 0 } else { exit 1 }" && (
+            echo   [OK] %%~nxf: libcronet.so packed
         ) || (
-            set "VERIFY_OK=0"
+            echo   [FAIL] %%~nxf: libcronet.so MISSING! m3u8 playback will fail!
+            set "VERIFY_BAD=1"
         )
-        powershell -NoProfile -Command "Remove-Item -Path $env:TEMP\apk_check -Recurse -Force -ErrorAction SilentlyContinue"
     )
-    if "!VERIFY_OK!"=="0" (
+    if "!VERIFY_BAD!"=="1" (
         echo.
         echo ============================================================
         echo   [FAIL] libcronet.so verification failed!
