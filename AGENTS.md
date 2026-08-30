@@ -9,6 +9,7 @@
 | 一键打包（测试包） | `build-legado.bat` |
 | 正式包 | `build-legado.bat release` |
 | 共存包 | `build-legado.bat debug io.legado.app` |
+| 一键发布（五阶段：构建→校验→gh release→tag） | `publish.bat`（或 `ai_tests\venv\Scripts\python.exe scripts\publish_release.py`，--dry-run 预览） |
 | 底层 Gradle 任务 | `./gradlew assembleAppDebug` / `assembleAppRelease`（productFlavors 仅 `app`，App 首字母大写，**不是** `assembleDebug`） |
 | 改签名/strings.xml 后强制重打 | `./gradlew assembleAppRelease --rerun-tasks` |
 | 单元测试 / Lint | `./gradlew test` / `./gradlew lint` |

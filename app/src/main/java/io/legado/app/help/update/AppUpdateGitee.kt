@@ -27,10 +27,11 @@ object AppUpdateGitee : AppUpdate.AppUpdateInterface {
         }
 
     private suspend fun getLatestRelease(): List<AppReleaseInfo> {
+        // 更新源与实际发布仓一致（build-release-automation 3.2：修复查询旧仓导致应用内检查更新失效）
         val lastReleaseUrl = if (checkVariant.isBeta()) {
-            "https://gitee.com/api/v5/repos/lyc486/legado/releases/latest"
+            "https://gitee.com/api/v5/repos/Chinashitou/legado/releases/latest"
         } else {
-            "https://gitee.com/api/v5/repos/lyc486/legado/releases?page=1&per_page=3&direction=desc"
+            "https://gitee.com/api/v5/repos/Chinashitou/legado/releases?page=1&per_page=3&direction=desc"
         }
         val res = okHttpClient.newCallResponse {
             url(lastReleaseUrl)

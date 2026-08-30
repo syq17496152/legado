@@ -1,5 +1,7 @@
 @echo off
-setlocal
+:: EnableDelayedExpansion（2026-08-30 修复）：!APK_FOUND!/!VERIFY_OK! 延迟扩展缺失导致
+:: libcronet.so 强制校验块（下方 L188 起）为死代码、从未真正执行
+setlocal EnableDelayedExpansion
 
 :: ============================================================
 ::  Legado APK Build Script
@@ -174,6 +176,7 @@ for %%f in ("%APK_BUILD_DIR%\*.apk") do (
     set "APK_FOUND=1"
     copy /y "%%f" "%DIST_DIR%\" >nul 2>&1
     echo   [COPY] %%f -^> %DIST_DIR%\
+    echo [ARTIFACT] %DIST_DIR%\%%~nxf
 )
 
 if "!APK_FOUND!"=="0" (
