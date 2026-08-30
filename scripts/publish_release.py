@@ -17,7 +17,7 @@ APK 一键发布编排器：版本确认 → 三包构建 → 校验强化 → g
                       显式版本第 3 参保证同版本），每包后 bat 内嵌 daemon 清场
     Stage3 校验强化   三包齐全 / libcronet.so / apksigner 验签 / 包名版本一致性 /
                       updateLog 当日条目——致命项 fail-fast exit
-    Stage4 gh release gh CLI 上传 release + coexist（test 包仅本地归档，包名禁令）；
+    gh release gh CLI 上传三包（test 包带 _debug 后缀命名防同名冲突）；
                       gitee 走原 requests 层
     Stage5 git tag    tag=版本号，push 前人工确认，形成版本回滚锚点
 
@@ -30,8 +30,10 @@ import datetime
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import zipfile
 from pathlib import Path
@@ -59,7 +61,7 @@ BUILD_PLAN: List[Tuple[str, List[str]]] = [
     ("coexist", ["debug", "io.legado.app", "{version}"]),
 ]
 
-# 包名禁令断言表（R7）：Release 仅接受 release + coexist 产物
+# 三包包名断言表（R7）：上传前逐一核对包名与包类型匹配（防混发）
 EXPECTED_PACKAGES = {
     "test": "io.legado.miss.app.debug",
     "release": "io.legado.miss.app.release",
@@ -668,14 +670,16 @@ def gh_run(gh_args: List[str], env: dict, stage: str) -> Optional[subprocess.Com
 
 def github_publish_gh(config: dict, version: str, body: str, apks: Dict[str, Path],
                       dry_run: bool) -> Dict[str, bool]:
-    """GitHub 发布流程（gh CLI 替代 requests，规避 uploads.github.com SSL 与 51MB+ 双坑）"""
+    """GitHub 发布流程（gh CLI 替代 requests，规避 uploads.github.com SSL 与 51MB+ 双坑）。
+
+    2026-08-30 用户裁决：三包全上传，test 包经 get_upload_name 加 _debug 后缀防同名冲突。
+    """
     results: Dict[str, bool] = {}
     g = config["github"]
     repo = f"{g['owner']}/{g['repo']}"
     log("GITHUB", f"repo={repo} token={hide_token(g['token'])} (gh CLI)")
 
-    # 包名禁令（R7）：test 包仅本地归档，不上 Release
-    upload_apks = {k: v for k, v in apks.items() if k != "test"}
+    upload_apks = dict(apks)
 
     if dry_run:
         # dry-run 允许无产物（bump 新版本尚未构建），仅模拟
@@ -686,8 +690,8 @@ def github_publish_gh(config: dict, version: str, body: str, apks: Dict[str, Pat
         return results
 
     if not upload_apks:
-        log("GITHUB", "无可上传产物（test 包不上 Release）", "ERROR")
-        return {k: False for k in apks}
+        log("GITHUB", "无可上传产物", "ERROR")
+        return results
 
     env = {**os.environ, "GH_TOKEN": g["token"]}
 
@@ -711,12 +715,20 @@ def github_publish_gh(config: dict, version: str, body: str, apks: Dict[str, Pat
             log("GITHUB", f"  {pkg_type}: {upload_name} 已存在，跳过")
             results[pkg_type] = True
             continue
+        # gh release upload 使用文件原始名且不支持重命名：test 包需先复制为
+        # _debug 目标名再上传，否则与 release 包原始名冲突（同名 asset 拒绝）
+        if upload_name == apk_path.name:
+            upload_file = apk_path
+        else:
+            staging = Path(tempfile.gettempdir()) / "legado_gh_upload"
+            staging.mkdir(exist_ok=True)
+            upload_file = staging / upload_name
+            shutil.copyfile(apk_path, upload_file)
         log("GITHUB", f"  {pkg_type}: 上传 {upload_name}...")
-        gh_run(["release", "upload", version, str(apk_path), "--repo", repo], env, "GITHUB")
+        gh_run(["release", "upload", version, str(upload_file), "--repo", repo], env, "GITHUB")
         results[pkg_type] = True
         log("GITHUB", f"  {pkg_type}: 上传成功")
 
-    results.setdefault("test", True)  # test 归档即成功
     return results
 
 
@@ -774,17 +786,16 @@ def main():
     # L2 真机门禁（不可跳过，无 flag 旁路）
     check_l2_evidence(args)
 
-    # Stage4 发布（test 包已被两层排除：github 层 + 此处 gitee 入参过滤）
+    # Stage4 发布（三包全上传；test 包经 get_upload_name 加 _debug 后缀防同名冲突）
     all_results: Dict[str, Dict[str, bool]] = {}
     exit_code = 0
-    release_apks = {k: v for k, v in apks.items() if k != "test"}
 
     if args.platform in ("gitee", "both"):
         try:
-            all_results["gitee"] = gitee_publish(config, version, body, release_apks, args.dry_run)
+            all_results["gitee"] = gitee_publish(config, version, body, apks, args.dry_run)
         except Exception as e:
             log("GITEE", f"发布异常: {e}", "ERROR")
-            all_results["gitee"] = {k: False for k in release_apks}
+            all_results["gitee"] = {k: False for k in apks}
             exit_code = 1
 
     if args.platform in ("github", "both"):
