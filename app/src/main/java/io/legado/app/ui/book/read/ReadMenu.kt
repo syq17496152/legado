@@ -58,6 +58,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReadMenuCustomButton
 import io.legado.app.help.book.isLocal
+import io.legado.app.help.book.isLocalTxt
 import io.legado.app.help.book.library.LibraryCloudState
 import io.legado.app.help.book.isEpub
 import io.legado.app.help.config.AppConfig
@@ -386,7 +387,9 @@ class ReadMenu @JvmOverloads constructor(
                         state = ReadMenuTitleBarState(
                             bookName = currentBookName,
                             isLocalBook = ReadBook.isLocalBook,
-                            isEpub = callBack.isEpubCoreBook()
+                            isEpub = ReadBook.book?.isEpub == true,
+                            isLocalTxt = ReadBook.book?.isLocalTxt == true,
+                            isEpubCoreMode = callBack.isEpubCoreBook()
                         ),
                         actions = ReadMenuTitleBarActions(
                             onBackClick = { callBack.returnToBookshelf() },
@@ -412,7 +415,13 @@ class ReadMenu @JvmOverloads constructor(
                             onParagraphRuleClick = { callBack.showParagraphRuleManage() },
                             onEffectiveReplacesClick = { callBack.showEffectiveReplaces() },
                             onLogClick = { callBack.showLog() },
-                            onHelpClick = { callBack.showHelp() }
+                            onHelpClick = { callBack.showHelp() },
+                            onHighlightRuleClick = { callBack.showHighlightRuleManage() },
+                            onSetCharsetClick = { callBack.showCharsetConfig() },
+                            onTocRegexClick = { callBack.showTocRegex() },
+                            onDelRubyTagClick = { callBack.toggleRubyTag() },
+                            onDelHTagClick = { callBack.toggleHTag() },
+                            onEpubScheduleModeClick = { callBack.showEpubCoreScheduleMode() }
                         ),
                         style = style,
                         modifier = Modifier.fillMaxWidth()
@@ -834,5 +843,11 @@ class ReadMenu @JvmOverloads constructor(
         fun showLog()
         fun showGetProgress()
         fun showCoverProgress()
+        fun showHighlightRuleManage()
+        fun showCharsetConfig()
+        fun showTocRegex()
+        fun toggleRubyTag()
+        fun toggleHTag()
+        fun showEpubCoreScheduleMode()
     }
 }

@@ -937,26 +937,14 @@ class ReadBookActivity : BaseReadBookActivity(),
 //                ReadBook.loadContent(false)
 //            }
 
-            R.id.menu_del_ruby_tag -> ReadBook.book?.let {
+            R.id.menu_del_ruby_tag -> {
                 item.isChecked = !item.isChecked
-                if (item.isChecked) {
-                    it.addDelTag(Book.rubyTag)
-                } else {
-                    it.removeDelTag(Book.rubyTag)
-                }
-                ReadBook.saveRead(fullUpdate = true)
-                ReadBook.reloadCurrentContent("delete-ruby-tag")
+                toggleDelTag(Book.rubyTag, "delete-ruby-tag")
             }
 
-            R.id.menu_del_h_tag -> ReadBook.book?.let {
+            R.id.menu_del_h_tag -> {
                 item.isChecked = !item.isChecked
-                if (item.isChecked) {
-                    it.addDelTag(Book.hTag)
-                } else {
-                    it.removeDelTag(Book.hTag)
-                }
-                ReadBook.saveRead(fullUpdate = true)
-                ReadBook.reloadCurrentContent("delete-h-tag")
+                toggleDelTag(Book.hTag, "delete-h-tag")
             }
 
             R.id.menu_epub_schedule_mode -> showEpubCoreScheduleModeDialog()
@@ -4899,6 +4887,38 @@ class ReadBookActivity : BaseReadBookActivity(),
     override fun showCoverProgress() {
         ReadBook.book?.let {
             ReadBook.uploadProgress(true) { toastOnUi(R.string.upload_book_success) }
+        }
+    }
+
+    override fun showHighlightRuleManage() {
+        startActivity<HighlightRuleActivity>()
+    }
+
+    override fun showTocRegex() {
+        showDialogFragment(TxtTocRuleDialog(ReadBook.book?.tocUrl))
+    }
+
+    override fun toggleRubyTag() {
+        toggleDelTag(Book.rubyTag, "delete-ruby-tag")
+    }
+
+    override fun toggleHTag() {
+        toggleDelTag(Book.hTag, "delete-h-tag")
+    }
+
+    override fun showEpubCoreScheduleMode() {
+        showEpubCoreScheduleModeDialog()
+    }
+
+    private fun toggleDelTag(tag: Long, reason: String) {
+        ReadBook.book?.let {
+            if (it.getDelTag(tag)) {
+                it.removeDelTag(tag)
+            } else {
+                it.addDelTag(tag)
+            }
+            ReadBook.saveRead(fullUpdate = true)
+            ReadBook.reloadCurrentContent(reason)
         }
     }
 

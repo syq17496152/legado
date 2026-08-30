@@ -64,7 +64,7 @@ class OkHttpStreamFetcher(
         internal const val SKIP_DECODE_SIZE_BYTES = 10L * 1024 * 1024
 
         /** AD-03: 有界缓冲读取结果（exceeded=true 表示超过 limit，调用方透传） */
-        private class BoundedRead(val bytes: ByteArray, val exceeded: Boolean)
+        internal class BoundedRead(val bytes: ByteArray, val exceeded: Boolean)
 
         /**
          * AD-03(enhance-switch-governance-fix): 有界缓冲读取——增量读入至 limit+1 上限

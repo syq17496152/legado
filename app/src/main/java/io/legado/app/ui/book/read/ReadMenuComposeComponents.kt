@@ -72,7 +72,9 @@ private val READ_MENU_TITLE_ICON_SPACING = 2.dp
 data class ReadMenuTitleBarState(
     val bookName: String?,
     val isLocalBook: Boolean,
-    val isEpub: Boolean
+    val isEpub: Boolean,
+    val isLocalTxt: Boolean,
+    val isEpubCoreMode: Boolean
 )
 
 data class ReadMenuTitleBarActions(
@@ -99,7 +101,13 @@ data class ReadMenuTitleBarActions(
     val onParagraphRuleClick: () -> Unit,
     val onEffectiveReplacesClick: () -> Unit,
     val onLogClick: () -> Unit,
-    val onHelpClick: () -> Unit
+    val onHelpClick: () -> Unit,
+    val onHighlightRuleClick: () -> Unit,
+    val onSetCharsetClick: () -> Unit,
+    val onTocRegexClick: () -> Unit,
+    val onDelRubyTagClick: () -> Unit,
+    val onDelHTagClick: () -> Unit,
+    val onEpubScheduleModeClick: () -> Unit
 )
 
 data class ReadMenuActionBarState(
@@ -220,6 +228,8 @@ fun ReadMenuTitleBar(
                         val overflowActions = buildOverflowActions(
                             isLocalBook = state.isLocalBook,
                             isEpub = state.isEpub,
+                            isLocalTxt = state.isLocalTxt,
+                            isEpubCoreMode = state.isEpubCoreMode,
                             onAddBookmarkClick = actions.onAddBookmarkClick,
                             onEditContentClick = actions.onEditContentClick,
                             onPageAnimClick = actions.onPageAnimClick,
@@ -236,7 +246,13 @@ fun ReadMenuTitleBar(
                             onParagraphRuleClick = actions.onParagraphRuleClick,
                             onEffectiveReplacesClick = actions.onEffectiveReplacesClick,
                             onLogClick = actions.onLogClick,
-                            onHelpClick = actions.onHelpClick
+                            onHelpClick = actions.onHelpClick,
+                            onHighlightRuleClick = actions.onHighlightRuleClick,
+                            onSetCharsetClick = actions.onSetCharsetClick,
+                            onTocRegexClick = actions.onTocRegexClick,
+                            onDelRubyTagClick = actions.onDelRubyTagClick,
+                            onDelHTagClick = actions.onDelHTagClick,
+                            onEpubScheduleModeClick = actions.onEpubScheduleModeClick
                         )
                         popupHandle = ModernActionPopup.show(
                             context,
@@ -807,6 +823,8 @@ private fun readMenuButtonIconRes(
 private fun buildOverflowActions(
     isLocalBook: Boolean,
     isEpub: Boolean,
+    isLocalTxt: Boolean,
+    isEpubCoreMode: Boolean,
     onAddBookmarkClick: () -> Unit,
     onEditContentClick: () -> Unit,
     onPageAnimClick: () -> Unit,
@@ -823,10 +841,23 @@ private fun buildOverflowActions(
     onParagraphRuleClick: () -> Unit,
     onEffectiveReplacesClick: () -> Unit,
     onLogClick: () -> Unit,
-    onHelpClick: () -> Unit
+    onHelpClick: () -> Unit,
+    onHighlightRuleClick: () -> Unit,
+    onSetCharsetClick: () -> Unit,
+    onTocRegexClick: () -> Unit,
+    onDelRubyTagClick: () -> Unit,
+    onDelHTagClick: () -> Unit,
+    onEpubScheduleModeClick: () -> Unit
 ): List<ModernActionPopup.Action> {
     val actions = mutableListOf<ModernActionPopup.Action>()
+    if (isLocalTxt) {
+        actions.add(ModernActionPopup.Action(title = "TXT目录规则", invoke = onTocRegexClick))
+    }
+    if (isLocalBook) {
+        actions.add(ModernActionPopup.Action(title = "设置字符集", invoke = onSetCharsetClick))
+    }
     actions.add(ModernActionPopup.Action(title = "添加书签", invoke = onAddBookmarkClick))
+    actions.add(ModernActionPopup.Action(title = "高亮规则管理", invoke = onHighlightRuleClick))
     actions.add(ModernActionPopup.Action(title = "编辑内容", invoke = onEditContentClick))
     actions.add(ModernActionPopup.Action(title = "翻页动画", invoke = onPageAnimClick))
     actions.add(ModernActionPopup.Action(title = "菜单编辑", invoke = onMenuEditClick))
@@ -857,6 +888,23 @@ private fun buildOverflowActions(
         persistent = true,
         invoke = onReSegmentClick
     ))
+    if (isEpub) {
+        actions.add(ModernActionPopup.Action(
+            title = "删除注音标签",
+            checked = io.legado.app.model.ReadBook.book?.getDelTag(io.legado.app.data.entities.Book.rubyTag) == true,
+            persistent = true,
+            invoke = onDelRubyTagClick
+        ))
+        actions.add(ModernActionPopup.Action(
+            title = "删除H标签",
+            checked = io.legado.app.model.ReadBook.book?.getDelTag(io.legado.app.data.entities.Book.hTag) == true,
+            persistent = true,
+            invoke = onDelHTagClick
+        ))
+    }
+    if (isEpubCoreMode) {
+        actions.add(ModernActionPopup.Action(title = "核心调度模式", invoke = onEpubScheduleModeClick))
+    }
     actions.add(ModernActionPopup.Action(title = "图片样式", invoke = onImageStyleClick))
     actions.add(ModernActionPopup.Action(title = "更新目录", invoke = onUpdateTocClick))
     if (!isEpub) {
