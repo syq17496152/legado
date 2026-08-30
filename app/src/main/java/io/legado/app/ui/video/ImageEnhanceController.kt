@@ -116,7 +116,6 @@ object ImageEnhanceController {
             val fingerprint = enhanceFingerprint()
             val sameAsLast = fingerprint == lastFingerprint &&
                 cachedPaint != null && lastAppliedView?.get() === tv
-            android.util.Log.d("EnhanceGov", "apply fp=$fingerprint shortCircuit=$sameAsLast")
             if (!sameAsLast) {
                 val paint = cachedPaint ?: Paint().also { cachedPaint = it }
                 paint.colorFilter = ColorMatrixColorFilter(buildColorMatrix())

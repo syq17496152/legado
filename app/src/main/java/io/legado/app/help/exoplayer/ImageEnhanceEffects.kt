@@ -44,7 +44,6 @@ object ImageEnhanceEffects {
      */
     fun buildEffects(sharpenLevel: Int, denoiseLevel: Int): List<Effect> {
         if (!VideoPlay.enhanceEnabled) return emptyList()
-        android.util.Log.d("EnhanceGov", "buildEffects on: sharpen=$sharpenLevel denoise=$denoiseLevel")
         val effects = mutableListOf<Effect>()
         val sigma = denoiseSigma(denoiseLevel)
         if (sigma > 0f) {

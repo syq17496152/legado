@@ -126,7 +126,6 @@ class ExoVideoManager: GSYVideoBaseManager() {
                 VideoPlay.enhanceSharpenLevel,
                 VideoPlay.enhanceDenoiseLevel
             )
-            android.util.Log.d("EnhanceGov", "applyImageEnhanceEffects size=${effects.size}")
             player.setVideoEffects(effects)
         } catch (t: Throwable) {
             // 效果链注入失败不影响播放（media3 管线异常兜底）
