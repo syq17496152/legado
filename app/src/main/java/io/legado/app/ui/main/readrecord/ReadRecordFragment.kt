@@ -64,6 +64,7 @@ import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.registerForActivityResult
+import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -236,14 +237,16 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             }
         }
         binding.ivRankMore.setOnClickListener {
-            ReadRecordRankDialog.show(requireContext(), currentRankItems, ::formatDuring) { item ->
-                viewLifecycleOwner.lifecycleScope.launch {
-                    withContext(IO) {
-                        appDb.readRecordDao.deleteByName(item.displayName)
+            showDialogFragment(
+                ReadRecordRankDialog.create(currentRankItems, ::formatDuring) { item ->
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        withContext(IO) {
+                            appDb.readRecordDao.deleteByName(item.displayName)
+                        }
+                        loadData(force = true)
                     }
-                    loadData(force = true)
                 }
-            }
+            )
         }
         binding.ivGoalEdit.setOnClickListener {
             requireContext().showReadRecordGoalDialog(
@@ -512,12 +515,14 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
     }
 
     private fun showComponentConfigDialog() {
-        ReadRecordComponentConfigDialog.show(requireContext(), componentItems) { items ->
-            componentItems = items.toMutableList()
-            ReadRecordComponents.save(componentItems)
-            applyComponentLayout()
-            applyPageChrome()
-        }
+        showDialogFragment(
+            ReadRecordComponentConfigDialog.create(componentItems) { items ->
+                componentItems = items.toMutableList()
+                ReadRecordComponents.save(componentItems)
+                applyComponentLayout()
+                applyPageChrome()
+            }
+        )
     }
 
     private fun applyComponentLayout() {

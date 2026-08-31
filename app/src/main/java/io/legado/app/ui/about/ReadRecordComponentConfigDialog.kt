@@ -1,8 +1,9 @@
 package io.legado.app.ui.about
 
-import android.content.Context
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
-import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,14 +11,15 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -30,72 +32,95 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.legado.app.R
+import io.legado.app.lib.theme.titleTypeface
+import io.legado.app.lib.theme.uiTypeface
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.theme.bodySecondary
 import io.legado.app.ui.widget.compose.AppDialogFrame
-import io.legado.app.ui.widget.compose.LegadoComposeTheme
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
-import io.legado.app.lib.theme.titleTypeface
-import io.legado.app.lib.theme.uiTypeface
-import io.legado.app.utils.applyModernWindowStyle
 import io.legado.app.utils.dpToPx
-import io.legado.app.utils.setLayout
 import kotlin.math.min
-import androidx.compose.material3.MaterialTheme
-import io.legado.app.ui.theme.bodySecondary
 
-object ReadRecordComponentConfigDialog {
+/**
+ * 阅读记录组件配置（deep-fix D2 批 B：AlertDialog+ComposeView 换壳 ComposeDialogFragment，
+ * 组件列表走 args 序列化，保存回调运行时持有，进程重建后自动关闭）
+ */
+class ReadRecordComponentConfigDialog : ComposeDialogFragment() {
 
-    fun show(
-        context: Context,
-        initialItems: List<ReadRecordComponentItem>,
-        onSaved: (List<ReadRecordComponentItem>) -> Unit
-    ) {
-        lateinit var dialog: AlertDialog
-        val fixedListHeight = min(
-            420.dpToPx(),
-            (context.resources.displayMetrics.heightPixels * 0.48f).toInt()
-        ).coerceAtLeast(260.dpToPx())
-        val composeView = ComposeView(context).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                (context.resources.displayMetrics.widthPixels * 0.9f).toInt(),
-                ViewGroup.LayoutParams.WRAP_CONTENT
+    override val dialogSize: AppDialogSize = AppDialogSize.Confirm
+
+    private var onSaved: ((List<ReadRecordComponentItem>) -> Unit)? = null
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        val args = arguments ?: Bundle()
+        val typeNames = args.getStringArrayList(ARG_TYPES).orEmpty()
+        val enabledFlags = args.getBooleanArray(ARG_ENABLED)
+            ?: BooleanArray(typeNames.size) { true }
+        val initialItems = typeNames.mapIndexed { index, name ->
+            ReadRecordComponentItem(
+                type = ReadRecordComponentType.fromKey(name) ?: ReadRecordComponentType.OVERVIEW,
+                enabled = enabledFlags.getOrElse(index) { true }
             )
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+        }
+        val metrics = resources.displayMetrics
+        val listHeightDp = min(
+            420.dpToPx(),
+            (metrics.heightPixels * 0.48f).toInt()
+        ).coerceAtLeast(260.dpToPx()) / metrics.density
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                LegadoComposeTheme {
+                LaunchedEffect(onSaved == null) {
+                    if (onSaved == null) {
+                        dismissAllowingStateLoss()
+                    }
+                }
+                LegadoTheme {
                     ReadRecordComponentConfigContent(
                         initialItems = initialItems,
-                        listHeightDp = fixedListHeight / context.resources.displayMetrics.density,
-                        onCancel = { dialog.dismiss() },
+                        listHeightDp = listHeightDp,
+                        onCancel = { dismissAllowingStateLoss() },
                         onSave = { items ->
                             val normalized = items.map { it.copy() }.toMutableList()
                             if (normalized.none { it.enabled }) {
                                 normalized.firstOrNull()?.enabled = true
                             }
-                            onSaved(normalized)
-                            dialog.dismiss()
+                            onSaved?.invoke(normalized)
+                            dismissAllowingStateLoss()
                         }
                     )
                 }
             }
         }
-        dialog = AlertDialog.Builder(context)
-            .setView(composeView)
-            .create()
-        dialog.setOnShowListener {
-            dialog.setLayout(0.9f, 0.68f)
+    }
+
+    companion object {
+        fun create(
+            initialItems: List<ReadRecordComponentItem>,
+            onSaved: (List<ReadRecordComponentItem>) -> Unit
+        ): ReadRecordComponentConfigDialog {
+            return ReadRecordComponentConfigDialog().apply {
+                arguments = Bundle().apply {
+                    putStringArrayList(ARG_TYPES, ArrayList(initialItems.map { it.type.name }))
+                    putBooleanArray(ARG_ENABLED, BooleanArray(initialItems.size) { initialItems[it].enabled })
+                }
+                this.onSaved = onSaved
+            }
         }
-        dialog.applyModernWindowStyle()
-        // AppDialogFrame 自带圆角面板背景，清掉 AlertDialog 自身窗口背景，避免双层背景。
-        dialog.window?.setBackgroundDrawable(
-            android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
-        )
-        dialog.show()
+
+        private const val ARG_TYPES = "typeNames"
+        private const val ARG_ENABLED = "enabledFlags"
     }
 }
 

@@ -2,7 +2,9 @@ package io.legado.app.ui.about
 
 import android.content.Context
 import android.graphics.drawable.GradientDrawable
+import android.os.Bundle
 import android.text.InputType
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -13,9 +15,12 @@ import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.data.entities.Book
@@ -27,14 +32,19 @@ import io.legado.app.lib.theme.applyUiInputStyle
 import io.legado.app.lib.theme.applyUiSectionTitleStyle
 import io.legado.app.lib.theme.applyUiSubtleButtonStyle
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.themeMutedColorOrDefault
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.BookCover
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.ui.book.info.BookInfoNavigator
 import io.legado.app.ui.book.search.SearchActivity
-import io.legado.app.ui.widget.compose.LegadoComposeTheme
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.ui.widget.image.CoverImageView
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyTint
@@ -132,42 +142,52 @@ fun ImageView.loadReadRecordAvatar(path: String?) {
         .into(this)
 }
 
-object ReadRecordRankDialog {
-    fun show(
-        context: Context,
-        items: List<ReadRecordRankItem>,
-        formatDuring: (Long) -> String,
-        onDeleteRecord: ((ReadRecordRankItem) -> Unit)? = null
-    ) {
-        val container = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(20.dpToPx(), 20.dpToPx(), 20.dpToPx(), 8.dpToPx())
-            addView(
-                androidx.appcompat.widget.AppCompatTextView(context).apply {
-                    text = context.getString(R.string.read_record_read_rank)
-                    applyUiSectionTitleStyle(context)
-                    textSize = 18f
-                },
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-            )
-            addView(
-                ComposeView(context).apply {
-                    setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-                    setContent {
-                        LegadoComposeTheme {
+/**
+ * 阅读记录排行弹框（deep-fix D2 批 B：AlertDialog+ComposeView 换壳 ComposeDialogFrame 体系。
+ * 列表数据与回调为运行时持有：进程重建/配置变更后自动关闭，与原 AlertDialog 行为一致）
+ */
+class ReadRecordRankDialog : ComposeDialogFragment() {
+
+    override val dialogSize: AppDialogSize = AppDialogSize.Confirm
+
+    private var rankItems: List<ReadRecordRankItem> = emptyList()
+    private var formatDuring: ((Long) -> String)? = null
+    private var onDeleteRecord: ((ReadRecordRankItem) -> Unit)? = null
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LaunchedEffect(rankItems.isEmpty() || formatDuring == null) {
+                    if (rankItems.isEmpty() || formatDuring == null) {
+                        dismissAllowingStateLoss()
+                    }
+                }
+                LegadoTheme {
+                    val context = LocalContext.current
+                    val palette = rememberAppDialogStyle().toMiuixPalette()
+                    AppDialogFrame(
+                        title = stringResource(R.string.read_record_read_rank),
+                        scrollContent = false,
+                        content = {
                             Box(modifier = Modifier.padding(horizontal = 4.dp)) {
                                 ReadRecordRankDialogContent(
-                                    items = items,
-                                    formatDuring = formatDuring,
-                                    onClick = {
-                                        context.openReadRecordBook(it.book, it.displayName)
+                                    items = rankItems,
+                                    formatDuring = { value ->
+                                        formatDuring?.invoke(value).orEmpty()
+                                    },
+                                    onClick = { item ->
+                                        context.openReadRecordBook(item.book, item.displayName)
                                     },
                                     onLongClick = { item, removeItem ->
                                         context.showReadRecordBookActionDialog(
-                                            title = item.book?.name ?: item.snapshot?.name ?: item.displayName,
+                                            title = item.book?.name
+                                                ?: item.snapshot?.name
+                                                ?: item.displayName,
                                             book = item.book,
                                             fallbackName = item.displayName
                                         ) {
@@ -178,23 +198,32 @@ object ReadRecordRankDialog {
                                     modifier = Modifier.height(420.dp)
                                 )
                             }
+                        },
+                        actions = {
+                            LegadoMiuixActionButton(
+                                text = stringResource(android.R.string.ok),
+                                palette = palette,
+                                onClick = { dismissAllowingStateLoss() }
+                            )
                         }
-                    }
-                },
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    420.dpToPx()
-                ).apply {
-                    topMargin = 14.dpToPx()
+                    )
                 }
-            )
+            }
         }
-        AlertDialog.Builder(context)
-            .setView(container)
-            .setPositiveButton(android.R.string.ok, null)
-            .create()
-            .applyTint()
-            .show()
+    }
+
+    companion object {
+        fun create(
+            items: List<ReadRecordRankItem>,
+            formatDuring: (Long) -> String,
+            onDeleteRecord: ((ReadRecordRankItem) -> Unit)? = null
+        ): ReadRecordRankDialog {
+            return ReadRecordRankDialog().apply {
+                this.rankItems = items.toList()
+                this.formatDuring = formatDuring
+                this.onDeleteRecord = onDeleteRecord
+            }
+        }
     }
 }
 
