@@ -385,6 +385,16 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         updateSourceNameWidthListener?.let { binding.topBar.removeOnLayoutChangeListener(it) }
         updateSourceNameWidthListener = null
         destroyModernRssChildren()
+        // video-sniff-403-and-rss-classic-fix R2: 回经典模式必须显式恢复经典布局基线。
+        // 根因：updateModernRssTopBarOverlay 在 modern 模式向 recyclerView 写入 topPadding=topBar.height
+        // （含展开标签条可达数百 px），切回经典时无重置路径 → 头部标签与列表间出现大块空白，
+        // 杀进程重启后 View 树重建 padding 归零才恢复（真机实锤 2026-08-31）。
+        // XML 基线：recycler_view/folder_compose_view 均无 padding、clipToPadding 默认 false。
+        binding.recyclerView.clipToPadding = false
+        binding.recyclerView.setPadding(0, 0, 0, 0)
+        // 防御性重置：folderComposeView 当前未被 modern 写 padding，此处归零防同类污染链路
+        binding.folderComposeView.setPadding(0, 0, 0, 0)
+        binding.folderComposeView.clipToPadding = false
         // 双保险隐藏 modern 容器（rss_fragment_container/rss_web_container 为全屏 z 序最高，
         // applyModernRssMode 置 visible 后 classic 不隐藏会盖住经典列表——真机实锤 2026-08-28）
         binding.rssFragmentContainer.isGone = true

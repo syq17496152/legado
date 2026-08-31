@@ -26,33 +26,9 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- P0-1.6: WebView 降级播放器（ExoPlayer 失败时使用，复用 skill V2 hls-video-player 模板） -->
-    <io.legado.app.ui.video.WebViewVideoPlayer
-        android:id="@+id/webViewPlayer"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
-
-    <!-- P0-1.6: 切换回内置播放器按钮（WebView 模式下显示，独立于 controlsLayer） -->
-    <ImageButton
-        android:id="@+id/btn_switch_back"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginEnd="16dp"
-        android:background="@drawable/bg_overlay_button"
-        android:contentDescription="@string/switch_to_exo_player"
-        android:src="@drawable/ic_swap_horiz"
-        android:scaleType="centerInside"
-        android:padding="12dp"
-        android:tint="#FFFFFF"
-        android:visibility="gone"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+    <!-- video-sniff-403-and-rss-classic-fix Phase 2 (3.2)：WebView 降级播放器及切换按钮已删除
+         （WebViewVideoPlayer 为历史遗留摆设：Chromium forbidden header 规范静默忽略 Referer 注入，
+         连防盗链核心头都设不上；失败承接改由"降级链自愈 + 重试 + 系统浏览器"三通道承担） -->
 
     <!-- 悬浮控件层（clickable=false，不拦截触摸事件） -->
     <androidx.constraintlayout.widget.ConstraintLayout

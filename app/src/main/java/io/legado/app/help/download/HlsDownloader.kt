@@ -9,6 +9,7 @@ import android.media.MediaMuxer
 import android.util.Log
 import io.legado.app.constant.AppLog
 import io.legado.app.help.http.videoStreamClient
+import io.legado.app.help.video.engine.M3u8Parser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
@@ -18,7 +19,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.Request
 import java.io.File
 import java.io.IOException
-import java.net.URI
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -293,30 +293,24 @@ object HlsDownloader {
      *
      * 仅支持标准 AES-128（METHOD=AES-128，key 为明文 URL）；显式 METHOD=NONE 视为明文；
      * 其余（SAMPLE-AES/DRM 等）判定 Unsupported 并记日志——与内置播放器（ExoPlayer）能力对齐：能播的分片即能下。
+     * 属性文本解析已下沉 M3u8Parser（video-sniff-403-and-rss-classic-fix 4.4/AD-07），此处保留支持性判定与 key 拉取 IO。
      */
     private suspend fun parseCrypto(
         mediaUrl: String,
         playlist: String,
         headers: Map<String, String>
     ): Crypto {
-        val keyLine = playlist.lineSequence().firstOrNull { it.trim().startsWith("#EXT-X-KEY:") }
-            ?: return Crypto.None
-        // METHOD 值兼容带引号形式：METHOD="AES-128" 也是合法清单写法
-        val method = Regex("""METHOD\s*=\s*"?([^",\s]+)""").find(keyLine)?.groupValues?.get(1)
-            ?.uppercase()?.removeSurrounding("\"")
+        val keyInfo = M3u8Parser.parseKeyInfo(playlist) ?: return Crypto.None
+        val method = keyInfo.method
         if (method == null || method == "NONE") return Crypto.None
         if (method != "AES-128") {
             // SAMPLE-AES/DRM 等：播放器内部可解但不支持下载解密，记录方法名便于真机定位
             AppLog.put("Hls 加密方法不支持: METHOD=$method")
             return Crypto.Unsupported
         }
-        val uri = Regex("""URI\s*=\s*"([^"]+)"""").find(keyLine)?.groupValues?.get(1)
-            ?: return Crypto.Unsupported
+        val uri = keyInfo.uri ?: return Crypto.Unsupported
         val keyUrl = resolve(mediaUrl, uri)
-        val ivStr = Regex("""IV\s*=\s*0x([0-9a-fA-F]{32})""").find(keyLine)?.groupValues?.get(1)
-        val iv = ivStr?.let { hexStr ->
-            hexStr.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-        }
+        val iv = keyInfo.iv
         // key 请求透传源站 headers（Referer/UA 等可能校验），避免 key 拉取被拒
         val keyBytes = withContext(Dispatchers.IO) {
             val req = Request.Builder().url(keyUrl)
@@ -330,45 +324,15 @@ object HlsDownloader {
         }
         if (keyBytes.size != 16) throw IOException("AES-128 key 长度异常: ${keyBytes.size}")
         // B4：解析媒体序号起点（缺省 0），供缺省 IV = MEDIA-SEQUENCE + 分片索引
-        val mediaSequenceBase = Regex("""#EXT-X-MEDIA-SEQUENCE:\s*(\d+)""")
-            .find(playlist)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+        val mediaSequenceBase = M3u8Parser.parseMediaSequence(playlist)
         AppLog.put(
             "Hls 加密流: METHOD=AES-128, IV=${if (iv != null) "显式" else "媒体序号($mediaSequenceBase)"}"
         )
         return Crypto.Aes128(keyBytes, iv, mediaSequenceBase)
     }
 
-    private fun pickBestVariant(playlist: String): String? {
-        val uriRegex = """^[^#].*""".toRegex()
-        val lines = playlist.lineSequence().toList()
-        var bestUri: String? = null
-        var bestBandwidth = -1L
-        var i = 0
-        while (i < lines.size) {
-            val line = lines[i].trim()
-            if (line.startsWith("#EXT-X-STREAM-INF")) {
-                // B10：剥离 AVERAGE-BANDWIDTH 干扰（否则 find() 会命中其子串取错码流）
-                val bw = Regex("""(?<![A-Z-])BANDWIDTH=(\d+)""")
-                    .find(line.replace("AVERAGE-BANDWIDTH", "X-BW"))?.groupValues?.get(1)
-                    ?.toLongOrNull() ?: 0L
-                // 下一行是非 # 开头的码流 URI
-                var j = i + 1
-                var candidate: String? = null
-                while (j < lines.size && lines[j].trim().startsWith("#")) j++
-                if (j < lines.size) candidate = lines[j].trim()
-                uriRegex.matchEntire(candidate ?: "")?.let {
-                    if (bw > bestBandwidth || bestUri == null) {
-                        bestBandwidth = bw
-                        bestUri = candidate
-                    }
-                }
-                i = j
-            } else {
-                i++
-            }
-        }
-        return bestUri
-    }
+    /** 多码率选优：委托 M3u8Parser（video-sniff-403-and-rss-classic-fix 4.4/AD-07 等价下沉） */
+    private fun pickBestVariant(playlist: String): String? = M3u8Parser.pickBestVariant(playlist)
 
     /**
      * 解析媒体清单中的分片（#EXTINF 后跟的 URI）并累加 EXTINF 声明的总时长（毫秒）。
@@ -376,41 +340,12 @@ object HlsDownloader {
      * 总时长用于 ts→mp4 重封装后的完整性校验（B 方案）：MediaExtractor 单轨模型在
      * 编码参数切换点可能提前截断，mp4 实际时长会显著小于清单声明的总时长，据此回退保留 ts。
      */
-    private fun parseSegments(playlist: String): Pair<List<String>, Long> {
-        val result = mutableListOf<String>()
-        var totalMs = 0L
-        val lines = playlist.lineSequence().toList()
-        var i = 0
-        while (i < lines.size) {
-            val line = lines[i].trim()
-            if (line.startsWith("#EXTINF")) {
-                // #EXTINF:10.000, 或 #EXTINF:10,title，取冒号后逗号前的秒数
-                Regex("""#EXTINF:\s*([0-9.]+)""").find(line)?.groupValues?.get(1)
-                    ?.toDoubleOrNull()?.let { totalMs += (it * 1000).toLong() }
-                var j = i + 1
-                while (j < lines.size && lines[j].trim().startsWith("#")) j++
-                if (j < lines.size) {
-                    val uri = lines[j].trim()
-                    if (uri.isNotEmpty() && !uri.startsWith("#")) result.add(uri)
-                }
-                i = j
-            } else {
-                i++
-            }
-        }
-        return result to totalMs
-    }
+    private fun parseSegments(playlist: String): Pair<List<String>, Long> =
+        M3u8Parser.parseSegments(playlist)
 
-    private fun resolve(base: String, path: String): String {
-        if (path.startsWith("http://") || path.startsWith("https://")) return path
-        return runCatching { URI(base).resolve(path).toString() }
-            .getOrDefault(trimToBase(base) + path)
-    }
-
-    private fun trimToBase(url: String): String {
-        val idx = url.lastIndexOf('/')
-        return if (idx >= 0) url.substring(0, idx + 1) else url
-    }
+    /** 相对地址 resolve：委托 M3u8Parser（video-sniff-403-and-rss-classic-fix 4.4/AD-07 等价下沉） */
+    private fun resolve(base: String, path: String): String =
+        M3u8Parser.resolveRelative(base, path)
 
     /**
      * ts → mp4 重封装（仅 remux，不转码）

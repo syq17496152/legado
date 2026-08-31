@@ -334,6 +334,8 @@ class VideoPlayer: StandardGSYVideoPlayer {
         //（K2 实证：GSY 播放状态变化会重置渲染视图，必须在此重新应用，切集/重播均会触发本回调）
         post { ImageEnhanceController.apply(this) }
         // video-player-image-enhance B2.3: 锐化/降噪效果链注入（每次播放管线构建时生效，主线程回调安全）
+        // 语义：仅增强开启（效果链非空）时才真正注入；增强关闭时为 no-op，
+        // 绝不调用 setVideoEffects(空列表)——那会在 media3 1.10.1 激活 GL VideoGraph 管线（7001 规避）
         post { ImageEnhanceController.applyEffectsToPlayer() }
     }
     private fun onPrepareDanmaku(gsyVideoPlayer: VideoPlayer) {

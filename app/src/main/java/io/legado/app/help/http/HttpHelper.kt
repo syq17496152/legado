@@ -95,11 +95,11 @@ val okHttpClient: OkHttpClient by lazy {
         .retryOnConnectionFailure(true)
         .hostnameVerifier(SSLHelper.unsafeHostnameVerifier)
         .connectionSpecs(specs)
-        // 连接池调优：50 个空闲连接（默认 5），5 分钟保活
+        // 连接池调优：128 个空闲连接（R3：线程数上限 64→256，并发下载连接需求同步扩容），5 分钟保活
         // 提升多书源并发访问时的连接复用率，减少 TCP/TLS 握手开销
         // 派生客户端（okHttpClientManga / proxyClient）通过 newBuilder() 继承此连接池
-        // 已知上限：50 个连接约 2.5MB 内存（每连接 ~50KB） | 升级路径：如内存紧张可降至 20
-        .connectionPool(okhttp3.ConnectionPool(50, 5, TimeUnit.MINUTES))
+        // 已知上限：128 个连接约 6.4MB 内存（每连接 ~50KB） | 升级路径：如内存紧张可降至 64
+        .connectionPool(okhttp3.ConnectionPool(128, 5, TimeUnit.MINUTES))
         // HTTP 响应缓存：仅缓存 GET 请求且响应含 Cache-Control/Expires 的资源
         // 派生客户端（okHttpClientManga / proxyClient）通过 newBuilder() 继承此缓存
         .cache(httpCache)

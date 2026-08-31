@@ -67,6 +67,7 @@ class M3u8PreCheckDataSource(
             when (rangeResult) {
                 is PreCheckResult.Success -> AppLog.putDebug("M3u8PreCheck: range-get success, finalUrlPath=${sanitizeUrlPath(rangeResult.finalUrl)}")
                 is PreCheckResult.Fail -> AppLog.putDebug("M3u8PreCheck: range-get failed, reason=${rangeResult.reason}")
+                is PreCheckResult.Rejected -> AppLog.putDebug("M3u8PreCheck: range-get rejected, code=${rangeResult.statusCode}")
             }
             rangeResult
         } catch (e: Exception) {
@@ -128,16 +129,10 @@ class M3u8PreCheckDataSource(
                         }
                     }
                     403 -> {
-                        val retryHeaders = headers.toMutableMap().apply {
-                            if (!keys.any { it.equals("User-Agent", true) }) {
-                                put("User-Agent", ExoPlayerHelper.BROWSER_UA)
-                            }
-                        }
-                        return if (retryHeaders != headers) {
-                            M3u8PreCheckDataSource(retryHeaders).headPreCheck(url, redirectCount)
-                        } else {
-                            verifyExtM3UHeader(url)
-                        }
+                        // video-sniff-403-and-rss-classic-fix 2.5/R-P1-4（AD-03 auth-retry）：
+                        // 403 = 确定性防盗链拒绝。同一头重试无意义，转交 range-get 二次验证；
+                        // range-get 仍 403 时由其返回 Rejected（而非 Fail），上层触发重嗅而非静默回退
+                        return verifyExtM3UHeader(url)
                     }
                     405 -> {
                         return verifyExtM3UHeader(url)
@@ -179,7 +174,13 @@ class M3u8PreCheckDataSource(
             client.newCall(request).execute().use { response ->
                 val code = response.code
                 if (code !in 200..299 && code != 206) {
-                    return PreCheckResult.Fail("Range-get failed: code=$code")
+                    // video-sniff-403-and-rss-classic-fix 2.5/R-P1-4：403/410 等确定性拒绝 → Rejected（区别于瞬时 Fail）
+                    return if (code == 403 || code == 410 || code == 451) {
+                        AppLog.putDebug("M3u8PreCheck: range-get rejected, code=$code")
+                        PreCheckResult.Rejected(code)
+                    } else {
+                        PreCheckResult.Fail("Range-get failed: code=$code")
+                    }
                 }
                 val body = response.body ?: return PreCheckResult.Fail("Empty response body")
                 val inputStream = body.byteStream()
@@ -234,10 +235,17 @@ class M3u8PreCheckDataSource(
         data class Success(val finalUrl: String) : PreCheckResult()
 
         /**
-         * 预检失败
+         * 预检失败（瞬时原因：5xx/超时/IO/格式不符，可回退原 URL 让 ExoPlayer 自行处理）
          * @param reason 失败原因（技术描述，不含敏感信息）
          */
         data class Fail(val reason: String) : PreCheckResult()
+
+        /**
+         * video-sniff-403-and-rss-classic-fix 2.5/R-P1-4（AD-03）：源站确定性拒绝
+         * 403/410 等 4xx 防盗链拒绝——继续使用原 URL 直连必然复现 403，上层应触发重嗅而非静默回退
+         * @param statusCode 源站拒绝状态码（403/410/451 等）
+         */
+        data class Rejected(val statusCode: Int) : PreCheckResult()
     }
 
     companion object {

@@ -56,7 +56,9 @@ object WebViewPool {
     // P1-C 修复：主线程 Handler，用于在非 UI 线程切回主线程销毁 WebView
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    private val globalMaxCached = max(AppConfig.updateCacheThreadCount / 10, 5)
+    // R3 钳制：线程数上限放开 256 后，比例派生（n/10）会使缓存 WebView 达 25 个（每实例 20~50MB），
+    // 绝对上限 15 防 OOM（video-sniff-403-and-rss-classic-fix AD-10）
+    private val globalMaxCached = max(AppConfig.updateCacheThreadCount / 10, 5).coerceAtMost(15)
     private const val IDLE_TIME_OUT: Long = 5 * 60 * 1000 // 闲置5分钟后销毁
     private const val IDLE_TIME_OUT_LAST: Long = 30 * 60 * 1000 // 最后一个闲置30分钟后销毁
     private const val SCOPED_WEB_VIEW_MAX_NUM = 2

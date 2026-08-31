@@ -1,6 +1,7 @@
 package io.legado.app.help.download
 
 import io.legado.app.help.http.videoStreamClient
+import io.legado.app.help.video.engine.HeaderResolver
 import io.legado.app.model.VideoPlay
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -62,9 +63,11 @@ object ChunkDownloader {
         val remain: Long get() = end - start + 1 - downloaded
     }
 
-    /** 解析下载请求头：优先使用播放时的防盗链头，否则回退默认 UA */
-    fun resolveHeaders(): Map<String, String> =
-        VideoPlay.currentPlayHeaders ?: mapOf("User-Agent" to CHROME_UA)
+    /** 解析下载请求头：优先任务级 headersJson 还原完整头，其次播放时防盗链头，最后回退默认 UA（旧任务 headersJson 缺失→降级现状行为，零破坏） */
+    fun resolveHeaders(headersJson: String? = null): Map<String, String> =
+        HeaderResolver.fromJsonHeaders(headersJson).ifEmpty {
+            VideoPlay.currentPlayHeaders ?: mapOf("User-Agent" to CHROME_UA)
+        }
 
     /**
      * 直链下载入口：probe 后按门禁选择动态分段或单流模式

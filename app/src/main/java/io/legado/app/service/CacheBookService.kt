@@ -42,7 +42,8 @@ class CacheBookService : BaseService() {
             private set
     }
 
-    private val threadCount = AppConfig.updateCacheThreadCount
+    // R3 钳制：平台线程池每线程预留 ~1MB 栈，256 配置钳到 128 防线程栈膨胀（AD-10）
+    private val threadCount = minOf(AppConfig.updateCacheThreadCount, 128)
     private var cachePool =
         Executors.newFixedThreadPool(threadCount).asCoroutineDispatcher()
     private var downloadJob: Job? = null

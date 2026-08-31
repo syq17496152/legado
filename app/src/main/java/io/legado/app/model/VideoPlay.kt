@@ -30,8 +30,9 @@ import io.legado.app.data.entities.RssRoute
 import io.legado.app.data.entities.RssSource
 import io.legado.app.help.exoplayer.FirstFramePreloader
 import io.legado.app.help.exoplayer.VideoPreloader
+import io.legado.app.help.exoplayer.ExoPlayerHelper
+import io.legado.app.help.exoplayer.VideoPrefiller
 import io.legado.app.data.entities.RssStar
-import io.legado.app.exception.ContentEmptyException
 import io.legado.app.help.CacheManager
 import io.legado.app.help.book.getDanmaku
 import io.legado.app.help.book.update
@@ -41,6 +42,9 @@ import io.legado.app.help.gsyVideo.ExoVideoManager.Companion.FULLSCREEN_ID
 import io.legado.app.help.gsyVideo.FloatingPlayer
 import io.legado.app.help.gsyVideo.VideoPlayer
 import io.legado.app.help.video.VideoUrlExtractor
+import io.legado.app.help.video.engine.HeaderResolver
+import io.legado.app.help.video.engine.SniffEngine
+import io.legado.app.help.video.engine.SniffRequest
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.rss.Rss
 import io.legado.app.model.webBook.WebBook
@@ -59,6 +63,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
+import splitties.systemservices.connectivityManager
 import org.json.JSONArray
 import io.legado.app.data.PlayHistoryStore
 import java.io.File
@@ -217,12 +222,9 @@ object VideoPlay : CoroutineScope by MainScope(){
             videoPrefs.edit { putInt("videoPreloadBytesMB", value) }
         }
 
-    /** R3 预加载触发进度（百分比），默认 10（播放进度达10%时触发预加载下一集），用户可往下调 */
-    var videoPreloadTriggerProgress: Int
-        get() = videoPrefs.getInt("videoPreloadTriggerProgress", 10)
-        set(value) {
-            videoPrefs.edit { putInt("videoPreloadTriggerProgress", value) }
-        }
+    // video-sniff-403-and-rss-classic-fix 4.8a（AD-12）：videoPreloadTriggerProgress 已删除。
+    // 依据（引用面核查：全库仅本文件定义、零调用方、无 UI 暴露）：新语义预嗅探触发点=播放启动
+    // （playRssEpisode 链路）而非播放进度门控，进度参数无可复用语义，按设计"零引用才允许删除"清理。
 
     /** AD-01 首帧预加载开关（默认true，关闭时不预加载首帧，WEAK 档行为） */
     var playerFirstFramePreload: Boolean
@@ -292,19 +294,53 @@ object VideoPlay : CoroutineScope by MainScope(){
     private var switchArticleJob: Coroutine<*>? = null
     /** FR-4: playRssEpisode 异步任务引用（用于取消前一个异步任务，防止切集竞争） */
     private var playEpisodeJob: Coroutine<*>? = null
+    // video-sniff-403-and-rss-classic-fix 2.7/R-P1-5（AD-04）：切换令牌守卫。
+    // 根因：startPlay 内层嗅探协程是 loadScope 顶层并列子协程，switchArticleJob?.cancel() 不覆盖，
+    // 连续上滑时旧嗅探迟到回调覆盖当前播放会话（黑屏+嗅探失败主因之一）。
+    // 机制：每次 switchToArticle/playRssEpisode 递增 token，异步回调执行前校验，过期丢弃。
+    private val switchTokenCounter = java.util.concurrent.atomic.AtomicLong(0)
+    @Volatile
+    var currentSwitchToken: Long = 0
+        private set
     /** FR-6: switchToArticle 状态标志（异步加载期间为 true，完成后清除；仅用于状态跟踪，不阻止入口） */
     @Volatile
     private var isSwitchingArticle = false
     var videoUrl: String? = null //播放链接
+    /**
+     * video-sniff-403-and-rss-classic-fix 4.8b（Z9）：嗅探前原始 URL（播放历史键）。
+     * 记录原始链接（episode.url/文章链接/书源正文链接）而非嗅探后地址——
+     * 源侧 token 轮换后原始链接仍可重嗅，嗅探后地址会永久失配导致进度记忆失效。
+     * 保存/恢复播放历史统一经 [historyKeyUrl] 取键（旧字段兜底，零破坏迁移）。
+     */
+    @Volatile
+    var originalPlayUrl: String? = null
+    /** 播放历史统一查询键：优先嗅探前原始 URL，未捕获时兜底 videoUrl（兼容 singleUrl 等直连场景） */
+    val historyKeyUrl: String?
+        get() = originalPlayUrl ?: videoUrl
     var singleUrl = false
     var videoTitle: String? = null
-    /** P0: 当前播放使用的 Headers（供 WebView 降级复用，避免重新构造 AnalyzeUrl） */
+    /** P0: 当前播放使用的 Headers（供备份恢复/重试复用） */
     var currentPlayHeaders: Map<String, String>? = null
-    /** P0: 播放器类型（0=AUTO 自动选择, 1=EXO_PLAYER 强制内置播放器, 2=WEB_VIEW 强制 WebView） */
+    /**
+     * P0 + video-sniff-403-and-rss-classic-fix Phase 2 (3.6a/3.8a)：播放器类型
+     * 语义收敛：0=AUTO 自动选择, 1=EXO_PLAYER 强制内置播放器（原 2=WEB_VIEW 已随 WebView 播放器删除）
+     * - getter 内一次性持久化迁移（F-06/R-P2-2）：读旧值 2 → 写回 1 并返回 1（含备份/导入路径，
+     *   任何来源写入的 2 在首次读取时即被迁移，消除废弃值存储残留）
+     * - setter 钳制 coerceIn(0,1)（R-P2-2）
+     */
     var playerType: Int
-        get() = videoPrefs.getInt("playerType", 0)
+        get() {
+            val stored = videoPrefs.getInt("playerType", 0)
+            if (stored == 2) {
+                // 存量 playerType=2（WEB_VIEW 已废弃）一次性迁移：读 2 写 1
+                AppLog.put("playerType migration: legacy 2 (WEB_VIEW removed) -> 1 (EXO_PLAYER)")
+                videoPrefs.edit { putInt("playerType", 1) }
+                return 1
+            }
+            return stored
+        }
         set(value) {
-            videoPrefs.edit { putInt("playerType", value) }
+            videoPrefs.edit { putInt("playerType", value.coerceIn(0, 1)) }
         }
     var inBookshelf = true
     var isResumeFromFloat = false  // P0-1: 从悬浮窗恢复标志，Fragment.activatePlayer 据此决定 clonePlayState 还是 startPlay
@@ -387,7 +423,11 @@ object VideoPlay : CoroutineScope by MainScope(){
         // P0: singleUrl 模式（直接传 videoUrl 播放）不需要 source，跳过 source == null 检查
         // 根因：adb am start 传 videoUrl 直接播放 m3u8 时，source 为 null，
         //   原 `if (source == null) return` 导致 singleUrl 分支永远不执行，播放器无法启动
-        AppLog.put("VideoPlay.startPlay called: singleUrl=$singleUrl, source=${source?.getKey()?.take(2)}, videoUrl=${videoUrl?.take(2)}")
+        // 2.7/R-P1-5 补强（校验报告 D-5）：捕获入口 token，全部异步出口校验——
+        // startPlay 内层 async 挂 loadScope 不受 switchArticleJob/playEpisodeJob cancel 覆盖，
+        // 迟到回调 setUp 前必须校验 token，防止连续切换时旧回调覆盖当前播放会话
+        val startPlayToken = currentSwitchToken
+        AppLog.put("VideoPlay.startPlay called: singleUrl=$singleUrl, source=${source?.getKey()?.take(2)}, videoUrl=${videoUrl?.take(2)}, token=$startPlayToken")
         if (source == null && !singleUrl) {
             AppLog.put("VideoPlay.startPlay early return: source=null and !singleUrl")
             return
@@ -397,6 +437,8 @@ object VideoPlay : CoroutineScope by MainScope(){
         val player = player.getCurrentPlayer()
         if (singleUrl) {
             val mUrl = videoUrl ?: return
+            // 4.8b（Z9）：singleUrl 直链即原始 URL，同步历史键
+            originalPlayUrl = mUrl
             AppLog.put("VideoPlay.startPlay entering singleUrl branch, mUrl=${mUrl.take(2)}")
             Coroutine.async(loadScope, IO) {
                 CacheManager.getLong(VIDEO_POS_NAME + mUrl)?.let {
@@ -411,6 +453,10 @@ object VideoPlay : CoroutineScope by MainScope(){
                 )
                 AppLog.put("VideoPlay.startPlay AnalyzeUrl ok, headerMap.size=${analyzeUrl.headerMap.size}, url=${analyzeUrl.url.take(2)}")
                 withContext(Main) {
+                    if (currentSwitchToken != startPlayToken) {
+                        AppLog.put("startPlay singleUrl: token expired, drop late callback")
+                        return@withContext
+                    }
                     player.mapHeadData = analyzeUrl.headerMap
                     currentPlayHeaders = analyzeUrl.headerMap
                     // Bug8 修复：统一解析播放器页面 URL，避免 3003 错误
@@ -441,6 +487,8 @@ object VideoPlay : CoroutineScope by MainScope(){
             if (ruleContent.isNullOrBlank() && !hasNewRoutesMode) {
                 // R5 自动视频链接抓取 + R3 title 修复
                 videoTitle = rssArticle.title
+                // 4.8b（Z9）：嗅探前捕获原始 URL（文章链接可重嗅），作为播放历史键
+                originalPlayUrl = rssArticle.link
                 postEvent(EventBus.VIDEO_SUB_TITLE, "正在抓取视频链接...")
                 Coroutine.async(loadScope, IO) {
                     // 阶段8 F10：优先使用预缓冲的 HTML 缓存，跳过网络请求
@@ -467,6 +515,10 @@ object VideoPlay : CoroutineScope by MainScope(){
                                 playAnalyzeUrl.headerMap["Referer"] = rssArticle.link
                             }
                             withContext(Main) {
+                                if (currentSwitchToken != startPlayToken) {
+                                    AppLog.put("startPlay R5命中: token expired, drop late callback")
+                                    return@withContext
+                                }
                                 player.mapHeadData = playAnalyzeUrl.headerMap
                                 currentPlayHeaders = playAnalyzeUrl.headerMap
                                 // Bug8 修复：统一解析播放器页面 URL
@@ -500,22 +552,32 @@ object VideoPlay : CoroutineScope by MainScope(){
                             // 适用场景：JS 动态构造视频 URL、播放器运行时请求 m3u8、CDN 鉴权 URL 等
                             AppLog.putInfo("R5静态解析未命中, 启动网络抓包拦截, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
                             // app-stability-round2 P2-2: 嗅探超时从 15s 缩短为 10s（慢站点由 delayTime 自适应）
-                            val webViewUrl = VideoUrlExtractor.extractWithWebView(
+                            val webViewCandidate = VideoUrlExtractor.extractWithWebView(
                                 url = rssArticle.link,
                                 source = source,
                                 delayTime = VideoUrlExtractor.R5_DELAY_TIME,
                                 timeout = VideoUrlExtractor.R5_TIMEOUT
                             )
+                            val webViewUrl = webViewCandidate?.url
                             if (webViewUrl != null) {
                                 // R5 网络抓包命中：走单 URL 播放流程（复用单 URL 分支模式）
                                 AppLog.putInfo("R5网络抓包命中, ${VideoUrlExtractor.sanitizeUrl(webViewUrl)}")
                                 videoUrl = webViewUrl
                                 val playAnalyzeUrl = AnalyzeUrl(webViewUrl, source = source, ruleData = rssArticle)
-                                // R5 Header 修复：视频 URL 来源页面为文章链接，Referer 防盗链必需
-                                if (!playAnalyzeUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
-                                    playAnalyzeUrl.headerMap["Referer"] = rssArticle.link
-                                }
+                                // R-P1-2 过渡版 → Phase 3 收口：HeaderResolver.merge 三层头合并（嗅探覆盖源配置 + Referer 兜底页面链接 + CookieManager 域内兜底）
+                                val merged = HeaderResolver.merge(
+                                    candidate = webViewCandidate,
+                                    baseHeaders = playAnalyzeUrl.headerMap,
+                                    refererFallback = rssArticle.link,
+                                    targetUrl = webViewUrl
+                                )
+                                playAnalyzeUrl.headerMap.clear()
+                                playAnalyzeUrl.headerMap.putAll(merged)
                                 withContext(Main) {
+                                    if (currentSwitchToken != startPlayToken) {
+                                        AppLog.put("startPlay 视频URL分支: token expired, drop late callback")
+                                        return@withContext
+                                    }
                                     player.mapHeadData = playAnalyzeUrl.headerMap
                                     currentPlayHeaders = playAnalyzeUrl.headerMap
                                     // Bug8 修复：统一解析播放器页面 URL
@@ -541,6 +603,10 @@ object VideoPlay : CoroutineScope by MainScope(){
                                         playAnalyzeUrl.headerMap["Referer"] = rssArticle.link
                                     }
                                     withContext(Main) {
+                                        if (currentSwitchToken != startPlayToken) {
+                                            AppLog.put("startPlay 正则兜底: token expired, drop late callback")
+                                            return@withContext
+                                        }
                                         player.mapHeadData = playAnalyzeUrl.headerMap
                                         currentPlayHeaders = playAnalyzeUrl.headerMap
                                         val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(playAnalyzeUrl.url)
@@ -553,15 +619,14 @@ object VideoPlay : CoroutineScope by MainScope(){
                                 } else {
                                     // T2.10: 第四层降级——正则兜底也失败，不再回退文章链接给 ExoPlayer
                                     // 原方案：回退 rssArticle.link（肯定非视频流URL）→ ExoPlayer 加载报 UnrecognizedInputFormatException
-                                    // 新方案：提示用户抓取失败 + 触发 WebView 降级（WebView 可加载文章页面播放）
+                                    // 新方案：提示用户抓取失败（video-sniff-403-and-rss-classic-fix Phase 2 (3.7)：
+                                    // 原"WebView 降级"已随 WebView 播放器删除，改统一错误提示）
                                     // 解决 Bug-19：ExoPlayer 不再加载非视频流URL
-                                    AppLog.putWarn("R5全层降级失败, 触发WebView降级, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
+                                    AppLog.putWarn("R5全层降级失败, 触发统一错误提示, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
                                     withContext(Main) {
-                                        postEvent(EventBus.VIDEO_SUB_TITLE, "视频地址抓取失败，切换到 WebView 模式")
-                                        // 触发 WebView 降级：用文章链接作为 URL（WebView 可加载文章页面播放）
                                         postEvent(
-                                            EventBus.VIDEO_FALLBACK_WEBVIEW,
-                                            Triple(rssArticle.link, rssArticle.title, currentPlayHeaders ?: emptyMap())
+                                            EventBus.VIDEO_PLAY_ERROR,
+                                            "播放失败：视频地址抓取失败（R5 全层降级均失败），请重试、切换线路/源，或用系统浏览器打开"
                                         )
                                     }
                                 }
@@ -575,6 +640,9 @@ object VideoPlay : CoroutineScope by MainScope(){
                 Rss.getContent(loadScope, rssArticle, ruleContent ?: "", s)
                     .onSuccess(IO) { content ->
                         val content = content.trim()
+                        // 4.8b（Z9）：嗅探前捕获原始 URL（文章链接可重嗅），作为播放历史键
+                        //（多线路分支随后的 playRssEpisode 会覆写为 episode.url）
+                        originalPlayUrl = rssArticle.link
                         // R3 多线路支持：优先解析为多线路列表，兼容旧版扁平JSON/多行URL
                         val routes = parseRssRoutes(content, rssArticle.link)
                         AppLog.putDebugWithTag(AppLog.TAG_RSS, "parseRssRoutes结果: routesNull=${routes == null}, routesSize=${routes?.size ?: 0}", level = AppLog.Level.DEBUG)
@@ -589,17 +657,21 @@ object VideoPlay : CoroutineScope by MainScope(){
                             return@onSuccess
                         }
                         // 单 URL（现有逻辑）
+                        // 2.4/R-P1-2：嗅探上下文头收集（T4.4/P3-1 两分支命中时记录，analyzeUrl 组装后 merge）
+                        var sniffMergedHeaders: Map<String, String> = emptyMap()
                         val mUrl = if (content.isEmpty()) {
                             // T4.4: 视频型订阅源（有视频规则）正文为空走正常空分支，不抛异常
                             // 日志实证：视频型订阅源正文解析 100% 走异常分支（ContentEmptyException），异常噪音大
                             // 视频地址本就可由嗅探获取，正文为空属正常场景——降级 R5 嗅探（与 P3-1 无效 URL 降级路径一致）
                             // 未配置视频规则的源（type=0 网页模式）保持 ReadRssViewModel 现有异常路径，便于发现真实解析故障
                             AppLog.putInfo("T4.4: 视频型订阅源正文为空, 降级R5嗅探, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
-                            val sniffUrl = VideoUrlExtractor.extractWithWebView(
+                            val sniffCandidate = VideoUrlExtractor.extractWithWebView(
                                 url = rssArticle.link, source = source,
                                 delayTime = VideoUrlExtractor.R5_DELAY_TIME,
                                 timeout = VideoUrlExtractor.R5_TIMEOUT
                             )
+                            sniffMergedHeaders = sniffCandidate?.headers ?: emptyMap()
+                            val sniffUrl = sniffCandidate?.url
                             if (sniffUrl != null) {
                                 AppLog.putInfo("T4.4降级R5嗅探命中, ${VideoUrlExtractor.sanitizeUrl(sniffUrl)}")
                                 sniffUrl
@@ -622,11 +694,13 @@ object VideoPlay : CoroutineScope by MainScope(){
                                 resolved
                             } else {
                                 AppLog.putWarn("P3-1: ruleContent返回非视频URL, 降级R5嗅探, len=${resolved.length}, hasScript=${resolved.contains("<script", ignoreCase = true)}")
-                                val sniffUrl = VideoUrlExtractor.extractWithWebView(
+                                val sniffCandidate = VideoUrlExtractor.extractWithWebView(
                                     url = rssArticle.link, source = source,
                                     delayTime = VideoUrlExtractor.R5_DELAY_TIME,
                                     timeout = VideoUrlExtractor.R5_TIMEOUT
                                 )
+                                sniffMergedHeaders = sniffCandidate?.headers ?: emptyMap()
+                                val sniffUrl = sniffCandidate?.url
                                 if (sniffUrl != null) {
                                     AppLog.putInfo("P3-1降级R5嗅探命中, ${VideoUrlExtractor.sanitizeUrl(sniffUrl)}")
                                     sniffUrl
@@ -642,12 +716,20 @@ object VideoPlay : CoroutineScope by MainScope(){
                             source = source,
                             ruleData = rssArticle
                         )
+                        // 2.4/R-P1-2：嗅探上下文优先 merge（覆盖源配置默认值，防 403 收益覆盖全部降级路径）
+                        sniffMergedHeaders.forEach { (k, v) ->
+                            analyzeUrl.headerMap[k] = v
+                        }
                         // R5 Header 修复：注入 Referer（模拟 WebView 行为，解决 CDN 防盗链 404）
                         if (!analyzeUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
                             analyzeUrl.headerMap["Referer"] = rssArticle.link
                         }
                         val playUrl = analyzeUrl.url
                         withContext(Main) {
+                            if (currentSwitchToken != startPlayToken) {
+                                AppLog.put("startPlay 单URL: token expired, drop late callback")
+                                return@withContext
+                            }
                             player.mapHeadData = analyzeUrl.headerMap
                             currentPlayHeaders = analyzeUrl.headerMap
                             // Bug8 修复：统一解析播放器页面 URL
@@ -692,9 +774,20 @@ object VideoPlay : CoroutineScope by MainScope(){
         WebBook.getContent(loadScope, source as BookSource, book, chapter)
             .onSuccess(IO) { content ->
                 val content = content.trim()
-                val mUrl = if (content.isEmpty()) {
-                    throw ContentEmptyException("正文为空")
-                } else if (content.startsWith("<")) { //当作mpd文本
+                // video-sniff-403-and-rss-classic-fix 4.8c（Z10）：书源章节空正文不再裸抛
+                // ContentEmptyException（与订阅源路径不对称，且异常噪音大），改发
+                // EventBus.VIDEO_PLAY_ERROR 统一错误提示（Phase 2 已统一该事件，订阅源路径同款）
+                if (content.isEmpty()) {
+                    AppLog.putWarn("4.8c: 书源章节正文为空, 触发统一错误提示, chapter=${chapter.title}")
+                    withContext(Main) {
+                        postEvent(
+                            EventBus.VIDEO_PLAY_ERROR,
+                            "播放失败：书源章节正文为空，未获取到视频地址，请重试、切换书源/章节，或用系统浏览器打开"
+                        )
+                    }
+                    return@onSuccess
+                }
+                val mUrl = if (content.startsWith("<")) { //当作mpd文本
                     val name = MD5Utils.md5Encode(content) + ".mpd"
                     val file = FileUtils.createFileIfNotExist(videoTempFile,name)
                     file.writeText(content)
@@ -702,13 +795,20 @@ object VideoPlay : CoroutineScope by MainScope(){
                 } else {
                     content
                 }
+                // 4.8b（Z9）：嗅探前捕获原始 URL（书源正文链接可重嗅），作为播放历史键
+                originalPlayUrl = mUrl
                 videoUrl = mUrl
                 // 能力迁移：视频书源正文为播放页 URL 时接入三层嗅探链（design 子方案B）
                 // 非 MPD 文本且非本地文件时，用 extractVideoUrlForEpisode 解析真实流 URL，失败回退直连
+                // 2.4/R-P1-2：嗅探上下文头收集（命中时记录，analyzeUrl 组装后 merge）
+                var sniffMergedHeaders: Map<String, String> = emptyMap()
                 val sniffedUrl = if (mUrl.startsWith("<") || mUrl.startsWith("file://")) {
                     mUrl
                 } else {
-                    VideoUrlExtractor.extractVideoUrlForEpisode(mUrl, source, chapter) ?: mUrl
+                    VideoUrlExtractor.extractVideoUrlForEpisode(mUrl, source, chapter)?.let { candidate ->
+                        sniffMergedHeaders = candidate.headers
+                        candidate.url
+                    } ?: mUrl
                 }
                 videoUrl = sniffedUrl
                 val analyzeUrl = AnalyzeUrl(
@@ -717,12 +817,20 @@ object VideoPlay : CoroutineScope by MainScope(){
                     ruleData = book,
                     chapter = chapter
                 )
+                // 2.4/R-P1-2：嗅探上下文优先 merge（书源章节路径防 403 收益）
+                sniffMergedHeaders.forEach { (k, v) ->
+                    analyzeUrl.headerMap[k] = v
+                }
                 when (val danmaku = chapter.getDanmaku()) {
                     is String -> danmakuStr = danmaku
                     is File -> danmakuFile = danmaku
                 }
                 val playUrl = analyzeUrl.url
                 withContext(Main) {
+                    if (currentSwitchToken != startPlayToken) {
+                        AppLog.put("startPlay 书源章节: token expired, drop late callback")
+                        return@withContext
+                    }
                     player.mapHeadData = analyzeUrl.headerMap
                     currentPlayHeaders = analyzeUrl.headerMap
                     // Bug8 修复：统一解析播放器页面 URL
@@ -768,6 +876,7 @@ object VideoPlay : CoroutineScope by MainScope(){
         if (!isLoading) {
             //还原所有状态
             videoUrl = null
+            originalPlayUrl = null // 4.8b：历史键同步清空
             singleUrl = false
             videoTitle = null
             source = null
@@ -819,6 +928,7 @@ object VideoPlay : CoroutineScope by MainScope(){
         isResumeFromFloat = false
         release()
         videoUrl = null
+        originalPlayUrl = null // 4.8b：历史键同步清空
         singleUrl = false
         videoTitle = null
         currentPlayHeaders = null
@@ -1282,7 +1392,11 @@ object VideoPlay : CoroutineScope by MainScope(){
         // FR-6: isSwitchingArticle 状态保护，异步加载期间为 true
         switchArticleJob?.cancel()
         isSwitchingArticle = true
-        AppLog.put("switchToArticle: debounce, cancel previous async task, index=$index")
+        // 2.7/R-P1-5：递增切换令牌，本次异步回调持 token 校验
+        val token = switchTokenCounter.incrementAndGet()
+        currentSwitchToken = token
+        SniffEngine.invalidate() // Phase 3: 页面切换清引擎去重缓存
+        AppLog.put("switchToArticle: debounce, cancel previous async task, index=$index, token=$token")
         // 异步查询 rssStar/rssRecord（Room 禁止主线程查询）+ 加载视频信息
         switchArticleJob = Coroutine.async(loadScope, IO) {
             // B2 修复：同步更新 source 以匹配 article.origin
@@ -1308,6 +1422,12 @@ object VideoPlay : CoroutineScope by MainScope(){
                 rssRecord = appDb.rssReadRecordDao.getRecord(article.link, article.origin)
             }
             withContext(Main) {
+                // 2.7/R-P1-5：token 过期（期间用户已再次切换）→ 丢弃迟到回调，不执行 startPlay
+                if (switchTokenCounter.get() != token) {
+                    AppLog.put("switchToArticle: token expired ($token < ${switchTokenCounter.get()}), drop late callback")
+                    isSwitchingArticle = false
+                    return@withContext
+                }
                 // FR-6: 清除 isSwitchingArticle 标志（startPlay 调用前）
                 isSwitchingArticle = false
                 // 重新加载该文章的视频信息（复用 startPlay 的 RssSource 分支）
@@ -1427,6 +1547,8 @@ object VideoPlay : CoroutineScope by MainScope(){
         // T2.2/T2.3: 退出播放器时同步清理预加载器缓存，释放内存
         FirstFramePreloader.clearCache()
         VideoPreloader.clearCache()
+        // 4.8a：清理新预填器记录（video-sniff-403-and-rss-classic-fix）
+        VideoPrefiller.clearCache()
     }
 
     /**
@@ -1442,23 +1564,30 @@ object VideoPlay : CoroutineScope by MainScope(){
             AppLog.putWarn("VideoPlay: rssArticle is null in playRssEpisode, rssArticleIndex=$rssArticleIndex")
             return
         }
+        // 4.8b（Z9）：嗅探前捕获原始 URL（episode.url 可重嗅，嗅探后地址源侧 token 轮换会失配）
+        originalPlayUrl = episode.url
         videoUrl = episode.url
         videoTitle = episode.title
         // FR-4: 取消前一个 playRssEpisode 异步任务，防止快速切集竞争
         playEpisodeJob?.cancel()
-        AppLog.put("playRssEpisode: debounce, cancel previous async task, episode=${episode.title}")
+        // 2.7/R-P1-5：递增切换令牌
+        val token = switchTokenCounter.incrementAndGet()
+        currentSwitchToken = token
+        SniffEngine.invalidate() // Phase 3: 页面切换清引擎去重缓存
+        AppLog.put("playRssEpisode: debounce, cancel previous async task, episode=${episode.title}, token=$token")
         playEpisodeJob = Coroutine.async(loadScope, IO) {
             // 接入三层降级采集：MacCMS播放页解析→DOM解析→网络抓包（统一由 VideoUrlExtractor.extractVideoUrlForEpisode 处理）
             // 替代原手动 MacCMS 解析，增加 DOM 解析和网络抓包降级，提升视频播放成功率
-            val resolvedUrl = VideoUrlExtractor.extractVideoUrlForEpisode(episode.url, source, rssArticle)
-            // T2.9/T2.10: 三层降级采集失败返回 null，触发 WebView 降级（避免非视频流URL传给 ExoPlayer）
+            val resolvedCandidate = VideoUrlExtractor.extractVideoUrlForEpisode(episode.url, source, rssArticle)
+            val resolvedUrl = resolvedCandidate?.url
+            // T2.9/T2.10: 三层降级采集失败返回 null，触发统一错误提示（避免非视频流URL传给 ExoPlayer）
+            // video-sniff-403-and-rss-classic-fix Phase 2 (3.7)：原"WebView 降级"已随 WebView 播放器删除
             if (resolvedUrl == null) {
-                AppLog.putWarn("extractVideoUrlForEpisode 返回null, 触发WebView降级, ${VideoUrlExtractor.sanitizeUrl(episode.url)}")
+                AppLog.putWarn("extractVideoUrlForEpisode 返回null, 触发统一错误提示, ${VideoUrlExtractor.sanitizeUrl(episode.url)}")
                 withContext(Main) {
-                    postEvent(EventBus.VIDEO_SUB_TITLE, "视频地址抓取失败，切换到 WebView 模式")
                     postEvent(
-                        EventBus.VIDEO_FALLBACK_WEBVIEW,
-                        Triple(episode.url, episode.title, currentPlayHeaders ?: emptyMap())
+                        EventBus.VIDEO_PLAY_ERROR,
+                        "播放失败：视频地址采集失败（三层降级均失败），请重试、切换线路/集数，或用系统浏览器打开"
                     )
                 }
                 return@async
@@ -1469,11 +1598,21 @@ object VideoPlay : CoroutineScope by MainScope(){
                 source = source,
                 ruleData = rssArticle
             )
-            // R5 Header 修复：注入 Referer（模拟 WebView 行为，解决 CDN 防盗链 404）
-            if (!analyzeUrl.headerMap.any { it.key.equals("Referer", ignoreCase = true) }) {
-                analyzeUrl.headerMap["Referer"] = rssArticle.link
-            }
+            // R-P1-2 过渡版 → Phase 3 收口：HeaderResolver.merge 三层头合并（嗅探覆盖源配置 + Referer 兜底页面链接 + CookieManager 域内兜底）
+            val merged = HeaderResolver.merge(
+                candidate = resolvedCandidate,
+                baseHeaders = analyzeUrl.headerMap,
+                refererFallback = rssArticle.link,
+                targetUrl = resolvedUrl
+            )
+            analyzeUrl.headerMap.clear()
+            analyzeUrl.headerMap.putAll(merged)
             withContext(Main) {
+                // 2.7/R-P1-5：token 过期 → 丢弃迟到回调（用户已再次切集/切文章）
+                if (switchTokenCounter.get() != token) {
+                    AppLog.put("playRssEpisode: token expired ($token < ${switchTokenCounter.get()}), drop late callback")
+                    return@withContext
+                }
                 player.mapHeadData = analyzeUrl.headerMap
                 currentPlayHeaders = analyzeUrl.headerMap
                 player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), episode.title)
@@ -1485,7 +1624,9 @@ object VideoPlay : CoroutineScope by MainScope(){
                 // T2.2: 首帧预加载（对齐快手官方方案）——预加载当前位置 ±1 的视频首帧（1MB Range 请求）
                 // T2.3: 下一个视频预加载（对齐抖音官方方案）——预加载下一集前 256KB（WiFi 3 个/4G 1 个）
                 // 触发时机：当前视频开始播放时启动预加载（异步执行不阻塞播放）
-                triggerPreload(resolvedUrl, analyzeUrl.headerMap)
+                // video-sniff-403-and-rss-classic-fix 4.8a（AD-12）：上述旧预加载语义已重写为
+                // "预嗅探下一集 + finalUrl 键预填首分片"，旧预加载器禁用（见 triggerPreload 注释）
+                triggerPreload()
             }
         }.onError {
             AppLog.put("加载订阅源视频集失败: ${episode.title}", it, true)
@@ -1493,27 +1634,83 @@ object VideoPlay : CoroutineScope by MainScope(){
     }
 
     /**
-     * T2.2+T2.3: 当前视频开始播放时触发预加载（异步执行不阻塞播放）
+     * AD-12 预加载重设计（video-sniff-403-and-rss-classic-fix 4.8a / R-P3-7/R-P3-8）：
+     * 预加载语义重写为"预嗅探下一集 + finalUrl 键预填首分片"。
      *
-     * - T2.2 首帧预加载（对齐快手官方方案）：预加载当前位置 ±1 的视频首帧（1MB Range 请求）
-     * - T2.3 下一个视频预加载（对齐抖音官方方案）：预加载下一集前 256KB（WiFi 3 个/4G 1 个）
-     * - 两个预加载器内部均有 LRU 缓存去重，同一 URL 不重复下载
+     * - 旧预加载器（FirstFramePreloader/VideoPreloader）存在 NPE 未修，长期注释禁用（Z1），
+     *   且用嗅探前原始页 URL 写 SimpleCache 与播放键（重定向 finalUrl）不一致（Z4）——按设计
+     *   "禁止带病复活"，禁用调用代码块一并清理，预填职责移交 VideoPrefiller（键对齐播放键，根治 Z4）
+     * - 新语义：下一集存在时异步调 SniffEngine.play(SniffRequest{下一集链接, source, ruleData, PLAY})，
+     *   复用引擎去重缓存与并发去重；命中候选后以 finalUrl（嗅探最终 URL）为键预填首分片入 SimpleCache，
+     *   头组装走 HeaderResolver.merge（嗅探上下文 > 源配置 > Referer 页面链接兜底 > CookieManager 域内兜底）
+     * - 触发缓解：仅 WiFi/以太网触发（移动网络省流量，design AD-12）；前台缓解由触发点天然保证
+     *   （本函数仅从 playRssEpisode 播放启动链路调用）；失败静默 AppLog，不影响播放
+     * - 书源/单 URL 等拿不到下一集上下文的场景安全跳过
      *
-     * @param currentUrl 当前播放的已解析视频 URL
-     * @param headers 请求头（Referer/Cookie/UA 防盗链）
+     * 简化说明：项目无全局前台生命周期 tracker，前台缓解依赖触发点语义（播放中即前台）
+     * 已知上限：SniffEngine 去重缓存为"进行中去重"非结果缓存，上滑后 playRssEpisode 仍会正式嗅探一次，
+     * 预载收益体现为 finalUrl 键缓存命中 + CDN/DNS 预热 | 升级路径：Phase 4 引擎结果缓存化
      */
-    private fun triggerPreload(currentUrl: String, headers: Map<String, String>) {
+    private var preloadJob: Coroutine<*>? = null
+
+    private fun triggerPreload() {
+        // 复用 AD-01 预加载总开关（关闭时不预嗅探/预填）
+        if (!playerFirstFramePreload) return
         val episodes = rssEpisodes ?: return
-        if (episodes.size <= 1) return
-        val urls = episodes.map { it.url }
-        val index = rssEpisodeIndex.coerceIn(urls.indices)
-        // T2.2/T2.3 关键日志：预加载触发点（release 包可输出，真机验收依据）
-        AppLog.put("triggerPreload: episodeIndex=$index, totalEpisodes=${urls.size}, hasNext=${index + 1 < urls.size}")
-        // 方案B: 预加载器已禁用（FirstFramePreloader/VideoPreloader 存在 NPE bug，待修复）
-        // 当前优先优化"当前视频快速缓冲"（LoadControl 激进策略），预加载器后续再修复
-        // FirstFramePreloader.preloadFirstFrame(urls, index, headers)
-        // VideoPreloader.preloadNextVideo(currentUrl, urls.getOrNull(index + 1), headers)
+        val nextEpisode = episodes.getOrNull(rssEpisodeIndex + 1) ?: return
+        if (nextEpisode.url.isBlank()) return
+        // 仅 WiFi/以太网触发（design AD-12 触发缓解：WiFi/前台）
+        if (!isUnmeteredNetworkForPreload()) return
+        val rssArticle = rssStar?.toRssArticle() ?: rssRecord?.toRssArticle()
+            ?: rssArticles?.getOrNull(rssArticleIndex) ?: return
+        val rssSource = source ?: return
+        AppLog.put(
+            "triggerPreload: pre-sniff next episode, index=${rssEpisodeIndex + 1}/${episodes.size}, " +
+                "urlPath=${ExoPlayerHelper.sanitizeUrl(nextEpisode.url)}"
+        )
+        preloadJob?.cancel()
+        preloadJob = Coroutine.async(loadScope, IO) {
+            // 预嗅探下一集（复用引擎去重缓存与 r5InProgress 并发去重）
+            val result = SniffEngine.play(
+                SniffRequest(
+                    targetUrl = nextEpisode.url,
+                    source = rssSource,
+                    ruleData = rssArticle
+                )
+            )
+            val candidate = result.selected
+            if (candidate == null) {
+                AppLog.put("triggerPreload: pre-sniff no candidate, skip prefill")
+                return@async
+            }
+            // finalUrl 键预填首分片（SimpleCache 键与播放写入键一致，根治 Z4）
+            val finalUrl = candidate.url
+            val baseHeaders = kotlin.runCatching {
+                AnalyzeUrl(nextEpisode.url, source = rssSource, ruleData = rssArticle).headerMap
+            }.getOrNull() ?: emptyMap()
+            val headers = HeaderResolver.merge(
+                candidate = candidate,
+                baseHeaders = baseHeaders,
+                refererFallback = rssArticle.link,
+                targetUrl = finalUrl
+            )
+            VideoPrefiller.prefill(finalUrl, headers)
+        }.onError {
+            // 失败静默（预加载不干扰播放主链路）
+            AppLog.put("triggerPreload: pre-sniff/prefill failed silently", it)
+        }
     }
+
+    /**
+     * 4.8a：预嗅探触发网络门禁（WiFi/以太网视为不限量网络）
+     * 检测异常/不可用时返回 false 跳过预载（省流量优先）
+     */
+    private fun isUnmeteredNetworkForPreload(): Boolean = kotlin.runCatching {
+        val nc = connectivityManager.activeNetwork
+            ?.let { connectivityManager.getNetworkCapabilities(it) }
+        nc?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true ||
+            nc?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) == true
+    }.getOrDefault(false)
 
     /**
      * R1 多集选择播放：切换集数（上一集/下一集）
@@ -1544,13 +1741,16 @@ object VideoPlay : CoroutineScope by MainScope(){
         val durPos = durPos ?: videoManager.currentPosition.toInt()
         durChapterPos = durPos
         // AD-04: 同时保存到 PlayHistoryStore（跨会话进度恢复）
-        videoUrl?.let { url ->
+        // 4.8b（Z9）：键改用 historyKeyUrl（嗅探前原始 URL，源侧 token 轮换后仍可重嗅）；
+        // rssSourceId 填充真实订阅源 ID（原恒空串，同文章多线路来源不可区分）
+        historyKeyUrl?.let { url ->
             val articleUrl = rssArticles?.getOrNull(rssArticleIndex)?.link ?: ""
             PlayHistoryStore.save(
                 articleUrl = articleUrl,
                 videoUrl = url,
                 position = durPos.toLong(),
-                duration = videoManager.duration
+                duration = videoManager.duration,
+                rssSourceId = (source as? RssSource)?.sourceUrl ?: ""
             )
         }
         if (book == null && rssStar == null && rssRecord == null) {

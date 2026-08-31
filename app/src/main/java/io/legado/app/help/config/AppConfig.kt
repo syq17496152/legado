@@ -2873,7 +2873,8 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var updateCacheThreadCount: Int
         get() = appCtx.getPrefInt(PreferKey.updateCacheThreadCount, 16)
         set(value) {
-            appCtx.putPrefInt(PreferKey.updateCacheThreadCount, value.coerceIn(1, 64))
+            // R3: 上限 64→256（OtherConfigFragment UI max 同步）；消费点钳制见 WebViewPool/CacheBookService/ImageCanvasViewModel
+            appCtx.putPrefInt(PreferKey.updateCacheThreadCount, value.coerceIn(1, 256))
         }
 
     var cacheConcurrentRate: String?

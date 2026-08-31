@@ -1713,7 +1713,6 @@
     <string name="video_seconds_format">%1$d秒</string>
     <string name="video_resume_from_format">Resume from %1$d:%2$02d</string>
     <string name="video_no_available_url">No available URL</string>
-    <string name="video_switch_to_webview_mode">ExoPlayer failed multiple times, switched to WebView mode</string>
     <string name="json_format">json格式</string>
     <string name="open_other_video_player">其它播放器打开</string>
     <string name="show_source_comment">显示源注释</string>
@@ -2007,10 +2006,10 @@
     <string name="source_layout_auto">Auto columns</string>
     <string name="source_layout">View</string>
     <string name="source_sort_label">Sort</string>
-    <!-- video-playback-issues-round1: ExoPlayer 失败降级 WebView 相关字符串 -->
+    <!-- video-playback-issues-round1: 视频播放失败提示字符串
+         video-sniff-403-and-rss-classic-fix Phase 2 (3.6)：use_webview_play/switch_to_exo_player/
+         player_type_webview 三条已随 WebView 播放器删除 -->
     <string name="video_play_error_title">视频播放失败</string>
-    <string name="use_webview_play">使用WebView播放</string>
-    <string name="switch_to_exo_player">切换回内置播放器</string>
     <string name="player_type">播放器类型</string>
     <string name="player_type_auto">自动</string>
     <string name="player_type_exo">内置播放器</string>
@@ -2029,7 +2028,6 @@
     <string name="player_error_unknown_title">播放失败</string>
     <string name="player_error_unknown_message">播放遇到问题，请重试或切换源</string>
     <string name="player_history_resume">已从 %1$d:%2$02d 继续播放</string>
-    <string name="player_type_webview">WebView播放器</string>
     <!-- BUG2 fix: 播放器优化5项配置 -->
     <string name="player_first_frame_preload">首帧预加载</string>
     <string name="player_buffer_strategy">缓冲策略</string>

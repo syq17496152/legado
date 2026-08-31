@@ -82,8 +82,9 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
      *
      * 用于图片加载相关异步任务的线程池调度，复用全局"更新+缓存"类线程数配置。
      */
+    // R3 钳制：平台线程池上限 128，防 256 配置下线程栈膨胀（AD-10）；配置变更重建路径同钳制
     private var coroutineExecutor: ExecutorService =
-        Executors.newFixedThreadPool(AppConfig.updateCacheThreadCount)
+        Executors.newFixedThreadPool(minOf(AppConfig.updateCacheThreadCount, 128))
 
     /**
      * 协程池配置变更观察者（W6：监听 PreferKey.updateCacheThreadCount 事件）
@@ -121,8 +122,8 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
         isLaunching = false
         // 步骤2: shutdown 旧池
         coroutineExecutor.shutdownNow()
-        // 步骤3: 创建新池
-        coroutineExecutor = Executors.newFixedThreadPool(newSize)
+        // 步骤3: 创建新池（R3 钳制 128，与初始创建路径一致，AD-10）
+        coroutineExecutor = Executors.newFixedThreadPool(minOf(newSize, 128))
         // 步骤4: 重新触发加载（仅当有已加载文章时，避免误触发首次加载）
         if (ImagePlay.loadedArticleIndices.isNotEmpty()) {
             AppLog.putDebugWithTag(

@@ -25,7 +25,7 @@ object DatabaseMigrations {
             migration_93_94, migration_94_95, migration_95_96, migration_96_97,
             migration_97_98, migration_98_99, migration_99_100, migration_100_101,
             migration_101_102, migration_102_103, migration_103_104, migration_104_105,
-            migration_105_106, migration_106_107, migration_107_108
+            migration_105_106, migration_106_107, migration_107_108, migration_108_109
         )
     }
 
@@ -1474,6 +1474,58 @@ object DatabaseMigrations {
                     kotlin.runCatching { db.execSQL(stmt) }
                         .onFailure { e ->
                             AppLog.put("AppDatabase Migration 107→108: [$tag] 执行失败: ${e.message}")
+                        }
+                }
+        }
+    }
+
+    /**
+     * video-sniff-403-and-rss-classic-fix 4.8e（用户裁决方案A）：playHistories 主键
+     * (articleUrl, videoUrl) 扩为 (articleUrl, videoUrl, rssSourceId)，播放进度按订阅源隔离
+     * （同一 m3u8 被多线路/多源复用时不再互相覆盖进度）。
+     * SQLite 无法直接修改主键，走建新表迁数据；v108 旧表无索引，无需重建索引。
+     * 注意：历史遗留 rssSourceId='' 的记录迁移后仍为 ''，同文章同视频经旧逻辑以
+     * rssSourceId='' 保存时仍会覆盖该条，属预期（4.8b 起新数据已填充源ID）。
+     * 新表 DDL 与实体 Room schema 严格一致（列序/类型/NOT NULL/DEFAULT 子句）。
+     */
+    private val migration_108_109 = object : Migration(108, 109) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            runCatchingSql(db, "108→109 playHistories rebuild add rssSourceId to PK") {
+                """CREATE TABLE IF NOT EXISTS `playHistories_new` (
+                    `articleUrl` TEXT NOT NULL,
+                    `videoUrl` TEXT NOT NULL,
+                    `position` INTEGER NOT NULL DEFAULT 0,
+                    `duration` INTEGER NOT NULL DEFAULT 0,
+                    `lastPlayTime` INTEGER NOT NULL DEFAULT 0,
+                    `rssSourceId` TEXT NOT NULL DEFAULT '',
+                    PRIMARY KEY(`articleUrl`, `videoUrl`, `rssSourceId`)
+                )"""
+            }
+            runCatchingSql(db, "108→109 copy data") {
+                """INSERT INTO `playHistories_new` (
+                    `articleUrl`, `videoUrl`, `position`, `duration`, `lastPlayTime`, `rssSourceId`
+                ) SELECT
+                    `articleUrl`, `videoUrl`, `position`, `duration`, `lastPlayTime`, `rssSourceId`
+                FROM `playHistories`"""
+            }
+            runCatchingSql(db, "108→109 drop old") { "DROP TABLE `playHistories`" }
+            runCatchingSql(db, "108→109 rename") {
+                "ALTER TABLE `playHistories_new` RENAME TO `playHistories`"
+            }
+            AppLog.put("AppDatabase Migration 108→109: playHistories 主键扩列(rssSourceId)完成")
+        }
+
+        private fun runCatchingSql(
+            db: SupportSQLiteDatabase,
+            tag: String,
+            sql: () -> String
+        ) {
+            // 简化说明：execSQL 一次仅执行一条语句，分号拼接多条会漏执行；按分号拆分逐条执行（建表语句内部无分号，安全）
+            sql().split(";").map { it.trim() }.filter { it.isNotBlank() }
+                .forEach { stmt ->
+                    kotlin.runCatching { db.execSQL(stmt) }
+                        .onFailure { e ->
+                            AppLog.put("AppDatabase Migration 108→109: [$tag] 执行失败: ${e.message}")
                         }
                 }
         }

@@ -49,6 +49,32 @@ object PlayerInstancePool {
     private val pool = ArrayDeque<ExoPlayer>()
 
     /**
+     * video-play-7001-videograph-fix 2.2/AD-02：注入过 video effects 的实例标记（污染隔离）。
+     * 根因：media3 1.10.1 的 videoEffects 字段经 setVideoEffects 写入后终生不回置 null，
+     * 复用实例第二次 prepare 会再次激活 GL VideoGraph 管线（切集 7001 崩溃的池复用放大器）。
+     * 策略：注入过 effects 的实例用完即毁，永不回池（池内零污染）；增强关闭用户绝不 setVideoEffects。
+     */
+    private val taintedPool = mutableSetOf<ExoPlayer>()
+
+    /**
+     * 标记实例已注入过 video effects（调用方 Exo2MediaPlayer.setUp/enhance 生效后调用）
+     */
+    @Synchronized
+    fun markTainted(player: ExoPlayer) {
+        taintedPool.add(player)
+        AppLog.put(
+            "PlayerPool: markTainted (effects injected, never recycle), " +
+                "taintedSize=${taintedPool.size}"
+        )
+    }
+
+    /**
+     * 查询实例是否被标记污染（池回收决策用）
+     */
+    @Synchronized
+    fun isTainted(player: ExoPlayer): Boolean = taintedPool.contains(player)
+
+    /**
      * V-P0-1: TrackSelector 工厂——每实例独立
      *
      * 根因：共享单例在并发 acquire（R5 双命中/ViewPager2 双 Fragment 并发 prepare）时
@@ -166,6 +192,13 @@ object PlayerInstancePool {
      */
     @Synchronized
     fun recycle(player: ExoPlayer) {
+        // video-play-7001-videograph-fix 2.2/AD-02：污染隔离——注入过 effects 的实例用完即毁，永不回池
+        if (taintedPool.remove(player)) {
+            AppLog.put("PlayerPool: tainted instance recycle -> release directly (never re-pool)")
+            selectorMap.remove(player)
+            kotlin.runCatching { player.release() }
+            return
+        }
         kotlin.runCatching {
             player.stop()
             player.clearMediaItems()
@@ -179,12 +212,14 @@ object PlayerInstancePool {
             // 状态重置失败（极端场景）——直接销毁不入池，避免污染池
             AppLog.put("PlayerPool: recycle reset failed, release directly", it)
             selectorMap.remove(player)  // player 已 release，移除映射防泄漏
+            taintedPool.remove(player)
             kotlin.runCatching { player.release() }
             return
         }
         if (pool.size >= MAX_POOL_SIZE) {
             val oldest = pool.removeLast()
             selectorMap.remove(oldest)  // evict 的 player 即将 release，移除映射防泄漏
+            taintedPool.remove(oldest)
             kotlin.runCatching { oldest.release() }
             AppLog.put("PlayerPool: evict oldest (LRU), poolSize=${pool.size}")
         }
@@ -202,6 +237,14 @@ object PlayerInstancePool {
         while (pool.isNotEmpty()) {
             kotlin.runCatching { pool.removeFirst().release() }
             count++
+        }
+        // 污染实例（曾注入 effects）也全部释放，防止泄漏
+        if (taintedPool.isNotEmpty()) {
+            taintedPool.forEach { player ->
+                kotlin.runCatching { player.release() }
+                count++
+            }
+            taintedPool.clear()
         }
         selectorMap.clear()  // 池内实例全部 release，清空映射防泄漏
         if (count > 0) {

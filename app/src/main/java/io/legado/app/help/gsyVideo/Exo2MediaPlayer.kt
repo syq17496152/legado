@@ -26,6 +26,7 @@ import androidx.media3.exoplayer.source.BehindLiveWindowException
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import io.legado.app.help.exoplayer.ExoPlayerHelper
+import io.legado.app.help.exoplayer.HlsKeyDataSourceFactory
 import io.legado.app.help.exoplayer.PlayerInstancePool
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
@@ -49,9 +50,11 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         // E2 优化：网络错误自动重试次数（避免临时网络抖动直接降级 WebView）
         // T2.4: 指数退避重试策略（对齐 hls.js）：最多重试 5 次（1s/2s/4s/8s/16s）
         private const val MAX_RETRY = 5
-        // exoplayer-resilience Layer 2：自动 WebView 降级阈值
-        // 累计失败次数 >= 此值 + 不可恢复错误类型时触发 VIDEO_FALLBACK_WEBVIEW 事件
+        // exoplayer-resilience Layer 2：不可恢复错误累计阈值
+        // 累计失败次数 >= 此值 + 不可恢复错误类型时触发 VIDEO_PLAY_ERROR 统一错误提示
         private const val FALLBACK_RETRY_THRESHOLD = 3
+        // video-play-7001-videograph-fix 2.3/AD-03：单次播放会话内 7001 重建上限（防重建循环）
+        private const val MAX_7001_REBUILD = 2
     }
     private val window = Timeline.Window()
 
@@ -79,6 +82,12 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
     private var isReleased = false
 
     /**
+     * video-play-7001-videograph-fix 2.3：当前播放会话内 7001 重建计数
+     * 新 prepare 会话（prepareAsyncInternal）时归零，单会话内超过 MAX_7001_REBUILD 走降级链
+     */
+    private var rebuild7001Count = 0
+
+    /**
      * FR-3: scope 取消标志位（AtomicBoolean 保证多线程可见性）
      *
      * 与 isReleased 职责不同：
@@ -89,16 +98,11 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      */
     private val isScopeCancelled = AtomicBoolean(false)
 
-    /**
-     * V-003-P0-2: prepareAsyncInternal 重入保护
-     *
-     * 根因：R5 网络抓包命中后可能多次回调 prepareAsyncInternal（003 日志 9~16ms 内重入），
-     * 导致 PlayerInstancePool.acquire 被调用两次，创建多个 ExoPlayer 实例竞争 + TrackSelector 崩溃。
-     *
-     * 方案：AtomicBoolean CAS 守卫，第一次进入设置 true，post Runnable 完成后重置 false。
-     * 重入时跳过并记录日志。
-     */
-    private val isPreparing = java.util.concurrent.atomic.AtomicBoolean(false)
+    // video-sniff-403-and-rss-classic-fix 2.8c/R-P1-9（Z5）：isPreparing 重入保护已删除——
+    // 历史核实：V-003-P0-2 引入的 AtomicBoolean 自始至终无任何 CAS 读写（死代码），
+    // 其防护目标（R5 双命中重复 acquire）已由 prepareAsyncInternal 的
+    // "lastPrepareUrl+lastPrepareHeaders+currentSniffJob.isActive 跳过重复调用"守卫承担（L538-548）。
+    // 如未来重入复现，在 prepareAsyncInternal 入口恢复 CAS 守卫并实际读写。
 
     /**
      * E2 优化：网络错误重试计数（prepareAsyncInternal 时重置）
@@ -109,7 +113,7 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      * exoplayer-resilience Layer 2：累计播放失败次数（不可恢复错误才计数）
      * - 可恢复错误（网络抖动）不计数，仅 retryCount 重试
      * - 不可恢复错误（3002/3003/3004/decoder）计数
-     * - btnSwitchBack 切回 ExoPlayer 时重置为 0
+     * - retryExoPlayback 用户重试时重置为 0
      */
     private var unrecoverableFailCount = 0
 
@@ -178,7 +182,7 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      *
      * - 0 表示第一个 MediaSource（按嗅探结果优先）
      * - 1/2/... 表示降级到下一个 MediaSource
-     * - 达到 fallbackTypes.size 时触发 VIDEO_FALLBACK_WEBVIEW 事件
+     * - 达到 fallbackTypes.size 时触发 VIDEO_PLAY_ERROR 统一错误提示
      */
     private var currentFallbackIndex = 0
 
@@ -220,8 +224,10 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      */
     private fun buildFallbackTypes(sniff: ExoPlayerHelper.SniffResult): List<Int> {
         // P1 嗅探成功率优化（2026-07-28）：区分两种 UNKNOWN 场景
-        // 1. mimeType 是 HTML（text/html 等）→ 确实是 HTML 页面，返回空列表直接降级 WebView
-        //    （铁证：002日志 /Player/Play.php 返回 text/html，3 次 HLS 重试必然 3002 失败）
+        // 1. mimeType 是 HTML（text/html 等）→ HTML 页面形态（可能为壳内直链视频源）
+        //    video-sniff-403-and-rss-classic-fix Phase 4 (5.5b/Z15·F-12)：不再返回空列表
+        //    （.html 一票否决与 F-12"排除规则后置"语义对齐），保留降级链走 HLS→Progressive，
+        //    链尾失败仍由既有失败承接通道（WebView 抓包/错误提示）承接，不产生承接真空
         // 2. mimeType 为 null（嗅探超时或网络错误）→ 可能是视频流但嗅探失败，尝试 HLS 优先
         //    （铁证：002日志嗅探超时 6.6s 后直接降级 WebView，但 URL 实际可能是视频流）
         if (sniff.contentType == ExoPlayerHelper.SniffResult.TYPE_UNKNOWN) {
@@ -233,10 +239,12 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             )
             if (isHtmlPage) {
                 AppLog.put(
-                    "ExoFallback: sniff UNKNOWN + HTML mimeType=$mt, skip video fallback, " +
+                    "ExoFallback: sniff UNKNOWN + HTML mimeType=$mt, keep fallback chain (5.5b F-12), " +
                         "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
                 )
-                return emptyList()
+                // video-sniff-403-and-rss-classic-fix Phase 4 (5.5b/Z15·F-12)：原 emptyList()（空降级链）
+                // 改为保留降级链——.html 页面可能为壳内直链视频（R6/F-12 对齐）
+                return listOf(C.TYPE_HLS, C.TYPE_OTHER)
             }
             // mimeType 为 null（嗅探超时）或非 HTML 类型 → 尝试 HLS 优先（最常见视频格式）
             // HLS 失败后会自动降级 WebView，不会卡死
@@ -307,7 +315,12 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                             currentSniffResult.mimeType?.let { setMimeType(it) }
                         }
                         .build()
-                    HlsMediaSource.Factory(ExoPlayerHelper.resolvingDataSource)
+                    // video-sniff-403-and-rss-classic-fix 2.8b/R-P1-8（Z3）：HlsKeyDataSourceFactory 接入主链路——
+                    // 对 AES-128 key URL 额外注入 currentPlayHeaders 防盗链头（部分 CDN 对 key 请求校验更严格），
+                    // 对齐旧入口 createMediaSource 的 P1-8 包装（原先仅旧入口接入，主链路缺失）
+                    val hlsDataSourceFactory =
+                        HlsKeyDataSourceFactory().wrap(ExoPlayerHelper.resolvingDataSource)
+                    HlsMediaSource.Factory(hlsDataSourceFactory)
                         // 缓冲速度优化（P0）：仅解析 m3u8 清单即完成 preparation，首帧耗时降 30%+
                         .setAllowChunklessPreparation(true)
                         // P2-2: 指数退避重试策略（1s/2s/4s/8s/16s），最多 5 次
@@ -378,7 +391,7 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      * - applyMediaSourceByType 创建 MediaSource 失败
      * - onPlayerError 收到解析错误（3002/3004/UnrecognizedInputFormatException）
      *
-     * 全部降级失败时触发 VIDEO_FALLBACK_WEBVIEW 事件，由 UI 切换到 WebView 模式
+     * 全部降级失败时触发 VIDEO_PLAY_ERROR 统一错误提示（由 UI 弹"重试/系统浏览器"对话框）
      */
     private fun tryNextFallback() {
         if (currentFallbackIndex < fallbackTypes.size - 1) {
@@ -394,15 +407,18 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             )
             applyMediaSourceByType(fallbackTypes[currentFallbackIndex], currentUrl, currentHeaders)
         } else {
-            // 全部降级失败，触发 VIDEO_FALLBACK_WEBVIEW
+            // 全部降级失败，触发统一错误提示（video-sniff-403-and-rss-classic-fix Phase 2 (3.5)：
+            // WebView 播放器已删除，原 VIDEO_FALLBACK_WEBVIEW 改 VIDEO_PLAY_ERROR"重试/系统浏览器"承接）
             AppLog.put(
                 "ExoFallback: all fallback exhausted (${fallbackTypes.size} types tried), " +
-                    "switch to WebView mode, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+                    "prompt retry/browser, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
             )
-            postEvent(
-                EventBus.VIDEO_FALLBACK_WEBVIEW,
-                Triple(currentUrl, VideoPlay.videoTitle ?: "", currentHeaders)
-            )
+            val errorInfo = buildString {
+                appendLine("播放失败：全部解码方式均失败")
+                appendLine("播放地址: ${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
+                appendLine("建议: 可重试，或复制到系统浏览器播放")
+            }
+            postEvent(EventBus.VIDEO_PLAY_ERROR, errorInfo)
         }
     }
 
@@ -541,6 +557,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             bufferingTimeoutHandler.removeCallbacks(bufferingTimeoutRunnable)
             // E2 优化：新播放重置重试计数
             retryCount = 0
+            // video-play-7001-videograph-fix 2.3：新播放会话重置 7001 重建计数
+            rebuild7001Count = 0
             // exoplayer-resilience Layer 2：新播放重置不可恢复错误计数
             // 理由：新播放/切换视频/切回 ExoPlayer 时给新的累计机会，避免历史失败影响当前播放
             unrecoverableFailCount = 0
@@ -636,15 +654,34 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                     fallbackTypes = buildFallbackTypes(sniff)
                     currentFallbackIndex = 0
 
+                    // video-sniff-403-and-rss-classic-fix 2.6/R-P1-4：预检被源站确定性拒绝（auth-retry 后仍 403/410）
+                    // 不再黑屏直连（原逻辑会用注定 403 的地址创建 HLS MediaSource → onPlayerError → 黑屏等待），
+                    // 直接发 VIDEO_PLAY_ERROR 提示用户（错误对话框提供"重试/系统浏览器"通道）
+                    if (sniff.preCheckRejected) {
+                        AppLog.put(
+                            "ExoFallback: preCheck rejected after auth-retry, skip doomed direct play, " +
+                                "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+                        )
+                        val rejectInfo = buildString {
+                            appendLine("播放失败")
+                            appendLine("错误信息: 视频地址被源站拒绝（防盗链 403），已尝试补齐鉴权头重试仍失败")
+                            appendLine("播放地址: ${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
+                            appendLine("建议: 请稍后重试，或切换线路/源；也可复制到系统浏览器播放")
+                        }
+                        postEvent(EventBus.VIDEO_PLAY_ERROR, rejectInfo)
+                        return@launch
+                    }
+
                     if (fallbackTypes.isEmpty()) {
                         // 嗅探失败 + 降级链为空（理论上不会发生，buildFallbackTypes 至少返回 3 项）
                         AppLog.put(
-                            "ExoFallback: empty fallback chain, switch to WebView, " +
+                            "ExoFallback: empty fallback chain, prompt error, " +
                                 "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
                         )
+                        // Phase 2 (3.5)：原 VIDEO_FALLBACK_WEBVIEW 改统一错误提示
                         postEvent(
-                            EventBus.VIDEO_FALLBACK_WEBVIEW,
-                            Triple(currentUrl, VideoPlay.videoTitle ?: "", currentHeaders)
+                            EventBus.VIDEO_PLAY_ERROR,
+                            "播放失败：视频地址嗅探失败且无可用降级方式，请重试或复制到系统浏览器播放"
                         )
                         return@launch
                     }
@@ -776,6 +813,109 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             }
         }
 
+        // video-sniff-403-and-rss-classic-fix 2.8/R-P1-6：403/410 确定性拒绝快速补头重试
+        // 复用 416 反射先例读取 responseCode；补 CookieManager 实时 Cookie 后立即重试一次，
+        // 缩短黑屏窗口（不进指数退避/长降级链）；重试仍失败走原降级链兜底
+        if (error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS && retryCount < MAX_RETRY) {
+            val cause403 = error.cause
+            if (cause403?.javaClass?.simpleName == "InvalidResponseCodeException") {
+                try {
+                    val responseCodeField = cause403.javaClass.getDeclaredField("responseCode")
+                    responseCodeField.isAccessible = true
+                    val responseCode = responseCodeField.get(cause403) as? Int
+                    if (responseCode == 403 || responseCode == 410 || responseCode == 451) {
+                        retryCount++
+                        val refreshedHeaders = (currentHeaders ?: emptyMap()).toMutableMap()
+                        val refreshedCookie = runCatching {
+                            android.webkit.CookieManager.getInstance().getCookie(currentUrl)
+                        }.getOrNull()
+                        if (!refreshedCookie.isNullOrBlank()) {
+                            refreshedHeaders["Cookie"] = refreshedCookie
+                        }
+                        AppLog.put(
+                            "ExoPlayer 403 快速补头重试($retryCount/$MAX_RETRY): code=$responseCode, " +
+                                "headers=${refreshedHeaders.keys}, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+                        )
+                        currentHeaders = refreshedHeaders
+                        ExoPlayerHelper.setDefaultHeaders(refreshedHeaders)
+                        mInternalPlayer?.let { player ->
+                            player.seekToDefaultPosition()
+                            player.prepare()
+                        }
+                        return
+                    }
+                } catch (e: Exception) {
+                    // 反射失败，忽略（走原降级链）
+                }
+            }
+        }
+
+        // video-play-7001-videograph-fix 2.3/AD-03：ERROR_CODE_VIDEO_FRAME_PROCESSING_FAILED(7001) 兜底重建
+        // 根因（media3 1.10.1 源码实证）：videoEffects 一旦被 setVideoEffects 写入（增强开启）即激活 GL
+        // VideoGraph 管线并终生不回置 null；GSY Surface(-1,-1) 负分辨率哨兵触发 Presentation
+        // createForWidthAndHeight(-1,-1) 抛异常。空 effects/清 effects/同实例 seekTo+prepare 均无法弥合
+        // （videoSink/VideoGraph 对象随 release 才销毁）。
+        // 方案（design 2.3.4）：不重试同一实例（GL 残留必败死循环），改为——
+        //   标记旧实例污染 → 清空池（防其他复用实例再碰 GL 残留）→ 旧实例 recycle（tainted 用完即毁）
+        //   → acquire 全新实例重绑（照抄 prepareAsyncInternal 初始化链）→ 按当前降级类型重建 MediaSource 重试。
+        // 单会话重建超 MAX_7001_REBUILD 次仍 7001 → tryNextFallback 降级链（耗尽后统一错误提示兜底）。
+        // 增强关闭态已由 AD-01 守卫保证不进 GL 管线，本分支仅增强开启用户兜底。
+        if (error.errorCode == 7001) {
+            if (rebuild7001Count >= MAX_7001_REBUILD) {
+                AppLog.put(
+                    "ExoPlayer 视频渲染管线错误(7001): rebuild limit reached($rebuild7001Count), advance fallback, " +
+                        "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+                )
+                rebuild7001Count = 0
+                tryNextFallback()
+                return
+            }
+            rebuild7001Count++
+            AppLog.put(
+                "ExoPlayer 视频渲染管线错误(7001): tainted旧实例+清池+acquire全新实例重建(#$rebuild7001Count), " +
+                    "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+            )
+            val oldPlayer = mInternalPlayer
+            // 标记实例已污染（含 GL 残留），pool.recycle 时会用完即毁不入池
+            runCatching { oldPlayer?.let { PlayerInstancePool.markTainted(it) } }
+            // 清空池：避免同 Activity 内其他复用实例再次碰 VideoGraph GL 残留
+            runCatching { PlayerInstancePool.clear() }
+            oldPlayer?.let { old ->
+                detachFromPlayer(old)
+                PlayerInstancePool.recycle(old) // tainted → release directly（GL 管线随 release 销毁）
+            }
+            mInternalPlayer = null
+            // 全新实例初始化链（照抄 prepareAsyncInternal L563-593 模式）
+            if (mRendererFactory == null) {
+                mRendererFactory = PlayerInstancePool.sharedRendererFactory
+            }
+            if (mLoadControl == null) {
+                mLoadControl = PlayerInstancePool.createLoadControl()
+            }
+            mInternalPlayer = PlayerInstancePool.acquire(Looper.myLooper()!!)
+            mTrackSelector = PlayerInstancePool.trackSelectorOf(mInternalPlayer)
+            mEventLogger = mTrackSelector?.let { EventLogger(it) }
+            attachToPlayer(mInternalPlayer)
+            if (mSpeedPlaybackParameters != null) {
+                mInternalPlayer.playbackParameters = mSpeedPlaybackParameters
+            }
+            if (isLooping) {
+                mInternalPlayer.repeatMode = Player.REPEAT_MODE_ALL
+            }
+            if (mSurface != null) mInternalPlayer.setVideoSurface(mSurface)
+            // 重置 scope/release 标志位，允许新实例回调正常触发
+            isScopeCancelled.set(false)
+            isReleased = false
+            // 按当前降级类型重建 MediaSource 重试（实例级故障优先重试同类型）
+            val contentType = fallbackTypes.getOrNull(currentFallbackIndex)
+            if (contentType != null) {
+                applyMediaSourceByType(contentType, currentUrl, currentHeaders)
+            } else {
+                tryNextFallback()
+            }
+            return
+        }
+
         // E2 优化：网络错误自动重试（减少不必要的降级到 WebView）
         // 根因分析：临时网络抖动（弱信号/DNS 抖动/服务器瞬时 503）占 ExoPlayer 失败的 10%，
         // 这类错误不应直接降级 WebView，给予重试机会：seekToDefaultPosition + prepare 重新加载
@@ -821,7 +961,7 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
 
         // P0-fix: 网络错误重试耗尽后触发降级（SSL握手失败等不可恢复网络错误）
         // 铁证：91短视频 m3u8 播放，SSLHandshakeException 重试5次后卡死，不降级不报错
-        // 修复：重试耗尽后走降级链 tryNextFallback，降级链耗尽则触发 VIDEO_FALLBACK_WEBVIEW
+        // 修复：重试耗尽后走降级链 tryNextFallback，降级链耗尽则触发 VIDEO_PLAY_ERROR 统一错误提示
         if (isNetworkError && retryCount >= MAX_RETRY) {
             AppLog.put(
                 "ExoFallback: network error retry exhausted ($retryCount/$MAX_RETRY), trigger fallback, " +
@@ -831,23 +971,25 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             return
         }
 
-        // P0-fix: SSL握手失败直接降级WebView（确定性错误，重试和降级链无意义）
+        // P0-fix + Phase 2 (3.5)：SSL握手失败走统一错误提示（确定性错误，重试和降级链无意义）
         // 铁证：站点A m3u8，CDN 重置 TLS 连接，ExoPlayer OkHttp 无法握手
-        // 关键：HLS 和 Progressive 用同一个 OkHttp 数据源，SSL 同样会失败，跳过 Progressive 直接 WebView
-        // WebView 使用系统 WebView 的 TLS 栈（ conscrypt + Chromium），可成功握手
+        // 原"直接降级 WebView（系统 WebView TLS 栈可握手）"已随 WebView 播放器删除，
+        // 改为提示用户"重试/系统浏览器"承接（系统浏览器具备独立 TLS 栈，能力等价；占比低，列入监控）
         if (isSslError) {
             AppLog.put(
-                "ExoFallback: SSL handshake failed, switch to WebView directly (skip OkHttp-based fallbacks), " +
+                "ExoFallback: SSL handshake failed, prompt retry/browser (WebView channel removed), " +
                     "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
             )
-            postEvent(
-                EventBus.VIDEO_FALLBACK_WEBVIEW,
-                Triple(currentUrl, VideoPlay.videoTitle ?: "", currentHeaders)
-            )
+            val errorInfo = buildString {
+                appendLine("播放失败：SSL 握手失败（CDN 拒绝 TLS 连接）")
+                appendLine("播放地址: ${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
+                appendLine("建议: 重试无效时可用系统浏览器打开（其独立 TLS 栈可能成功握手）")
+            }
+            postEvent(EventBus.VIDEO_PLAY_ERROR, errorInfo)
             return
         }
 
-        // exoplayer-resilience Layer 2：不可恢复错误累计 + 自动 WebView 降级
+        // exoplayer-resilience Layer 2：不可恢复错误累计 + 统一错误提示
         // 触发条件：unrecoverableFailCount >= FALLBACK_RETRY_THRESHOLD(3) + 不可恢复错误类型
         // 不可恢复错误类型（参考 design.md AD-03）：
         // - 3002 PARSING_CONTAINER_MALFORMED：m3u8/mp4 解析错误（格式不兼容）
@@ -855,7 +997,7 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         // - 3004 PARSING_MANIFEST_MALFORMED：清单格式错误
         // - ERROR_CODE_DECODER_INIT_FAILED：解码器初始化失败
         // - ERROR_CODE_DECODING_FAILED：解码失败
-        // 设计理由：可恢复错误（网络抖动）重试即可，不可恢复错误重试无意义，达阈值后切换 WebView
+        // 设计理由：可恢复错误（网络抖动）重试即可，不可恢复错误重试无意义，达阈值后统一错误提示
         // V-P1-2 修正：3003 ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED 真实存在（原注释误判"3003 未使用已移除"），
         // 缺失导致 3003 逃逸白名单 → isParsingError 对 3003 成死代码 → 降级末端失败双触发路径全死
         val isUnrecoverableError = error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
@@ -893,52 +1035,38 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 return
             }
 
-            // V-P1-2: 末端解析失败（currentFallbackIndex 已在末端）——直接 WebView 兜底 + 错误提示，
-            // 不等 unrecoverableFailCount 累计阈值（否则末端失败陷入空转：既不降级也不 WebView 兜底）
+            // V-P1-2: 末端解析失败（currentFallbackIndex 已在末端）——直接错误提示兜底，
+            // 不等 unrecoverableFailCount 累计阈值（否则末端失败陷入空转：既不降级也不提示）
+            // Phase 2 (3.5)：原"WebView 兜底"改统一错误提示
             if (isParsingError && currentFallbackIndex >= fallbackTypes.size - 1) {
-                val title = VideoPlay.videoTitle ?: ""
                 AppLog.put(
-                    "ExoFallback: terminal fallback failed (${error.errorCodeName}), trigger WebView, " +
+                    "ExoFallback: terminal fallback failed (${error.errorCodeName}), prompt error, " +
                         "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
                 )
                 val errorInfo = buildString {
                     appendLine("播放失败：视频格式不支持或地址已失效")
                     appendLine("错误码: ${error.errorCode} (${error.errorCodeName})")
                     appendLine("播放地址: ${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
-                    appendLine("建议: 正在切换到 WebView 播放...")
+                    appendLine("建议: 可重试，或复制到系统浏览器播放")
                 }
                 postEvent(EventBus.VIDEO_PLAY_ERROR, errorInfo)
-                postEvent(
-                    EventBus.VIDEO_FALLBACK_WEBVIEW,
-                    Triple(currentUrl, title, currentHeaders)
-                )
                 return
             }
 
             if (unrecoverableFailCount >= FALLBACK_RETRY_THRESHOLD) {
-                // T1.2: 重试耗尽后先发送 VIDEO_PLAY_ERROR 事件（UI 错误提示），再触发 VIDEO_FALLBACK_WEBVIEW 降级
-                // AD-02: 所有失败场景必须有 UI 提示，不能静默降级
-                val title = VideoPlay.videoTitle ?: ""
+                // T1.2 + Phase 2 (3.5)：重试耗尽后发送 VIDEO_PLAY_ERROR 事件（UI 统一错误提示）
+                // AD-02: 所有失败场景必须有 UI 提示，不能静默
+                // Phase 2：原"再触发 VIDEO_FALLBACK_WEBVIEW 自动降级"已随 WebView 播放器删除
                 val errorInfo = buildString {
                     appendLine("播放失败（已重试 $unrecoverableFailCount 次）")
                     appendLine("错误码: ${error.errorCode} (${error.errorCodeName})")
                     appendLine("错误信息: ${error.message ?: "无"}")
                     appendLine("播放地址: ${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
                     appendLine("原因: ${error.cause?.toString() ?: "未知"}")
-                    appendLine("建议: 视频格式不兼容或地址已失效，正在切换到 WebView 播放...")
+                    appendLine("建议: 视频格式不兼容或地址已失效，可重试或复制到系统浏览器播放")
                 }
                 AppLog.put(errorInfo, error)
                 postEvent(EventBus.VIDEO_PLAY_ERROR, errorInfo)
-
-                // 触发自动 WebView 降级
-                AppLog.put(
-                    "ExoPlayer 累计失败 $unrecoverableFailCount 次（不可恢复错误 ${error.errorCodeName}），" +
-                        "自动切换到 WebView 模式"
-                )
-                postEvent(
-                    EventBus.VIDEO_FALLBACK_WEBVIEW,
-                    Triple(currentUrl, title, currentHeaders)
-                )
                 return
             }
             // 未达阈值，继续走友好提示让用户知道当前失败原因

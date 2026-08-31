@@ -457,7 +457,7 @@ class OtherConfigFragment : ComposeSettingFragment() {
                     AppConfig.updateCacheThreadCount.toString()
                 ),
                 min = 1,
-                max = 64,
+                max = 256,
                 value = AppConfig.updateCacheThreadCount,
                 onSelected = { AppConfig.updateCacheThreadCount = it }
             ),

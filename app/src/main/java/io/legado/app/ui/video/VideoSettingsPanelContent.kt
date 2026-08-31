@@ -484,15 +484,15 @@ fun VideoSettingsPanelContent(
             )
         }
         PanelSelection.PlayerType -> {
+            // video-sniff-403-and-rss-classic-fix Phase 2 (3.6)：WebView 播放器已删除，仅剩 自动/内置 两档
             val options = listOf(
                 stringResource(R.string.player_type_auto),
-                stringResource(R.string.player_type_exo),
-                stringResource(R.string.player_type_webview)
+                stringResource(R.string.player_type_exo)
             )
             SingleChoiceDialog(
                 title = stringResource(R.string.player_type),
                 options = options,
-                selectedIndex = playerType.coerceIn(0, 2),
+                selectedIndex = playerType.coerceIn(0, 1),
                 onSelect = {
                     playerType = it
                     VideoPlay.playerType = it
@@ -648,10 +648,10 @@ private fun PanelButton(text: String, onClick: () -> Unit) {
 /** 下拉选择类型 */
 private enum class PanelSelection { SkipTime, CacheSize, PlayerType, SeekSensitivity, EnhancePreset, EnhanceSharpen, EnhanceDenoise, BufferStrategy }
 
+/** 播放器类型标签（Phase 2：已收敛为 自动/内置 两档，原 WebView 项删除） */
 @Composable
 private fun playerTypeLabel(type: Int): String = when (type) {
     1 -> stringResource(R.string.player_type_exo)
-    2 -> stringResource(R.string.player_type_webview)
     else -> stringResource(R.string.player_type_auto)
 }
 

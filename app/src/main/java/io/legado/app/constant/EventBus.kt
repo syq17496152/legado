@@ -56,11 +56,8 @@ object EventBus {
     const val LIBRARY_CONTAINER_CHANGED = "libraryContainerChanged"
     const val UP_VIDEO_INFO = "upVideoInfo"
     const val VIDEO_PLAY_ERROR = "videoPlayError"
-    /**
-     * exoplayer-resilience Layer 2：ExoPlayer 失败次数达阈值 + 不可恢复错误时触发
-     * 载荷：Triple<url, title, headers>，供 VideoFragment.switchToWebViewMode 使用
-     */
-    const val VIDEO_FALLBACK_WEBVIEW = "videoFallbackWebview"
+    // video-sniff-403-and-rss-classic-fix Phase 2 (3.6)：VIDEO_FALLBACK_WEBVIEW 事件常量已删除
+    // （WebView 播放器移除，原 WebView 承接点统一改发 VIDEO_PLAY_ERROR"重试/系统浏览器"）
     const val ARTICLES_LOADED = "articlesLoaded"
     // 阅读页滚动模式顶部下拉快速书签 (R5)
     const val PULL_DOWN_BOOKMARK = "pullDownBookmark"

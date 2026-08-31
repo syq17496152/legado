@@ -23,7 +23,6 @@ import com.shuyu.gsyvideoplayer.video.base.GSYVideoView
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.RssEpisode
-import io.legado.app.help.download.ChunkDownloader
 import io.legado.app.help.gsyVideo.VideoPlayer
 import io.legado.app.model.Download
 import io.legado.app.model.VideoPlay
@@ -69,11 +68,9 @@ class VideoFragment : Fragment() {
     private var _playerView: VideoPlayer? = null
     val playerView: VideoPlayer? get() = _playerView
 
-    // P0-1.6: WebView 降级播放相关（ExoPlayer 失败时降级到 WebView，复用 skill V2 模板）
-    private var webViewPlayer: WebViewVideoPlayer? = null
-    private var btnSwitchBack: ImageButton? = null
-    /** 当前是否处于 WebView 播放模式（影响 activatePlayer/deactivatePlayer 行为） */
-    private var isWebViewMode = false
+    // video-sniff-403-and-rss-classic-fix Phase 2 (3.3)：WebView 降级播放器已删除
+    // （webViewPlayer/btnSwitchBack/isWebViewMode 字段及 switchToWebViewMode/switchBackToExo 已清理，
+    //   失败承接 = tryNextFallback 降级链 + retryExoPlayback 重试 + 错误对话框"重试/系统浏览器"）
 
     // 阶段8 F10：进度监听 Handler（80%进度触发预缓冲下一文章）
     private val progressMonitorHandler = Handler(Looper.getMainLooper())
@@ -186,11 +183,7 @@ class VideoFragment : Fragment() {
         bottomProgressbar = _playerView?.findViewById(R.id.bottom_progressbar)
         AppLog.put("VideoFragment onViewCreated: episode=$episodeIndex, playerView=${_playerView != null}, bottomProgressbar=${bottomProgressbar != null}")
 
-        // P0-1.6: 初始化 WebView 降级播放器 + 切换回内置播放器按钮
-        webViewPlayer = view.findViewById(R.id.webViewPlayer)
-        btnSwitchBack = view.findViewById<ImageButton>(R.id.btn_switch_back).apply {
-            setOnClickListener { switchBackToExo() }
-        }
+        // video-sniff-403-and-rss-classic-fix Phase 2 (3.3)：WebView 降级播放器初始化已删除（布局同步清理）
 
         // 初始化悬浮控件
         initOverlayControls(view)
@@ -210,11 +203,6 @@ class VideoFragment : Fragment() {
         // 顺序很重要：先取消嗅探协程，避免 releasePlayer 后嗅探协程回调 setMediaItem 操作已 release 的 mInternalPlayer
         VideoPlay.videoManager.releaseSniffResources()
         releasePlayer()
-        // P0-1.6: 释放 WebView 资源，防内存泄漏
-        webViewPlayer?.release()
-        webViewPlayer = null
-        btnSwitchBack = null
-        isWebViewMode = false
         _playerView = null
         bottomProgressbar = null  // F1: 清理引用
         controlsLayer = null
@@ -238,17 +226,10 @@ class VideoFragment : Fragment() {
     // ==================== 播放器生命周期控制 ====================
 
     fun activatePlayer() {
-        AppLog.put("VideoFragment.activatePlayer called: isActivated=$isActivated, _playerView=${_playerView != null}, isWebViewMode=$isWebViewMode, singleUrl=${VideoPlay.singleUrl}")
+        AppLog.put("VideoFragment.activatePlayer called: isActivated=$isActivated, _playerView=${_playerView != null}, singleUrl=${VideoPlay.singleUrl}")
         if (isActivated) return
         val pv = _playerView ?: return
         isActivated = true
-
-        // P0-1.6: WebView 模式下仅恢复 WebView 播放，不重新设置 ExoPlayer
-        // ViewPager2 切换回此 Fragment 时恢复 WebView 播放
-        if (isWebViewMode) {
-            webViewPlayer?.resume()
-            return
-        }
 
         // 4.1 横屏视频检测：注册 onPrepared 回调获取视频尺寸
         pv.setVideoAllCallBack(object : GSYSampleCallBack() {
@@ -281,7 +262,8 @@ class VideoFragment : Fragment() {
                 if (!VideoPlay.isResumeFromFloat) {
                     viewLifecycleOwner.lifecycleScope.launch {
                         val articleUrl = VideoPlay.rssArticles?.getOrNull(VideoPlay.rssArticleIndex)?.link ?: ""
-                        val videoUrl = VideoPlay.videoUrl ?: return@launch
+                        // 4.8b（Z9）：恢复键与保存键一致（嗅探前原始 URL）
+                        val videoUrl = VideoPlay.historyKeyUrl ?: return@launch
                         val history = PlayHistoryStore.load(articleUrl, videoUrl)
                         if (history != null && history.position > 10000) {
                             pv.seekTo(history.position)
@@ -332,12 +314,7 @@ class VideoFragment : Fragment() {
         isActivated = false
         cancelAutoHide()  // F2: 停止自动隐藏
         stopBufferUpdate()  // F1: 停止缓冲进度更新
-        stopProgressMonitor()  // 阶段8 F10：停止进度监听
-        // P0-1.6: WebView 模式下仅暂停 WebView（ViewPager2 切走时）
-        if (isWebViewMode) {
-            webViewPlayer?.pause()
-            return
-        }
+        stopProgressMonitor()  // 阶段8 F10: 停止进度监听
         _playerView?.onVideoPause()
     }
 
@@ -345,85 +322,24 @@ class VideoFragment : Fragment() {
         _playerView?.currentPlayer?.release()
     }
 
-    // ==================== P0-1.6: WebView 降级播放模式 ====================
-
     /**
-     * P0-1.6: 切换到 WebView 播放模式
+     * video-sniff-403-and-rss-classic-fix Phase 2 (3.3)：重试 ExoPlayer 播放
      *
-     * ExoPlayer 播放失败时由 Activity 调用。
-     * 暂停 ExoPlayer + 隐藏其控件层，显示 WebView 播放器 + 切换回按钮。
-     * WebView 使用 skill V2 hls-video-player 模板（HLS.js + 进度条/倍速/全屏/横竖屏/上下集）。
-     *
-     * ViewPager2 兼容性（用户反馈2）：切换后 isWebViewMode=true，后续 activatePlayer/deactivatePlayer
-     * 走 WebView 分支（resume/pause），ViewPager2 上下滑动切换不受影响。
-     */
-    fun switchToWebViewMode(url: String, title: String, headers: Map<String, String>) {
-        val pv = _playerView ?: return
-        val wvp = webViewPlayer ?: return
-        // exoplayer-resilience Layer 2：自动降级时给用户 Toast 提示
-        // 区分手动降级（错误对话框点击 WebView）和自动降级（累计失败达阈值）
-        // 自动降级时 isWebViewMode 之前为 false，切换后变 true；手动降级时也是 false→true
-        // 简化：每次 switchToWebViewMode 都 Toast（用户感知"已切换"即可，无需区分手动/自动）
-        toastOnUi(getString(R.string.video_switch_to_webview_mode))
-        // 暂停 ExoPlayer
-        pv.onVideoPause()
-        // 隐藏 ExoPlayer
-        pv.visibility = View.GONE
-        // 修复：不隐藏整个controlsLayer，只隐藏右侧按钮和返回按钮
-        // 保留left_bottom_container（多线路多集UI）可见，让用户在WebView模式下也能切换线路/集数
-        rightButtons?.visibility = View.GONE
-        btnBackOverlay?.visibility = View.GONE
-        // 显式恢复left_bottom_container可见（可能被hideControlsAnimated隐藏为GONE）
-        leftBottomContainer?.visibility = View.VISIBLE
-        leftBottomContainer?.alpha = 1f
-        leftBottomContainer?.translationY = 0f
-        // 显示 WebView 播放器 + 切换回按钮
-        wvp.visibility = View.VISIBLE
-        btnSwitchBack?.visibility = View.VISIBLE
-        // 启动 WebView 播放
-        wvp.play(url, title, headers)
-        isWebViewMode = true
-        // P0 日志规范：播放器状态切换（降级到 WebView）永久日志
-        AppLog.put("switchToWebView: episode=$episodeIndex, title=$title, urlLen=${url.length}")
-    }
-
-    /**
-     * P0-1.6: 切换回内置播放器（ExoPlayer）
-     *
-     * 由"切换回内置播放器"按钮调用，委托给 retryExoPlayback 重新激活 ExoPlayer。
-     */
-    fun switchBackToExo() {
-        if (!isWebViewMode) return
-        retryExoPlayback()
-    }
-
-    /**
-     * P0-1.4: 重试 ExoPlayer 播放
-     *
-     * 由错误对话框"重试"按钮或 switchBackToExo 调用。
-     * 重置到 ExoPlayer 模式（隐藏 WebView、显示 ExoPlayer），重置 isActivated 后重新激活。
+     * 由错误对话框"重试"按钮调用（switchToWebViewMode/switchBackToExo 已随 WebView 播放器删除）。
+     * 重置 isActivated 后重新激活。
      */
     fun retryExoPlayback() {
         val pv = _playerView ?: return
-        // 重置到 ExoPlayer 模式（处理可能处于 WebView 模式的情况）
-        webViewPlayer?.let {
-            it.pause()
-            it.visibility = View.GONE
-        }
-        btnSwitchBack?.visibility = View.GONE
         pv.visibility = View.VISIBLE
         controlsLayer?.visibility = View.VISIBLE
-        // 修复：恢复right_buttons可见性（switchToWebViewMode隐藏了它）
         rightButtons?.visibility = View.VISIBLE
-        isWebViewMode = false
         // 重置激活标志，让 activatePlayer 重新走完整 ExoPlayer 设置流程
         isActivated = false
         activatePlayer()
-        // video-player-image-enhance A1.3: 降级返回后重新应用画质增强滤镜
-        //（WebView 模式不适用滤镜，切回 Exo 后由 activatePlayer→onPrepared 链路恢复，此处兜底立即应用）
+        // video-player-image-enhance A1.3: 重试后重新应用画质增强滤镜
+        //（由 activatePlayer→onPrepared 链路恢复，此处兜底立即应用）
         _playerView?.let { ImageEnhanceController.apply(it) }
-        // P0 日志规范：播放器状态切换（切换回 ExoPlayer）永久日志
-        AppLog.put("retryExoPlayback: episode=$episodeIndex, isWebViewMode=false")
+        AppLog.put("retryExoPlayback: episode=$episodeIndex")
     }
 
     // ==================== 阶段8 F10：进度监听（预缓冲触发） ====================
@@ -728,10 +644,8 @@ class VideoFragment : Fragment() {
     private fun getOverlayControls(): List<View> {
         val list = mutableListOf<View>()
         // 左下角容器（包含标题、线路选择器、集数选择器）
-        // WebView模式下不参与自动隐藏（保持多线路多集UI可见，让用户能切换线路/集数）
-        if (!isWebViewMode) {
-            leftBottomContainer?.let { list.add(it) }
-        }
+        // video-sniff-403-and-rss-classic-fix Phase 2：WebView 模式已删除，恢复无条件参与自动隐藏
+        leftBottomContainer?.let { list.add(it) }
         // 右侧功能按钮容器（U1：现在包含全屏按钮作为第一个子控件）
         rightButtons?.let { list.add(it) }
         // B1+ 修复 + video-player-ux-fixes P4：全屏专属控件（悬浮返回按钮/全屏态标题）参与 3 秒自动隐藏
@@ -828,7 +742,8 @@ class VideoFragment : Fragment() {
         val title = VideoPlay.videoTitle ?: ""
         val taskType =
             if (url.contains(".m3u8", ignoreCase = true)) DownloadTaskType.HLS else DownloadTaskType.DIRECT
-        Download.start(requireContext(), url, title, taskType, ChunkDownloader.resolveHeaders())
+        // Phase 3 收口：播放现场头直接进任务创建链（DownloadService.addTask 以 toJsonHeaders 持久化，恢复/续传不丢头）
+        Download.start(requireContext(), url, title, taskType, VideoPlay.currentPlayHeaders ?: emptyMap())
     }
 
     // ==================== 线路选择器（REQ-17） ====================
@@ -1071,13 +986,8 @@ class VideoFragment : Fragment() {
             }
         }
 
-        // P0-1.6 修复（5.6 验证发现）：WebView 模式下的触摸事件处理
-        // 问题：WebView 全屏播放时消费所有触摸事件，导致 ViewPager2 无法上下滑动切换文章
-        // 修复方案：在 WebViewVideoPlayer 中重写 onInterceptTouchEvent（而非 OnTouchListener）
-        // 原因：FrameLayout 是 ViewGroup，其 OnTouchListener 只在子 View 不处理事件时才被调用，
-        //        但 WebView 默认消费所有触摸事件，导致 OnTouchListener 永远不触发。
-        //        onInterceptTouchEvent 在事件传递给子 View 之前被调用，可以拦截垂直滑动。
-        // 实现位置：WebViewVideoPlayer.onInterceptTouchEvent()
+        // video-sniff-403-and-rss-classic-fix Phase 2：原 P0-1.6 WebView 模式触摸事件说明段已随
+        // WebView 播放器删除而失效清理（WebViewVideoPlayer.onInterceptTouchEvent 不复存在）
     }
 
     /**

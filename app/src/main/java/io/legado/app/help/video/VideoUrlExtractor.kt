@@ -46,8 +46,12 @@ object VideoUrlExtractor {
      * 注意：4处调用方（VideoPlay.kt L425/L520/L547 + VideoUrlExtractor.kt L552）
      * 必须统一引用此常量，禁止硬编码（V1 文档 T1.1/T1.2 关键漏洞：只改默认值无效）
      */
-    const val R5_DELAY_TIME = 1000L
-    const val R5_TIMEOUT = 6000L
+    // video-sniff-403-and-rss-classic-fix 2.3a/R-P1-10：恢复巅峰窗口参数（07-26 af3ba150c 曾砍至 6s/1s 致慢源嗅探成功率下降）
+    // 巅峰实证：git show 7e11d7399:VideoUrlExtractor.kt timeout=15000/delay=3000
+    // 命中即收口：四路命中点均立即 destroy+resume（BackstageWebView 命中路径），快站点无额外等待
+    // 已知上限：慢站点总耗时延长至 15s（快站点不受影响，命中即返回）
+    const val R5_DELAY_TIME = 3000L
+    const val R5_TIMEOUT = 15000L
 
     /**
      * FR-1: R5 嗅探去重锁
@@ -62,7 +66,8 @@ object VideoUrlExtractor {
      * 已知上限：ConcurrentHashMap 常驻内存，每条记录约 200 字节，单次会话 < 50 次
      * 升级路径：如需更精细控制可按 source+url 分组，或引入 LRU 淘汰
      */
-    private val r5InProgress = ConcurrentHashMap<String, Deferred<String?>>()
+    // 2.3/R-P1-1：泛型升级 SniffCandidate?（携带嗅探上下文）
+    private val r5InProgress = ConcurrentHashMap<String, Deferred<SniffCandidate?>>()
     private val r5CleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
@@ -231,7 +236,7 @@ object VideoUrlExtractor {
         source: BaseSource?,
         delayTime: Long = R5_DELAY_TIME,
         timeout: Long = R5_TIMEOUT
-    ): String? {
+    ): SniffCandidate? {
         if (url.isBlank()) return null
 
         // FR-1: 提取完整 URL（去掉 fragment）作为去重 key
@@ -296,7 +301,7 @@ object VideoUrlExtractor {
         source: BaseSource?,
         delayTime: Long,
         timeout: Long
-    ): String? {
+    ): SniffCandidate? {
         AppLog.putInfo("R5网络抓包: 启动, ${sanitizeUrl(url)}, delayTime=${delayTime}, timeout=${timeout}")
         // 构造 AnalyzeUrl 获取 headerMap（防盗链 Referer/UA/Cookie 等）
         val headerMap = try {
@@ -315,7 +320,8 @@ object VideoUrlExtractor {
         // 根因：60 次 JobCancellationException——退出播放器时 stopLoading() cancelChildren 触发协程取消，
         //   runCatching 捕获 CancellationException → onFailure 记录为"抓包失败"（误报）
         return try {
-            BackstageWebView(
+            // R-P1-1/AD-01：命中后读取四路命中点写入的嗅探上下文候选
+            val backstageWebView = BackstageWebView(
                 url = url,
                 headerMap = headerMap,
                 tag = source?.getKey(),
@@ -324,7 +330,21 @@ object VideoUrlExtractor {
                 timeout = timeout,
                 interceptAllRequests = true,   // 新增：启用 shouldInterceptRequest 拦截 fetch/XHR
                 videoSniffJs = VIDEO_SNIFF_JS   // 新增：注入 JS 覆写 fetch/XHR
-            ).getStrResponse().body
+            )
+            val response = backstageWebView.getStrResponse()
+            val hitUrl = response.body
+            if (hitUrl.isNullOrBlank()) {
+                null
+            } else {
+                val candidate = backstageWebView.lastSniffCandidate
+                if (candidate != null) {
+                    AppLog.putInfo("R5嗅探上下文回传: source=${candidate.source}, headers=${candidate.headers.keys}")
+                    candidate.copy(url = hitUrl)
+                } else {
+                    // 兜底：命中但无上下文（理论不可达，四路命中均已写入）
+                    SniffCandidate(url = hitUrl, source = SniffCandidate.SOURCE_WEBVIEW_RUNTIME)
+                }
+            }
         } catch (e: kotlinx.coroutines.CancellationException) {
             // 协程取消（退出播放器/超时）是正常行为，不记录为失败
             throw e
@@ -610,7 +630,7 @@ object VideoUrlExtractor {
         url: String,
         source: BaseSource?,
         ruleData: RuleDataInterface?
-    ): String? {
+    ): SniffCandidate? {
         if (url.isBlank()) return null
         // Bug-fix 2026-07-26: URL 已是视频流格式时直接返回，跳过三层解析
         // 铁证：logcat 11 次 .m3u8 URL 走完整 12 秒超时返回 null 触发 WebView 降级（WebView 也不支持 HLS）
@@ -618,13 +638,14 @@ object VideoUrlExtractor {
         // 修复：识别 .m3u8/.mpd/.mp4/.flv/.mkv/.webm/.ts(排除) 等视频流后缀，直接交给 ExoPlayer
         if (isDirectVideoStreamUrl(url)) {
             AppLog.putInfo("extractVideoUrlForEpisode: URL已是视频流, 跳过三层解析直接返回, ${sanitizeUrl(url)}")
-            return url
+            return SniffCandidate(url = url, source = SniffCandidate.SOURCE_FAST)
         }
         // FR-8: play.php 类 URL 预解析缓存检查（5 分钟 TTL，降低首帧延迟方差 7.5 倍）
         playerPageCache[url]?.let { entry ->
             if (System.currentTimeMillis() - entry.timestamp < PLAYER_PAGE_CACHE_TTL_MS) {
                 AppLog.putInfo("FR-8 预解析缓存命中, url=${sanitizeUrl(url)}")
-                return entry.videoUrl
+                // 静态解析路径无 WebView 上下文，headers 留空由消费端走源配置兜底
+                return SniffCandidate(url = entry.videoUrl, source = SniffCandidate.SOURCE_MACCMS)
             }
             playerPageCache.remove(url)
         }
@@ -657,7 +678,8 @@ object VideoUrlExtractor {
                 if (!m3u8Url.isNullOrBlank()) {
                     AppLog.put("extractVideoUrlForEpisode: 第一层MacCMS解析成功, m3u8UrlLen=${m3u8Url.length}")
                     playerPageCache[url] = PlayerPageCacheEntry(m3u8Url, System.currentTimeMillis())
-                    return m3u8Url
+                    // 静态解析无 WebView 上下文，headers 留空走消费端源配置兜底
+                    return SniffCandidate(url = m3u8Url, source = SniffCandidate.SOURCE_MACCMS)
                 }
                 // 第二层 DOM 解析（复用第一层 HTML，避免重复请求）
                 if (playPageHtml.isNotBlank()) {
@@ -665,7 +687,7 @@ object VideoUrlExtractor {
                     if (domUrls.isNotEmpty()) {
                         AppLog.put("extractVideoUrlForEpisode: 第二层DOM解析成功, urlCount=${domUrls.size}")
                         playerPageCache[url] = PlayerPageCacheEntry(domUrls[0], System.currentTimeMillis())
-                        return domUrls[0]
+                        return SniffCandidate(url = domUrls[0], source = SniffCandidate.SOURCE_DOM)
                     }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -677,11 +699,12 @@ object VideoUrlExtractor {
         }
         // 第三层 网络抓包拦截
         return try {
-            val webViewUrl = extractWithWebView(url, source, delayTime = R5_DELAY_TIME, timeout = R5_TIMEOUT)
+            val webViewCandidate = extractWithWebView(url, source, delayTime = R5_DELAY_TIME, timeout = R5_TIMEOUT)
+            val webViewUrl = webViewCandidate?.url
             if (!webViewUrl.isNullOrBlank() && webViewUrl != url) {
                 AppLog.put("extractVideoUrlForEpisode: 第三层网络抓包成功, urlLen=${webViewUrl.length}")
                 playerPageCache[url] = PlayerPageCacheEntry(webViewUrl, System.currentTimeMillis())
-                webViewUrl
+                webViewCandidate
             } else {
                 // T2.9: 第三层失败返回 null（解决 Bug-16：不返回非视频流URL给 ExoPlayer）
                 // 原 resolvedUrl 可能是文章页 URL（非视频流），传给 ExoPlayer 会触发 UnrecognizedInputFormatException

@@ -1041,7 +1041,6 @@
     <string name="video_seconds_format">%1$d秒</string>
     <string name="video_resume_from_format">已从 %1$d:%2$02d 继续播放</string>
     <string name="video_no_available_url">暂无可用地址</string>
-    <string name="video_switch_to_webview_mode">ExoPlayer 多次失败，已切换到 WebView 模式</string>
     <string name="skip_book_credits">跳过片头片尾</string>
     <string name="set_source_variable">设置源变量</string>
     <string name="set_book_variable">设置书籍变量</string>

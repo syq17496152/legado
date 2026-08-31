@@ -123,7 +123,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 108,
+    version = 109,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -205,6 +205,7 @@ val appDb by lazy {
         // archive-ui P1-F: 105→106 使用手动 Migration（DatabaseMigrations.migration_105_106），新增 AI agent/images/memory/read-aloud bgm/speaker/book character/chapter summary 等共 19 张表（含 2 张 FTS4 虚拟表）
         // download-manager: 106→107 使用手动 Migration（DatabaseMigrations.migration_106_107），新增 download_tasks 表（下载任务持久化）
         // download-manager-optimize B8: 107→108 使用手动 Migration（migration_107_108），download_tasks 删除 errorMsg/resumePointJson/segmentsJson 僵尸列（建新表迁数据）
+        // video-sniff-403-and-rss-classic-fix 4.8e: 108→109 使用手动 Migration（migration_108_109），playHistories 主键扩为 (articleUrl, videoUrl, rssSourceId)（建新表迁数据）
     ]
 )
 abstract class AppDatabase : RoomDatabase() {

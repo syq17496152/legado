@@ -114,7 +114,8 @@ class ExoVideoManager: GSYVideoBaseManager() {
      * video-player-image-enhance B2.1: 应用画质增强效果链（锐化/降噪 media3-effect）
      * playerManager 为 protected，访问链（playerManager→getMediaPlayer→exoPlayerInstance）
      * 必须在管理器内部完成（同 getAudioTracks/releaseSniffResources 先例）。
-     * 档位全关时 setVideoEffects(空列表) 显式清空（K4 防池化实例跨会话残留）。
+     * 非空效果链才允许 setVideoEffects——空列表调用会在 media3 1.10.1 激活 GL VideoGraph 管线，
+     * 禁止以"显式清空"名义注入空列表（video-play-7001-videograph-fix 2.1.3/AD-01）。
      */
     @OptIn(UnstableApi::class)
     fun applyImageEnhanceEffects() {
@@ -126,7 +127,14 @@ class ExoVideoManager: GSYVideoBaseManager() {
                 VideoPlay.enhanceSharpenLevel,
                 VideoPlay.enhanceDenoiseLevel
             )
+            // video-play-7001-videograph-fix 2.1/AD-01：增强关闭时必须零注入。
+            // 根因：media3 1.10.1 中 setVideoEffects(空列表) 也是非 null → 激活 GL VideoGraph 管线，
+            // 叠加 GSY Surface(-1,-1) 负分辨率哨兵 → 切集首帧后 Presentation.createForWidthAndHeight(-1,-1) 抛 7001。
+            // 原"空列表显式清空(K4)"的注入动作本身就是激活 GL 管线的操作，改为守卫不注入。
+            if (effects.isEmpty()) return
             player.setVideoEffects(effects)
+            // video-play-7001-videograph-fix 2.2/AD-02：标记实例已注入 effects → 用完即毁不入池（池污染隔离）
+            io.legado.app.help.exoplayer.PlayerInstancePool.markTainted(player)
         } catch (t: Throwable) {
             // 效果链注入失败不影响播放（media3 管线异常兜底）
             AppLog.put("ImageEnhance: setVideoEffects failed: ${t.message}")

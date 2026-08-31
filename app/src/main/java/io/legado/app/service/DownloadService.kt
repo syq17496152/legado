@@ -19,6 +19,7 @@ import io.legado.app.help.download.ChunkDownloader
 import io.legado.app.help.download.DownloadError
 import io.legado.app.help.download.HlsDownloader
 import io.legado.app.help.download.HlsResult
+import io.legado.app.help.video.engine.HeaderResolver
 import io.legado.app.utils.IntentType
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.openFileUri
@@ -35,7 +36,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import org.json.JSONObject
 import splitties.init.appCtx
 import splitties.systemservices.connectivityManager
 import splitties.systemservices.notificationManager
@@ -283,7 +283,8 @@ class DownloadService : BaseService() {
         val headers = parseHeaders(headersJson)
         val fileName = resolveFileName(rawFileName, url, taskType)
         // id 由 Room 主键生成：进程被杀后可恢复续传，且作为通知 id 稳定映射
-        val id = DownloadState.addTask(url, fileName, taskType = taskType, headersJson = headersJson)
+        // Phase 3 头持久化收口：任务创建时以 toJsonHeaders 落库最终解析头（恢复/续传直接还原完整头，不再依赖播放现场遗留头）
+        val id = DownloadState.addTask(url, fileName, taskType = taskType, headersJson = HeaderResolver.toJsonHeaders(headers))
         downloadInfos[id] = DownloadInfo(
             url, fileName, taskType, headers, maxRetry = maxRetry.coerceAtLeast(0)
         )
@@ -594,17 +595,10 @@ class DownloadService : BaseService() {
     }
 
     private fun parseHeaders(json: String?): Map<String, String> {
-        if (json.isNullOrBlank()) return ChunkDownloader.resolveHeaders()
-        return runCatching {
-            val obj = JSONObject(json)
-            val map = mutableMapOf<String, String>()
-            val it = obj.keys()
-            while (it.hasNext()) {
-                val k = it.next()
-                map[k] = obj.optString(k)
-            }
-            map
-        }.getOrDefault(ChunkDownloader.resolveHeaders())
+        // Phase 3 收口：委托 HeaderResolver.fromJsonHeaders（非法/缺失返回空 map → 降级 ChunkDownloader 现状兜底，语义等价）
+        val parsed = HeaderResolver.fromJsonHeaders(json)
+        if (parsed.isNotEmpty()) return parsed
+        return ChunkDownloader.resolveHeaders()
     }
 
     /** B9：进度全程 Long，去除 >2GB 截断 */

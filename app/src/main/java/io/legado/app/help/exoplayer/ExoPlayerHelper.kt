@@ -207,7 +207,9 @@ object ExoPlayerHelper {
         val mimeType: String?,
         val moovPosition: MoovPosition = MoovPosition.UNKNOWN,
         val supportsRange: Boolean = false,
-        val finalUrl: String = ""
+        val finalUrl: String = "",
+        /** video-sniff-403-and-rss-classic-fix 2.5/R-P1-4：m3u8 预检被源站确定性拒绝（403/410），上层消费触发重嗅 */
+        val preCheckRejected: Boolean = false
     ) {
         companion object {
             /** 未知内容类型，进入降级链 */
@@ -306,7 +308,10 @@ object ExoPlayerHelper {
         val host = kotlin.runCatching { Uri.parse(url).host }.getOrNull() ?: return
         if (host.isBlank()) return
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
-            kotlin.runCatching { java.net.InetAddress.getAllByName(host) }
+            // video-sniff-403-and-rss-classic-fix 2.8a/R-P1-7（AD-11 DoH 一致化）：
+            // 原实现 java.net.InetAddress.getAllByName 走系统 DNS，未享受 DoH 反污染能力；
+            // 改走 DohDns（双国内 DoH+负缓存+降级链），与 OkHttp 栈 DNS 策略一致
+            kotlin.runCatching { io.legado.app.help.http.DohDns.lookup(host) }
                 .onSuccess { ips ->
                     AppLog.putDebug("preResolveDns: success host=${host.take(2)}***/${host.hashCode()}, ips=${ips.size}")
                 }
@@ -380,14 +385,38 @@ object ExoPlayerHelper {
         if (url.lowercase().substringBefore("?").substringBefore("#").endsWith(".m3u8")) {
             AppLog.put("sniffVideoType: short-circuit .m3u8 URL, skip Range sniff, urlPath=${sanitizeUrl(url)}")
             // P0-5: HEAD 预检获取重定向后的 finalUrl（避免 HlsMediaSource 创建后再次重定向）
-            // 超时 3s：HEAD 预检失败/超时不阻塞播放（使用原始 URL，让 ExoPlayer 自行处理重定向）
-            val preCheckResult = withTimeoutOrNull(3000L) {
-                M3u8PreCheckDataSource(headers).preCheck(url)
+            // video-sniff-403-and-rss-classic-fix 2.5/R-P1-4（AD-03）：auth-retry + Rejected 语义
+            // 首次预检用当前 headers；被源站确定性拒绝（Rejected）时用合并嗅探上下文后的头重试一次
+            // （Cookie/Referer 可能已由 buildPlayHeaders 过渡版合入 currentHeaders），重试独立 3s 预算（总 6s）
+            var preCheckResult: M3u8PreCheckDataSource.PreCheckResult? =
+                withTimeoutOrNull(3000L) {
+                    M3u8PreCheckDataSource(headers).preCheck(url)
+                }
+            if (preCheckResult is M3u8PreCheckDataSource.PreCheckResult.Rejected) {
+                AppLog.put("sniffVideoType: m3u8 preCheck rejected(403), auth-retry with refreshed cookie")
+                // auth-retry：补齐 CookieManager 实时 Cookie（域内）；Referer/UA 沿用现有头（已含嗅探上下文时无需变更）
+                val retryHeaders = headers.toMutableMap().apply {
+                    val cookie = runCatching {
+                        android.webkit.CookieManager.getInstance().getCookie(url)
+                    }.getOrNull()
+                    if (!cookie.isNullOrBlank()) {
+                        put("Cookie", cookie)
+                    }
+                }
+                preCheckResult = withTimeoutOrNull(3000L) {
+                    M3u8PreCheckDataSource(retryHeaders).preCheck(url)
+                }
             }
+            val authRejected = preCheckResult is M3u8PreCheckDataSource.PreCheckResult.Rejected
             val finalUrl = when (preCheckResult) {
                 is M3u8PreCheckDataSource.PreCheckResult.Success -> {
                     AppLog.putDebug("sniffVideoType: m3u8 preCheck success, using finalUrl")
                     preCheckResult.finalUrl
+                }
+                is M3u8PreCheckDataSource.PreCheckResult.Rejected -> {
+                    // 仍被拒绝：finalUrl 保留原值，Rejected 标记向上传播（上层触发重嗅，不再静默直连）
+                    AppLog.put("sniffVideoType: m3u8 preCheck still rejected after auth-retry, code=${preCheckResult.statusCode}")
+                    url
                 }
                 is M3u8PreCheckDataSource.PreCheckResult.Fail -> {
                     AppLog.putDebug("sniffVideoType: m3u8 preCheck failed: ${preCheckResult.reason}, using original url")
@@ -401,7 +430,8 @@ object ExoPlayerHelper {
             return SniffResult(
                 contentType = C.TYPE_HLS,
                 mimeType = MimeTypes.APPLICATION_M3U8,
-                finalUrl = finalUrl
+                finalUrl = finalUrl,
+                preCheckRejected = authRejected
             )
         }
 
@@ -995,6 +1025,10 @@ object ExoPlayerHelper {
         // 铁证：站点A m3u8，OkHttp TLS 被 CDN 重置（SSLHandshakeException: Connection reset by peer），
         // 但 Cronet（BoringSSL）能成功握手。项目 HTTP 请求层已用 Cronet 成功获取详情页。
         // 回退：Cronet 不可用时用 OkHttp（保持兼容性）
+        // video-sniff-403-and-rss-classic-fix 4.8c（Z7，design §3.7）澄清：
+        // cronet 用户开关（AppConfig.isCronet，PreferKey.cronet 默认 false）仅控制 OkHttp builder
+        // 是否装配 Cronet interceptor（爬取链路），与视频链路此处 cronetDataFactory 无条件装配
+        // （cronetEngine 非空即优先 Cronet、失败回退 OkHttp）是两条独立逻辑，互不联动。
         val upstreamFactory = cronetDataFactory ?: okhttpDataFactory
         // P0-3-cache-play 接线：视频缓存总开关（VideoPlay.videoCache，默认开启）
         // 开启：走 CacheDataSource + SimpleCache 边下边缓存（回看重播零流量、可秒拖缓存区间）
