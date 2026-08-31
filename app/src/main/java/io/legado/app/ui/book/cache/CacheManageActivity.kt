@@ -23,6 +23,7 @@ import io.legado.app.lib.cloud.S3ContainerScope
 import io.legado.app.lib.dialogs.AndroidAlertBuilder
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryTextColor
@@ -510,13 +511,12 @@ class CacheManageActivity :
             CacheDeleteTarget.REMOTE -> getString(R.string.cache_manage_delete_remote_confirm, count)
             CacheDeleteTarget.BOTH -> getString(R.string.cache_manage_delete_both_confirm, count)
         }
-        AndroidAlertBuilder(this).apply {
-            setTitle(R.string.delete)
-            setMessage(message)
-            yesButton { onConfirmed() }
-            noButton()
-            show()
-        }
+        showComposeConfirmDialog(
+            title = getString(R.string.delete),
+            message = message,
+            dangerPositive = true,
+            onPositive = onConfirmed
+        )
     }
 
     private fun selectSyncStrategy(

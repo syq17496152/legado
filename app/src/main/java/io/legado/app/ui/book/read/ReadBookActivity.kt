@@ -106,6 +106,7 @@ import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.applyUiTitleTypeface
@@ -3651,31 +3652,22 @@ class ReadBookActivity : BaseReadBookActivity(),
                     }
                 }
             }
-            val debugTextView = TextView(this@ReadBookActivity).apply {
-                text = message
-                setTextIsSelectable(true)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                setPadding(20.dpToPx(), 12.dpToPx(), 20.dpToPx(), 12.dpToPx())
-            }
-            val debugScrollView = ScrollView(this@ReadBookActivity).apply {
-                addView(
-                    debugTextView,
-                    ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                    )
-                )
-            }
-            AlertDialog.Builder(this@ReadBookActivity)
-                .setTitle("书库调试")
-                .setView(debugScrollView)
-                .setNegativeButton("复制") { _, _ ->
+            // 简化说明：D2 批收敛为 Compose 只读文本弹框（原 ScrollView+TextView customView）；已知上限：readOnly 文本框非滚动视图，超长调试文本显示受限（完整内容可经「复制」按钮获取）；升级路径：专用只读滚动弹框组件
+            showComposeTextInputDialog(
+                title = "书库调试",
+                initialValue = message,
+                readOnly = true,
+                minLines = 8,
+                maxLines = 30,
+                negativeText = "取消",
+                neutralText = "复制",
+                onNeutral = {
                     val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     clipboard.setPrimaryClip(ClipData.newPlainText("书库调试", message))
                     toastOnUi("已复制")
-                }
-                .setPositiveButton(android.R.string.ok, null)
-                .show()
+                },
+                onPositive = { }
+            )
         }
     }
 
@@ -3882,28 +3874,17 @@ class ReadBookActivity : BaseReadBookActivity(),
         item: LibraryCloudChapterVersion,
         dismissParent: () -> Unit
     ) {
-        val input = EditText(this).apply {
-            hint = "请输入 删除"
-            setSingleLine(true)
-            typeface = uiTypeface()
-            setPadding(20.dpToPx(), 8.dpToPx(), 20.dpToPx(), 8.dpToPx())
-        }
-        val confirmDialog = AndroidAlertBuilder(this).apply {
-            setTitle("删除云端章节")
-            setMessage("将删除云端章节：${item.payload.title.ifBlank { currentChapter.title }}\n请输入“删除”确认。")
-            setCustomView(input)
-            negativeButton(android.R.string.cancel)
-            positiveButton("删除")
-        }.show()
-        confirmDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-            if (input.text?.toString()?.trim() != "删除") {
-                toastOnUi("请输入 删除 后再确认")
-                return@setOnClickListener
+        showComposeTextInputDialog(
+            title = "删除云端章节",
+            message = "将删除云端章节：${item.payload.title.ifBlank { currentChapter.title }}\n请输入“删除”确认。",
+            hint = "请输入 删除",
+            positiveText = "删除",
+            validateInput = { it.trim() == "删除" },
+            onPositive = {
+                dismissParent()
+                deleteLibraryCloudChapter(book, session, currentChapter, item)
             }
-            confirmDialog.dismiss()
-            dismissParent()
-            deleteLibraryCloudChapter(book, session, currentChapter, item)
-        }
+        )
     }
 
     private fun deleteLibraryCloudChapter(
