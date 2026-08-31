@@ -116,6 +116,9 @@ import io.legado.app.lib.theme.composeActionRadius
 import io.legado.app.lib.theme.composePanelRadius
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.secondaryTextColor
+import io.legado.app.ui.widget.components.contrastOn
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.TextStyle
 import io.legado.app.ui.association.OnLineImportActivity
 import io.legado.app.ui.book.info.BookInfoUseWebHost
 import io.legado.app.ui.widget.image.CoverImageView
@@ -1224,7 +1227,8 @@ private fun BookInfoToggleActionItem(
                     modifier = Modifier
                         .size(7.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.94f))
+                        // accent 底内芯亮度自适应（light-theme-contrast-fix 2.16）
+                        .background(contrastOn(style.colors.accent).copy(alpha = 0.94f))
                 )
             }
         }
@@ -1604,7 +1608,8 @@ private fun BookInfoTopIcon(
         modifier = Modifier
             .size(40.dp)
             .clip(CircleShape)
-            .background(style.colors.scrim.copy(alpha = 0.30f))
+            // 圆按钮底加深保证白色图标可读（light-theme-contrast-fix 2.18）
+            .background(style.colors.scrim.copy(alpha = 0.45f))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -1694,6 +1699,10 @@ private fun BookInfoPosterHero(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // hero 区文字画在模糊封面上，浅色封面时加阴影保证可读（light-theme-contrast-fix 2.18）
+            val heroShadow = TextStyle(
+                shadow = Shadow(color = Color.Black.copy(alpha = 0.6f), blurRadius = 6f)
+            )
             Text(
                 text = state.name.ifBlank { stringResource(R.string.book_name) },
                 color = Color.White,
@@ -1701,6 +1710,7 @@ private fun BookInfoPosterHero(
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
+                style = heroShadow,
                 modifier = Modifier.combinedClickable(
                     onClick = actions.onNameClick,
                     onLongClick = actions.onNameLongClick
@@ -1712,6 +1722,7 @@ private fun BookInfoPosterHero(
                 fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                style = heroShadow,
                 modifier = Modifier.combinedClickable(
                     onClick = actions.onAuthorClick,
                     onLongClick = actions.onAuthorLongClick
@@ -1723,7 +1734,8 @@ private fun BookInfoPosterHero(
                     color = Color.White.copy(alpha = 0.72f),
                     fontSize = 12.5.sp,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    style = heroShadow
                 )
             }
             if (state.readTimeText.isNotBlank()) {
@@ -1732,7 +1744,8 @@ private fun BookInfoPosterHero(
                     color = Color.White.copy(alpha = 0.68f),
                     fontSize = 12.5.sp,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    style = heroShadow
                 )
             }
             if (state.kinds.isNotEmpty()) {
@@ -1764,7 +1777,8 @@ private fun BookInfoPosterChip(
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier
             .clip(RoundedCornerShape(style.metrics.actionRadius))
-            .background(style.colors.scrim.copy(alpha = 0.28f))
+            // chip 底加深保证白字可读（light-theme-contrast-fix 2.18）
+            .background(style.colors.scrim.copy(alpha = 0.50f))
             .padding(horizontal = 10.dp, vertical = 5.dp)
     )
 }

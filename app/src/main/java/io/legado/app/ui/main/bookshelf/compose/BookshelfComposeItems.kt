@@ -187,7 +187,14 @@ fun BookshelfGridItem(
                     fontFamily = titleFontFamily,
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    // 浅色封面可读性阴影（light-theme-contrast-fix 2.12）
+                    style = androidx.compose.ui.text.TextStyle(
+                        shadow = androidx.compose.ui.graphics.Shadow(
+                            color = Color.Black.copy(alpha = 0.6f),
+                            blurRadius = 6f,
+                        )
+                    )
                 )
             }
         }

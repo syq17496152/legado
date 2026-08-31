@@ -37,8 +37,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import io.legado.app.lib.theme.onAccentFor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -292,7 +295,8 @@ private fun ModeChip(
     ) {
         Text(
             text = label,
-            color = if (selected) Color.White else style.primaryText,
+            // accent 底字色亮度自适应（light-theme-contrast-fix 2.16）
+            color = if (selected) Color(LocalContext.current.onAccentFor(style.accent.toArgb())) else style.primaryText,
             fontFamily = style.bodyFontFamily
         )
     }

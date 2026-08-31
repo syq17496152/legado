@@ -136,7 +136,8 @@ class EpubReadView @JvmOverloads constructor(
         style = Paint.Style.FILL
     }
     private val loadingOverlayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0x66000000
+        // light-theme-contrast-fix 2.18：40% 黑遮罩叠 EPUB 白页后白字对比仅≈2.8:1，加深至 60%
+        color = 0x99000000.toInt()
         style = Paint.Style.FILL
     }
     private val loadingTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

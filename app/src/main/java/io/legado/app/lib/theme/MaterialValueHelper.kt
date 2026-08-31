@@ -76,7 +76,8 @@ val Context.bottomBackground: Int
     get() = ThemeStore.bottomBackground(this)
 
 val Context.primaryTextColor: Int
-    get() = getPrimaryTextColor(isDarkTheme)
+    get() = AppConfig.uiFontColor.toThemeTextColorOrNull()
+        ?: defaultThemeTextColor(AppConfig.isNightTheme)
 
 val Context.titleTextColor: Int
     get() = AppConfig.titleFontColor.toThemeTextColorOrNull()
@@ -86,13 +87,15 @@ val Context.transparentNavBar: Boolean
     get() = ThemeStore.transparentNavBar(this)
 
 val Context.secondaryTextColor: Int
-    get() = getSecondaryTextColor(isDarkTheme)
+    get() = AppConfig.uiFontColor.toThemeTextColorOrNull()
+        ?.let { ColorUtils.withAlpha(it, 0.72f) }
+        ?: ColorUtils.withAlpha(defaultThemeTextColor(AppConfig.isNightTheme), 0.72f)
 
 val Context.primaryDisabledTextColor: Int
-    get() = getPrimaryDisabledTextColor(isDarkTheme)
+    get() = getPrimaryDisabledTextColor(!AppConfig.isNightTheme)
 
 val Context.secondaryDisabledTextColor: Int
-    get() = getSecondaryDisabledTextColor(isDarkTheme)
+    get() = getSecondaryDisabledTextColor(!AppConfig.isNightTheme)
 
 val Fragment.primaryColor: Int
     get() = ThemeStore.primaryColor(requireContext())
@@ -110,29 +113,45 @@ val Fragment.bottomBackground: Int
     get() = ThemeStore.bottomBackground(requireContext())
 
 val Fragment.primaryTextColor: Int
-    get() = requireContext().getPrimaryTextColor(isDarkTheme)
+    get() = AppConfig.uiFontColor.toThemeTextColorOrNull()
+        ?: defaultThemeTextColor(AppConfig.isNightTheme)
 
 val Fragment.secondaryTextColor: Int
-    get() = requireContext().getSecondaryTextColor(isDarkTheme)
+    get() = AppConfig.uiFontColor.toThemeTextColorOrNull()
+        ?.let { ColorUtils.withAlpha(it, 0.72f) }
+        ?: ColorUtils.withAlpha(defaultThemeTextColor(AppConfig.isNightTheme), 0.72f)
 
 val Fragment.primaryDisabledTextColor: Int
-    get() = requireContext().getPrimaryDisabledTextColor(isDarkTheme)
+    get() = requireContext().getPrimaryDisabledTextColor(!AppConfig.isNightTheme)
 
 val Fragment.secondaryDisabledTextColor: Int
-    get() = requireContext().getSecondaryDisabledTextColor(isDarkTheme)
+    get() = requireContext().getSecondaryDisabledTextColor(!AppConfig.isNightTheme)
 
 val Context.buttonDisabledColor: Int
-    get() = if (isDarkTheme) {
+    get() = if (AppConfig.isNightTheme) {
         ContextCompat.getColor(this, R.color.md_dark_disabled)
     } else {
         ContextCompat.getColor(this, R.color.md_light_disabled)
     }
 
 val Context.isDarkTheme: Boolean
-    get() = ColorUtils.isColorLight(ThemeStore.primaryColor(this))
+    get() = AppConfig.isNightTheme
 
 val Fragment.isDarkTheme: Boolean
     get() = requireContext().isDarkTheme
+
+/** 文字画在 primary 色表面（如深色 Toolbar）时的专用字色：按 primary 实际亮度选黑白（保持旧链语义） */
+val Context.onPrimarySurfaceTextColor: Int
+    get() = getPrimaryTextColor(!ColorUtils.isColorLight(ThemeStore.primaryColor(this)))
+
+/** accent/任意底色上的自适应前景色：底色亮选黑，底色暗选白（统一收敛硬编码白字点） */
+fun Context.onAccentFor(@ColorInt bgColor: Int): Int {
+    return if (ColorUtils.isColorLight(bgColor)) {
+        ContextCompat.getColor(this, R.color.md_light_primary_text)
+    } else {
+        ContextCompat.getColor(this, R.color.md_dark_primary_text)
+    }
+}
 
 val Context.elevation: Float
     @SuppressLint("PrivateResource")

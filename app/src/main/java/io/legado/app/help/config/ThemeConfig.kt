@@ -1031,6 +1031,9 @@ object ThemeConfig {
             ?.toColorInt()
             ?: defaultThemeTextColor(isNightTheme)
         textColorPrimary(color)
+        // 次要文字与主文字同源派生（与 View 层 secondaryTextColor 的 0.72 alpha 派生一致），
+        // 消除 textColorSecondary fallback View attr 的不可控（本项目新增层 ThemeSpec 消费该值）
+        textColorSecondary(ColorUtils.withAlpha(color, 0.72f))
         return this
     }
 

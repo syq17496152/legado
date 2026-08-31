@@ -32,8 +32,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import io.legado.app.lib.theme.onAccentFor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -356,7 +358,8 @@ fun ReaderSegmentedOptions(
             options.forEach { option ->
                 val selected = option.value == selectedValue
                 val bgColor = if (selected) style.accent else style.fieldSurface
-                val textColor = if (selected) Color.White else style.primaryText
+                // accent 底字色亮度自适应（light-theme-contrast-fix 2.16）
+                val textColor = if (selected) Color(LocalContext.current.onAccentFor(bgColor.toArgb())) else style.primaryText
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -387,7 +390,8 @@ fun ReaderSegmentedOptions(
             options.forEach { option ->
                 val selected = option.value == selectedValue
                 val bgColor = if (selected) style.accent else style.fieldSurface
-                val textColor = if (selected) Color.White else style.primaryText
+                // accent 底字色亮度自适应（light-theme-contrast-fix 2.16）
+                val textColor = if (selected) Color(LocalContext.current.onAccentFor(bgColor.toArgb())) else style.primaryText
                 Row(
                     modifier = Modifier
                         .weight(1f)

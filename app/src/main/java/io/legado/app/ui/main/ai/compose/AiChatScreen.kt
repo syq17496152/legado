@@ -74,6 +74,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import io.legado.app.lib.theme.onAccentFor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
@@ -1887,7 +1889,8 @@ private fun AiComposer(
                         contentDescription = stringResource(
                             if (requesting) R.string.ai_chat_stop else R.string.ai_chat_send
                         ),
-                        tint = Color.White,
+                        // accent 底图标亮度自适应（light-theme-contrast-fix 2.16）
+                        tint = Color(LocalContext.current.onAccentFor(style.colors.accent.toArgb())),
                         modifier = Modifier.size(22.dp)
                     )
                 }

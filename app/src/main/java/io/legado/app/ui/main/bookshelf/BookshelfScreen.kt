@@ -47,7 +47,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +67,7 @@ import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.readProgress
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.UiCorner
+import io.legado.app.lib.theme.onAccentFor
 import io.legado.app.lib.theme.rememberThemeUiPalette
 import io.legado.app.lib.theme.titleTypeface
 import io.legado.app.model.BookCover
@@ -518,7 +522,7 @@ private fun BookGridItem(
                 }
             }
             if (showBookname == 2) {
-                // 遮罩模式：对齐 archive——无底色，白字叠印左下（白字随遮罩豁免登记）
+                // 遮罩模式：对齐 archive——无底色，白字叠印左下；浅色封面上加轻阴影保证可读（light-theme-contrast-fix 2.11）
                 Text(
                     text = book.name,
                     maxLines = 2,
@@ -527,6 +531,12 @@ private fun BookGridItem(
                     fontFamily = FontFamily(context.titleTypeface()),
                     color = Color.White,
                     fontWeight = FontWeight.Medium,
+                    style = TextStyle(
+                        shadow = Shadow(
+                            color = Color.Black.copy(alpha = 0.6f),
+                            blurRadius = 6f,
+                        )
+                    ),
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(6.dp),
@@ -810,7 +820,7 @@ private fun ShelfMetaRow(
     }
 }
 
-/** 未读角标（对齐 archive BookshelfStatusBadge）：新章 accent 底 / 普通 muted 底，白字（随遮罩豁免登记） */
+/** 未读角标（对齐 archive BookshelfStatusBadge）：新章 accent 底 / 普通 muted 底，字色按底色亮度自适应（light-theme-contrast-fix 2.10） */
 @Composable
 private fun ShelfStatusBadge(
     count: Int,
@@ -819,15 +829,16 @@ private fun ShelfStatusBadge(
     scrim: Color,
     modifier: Modifier = Modifier,
 ) {
+    val badgeBg = if (hasNew) accent else scrim
     Box(
         modifier = modifier
             .padding(5.dp)
-            .background(if (hasNew) accent else scrim, CircleShape)
+            .background(badgeBg, CircleShape)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         Text(
             text = count.toString(),
-            color = Color.White,
+            color = Color(LocalContext.current.onAccentFor(badgeBg.toArgb())),
             fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold,
         )

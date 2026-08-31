@@ -91,6 +91,7 @@ import top.yukonga.miuix.kmp.basic.Switch as MiuixSwitch
 import top.yukonga.miuix.kmp.basic.SwitchDefaults as MiuixSwitchDefaults
 import androidx.compose.material3.MaterialTheme
 import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.widget.components.contrastOn
 
 private const val MIUIX_PANEL_ANIMATION_MS = 160
 private const val MIUIX_PANEL_DISMISS_MS = MIUIX_PANEL_ANIMATION_MS + 20L
@@ -103,10 +104,17 @@ data class LegadoMiuixPalette(
     val primaryText: Color,
     val secondaryText: Color,
     val danger: Color,
-    val onAccent: Color = Color.White,
+    val onAccent: Color = Color.Unspecified,
     val panelRadius: Dp? = null,
     val actionRadius: Dp? = null
-)
+) {
+    /**
+     * accent 底上的前景色（light-theme-contrast-fix 2.13）：
+     * 未显式传入时按 accent 亮度自适应选黑白（浅 accent 白字隐形防御）；显式传入则尊重调用方。
+     */
+    val resolvedOnAccent: Color
+        get() = if (onAccent == Color.Unspecified) contrastOn(accent) else onAccent
+}
 
 fun AppDialogStyle.toMiuixPalette(): LegadoMiuixPalette {
     return LegadoMiuixPalette(
@@ -207,7 +215,7 @@ fun LegadoMiuixActionButton(
         else -> palette.surfaceVariant
     }
     val content = when {
-        primary -> palette.onAccent
+        primary -> palette.resolvedOnAccent
         danger -> palette.danger
         else -> palette.primaryText
     }
@@ -289,9 +297,9 @@ fun LegadoMiuixSwitch(
             enabled = enabled,
             modifier = switchModifier,
             colors = MiuixSwitchDefaults.switchColors(
-                checkedThumbColor = palette.onAccent,
+                checkedThumbColor = palette.resolvedOnAccent,
                 uncheckedThumbColor = palette.secondaryText.copy(alpha = 0.72f),
-                disabledCheckedThumbColor = palette.onAccent.copy(alpha = 0.42f),
+                disabledCheckedThumbColor = palette.resolvedOnAccent.copy(alpha = 0.42f),
                 disabledUncheckedThumbColor = palette.secondaryText.copy(alpha = 0.32f),
                 checkedTrackColor = palette.accent,
                 uncheckedTrackColor = palette.surfaceVariant,
@@ -307,9 +315,9 @@ fun LegadoMiuixSwitch(
         enabled = enabled,
         modifier = switchModifier,
         colors = SwitchDefaults.colors(
-            checkedThumbColor = palette.onAccent,
+            checkedThumbColor = palette.resolvedOnAccent,
             uncheckedThumbColor = palette.secondaryText.copy(alpha = 0.72f),
-            disabledCheckedThumbColor = palette.onAccent.copy(alpha = 0.42f),
+            disabledCheckedThumbColor = palette.resolvedOnAccent.copy(alpha = 0.42f),
             disabledUncheckedThumbColor = palette.secondaryText.copy(alpha = 0.32f),
             checkedTrackColor = palette.accent,
             uncheckedTrackColor = palette.surfaceVariant,
@@ -344,10 +352,10 @@ fun LegadoMiuixSlider(
                 disabledForegroundColor = palette.accent.copy(alpha = 0.28f),
                 backgroundColor = palette.surfaceVariant,
                 disabledBackgroundColor = palette.surfaceVariant.copy(alpha = 0.44f),
-                thumbColor = palette.onAccent,
-                disabledThumbColor = palette.onAccent.copy(alpha = 0.42f),
+                thumbColor = palette.resolvedOnAccent,
+                disabledThumbColor = palette.resolvedOnAccent.copy(alpha = 0.42f),
                 keyPointColor = palette.secondaryText.copy(alpha = 0.32f),
-                keyPointForegroundColor = palette.onAccent.copy(alpha = 0.68f)
+                keyPointForegroundColor = palette.resolvedOnAccent.copy(alpha = 0.68f)
             )
         )
         return
@@ -363,13 +371,13 @@ fun LegadoMiuixSlider(
         colors = SliderDefaults.colors(
             activeTrackColor = palette.accent,
             inactiveTrackColor = palette.surfaceVariant,
-            thumbColor = palette.onAccent,
-            activeTickColor = palette.onAccent.copy(alpha = 0.72f),
+            thumbColor = palette.resolvedOnAccent,
+            activeTickColor = palette.resolvedOnAccent.copy(alpha = 0.72f),
             inactiveTickColor = palette.secondaryText.copy(alpha = 0.32f),
             disabledActiveTrackColor = palette.accent.copy(alpha = 0.28f),
             disabledInactiveTrackColor = palette.surfaceVariant.copy(alpha = 0.44f),
-            disabledThumbColor = palette.onAccent.copy(alpha = 0.42f),
-            disabledActiveTickColor = palette.onAccent.copy(alpha = 0.34f),
+            disabledThumbColor = palette.resolvedOnAccent.copy(alpha = 0.42f),
+            disabledActiveTickColor = palette.resolvedOnAccent.copy(alpha = 0.34f),
             disabledInactiveTickColor = palette.secondaryText.copy(alpha = 0.18f)
         )
     )
@@ -712,7 +720,8 @@ fun LegadoMiuixChoiceRow(
                             modifier = Modifier
                                 .size(7.dp)
                                 .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.94f))
+                                // 选中点内芯按选中色亮度自适应（light-theme-contrast-fix 2.16）
+                                .background(contrastOn(selectedColor).copy(alpha = 0.94f))
                         )
                     }
                 }

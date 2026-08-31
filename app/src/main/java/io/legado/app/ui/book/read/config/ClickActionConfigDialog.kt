@@ -218,7 +218,8 @@ class ClickActionConfigDialog : ComposeDialogFragment() {
     ) {
         LegadoMiuixCard(
             modifier = Modifier.fillMaxWidth(),
-            color = Color.White.copy(alpha = 0.16f),
+            // light-theme-contrast-fix 2.17：白 16% 叠浅色阅读页后白字对比不足（≈3.4:1），改深色底保证白字可读
+            color = Color.Black.copy(alpha = 0.55f),
             contentColor = Color.White,
             cornerRadius = style.actionRadius,
             insidePadding = PaddingValues(start = 16.dp, top = 5.dp, end = 6.dp, bottom = 5.dp)
@@ -293,7 +294,8 @@ class ClickActionConfigDialog : ComposeDialogFragment() {
             modifier = modifier
                 .fillMaxSize()
                 .clickable(onClick = onClick),
-            color = Color.White.copy(alpha = 0.14f),
+            // light-theme-contrast-fix 2.17：白 14% 叠浅色阅读页后白字对比不足，改深色底保证白字可读
+            color = Color.Black.copy(alpha = 0.55f),
             contentColor = Color.White,
             cornerRadius = style.actionRadius,
             insidePadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp)

@@ -20,8 +20,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import io.legado.app.utils.ColorUtils
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -108,7 +110,9 @@ internal fun GeneratedCover(
         androidx.compose.material3.Icon(
             coverFormatIcon(book),
             contentDescription = null,
-            tint = Color.White.copy(alpha = 0.55f),
+            // 占位渐变底色亮度自适应（light-theme-contrast-fix 2.12：浅色渐变上白 tint 隐形防御）
+            tint = (if (ColorUtils.isColorLight(baseColor.toArgb())) Color.Black else Color.White)
+                .copy(alpha = 0.55f),
             modifier = Modifier.size(iconSize.dp),
         )
         Box(

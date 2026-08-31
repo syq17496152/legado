@@ -184,12 +184,13 @@
     //*******************Video Player Style**********************************//
 
     <!-- R3 视频播放器控制按钮样式（Borderless 避免AppCompat主题不兼容） -->
+    <!-- light-theme-contrast-fix 2.14：控制器为固定深色面板，字色恒亮色与主题模式解耦（原 primaryText 亮色主题下黑字黑底不可见） -->
     <style name="VideoCtrlButton" parent="Widget.AppCompat.Button.Borderless">
         <item name="android:minWidth">48dp</item>
         <item name="android:minHeight">36dp</item>
         <item name="android:padding">3dp</item>
         <item name="android:textSize">11sp</item>
-        <item name="android:textColor">@color/primaryText</item>
+        <item name="android:textColor">@color/white</item>
         <item name="android:background">@drawable/bg_video_ctrl_btn</item>
     </style>
 
@@ -202,7 +203,7 @@
         <item name="android:paddingTop">6dp</item>
         <item name="android:paddingBottom">6dp</item>
         <item name="android:textSize">12sp</item>
-        <item name="android:textColor">@color/primaryText</item>
+        <item name="android:textColor">@color/white</item>
         <item name="android:background">@drawable/bg_panel_button</item>
     </style>
 

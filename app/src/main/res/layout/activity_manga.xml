@@ -55,7 +55,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:indeterminate="true"
-                app:indicatorColor="@color/white"
+                app:indicatorColor="@color/primaryText"
                 app:indicatorSize="36dp"
                 app:trackCornerRadius="99dp"
                 app:trackThickness="3dp" />
