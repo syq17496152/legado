@@ -252,9 +252,12 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                 withContext(Dispatchers.IO) { AdvancedTitlePackageManager.readTemplate(entry) }
             }.onSuccess { json ->
                 if (supportFragmentManager.isStateSaved ||
-                    !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) ||
-                    supportFragmentManager.findFragmentByTag("advancedTitleEdit") != null
-                ) return@onSuccess
+                !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) ||
+                supportFragmentManager.findFragmentByTag(
+                    AdvancedTitleConfigDialog::class.java.simpleName
+                ) != null
+            ) return@onSuccess
+            showDialogFragment(
                 AdvancedTitleConfigDialog.edit(
                     entryId = entry.id,
                     name = entry.name,
@@ -263,7 +266,8 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                         ?: AdvancedTitleConfig.globalRule,
                     heightFactor = entry.config.normalizedHeightFactorOrNull()
                         ?: AdvancedTitleConfig.heightFactor
-                ).show(supportFragmentManager, "advancedTitleEdit")
+                )
+            )
             }.onFailure { toastOnUi(it.localizedMessage) }
         }
     }

@@ -1,42 +1,65 @@
 package io.legado.app.ui.book.read.config
 
 import android.app.Activity.RESULT_OK
-import android.app.Dialog
 import android.content.Intent
 import android.os.Bundle
-import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
-import android.widget.CheckBox
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
-import androidx.cardview.widget.CardView
-import androidx.core.content.ContextCompat
-import androidx.core.widget.doAfterTextChanged
-import androidx.fragment.app.DialogFragment
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.help.config.AdvancedTitleConfig
 import io.legado.app.help.config.AdvancedTitlePackageManager
-import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
-import io.legado.app.lib.theme.applyUiInputStyle
-import io.legado.app.lib.theme.applyUiLabelStyle
-import io.legado.app.lib.theme.applyUiSectionTitleStyle
-import io.legado.app.lib.theme.applyUiSubtleButtonStyle
-import io.legado.app.lib.theme.applyUiTitleTypeface
-import io.legado.app.lib.theme.dialogSurfaceBackground
-import io.legado.app.lib.theme.secondaryTextColor
-import io.legado.app.lib.theme.themeDividerColorOrDefault
-import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.code.CodeEditActivity
-import io.legado.app.utils.dpToPx
+import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.AppDialogStyle
+import io.legado.app.ui.widget.compose.AppDialogSwitchRow
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.toastOnUi
 
-class AdvancedTitleConfigDialog : DialogFragment() {
+/**
+ * 高级标题模板编辑弹框（deep-fix 批 E 迁移：动态 View 表单 → ComposeDialogFrame 表单）。
+ * 字段：名称 / 正则开关 / 拆分规则 / 预览示例 / 高度因子 / JSON 模板（外链编辑器）。
+ * 保存经 [Host.onAdvancedTitleSaved] 回调宿主，校验与原 View 版等价（名称非空 + JSON 合法）。
+ */
+class AdvancedTitleConfigDialog : ComposeDialogFragment() {
+
+    override val dialogSize: AppDialogSize = AppDialogSize.Confirm
 
     companion object {
         private const val ARG_ENTRY_ID = "entryId"
@@ -87,251 +110,260 @@ class AdvancedTitleConfigDialog : DialogFragment() {
         jsonCursorPosition = result.data?.getIntExtra("cursorPosition", text.length) ?: text.length
     }
 
-    override fun onStart() {
-        super.onStart()
-        dialog?.window?.apply {
-            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-            setBackgroundDrawableResource(android.R.color.transparent)
-            setLayout(
-                (resources.displayMetrics.widthPixels * 0.92f).toInt(),
-                (resources.displayMetrics.heightPixels * 0.72f).toInt()
-            )
-        }
-    }
-
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val context = requireContext()
-        val args = requireArguments()
-        val entryId = args.getString(ARG_ENTRY_ID).orEmpty()
-        val initialName = args.getString(ARG_NAME).orEmpty()
-        val startRule = AdvancedTitleConfig.SplitRule(
-            mode = args.getInt(ARG_SPLIT_MODE, AdvancedTitleConfig.SPLIT_DELIMITER),
-            delimiter = args.getString(ARG_DELIMITER) ?: " ",
-            regex = args.getString(ARG_REGEX) ?: AdvancedTitleConfig.DEFAULT_REGEX
-        )
-        val initialHeightFactor = args.getInt(
-            ARG_HEIGHT_FACTOR,
-            AdvancedTitleConfig.DEFAULT_HEIGHT_FACTOR
-        )
-        if (currentJson.isBlank()) {
-            currentJson = runCatching {
-                AdvancedTitlePackageManager.readTemplate(entryId)
-            }.getOrDefault("")
-        }
-        val emptyText = getString(R.string.empty)
-
-        val root = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(18.dpToPx(), 12.dpToPx(), 18.dpToPx(), 4.dpToPx())
-        }
-
-        fun label(value: String) = TextView(context).apply {
-            text = value
-            setPadding(0, 10.dpToPx(), 0, 4.dpToPx())
-            applyUiLabelStyle(context)
-        }
-
-        fun edit(value: String) = EditText(context).apply {
-            setText(value)
-            applyUiInputStyle(context, 1)
-        }
-
-        fun button(value: String) = TextView(context).apply {
-            text = value
-            gravity = Gravity.CENTER
-            background = ContextCompat.getDrawable(context, R.drawable.bg_book_info_subtle_button)
-            setPadding(12.dpToPx(), 8.dpToPx(), 12.dpToPx(), 8.dpToPx())
-            applyUiSubtleButtonStyle(context)
-        }
-
-        val nameEdit = edit(initialName).apply {
-            hint = getString(R.string.advanced_title_name)
-            isSingleLine = true
-        }
-
-        val regexCheck = CheckBox(context).apply {
-            text = getString(R.string.advanced_title_use_regex)
-            isChecked = startRule.mode == AdvancedTitleConfig.SPLIT_REGEX
-            typeface = context.uiTypeface()
-        }
-        val ruleEdit = edit(
-            if (startRule.mode == AdvancedTitleConfig.SPLIT_REGEX) startRule.regex
-            else startRule.delimiter
-        )
-        val sampleEdit = edit(getString(R.string.advanced_title_sample_default))
-        val heightEdit = edit(initialHeightFactor.coerceIn(30, 120).toString()).apply {
-            hint = getString(R.string.advanced_title_height_factor_hint)
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER
-        }
-        val preview = TextView(context).apply {
-            setPadding(0, 8.dpToPx(), 0, 0)
-            applyUiSectionTitleStyle(context)
-        }
-        val openEditorButton = button(getString(R.string.advanced_title_open_editor)).apply {
-            setOnClickListener { openJsonEditor() }
-        }
-
-        fun buildRule() = AdvancedTitleConfig.SplitRule(
-            mode = if (regexCheck.isChecked) {
-                AdvancedTitleConfig.SPLIT_REGEX
-            } else {
-                AdvancedTitleConfig.SPLIT_DELIMITER
-            },
-            delimiter = if (regexCheck.isChecked) startRule.delimiter
-            else ruleEdit.text?.toString().orEmpty(),
-            regex = if (regexCheck.isChecked) ruleEdit.text?.toString().orEmpty()
-            else startRule.regex
-        )
-
-        fun updatePreview() {
-            preview.text = runCatching {
-                val parts = AdvancedTitleConfig.split(
-                    sampleEdit.text?.toString().orEmpty(),
-                    buildRule()
-                )
-                getString(
-                    R.string.advanced_title_preview_template,
-                    parts.s1.ifBlank { emptyText },
-                    parts.s2.ifBlank { emptyText }
-                )
-            }.getOrElse {
-                getString(R.string.advanced_title_rule_error, it.localizedMessage.orEmpty())
-            }
-        }
-
-        listOf(ruleEdit, sampleEdit).forEach { field ->
-            field.doAfterTextChanged { updatePreview() }
-        }
-        regexCheck.setOnCheckedChangeListener { _, checked ->
-            ruleEdit.setText(if (checked) startRule.regex else startRule.delimiter)
-            ruleEdit.setSelection(ruleEdit.text?.length ?: 0)
-            updatePreview()
-        }
-
-        root.addView(TextView(context).apply {
-            text = getString(R.string.advanced_title_edit_title)
-            textSize = 18f
-            applyUiTitleTypeface(context)
-            setPadding(0, 2.dpToPx(), 0, 8.dpToPx())
-        })
-        root.addView(label(getString(R.string.advanced_title_name)))
-        root.addView(nameEdit)
-        root.addView(label(getString(R.string.advanced_title_rule_label)))
-        root.addView(regexCheck)
-        root.addView(ruleEdit)
-        root.addView(label(getString(R.string.preview)))
-        root.addView(sampleEdit)
-        root.addView(preview)
-        root.addView(label(getString(R.string.advanced_title_height_factor_label)))
-        root.addView(heightEdit)
-        root.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(label(getString(R.string.advanced_title_json_label)).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    0,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    1f
-                )
-            })
-            addView(openEditorButton)
-        })
-        root.addView(TextView(context).apply {
-            text = getString(R.string.advanced_title_json_hint)
-            textSize = 12f
-            typeface = context.uiTypeface()
-            setPadding(0, 4.dpToPx(), 0, 6.dpToPx())
-            setTextColor(context.secondaryTextColor)
-        })
-        root.addView(View(context).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                1.dpToPx()
-            ).apply { topMargin = 12.dpToPx() }
-            setBackgroundColor(context.themeDividerColorOrDefault())
-        })
-        root.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 12.dpToPx(), 0, 6.dpToPx())
-            addView(button(getString(R.string.cancel)).apply {
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                setOnClickListener { dismissAllowingStateLoss() }
-            })
-            addView(button(getString(R.string.confirm)).apply {
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                    .apply { marginStart = 6.dpToPx() }
-                setOnClickListener {
-                    val name = nameEdit.text?.toString()?.trim().orEmpty()
-                    if (name.isEmpty()) {
-                        context.toastOnUi(getString(R.string.advanced_title_name_required))
-                        return@setOnClickListener
-                    }
-                    val json = currentJson.trim()
-                    val jsonError = runCatching {
-                        AdvancedTitlePackageManager.validateJson(json)
-                    }.exceptionOrNull()
-                    if (jsonError != null) {
-                        context.toastOnUi(
-                            jsonError.localizedMessage
-                                ?: getString(R.string.advanced_title_invalid_json)
-                        )
-                        return@setOnClickListener
-                    }
-                    val rule = buildRule()
-                    val heightFactor = heightEdit.text?.toString()
-                        ?.trim()
-                        ?.toIntOrNull()
-                        ?.coerceIn(30, 120)
-                        ?: AdvancedTitleConfig.DEFAULT_HEIGHT_FACTOR
-                    dismissAllowingStateLoss()
-                    (activity as? Host)?.onAdvancedTitleSaved(
-                        entryId,
-                        name,
-                        json,
-                        rule,
-                        heightFactor
-                    )
-                }
-            })
-        })
-
-        updatePreview()
-
-        val scroll = ScrollView(context).apply {
-            isFillViewport = true
-            setBackgroundColor(ContextCompat.getColor(context, android.R.color.transparent))
-            addView(
-                root,
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-            )
-        }
-        val container = CardView(context).apply {
-            radius = 16.dpToPx().toFloat()
-            cardElevation = 0f
-            preventCornerOverlap = false
-            useCompatPadding = false
-            background = context.dialogSurfaceBackground
-            addView(
-                scroll,
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            )
-        }
-        container.applyUiBodyTypefaceDeep(context.uiTypeface())
-        return AlertDialog.Builder(context).setView(container).create()
-    }
-
     private fun openJsonEditor() {
         jsonEditor.launch(Intent(requireContext(), CodeEditActivity::class.java).apply {
             putExtra("text", currentJson)
             putExtra("title", getString(R.string.advanced_title_json_label))
             putExtra("cursorPosition", jsonCursorPosition.coerceIn(0, currentJson.length))
         })
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        val args = requireArguments()
+        val entryId = args.getString(ARG_ENTRY_ID).orEmpty()
+        val startModeIsRegex = args.getInt(
+            ARG_SPLIT_MODE, AdvancedTitleConfig.SPLIT_DELIMITER
+        ) == AdvancedTitleConfig.SPLIT_REGEX
+        val startDelimiter = args.getString(ARG_DELIMITER) ?: " "
+        val startRegex = args.getString(ARG_REGEX) ?: AdvancedTitleConfig.DEFAULT_REGEX
+        val initialHeightFactor = args.getInt(
+            ARG_HEIGHT_FACTOR, AdvancedTitleConfig.DEFAULT_HEIGHT_FACTOR
+        )
+        if (currentJson.isBlank()) {
+            currentJson = kotlin.runCatching {
+                AdvancedTitlePackageManager.readTemplate(entryId)
+            }.getOrDefault("")
+        }
+
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                AdvancedTitleConfigContent(
+                    entryId = entryId,
+                    initialName = args.getString(ARG_NAME).orEmpty(),
+                    startModeIsRegex = startModeIsRegex,
+                    startDelimiter = startDelimiter,
+                    startRegex = startRegex,
+                    initialHeightFactor = initialHeightFactor
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun AdvancedTitleConfigContent(
+        entryId: String,
+        initialName: String,
+        startModeIsRegex: Boolean,
+        startDelimiter: String,
+        startRegex: String,
+        initialHeightFactor: Int
+    ) {
+        val context = LocalContext.current
+        val style = rememberAppDialogStyle()
+        val palette = style.toMiuixPalette()
+        val defaultSample = stringResource(R.string.advanced_title_sample_default)
+        val emptyText = stringResource(R.string.empty)
+        var name by rememberSaveable { mutableStateOf(initialName) }
+        var useRegex by rememberSaveable { mutableStateOf(startModeIsRegex) }
+        var ruleText by rememberSaveable { mutableStateOf(if (startModeIsRegex) startRegex else startDelimiter) }
+        var sampleText by rememberSaveable { mutableStateOf(defaultSample) }
+        var heightText by rememberSaveable { mutableStateOf(initialHeightFactor.coerceIn(30, 120).toString()) }
+
+        fun buildRule() = AdvancedTitleConfig.SplitRule(
+            mode = if (useRegex) {
+                AdvancedTitleConfig.SPLIT_REGEX
+            } else {
+                AdvancedTitleConfig.SPLIT_DELIMITER
+            },
+            delimiter = if (useRegex) startDelimiter else ruleText,
+            regex = if (useRegex) ruleText else startRegex
+        )
+
+        val previewText = remember(useRegex, ruleText, sampleText) {
+            kotlin.runCatching {
+                val parts = AdvancedTitleConfig.split(sampleText, buildRule())
+                context.getString(
+                    R.string.advanced_title_preview_template,
+                    parts.s1.ifBlank { emptyText },
+                    parts.s2.ifBlank { emptyText }
+                )
+            }.getOrElse {
+                context.getString(R.string.advanced_title_rule_error, it.localizedMessage.orEmpty())
+            }
+        }
+
+        fun confirm() {
+            val nameVal = name.trim()
+            if (nameVal.isEmpty()) {
+                context.toastOnUi(context.getString(R.string.advanced_title_name_required))
+                return
+            }
+            val json = currentJson.trim()
+            val jsonError = kotlin.runCatching {
+                AdvancedTitlePackageManager.validateJson(json)
+            }.exceptionOrNull()
+            if (jsonError != null) {
+                context.toastOnUi(
+                    jsonError.localizedMessage
+                        ?: context.getString(R.string.advanced_title_invalid_json)
+                )
+                return
+            }
+            val heightFactor = heightText.trim().toIntOrNull()?.coerceIn(30, 120)
+                ?: AdvancedTitleConfig.DEFAULT_HEIGHT_FACTOR
+            dismissAllowingStateLoss()
+            (activity as? Host)?.onAdvancedTitleSaved(
+                entryId,
+                nameVal,
+                json,
+                buildRule(),
+                heightFactor
+            )
+        }
+
+        AppDialogFrame(
+            title = stringResource(R.string.advanced_title_edit_title),
+            scrollContent = true,
+            content = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AdvancedTitleTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = stringResource(R.string.advanced_title_name),
+                        style = style,
+                        singleLine = true
+                    )
+                    AppDialogSwitchRow(
+                        text = stringResource(R.string.advanced_title_use_regex),
+                        checked = useRegex,
+                        onCheckedChange = { next ->
+                            useRegex = next
+                            ruleText = if (next) startRegex else startDelimiter
+                        }
+                    )
+                    AdvancedTitleTextField(
+                        value = ruleText,
+                        onValueChange = { ruleText = it },
+                        label = stringResource(R.string.advanced_title_rule_label),
+                        style = style
+                    )
+                    AdvancedTitleTextField(
+                        value = sampleText,
+                        onValueChange = { sampleText = it },
+                        label = stringResource(R.string.preview),
+                        style = style
+                    )
+                    Text(
+                        text = previewText,
+                        color = style.accent,
+                        fontSize = MaterialTheme.typography.bodySecondary.fontSize,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    AdvancedTitleTextField(
+                        value = heightText,
+                        onValueChange = { heightText = it },
+                        label = stringResource(R.string.advanced_title_height_factor_label),
+                        style = style,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.advanced_title_json_label),
+                            modifier = Modifier.weight(1f),
+                            color = style.primaryText,
+                            fontSize = MaterialTheme.typography.bodySecondary.fontSize,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        LegadoMiuixActionButton(
+                            text = stringResource(R.string.advanced_title_open_editor),
+                            palette = palette,
+                            onClick = { openJsonEditor() },
+                            cornerRadius = style.actionRadius
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.advanced_title_json_hint),
+                        color = style.secondaryText,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    HorizontalDivider(color = style.stroke, thickness = 1.dp)
+                }
+            },
+            actions = {
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.cancel),
+                    palette = palette,
+                    onClick = { dismissAllowingStateLoss() },
+                    cornerRadius = style.actionRadius
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.confirm),
+                    palette = palette,
+                    onClick = { confirm() },
+                    primary = true,
+                    cornerRadius = style.actionRadius
+                )
+            }
+        )
+    }
+}
+
+@Composable
+private fun AdvancedTitleTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    style: AppDialogStyle,
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = false,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            color = style.secondaryText,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
+            fontWeight = FontWeight.Medium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = singleLine,
+            keyboardOptions = keyboardOptions,
+            shape = RoundedCornerShape(style.actionRadius),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = style.primaryText,
+                unfocusedTextColor = style.primaryText,
+                focusedContainerColor = style.fieldSurface,
+                unfocusedContainerColor = style.fieldSurface,
+                cursorColor = style.accent,
+                focusedBorderColor = style.accent.copy(alpha = 0.55f),
+                unfocusedBorderColor = style.stroke
+            ),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                color = style.primaryText
+            )
+        )
     }
 }

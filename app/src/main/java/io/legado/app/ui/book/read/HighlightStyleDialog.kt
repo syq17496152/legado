@@ -9,11 +9,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
-import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import io.legado.app.R
 import io.legado.app.help.HighlightStyle
 import io.legado.app.help.HighlightStyle.Deco
 import io.legado.app.help.HighlightStyle.Underline
+import io.legado.app.ui.book.read.config.ReaderBottomSheetComposeDialogFragment
+import io.legado.app.ui.book.read.config.ReaderBottomSheetFrame
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.HighlightStyleSheet
 
@@ -25,8 +27,10 @@ import io.legado.app.ui.widget.components.HighlightStyleSheet
  *
  * task 12.2E：UI 层 Compose 化（[HighlightStyleSheet]），保留 [StyleHost] 桥接与全部业务逻辑，
  * 宿主(如 HighlightRuleEditDialog)通过 [refresh] 在取色/选字后驱动 Compose 重组。
+ * deep-fix 批 E：基类升级为 [ReaderBottomSheetComposeDialogFragment]，BottomSheet 窗口背景/
+ * 阅读菜单互斥计数由基类统一纳管，内容侧由 [ReaderBottomSheetFrame] 提供面板表面。
  */
-class HighlightStyleDialog : BottomSheetDialogFragment() {
+class HighlightStyleDialog : ReaderBottomSheetComposeDialogFragment() {
 
     interface StyleHost {
         /** 当前正在编辑的样式 */
@@ -52,36 +56,23 @@ class HighlightStyleDialog : BottomSheetDialogFragment() {
         uiStyle = s
         uiFontDisplay = fontDisplayName(s.fontPath)
         return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 LegadoTheme {
-                    HighlightStyleSheet(
-                        style = uiStyle,
-                        onStyleChange = { apply(it) },
-                        onPickColor = { dialogId, initial, withAlpha ->
-                            styleHost?.pickHighlightColor(dialogId, initial, withAlpha)
-                        },
-                        onPickFont = { current -> styleHost?.pickHighlightFont(current) },
-                        fontDisplayName = uiFontDisplay
-                    )
+                    ReaderBottomSheetFrame {
+                        HighlightStyleSheet(
+                            style = uiStyle,
+                            onStyleChange = { apply(it) },
+                            onPickColor = { dialogId, initial, withAlpha ->
+                                styleHost?.pickHighlightColor(dialogId, initial, withAlpha)
+                            },
+                            onPickFont = { current -> styleHost?.pickHighlightFont(current) },
+                            fontDisplayName = uiFontDisplay
+                        )
+                    }
                 }
             }
         }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        // 修复：应用级暗色主题不激活 values-night 资源, 需动态设置 sheet 背景色
-        // Compose 内容由 LegadoTheme 适配, 此处仅设置外层 sheet 容器背景
-        dialog?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
-            ?.let { sheet ->
-                val radius = resources.getDimension(R.dimen.corner_large)
-                sheet.background = android.graphics.drawable.GradientDrawable().apply {
-                    shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-                    cornerRadii = floatArrayOf(radius, radius, radius, radius, 0f, 0f, 0f, 0f)
-                    setColor(io.legado.app.lib.theme.ThemeStore.backgroundColor())
-                }
-                sheet.clipToOutline = true
-            }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
