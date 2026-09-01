@@ -50,8 +50,13 @@ internal object BookSourceFileAccessPolicy {
         if (path.isEmpty() || path == "/") {
             throw SecurityException("书源文件路径为空或指向沙箱根本身")
         }
-        val target = if (isAbsolutePathInsideSourceRoot(root, path)) {
-            File(path).canonicalFile
+        val file = File(path)
+        val target = if (file.isAbsolute) {
+            // Windows JVM 的 File(parent, child) 对绝对 child 为拼接语义，需显式拒绝根外绝对路径
+            if (!isAbsolutePathInsideSourceRoot(root, path)) {
+                throw SecurityException("书源文件路径超出缓存目录")
+            }
+            file.canonicalFile
         } else {
             File(root, path).canonicalFile
         }
