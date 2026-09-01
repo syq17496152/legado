@@ -112,15 +112,11 @@ call "%PROJECT_DIR%\gradlew.bat" --stop >nul 2>&1
 :: Ensure gradle-home dir exists
 if not exist "%GRADLE_USER_HOME%" mkdir "%GRADLE_USER_HOME%"
 
-:: Clean old transforms cache (fix cross-drive / long-path issues)
-if exist "%GRADLE_USER_HOME%\caches\8.14.4\transforms" (
-    echo [CLEAN] Removing old transforms cache...
-    rd /s /q "%GRADLE_USER_HOME%\caches\8.14.4\transforms" 2>nul
-)
-if exist "C:\Users\%USERNAME%\.gradle\caches\8.14.4\transforms" (
-    echo [CLEAN] Removing C-drive transforms cache...
-    rd /s /q "C:\Users\%USERNAME%\.gradle\caches\8.14.4\transforms" 2>nul
-)
+:: NOTE: 已移除"每次构建前删除 transforms 缓存"逻辑（2026-09-01）
+:: 原逻辑导致：①每次构建全量重解压依赖（5-10 分钟）②删除后 Gradle 立即重建时
+:: metadata.bin 读取竞态失败（Could not read workspace metadata，实测 f67443882 反复损坏）
+:: 缓存损坏时手动执行: rd /s /q "%GRADLE_USER_HOME%\caches\8.14.4\transforms"
+echo [SKIP] Keeping transforms cache (incremental build)
 
 echo.
 echo ============================================================
