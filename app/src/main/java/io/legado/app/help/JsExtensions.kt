@@ -19,7 +19,11 @@ import io.legado.app.help.http.CookieManager.cookieJarHeader
 import io.legado.app.help.http.CookieStore
 import io.legado.app.help.http.SSLHelper
 import io.legado.app.help.http.StrResponse
+import io.legado.app.help.source.BookSourceFileAccessPolicy
 import io.legado.app.help.source.SourceHelp
+import io.legado.app.help.source.SourceInteractionBlockedException
+import io.legado.app.help.source.SourceInteractionPolicy
+import io.legado.app.help.source.SourceSandboxExtensions
 import io.legado.app.help.source.SourceVerificationHelp
 import io.legado.app.help.source.getSourceType
 import io.legado.app.model.Debug
@@ -93,6 +97,29 @@ interface JsExtensions : JsEncodeUtils {
 
     private val context: CoroutineContext
         get() = rhinoContextOrNull?.coroutineContext ?: EmptyCoroutineContext
+
+    /**
+     * P0-S3 弹窗拦截开关：由批量流程（搜索/换源）协程树上的 SourceInteractionPolicy 决定，
+     * 无 policy 挂载的调用面（单源调试等）恒为 false，弹窗全放行
+     */
+    private val blockSourceDialogs: Boolean
+        get() = context[SourceInteractionPolicy]?.blockDialogs == true
+
+    /**
+     * P0-S3 弹窗拦截判定：被拦截时记日志并抛 SourceInteractionBlockedException
+     */
+    private fun requireSourceDialogAllowed(action: String) {
+        if (!blockSourceDialogs) {
+            return
+        }
+        AppLog.putDebugWithTag(
+            AppLog.TAG_SOURCE_DIALOG,
+            "blockedDialog action=$action ns=${SourceSandboxExtensions.nsShortLabel(getSource())}",
+            null,
+            AppLog.Level.INFO
+        )
+        throw SourceInteractionBlockedException(action)
+    }
 
     /**
      * 访问网络,返回String
@@ -341,6 +368,8 @@ interface JsExtensions : JsEncodeUtils {
 
     fun startBrowserAwait(url: String, title: String, refetchAfterSuccess: Boolean, html: String?): StrResponse {
         rhinoContext.ensureActive()
+        // P0-S3 弹窗拦截：批量流程（搜索/换源）协程树挂载 policy 时拒绝验证网页（无法输入，中断为必要语义）
+        requireSourceDialogAllowed("验证网页")
         val pair = SourceVerificationHelp.getVerificationResult(
             getSource(), url, title, true, refetchAfterSuccess, html
         )
@@ -353,6 +382,8 @@ interface JsExtensions : JsEncodeUtils {
      */
     fun getVerificationCode(imageUrl: String): String {
         rhinoContext.ensureActive()
+        // P0-S3 弹窗拦截：批量流程协程树挂载 policy 时拒绝验证码
+        requireSourceDialogAllowed("验证码")
         return SourceVerificationHelp.getVerificationResult(getSource(), imageUrl, "", false).second
     }
 
@@ -427,11 +458,10 @@ interface JsExtensions : JsEncodeUtils {
         rhinoContextOrNull?.ensureActive()
         val analyzeUrl = AnalyzeUrl(url, source = getSource(), coroutineContext = context)
         val type = analyzeUrl.type ?: UrlUtil.getSuffix(url)
-        val path = FileUtils.getPath(
-            File(FileUtils.getCachePath()),
-            "${MD5Utils.md5Encode16(url)}.${type}"
-        )
-        val file = File(path)
+        val fileName = "${MD5Utils.md5Encode16(url)}.${type}"
+        // P0-S1 书源文件沙箱：命中沙箱则产物写 externalCache/source/{ns}/ 并返回相对沙箱根路径；否则走旧全局根，语义不变
+        val target = SourceSandboxExtensions.resolveBookSourceFile(getSource(), fileName)
+        val file = target?.file ?: File(FileUtils.getPath(File(FileUtils.getCachePath()), fileName))
         file.delete()
         analyzeUrl.getInputStream().use { iStream ->
             file.createFileReplace()
@@ -444,7 +474,7 @@ interface JsExtensions : JsEncodeUtils {
                 throw e
             }
         }
-        return path.substring(FileUtils.getCachePath().length)
+        return target?.relativePath ?: file.absolutePath.substring(FileUtils.getCachePath().length)
     }
 
 
@@ -463,18 +493,22 @@ interface JsExtensions : JsEncodeUtils {
         rhinoContextOrNull?.ensureActive()
         val type = AnalyzeUrl(url, source = getSource(), coroutineContext = context).type
             ?: return ""
-        val path = FileUtils.getPath(
-            FileUtils.createFolderIfNotExist(FileUtils.getCachePath()),
-            "${MD5Utils.md5Encode16(url)}.${type}"
+        // P0-S1 书源文件沙箱：与单参版统一文件定位原语（同 md5 文件名 + 同沙箱解析），保留 hex 写盘语义
+        val fileName = "${MD5Utils.md5Encode16(url)}.${type}"
+        val target = SourceSandboxExtensions.resolveBookSourceFile(getSource(), fileName)
+        val file = target?.file ?: File(
+            FileUtils.getPath(
+                FileUtils.createFolderIfNotExist(FileUtils.getCachePath()),
+                fileName
+            )
         )
-        val file = File(path)
         file.createFileReplace()
         HexUtil.decodeHex(content).let {
             if (it.isNotEmpty()) {
                 file.writeBytes(it)
             }
         }
-        return path.substring(FileUtils.getCachePath().length)
+        return target?.relativePath ?: file.absolutePath.substring(FileUtils.getCachePath().length)
     }
 
     /**
@@ -699,6 +733,8 @@ interface JsExtensions : JsEncodeUtils {
      * @return File
      */
     fun getFile(path: String): File {
+        // P0-S1 书源文件沙箱：BookSource 上下文且开关开启时收敛到 externalCache/source/{ns}/，越界抛 SecurityException
+        SourceSandboxExtensions.resolveBookSourceFile(getSource(), path)?.let { return it.file }
         val cachePath = appCtx.externalCache.absolutePath
         val aPath = if (path.startsWith(File.separator)) {
             cachePath + path
@@ -746,6 +782,8 @@ interface JsExtensions : JsEncodeUtils {
     @JavascriptInterface
     fun deleteFile(path: String): Boolean {
         val file = getFile(path)
+        // P0-S1 书源文件沙箱：删除前校验整个子树在沙箱内（防符号链接/嵌套逃逸）；无沙箱上下文时 no-op
+        SourceSandboxExtensions.requireContainedTree(getSource(), file)
         return FileUtils.delete(file, true)
     }
 
@@ -788,7 +826,17 @@ interface JsExtensions : JsEncodeUtils {
     fun unArchiveFile(zipPath: String): String {
         if (zipPath.isEmpty()) return ""
         val zipFile = getFile(zipPath)
-        return ArchiveUtils.deCompress(zipFile.absolutePath).let {
+        // P0-S1 书源文件沙箱：解压临时目录与产物收敛到沙箱内 ArchiveTemp/{md5}，解压后校验子树；无沙箱上下文走旧全局根
+        val sandboxRoot = SourceSandboxExtensions.bookSourceFileRoot(getSource())
+        return if (sandboxRoot != null) {
+            val tempFolder = BookSourceFileAccessPolicy.resolvePath(sandboxRoot, ArchiveUtils.TEMP_FOLDER_NAME)
+            ArchiveUtils.deCompress(zipFile.absolutePath, tempFolder.file.absolutePath)
+            val outputRelativePath = ArchiveUtils.TEMP_FOLDER_NAME + File.separator + MD5Utils.md5Encode16(zipFile.name)
+            val outputDir = BookSourceFileAccessPolicy.resolvePath(sandboxRoot, outputRelativePath)
+            SourceSandboxExtensions.requireContainedTree(getSource(), outputDir.file)
+            outputRelativePath
+        } else {
+            ArchiveUtils.deCompress(zipFile.absolutePath)
             ArchiveUtils.TEMP_FOLDER_NAME + File.separator + MD5Utils.md5Encode16(zipFile.name)
         }
     }
@@ -1087,6 +1135,16 @@ interface JsExtensions : JsEncodeUtils {
      */
     fun toast(msg: Any?) {
         rhinoContextOrNull?.ensureActive()
+        // P0-S3 弹窗拦截：批量流程静默+记日志（toast 中断会让"提示后继续"的正常源崩溃，D4 裁决不抛）
+        if (blockSourceDialogs) {
+            AppLog.putDebugWithTag(
+                AppLog.TAG_SOURCE_DIALOG,
+                "blockedDialog action=toast ns=${SourceSandboxExtensions.nsShortLabel(getSource())}",
+                null,
+                AppLog.Level.INFO
+            )
+            return
+        }
         appCtx.toastOnUi("${getTag()}: ${msg.toString()}")
     }
 
@@ -1095,6 +1153,16 @@ interface JsExtensions : JsEncodeUtils {
      */
     fun longToast(msg: Any?) {
         rhinoContextOrNull?.ensureActive()
+        // P0-S3 弹窗拦截：同 toast 静默+记日志
+        if (blockSourceDialogs) {
+            AppLog.putDebugWithTag(
+                AppLog.TAG_SOURCE_DIALOG,
+                "blockedDialog action=longToast ns=${SourceSandboxExtensions.nsShortLabel(getSource())}",
+                null,
+                AppLog.Level.INFO
+            )
+            return
+        }
         appCtx.longToastOnUi("${getTag()}: ${msg.toString()}")
     }
 

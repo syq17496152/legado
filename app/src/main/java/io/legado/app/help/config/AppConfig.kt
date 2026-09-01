@@ -2795,6 +2795,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var sourceRecycleBinEnabled = appCtx.getPrefBoolean(PreferKey.sourceRecycleBinEnabled, false)
     var debugLogFloatingBall = appCtx.getPrefBoolean(PreferKey.debugLogFloatingBall, false)
 
+    // P0-S1/S3 书源安全开关：computed getter 实时读 SP（无设置页时 adb 改 SP 即时生效，避免单例加载期求值镜像假开关）
+    val bookSourceFileSandbox get() = appCtx.getPrefBoolean(PreferKey.bookSourceFileSandbox, false)
+    val blockSourceDialogs get() = appCtx.getPrefBoolean(PreferKey.blockSourceDialogs, false)
+
     var showBookshelfReadProgress: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showBookshelfReadProgress, false)
         set(value) {

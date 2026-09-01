@@ -40,6 +40,8 @@ object AppLog {
     const val TAG_WEBDAV_BACKUP = "WebDavBackup"        // B14 WebDAV 删除/重命名
     const val TAG_HIGHLIGHT_STYLE = "HighlightStyle"    // B15 高亮捕获组样式
     const val TAG_THOUGHT_EXPORT = "ThoughtExport"      // B16 想法批注导出
+    const val TAG_SOURCE_SANDBOX = "SourceSandbox"      // P0-S1 书源文件沙箱（越界/拒绝记录）
+    const val TAG_SOURCE_DIALOG = "SourceDialog"        // P0-S3 书源弹窗拦截记录
 
     enum class Level { ERROR, WARN, INFO, DEBUG }
 

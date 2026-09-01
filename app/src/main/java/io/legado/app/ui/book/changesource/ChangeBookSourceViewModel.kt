@@ -24,6 +24,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.SourceConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.SourceHelp
+import io.legado.app.help.source.SourceInteractionPolicy
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.internString
 import io.legado.app.utils.mapParallel
@@ -60,6 +61,12 @@ import java.util.concurrent.Executors
 open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(application) {
     private val threadCount = AppConfig.searchThreadCount
     private var searchPool: ExecutorCoroutineDispatcher? = null
+
+    // P0-S3 书源弹窗拦截策略：随 search/refreshList 协程树传播（开关关闭时 blockDialogs=false 全放行）
+    private val interactionPolicy = SourceInteractionPolicy(
+        blockDialogs = AppConfig.blockSourceDialogs
+    )
+
     val searchStateData = MutableLiveData<Boolean>()
     var searchFinishCallback: ((isEmpty: Boolean) -> Unit)? = null
     var name: String = ""
@@ -224,7 +231,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     private fun search() {
-        task = viewModelScope.launch(searchPool!!) {
+        task = viewModelScope.launch(interactionPolicy + searchPool!!) {
             flow {
                 for (bs in bookSourceParts) {
                     bs.getBookSource()?.let {
@@ -375,7 +382,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     private fun refreshList() {
-        task = viewModelScope.launch(searchPool!!) {
+        task = viewModelScope.launch(interactionPolicy + searchPool!!) {
             flow {
                 for (searchBook in searchBookList) {
                     emit(searchBook)

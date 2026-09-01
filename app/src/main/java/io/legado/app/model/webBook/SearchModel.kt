@@ -7,6 +7,7 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.source.SourceInteractionPolicy
 import io.legado.app.ui.book.search.SearchScope
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.mapParallelSafe
@@ -39,6 +40,11 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     private var searchBooks = arrayListOf<SearchBook>()
     private var searchJob: Job? = null
     private var workingState = MutableStateFlow(true)
+
+    // P0-S3 书源弹窗拦截策略：随 startSearch 协程树传播（开关关闭时 blockDialogs=false 全放行）
+    private val interactionPolicy = SourceInteractionPolicy(
+        blockDialogs = AppConfig.blockSourceDialogs
+    )
 
 
     private fun initSearchPool() {
@@ -86,7 +92,7 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     private fun startSearch() {
         val precision = appCtx.getPrefBoolean(PreferKey.precisionSearch)
         var hasMore = false
-        searchJob = scope.launch(searchPool!!) {
+        searchJob = scope.launch(interactionPolicy + searchPool!!) {
             flow {
                 for (bs in bookSourceParts) {
                     bs.getBookSource()?.let {

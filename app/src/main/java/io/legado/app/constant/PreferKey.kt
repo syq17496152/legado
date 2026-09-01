@@ -63,6 +63,8 @@ object PreferKey {
     const val episodeExportFileName = "episodeExportFileName"
     const val recordLog = "recordLog"
     const val recordNetworkLog = "recordNetworkLog"
+    const val bookSourceFileSandbox = "bookSourceFileSandbox"   // P0-S1 书源文件沙箱开关
+    const val blockSourceDialogs = "blockSourceDialogs"         // P0-S3 书源弹窗拦截开关
     const val sourceRecycleBinEnabled = "sourceRecycleBinEnabled"
     const val processText = "process_text"
     const val cleanCache = "cleanCache"
