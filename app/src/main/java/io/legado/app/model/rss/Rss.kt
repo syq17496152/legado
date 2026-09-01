@@ -10,6 +10,7 @@ import io.legado.app.help.http.warmUpConnection
 import io.legado.app.help.source.SourceLastHostHelper
 import io.legado.app.help.source.SourceNetworkClient
 import io.legado.app.help.source.SourcePreconnectHelper
+import io.legado.app.help.video.VideoUrlExtractor
 import io.legado.app.model.Debug
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
@@ -187,29 +188,42 @@ object Rss {
             AppLog.putDebugWithTag(AppLog.TAG_RSS, "ruleRoutes未匹配到线路 sourceHash=${rssSource.sourceUrl.hashCode()}", level = AppLog.Level.WARN)
             return ""
         }
-        // 采集第一线路集数（routeIndex=0）
+        // 采集首线路集数（routeIndex=0）
         val firstRouteEpisodes = getEpisodesListByIndex(analyzeRule, ruleEpisodes, 0, rssArticle)
-        // 构造嵌套JSON返回
+        // direct-route-first: 首线路无直链（如 /share/ 分享页需二次解析）时，检测后续线路是否有
+        // .m3u8 直链线路并填充其集数（同一 API 响应内纯内存解析，零额外网络请求），
+        // 供 VideoPlay 自动选集优先直链线路起播；线路顺序保持原始序（索引语义一致，无错位）
+        val routeEps = mutableListOf(firstRouteEpisodes)
+        if (routeNames.size > 1 && firstRouteEpisodes.none { VideoUrlExtractor.isDirectVideoStreamUrl(it.url) }) {
+            for (i in 1 until routeNames.size) {
+                val eps = getEpisodesListByIndex(analyzeRule, ruleEpisodes, i, rssArticle)
+                routeEps.add(eps)
+                if (eps.any { VideoUrlExtractor.isDirectVideoStreamUrl(it.url) }) break
+            }
+        }
+        return buildRouteJson(routeNames, routeEps)
+    }
+
+    /**
+     * 构造嵌套JSON线路列表返回值（getRoutesContentAwait 专用）
+     * 约定：其他线路仅含名称、集数为空，切换时由 VideoPlay.switchToRoute 走 getEpisodesAwait 按需采集
+     */
+    private fun buildRouteJson(routeNames: List<String>, routeEpisodes: List<List<RssEpisode>>): String {
         val routeJson = JSONArray()
-        // 第一线路含集数
-        val firstRoute = JSONObject().apply {
-            put("name", routeNames.getOrNull(0) ?: "线路1")
-            put("episodes", JSONArray(firstRouteEpisodes.map { ep ->
+        routeNames.forEachIndexed { i, name ->
+            val eps = routeEpisodes.getOrNull(i) ?: emptyList()
+            routeJson.put(
                 JSONObject().apply {
-                    put("title", ep.title)
-                    put("url", ep.url)
+                    put("name", name)
+                    put("episodes", JSONArray(eps.map { ep ->
+                        JSONObject().apply {
+                            put("title", ep.title)
+                            put("url", ep.url)
+                        }
+                    }))
                 }
-            }))
+            )
         }
-        routeJson.put(firstRoute)
-        // 其他线路只含名称，集数在切换时按需采集
-        for (i in 1 until routeNames.size) {
-            routeJson.put(JSONObject().apply {
-                put("name", routeNames[i])
-                put("episodes", JSONArray())
-            })
-        }
-        AppLog.putDebugWithTag(AppLog.TAG_RSS, "多线路采集完成 routeCount=${routeNames.size} firstRouteEpisodes=${firstRouteEpisodes.size}", level = AppLog.Level.INFO)
         return routeJson.toString()
     }
 

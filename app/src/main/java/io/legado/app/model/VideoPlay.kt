@@ -648,11 +648,17 @@ object VideoPlay : CoroutineScope by MainScope(){
                         AppLog.putDebugWithTag(AppLog.TAG_RSS, "parseRssRoutes结果: routesNull=${routes == null}, routesSize=${routes?.size ?: 0}", level = AppLog.Level.DEBUG)
                         if (routes != null && routes.isNotEmpty()) {
                             rssRoutes = routes
-                            rssRouteIndex = 0
-                            rssEpisodes = routes[0].episodes
+                            // direct-route-first: 自动选集优先直链线路——ffzy 等站首线路为 /share/ 分享页
+                            // （需二次解析且页面 HTML 为空不可解析），次线路直接给 .m3u8 直链；
+                            // 无直链线路时回落首线路（保持旧行为）
+                            val directRouteIdx = routes.indexOfFirst { rt ->
+                                rt.episodes.any { VideoUrlExtractor.isDirectVideoStreamUrl(it.url) }
+                            }.takeIf { it > 0 } ?: 0
+                            rssRouteIndex = directRouteIdx
+                            rssEpisodes = routes[directRouteIdx].episodes
                             rssEpisodeIndex = 0
                             postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title) // R3 title 修复
-                            playRssEpisode(player, routes[0].episodes[0])
+                            playRssEpisode(player, routes[directRouteIdx].episodes[0])
                             postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1)) //通知 UI 更新多集列表
                             return@onSuccess
                         }

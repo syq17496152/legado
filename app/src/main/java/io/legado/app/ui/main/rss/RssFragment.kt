@@ -461,6 +461,9 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     @SuppressLint("SetJavaScriptEnabled")
     private fun initModernRssView() {
         binding.topBar.setMode(MainTopBarView.Mode.RSS)
+        // topbar-search-entry-align：modern 初始化路径必须关闭 searchEntry 胶囊（构造默认 open），
+        // 否则 selectSource 的 setSearchHint(源名) 会让搜索条显示源名，点击源名被误触为源内搜索跳转
+        binding.topBar.setSearchEntryVisible(false)
         binding.topBar.titleText.applyUiTitleTypeface(requireContext())
         binding.topBar.applyStatusBarPadding(withInitialPadding = true)
         binding.topBar.doOnLayout {

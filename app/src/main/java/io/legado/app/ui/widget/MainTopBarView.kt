@@ -325,7 +325,6 @@ class MainTopBarView @JvmOverloads constructor(
     }
 
     fun showSelects(show: Boolean) {
-        android.util.Log.d("TopBarDebug", "showSelects($show) isReg=${isRegularStyle()}", Throwable())
         selectsBarRequested = show
         if (!show) {
             filtersExpanded = tagsBarRequested && filtersExpanded
@@ -334,7 +333,6 @@ class MainTopBarView @JvmOverloads constructor(
     }
 
     fun showTags(show: Boolean) {
-        android.util.Log.d("TopBarDebug", "showTags($show) isReg=${isRegularStyle()}", Throwable())
         tagsBarRequested = show
         if (!show) {
             filtersExpanded = selectsBarRequested && filtersExpanded
@@ -706,14 +704,13 @@ class MainTopBarView @JvmOverloads constructor(
         val oldToggleVisible = filterToggleButton.isVisible
         val oldSelectsVisible = selectsBar.isVisible
         val oldTagsVisible = tagsBar.isVisible
-        android.util.Log.d("TopBarDebug", "updateFilterBars isReg=${isRegularStyle()} selReq=$selectsBarRequested tagReq=$tagsBarRequested expanded=$filtersExpanded")
         if (isRegularStyle()) {
             val config = TopBarConfig.currentConfig(context, AppConfig.isNightTheme)
             filterToggleButton.isVisible = hasFilters &&
                 !(filtersExpanded && config.hideFilterToggleWhenExpanded)
             animateFilterToggle(filtersExpanded)
-            setFilterBarVisible(selectsBar, filtersExpanded && selectsBarRequested, oldSelectsVisible)
-            setFilterBarVisible(tagsBar, filtersExpanded && tagsBarRequested, oldTagsVisible)
+            setFilterBarVisible(selectsBar, filtersExpanded && selectsBarRequested)
+            setFilterBarVisible(tagsBar, filtersExpanded && tagsBarRequested)
         } else {
             filterToggleButton.isVisible = false
             selectsBar.isVisible = selectsBarRequested
@@ -747,71 +744,14 @@ class MainTopBarView @JvmOverloads constructor(
             .start()
     }
 
-    private fun setFilterBarVisible(
-        view: View,
-        visible: Boolean,
-        wasVisible: Boolean
-    ) {
+    private fun setFilterBarVisible(view: View, visible: Boolean) {
+        // topbar-filter-flash-fix: 透明度动画存在 cancel 竞态（收起动画 withEndAction 与展开动画互斥，
+        // MEmu 实测展开后停留 alpha=0 导致 tagsBar 占位但不可见），改为无动画直接切换可见性
         view.animate().cancel()
-        if (!isAttachedToWindow) {
-            view.isVisible = visible
-            view.alpha = 1f
-            view.translationY = 0f
-            view.scaleY = 1f
-            return
-        }
-        if (visible) {
-            if (!wasVisible) {
-                view.alpha = 0f
-                view.translationY = (-4).dp.toFloat()
-                view.isVisible = true
-            } else {
-                view.isVisible = true
-            }
-            view.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setDuration(260L)
-                .setInterpolator(topBarEaseOut)
-                .start()
-        } else if (wasVisible) {
-            view.animate()
-                .alpha(0f)
-                .translationY((-2).dp.toFloat())
-                .setDuration(150L)
-                .setInterpolator(topBarEaseInOut)
-                .withEndAction {
-                    if (!shouldFilterBarBeVisible(view)) {
-                        view.isVisible = false
-                        view.alpha = 1f
-                        view.translationY = 0f
-                        requestLayout()
-                        invalidate()
-                        notifyHeightChangedAfterLayout()
-                    }
-                }
-                .start()
-        } else {
-            view.isVisible = false
-            view.alpha = 1f
-            view.translationY = 0f
-        }
-    }
-
-    private fun shouldFilterBarBeVisible(view: View): Boolean {
-        return if (isRegularStyle()) {
-            filtersExpanded && when (view) {
-                selectsBar -> selectsBarRequested
-                tagsBar -> tagsBarRequested
-                else -> false
-            }
-        } else {
-            when (view) {
-                selectsBar -> selectsBarRequested
-                tagsBar -> tagsBarRequested
-                else -> false
-            }
-        }
+        view.isVisible = visible
+        view.alpha = 1f
+        view.translationY = 0f
+        view.scaleY = 1f
     }
 
     private val Int.dp: Int get() = (this * resources.displayMetrics.density).toInt()

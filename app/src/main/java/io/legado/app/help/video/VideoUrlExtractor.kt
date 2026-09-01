@@ -548,7 +548,7 @@ object VideoUrlExtractor {
      * @param url 待检测的 URL
      * @return true 表示 URL 后缀是视频流格式，可直接交给 ExoPlayer
      */
-    private fun isDirectVideoStreamUrl(url: String): Boolean {
+    fun isDirectVideoStreamUrl(url: String): Boolean {
         val lower = url.lowercase().substringBefore("?").substringBefore("#")
         return lower.endsWith(".m3u8") ||
             lower.endsWith(".mpd") ||
