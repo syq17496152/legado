@@ -117,6 +117,7 @@ scripts/publish_config.json
 !/ai_tests/scripts/l2_verify_precise_manage.py
 !/ai_tests/scripts/verify_no_crash.py
 !/ai_tests/scripts/l2_verify_image_enhance_governance.py
+!/ai_tests/scripts/l2_verify_p0_sandbox_cache.py
 # opencode 运行时产物
 .opencode/goals/
 /docs/specs/rss-image-decrypt-optimization/*.md
