@@ -11,7 +11,7 @@ import io.legado.app.base.VMBaseFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssStar
-import io.legado.app.databinding.FragmentRssArticlesBinding
+import io.legado.app.databinding.FragmentRssFavoritesBinding
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.rss.read.ReadRss
 import io.legado.app.ui.widget.recycler.VerticalDivider
@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
-class RssFavoritesFragment() : VMBaseFragment<RssFavoritesViewModel>(R.layout.fragment_rss_articles),
+class RssFavoritesFragment() : VMBaseFragment<RssFavoritesViewModel>(R.layout.fragment_rss_favorites),
     RssFavoritesAdapter.CallBack {
 
     constructor(group: String) : this() {
@@ -32,7 +32,7 @@ class RssFavoritesFragment() : VMBaseFragment<RssFavoritesViewModel>(R.layout.fr
         }
     }
 
-    private val binding by viewBinding(FragmentRssArticlesBinding::bind)
+    private val binding by viewBinding(FragmentRssFavoritesBinding::bind)
     override val viewModel by viewModels<RssFavoritesViewModel>()
     private val adapter: RssFavoritesAdapter by lazy {
         RssFavoritesAdapter(requireContext(), this@RssFavoritesFragment)
