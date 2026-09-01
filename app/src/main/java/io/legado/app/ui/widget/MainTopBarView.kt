@@ -325,6 +325,7 @@ class MainTopBarView @JvmOverloads constructor(
     }
 
     fun showSelects(show: Boolean) {
+        android.util.Log.d("TopBarDebug", "showSelects($show) isReg=${isRegularStyle()}", Throwable())
         selectsBarRequested = show
         if (!show) {
             filtersExpanded = tagsBarRequested && filtersExpanded
@@ -333,6 +334,7 @@ class MainTopBarView @JvmOverloads constructor(
     }
 
     fun showTags(show: Boolean) {
+        android.util.Log.d("TopBarDebug", "showTags($show) isReg=${isRegularStyle()}", Throwable())
         tagsBarRequested = show
         if (!show) {
             filtersExpanded = selectsBarRequested && filtersExpanded
@@ -704,6 +706,7 @@ class MainTopBarView @JvmOverloads constructor(
         val oldToggleVisible = filterToggleButton.isVisible
         val oldSelectsVisible = selectsBar.isVisible
         val oldTagsVisible = tagsBar.isVisible
+        android.util.Log.d("TopBarDebug", "updateFilterBars isReg=${isRegularStyle()} selReq=$selectsBarRequested tagReq=$tagsBarRequested expanded=$filtersExpanded")
         if (isRegularStyle()) {
             val config = TopBarConfig.currentConfig(context, AppConfig.isNightTheme)
             filterToggleButton.isVisible = hasFilters &&
