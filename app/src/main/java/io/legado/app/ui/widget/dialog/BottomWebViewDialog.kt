@@ -46,6 +46,7 @@ import io.legado.app.help.source.SourceContentFilter
 import io.legado.app.help.source.SourceWebViewController
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.webView.PooledWebView
+import io.legado.app.help.webView.WebViewHtmlStore
 import io.legado.app.help.webView.WebJsExtensions
 import io.legado.app.help.webView.WebJsExtensions.Companion.JS_INJECTION
 import io.legado.app.help.webView.WebJsExtensions.Companion.basicJs
@@ -89,6 +90,7 @@ import io.legado.app.utils.writeBytes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.lang.ref.WeakReference
 import java.net.URLDecoder
@@ -147,6 +149,13 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
     private var webViewSession: CommentWebViewSession? = null
     private var onDismissAction: (() -> Unit)? = null
     private var dismissActionNotified = false
+
+    /** 大 HTML 落盘后的文件引用（onViewCreated 写盘成功后赋值） */
+    private var htmlFileReference: String? = null
+
+    companion object {
+        private const val ARG_HTML_FILE = "htmlFile"
+    }
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -411,6 +420,18 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
         super.onViewCreated(view, savedInstanceState)
         view.setBackgroundColor(0)
         binding.webViewContainer.addView(currentWebView)
+        // 大 HTML 落盘：构造器传入的 legacy "html" 键换存文件引用，避免状态保存时全量序列化
+        viewLifecycleOwner.lifecycleScope.launch {
+            val raw = arguments?.getString("html")
+            if (raw != null && arguments?.getString(ARG_HTML_FILE) == null) {
+                val ref = withContext(Dispatchers.IO) { WebViewHtmlStore.write(raw) }
+                htmlFileReference = ref
+                arguments?.apply {
+                    putString(ARG_HTML_FILE, ref)
+                    remove("html")
+                }
+            }
+        }
         lifecycleScope.launch(IO) {
             val args = arguments
             if (args == null) {
@@ -447,7 +468,10 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
                 }
                 val analyzeUrl =
                     AnalyzeUrl(url, source = source, coroutineContext = coroutineContext)
-                val html = args.getString("html") ?: analyzeUrl.getStrResponseAwait().body
+                val html = args.getString(ARG_HTML_FILE)?.let { ref ->
+                    WebViewHtmlStore.read(ref)
+                        ?: throw NoStackTraceException("WebView HTML file is missing: $ref")
+                } ?: args.getString("html") ?: analyzeUrl.getStrResponseAwait().body
                 if (html.isNullOrEmpty()) {
                     throw NoStackTraceException("html is NullOrEmpty")
                 }
@@ -630,6 +654,14 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
             activity?.requestedOrientation = it
         }
         super.onDestroyView()
+    }
+
+    override fun onDestroy() {
+        // 旋转重建时保留文件供恢复后的对话框重读，其余场景清理
+        if (activity?.isChangingConfigurations != true) {
+            WebViewHtmlStore.delete(htmlFileReference)
+        }
+        super.onDestroy()
     }
 
     override fun upConfig(config: String) {

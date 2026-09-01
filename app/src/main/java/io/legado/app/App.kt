@@ -65,6 +65,7 @@ import kotlinx.coroutines.Dispatchers.IO
 import io.legado.app.help.http.Cronet
 import io.legado.app.help.http.ObsoleteUrlFactory
 import io.legado.app.help.http.okHttpClient
+import io.legado.app.help.rhino.BookScriptObject
 import io.legado.app.help.rhino.NativeBaseSource
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.help.storage.Backup
@@ -455,6 +456,7 @@ class App : Application() {
         RhinoWrapFactory.register(BookInfoRule::class.java, ReadOnlyJavaObject.factory)
         RhinoWrapFactory.register(ContentRule::class.java, ReadOnlyJavaObject.factory)
         RhinoWrapFactory.register(BookChapter::class.java, ReadOnlyJavaObject.factory)
+        RhinoWrapFactory.register(Book::class.java, BookScriptObject.factory)
         RhinoWrapFactory.register(Book.ReadConfig::class.java, ReadOnlyJavaObject.factory)
     }
 

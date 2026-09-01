@@ -29,11 +29,41 @@ private val exploreKindsMap by lazy { ConcurrentHashMap<String, List<ExploreKind
 private val aCache by lazy { ACache.get("explore") }
 
 private fun BookSource.getExploreKindsKey(): String {
-    return MD5Utils.md5Encode(bookSourceUrl + exploreUrl)
+    val sourceState = listOf(
+        MD5Utils.md5Encode16(getVariable()),
+        get("type"),
+        get("order"),
+        get("hostIndex"),
+        get("host"),
+        lastHost.orEmpty()
+    ).joinToString("|")
+    return MD5Utils.md5Encode(
+        listOf(
+            bookSourceUrl,
+            exploreUrl.orEmpty(),
+            jsLib.orEmpty(),
+            lastUpdateTime.toString(),
+            sourceState
+        ).joinToString("\n")
+    )
 }
 
 private fun BookSourcePart.getExploreKindsKey(): String {
     return getBookSource()!!.getExploreKindsKey()
+}
+
+/**
+ * 校验发现分类规则串是否可用：trim 后非空且不为 null/undefined（忽略大小写）
+ */
+private fun String.isValidExploreKindsRule(): Boolean {
+    val trimmed = trim()
+    if (trimmed.isEmpty()) {
+        return false
+    }
+    return when (trimmed.lowercase()) {
+        "null", "undefined" -> false
+        else -> true
+    }
 }
 
 suspend fun BookSourcePart.exploreKinds(): List<ExploreKind> {
@@ -64,7 +94,9 @@ suspend fun BookSource.exploreKinds(): List<ExploreKind> {
                                     put("infoMap", exploreInfoMap)
                                 }.toString().trim()
                             }.also {
-                                aCache.put(exploreKindsKey, it)
+                                if (it.isValidExploreKindsRule()) {
+                                    aCache.put(exploreKindsKey, it)
+                                }
                             }
                         }
                     }
@@ -78,11 +110,16 @@ suspend fun BookSource.exploreKinds(): List<ExploreKind> {
                                     put("infoMap", exploreInfoMap)
                                 }.toString().trim()
                             }.also {
-                                aCache.put(exploreKindsKey, it)
+                                if (it.isValidExploreKindsRule()) {
+                                    aCache.put(exploreKindsKey, it)
+                                }
                             }
                         }
                     }
                     else -> exploreUrl
+                }
+                if (!ruleStr.isValidExploreKindsRule()) {
+                    return@runCatching
                 }
                 if (ruleStr.isJsonArray()) {
                     GSON.fromJsonArray<ExploreKind>(ruleStr).getOrThrow().let {
