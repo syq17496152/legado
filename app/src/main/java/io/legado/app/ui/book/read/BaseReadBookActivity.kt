@@ -141,7 +141,7 @@ abstract class BaseReadBookActivity :
     }
 
     private fun showCustomPageKeyConfig() {
-        PageKeyDialog(this).show()
+        showDialogFragment(PageKeyDialog())
     }
 
     /**

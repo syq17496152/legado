@@ -1,21 +1,20 @@
 package io.legado.app.ui.book.read.config
 
-import android.content.Context
-import android.graphics.drawable.ColorDrawable
-import android.view.KeyEvent
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
-import android.view.Window
-import androidx.activity.ComponentDialog
+import android.view.KeyEvent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -41,91 +40,65 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.theme.bodyTertiary
+import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
-import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
-import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.getPrefString
-import io.legado.app.utils.hideSoftInput
 import io.legado.app.utils.putPrefString
-import io.legado.app.utils.setLayout
-import androidx.compose.material3.MaterialTheme
-import io.legado.app.ui.theme.bodyTertiary
 
-class PageKeyDialog(private val context: Context) : ComponentDialog(context) {
+/**
+ * 自定义翻页键（deep-fix F 迁移：ComponentDialog+ComposeView → ComposeDialogFragment + AppDialogFrame 标准壳）
+ */
+class PageKeyDialog : ComposeDialogFragment() {
 
-    private var prevKeys by mutableStateOf(context.getPrefString(PreferKey.prevKeys).orEmpty())
-    private var nextKeys by mutableStateOf(context.getPrefString(PreferKey.nextKeys).orEmpty())
+    override val dialogSize: AppDialogSize = AppDialogSize.Confirm
+
+    private var prevKeys by mutableStateOf("")
+    private var nextKeys by mutableStateOf("")
     private var focusedField by mutableStateOf(PageKeyField.None)
 
-    init {
-        requestWindowFeature(Window.FEATURE_NO_TITLE)
-        setContentView(
-            ComposeView(context).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-                setContent {
-                    LegadoTheme {
-                        PageKeyContent(
-                            prevKeys = prevKeys,
-                            nextKeys = nextKeys,
-                            onPrevChange = { prevKeys = it },
-                            onNextChange = { nextKeys = it },
-                            onFocusChange = { field, focused ->
-                                if (focused) {
-                                    focusedField = field
-                                } else if (focusedField == field) {
-                                    focusedField = PageKeyField.None
-                                }
-                            },
-                            onReset = {
-                                prevKeys = ""
-                                nextKeys = ""
-                            },
-                            onConfirm = {
-                                context.putPrefString(PreferKey.prevKeys, prevKeys)
-                                context.putPrefString(PreferKey.nextKeys, nextKeys)
-                                dismiss()
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        prevKeys = requireContext().getPrefString(PreferKey.prevKeys).orEmpty()
+        nextKeys = requireContext().getPrefString(PreferKey.nextKeys).orEmpty()
+        focusedField = PageKeyField.None
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoTheme {
+                    PageKeyContent(
+                        prevKeys = prevKeys,
+                        nextKeys = nextKeys,
+                        onPrevChange = { prevKeys = it },
+                        onNextChange = { nextKeys = it },
+                        onFocusChange = { field, focused ->
+                            if (focused) {
+                                focusedField = field
+                            } else if (focusedField == field) {
+                                focusedField = PageKeyField.None
                             }
-                        )
-                    }
+                        },
+                        onReset = {
+                            prevKeys = ""
+                            nextKeys = ""
+                        },
+                        onConfirm = {
+                            requireContext().putPrefString(PreferKey.prevKeys, prevKeys)
+                            requireContext().putPrefString(PreferKey.nextKeys, nextKeys)
+                            dismissAllowingStateLoss()
+                        }
+                    )
                 }
-            }
-        )
-    }
-
-    override fun onStart() {
-        super.onStart()
-        window?.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
-        setLayout(0.92f, ViewGroup.LayoutParams.WRAP_CONTENT)
-    }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (keyCode != KeyEvent.KEYCODE_BACK && keyCode != KeyEvent.KEYCODE_DEL) {
-            when (focusedField) {
-                PageKeyField.Prev -> {
-                    prevKeys = prevKeys.appendPageKey(keyCode)
-                    return true
-                }
-
-                PageKeyField.Next -> {
-                    nextKeys = nextKeys.appendPageKey(keyCode)
-                    return true
-                }
-
-                PageKeyField.None -> Unit
             }
         }
-        return super.onKeyDown(keyCode, event)
-    }
-
-    override fun dismiss() {
-        super.dismiss()
-        currentFocus?.hideSoftInput()
     }
 }
 
@@ -147,28 +120,9 @@ private fun PageKeyContent(
 ) {
     val style = rememberAppDialogStyle()
     val palette = style.toMiuixPalette()
-    CompositionLocalProvider(
-        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
-    ) {
-        LegadoMiuixCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 12.dp),
-            color = style.surface,
-            contentColor = style.primaryText,
-            cornerRadius = style.panelRadius,
-            insidePadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.custom_page_key),
-                color = style.primaryText,
-                fontSize = MaterialTheme.typography.titleLarge.fontSize,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = style.titleFontFamily,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+    AppDialogFrame(
+        title = stringResource(R.string.custom_page_key),
+        content = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -191,39 +145,31 @@ private fun PageKeyContent(
                         onFocusChange(PageKeyField.Next, focused)
                     }
                 )
+                Text(
+                    text = stringResource(R.string.page_key_set_help),
+                    color = style.secondaryText,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+                    lineHeight = 18.sp
+                )
             }
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = stringResource(R.string.page_key_set_help),
-                color = style.secondaryText,
-                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
-                lineHeight = 18.sp
+        },
+        actions = {
+            LegadoMiuixActionButton(
+                text = stringResource(R.string.reset),
+                palette = palette,
+                onClick = onReset,
+                cornerRadius = style.actionRadius
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                LegadoMiuixActionButton(
-                    text = stringResource(R.string.reset),
-                    palette = palette,
-                    onClick = onReset,
-                    modifier = Modifier.weight(1f),
-                    cornerRadius = style.actionRadius,
-                    minWidth = 0.dp
-                )
-                LegadoMiuixActionButton(
-                    text = stringResource(R.string.ok),
-                    palette = palette,
-                    onClick = onConfirm,
-                    modifier = Modifier.weight(1f),
-                    primary = true,
-                    cornerRadius = style.actionRadius,
-                    minWidth = 0.dp
-                )
-            }
+            Spacer(modifier = Modifier.width(8.dp))
+            LegadoMiuixActionButton(
+                text = stringResource(R.string.ok),
+                palette = palette,
+                onClick = onConfirm,
+                primary = true,
+                cornerRadius = style.actionRadius
+            )
         }
-    }
+    )
 }
 
 @Composable

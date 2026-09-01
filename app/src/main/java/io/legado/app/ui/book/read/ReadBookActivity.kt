@@ -25,9 +25,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import android.widget.CheckBox
 import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.TextView
 import android.text.TextPaint
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,7 +36,6 @@ import androidx.core.view.get
 import androidx.core.view.isVisible
 import androidx.core.view.doOnLayout
 import androidx.core.view.size
-import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.lifecycleScope
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import io.legado.app.BuildConfig
@@ -100,20 +97,12 @@ import io.legado.app.help.readaloud.ReadAloudPlaybackState
 import io.legado.app.help.readaloud.ReadAloudProgressState
 import io.legado.app.help.source.getSourceType
 import io.legado.app.help.storage.Backup
-import io.legado.app.lib.dialogs.AndroidAlertBuilder
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.UiCorner
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
-import io.legado.app.lib.theme.applyUiTitleTypeface
-import io.legado.app.lib.theme.primaryTextColor
-import io.legado.app.lib.theme.secondaryTextColor
-import io.legado.app.lib.theme.themeCardColorOrDefault
-import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.model.ImageProvider
@@ -3741,130 +3730,33 @@ class ReadBookActivity : BaseReadBookActivity(),
         currentChapter: BookChapter,
         items: List<LibraryCloudChapterVersion>
     ) {
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(4.dpToPx(), 0, 4.dpToPx(), 0)
-        }
-        val summaryView = TextView(this).apply {
-            text = "当前章节：${currentChapter.title}"
-            textSize = 13f
-            setTextColor(secondaryTextColor)
-            setPadding(0, 0, 0, 8.dpToPx())
-            applyUiBodyTypefaceDeep(this@ReadBookActivity.uiTypeface())
-        }
-        val listLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        var dialog: AlertDialog? = null
-        items.groupBy { libraryCloudSourceGroupKey(it) }.forEach { (_, sourceItems) ->
-            val sourceLabel = libraryCloudSourceLabel(sourceItems.first())
-            listLayout.addView(TextView(this).apply {
-                text = sourceLabel
-                textSize = 14f
-                setTextColor(secondaryTextColor)
-                setPadding(2.dpToPx(), 12.dpToPx(), 2.dpToPx(), 6.dpToPx())
-                applyUiTitleTypeface(this@ReadBookActivity)
-            })
-            sourceItems.forEach { item ->
-                listLayout.addView(createLibraryCloudChapterRow(book, session, currentChapter, item) {
-                    dialog?.dismiss()
-                })
-            }
-        }
-        val scrollView = NestedScrollView(this).apply {
-            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
-            addView(
-                listLayout,
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-            )
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                (resources.displayMetrics.heightPixels * 0.55f).toInt()
+        val groups = items.groupBy { libraryCloudSourceGroupKey(it) }.map { (_, sourceItems) ->
+            LibraryCloudChapterGroup(
+                label = libraryCloudSourceLabel(sourceItems.first()),
+                rows = sourceItems.map { version ->
+                    LibraryCloudChapterRow(
+                        item = version,
+                        title = libraryCloudChapterTitle(version),
+                        time = libraryCloudChapterTime(version)
+                    )
+                }
             )
         }
-        content.addView(summaryView)
-        content.addView(scrollView)
-        dialog = AndroidAlertBuilder(this).apply {
-            setTitle("选择书库章节")
-            setCustomView(content)
-            negativeButton(android.R.string.cancel)
-        }.show()
-    }
-
-    private fun createLibraryCloudChapterRow(
-        book: Book,
-        session: LibraryCloudSession,
-        currentChapter: BookChapter,
-        item: LibraryCloudChapterVersion,
-        dismissParent: () -> Unit
-    ): View {
-        val cardColor = themeCardColorOrDefault()
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(14.dpToPx(), 10.dpToPx(), 14.dpToPx(), 10.dpToPx())
-            background = UiCorner.opaqueRounded(
-                cardColor,
-                UiCorner.panelRadius(this@ReadBookActivity)
-            )
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = 10.dpToPx()
+        var dialogRef: LibraryCloudChapterDialog? = null
+        val dialog = LibraryCloudChapterDialog(
+            currentChapterTitle = currentChapter.title,
+            groups = groups,
+            onRead = { version ->
+                downloadLibraryCloudChapter(book, session, currentChapter, version)
+            },
+            onDelete = { version ->
+                confirmDeleteLibraryCloudChapter(book, session, currentChapter, version) {
+                    dialogRef?.dismissAllowingStateLoss()
+                }
             }
-            addView(TextView(this@ReadBookActivity).apply {
-                text = libraryCloudChapterTitle(item)
-                setTextColor(primaryTextColor)
-                textSize = 15f
-                applyUiTitleTypeface(this@ReadBookActivity)
-            })
-            libraryCloudChapterTime(item)?.let { time ->
-                addView(TextView(this@ReadBookActivity).apply {
-                    text = time
-                    textSize = 13f
-                    setTextColor(secondaryTextColor)
-                    setPadding(0, 4.dpToPx(), 0, 8.dpToPx())
-                    applyUiBodyTypefaceDeep(this@ReadBookActivity.uiTypeface())
-                })
-            }
-            addView(LinearLayout(this@ReadBookActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                addView(libraryCloudActionText("读取", accentColor) {
-                    dismissParent()
-                    downloadLibraryCloudChapter(book, session, currentChapter, item)
-                })
-                addView(libraryCloudActionText("删除", 0xFFD32F2F.toInt()) {
-                    confirmDeleteLibraryCloudChapter(book, session, currentChapter, item, dismissParent)
-                })
-            })
-            setOnClickListener {
-                dismissParent()
-                downloadLibraryCloudChapter(book, session, currentChapter, item)
-            }
-        }
-    }
-
-    private fun libraryCloudActionText(
-        text: String,
-        textColor: Int,
-        onClick: () -> Unit
-    ): TextView {
-        return TextView(this).apply {
-            this.text = text
-            setTextColor(textColor)
-            textSize = 14f
-            setPadding(0, 4.dpToPx(), 14.dpToPx(), 4.dpToPx())
-            applyUiBodyTypefaceDeep(this@ReadBookActivity.uiTypeface())
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            setOnClickListener { onClick() }
-        }
+        )
+        dialogRef = dialog
+        showDialogFragment(dialog)
     }
 
     private fun confirmDeleteLibraryCloudChapter(

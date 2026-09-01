@@ -52,6 +52,7 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.removePref
+import io.legado.app.utils.showDialogFragment
 
 /**
  * 更多阅读设置（偏好面板型弹框迁移 ComposeDialogFragment + AppDialogFrame，设置行按原交互语义重组）
@@ -416,7 +417,7 @@ class MoreConfigDialog() : ComposeDialogFragment() {
                     SettingActionRow(
                         title = getString(R.string.custom_page_key),
                         onClick = {
-                            PageKeyDialog(requireContext()).show()
+                            showDialogFragment(PageKeyDialog())
                         }
                     )
                     SwitchRow(
