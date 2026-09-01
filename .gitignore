@@ -190,3 +190,6 @@ ai_tests/ui_*.xml
 ai_tests/testdata/_local_*.txt
 ai_tests/testdata/image_gallery_source.json
 ai_tests/testdata/image_gallery_srv/
+!/ai_tests/scripts/l2_verify_rss_search_scope.py
+!/ai_tests/scripts/l2_verify_rss_search_regression.py
+!/ai_tests/scripts/l2_verify_rss_folder_subtag.py
