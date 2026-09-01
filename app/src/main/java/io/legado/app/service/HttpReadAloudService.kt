@@ -97,6 +97,10 @@ class HttpReadAloudService : BaseReadAloudService(),
     private var playErrorNo = 0
     private val downloadTaskActiveLock = Mutex()
 
+    /** C1 流式兜底：上一句实测单字符毫秒时长，流式播放拿不到总时长时的步长估计（LC :105-108）。 */
+    @Volatile
+    private var lastCharDurationMs = 100L
+
     override fun onCreate() {
         super.onCreate()
         exoPlayer.addListener(this)
@@ -540,29 +544,47 @@ class HttpReadAloudService : BaseReadAloudService(),
         }
     }
 
+    /**
+     * 句内位置轮询（LC :775-815 直译）：
+     * duration > 0 按真实时长步进并回写 lastCharDurationMs；
+     * duration <= 0（流式）用 lastCharDurationMs 兜底步进（M2：不再直接放弃句内推进）；
+     * 扫过页界只推引擎私有页光标 + 发布位置，绝不直写显示（D6 拆除）。
+     */
     private fun upPlayPos() {
         playIndexJob?.cancel()
         val textChapter = textChapter ?: return
         playIndexJob = lifecycleScope.launch {
-            upTtsProgress(readAloudNumber + 1)
-            if (exoPlayer.duration <= 0) {
-                return@launch
-            }
-            val speakTextLength = contentList[nowSpeak].length
+            upTtsProgress(readAloudNumber)
+            val speakTextLength = contentList.getOrNull(nowSpeak)?.length ?: return@launch
             if (speakTextLength <= 0) {
                 return@launch
             }
-            val sleep = exoPlayer.duration / speakTextLength
-            val start = speakTextLength * exoPlayer.currentPosition / exoPlayer.duration
-            for (i in start..contentList[nowSpeak].length) {
+            val duration = exoPlayer.duration
+            val sleep: Long
+            val start: Int
+            if (duration > 0) {
+                sleep = duration / speakTextLength
+                if (sleep > 0) {
+                    lastCharDurationMs = sleep
+                }
+                start = (speakTextLength * exoPlayer.currentPosition / duration).toInt()
+            } else {
+                // 流式无时长：lastCharDurationMs 兜底，起点按时间比例换算
+                sleep = lastCharDurationMs
+                start = if (sleep > 0) (exoPlayer.currentPosition / sleep).toInt() else 0
+            }
+            if (readAloudByPage) {
+                // 页分段时句内无页界，直接返回（LC :786-788）
+                return@launch
+            }
+            for (i in start..speakTextLength) {
                 if (pageIndex + 1 < textChapter.pageSize
                     && readAloudNumber + i > textChapter.getReadLength(pageIndex + 1)
                 ) {
                     pageIndex++
-                    ReadBook.moveToNextPage()
-                    upTtsProgress(readAloudNumber + i.toInt())
+                    upTtsProgress(readAloudNumber + i)
                 }
-                delay(sleep)
+                delay(sleep.coerceAtLeast(1))
             }
         }
     }

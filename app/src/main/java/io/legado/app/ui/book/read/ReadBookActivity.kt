@@ -94,7 +94,8 @@ import io.legado.app.help.config.ShareNoteTemplateManager
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.readaloud.ReadAloudPlaybackState
-import io.legado.app.help.readaloud.ReadAloudProgressState
+import io.legado.app.model.ReadAloudPosition
+import io.legado.app.model.ReadAloudPositionUpdate
 import io.legado.app.help.source.getSourceType
 import io.legado.app.help.storage.Backup
 import io.legado.app.lib.dialogs.SelectItem
@@ -146,6 +147,7 @@ import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.book.read.page.LottieImageBitmapCache
 import io.legado.app.ui.book.read.page.delegate.ScrollPageDelegate
 import io.legado.app.ui.book.read.page.entities.PageDirection
+import io.legado.app.ui.book.read.page.entities.TextLine
 import io.legado.app.ui.book.read.page.entities.TextPage
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.book.read.page.provider.LayoutProgressListener
@@ -188,6 +190,7 @@ import io.legado.app.utils.isTrue
 import io.legado.app.utils.launch
 import io.legado.app.utils.navigationBarGravity
 import io.legado.app.utils.observeEvent
+import io.legado.app.utils.observeEventSticky
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.setLightStatusBar
 import io.legado.app.utils.share
@@ -4173,52 +4176,24 @@ class ReadBookActivity : BaseReadBookActivity(),
 
 
     /**
-     * 朗读按钮
+     * 朗读按钮（C1 M6 归一：滚动翻页恢复链一律走原语 A setAloudStart，不再直写 durChapterPos）
      */
     override fun onClickReadAloud() {
         autoPageStop()
         when {
             !BaseReadAloudService.isRun -> {
                 ReadAloud.upReadAloudClass()
-                val scrollPageAnim = ReadBook.pageAnim() == 3
-                if (scrollPageAnim) {
-                    val pos = binding.readView.getReadAloudPos()
-                    if (pos != null) {
-                        val (index, line) = pos
-                        if (ReadBook.durChapterIndex != index) {
-                            ReadBook.openChapter(index, line.chapterPosition, false) {
-                                ReadBook.readAloud(startPos = line.pagePosition)
-                            }
-                        } else {
-                            ReadBook.durChapterPos = line.chapterPosition
-                            ReadBook.readAloud(startPos = line.pagePosition)
-                        }
-                    } else {
-                        ReadBook.readAloud()
-                    }
+                if (ReadBook.pageAnim() == 3) {
+                    startAloudFromReadAloudPos()
                 } else {
                     ReadBook.readAloud()
                 }
             }
 
             BaseReadAloudService.pause -> {
-                val scrollPageAnim = ReadBook.pageAnim() == 3
-                if (scrollPageAnim && pageChanged) {
+                if (ReadBook.pageAnim() == 3 && pageChanged) {
                     pageChanged = false
-                    val pos = binding.readView.getReadAloudPos()
-                    if (pos != null) {
-                        val (index, line) = pos
-                        if (ReadBook.durChapterIndex != index) {
-                            ReadBook.openChapter(index, line.chapterPosition, false) {
-                                ReadBook.readAloud(startPos = line.pagePosition)
-                            }
-                        } else {
-                            ReadBook.durChapterPos = line.chapterPosition
-                            ReadBook.readAloud(startPos = line.pagePosition)
-                        }
-                    } else {
-                        ReadBook.readAloud()
-                    }
+                    startAloudFromReadAloudPos()
                 } else {
                     ReadAloud.resume(this)
                 }
@@ -4226,6 +4201,147 @@ class ReadBookActivity : BaseReadBookActivity(),
 
             else -> ReadAloud.pause(this)
         }
+    }
+
+    /** 滚动模式从可见首行恢复朗读：归一到原语 A（只写朗读起点，不联动显示状态）。 */
+    private fun startAloudFromReadAloudPos() {
+        val pos = binding.readView.getReadAloudPos()
+        if (pos != null) {
+            val (index, line) = pos
+            setAloudStart(ReadAloudPosition(index, line.chapterPosition))
+        } else {
+            ReadBook.readAloud()
+        }
+    }
+
+    // ---------------- C1 朗读跟随与原语（蓝本 LC ReadBookActivity :2083-2301） ----------------
+
+    /** 当前显示页（派生）：ReadBook.durPageIndex 即 durChapterPos→页 的派生 getter。 */
+    private fun currentDisplayPageIndex(): Int? =
+        ReadBook.curTextChapter?.getPageIndexByCharIndex(ReadBook.durChapterPos)?.takeIf { it >= 0 }
+
+    /**
+     * 跟随规则（纯判定，零存储）：显示页 == 朗读出发页且前进时才跟随；
+     * 首事件不跟随；显示永不被朗读拽向后退（前进单调）。
+     */
+    private fun shouldFollowAloudAdvance(
+        prev: ReadAloudPosition?,
+        current: ReadAloudPosition
+    ): Boolean {
+        if (prev == null) return false
+        if (current.chapterIndex != ReadBook.durChapterIndex) return false
+        val chapter = ReadBook.curTextChapter ?: return false
+        if (chapter.chapter.index != current.chapterIndex) return false
+        if (current.chapterPosition <= prev.chapterPosition) return false
+        val displayPage = currentDisplayPageIndex() ?: return false
+        return displayPage == chapter.getPageIndexByCharIndex(prev.chapterPosition)
+    }
+
+    /** 派生脱节（每帧现算，零存储）：显示页 != 朗读位置所在页。 */
+    private fun isViewBehindAloud(): Boolean {
+        val position = ReadAloud.aloudPosition ?: return false
+        if (!BaseReadAloudService.isRun || !BaseReadAloudService.isPlay()) return false
+        if (ReadBook.durChapterIndex != position.chapterIndex) return true
+        val chapter = ReadBook.curTextChapter ?: return false
+        if (chapter.chapter.index != position.chapterIndex) return true
+        val displayPage = currentDisplayPageIndex() ?: return false
+        return displayPage != chapter.getPageIndexByCharIndex(position.chapterPosition)
+    }
+
+    /** 原语 B：全架构唯一允许直写显示的对齐动作（LC :2112-2135）。 */
+    private fun backToAloudProgress() {
+        val position = ReadAloud.aloudPosition ?: return
+        if (ReadBook.durChapterIndex != position.chapterIndex) {
+            if (position.chapterIndex !in 0 until ReadBook.chapterSize) return
+            ReadBook.skipReadAloudSyncOnce = true
+            ReadBook.openChapter(position.chapterIndex, position.chapterPosition) {
+                ReadBook.skipReadAloudSyncOnce = false
+                applyAloudPositionToReader(position)
+            }
+        } else {
+            applyAloudPositionToReader(position)
+        }
+    }
+
+    private fun applyAloudPositionToReader(position: ReadAloudPosition) {
+        ReadBook.durChapterPos = position.chapterPosition
+        ReadBook.saveRead(true)
+        binding.readView.upContent(resetPageOffset = false)
+        upSeekBarProgress()
+        binding.readAloudPlayerPanel.refresh()
+    }
+
+    /** 原语 A：只写朗读起点，绝不联动任何显示状态（LC :2231-2280）。 */
+    private fun setAloudStart(position: ReadAloudPosition) {
+        ReadAloud.beginPositionSwitch(position)
+        val start = {
+            val chapter = ReadBook.curTextChapter ?: throw NoStackTraceException("no chapter")
+            if (chapter.chapter.index != position.chapterIndex) {
+                throw NoStackTraceException("chapter changed while switching")
+            }
+            val pageIndex = chapter.getPageIndexByCharIndex(position.chapterPosition)
+            if (pageIndex !in 0 until chapter.pageSize) {
+                throw NoStackTraceException("no page")
+            }
+            // 只切朗读位置，绝不直写显示进度
+            ReadBook.readAloud(
+                startPos = (position.chapterPosition - chapter.getReadLength(pageIndex))
+                    .coerceAtLeast(0),
+                pageIndex = pageIndex
+            )
+        }
+        if (ReadBook.curTextChapter?.chapter?.index == position.chapterIndex) {
+            start()
+            return
+        }
+        if (position.chapterIndex !in 0 until ReadBook.chapterSize) {
+            ReadAloud.cancelPositionSwitch()
+            return
+        }
+        ReadBook.skipReadAloudSyncOnce = true
+        ReadBook.openChapter(position.chapterIndex, position.chapterPosition, false) {
+            ReadBook.skipReadAloudSyncOnce = false
+            start()
+        }
+    }
+
+    /** 页内第一个正文行的真段首（跨页段回退，LC firstParagraphVisibleStart :2217-2223）。 */
+    private fun firstParagraphVisibleStart(page: TextPage): Int? =
+        page.lines.firstOrNull { it.paragraphNum > 0 }?.let {
+            resolveTrueParagraphStart(it) ?: it.chapterPosition
+        }
+
+    /** 跨页段真段首回退（LC resolveTrueParagraphStart :2200-2213）：行所属全章段落的段首。 */
+    private fun resolveTrueParagraphStart(line: TextLine): Int? {
+        val chapter = ReadBook.curTextChapter ?: return null
+        return chapter.getParagraphs(false)
+            .firstOrNull { line.chapterPosition in it.chapterIndices }?.chapterPosition
+    }
+
+    /** 强制追页：手动翻页翻译成"从新页第一段重读"（= 对新页第一段执行原语 A）。 */
+    private fun restartFromPage() {
+        val pos = firstParagraphVisibleStart(binding.readView.curPage.textPage) ?: return
+        setAloudStart(ReadAloudPosition(ReadBook.durChapterIndex, pos))
+    }
+
+    /** 手动翻页挂钩（LC onManualPageChanged :2289-2301）：由 ReadBook UI 导航汇合点回调。 */
+    override fun onManualPageChanged() {
+        if (!BaseReadAloudService.isRun || ReadBook.skipReadAloudSyncOnce) return
+        if (getPrefBoolean(PreferKey.forcePageFollow, false)) {
+            handler.post { restartFromPage() }
+        } else {
+            updateReadAloudPanelsFollowState()
+        }
+    }
+
+    /**
+     * 面板派生刷新。
+     * 简化说明:三形态面板当前无独立"回原进度"按钮，此处仅触发面板刷新（面板自身从
+     * durChapterPos/aloudPosition 派生）| 已知上限:回原进度入口暂经进度条 seekToTextPosition 语义
+     * | 升级路径:三形态面板各加可见性接 isViewBehindAloud 的按钮后替换本实现
+     */
+    private fun updateReadAloudPanelsFollowState() {
+        binding.readAloudPlayerPanel.refresh()
     }
 
     override fun showHelp() {
@@ -4904,20 +5020,6 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
     }
 
-    private fun isCurrentReadAloudProgress(progress: ReadAloudProgressState): Boolean {
-        val book = ReadBook.book ?: return false
-        val chapter = ReadBook.curTextChapter ?: return false
-        if (progress.bookUrl.isNotBlank() && progress.bookUrl != book.bookUrl) return false
-        if (progress.chapterIndex >= 0 && progress.chapterIndex != chapter.chapter.index) return false
-        if (progress.chapterUrl.isNotBlank() &&
-            chapter.chapter.url.isNotBlank() &&
-            progress.chapterUrl != chapter.chapter.url
-        ) {
-            return false
-        }
-        return true
-    }
-
     /**
      * T7（theme-arch-gap）：阅读器豁免 recreate（兑现 BaseActivity 注释承诺的沉浸页豁免），
      * 主题切换不打断阅读/朗读；Compose 面板经 ThemeSync 即时换肤，View 链由 [upThemeInPlace] 原位刷新
@@ -4980,13 +5082,8 @@ class ReadBookActivity : BaseReadBookActivity(),
                 pendingReadAloudPlayerOpen = false
             }
             if (it == Status.STOP || it == Status.PAUSE) {
-                ReadBook.curTextChapter?.let { textChapter ->
-                    val page = textChapter.getPageByReadPos(ReadBook.durChapterPos)
-                    if (page != null) {
-                        page.removePageAloudSpan()
-                        readView.upContent(resetPageOffset = false)
-                    }
-                }
+                // C1 投影化（H5）：停止/暂停红字随 isReadAloud 现算消失，只需失效绘制缓存重绘
+                binding.readView.invalidateReadAloudHighlight()
             }
         }
         observeEvent<Int>(EventBus.READ_ALOUD_DS) {
@@ -5005,26 +5102,29 @@ class ReadBookActivity : BaseReadBookActivity(),
                 readAloudPlayerPanel.openFromBottom(force = true)
             }
         }
-        observeEvent<ReadAloudProgressState>(EventBus.READ_ALOUD_PROGRESS) { progress ->
-            if (!isCurrentReadAloudProgress(progress)) return@observeEvent
-            val chapterStart = progress.chapterPosition
-            readAloudPlayerPanel.onTtsProgress(chapterStart)
-            if (BaseReadAloudService.isPlay() &&
-                !ReadBook.isReadAloudUserNavigationActive() &&
-                isCurrentReadAloudProgress(progress)
-            ) {
-                ReadBook.curTextChapter?.let { textChapter ->
-                    val previousPageIndex = ReadBook.durPageIndex
-                    ReadBook.durChapterPos = chapterStart
-                    val pageIndex = ReadBook.durPageIndex
-                    val aloudSpanStart = chapterStart - textChapter.getReadLength(pageIndex)
-                    textChapter.getPage(pageIndex)?.upPageAloudSpan(aloudSpanStart)
-                    if (pageIndex != previousPageIndex) {
-                        upContent()
-                    } else {
-                        readView.curPage.invalidateContentView()
-                    }
+        // C1 位置观察者（替换原 READ_ALOUD_PROGRESS 孤儿观察者，蓝本 LC :3369-3424）：
+        // 显示进度的唯一跟随写点；syncView 显式传送直接走原语 B；每帧先失效红字投影绘制缓存
+        observeEventSticky<ReadAloudPositionUpdate>(EventBus.READ_ALOUD_POSITION) { update ->
+            if (!ReadAloud.isCurrentPosition(update)) return@observeEventSticky   // 防乱序闸门
+            val position = update.position
+            // 面板进度条数据源（OQ-5 裁决：位置事件喂入，段进度事件留作 P3 rebase 预留）
+            readAloudPlayerPanel.onTtsProgress(position.chapterPosition)
+            lifecycleScope.launch {
+                // 先失效当前页绘制缓存，同页推进时重绘才会重录红字投影
+                binding.readView.invalidateReadAloudHighlight()
+                if (update.syncView) {
+                    // 用户显式传送：等同再点一次"回原进度"
+                    backToAloudProgress()
+                    updateReadAloudPanelsFollowState()
+                    return@launch
                 }
+                if (!BaseReadAloudService.isPlay()) return@launch
+                if (ReadBook.curTextChapter?.chapter?.index != position.chapterIndex) return@launch
+                if (shouldFollowAloudAdvance(update.previousPosition, position)) {
+                    ReadBook.durChapterPos = position.chapterPosition   // 显示进度的唯一跟随写点
+                    upContent()
+                }
+                updateReadAloudPanelsFollowState()
             }
         }
         observeEvent<Boolean>(PreferKey.keepLight) {
