@@ -16,6 +16,8 @@ import io.legado.app.help.crypto.SymmetricCryptoAndroid
 import io.legado.app.help.http.CookieStore
 import io.legado.app.help.source.clearExploreKindsCache
 import io.legado.app.help.source.getShareScope
+import io.legado.app.help.source.scriptCacheObject
+import io.legado.app.help.source.withBookSourceClassPolicy
 import io.legado.app.model.SharedJsScope.remove
 import io.legado.app.utils.GSON
 import io.legado.app.utils.GSONStrict
@@ -325,22 +327,26 @@ interface BaseSource : JsExtensions {
      */
     @Throws(Exception::class)
     fun evalJS(jsStr: String, bindingsConfig: ScriptBindings.() -> Unit = {}): Any? {
-        val bindings = buildScriptBindings { bindings ->
-            bindings["java"] = this
-            bindings["source"] = this
-            bindings["baseUrl"] = getKey()
-            bindings["cookie"] = CookieStore
-            bindings["cache"] = CacheManager
-            bindings.apply(bindingsConfig)
-        }
-        val sharedScope = getShareScope()
-        val scope = if (sharedScope == null) {
-            RhinoScriptEngine.getRuntimeScope(bindings)
-        } else {
-            bindings.apply {
-                prototype = sharedScope
+        // P0-S4/D17 第三求值入口同款包裹（D5 观察放行/D11 实拦，enabled=this is BookSource 天然排除 RssSource）
+        // P0-S2 cache 按源命名空间
+        return withBookSourceClassPolicy {
+            val bindings = buildScriptBindings { bindings ->
+                bindings["java"] = this
+                bindings["source"] = this
+                bindings["baseUrl"] = getKey()
+                bindings["cookie"] = CookieStore
+                bindings["cache"] = scriptCacheObject()
+                bindings.apply(bindingsConfig)
             }
+            val sharedScope = getShareScope()
+            val scope = if (sharedScope == null) {
+                RhinoScriptEngine.getRuntimeScope(bindings)
+            } else {
+                bindings.apply {
+                    prototype = sharedScope
+                }
+            }
+            RhinoScriptEngine.eval(jsStr, scope)
         }
-        return RhinoScriptEngine.eval(jsStr, scope)
     }
 }

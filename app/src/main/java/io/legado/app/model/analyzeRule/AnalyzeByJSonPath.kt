@@ -45,10 +45,13 @@ class AnalyzeByJSonPath(json: Any) {
             if (result.isEmpty()) { //st为空，表明无成功替换的内嵌规则
                 try {
                     val ob = ctx.read<Any>(rule)
-                    result = if (ob is List<*>) {
-                        ob.joinToString("\n")
-                    } else {
-                        ob.toString()
+                    result = when {
+                        // 修复：对象/Map 元素不能 joinToString（Map.toString 非法 JSON，下游解析全坏）；
+                        // 字符串元素保持旧拼接语义，混合/对象元素序列化为合法 JSON 文本
+                        ob is List<*> && ob.all { it is String || it == null } -> ob.joinToString("\n")
+                        ob is List<*> -> org.json.JSONArray(ob).toString()
+                        ob is Map<*, *> -> org.json.JSONObject(ob).toString()
+                        else -> ob.toString()
                     }
                 } catch (e: Exception) {
                     e.printOnDebug()
@@ -86,7 +89,14 @@ class AnalyzeByJSonPath(json: Any) {
                     val obj = ctx.read<Any>(rule)
                     if (obj is List<*>) {
                         // F-5.2: JSONPath 列表项可能为 null，跳过避免 NPE
-                        for (o in obj) if (o != null) result.add(o.toString())
+                        // 修复：对象/Map 元素转合法 JSON 字符串（toString 产生 Map 字符串破坏下游解析）
+                        for (o in obj) {
+                            when (o) {
+                                null -> Unit
+                                is Map<*, *> -> result.add(org.json.JSONObject(o).toString())
+                                else -> result.add(o.toString())
+                            }
+                        }
                     } else if (obj != null) {
                         // F-5.2: JSONPath 匹配不到时 read 返回 null，判空避免 NPE
                         result.add(obj.toString())

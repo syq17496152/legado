@@ -98,6 +98,15 @@ object CacheManager {
         memoryLruCache.remove(key)
     }
 
+    // P0-S2 脚本缓存按源隔离：按前缀清理内存缓存（参照 AppCacheManager.clearSourceVariables 模式）
+    fun deleteMemoryByPrefix(prefix: String) {
+        memoryLruCache.snapshot().keys.forEach {
+            if (it.startsWith(prefix)) {
+                memoryLruCache.remove(it)
+            }
+        }
+    }
+
     fun get(key: String): String? {
         getFromMemory(key)?.let {
             if (it is String) return it

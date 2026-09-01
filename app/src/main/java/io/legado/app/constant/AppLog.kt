@@ -42,6 +42,8 @@ object AppLog {
     const val TAG_THOUGHT_EXPORT = "ThoughtExport"      // B16 想法批注导出
     const val TAG_SOURCE_SANDBOX = "SourceSandbox"      // P0-S1 书源文件沙箱（越界/拒绝记录）
     const val TAG_SOURCE_DIALOG = "SourceDialog"        // P0-S3 书源弹窗拦截记录
+    const val TAG_SOURCE_CACHE = "SourceCache"          // P0-S2 书源脚本缓存命名空间（清理失败记录）
+    const val TAG_SOURCE_GUARD = "SourceGuard"          // P0-S4 类导入策略观察/实拦记录
 
     enum class Level { ERROR, WARN, INFO, DEBUG }
 

@@ -16,6 +16,7 @@ import com.github.liuyueyi.quick.transfer.constants.TransType
 import com.jeremyliao.liveeventbus.LiveEventBus
 import com.jeremyliao.liveeventbus.logger.DefaultLogger
 import com.script.rhino.ReadOnlyJavaObject
+import com.script.rhino.RhinoClassShutter
 import com.script.rhino.RhinoScriptEngine
 import com.script.rhino.RhinoWrapFactory
 import io.legado.app.base.AppContextWrapper
@@ -66,6 +67,7 @@ import io.legado.app.help.http.Cronet
 import io.legado.app.help.http.ObsoleteUrlFactory
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.rhino.BookScriptObject
+import io.legado.app.help.rhino.BookSourceGuardLog
 import io.legado.app.help.rhino.NativeBaseSource
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.help.storage.Backup
@@ -141,6 +143,16 @@ class App : Application() {
         applyDayNightInit(this)
         registerActivityLifecycleCallbacks(LifecycleHelp)
         defaultSharedPreferences.registerOnSharedPreferenceChangeListener(AppConfig)
+        // P0-S4 类导入策略灰度：注册类访问观察者（modules 层回调解耦 AppLog，D13）
+        RhinoClassShutter.classAccessObserver = object : RhinoClassShutter.ClassAccessObserver {
+            override fun onObserveClass(className: String, sourceLabel: String?) {
+                BookSourceGuardLog.observeClass(sourceLabel, className)
+            }
+
+            override fun onBlockClass(className: String, sourceLabel: String?) {
+                BookSourceGuardLog.blockedClass(sourceLabel, className)
+            }
+        }
         // 线程池拆分配置迁移：必须在业务使用 threadCount 前执行
         migrateThreadCountConfig()
         // B13 内存压力监控：注册降级回调 + 启动定时轮询

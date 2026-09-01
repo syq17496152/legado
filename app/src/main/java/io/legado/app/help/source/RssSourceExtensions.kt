@@ -62,7 +62,8 @@ suspend fun RssSource.sortUrls(): List<Pair<String, String>> {
                     }
                 }
             }
-            str?.split("(&&|\n)+".toRegex())?.forEach { sort ->
+            // &&& 优先于 && 匹配，避免 "a&&&b" 被拆成 ["a", "&b"] 残留单个 & 前缀
+            str?.split("(&&&|&&|\n)+".toRegex())?.forEach { sort ->
                 val name = sort.substringBefore("::")
                 val url = sort.substringAfter("::", "")
                 if (url.isNotEmpty()) {

@@ -171,13 +171,18 @@ object Rss {
         }.getOrElse { throw it }
         checkRedirect(rssSource, res)
         val analyzeRule = AnalyzeRule(rssArticle, rssSource)
-        analyzeRule.setContent(res.body)
+        analyzeRule.setContent(normalizeMacCmsBody(res.body))
             .setBaseUrl(NetworkUtils.getAbsoluteURL(rssArticle.origin, rssArticle.link))
             .setCoroutineContext(currentCoroutineContext())
             .setRedirectUrl(res.url)
-        // 采集线路名列表（用getString+手动分割，getStringList行为不一致）
-        val routeNamesStr = analyzeRule.getString(ruleRoutes) ?: ""
-        val routeNames = routeNamesStr.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+        // 采集线路名列表（列表范式优先：$.routes[*].name；结果逐项按 \n 展开以兼容旧写法 replaceRegex 转行产物；空则回落单字符串+\n 分割）
+        val routeNames = analyzeRule.getStringList(ruleRoutes)
+            ?.flatMap { it.split("\n") }
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            ?.takeIf { it.isNotEmpty() }
+            ?: (analyzeRule.getString(ruleRoutes) ?: "")
+                .split("\n").map { it.trim() }.filter { it.isNotBlank() }
         if (routeNames.isEmpty()) {
             AppLog.putDebugWithTag(AppLog.TAG_RSS, "ruleRoutes未匹配到线路 sourceHash=${rssSource.sourceUrl.hashCode()}", level = AppLog.Level.WARN)
             return ""
@@ -230,16 +235,16 @@ object Rss {
             .replace("{routeIndex}", routeIndex.toString())
         // 执行规则
         val result = analyzeRule.getString(processedRule)
-        // 解析为 List<RssEpisode>
-        val episodes = parseEpisodesResult(result, rssArticle)
+        // 解析为 List<RssEpisode>（透传 routeIndex 供兜底隐式分组）
+        val episodes = parseEpisodesResult(result, rssArticle, routeIndex)
         return episodes
     }
 
     /**
      * 解析集数规则执行结果为 List<RssEpisode>
-     * 支持：嵌套JSON数组 [{"title":"第1集","url":"..."}] / 纯URL列表
+     * 支持：嵌套JSON数组 [{"title":"第1集","url":"..."}] / 纯URL列表 / MacCMS 多线路串（兜底隐式分组）
      */
-    private fun parseEpisodesResult(result: String, rssArticle: RssArticle): List<RssEpisode> {
+    private fun parseEpisodesResult(result: String, rssArticle: RssArticle, routeIndex: Int = 0): List<RssEpisode> {
         if (result.isBlank()) return emptyList()
         val trimmed = result.trim()
         // 尝试解析为JSON数组
@@ -267,24 +272,57 @@ object Rss {
                 parseEpisodesByLines(trimmed, rssArticle)
             }
         }
+        // 兜底：规范化层未触发时，含 $$$ 的多线路串隐式按线路分组取第 N 组（越界回落首组）
+        if (trimmed.contains("\$\$\$")) {
+            val groups = trimmed.split("\$\$\$")
+            val group = groups.getOrNull(routeIndex) ?: run {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_RSS,
+                    "routeIndex=$routeIndex 超出线路数(${groups.size})，回落首线路",
+                    level = AppLog.Level.WARN
+                )
+                groups[0]
+            }
+            return parseEpisodesByLines(group, rssArticle)
+        }
         // 多行URL格式
         return parseEpisodesByLines(trimmed, rssArticle)
     }
 
     /**
      * 多行URL格式解析为集数列表
+     * 增强：行内含 $ 时按 MacCMS 段解析——先按 # 分集、再按 $(limit=2) 拆集名/地址（缺名补"第N集"）
+     * 旧格式（整行即 URL）保持兼容
      */
     private fun parseEpisodesByLines(text: String, rssArticle: RssArticle): List<RssEpisode> {
-        return text.split("\n", "\r")
+        val pairs = text.split("\n", "\r")
             .map { it.trim() }
             .filter { it.isNotBlank() }
-            .mapIndexed { i, line ->
-                RssEpisode(
-                    title = "第${i + 1}集",
-                    url = NetworkUtils.getAbsoluteURL(rssArticle.origin, line)
-                )
+            .flatMap { line ->
+                if (line.contains('$')) {
+                    // CMS 段：集名$URL#集名$URL（limit=2 保留地址内 $ 字符）
+                    line.split('#')
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .map { piece ->
+                            val parts = piece.split('$', limit = 2)
+                            (parts.getOrNull(0)?.trim().orEmpty()) to
+                                (parts.getOrNull(1)?.trim() ?: parts[0].trim())
+                        }
+                } else {
+                    // 旧格式兼容：整行即 URL，行为不变（回归安全）
+                    listOf("" to line)
+                }
             }
-            .filter { it.url.isNotBlank() }
+        var index = 0
+        return pairs.mapNotNull { (title, url) ->
+            if (url.isBlank()) return@mapNotNull null
+            index++
+            RssEpisode(
+                title = title.ifBlank { "第${index}集" },
+                url = NetworkUtils.getAbsoluteURL(rssArticle.origin, url)
+            )
+        }
     }
 
     /**
@@ -315,10 +353,53 @@ object Rss {
             analyzeUrl.getStrResponseAwait()
         }.getOrElse { throw it }
         val analyzeRule = AnalyzeRule(rssArticle, rssSource)
-        analyzeRule.setContent(res.body)
+        analyzeRule.setContent(normalizeMacCmsBody(res.body))
             .setBaseUrl(NetworkUtils.getAbsoluteURL(rssArticle.origin, rssArticle.link))
             .setCoroutineContext(currentCoroutineContext())
             .setRedirectUrl(res.url)
         return getEpisodesListByIndex(analyzeRule, ruleEpisodes, routeIndex, rssArticle)
+    }
+
+    /**
+     * MacCMS 扁平播放数据规范化：vod_play_from / vod_play_url 含 $$$ 时，
+     * 在原 JSON 增量注入结构化 routes 字段（原字段不动），供列表范式规则随意消费。
+     * 非 JSON body / 无 MacCMS 特征字段 / 已有 routes 时原样返回（零侵入）。
+     */
+    private fun normalizeMacCmsBody(body: String?): String? {
+        if (body.isNullOrBlank()) return body
+        val json = kotlin.runCatching { JSONObject(body) }.getOrNull() ?: return body
+        val item = json.optJSONArray("list")?.optJSONObject(0) ?: json
+        if (item == null || item.has("routes")) return body
+        val from = item.optString("vod_play_from")
+        val urls = item.optString("vod_play_url")
+        if (!from.contains("\$\$\$") && !urls.contains("\$\$\$")) return body
+        return kotlin.runCatching {
+            val names = from.split("\$\$\$")
+            val groups = urls.split("\$\$\$")
+            val routes = JSONArray()
+            names.forEachIndexed { i, name ->
+                val eps = JSONArray()
+                groups.getOrNull(i)?.split('#')
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotBlank() }
+                    ?.forEach { piece ->
+                        val parts = piece.split('$', limit = 2)
+                        val title = parts.getOrNull(0)?.trim().orEmpty()
+                        val url = (parts.getOrNull(1) ?: parts.getOrNull(0))?.trim().orEmpty()
+                        if (url.isNotBlank()) {
+                            eps.put(JSONObject().put("title", title).put("url", url))
+                        }
+                    }
+                routes.put(JSONObject().put("name", name.trim()).put("episodes", eps))
+            }
+            // 注入到顶层（$.routes），与列表范式规则 $.routes[*].name 对齐；item(list[0]) 不重复注入
+            json.put("routes", routes)
+            AppLog.putDebugWithTag(
+                AppLog.TAG_RSS,
+                "MacCMS规范化完成 routeCount=${routes.length()} 首线路集数=${routes.optJSONObject(0)?.optJSONArray("episodes")?.length() ?: 0}",
+                level = AppLog.Level.INFO
+            )
+            json.toString()
+        }.getOrElse { body }
     }
 }

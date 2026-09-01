@@ -2798,6 +2798,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     // P0-S1/S3 书源安全开关：computed getter 实时读 SP（无设置页时 adb 改 SP 即时生效，避免单例加载期求值镜像假开关）
     val bookSourceFileSandbox get() = appCtx.getPrefBoolean(PreferKey.bookSourceFileSandbox, false)
     val blockSourceDialogs get() = appCtx.getPrefBoolean(PreferKey.blockSourceDialogs, false)
+    // P0-S2/S4 书源安全开关：默认关=现状全局 CacheManager（应急回退通道）；观察日志默认开（灰度观察档数据收集）
+    val bookSourceCacheScoped get() = appCtx.getPrefBoolean(PreferKey.bookSourceCacheScoped, false)
+    val bookSourceClassPolicyLog get() = appCtx.getPrefBoolean(PreferKey.bookSourceClassPolicyLog, true)
 
     var showBookshelfReadProgress: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showBookshelfReadProgress, false)

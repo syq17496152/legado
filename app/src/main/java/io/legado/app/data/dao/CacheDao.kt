@@ -51,6 +51,13 @@ interface CacheDao {
     @Query("delete from caches where deadline > 0 and deadline < :now")
     fun clearDeadline(now: Long)
 
+    // P0-S2 脚本缓存按源隔离：前缀查询/清理（like 语法先例 deleteSourceVariables；仅新增 @Query 零 schema 变更免 migration）
+    @Query("select * from caches where `key` like :prefix || '%'")
+    fun getByPrefix(prefix: String): List<Cache>
+
+    @Query("delete from caches where `key` like :prefix || '%'")
+    fun deleteByPrefix(prefix: String)
+
     // F-P0-2 备份选择器（借鉴蛋蛋Max）获取书源运行数据缓存
     @Query(
         """select * from caches

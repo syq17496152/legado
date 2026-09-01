@@ -22,6 +22,8 @@ import io.legado.app.help.JsExtensions
 import io.legado.app.help.http.BackstageWebView
 import io.legado.app.help.http.CookieStore
 import io.legado.app.help.source.getShareScope
+import io.legado.app.help.source.scriptCacheObject
+import io.legado.app.help.source.withBookSourceClassPolicy
 import io.legado.app.model.Debug
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.GSON
@@ -219,8 +221,8 @@ class AnalyzeRule(
                     // get {{}}
                     resolvedRule.rule
                 } else {
-                    // 键值直接访问
-                    result[resolvedRule.rule]
+                    // 键值直接访问（容错 $. 前缀，同 getString 分支）
+                    result[resolvedRule.rule.removePrefix("$.")]
                 }
                 result?.let {
                     if (resolvedRule.replaceRegex.isNotEmpty() && it is List<*>) {
@@ -232,8 +234,8 @@ class AnalyzeRule(
                     }
                 }
             } else if (result is LinkedTreeMap<*, *>) {
-                // 键值直接访问
-                result = result[ruleList.first().rule]
+                // 键值直接访问（容错 $. 前缀，同 getString 分支）
+                result = result[ruleList.first().rule.removePrefix("$.")]
             } else {
                 for (sourceRule in ruleList) {
                     putRule(sourceRule.putMap)
@@ -319,14 +321,14 @@ class AnalyzeRule(
                     // get {{}}
                     resolvedRule.rule
                 } else {
-                    // 键值直接访问
-                    result[resolvedRule.rule]?.toString()
+                    // 键值直接访问（容错 $. 前缀：{{$.key}} 子规则经 getOrCreateSingleSourceRule 保留原串，裸键取值）
+                    result[resolvedRule.rule.removePrefix("$.")]?.toString()
                 }?.let {
                     replaceRegex(it, resolvedRule)
                 }
             } else if (result is LinkedTreeMap<*, *>) {
-                // 键值直接访问
-                result = result[ruleList.first().rule]?.toString()
+                // 键值直接访问（同上：容错 $. 前缀）
+                result = result[ruleList.first().rule.removePrefix("$.")]?.toString()
             } else {
                 for (sourceRule in ruleList) {
                     putRule(sourceRule.putMap)
@@ -751,7 +753,10 @@ class AnalyzeRule(
                         regType == jsRuleType -> {
                             if (isRule(ruleParam[index])) {
                                 val ruleList = getOrCreateSingleSourceRule(ruleParam[index])
-                                getString(ruleList).let {
+                                // 修复：SourceRule 为 inner class 绑定创建实例，跨实例复用规则时
+                                // getString(ruleList) 会用创建实例的 content（如列表响应顶层，无目标键）。
+                                // 显式传入当前解析上下文 result（如列表项），确保子规则作用于正确数据。
+                                getString(ruleList, result).let {
                                     infoVal.insert(0, it)
                                 }
                             } else {
@@ -842,36 +847,38 @@ class AnalyzeRule(
      * 执行JS
      */
     fun evalJS(jsStr: String, result: Any? = null): Any? {
-        val bindings = buildScriptBindings { bindings ->
-            bindings["java"] = this
-            bindings["cookie"] = CookieStore
-            bindings["cache"] = CacheManager
-            bindings["source"] = source
-            bindings["book"] = book
-            bindings["result"] = result
-            bindings["baseUrl"] = baseUrl
-            bindings["chapter"] = chapter
-            bindings["title"] = chapter?.title
-            bindings["src"] = content
-            bindings["nextChapterUrl"] = nextChapterUrl
-            bindings["rssArticle"] = rssArticle
-            bindings["fromBookInfo"] = isFromBookInfo
-        }
-        val topScope = source?.getShareScope(coroutineContext) ?: topScopeRef?.get()
-        val scope = if (topScope == null) {
-            RhinoScriptEngine.getRuntimeScope(bindings).apply {
-                if (evalJSCallCount++ > 16) {
-                    topScopeRef = WeakReference(prototype)
+        // P0-S4 书源类策略包裹（D5 观察放行/D11 实拦）+ P0-S2 cache 按源命名空间
+        return source.withBookSourceClassPolicy {
+            val bindings = buildScriptBindings { bindings ->
+                bindings["java"] = this
+                bindings["cookie"] = CookieStore
+                bindings["cache"] = source.scriptCacheObject()
+                bindings["source"] = source
+                bindings["book"] = book
+                bindings["result"] = result
+                bindings["baseUrl"] = baseUrl
+                bindings["chapter"] = chapter
+                bindings["title"] = chapter?.title
+                bindings["src"] = content
+                bindings["nextChapterUrl"] = nextChapterUrl
+                bindings["rssArticle"] = rssArticle
+                bindings["fromBookInfo"] = isFromBookInfo
+            }
+            val topScope = source?.getShareScope(coroutineContext) ?: topScopeRef?.get()
+            val scope = if (topScope == null) {
+                RhinoScriptEngine.getRuntimeScope(bindings).apply {
+                    if (evalJSCallCount++ > 16) {
+                        topScopeRef = WeakReference(prototype)
+                    }
+                }
+            } else {
+                bindings.apply {
+                    prototype = topScope
                 }
             }
-        } else {
-            bindings.apply {
-                prototype = topScope
-            }
+            val script = compileScriptCache(jsStr)
+            script?.eval(scope, coroutineContext)
         }
-        val script = compileScriptCache(jsStr)
-        val result = script?.eval(scope, coroutineContext)
-        return result
     }
 
     private fun compileScriptCache(jsStr: String): CompiledScript? {

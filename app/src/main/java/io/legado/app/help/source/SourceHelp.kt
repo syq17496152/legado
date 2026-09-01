@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.content.ContextCompat
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.SourceType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
@@ -136,6 +137,15 @@ object SourceHelp {
         SourceConfig.removeSource(key)
         // F-P1-C4 删源时清理并发限流记录，避免内存泄漏
         ConcurrentRateLimiter.clearRecord(key)
+        // P0-S2 删源联动：清理脚本缓存命名空间（DB+内存+文件三处，失败不阻断删源，E17）
+        kotlin.runCatching { BookSourceCacheStore.clear(key) }.onFailure {
+            AppLog.putDebugWithTag(
+                AppLog.TAG_SOURCE_CACHE,
+                "clear source cache failed ns=${BookSourceStorageScope.namespace(key).take(8)} err=${it.localizedMessage}",
+                null,
+                AppLog.Level.WARN
+            )
+        }
     }
 
     fun deleteBookSource(key: String) {
@@ -164,6 +174,15 @@ object SourceHelp {
         appDb.cacheDao.deleteSourceVariables(key)
         // F-P1-C4 删源时清理并发限流记录，避免内存泄漏
         ConcurrentRateLimiter.clearRecord(key)
+        // P0-S2 删源联动：清理脚本缓存命名空间（RssSource 用 sourceUrl 作 key；前缀清理对未隔离数据无副作用，E17）
+        kotlin.runCatching { BookSourceCacheStore.clear(key) }.onFailure {
+            AppLog.putDebugWithTag(
+                AppLog.TAG_SOURCE_CACHE,
+                "clear rss source cache failed ns=${BookSourceStorageScope.namespace(key).take(8)} err=${it.localizedMessage}",
+                null,
+                AppLog.Level.WARN
+            )
+        }
     }
 
     fun deleteRssSource(key: String) {

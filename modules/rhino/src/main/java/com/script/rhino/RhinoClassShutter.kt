@@ -45,6 +45,60 @@ import java.util.Collections
  */
 object RhinoClassShutter : ClassShutter {
 
+    // P0-S4 类导入策略灰度：书源模式下的宿主 App 类前缀（D5 观察放行，SourceGuard 数据驱动二期白名单）
+    const val APP_CLASS_PREFIX = "io.legado.app."
+
+    // P0-S4 D11 实拦集：书源模式命中即拒绝，不随观察档放行（维持 JS 侧 Cookie 隔离语义）
+    private val bookSourceProtectedClassNames = setOf(
+        "android.webkit.CookieManager",
+        "android.webkit.CookieSyncManager",
+    )
+
+    // 书源模式可重入深度与源标识（ThreadLocal，Rhino 求值同线程完成；finally 恢复防残留）
+    private val bookSourcePolicyDepth = ThreadLocal<Int>()
+    private val bookSourceLabel = ThreadLocal<String?>()
+
+    /**
+     * D13 类访问观察者：modules 层不可依赖 app 模块 AppLog，由 app 模块启动时注册实现回写日志
+     */
+    interface ClassAccessObserver {
+        fun onObserveClass(className: String, sourceLabel: String?)
+        fun onBlockClass(className: String, sourceLabel: String?)
+    }
+
+    @Volatile
+    var classAccessObserver: ClassAccessObserver? = null
+
+    private fun policyDepth(): Int = bookSourcePolicyDepth.get() ?: 0
+
+    fun currentBookSourceLabel(): String? = bookSourceLabel.get()
+
+    /**
+     * P0-S4 书源类策略包裹：enabled=false 直接执行（非书源上下文零行为变化）；
+     * depth+1、label 非空才覆盖；finally 恢复 depth 与 label（可重入，防协程线程切换残留）
+     */
+    fun <T> withBookSourceClassPolicy(enabled: Boolean, sourceLabel: String?, block: () -> T): T {
+        if (!enabled) {
+            return block()
+        }
+        val depth = policyDepth() + 1
+        bookSourcePolicyDepth.set(depth)
+        val previousLabel = bookSourceLabel.get()
+        if (!sourceLabel.isNullOrEmpty()) {
+            bookSourceLabel.set(sourceLabel)
+        }
+        try {
+            return block()
+        } finally {
+            if (depth <= 1) {
+                bookSourcePolicyDepth.remove()
+            } else {
+                bookSourcePolicyDepth.set(depth - 1)
+            }
+            bookSourceLabel.set(previousLabel)
+        }
+    }
+
     private val protectedClassNamesMatcher by lazy {
         listOf(
             "java.lang.Class",
@@ -184,7 +238,24 @@ object RhinoClassShutter : ClassShutter {
     }
 
     override fun visibleToScripts(fullClassName: String): Boolean {
-        return !protectedClassNamesMatcher.match(fullClassName)
+        // 前置 matcher 段不变：全局防护行为不变
+        if (protectedClassNamesMatcher.match(fullClassName)) {
+            return false
+        }
+        // P0-S4 书源模式段（depth>0）：
+        // ① D11 实拦：CookieManager/CookieSyncManager 命中即拒（观察者回写限流采样日志）
+        // ② D5 观察放行：宿主 App 类放行+观察计数（首期不阻断，SourceGuard 数据驱动二期白名单）
+        if (policyDepth() > 0) {
+            if (fullClassName in bookSourceProtectedClassNames) {
+                classAccessObserver?.onBlockClass(fullClassName, currentBookSourceLabel())
+                return false
+            }
+            if (fullClassName.startsWith(APP_CLASS_PREFIX)) {
+                classAccessObserver?.onObserveClass(fullClassName, currentBookSourceLabel())
+                return true
+            }
+        }
+        return true
     }
 
 }
