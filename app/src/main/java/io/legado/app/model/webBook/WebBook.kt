@@ -21,14 +21,30 @@ import io.legado.app.model.analyzeRule.RuleData
 import io.legado.app.ui.main.explore.ExploreAdapter.Companion.exploreInfoMapList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.CoroutineContext
 
 @Suppress("MemberVisibilityCanBePrivate")
 object WebBook {
+
+    /**
+     * 目录加载结果快照：book 用 copy() 隔离，防止跟随者读到主任务加载过程中的半初始化状态
+     */
+    private data class ChapterListResult(
+        val book: Book,
+        val chapters: List<BookChapter>
+    )
+
+    /**
+     * 在飞目录加载任务表：按 key 去重，同 key 并发进入时跟随者复用主任务结果
+     */
+    private val chapterListJobs = ConcurrentHashMap<String, Deferred<Result<ChapterListResult>>>()
 
     /**
      * 搜索
@@ -237,6 +253,44 @@ object WebBook {
         runPerJs: Boolean = false,
         isFromBookInfo : Boolean = false
     ): Result<List<BookChapter>> {
+        val key = chapterListLoadKey(bookSource, book, runPerJs)
+        val job = CoroutineScope(currentCoroutineContext()).async(start = CoroutineStart.LAZY) {
+            loadChapterListAwait(bookSource, book, runPerJs, isFromBookInfo)
+        }
+        val runningJob = chapterListJobs.putIfAbsent(key, job)
+        return if (runningJob == null) {
+            // 主任务：执行加载并在结束后移除在飞标记（两参 remove 防误删后继任务）
+            job.await()
+                .onFailure {
+                    currentCoroutineContext().ensureActive()
+                }
+                .map { it.chapters }
+                .also {
+                    chapterListJobs.remove(key, job)
+                }
+        } else {
+            // 跟随者：LAZY 未启动取消零成本，等待主任务结果并回填书籍状态
+            job.cancel()
+            runningJob.await()
+                .onSuccess {
+                    applyChapterListBookState(book, it.book)
+                }
+                .onFailure {
+                    currentCoroutineContext().ensureActive()
+                }
+                .map { it.chapters }
+        }
+    }
+
+    /**
+     * 目录加载体（同 key 去重后的唯一执行体）
+     */
+    private suspend fun loadChapterListAwait(
+        bookSource: BookSource,
+        book: Book,
+        runPerJs: Boolean = false,
+        isFromBookInfo : Boolean = false
+    ): Result<ChapterListResult> {
         AppLog.putDebugWithTag(AppLog.TAG_WEB_BOOK, "获取目录开始", level = AppLog.Level.INFO)
         book.removeAllBookType()
         book.addType(bookSource.getBookType())
@@ -244,7 +298,7 @@ object WebBook {
             if (runPerJs) {
                 runPreUpdateJs(bookSource, book, isFromBookInfo).getOrThrow()
             }
-            if (book.bookUrl == book.tocUrl && !book.tocHtml.isNullOrEmpty()) {
+            val chapters = if (book.bookUrl == book.tocUrl && !book.tocHtml.isNullOrEmpty()) {
                 BookChapterList.analyzeChapterList(
                     bookSource = bookSource,
                     book = book,
@@ -276,9 +330,55 @@ object WebBook {
                     isFromBookInfo = isFromBookInfo
                 )
             }
+            ChapterListResult(book.copy(), chapters)
         }.onFailure {
             currentCoroutineContext().ensureActive()
         }
+    }
+
+    /**
+     * 目录加载去重键：四因素，不含 isFromBookInfo（跟随者直接复用主任务结果）
+     */
+    private fun chapterListLoadKey(
+        bookSource: BookSource,
+        book: Book,
+        runPerJs: Boolean
+    ): String {
+        return listOf(
+            bookSource.bookSourceUrl,
+            book.bookUrl,
+            book.tocUrl,
+            runPerJs
+        ).joinToString("\n")
+    }
+
+    /**
+     * 跟随者回填主任务解析后的书籍状态，保证与主任务实际解析用的 book 一致
+     */
+    private fun applyChapterListBookState(target: Book, source: Book) {
+        target.bookUrl = source.bookUrl
+        target.tocUrl = source.tocUrl
+        target.origin = source.origin
+        target.originName = source.originName
+        target.name = source.name
+        target.author = source.author
+        target.kind = source.kind
+        target.coverUrl = source.coverUrl
+        target.intro = source.intro
+        target.charset = source.charset
+        target.type = source.type
+        target.latestChapterTitle = source.latestChapterTitle
+        target.latestChapterTime = source.latestChapterTime
+        target.lastCheckTime = source.lastCheckTime
+        target.lastCheckCount = source.lastCheckCount
+        target.totalChapterNum = source.totalChapterNum
+        target.wordCount = source.wordCount
+        target.originOrder = source.originOrder
+        target.variable = source.variable
+        target.syncTime = source.syncTime
+        target.infoHtml = source.infoHtml
+        target.tocHtml = source.tocHtml
+        target.downloadUrls = source.downloadUrls
     }
 
     /**
