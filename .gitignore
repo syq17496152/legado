@@ -125,6 +125,8 @@ scripts/publish_config.json
 !/ai_tests/scripts/l2_verify_compose_s5_read_float.py
 !/ai_tests/scripts/l2_verify_compose_s6_dialog_tiers.py
 !/ai_tests/scripts/l2_verify_compose_cache.py
+!/ai_tests/scripts/import_book_source.py
+!/ai_tests/scripts/seed_b2_bookshelf.py
 # opencode 运行时产物
 .opencode/goals/
 /docs/specs/rss-image-decrypt-optimization/*.md
