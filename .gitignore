@@ -118,6 +118,13 @@ scripts/publish_config.json
 !/ai_tests/scripts/verify_no_crash.py
 !/ai_tests/scripts/l2_verify_image_enhance_governance.py
 !/ai_tests/scripts/l2_verify_p0_sandbox_cache.py
+!/ai_tests/scripts/l2_verify_compose_s1_main.py
+!/ai_tests/scripts/l2_verify_compose_s2_source.py
+!/ai_tests/scripts/l2_verify_compose_s3_source_edit.py
+!/ai_tests/scripts/l2_verify_compose_s4_book_info.py
+!/ai_tests/scripts/l2_verify_compose_s5_read_float.py
+!/ai_tests/scripts/l2_verify_compose_s6_dialog_tiers.py
+!/ai_tests/scripts/l2_verify_compose_cache.py
 # opencode 运行时产物
 .opencode/goals/
 /docs/specs/rss-image-decrypt-optimization/*.md
