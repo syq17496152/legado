@@ -8,6 +8,7 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.http.StrResponse
 import io.legado.app.help.http.warmUpConnection
 import io.legado.app.help.source.SourceLastHostHelper
+import io.legado.app.help.video.MacCmsNormalizer
 import io.legado.app.help.source.SourceNetworkClient
 import io.legado.app.help.source.SourcePreconnectHelper
 import io.legado.app.help.video.VideoUrlExtractor
@@ -375,45 +376,10 @@ object Rss {
     }
 
     /**
-     * MacCMS 扁平播放数据规范化：vod_play_from / vod_play_url 含 $$$ 时，
-     * 在原 JSON 增量注入结构化 routes 字段（原字段不动），供列表范式规则随意消费。
-     * 非 JSON body / 无 MacCMS 特征字段 / 已有 routes 时原样返回（零侵入）。
+     * MacCMS 扁平播放数据规范化：已抽共享层 [MacCmsNormalizer]（video-booksource-multiroute）。
+     * 订阅源侧行为等价：routes 权威注入不变；chapters 为新增派生字段，列表范式规则不消费即无影响。
      */
     private fun normalizeMacCmsBody(body: String?): String? {
-        if (body.isNullOrBlank()) return body
-        val json = kotlin.runCatching { JSONObject(body) }.getOrNull() ?: return body
-        val item = json.optJSONArray("list")?.optJSONObject(0) ?: json
-        if (item == null || item.has("routes")) return body
-        val from = item.optString("vod_play_from")
-        val urls = item.optString("vod_play_url")
-        if (!from.contains("\$\$\$") && !urls.contains("\$\$\$")) return body
-        return kotlin.runCatching {
-            val names = from.split("\$\$\$")
-            val groups = urls.split("\$\$\$")
-            val routes = JSONArray()
-            names.forEachIndexed { i, name ->
-                val eps = JSONArray()
-                groups.getOrNull(i)?.split('#')
-                    ?.map { it.trim() }
-                    ?.filter { it.isNotBlank() }
-                    ?.forEach { piece ->
-                        val parts = piece.split('$', limit = 2)
-                        val title = parts.getOrNull(0)?.trim().orEmpty()
-                        val url = (parts.getOrNull(1) ?: parts.getOrNull(0))?.trim().orEmpty()
-                        if (url.isNotBlank()) {
-                            eps.put(JSONObject().put("title", title).put("url", url))
-                        }
-                    }
-                routes.put(JSONObject().put("name", name.trim()).put("episodes", eps))
-            }
-            // 注入到顶层（$.routes），与列表范式规则 $.routes[*].name 对齐；item(list[0]) 不重复注入
-            json.put("routes", routes)
-            AppLog.putDebugWithTag(
-                AppLog.TAG_RSS,
-                "MacCMS规范化完成 routeCount=${routes.length()} 首线路集数=${routes.optJSONObject(0)?.optJSONArray("episodes")?.length() ?: 0}",
-                level = AppLog.Level.INFO
-            )
-            json.toString()
-        }.getOrElse { body }
+        return MacCmsNormalizer.normalize(body)
     }
 }

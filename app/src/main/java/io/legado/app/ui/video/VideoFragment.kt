@@ -22,6 +22,8 @@ import com.shuyu.gsyvideoplayer.listener.GSYSampleCallBack
 import com.shuyu.gsyvideoplayer.video.base.GSYVideoView
 import io.legado.app.R
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.BookSourceType
+import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssEpisode
 import io.legado.app.help.gsyVideo.VideoPlayer
 import io.legado.app.model.Download
@@ -664,6 +666,14 @@ class VideoFragment : Fragment() {
         controlsLayer = view.findViewById(R.id.controlsLayer)
         leftBottomContainer = view.findViewById(R.id.left_bottom_container)
         tvVideoTitle = view.findViewById(R.id.tv_video_title)
+        // video-booksource-multiroute AD-06：视频书源模式标题可点开详情抽屉
+        // （书源有 intro/coverUrl 详情数据；订阅源无此数据，不注入入口，UI 零退化）
+        val detailSource = VideoPlay.source as? BookSource
+        if (detailSource?.bookSourceType == BookSourceType.video) {
+            tvVideoTitle?.setOnClickListener {
+                showVideoBookDetailSheet()
+            }
+        }
         // video-player-ux-fixes P4: 绑定全屏态标题
         tvTitleFullscreen = view.findViewById(R.id.tv_title_fullscreen)
         tvRouteSelector = view.findViewById(R.id.tv_route_selector)
@@ -800,6 +810,29 @@ class VideoFragment : Fragment() {
                 (activity as? VideoSettingsPanel.SettingsPanelCallback)?.onRouteChanged(episode)
             }
         }
+    }
+
+    /**
+     * video-booksource-multiroute AD-06：打开视频书源详情抽屉
+     * 动作源与悬浮选择器统一：切线路走 switchRoute，选集走 playRssEpisode（内部已分派书源章节链）
+     */
+    private fun showVideoBookDetailSheet() {
+        VideoBookDetailSheet()
+            .setCallback(object : VideoBookDetailSheet.Callback {
+                override fun onDetailRouteSelected(routeIndex: Int) {
+                    switchRoute(routeIndex)
+                }
+
+                override fun onDetailEpisodeSelected(episodeIndex: Int, episode: RssEpisode) {
+                    val pv = _playerView ?: return
+                    if (episodeIndex != VideoPlay.rssEpisodeIndex) {
+                        VideoPlay.rssEpisodeIndex = episodeIndex
+                    }
+                    VideoPlay.playRssEpisode(pv, episode)
+                    updateEpisodeList()
+                }
+            })
+            .show(childFragmentManager, "VideoBookDetailSheet")
     }
 
     private fun updateRouteSelectorText() {

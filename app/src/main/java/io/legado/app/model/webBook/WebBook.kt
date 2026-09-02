@@ -1,17 +1,20 @@
 package io.legado.app.model.webBook
 
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.BookSourceType
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.book.VideoBookChapterHelper
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.removeAllBookType
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.SourceNetworkClient
 import io.legado.app.help.source.getBookType
+import io.legado.app.help.video.MacCmsNormalizer
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.model.Debug
 import io.legado.app.model.analyzeRule.AnalyzeRule
@@ -298,6 +301,16 @@ object WebBook {
             if (runPerJs) {
                 runPreUpdateJs(bookSource, book, isFromBookInfo).getOrThrow()
             }
+            // video-booksource-multiroute：视频书源目录分流（严格隔离分支，文本书源/订阅源路径零改动）
+            // L0 零规则（MacCMS 自动规范化直产卷章）/ L1 规则写法（注入双结构后走既有解析）/
+            // L2 CSS·XPath·正则 / L3 JS（非 MacCMS body 原样返回，走既有解析路径不受影响）
+            if (bookSource.bookSourceType == BookSourceType.video) {
+                val videoChapters = videoBookChapterListAwait(bookSource, book)
+                if (videoChapters != null) {
+                    return@runCatching ChapterListResult(book.copy(), videoChapters)
+                }
+                // videoBookChapterListAwait 返回 null：无 tocUrl 等基础数据缺失，交回通用路径报错
+            }
             val chapters = if (book.bookUrl == book.tocUrl && !book.tocHtml.isNullOrEmpty()) {
                 BookChapterList.analyzeChapterList(
                     bookSource = bookSource,
@@ -334,6 +347,60 @@ object WebBook {
         }.onFailure {
             currentCoroutineContext().ensureActive()
         }
+    }
+
+    /**
+     * video-booksource-multiroute：视频书源目录加载（L0/L1/L2/L3 分流）
+     *
+     * 1. 请求 tocUrl 得 body（tocHtml 缓存逻辑与通用路径一致）
+     * 2. MacCmsNormalizer 规范化（非 MacCMS body 原样返回）
+     * 3. MacCMS 且 chapterList 规则为空 → L0：Helper 直产卷章
+     * 4. 其他 → 既有 analyzeChapterList（L1 消费注入的 $.chapters[*]；L2/L3 原样走既有解析）
+     *
+     * @return 卷章列表；book.tocUrl 为空返回 null（交回通用路径自然报错）
+     */
+    private suspend fun videoBookChapterListAwait(
+        bookSource: BookSource,
+        book: Book
+    ): List<BookChapter>? {
+        if (book.tocUrl.isNullOrBlank()) return null
+        val body: String = if (book.bookUrl == book.tocUrl && !book.tocHtml.isNullOrEmpty()) {
+            book.tocHtml!!
+        } else {
+            val analyzeUrl = AnalyzeUrl(
+                mUrl = book.tocUrl,
+                baseUrl = book.bookUrl,
+                source = bookSource,
+                ruleData = book,
+                coroutineContext = currentCoroutineContext()
+            )
+            // M6 SourceNetworkClient 统一网络请求 + 登录检测（与通用路径同款）
+            SourceNetworkClient.requestWithLoginCheck(
+                analyzeUrl = analyzeUrl,
+                source = bookSource,
+                checkJs = bookSource.loginCheckJs
+            ).body.orEmpty()
+        }
+        val normalized = MacCmsNormalizer.normalize(body)
+        val isMacCms = normalized != body
+        if (isMacCms && bookSource.ruleToc?.chapterList.isNullOrBlank()) {
+            // L0 零规则：routes 结构直产卷章
+            val chapters = VideoBookChapterHelper.buildFromMacCms(normalized.orEmpty(), book, book.tocUrl)
+            if (chapters != null) {
+                // 缓存规范化 body，覆盖安装/重进复用（与通用路径 tocHtml 语义一致）
+                book.tocHtml = normalized
+                return chapters
+            }
+        }
+        // L1 规则写法 / L2 HTML 站 / L3 JS：走既有解析（MacCMS 时传注入双结构后的 body）
+        return BookChapterList.analyzeChapterList(
+            bookSource = bookSource,
+            book = book,
+            baseUrl = book.tocUrl,
+            redirectUrl = book.tocUrl,
+            body = normalized ?: body,
+            isFromBookInfo = false
+        )
     }
 
     /**

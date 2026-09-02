@@ -16,6 +16,7 @@ import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer
 import com.shuyu.gsyvideoplayer.video.base.GSYBaseVideoPlayer
 import io.legado.app.R
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.BookSourceType
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.SourceType
 import io.legado.app.data.appDb
@@ -1060,6 +1061,25 @@ object VideoPlay : CoroutineScope by MainScope(){
             }
         }
         upEpisodes()
+        // video-booksource-multiroute：视频书源时把卷章映射为线路/集数模型，
+        // 复用订阅源线路/集数选择器 UI（数据源 rssRoutes/rssEpisodes），UI 层零改动
+        val bookSourceForRoutes = source as? BookSource
+        if (bookSourceForRoutes?.bookSourceType == BookSourceType.video && volumes.isNotEmpty()) {
+            val tocList = toc.orEmpty()
+            rssRoutes = volumes.mapIndexed { vIndex, volume ->
+                val start = volume.index
+                val end = volumes.getOrNull(vIndex + 1)?.index ?: tocList.size
+                RssRoute(
+                    name = volume.title,
+                    episodes = tocList.subList(start, end)
+                        .filter { !it.isVolume }
+                        .map { RssEpisode(title = it.title, url = it.url) }
+                )
+            }
+            rssEpisodes = rssRoutes?.getOrNull(durVolumeIndex)?.episodes
+            rssRouteIndex = durVolumeIndex
+            rssEpisodeIndex = chapterInVolumeIndex
+        }
         // P0: singleUrl 模式（直接传 videoUrl 播放）不需要源，跳过 source == null 检查
         // 根因：adb am start 传 videoUrl 直接播放 m3u8 时，sourceKey 为 null 导致 source == null，
         //   initSource 返回 false → VideoPlayerActivity finish() 退出，无法测试播放
@@ -1327,10 +1347,16 @@ object VideoPlay : CoroutineScope by MainScope(){
     /**
      * 判断当前源是否为多线路多集按需采集新模式（type=2 + ruleRoutes/ruleEpisodes 非空）
      * UI 层据此决定调用 switchToRoute（异步按需采集）还是 switchRssRoute（内存切换）
+     * video-booksource-multiroute：视频书源（目录含线路卷）同样视为多线路模式
      */
     fun isNewRoutesMode(): Boolean {
-        val s = source as? RssSource ?: return false
-        return !s.ruleRoutes.isNullOrBlank() && !s.ruleEpisodes.isNullOrBlank()
+        val s = source as? RssSource
+        if (s != null) {
+            return !s.ruleRoutes.isNullOrBlank() && !s.ruleEpisodes.isNullOrBlank()
+        }
+        // 视频书源：目录含线路卷（isVolume）即为多线路模式
+        val b = source as? BookSource ?: return false
+        return b.bookSourceType == BookSourceType.video && volumes.isNotEmpty()
     }
 
     /**
@@ -1342,6 +1368,11 @@ object VideoPlay : CoroutineScope by MainScope(){
      * @return true 切换成功，false 切换失败
      */
     fun switchToRoute(routeIndex: Int, player: GSYBaseVideoPlayer): Boolean {
+        // video-booksource-multiroute：视频书源分支——目录卷章内存切片，无网络采集
+        val bookSource = source as? BookSource
+        if (bookSource != null && bookSource.bookSourceType == BookSourceType.video) {
+            return switchBookRoute(routeIndex, player)
+        }
         // source 是 BaseSource，需 cast 为 RssSource 才能访问 ruleEpisodes
         val rssSource = source as? RssSource ?: return false
         val ruleEpisodes = rssSource.ruleEpisodes?.takeIf { it.isNotBlank() } ?: return false
@@ -1371,6 +1402,146 @@ object VideoPlay : CoroutineScope by MainScope(){
             AppLog.put("切换线路采集集数失败: routeIndex=$routeIndex", it, true)
         }
         return true
+    }
+
+    /**
+     * video-booksource-multiroute：视频书源切换线路（内存卷章切片，无网络采集）
+     *
+     * 切 durVolumeIndex → upEpisodes() 重新切片 → 同步映射集数到 rssEpisodes
+     * （复用订阅源集数选择器 UI）→ 播放新线路第一集（章节播放链）。
+     *
+     * @param routeIndex 线路索引（0-based，对应 volumes 索引）
+     * @param player 播放器实例
+     * @return true 切换成功，false 切换失败（索引越界/无目录）
+     */
+    fun switchBookRoute(routeIndex: Int, player: GSYBaseVideoPlayer): Boolean {
+        val toc = toc ?: return false
+        if (volumes.getOrNull(routeIndex) == null) return false
+        // 竞态守卫：与订阅源 switchToRoute 同一令牌池
+        val switchToken = ++switchToRouteToken
+        durVolumeIndex = routeIndex
+        chapterInVolumeIndex = 0
+        upEpisodes()
+        // 卷章 → RssEpisode 映射，复用订阅源集数选择器 UI（数据源 rssEpisodes）
+        val routeEpisodes = episodes.orEmpty().map { RssEpisode(title = it.title, url = it.url) }
+        if (switchToken != switchToRouteToken) {
+            AppLog.put("switchBookRoute 丢弃过期结果: token=$switchToken, current=$switchToRouteToken")
+            return true
+        }
+        rssEpisodes = routeEpisodes
+        postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1))
+        // 默认播放新线路第一集（章节播放链）
+        routeEpisodes.firstOrNull()?.let { playBookEpisode(player, 0, it) }
+        return true
+    }
+
+    /**
+     * video-booksource-multiroute：视频书源选集播放（章节播放链）
+     *
+     * 与 startPlay 书源分支共用同一采集链（WebBook.getContent 正文=视频地址，
+     * 直链直出 / 播放页 URL 三层嗅探兜底），startPlay 播当前进度章节，
+     * 本方法按 episodeIndex 定位后播放（选集/切线路第一集共用）。
+     *
+     * @param player 播放器实例
+     * @param episodeIndex 集数在当前线路（episodes）内的索引
+     * @param episode 集数模型（title/url 与章节一致，来自 rssEpisodes 映射）
+     */
+    fun playBookEpisode(player: GSYBaseVideoPlayer, episodeIndex: Int, episode: RssEpisode) {
+        val book = book ?: return
+        val toc = toc ?: return
+        // 卷内索引 → 全目录索引（durVolume.index 为卷起始章索引，+1 跳过卷行本身）
+        val durChapterIndex = if (volumes.isEmpty()) episodeIndex
+        else (durVolume?.index ?: 0) + episodeIndex + 1
+        val chapter = toc.getOrNull(durChapterIndex) ?: return
+        this.chapter = chapter
+        chapterInVolumeIndex = episodeIndex
+        book.chapterInVolumeIndex = episodeIndex
+        book.durChapterIndex = durChapterIndex
+        durChapterPos = 0
+        startPlayBookChapter(player, book, chapter)
+    }
+
+    /**
+     * video-booksource-multiroute：书源章节播放采集链（从 startPlay 书源分支抽取）
+     *
+     * WebBook.getContent（ruleContent 五类规则/留空→chapter.url 直链）→
+     * MPD 文本落盘 → 播放页 URL 三层嗅探兜底 → AnalyzeUrl 头合并 → setUp 起播。
+     */
+    private fun startPlayBookChapter(player: GSYBaseVideoPlayer, book: Book, chapter: BookChapter) {
+        // 4.8b（Z9）：嗅探前捕获原始 URL（书源正文链接可重嗅），作为播放历史键
+        originalPlayUrl = chapter.url
+        videoTitle = chapter.title
+        SniffEngine.invalidate()
+        val token = switchTokenCounter.incrementAndGet()
+        currentSwitchToken = token
+        Coroutine.async(loadScope, IO) {
+            WebBook.getContent(loadScope, source as BookSource, book, chapter)
+                .onSuccess(IO) { content ->
+                    val content = content.trim()
+                    // 4.8c（Z10）：书源章节空正文统一错误提示（不裸抛）
+                    if (content.isEmpty()) {
+                        AppLog.putWarn("书源章节正文为空, 触发统一错误提示, chapter=${chapter.title}")
+                        withContext(Main) {
+                            postEvent(
+                                EventBus.VIDEO_PLAY_ERROR,
+                                "播放失败：书源章节正文为空，未获取到视频地址，请重试、切换书源/章节，或用系统浏览器打开"
+                            )
+                        }
+                        return@onSuccess
+                    }
+                    val mUrl = if (content.startsWith("<")) { //当作mpd文本
+                        val name = MD5Utils.md5Encode(content) + ".mpd"
+                        val file = FileUtils.createFileIfNotExist(videoTempFile, name)
+                        file.writeText(content)
+                        Uri.fromFile(file).toString()
+                    } else {
+                        content
+                    }
+                    videoUrl = mUrl
+                    // 书源正文为播放页 URL 时接入三层嗅探链；非 MPD 文本且非本地文件时解析真实流 URL，失败回退直连
+                    var sniffMergedHeaders: Map<String, String> = emptyMap()
+                    val sniffedUrl = if (mUrl.startsWith("<") || mUrl.startsWith("file://")) {
+                        mUrl
+                    } else {
+                        VideoUrlExtractor.extractVideoUrlForEpisode(mUrl, source, chapter)?.let { candidate ->
+                            sniffMergedHeaders = candidate.headers
+                            candidate.url
+                        } ?: mUrl
+                    }
+                    videoUrl = sniffedUrl
+                    val analyzeUrl = AnalyzeUrl(
+                        sniffedUrl,
+                        source = source,
+                        ruleData = book,
+                        chapter = chapter
+                    )
+                    // 嗅探上下文优先 merge（书源章节路径防 403 收益）
+                    sniffMergedHeaders.forEach { (k, v) ->
+                        analyzeUrl.headerMap[k] = v
+                    }
+                    when (val danmaku = chapter.getDanmaku()) {
+                        is String -> danmakuStr = danmaku
+                        is File -> danmakuFile = danmaku
+                    }
+                    val playUrl = analyzeUrl.url
+                    withContext(Main) {
+                        if (currentSwitchToken != token) {
+                            AppLog.put("playBookEpisode: token expired, drop late callback")
+                            return@withContext
+                        }
+                        player.mapHeadData = analyzeUrl.headerMap
+                        currentPlayHeaders = analyzeUrl.headerMap
+                        val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(playUrl)
+                        player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), chapter.title)
+                        if (autoPlay) {
+                            player.startPlayLogic()
+                        }
+                    }
+                }.onError {
+                    AppLog.put("获取资源链接出错\n$it", it, true)
+                }
+            isLoading = false
+        }
     }
 
     /**
@@ -1563,6 +1734,16 @@ object VideoPlay : CoroutineScope by MainScope(){
      * 参考 startPlay RssSource 分支的 AnalyzeUrl + setUp + startPlayLogic 模式
      */
     fun playRssEpisode(player: GSYBaseVideoPlayer, episode: RssEpisode) {
+        // video-booksource-multiroute：视频书源分派——episode 来自卷章映射，按索引走章节播放链
+        val bookSource = source as? BookSource
+        if (bookSource != null && bookSource.bookSourceType == BookSourceType.video) {
+            val idx = rssEpisodes?.indexOfFirst { it.url == episode.url && it.title == episode.title } ?: -1
+            if (idx >= 0) {
+                rssEpisodeIndex = idx
+                playBookEpisode(player, idx, episode)
+            }
+            return
+        }
         val rssArticle = rssStar?.toRssArticle() ?: rssRecord?.toRssArticle() ?: rssArticles?.getOrNull(rssArticleIndex)
         if (rssArticle == null) {
             // BUG4 fix: 正常滑动退出时rssArticle变null属正常流程，toast干扰用户体验

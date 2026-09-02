@@ -3184,6 +3184,9 @@ function login() {
     <string name="video_audio_track">音轨</string>
     <string name="video_episode_list">选集（%1$d）</string>
     <string name="video_episode_list_btn">选集</string>
+    <string name="video_book_detail_title">详情</string>
+    <string name="video_route_label">线路</string>
+    <string name="video_episode_label">选集</string>
     <string name="video_ratio_default">默认</string>
     <string name="video_ratio_16_9">16:9</string>
     <string name="video_ratio_4_3">4:3</string>
