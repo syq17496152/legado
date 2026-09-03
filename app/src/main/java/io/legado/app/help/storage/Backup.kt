@@ -544,7 +544,7 @@ object Backup {
                 appCtx.defaultSharedPreferences.all.forEach { (key, value) ->
                     if (BackupConfig.keyIsNotIgnore(key)) {
                         when (key) {
-                            PreferKey.webDavPassword -> {
+                            in BackupAES.sensitivePrefKeys -> {
                                 edit.putString(key, aes.runCatching {
                                     encryptBase64(value.toString())
                                 }.getOrDefault(value.toString()))

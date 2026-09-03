@@ -4,13 +4,9 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.Drawable
-import android.os.Build
 import android.util.DisplayMetrics
 import androidx.annotation.Keep
 import androidx.appcompat.app.AppCompatDelegate
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.toColorInt
 import androidx.core.graphics.ColorUtils as AndroidColorUtils
 import io.legado.app.R
@@ -423,31 +419,15 @@ object ThemeConfig {
                 needClearImg = false
                 clearBg(context)
             }
-            // AD-07 Material You：跟随系统动态色开启时，以系统壁纸配色替换主题 4 固定色源（Android 12+）
-            val effectiveConfig = if (AppConfig.followDynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val scheme = if (config.isNightTheme) {
-                    dynamicDarkColorScheme(context)
-                } else {
-                    dynamicLightColorScheme(context)
-                }
-                config.copy(
-                    primaryColor = "#${scheme.primary.toArgb().hexString}",
-                    accentColor = "#${scheme.secondary.toArgb().hexString}",
-                    backgroundColor = "#${scheme.surface.toArgb().hexString}",
-                    bottomBackground = "#${scheme.surfaceVariant.toArgb().hexString}"
-                )
-            } else {
-                config
-            }
-            val primary = effectiveConfig.primaryColor.toColorInt()
-            val accent = effectiveConfig.accentColor.toColorInt()
-            val background = effectiveConfig.backgroundColor.toColorInt()
-            val bBackground = effectiveConfig.bottomBackground.toColorInt()
-            val isNightTheme = effectiveConfig.isNightTheme
-            val backgroundPath = effectiveConfig.backgroundImgPath
-            val backgroundCrop = normalizeBackgroundCrop(effectiveConfig.backgroundImgCrop)
-            val bookInfoBackgroundPath = effectiveConfig.bookInfoBackgroundImgPath
-            val panelBackgroundPath = effectiveConfig.panelBackgroundImgPath
+            val primary = config.primaryColor.toColorInt()
+            val accent = config.accentColor.toColorInt()
+            val background = config.backgroundColor.toColorInt()
+            val bBackground = config.bottomBackground.toColorInt()
+            val isNightTheme = config.isNightTheme
+            val backgroundPath = config.backgroundImgPath
+            val backgroundCrop = normalizeBackgroundCrop(config.backgroundImgCrop)
+            val bookInfoBackgroundPath = config.bookInfoBackgroundImgPath
+            val panelBackgroundPath = config.panelBackgroundImgPath
             val panelBackgroundScaleType = config.panelBackgroundScaleType?.takeIf {
                 it == PANEL_BG_CROP || it == PANEL_BG_FIT
             } ?: PANEL_BG_CROP
@@ -1189,11 +1169,7 @@ object ThemeConfig {
         var uiFontPath: String? = null,
         var titleFontPath: String? = null,
         var uiFontColor: String? = null,
-        var titleFontColor: String? = null,
-        // AD-06 Red 包元数据双写（可空，旧包缺省 null；GSON 未知字段安全忽略保证向后兼容）
-        var author: String? = null,
-        var previewPath: String? = null,
-        var minAppVersion: String? = null
+        var titleFontColor: String? = null
     ) {
 
         override fun hashCode(): Int {
@@ -1235,9 +1211,6 @@ object ThemeConfig {
                         && other.titleFontPath == titleFontPath
                         && other.uiFontColor == uiFontColor
                         && other.titleFontColor == titleFontColor
-                        && other.author == author
-                        && other.previewPath == previewPath
-                        && other.minAppVersion == minAppVersion
             }
             return false
         }

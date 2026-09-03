@@ -56,11 +56,11 @@ object EventBus {
     const val LIBRARY_CONTAINER_CHANGED = "libraryContainerChanged"
     const val UP_VIDEO_INFO = "upVideoInfo"
     const val VIDEO_PLAY_ERROR = "videoPlayError"
+    // video-booksource-align-rss AD-02：书源列表切换影片完成信号（显式激活链）
+    const val VIDEO_BOOK_UNIT_SWITCHED = "videoBookUnitSwitched"
     // video-sniff-403-and-rss-classic-fix Phase 2 (3.6)：VIDEO_FALLBACK_WEBVIEW 事件常量已删除
     // （WebView 播放器移除，原 WebView 承接点统一改发 VIDEO_PLAY_ERROR"重试/系统浏览器"）
     const val ARTICLES_LOADED = "articlesLoaded"
-    // video-playlist-continuity：书源跨影片切换完成（队列新单元就绪，播放器定位首集+刷新）
-    const val VIDEO_BOOK_UNIT_SWITCHED = "videoBookUnitSwitched"
     // 阅读页滚动模式顶部下拉快速书签 (R5)
     const val PULL_DOWN_BOOKMARK = "pullDownBookmark"
     // T6（theme-arch-gap）：MAIN_THEME_BACKGROUND_CHANGED 死事件常量已删（4 发 0 订阅）

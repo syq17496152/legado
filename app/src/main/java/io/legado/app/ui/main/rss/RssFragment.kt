@@ -1015,6 +1015,16 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
 
     fun gotoTop() {
         // F-4/6.x: 现代形态定位到内嵌文章列表/WebView 顶部，经典形态定位到订阅源网格
+        // D4 §3.4：内嵌 Compose 文章列表走壳新 API scrollToTop()
+        //（currentRssScrollTarget 的 recycler_view findViewById 兜底保留，B5 随批删除）
+        if (usingModernRss && binding.rssFragmentContainer.isVisible) {
+            val fragment = childFragmentManager.findFragmentById(R.id.rss_fragment_container)
+                as? RssArticlesFragment
+            if (fragment != null) {
+                fragment.scrollToTop()
+                return
+            }
+        }
         when (val target = currentRssScrollTarget()) {
             is WebView -> target.scrollTo(0, 0)
             is androidx.recyclerview.widget.RecyclerView -> target.scrollToPosition(0)

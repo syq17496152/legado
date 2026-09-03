@@ -105,7 +105,9 @@ class BookSourceEditActivity :
     private var sourceEditMenuPopup: ModernActionPopup.Handle? = null
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        softKeyboardTool.attachToWindow(window)
+        // S3-4 接线：insets 驱动模式（edge-to-edge 下 onGlobalLayout 的
+        // WindowVisibleDisplayFrame 检测失效，不再注册 decorView 全局布局监听）
+        softKeyboardTool.prepare()
         initTopBar()
         initView()
         viewModel.initData(intent) {
@@ -290,7 +292,8 @@ class BookSourceEditActivity :
             val navigationBarHeight = windowInsets.navigationBarHeight
             val imeHeight = windowInsets.imeHeight
             view.bottomPadding = if (imeHeight == 0) navigationBarHeight else 0
-            softKeyboardTool.initialPadding = imeHeight
+            // S3-4 接线：键盘弹出时由 insets 直接驱动工具条显隐
+            softKeyboardTool.onImeVisibilityChanged(imeHeight > 0, imeHeight)
             windowInsets
         }
     }

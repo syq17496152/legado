@@ -17,9 +17,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.FragmentBookshelf2Binding
-import io.legado.app.help.book.isVideo
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.ui.book.group.GroupEditDialog
 import io.legado.app.ui.book.info.BookInfoNavigator
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
@@ -132,17 +130,7 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
             onRetry = { upConnect() },
             onGroupSelected = { onGroupSelected(it) },
             onGroupLongClick = { showDialogFragment(GroupEditDialog(it)) },
-            onBookClick = { book ->
-                if (book.isVideo) {
-                    // video-playlist-continuity：书架视频书整表注入（跨影片续播，列表=当前分组显示的视频书）
-                    val videoList = currentBooks.filter { it.isVideo }.map { it.toSearchBook() }
-                    val idx = videoList.indexOfFirst { it.bookUrl == book.bookUrl }
-                    if (idx >= 0) {
-                        VideoPlaylistHolder.set(videoList, idx)
-                    }
-                }
-                startActivityForBook(book)
-            },
+            onBookClick = { book -> startActivityForBook(book) },
             onBookLongClick = { book ->
                 BookInfoNavigator.open(requireContext(), book)
             },
