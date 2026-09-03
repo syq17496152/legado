@@ -48,7 +48,14 @@ import kotlin.math.roundToInt
  * video-player-ux-fixes P3：取色同源治理（color.md 门禁）——MaterialTheme.colorScheme.* 全部替换
  * 为 rememberAppDialogStyle()（themeUiPalette 同源），Dialog 壳/BottomSheet 壳双入口视觉统一。
  * [showDragHandle]：拖拽手柄为 BottomSheet 专属视觉，Dialog 壳（SettingsDialog）传 false 隐藏。
+ *
+ * video-player-dual-layout AD-04（设置中心化分工）：
+ * - [PanelHost.PLAYER_PAGE]（播放页面板）：布局模式即时切换 / 播放控制 / 播放信息 / 功能菜单 / 画质增强即时调节
+ * - [PanelHost.GLOBAL]（全局设置页）：布局模式默认值 / 播放设置 / 播放器优化 / 画质增强默认参数
+ * 两宿主读写同一 [VideoPlay] 配置源（单源双入口，无事件总线）。
  */
+enum class PanelHost { PLAYER_PAGE, GLOBAL }
+
 @Composable
 fun VideoSettingsPanelContent(
     videoUrl: String?,
@@ -68,6 +75,9 @@ fun VideoSettingsPanelContent(
     onLog: () -> Unit,
     onPickPressSpeed: () -> Unit,
     showDragHandle: Boolean = true,
+    host: PanelHost = PanelHost.PLAYER_PAGE,
+    onLayoutModeSelected: (Int) -> Unit = {},
+    expand: Boolean = false,
 ) {
     // 播放设置开关状态（初值读自 VideoPlay，变更即写回）
     var autoPlay by remember { mutableStateOf(VideoPlay.autoPlay) }
@@ -96,15 +106,25 @@ fun VideoSettingsPanelContent(
     var autoReconnect by remember { mutableStateOf(VideoPlay.playerAutoReconnect) }
     var showDebug by remember { mutableStateOf(false) }
     var selection by remember { mutableStateOf<PanelSelection?>(null) }
+    // video-player-dual-layout：布局模式（初值读自 VideoPlay，双宿主可见）
+    var layoutMode by remember { mutableStateOf(VideoPlay.layoutMode) }
     // 取色同源（P3）：与 AppDialogFrame 规范壳共用一套色板
     val style = rememberAppDialogStyle()
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 540.dp)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 16.dp)
+        modifier = if (expand) {
+            // video-player-dual-layout：全局设置页宿主——填满页面高度（父级提供有界高度）
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 16.dp)
+        } else {
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = 540.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 16.dp)
+        }
     ) {
         // 拖拽手柄（BottomSheet 专属，Dialog 壳隐藏）
         if (showDragHandle) {
@@ -126,6 +146,20 @@ fun VideoSettingsPanelContent(
             }
         }
 
+        // ====== 布局模式（video-player-dual-layout，双宿主可见：全局=默认值，播放页=即时切换） ======
+        SectionHeader(stringResource(R.string.video_layout_mode))
+        SettingsClickRow(
+            icon = null,
+            title = stringResource(R.string.video_layout_mode),
+            value = if (layoutMode == 1) {
+                stringResource(R.string.video_layout_mode_traditional)
+            } else {
+                stringResource(R.string.video_layout_mode_immersive)
+            },
+            onClick = { selection = PanelSelection.LayoutMode }
+        )
+
+        if (host == PanelHost.PLAYER_PAGE) {
         // ====== 播放控制 ======
         SectionHeader(stringResource(R.string.video_play_control))
         Row(
@@ -219,7 +253,9 @@ fun VideoSettingsPanelContent(
                     .padding(8.dp)
             )
         }
+        } // end PLAYER_PAGE sections
 
+        if (host == PanelHost.GLOBAL) {
         // ====== 播放设置 ======
         SectionHeader(stringResource(R.string.video_play_setting))
         SettingsToggleRow(
@@ -301,7 +337,9 @@ fun VideoSettingsPanelContent(
             onClick = { selection = PanelSelection.PlayerType }
         )
 
-        // ====== 画质增强（video-player-image-enhance A2.2） ======
+        }
+
+        // ====== 画质增强（video-player-image-enhance A2.2，单源双入口：全局=默认参数，播放页=即时调节） ======
         SectionHeader(stringResource(R.string.image_enhance))
         Text(
             text = stringResource(R.string.image_enhance_note),
@@ -403,6 +441,7 @@ fun VideoSettingsPanelContent(
             )
         }
 
+        if (host == PanelHost.GLOBAL) {
         // ====== 播放器优化 ======
         SectionHeader(stringResource(R.string.video_player_optimization))
         SettingsToggleRow(
@@ -447,10 +486,30 @@ fun VideoSettingsPanelContent(
                 VideoPlay.playerAutoReconnect = it
             }
         )
+        } // end GLOBAL 播放器优化
     }
 
     // ====== 下拉选择弹窗（替代旧 Spinner） ======
     when (val sel = selection) {
+        // video-player-dual-layout：布局模式选择（双宿主；播放页选中后经 onLayoutModeSelected 重建续播）
+        PanelSelection.LayoutMode -> {
+            val options = listOf(
+                stringResource(R.string.video_layout_mode_immersive),
+                stringResource(R.string.video_layout_mode_traditional)
+            )
+            SingleChoiceDialog(
+                title = stringResource(R.string.video_layout_mode),
+                options = options,
+                selectedIndex = layoutMode.coerceIn(0, 1),
+                onSelect = {
+                    layoutMode = it
+                    VideoPlay.layoutMode = it
+                    onLayoutModeSelected(it)
+                    selection = null
+                },
+                onDismiss = { selection = null }
+            )
+        }
         PanelSelection.SkipTime -> {
             val values = intArrayOf(10, 30, 60, 90, 120)
             val options = values.map { stringResource(R.string.video_seconds_format, it) }
@@ -646,7 +705,7 @@ private fun PanelButton(text: String, onClick: () -> Unit) {
 }
 
 /** 下拉选择类型 */
-private enum class PanelSelection { SkipTime, CacheSize, PlayerType, SeekSensitivity, EnhancePreset, EnhanceSharpen, EnhanceDenoise, BufferStrategy }
+private enum class PanelSelection { LayoutMode, SkipTime, CacheSize, PlayerType, SeekSensitivity, EnhancePreset, EnhanceSharpen, EnhanceDenoise, BufferStrategy }
 
 /** 播放器类型标签（Phase 2：已收敛为 自动/内置 两档，原 WebView 项删除） */
 @Composable

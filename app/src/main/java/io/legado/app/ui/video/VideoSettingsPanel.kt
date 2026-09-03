@@ -93,7 +93,13 @@ class VideoSettingsPanel : BottomSheetDialogFragment() {
                         onEditSource = { callback?.onEditSource() },
                         onLogin = ::openLogin,
                         onLog = { callback?.onLog() },
-                        onPickPressSpeed = ::pickPressSpeed
+                        onPickPressSpeed = ::pickPressSpeed,
+                        host = PanelHost.PLAYER_PAGE,
+                        onLayoutModeSelected = { target ->
+                            // video-player-dual-layout R7：面板内切换布局 → Activity 重建续播
+                            callback?.onLayoutModeSelected(target)
+                            dismiss()
+                        }
                     )
                 }
             }
@@ -214,6 +220,11 @@ class VideoSettingsPanel : BottomSheetDialogFragment() {
 
         /** 日志 */
         fun onLog()
+
+        /**
+         * video-player-dual-layout R7：布局模式即时切换（默认空实现，Activity 覆写执行重建续播）
+         */
+        fun onLayoutModeSelected(target: Int) {}
     }
 
     companion object {

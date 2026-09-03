@@ -30,7 +30,6 @@ import io.legado.app.ui.config.compose.SettingSectionSpec
 import io.legado.app.ui.config.compose.SettingSwitchSpec
 import io.legado.app.ui.debug.DebugToolsActivity
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.video.config.SettingsDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeNumberPickerDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
@@ -404,7 +403,12 @@ class OtherConfigFragment : ComposeSettingFragment() {
                 key = PreferKey.videoSetting,
                 title = getString(R.string.video_setting),
                 summary = getString(R.string.video_setting_summary),
-                onClick = { showDialogFragment(SettingsDialog(requireActivity())) }
+                // video-player-dual-layout R11：入口归一——改跳转全局设置页（原 SettingsDialog 弹框收编为播放页宿主）
+                onClick = {
+                    startActivity<ConfigActivity> {
+                        putExtra("configTag", ConfigTag.VIDEO_PLAYER)
+                    }
+                }
             ),
             switch(
                 key = PreferKey.autoRefreshMediaToc,

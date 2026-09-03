@@ -112,6 +112,8 @@ internal fun buildSettingsSections(context: Context): List<MySettingsSectionMode
             rows = listOf(
                 actionRow("ai_setting", R.string.ai_setting, R.string.ai_setting_summary),
                 actionRow("autoTask", R.string.auto_task_manage, R.string.auto_task_manage_desc),
+                // video-player-dual-layout R11：视频播放器全局设置入口（布局模式/播放器类型/缓存等中心化配置）
+                actionRow("videoPlayerSetting", R.string.video_setting, R.string.video_setting_summary),
                 actionRow("rssSearch", R.string.rss_search, R.string.rss_search_summary),
                 actionRow("featureBooks", R.string.my_feature_books, R.string.my_feature_books_desc),
                 actionRow("bookmark", R.string.bookmark, R.string.all_bookmark),
@@ -170,6 +172,50 @@ internal fun buildSettingsSubSearchItems(context: Context): List<MySettingsSubSe
             summary = context.getString(R.string.welcome_style_summary),
             key = PreferKey.welcomeShowTime,
             ownerConfigTag = ConfigTag.WELCOME_CONFIG
+        ),
+        // video-player-dual-layout R11：视频播放器全局设置页搜索条目
+        // （key 为 video_config 独立文件键名，仅作搜索跳转锚点；ownerConfigTag=VIDEO_PLAYER）
+        MySettingsSubSearchItem(
+            ownerKey = "videoPlayerSetting",
+            title = context.getString(R.string.video_layout_mode),
+            summary = context.getString(R.string.video_layout_mode_summary),
+            key = "layoutMode",
+            ownerConfigTag = ConfigTag.VIDEO_PLAYER
+        ),
+        MySettingsSubSearchItem(
+            ownerKey = "videoPlayerSetting",
+            title = context.getString(R.string.player_type),
+            summary = "",
+            key = "playerType",
+            ownerConfigTag = ConfigTag.VIDEO_PLAYER
+        ),
+        MySettingsSubSearchItem(
+            ownerKey = "videoPlayerSetting",
+            title = context.getString(R.string.auto_play),
+            summary = "",
+            key = "autoPlay",
+            ownerConfigTag = ConfigTag.VIDEO_PLAYER
+        ),
+        MySettingsSubSearchItem(
+            ownerKey = "videoPlayerSetting",
+            title = context.getString(R.string.cache_play),
+            summary = "",
+            key = "cachePlay",
+            ownerConfigTag = ConfigTag.VIDEO_PLAYER
+        ),
+        MySettingsSubSearchItem(
+            ownerKey = "videoPlayerSetting",
+            title = context.getString(R.string.video_cache_size),
+            summary = "",
+            key = "videoCacheSize",
+            ownerConfigTag = ConfigTag.VIDEO_PLAYER
+        ),
+        MySettingsSubSearchItem(
+            ownerKey = "videoPlayerSetting",
+            title = context.getString(R.string.player_buffer_strategy),
+            summary = "",
+            key = "playerBufferStrategy",
+            ownerConfigTag = ConfigTag.VIDEO_PLAYER
         )
     )
 }
@@ -277,6 +323,11 @@ internal fun Activity.handleSettingsRowClick(key: String, searchTarget: MySettin
 
         "ai_setting" -> startActivity<ConfigActivity> {
             putExtra("configTag", ConfigTag.AI_CONFIG)
+        }
+
+        // video-player-dual-layout R11：视频播放器全局设置页路由
+        "videoPlayerSetting" -> startActivity<ConfigActivity> {
+            putExtra("configTag", ConfigTag.VIDEO_PLAYER)
         }
 
         "fileManage" -> startActivity<FileManageActivity>()

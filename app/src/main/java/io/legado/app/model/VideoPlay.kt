@@ -348,6 +348,22 @@ object VideoPlay : CoroutineScope by MainScope(){
         set(value) {
             videoPrefs.edit { putInt("playerType", value.coerceIn(0, 1)) }
         }
+
+    /**
+     * video-player-dual-layout AD-02：播放页布局模式
+     * 语义：0=抖音沉浸式（默认，ViewPager2 竖滑），1=传统布局（上播放器+下部信息区）
+     * - getter 异常值容错（备份导入/手改 prefs 出现非法值时回落 0，参照 playerType 先例）
+     * - 与沉浸式/传统布局分发的四个分发点（onCreate/initFromIntent/悬浮窗恢复/onNewIntent）共用本单源
+     */
+    var layoutMode: Int
+        get() {
+            val stored = videoPrefs.getInt("layoutMode", 0)
+            return if (stored == 1) 1 else 0
+        }
+        set(value) {
+            videoPrefs.edit { putInt("layoutMode", if (value == 1) 1 else 0) }
+        }
+
     var inBookshelf = true
     var isResumeFromFloat = false  // P0-1: 从悬浮窗恢复标志，Fragment.activatePlayer 据此决定 clonePlayState 还是 startPlay
     /**
@@ -417,6 +433,14 @@ object VideoPlay : CoroutineScope by MainScope(){
     @Volatile
     var switchingInProgress: Boolean = false
         private set
+
+    /**
+     * video-player-dual-layout AD-05：布局切换窗口进度短路标记
+     * （播放页内切换布局的重建窗口置 true，savePlayHistory 跳过定时/普通保存防串写；
+     * 与 switchingInProgress 分离——后者为 private set 的既有守卫，互不侵入）
+     */
+    @Volatile
+    var layoutSwitchInProgress: Boolean = false
     /** AD-07：切换异步任务引用（快速连滑时 cancel 前一任务） */
     private var switchBookJob: Coroutine<*>? = null
 

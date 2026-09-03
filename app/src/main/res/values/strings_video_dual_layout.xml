@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- video-player-dual-layout：双布局模式新增字符串（独立文件，避免与其他轨道争用 strings.xml）
+     W2：用户反馈①"抖音沉浸式"改名"沉浸式" ③信息区区块标题平铺 -->
+<resources>
+    <string name="video_layout_mode">布局模式</string>
+    <string name="video_layout_mode_immersive">沉浸式</string>
+    <string name="video_layout_mode_traditional">传统布局</string>
+    <string name="video_layout_mode_summary">沉浸式为全屏竖滑切换，传统布局为上播放器+下部视频信息</string>
+    <string name="play_next_film">下一部 ▶</string>
+    <string name="video_section_routes">线路</string>
+    <string name="video_section_episodes">选集</string>
+    <string name="video_playlist_position_article">第%1$d篇 · 共%2$d篇</string>
+    <string name="video_playlist_position_episode">第%1$d集 · 共%2$d集</string>
+</resources>

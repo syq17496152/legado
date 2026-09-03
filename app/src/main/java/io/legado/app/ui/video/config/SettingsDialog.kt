@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import io.legado.app.R
 import io.legado.app.model.VideoPlay
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.video.PanelHost
 import io.legado.app.ui.video.VideoSettingsPanelContent
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -29,11 +30,15 @@ import io.legado.app.ui.widget.number.NumberPickerDialog
  *
  * 使用场景：
  * - [io.legado.app.ui.video.VideoPlayerActivity] 设置菜单
- * - [io.legado.app.ui.config.OtherConfigFragment] 视频设置入口
+ *   （video-player-dual-layout：OtherConfig 入口已改跳转全局设置页 ConfigTag.VIDEO_PLAYER，
+ *    本弹框收编为仅播放页宿主 PanelHost.PLAYER_PAGE，布局模式切换经 onLayoutModeSelected 重建续播）
  */
 class SettingsDialog() : ComposeDialogFragment() {
 
     constructor(context: Context, callBack: CallBack? = null) : this()
+
+    /** video-player-dual-layout R7：布局模式选中回调（Activity 注入，执行容器重建续播） */
+    var onLayoutModeSelected: ((Int) -> Unit)? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -65,7 +70,12 @@ class SettingsDialog() : ComposeDialogFragment() {
                                 onLogin = {},
                                 onLog = {},
                                 onPickPressSpeed = ::pickPressSpeed,
-                                showDragHandle = false
+                                showDragHandle = false,
+                                host = PanelHost.PLAYER_PAGE,
+                                onLayoutModeSelected = { target ->
+                                    onLayoutModeSelected?.invoke(target)
+                                    dismiss()
+                                }
                             )
                         },
                         actions = {}
