@@ -42,6 +42,8 @@ import io.legado.app.help.gsyVideo.ExoVideoManager
 import io.legado.app.help.gsyVideo.ExoVideoManager.Companion.FULLSCREEN_ID
 import io.legado.app.help.gsyVideo.FloatingPlayer
 import io.legado.app.help.gsyVideo.VideoPlayer
+import io.legado.app.help.video.VideoPlaybackPipeline
+import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.help.video.VideoUrlExtractor
 import io.legado.app.help.video.engine.HeaderResolver
 import io.legado.app.help.video.engine.SniffEngine
@@ -74,7 +76,7 @@ object VideoPlay : CoroutineScope by MainScope(){
     private const val VIDEO_POS_SAVE_TIME = 60 * 60 * 24 * 20 //20天
     private var needClearTemp = true //需要清理缓存
     private const val VIDEO_TEMP_PATH = "video_temp"
-    private val videoTempFile by lazy { File(FileUtils.getCachePath(), VIDEO_TEMP_PATH) }
+    internal val videoTempFile by lazy { File(FileUtils.getCachePath(), VIDEO_TEMP_PATH) }
 
     const val VIDEO_PREF_NAME = "video_config"
 
@@ -290,6 +292,9 @@ object VideoPlay : CoroutineScope by MainScope(){
 
     val videoManager by lazy { ExoVideoManager() }
     private var isLoading = false
+    internal fun isLoadingFalse() {
+        isLoading = false
+    }
     private val loadScope = CoroutineScope(SupervisorJob() + IO)
     /** FR-4/FR-6: switchToArticle 异步任务引用（用于取消前一个异步任务，防止快速切换竞争） */
     private var switchArticleJob: Coroutine<*>? = null
@@ -385,8 +390,96 @@ object VideoPlay : CoroutineScope by MainScope(){
     var rssRoutes: List<RssRoute>? = null
     /**  当前线路索引（R3 多线路支持）  **/
     var rssRouteIndex: Int = 0
+    /**
+     * video-playlist-continuity：书源视频集名显示策略（头部顶栏/左下角共用）
+     *
+     * 源站单集影片的集名常为无语义占位（"全集完结"/"正片"/"HD"等），直接显示会与
+     * 详情抽屉（影片名）对不上，用户感知为"标题错乱"。规则：
+     * - 集名为空、等于影片名、属于常见无语义占位、或影片仅一集 → 显示影片名
+     * - 其余（多集且集名有语义，如"第N集"/"第xxxx期"）→ 显示集名
+     */
+    fun displayEpisodeTitle(episodeTitle: String?): String {
+        val name = book?.name?.takeIf { it.isNotBlank() } ?: videoTitle ?: ""
+        val et = episodeTitle?.takeIf { it.isNotBlank() } ?: return name
+        val meaninglessNames = hashSetOf("正片", "全集完结", "完结", "HD", "HD中字", "抢先版", "预告", "花絮")
+        val singleEpisode = book != null && (episodes?.size ?: 0) <= 1
+        return if (singleEpisode || et == name || et in meaninglessNames) name else et
+    }
+
     /** switchToRoute 竞态守卫序号（每次切换递增，异步回调校验是否过期） **/
     private var switchToRouteToken: Int = 0
+    /** video-playlist-continuity：跨影片切换防重标记（占位页一次触发） **/
+    @Volatile
+    var switchBookAppending: Boolean = false
+        private set
+
+    /** AD-06：切换窗口进度短路标记（initSource 重建期间 saveRead/定时保存跳过，防进度串写） */
+    @Volatile
+    var switchingInProgress: Boolean = false
+        private set
+    /** AD-07：切换异步任务引用（快速连滑时 cancel 前一任务） */
+    private var switchBookJob: Coroutine<*>? = null
+
+    /**
+     * video-booksource-align-rss AD-02：书源单页模式列表驱动切换影片
+     *
+     * 上滑(+1)=列表下一影片 / 下滑(-1)=上一影片，复用 initSource 换源式全链重建
+     * （无 generation 校验、无占位页），完成后发 VIDEO_BOOK_UNIT_SWITCHED 由
+     * Activity 走显式激活链定位首集。与订阅源 switchToArticle 同构。
+     *
+     * @param offset +1 下一部 / -1 上一部
+     * @param player 播放器实例
+     * @return true 已发起切换（异步），false 无相邻影片（已 toast 边界提示）或已在切换中
+     */
+    fun switchToBookFromList(offset: Int, player: GSYBaseVideoPlayer): Boolean {
+        val book = book ?: return false
+        if (switchBookAppending) return false
+        val next = VideoPlaylistHolder.neighborOf(book.bookUrl, offset)
+        if (next == null) {
+            appCtx.toastOnUi(if (offset > 0) "已是最后一个视频" else "已到开头")
+            return false
+        }
+        switchBookAppending = true
+        switchingInProgress = true
+        // AD-07：cancel 前一异步任务 + token 双保险（onError 仅在 token 未过期时复位状态）
+        switchBookJob?.cancel()
+        val token = switchTokenCounter.incrementAndGet()
+        currentSwitchToken = token
+        switchBookJob = Coroutine.async(loadScope, IO) {
+            // 复用 initSource 写入链：sourceType=book、record=null（相邻影片无历史）
+            val ok = initSource(next.origin, SourceType.book, next.bookUrl, null)
+            withContext(Main) {
+                // token 过期（期间已发起新切换）→ 状态由新切换管理，本次静默退出
+                if (currentSwitchToken != token) {
+                    AppLog.put("switchToBookFromList: token expired ($token < $currentSwitchToken), drop late callback")
+                    return@withContext
+                }
+                switchingInProgress = false
+                switchBookAppending = false
+                if (!ok) {
+                    AppLog.put("VbsQueue: 切换影片失败 dir=$offset, bookUrl=${next.bookUrl.take(30)}")
+                    postEvent(
+                        EventBus.VIDEO_PLAY_ERROR,
+                        "播放失败：视频加载失败，请重试或返回列表选择其他影片"
+                    )
+                } else {
+                    // 通知播放器：新影片就绪，走显式激活链定位首集+刷新
+                    postEvent(EventBus.VIDEO_BOOK_UNIT_SWITCHED, 0)
+                }
+            }
+            ok
+        }.onError {
+            // Coroutine 框架保证 CancellationException 不进入 onError（Coroutine.kt 守卫）；
+            // token 校验防旧任务异常复位新切换状态
+            if (currentSwitchToken != token) return@onError
+            switchingInProgress = false
+            switchBookAppending = false
+            AppLog.put("VbsQueue: 切换影片异常 ${it.localizedMessage}", it)
+            postEvent(EventBus.VIDEO_PLAY_ERROR, "播放失败：视频加载异常，请重试")
+        }
+        return true
+    }
+
     /**  订阅源文章列表（上下滑动切换文章，从 RssArticlesFragment 传入）  **/
     var rssArticles: List<RssArticle>? = null
     /**  当前订阅源文章索引（上下滑动切换文章）  **/
@@ -775,81 +868,13 @@ object VideoPlay : CoroutineScope by MainScope(){
         }
         val chapter = chapter
         if (chapter == null) {
+            AppLog.put("startPlay: 未找到章节, tocSize=${toc?.size}, volumes=${volumes.size}, episodes=${episodes?.size ?: -1}, durVolumeIndex=$durVolumeIndex, chInVol=$chapterInVolumeIndex, bookDurChIdx=${book.durChapterIndex}")
             appCtx.toastOnUi("未找到章节")
             return
         }
-        WebBook.getContent(loadScope, source as BookSource, book, chapter)
-            .onSuccess(IO) { content ->
-                val content = content.trim()
-                // video-sniff-403-and-rss-classic-fix 4.8c（Z10）：书源章节空正文不再裸抛
-                // ContentEmptyException（与订阅源路径不对称，且异常噪音大），改发
-                // EventBus.VIDEO_PLAY_ERROR 统一错误提示（Phase 2 已统一该事件，订阅源路径同款）
-                if (content.isEmpty()) {
-                    AppLog.putWarn("4.8c: 书源章节正文为空, 触发统一错误提示, chapter=${chapter.title}")
-                    withContext(Main) {
-                        postEvent(
-                            EventBus.VIDEO_PLAY_ERROR,
-                            "播放失败：书源章节正文为空，未获取到视频地址，请重试、切换书源/章节，或用系统浏览器打开"
-                        )
-                    }
-                    return@onSuccess
-                }
-                val mUrl = if (content.startsWith("<")) { //当作mpd文本
-                    val name = MD5Utils.md5Encode(content) + ".mpd"
-                    val file = FileUtils.createFileIfNotExist(videoTempFile,name)
-                    file.writeText(content)
-                    Uri.fromFile(file).toString()
-                } else {
-                    content
-                }
-                // 4.8b（Z9）：嗅探前捕获原始 URL（书源正文链接可重嗅），作为播放历史键
-                originalPlayUrl = mUrl
-                videoUrl = mUrl
-                // 能力迁移：视频书源正文为播放页 URL 时接入三层嗅探链（design 子方案B）
-                // 非 MPD 文本且非本地文件时，用 extractVideoUrlForEpisode 解析真实流 URL，失败回退直连
-                // 2.4/R-P1-2：嗅探上下文头收集（命中时记录，analyzeUrl 组装后 merge）
-                var sniffMergedHeaders: Map<String, String> = emptyMap()
-                val sniffedUrl = if (mUrl.startsWith("<") || mUrl.startsWith("file://")) {
-                    mUrl
-                } else {
-                    VideoUrlExtractor.extractVideoUrlForEpisode(mUrl, source, chapter)?.let { candidate ->
-                        sniffMergedHeaders = candidate.headers
-                        candidate.url
-                    } ?: mUrl
-                }
-                videoUrl = sniffedUrl
-                val analyzeUrl = AnalyzeUrl(
-                    sniffedUrl,
-                    source = source,
-                    ruleData = book,
-                    chapter = chapter
-                )
-                // 2.4/R-P1-2：嗅探上下文优先 merge（书源章节路径防 403 收益）
-                sniffMergedHeaders.forEach { (k, v) ->
-                    analyzeUrl.headerMap[k] = v
-                }
-                when (val danmaku = chapter.getDanmaku()) {
-                    is String -> danmakuStr = danmaku
-                    is File -> danmakuFile = danmaku
-                }
-                val playUrl = analyzeUrl.url
-                withContext(Main) {
-                    if (currentSwitchToken != startPlayToken) {
-                        AppLog.put("startPlay 书源章节: token expired, drop late callback")
-                        return@withContext
-                    }
-                    player.mapHeadData = analyzeUrl.headerMap
-                    currentPlayHeaders = analyzeUrl.headerMap
-                    // Bug8 修复：统一解析播放器页面 URL
-                    val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(playUrl)
-                    player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), chapter.title)
-                    if (autoPlay) {
-                        player.startPlayLogic()
-                    }
-                }
-            }.onError {
-                AppLog.put("获取资源链接出错\n$it", it, true)
-            }
+        // video-booksource-align-rss task 2.5：书源分支瘦身为定位章节+委托，
+        // 采集链（L0 直链/getContent/嗅探/头合并/setUp）唯一实现在 VideoPlaybackPipeline
+        startPlayBookChapter(player, book, chapter)
         isLoading = false
     }
 
@@ -1060,13 +1085,42 @@ object VideoPlay : CoroutineScope by MainScope(){
                 SourceCallBack.callBackBook(SourceCallBack.START_READ, source as BookSource?, b, chapter)
             }
         }
+        // video-booksource-multiroute fix："未找到章节"根因修复——视频书源首次进入时
+        // 目录可能尚未入库（发现页 VideoBookPreloader 只预加载前 12 项，且加载与点击存在竞态），
+        // 此处同步加载目录，不再依赖预加载碰运气；目录仍空时才由 startPlay 报"未找到章节"
+        val bsVideoForToc = source as? BookSource
+        val bookForToc = book
+        if (bsVideoForToc?.bookSourceType == BookSourceType.video && bookForToc != null && toc.isNullOrEmpty()) {
+            // MacCMS detail 接口响应本身含 vod_play_url，tocUrl 空时用 bookUrl 直接当目录地址
+            if (bookForToc.tocUrl.isBlank()) {
+                bookForToc.tocUrl = bookForToc.bookUrl
+            }
+            kotlin.runCatching {
+                val chapters = WebBook.getChapterListAwait(bsVideoForToc, bookForToc).getOrThrow()
+                if (chapters.isNotEmpty()) {
+                    bookForToc.save()
+                    appDb.bookChapterDao.delByBook(bookForToc.bookUrl)
+                    appDb.bookChapterDao.insert(*chapters.toTypedArray())
+                    toc = chapters
+                }
+            }.onFailure {
+                AppLog.put("视频书源目录即时加载失败 ${it.localizedMessage}", it)
+            }
+            volumes.clear()
+            toc?.forEach { t ->
+                if (t.isVolume) {
+                    volumes.add(t)
+                }
+            }
+        }
         upEpisodes()
+        AppLog.put("initSource: 视频书源目录映射, tocSize=${toc?.size}, volumes=${volumes.size}, durVolumeIndex=$durVolumeIndex, chInVol=$chapterInVolumeIndex, bookDurChIdx=${book?.durChapterIndex}")
         // video-booksource-multiroute：视频书源时把卷章映射为线路/集数模型，
         // 复用订阅源线路/集数选择器 UI（数据源 rssRoutes/rssEpisodes），UI 层零改动
         val bookSourceForRoutes = source as? BookSource
         if (bookSourceForRoutes?.bookSourceType == BookSourceType.video && volumes.isNotEmpty()) {
             val tocList = toc.orEmpty()
-            rssRoutes = volumes.mapIndexed { vIndex, volume ->
+            val mappedRoutes: List<RssRoute> = volumes.mapIndexed { vIndex, volume ->
                 val start = volume.index
                 val end = volumes.getOrNull(vIndex + 1)?.index ?: tocList.size
                 RssRoute(
@@ -1076,9 +1130,23 @@ object VideoPlay : CoroutineScope by MainScope(){
                         .map { RssEpisode(title = it.title, url = it.url) }
                 )
             }
-            rssEpisodes = rssRoutes?.getOrNull(durVolumeIndex)?.episodes
+            // 书源视频直链线路优选（对齐订阅源 directRouteIdx，红队 R3-4 同源问题）：
+            // 首线路常为网页播放页（需二次嗅探、易失败黑屏），多线路时优先选含 m3u8/mp4 直链的线路。
+            // 仅在无历史进度时生效（book.durChapterIndex>0 尊重用户上次选择）
+            var preferIdx = 0
+            if ((bookForToc?.durChapterIndex ?: 0) <= 0) {
+                mappedRoutes.indexOfFirst { rt ->
+                    rt.episodes.any { VideoUrlExtractor.isDirectVideoStreamUrl(it.url) }
+                }.takeIf { it > 0 }?.let { preferIdx = it }
+            }
+            durVolumeIndex = preferIdx
+            rssRoutes = mappedRoutes
+            upEpisodes()
+            rssEpisodes = mappedRoutes.getOrNull(durVolumeIndex)?.episodes
             rssRouteIndex = durVolumeIndex
             rssEpisodeIndex = chapterInVolumeIndex
+            // video-booksource-align-rss AD-01：书源侧 VideoPlaybackQueue 接入删除（单页化后
+            // 无扁平位映射/占位页需求），组件文件保留供订阅源多集分页改造后续用
         }
         // P0: singleUrl 模式（直接传 videoUrl 播放）不需要源，跳过 source == null 检查
         // 根因：adb am start 传 videoUrl 直接播放 m3u8 时，sourceKey 为 null 导致 source == null，
@@ -1184,8 +1252,9 @@ object VideoPlay : CoroutineScope by MainScope(){
             return false
         }
         if (index >= episodes.size) {
-            appCtx.toastOnUi("已播放完")
-            return false
+            // video-booksource-align-rss REQ-9/S6：末集播完自动连播 → 列表下一影片
+            // （与上滑语义一致；无下一影片时 switchToBookFromList 内部 toast 边界提示）
+            return switchToBookFromList(offset, player)
         }
         chapterInVolumeIndex = index
         saveRead(0)
@@ -1420,6 +1489,8 @@ object VideoPlay : CoroutineScope by MainScope(){
         // 竞态守卫：与订阅源 switchToRoute 同一令牌池
         val switchToken = ++switchToRouteToken
         durVolumeIndex = routeIndex
+        // 线路索引镜像同步（订阅源 switchToRoute 同款），详情抽屉线路 Tab 高亮依赖
+        rssRouteIndex = routeIndex
         chapterInVolumeIndex = 0
         upEpisodes()
         // 卷章 → RssEpisode 映射，复用订阅源集数选择器 UI（数据源 rssEpisodes）
@@ -1458,90 +1529,37 @@ object VideoPlay : CoroutineScope by MainScope(){
         book.chapterInVolumeIndex = episodeIndex
         book.durChapterIndex = durChapterIndex
         durChapterPos = 0
+        // video-booksource-align-rss AD-01：双索引镜像删除——此处唯一写点直接同步
+        // rssEpisodeIndex（详情抽屉/集数选择器选中态权威源）
+        rssEpisodeIndex = episodeIndex
         startPlayBookChapter(player, book, chapter)
     }
 
     /**
-     * video-booksource-multiroute：书源章节播放采集链（从 startPlay 书源分支抽取）
+     * video-booksource-multiroute：书源章节播放采集链（video-booksource-align-rss task 2.2 委托）
      *
-     * WebBook.getContent（ruleContent 五类规则/留空→chapter.url 直链）→
-     * MPD 文本落盘 → 播放页 URL 三层嗅探兜底 → AnalyzeUrl 头合并 → setUp 起播。
+     * 瘦身为状态准备（历史键/标题/token）+ 委托 VideoPlaybackPipeline.playBookChapter：
+     * L0 直链快速路径 / getContent → MPD 落盘 → 三层嗅探 → 头合并 → setUp 唯一实现见 Pipeline。
      */
     private fun startPlayBookChapter(player: GSYBaseVideoPlayer, book: Book, chapter: BookChapter) {
         // 4.8b（Z9）：嗅探前捕获原始 URL（书源正文链接可重嗅），作为播放历史键
         originalPlayUrl = chapter.url
         videoTitle = chapter.title
-        SniffEngine.invalidate()
         val token = switchTokenCounter.incrementAndGet()
         currentSwitchToken = token
-        Coroutine.async(loadScope, IO) {
-            WebBook.getContent(loadScope, source as BookSource, book, chapter)
-                .onSuccess(IO) { content ->
-                    val content = content.trim()
-                    // 4.8c（Z10）：书源章节空正文统一错误提示（不裸抛）
-                    if (content.isEmpty()) {
-                        AppLog.putWarn("书源章节正文为空, 触发统一错误提示, chapter=${chapter.title}")
-                        withContext(Main) {
-                            postEvent(
-                                EventBus.VIDEO_PLAY_ERROR,
-                                "播放失败：书源章节正文为空，未获取到视频地址，请重试、切换书源/章节，或用系统浏览器打开"
-                            )
-                        }
-                        return@onSuccess
-                    }
-                    val mUrl = if (content.startsWith("<")) { //当作mpd文本
-                        val name = MD5Utils.md5Encode(content) + ".mpd"
-                        val file = FileUtils.createFileIfNotExist(videoTempFile, name)
-                        file.writeText(content)
-                        Uri.fromFile(file).toString()
-                    } else {
-                        content
-                    }
-                    videoUrl = mUrl
-                    // 书源正文为播放页 URL 时接入三层嗅探链；非 MPD 文本且非本地文件时解析真实流 URL，失败回退直连
-                    var sniffMergedHeaders: Map<String, String> = emptyMap()
-                    val sniffedUrl = if (mUrl.startsWith("<") || mUrl.startsWith("file://")) {
-                        mUrl
-                    } else {
-                        VideoUrlExtractor.extractVideoUrlForEpisode(mUrl, source, chapter)?.let { candidate ->
-                            sniffMergedHeaders = candidate.headers
-                            candidate.url
-                        } ?: mUrl
-                    }
-                    videoUrl = sniffedUrl
-                    val analyzeUrl = AnalyzeUrl(
-                        sniffedUrl,
-                        source = source,
-                        ruleData = book,
-                        chapter = chapter
-                    )
-                    // 嗅探上下文优先 merge（书源章节路径防 403 收益）
-                    sniffMergedHeaders.forEach { (k, v) ->
-                        analyzeUrl.headerMap[k] = v
-                    }
-                    when (val danmaku = chapter.getDanmaku()) {
-                        is String -> danmakuStr = danmaku
-                        is File -> danmakuFile = danmaku
-                    }
-                    val playUrl = analyzeUrl.url
-                    withContext(Main) {
-                        if (currentSwitchToken != token) {
-                            AppLog.put("playBookEpisode: token expired, drop late callback")
-                            return@withContext
-                        }
-                        player.mapHeadData = analyzeUrl.headerMap
-                        currentPlayHeaders = analyzeUrl.headerMap
-                        val resolvedUrl = VideoUrlExtractor.resolvePlayerPageUrl(playUrl)
-                        player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), chapter.title)
-                        if (autoPlay) {
-                            player.startPlayLogic()
-                        }
-                    }
-                }.onError {
-                    AppLog.put("获取资源链接出错\n$it", it, true)
-                }
-            isLoading = false
-        }
+        VideoPlaybackPipeline.playBookChapter(
+            VideoPlaybackPipeline.PipelineContext(
+                scope = loadScope,
+                player = player,
+                source = source,
+                token = token,
+                title = chapter.title,
+                refererFallback = chapter.url,
+                ruleData = book,
+                book = book,
+                chapter = chapter
+            )
+        )
     }
 
     /**
@@ -1760,64 +1778,24 @@ object VideoPlay : CoroutineScope by MainScope(){
         // 2.7/R-P1-5：递增切换令牌
         val token = switchTokenCounter.incrementAndGet()
         currentSwitchToken = token
-        SniffEngine.invalidate() // Phase 3: 页面切换清引擎去重缓存
         AppLog.put("playRssEpisode: debounce, cancel previous async task, episode=${episode.title}, token=$token")
-        playEpisodeJob = Coroutine.async(loadScope, IO) {
-            // 接入三层降级采集：MacCMS播放页解析→DOM解析→网络抓包（统一由 VideoUrlExtractor.extractVideoUrlForEpisode 处理）
-            // 替代原手动 MacCMS 解析，增加 DOM 解析和网络抓包降级，提升视频播放成功率
-            val resolvedCandidate = VideoUrlExtractor.extractVideoUrlForEpisode(episode.url, source, rssArticle)
-            val resolvedUrl = resolvedCandidate?.url
-            // T2.9/T2.10: 三层降级采集失败返回 null，触发统一错误提示（避免非视频流URL传给 ExoPlayer）
-            // video-sniff-403-and-rss-classic-fix Phase 2 (3.7)：原"WebView 降级"已随 WebView 播放器删除
-            if (resolvedUrl == null) {
-                AppLog.putWarn("extractVideoUrlForEpisode 返回null, 触发统一错误提示, ${VideoUrlExtractor.sanitizeUrl(episode.url)}")
-                withContext(Main) {
-                    postEvent(
-                        EventBus.VIDEO_PLAY_ERROR,
-                        "播放失败：视频地址采集失败（三层降级均失败），请重试、切换线路/集数，或用系统浏览器打开"
-                    )
-                }
-                return@async
-            }
-            // 构造 AnalyzeUrl 获取 headerMap（Referer 等，用于播放器防盗链）
-            val analyzeUrl = AnalyzeUrl(
-                episode.url,
+        // video-booksource-align-rss task 2.3：采集链委托 VideoPlaybackPipeline.playEpisode
+        // （三层嗅探/头合并/setUp/VIDEO_SUB_TITLE 唯一实现），preload hook 经 onStarted 保留
+        playEpisodeJob = VideoPlaybackPipeline.playEpisode(
+            VideoPlaybackPipeline.PipelineContext(
+                scope = loadScope,
+                player = player,
                 source = source,
-                ruleData = rssArticle
-            )
-            // R-P1-2 过渡版 → Phase 3 收口：HeaderResolver.merge 三层头合并（嗅探覆盖源配置 + Referer 兜底页面链接 + CookieManager 域内兜底）
-            val merged = HeaderResolver.merge(
-                candidate = resolvedCandidate,
-                baseHeaders = analyzeUrl.headerMap,
+                token = token,
+                title = episode.title,
+                displayTitle = rssArticle.title,
                 refererFallback = rssArticle.link,
-                targetUrl = resolvedUrl
+                ruleData = rssArticle,
+                article = rssArticle,
+                episode = episode,
+                onStarted = { triggerPreload() }
             )
-            analyzeUrl.headerMap.clear()
-            analyzeUrl.headerMap.putAll(merged)
-            withContext(Main) {
-                // 2.7/R-P1-5：token 过期 → 丢弃迟到回调（用户已再次切集/切文章）
-                if (switchTokenCounter.get() != token) {
-                    AppLog.put("playRssEpisode: token expired ($token < ${switchTokenCounter.get()}), drop late callback")
-                    return@withContext
-                }
-                player.mapHeadData = analyzeUrl.headerMap
-                currentPlayHeaders = analyzeUrl.headerMap
-                player.setUp(resolvedUrl, cachePlay, File(appCtx.externalCache, "exoplayer"), episode.title)
-                // R3 title 修复：TitleBar 统一显示文章标题（用户反馈：单URL/多行URL模式title用rssArticle.title）
-                postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title)
-                if (autoPlay) {
-                    player.startPlayLogic()
-                }
-                // T2.2: 首帧预加载（对齐快手官方方案）——预加载当前位置 ±1 的视频首帧（1MB Range 请求）
-                // T2.3: 下一个视频预加载（对齐抖音官方方案）——预加载下一集前 256KB（WiFi 3 个/4G 1 个）
-                // 触发时机：当前视频开始播放时启动预加载（异步执行不阻塞播放）
-                // video-sniff-403-and-rss-classic-fix 4.8a（AD-12）：上述旧预加载语义已重写为
-                // "预嗅探下一集 + finalUrl 键预填首分片"，旧预加载器禁用（见 triggerPreload 注释）
-                triggerPreload()
-            }
-        }.onError {
-            AppLog.put("加载订阅源视频集失败: ${episode.title}", it, true)
-        }
+        )
     }
 
     /**
@@ -1922,6 +1900,11 @@ object VideoPlay : CoroutineScope by MainScope(){
     }
 
     fun saveRead(durPos: Int? = null) {
+        // AD-06：切换窗口进度短路——initSource 重建期间旧片 currentPosition 不得写入新 book 落库
+        if (switchingInProgress) {
+            AppLog.put("saveRead: switchingInProgress, skip progress save")
+            return
+        }
         val book = book
         val rssStar = rssStar
         val rssRecord = rssRecord

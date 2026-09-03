@@ -143,6 +143,8 @@ class VideoFragment : Fragment() {
     /** 修复: ACTION_DOWN 时记录的播放位置，避免滑动过程中 currentPosition 持续变化导致 seekTarget 漂移 */
     private var slideSeekStartPos = 0L
 
+    // FLING_MIN_VELOCITY 定义在文件尾部既有 companion object 中
+
     // ==================== F1: 缓冲进度条更新 ====================
     /** GSY 底部进度条引用（用于更新 secondaryProgress 显示缓冲进度） */
     private var bottomProgressbar: ProgressBar? = null
@@ -231,6 +233,8 @@ class VideoFragment : Fragment() {
         AppLog.put("VideoFragment.activatePlayer called: isActivated=$isActivated, _playerView=${_playerView != null}, singleUrl=${VideoPlay.singleUrl}")
         if (isActivated) return
         val pv = _playerView ?: return
+        // video-booksource-align-rss AD-01：占位页机制删除（书源单页化后 position 恒 0，
+        // 跨影片切换走 Activity 手势层 switchToBookFromList + VIDEO_BOOK_UNIT_SWITCHED 显式激活链）
         isActivated = true
 
         // 4.1 横屏视频检测：注册 onPrepared 回调获取视频尺寸
@@ -695,12 +699,15 @@ class VideoFragment : Fragment() {
             requireActivity().onBackPressedDispatcher.onBackPressed()
         }
 
-        // 2.1 左下角视频标题（适配文章模式/集数模式）
+        // 2.1 左下角视频标题（适配文章模式/集数模式/书源单页模式）
+        // 书源单页化：episodeIndex 恒 0，当前集取 chapterInVolumeIndex（标题单一权威经 displayEpisodeTitle）
         val title = when {
             !VideoPlay.rssArticles.isNullOrEmpty() ->
                 VideoPlay.rssArticles?.getOrNull(episodeIndex)?.title ?: VideoPlay.videoTitle ?: ""
             !VideoPlay.rssEpisodes.isNullOrEmpty() ->
                 VideoPlay.rssEpisodes?.getOrNull(episodeIndex)?.title ?: VideoPlay.videoTitle ?: ""
+            VideoPlay.book != null ->
+                VideoPlay.displayEpisodeTitle(VideoPlay.episodes?.getOrNull(VideoPlay.chapterInVolumeIndex)?.title)
             else -> VideoPlay.videoTitle ?: ""
         }
         setTitle(title)
@@ -971,6 +978,27 @@ class VideoFragment : Fragment() {
                     GSYVideoView.CURRENT_STATE_PAUSE -> pv.startAfterPrepared()
                 }
                 return true
+            }
+
+            // video-booksource-align-rss AD-02/AD-05：书源单页模式垂直滑动=列表上/下一影片
+            // （ViewPager 已禁滑，由手势层驱动 Activity.onBookVerticalFling）；
+            // 订阅源文章/集数模式不受影响（其垂直滑动由 ViewPager2 翻页消费，且此处不回调）；
+            // 左右滑动 seek（video-gesture-overhaul R2）由方向锁定互斥，不受影响
+            override fun onFling(
+                e1: MotionEvent?,
+                e2: MotionEvent,
+                velocityX: Float,
+                velocityY: Float
+            ): Boolean {
+                if (VideoPlay.book != null && VideoPlay.rssArticles.isNullOrEmpty()) {
+                    if (kotlin.math.abs(velocityY) > kotlin.math.abs(velocityX) &&
+                        kotlin.math.abs(velocityY) > FLING_MIN_VELOCITY
+                    ) {
+                        (activity as? VideoPlayerActivity)?.onBookVerticalFling(velocityY)
+                        return true
+                    }
+                }
+                return super.onFling(e1, e2, velocityX, velocityY)
             }
         })
 
@@ -1384,6 +1412,9 @@ class VideoFragment : Fragment() {
 
     companion object {
         private const val ARG_EPISODE_INDEX = "episode_index"
+
+        /** video-booksource-align-rss AD-02：垂直 fling 最小速度阈值（px/s），低于此值不触发列表切换 */
+        private const val FLING_MIN_VELOCITY = 1200f
 
         fun newInstance(index: Int): VideoFragment {
             return VideoFragment().apply {

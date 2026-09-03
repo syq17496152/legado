@@ -87,6 +87,8 @@ import io.legado.app.help.webView.WebViewPool
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.model.VideoPlay
+import io.legado.app.model.VideoPlaybackQueue
+import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.service.VideoPlayService
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.about.AppLogDialog
@@ -212,6 +214,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      */
     private var pageChangeCallback: ViewPager2.OnPageChangeCallback? = null
 
+    // video-playlist-continuity：快速滑动防错乱——滑动中只记录落点页，停稳（IDLE）后统一处理
+    private var vpScrollState: Int = ViewPager2.SCROLL_STATE_IDLE
+    private var pendingPosition: Int = -1
+
     /** initView 幂等守卫：onNewIntent 重初始化时避免重复注册 ViewModel 观察者 */
     private var isViewInitialized = false
 
@@ -238,6 +244,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      * 失败不影响主播放链路（PlayHistoryStore内部runCatching包裹）
      */
     private fun savePlayHistory() {
+        // AD-06：切换窗口短路——旧片进度不得写入新影片历史键（historyKeyUrl 已随 initSource 变更）
+        if (VideoPlay.switchingInProgress) return
         // 4.8b（Z9）：键改用 historyKeyUrl（嗅探前原始 URL，源侧 token 轮换后仍可重嗅）；
         // rssSourceId 填充真实订阅源 ID（原恒空串）
         val videoUrl = VideoPlay.historyKeyUrl ?: return
@@ -539,11 +547,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         updateSourceDependentMenu()
 
         // P0-1: 书源/单URL模式禁用滑动（单 Fragment），订阅源模式保持垂直滑动
-        // 能力迁移：书源视频多集（episodes 非空且 >1）时放开滑动，支持上下滑动切换上/下集
-        val book = VideoPlay.book
-        val bookEpisodes = VideoPlay.episodes
-        val isSinglePage = VideoPlay.singleUrl ||
-            (book != null && (bookEpisodes.isNullOrEmpty() || bookEpisodes.size <= 1))
+        // video-booksource-align-rss AD-01：书源视频单页化——恒 1 页禁滑，集数/线路切换仅经
+        // 选择器与详情抽屉；上滑=列表下一影片由手势层驱动（onBookVerticalFling → switchToBookFromList）
+        val isSinglePage = VideoPlay.singleUrl || VideoPlay.book != null
 
         // 配置 ViewPager2
         videoPagerAdapter = VideoPagerAdapter(this)
@@ -554,39 +560,25 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             isUserInputEnabled = !isSinglePage
             adapter = videoPagerAdapter
             pageChangeCallback = object : ViewPager2.OnPageChangeCallback() {
+                override fun onPageScrollStateChanged(state: Int) {
+                    super.onPageScrollStateChanged(state)
+                    vpScrollState = state
+                    // 快速滑动防错乱核心：停稳后才统一处理落点页（写索引/标题/触发切换）
+                    if (state == ViewPager2.SCROLL_STATE_IDLE && pendingPosition != -1) {
+                        val pos = pendingPosition
+                        pendingPosition = -1
+                        handlePageSelected(pos)
+                    }
+                }
+
                 override fun onPageSelected(position: Int) {
                     super.onPageSelected(position)
-                    // 旧 Fragment 暂停
-                    currentFragment?.deactivatePlayer()
-                    // 根据数据源更新索引（文章模式 vs 集数模式 vs 书源剧集模式）
-                    when {
-                        !VideoPlay.rssArticles.isNullOrEmpty() -> VideoPlay.rssArticleIndex = position
-                        VideoPlay.book != null && !VideoPlay.episodes.isNullOrEmpty() ->
-                            VideoPlay.chapterInVolumeIndex = position
-                        else -> VideoPlay.rssEpisodeIndex = position
+                    // 滑动中（DRAGGING/SETTLING）只记录落点，不写索引不改标题，防止快速滑动时中间页污染状态
+                    if (vpScrollState != ViewPager2.SCROLL_STATE_IDLE) {
+                        pendingPosition = position
+                        return
                     }
-                    // 获取新 Fragment
-                    val fragment = getVideoFragment(position)
-                    currentFragment = fragment
-                    // 激活播放（playerView 可能未就绪，由 onFragmentViewReady 兜底）
-                    if (fragment?.playerView != null) {
-                        fragment.activatePlayer()
-                    }
-                    // 更新标题（适配文章模式/集数模式/书源剧集模式）
-                    composeTitle = when {
-                        !VideoPlay.rssArticles.isNullOrEmpty() ->
-                            VideoPlay.rssArticles?.getOrNull(position)?.title ?: ""
-                        VideoPlay.book != null && !VideoPlay.episodes.isNullOrEmpty() ->
-                            VideoPlay.episodes?.getOrNull(position)?.title ?: VideoPlay.videoTitle ?: ""
-                        !VideoPlay.rssEpisodes.isNullOrEmpty() ->
-                            VideoPlay.rssEpisodes?.getOrNull(position)?.title ?: VideoPlay.videoTitle ?: ""
-                        else -> VideoPlay.videoTitle ?: ""
-                    }
-                    // 阶段8 F9：滑到最后一个文章时触发分页加载
-                    val articles = VideoPlay.rssArticles
-                    if (!articles.isNullOrEmpty() && position == articles.size - 1) {
-                        VideoPlay.loadMoreArticles()
-                    }
+                    handlePageSelected(position)
                 }
             }
             registerOnPageChangeCallback(pageChangeCallback!!)
@@ -596,16 +588,65 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         if (!VideoPlay.rssArticles.isNullOrEmpty() && VideoPlay.rssArticleIndex > 0) {
             binding.viewPager.setCurrentItem(VideoPlay.rssArticleIndex, false)
         }
-        // 书源剧集模式：定位到历史播放的集数索引（非0时需设置）
-        if (VideoPlay.book != null &&
-            !VideoPlay.episodes.isNullOrEmpty() &&
-            VideoPlay.chapterInVolumeIndex > 0
-        ) {
-            binding.viewPager.setCurrentItem(VideoPlay.chapterInVolumeIndex, false)
-        }
+        // video-booksource-align-rss AD-01：书源单页恒 0，历史集数定位由
+        // startPlay 内 chapterInVolumeIndex 章节解析承担，无需 ViewPager 定位
 
         // 设置标题
         composeTitle = VideoPlay.videoTitle ?: ""
+    }
+
+    /**
+     * video-playlist-continuity：页面落点统一处理（仅在 SCROLL_STATE_IDLE 时调用）
+     *
+     * 快速滑动防错乱：滑动过程中 onPageSelected 的中间页不再立即写索引/改标题/触发切换，
+     * 防止 1) 中间页污染 VideoPlay 索引与标题；2) 快速越过末集时占位页提前触发跨影片切换，
+     * 数据集崩缩导致 ViewPager 页面被强拽、标题与内容错乱。
+     */
+    private fun handlePageSelected(position: Int) {
+        // 旧 Fragment 暂停
+        currentFragment?.deactivatePlayer()
+        // video-booksource-align-rss AD-01：书源占位页/集数索引映射分支删除（单页化后
+        // ViewPager 恒 1 页无滑动，跨影片切换走手势层 switchToBookFromList + 显式激活链）
+        // 根据数据源更新索引（文章模式 vs 集数模式），
+        // 并同步底部集数/线路列表选中态（停稳后落点集必须高亮跟随）
+        when {
+            !VideoPlay.rssArticles.isNullOrEmpty() -> {
+                VideoPlay.rssArticleIndex = position
+                // 文章模式集数/线路选择器由 UP_VIDEO_INFO 事件整体重建，此处无需刷新
+            }
+            VideoPlay.book != null -> {
+                // 书源单页：position 恒 0，集索引权威链为 initSource/playBookEpisode，不映射
+                upEpisodesView()
+            }
+            else -> {
+                VideoPlay.rssEpisodeIndex = position
+                upRssEpisodesView()
+            }
+        }
+        // 获取新 Fragment
+        val fragment = getVideoFragment(position)
+        currentFragment = fragment
+        // 激活播放（playerView 可能未就绪，由 onFragmentViewReady 兜底）
+        if (fragment?.playerView != null) {
+            fragment.activatePlayer()
+        }
+        // 更新标题（适配文章模式/集数模式/书源单页模式）
+        composeTitle = when {
+            !VideoPlay.rssArticles.isNullOrEmpty() ->
+                VideoPlay.rssArticles?.getOrNull(position)?.title ?: ""
+            VideoPlay.book != null ->
+                VideoPlay.displayEpisodeTitle(VideoPlay.episodes?.getOrNull(VideoPlay.chapterInVolumeIndex)?.title)
+            !VideoPlay.rssEpisodes.isNullOrEmpty() ->
+                VideoPlay.rssEpisodes?.getOrNull(position)?.title ?: VideoPlay.videoTitle ?: ""
+            else -> VideoPlay.videoTitle ?: ""
+        }
+        // 左下角标题同步：滑动停稳后当前 Fragment 的 tv_video_title 必须与头部标题一致
+        currentFragment?.updateVideoTitle(composeTitle)
+        // 阶段8 F9：滑到最后一个文章时触发分页加载
+        val articles = VideoPlay.rssArticles
+        if (!articles.isNullOrEmpty() && position == articles.size - 1) {
+            VideoPlay.loadMoreArticles()
+        }
     }
 
     /**
@@ -636,6 +677,24 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      */
     private fun getVideoFragment(position: Int): VideoFragment? {
         return supportFragmentManager.findFragmentByTag("f$position") as? VideoFragment
+    }
+
+    /**
+     * video-booksource-align-rss AD-02/AD-05：书源单页模式垂直滑动接线
+     *
+     * VideoFragment 手势层检测到垂直 fling 时回调（书源模式 ViewPager 已禁滑，
+     * 由本方法驱动列表切换）；上滑(velocityY<0)=列表下一影片，下滑=上一影片。
+     * 订阅源文章/集数模式不走此路径（其垂直滑动由 ViewPager2 翻页消费）。
+     */
+    fun onBookVerticalFling(velocityY: Float) {
+        if (!useViewPagerMode) return
+        if (VideoPlay.book == null) return
+        val player = currentFragment?.playerView?.currentPlayer ?: return
+        if (velocityY < 0) {
+            VideoPlay.switchToBookFromList(+1, player)
+        } else {
+            VideoPlay.switchToBookFromList(-1, player)
+        }
     }
 
     /**
@@ -1484,12 +1543,14 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
 
         observeEventSticky<String>(EventBus.VIDEO_SUB_TITLE) {
+            // displayEpisodeTitle：书源无语义集名（"正片"/"全集完结"等）回退影片名，订阅源恒等
+            val title = VideoPlay.displayEpisodeTitle(it)
             if (useViewPagerMode) {
-                composeTitle = it
+                composeTitle = title
                 // R3 阶段2：同步更新当前 Fragment 的视频标题
-                currentFragment?.updateVideoTitle(it)
+                currentFragment?.updateVideoTitle(title)
             } else {
-                composeTitle = it
+                composeTitle = title
             }
             // R3 修复：startPlay 异步赋值 videoUrl，VIDEO_SUB_TITLE 在每次 player.setUp 后触发，此时 videoUrl 已就绪
             // P0-1: 统一 ViewPager2 模式，updateVideoUrlDisplay 已移除
@@ -1512,8 +1573,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 } else if (newCount < oldCount) {
                     videoPagerAdapter?.notifyItemRangeRemoved(newCount, oldCount - newCount)
                 }
-                composeTitle = VideoPlay.rssEpisodes?.getOrNull(VideoPlay.rssEpisodeIndex)?.title
-                    ?: VideoPlay.videoTitle ?: ""
+                composeTitle = VideoPlay.displayEpisodeTitle(
+                    VideoPlay.rssEpisodes?.getOrNull(VideoPlay.rssEpisodeIndex)?.title
+                )
                 // 集数模式下也更新选择器（集数列表可能变化）
                 currentFragment?.updateEpisodeSelector()
                 return@observeEvent
@@ -1553,6 +1615,26 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         observeEvent<Int>(EventBus.ARTICLES_LOADED) { addedCount ->
             val oldCount = videoPagerAdapter?.itemCount ?: 0
             videoPagerAdapter?.notifyItemRangeInserted(oldCount, addedCount)
+        }
+
+        // video-booksource-align-rss AD-02：书源列表切换影片完成——episodes 已整体切换（initSource 重建）
+        // 显式激活链：setCurrentItem(0) 当 currentItem 已在 0 时不会触发 onPageSelected，
+        // 必须显式 deactivate（复位 isActivated）→ activate（重新起播），不依赖页面回调
+        observeEvent<Int>(EventBus.VIDEO_BOOK_UNIT_SWITCHED) {
+            currentFragment?.deactivatePlayer()
+            videoPagerAdapter?.notifyDataSetChanged()
+            binding.viewPager.setCurrentItem(0, false)
+            currentFragment = getVideoFragment(0)
+            val fragment = currentFragment
+            if (fragment?.playerView != null) {
+                fragment.activatePlayer()
+            }
+            // 标题单一权威：经 displayEpisodeTitle 归一（无语义集名回退影片名）
+            composeTitle = VideoPlay.displayEpisodeTitle(
+                VideoPlay.episodes?.getOrNull(VideoPlay.chapterInVolumeIndex)?.title
+            )
+            currentFragment?.updateVideoTitle(composeTitle)
+            upView()
         }
 
         observeEvent<String>(EventBus.VIDEO_PLAY_ERROR) {
@@ -1759,6 +1841,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // rss-unified-search: 清理换源 Holder，避免内存泄漏与跨文章串数据
         RssSearchSourceHolder.clear()
+        // video-playlist-continuity 铁律3：清理播放列表 Holder（防残留列表导致后续单影片错误续播）
+        VideoPlaylistHolder.clear()
+        VideoPlaybackQueue.clear()
     }
 
     private fun destroyWeb() {
