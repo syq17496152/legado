@@ -115,6 +115,7 @@ import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.config.theme.compose.ThemeEditorDialogFragment
 import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
 import io.legado.app.utils.ColorUtils
@@ -420,7 +421,12 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         }
     }
 
+    /** AD-05：新编辑器默认入口开关（false 回退旧 View 弹窗，兼容期满后删除旧路径） */
     private fun showManualAddDialog() {
+        if (USE_COMPOSE_EDITOR) {
+            showComposeEditor(null, isNightTheme)
+            return
+        }
         val dialogBinding = createEditBinding(currentConfig(), null)
         editDialogBinding = dialogBinding
         editingEntry = null
@@ -454,6 +460,13 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     entry
                 }
             }.onSuccess { localEntry ->
+                if (USE_COMPOSE_EDITOR) {
+                    showComposeEditor(
+                        kotlin.runCatching { ThemePackageManager.getConfig(localEntry) }.getOrNull(),
+                        localEntry.packageInfo.isNightTheme
+                    )
+                    return@onSuccess
+                }
                 val dialogBinding = createEditBinding(ThemePackageManager.getConfig(localEntry), localEntry)
                 editDialogBinding = dialogBinding
                 editingEntry = localEntry
@@ -477,6 +490,13 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                 toastOnUi(getString(R.string.theme_package_read_failed, it.localizedMessage))
             }
         }
+    }
+
+    /** AD-05 Compose 编辑器入口（新建 config=null / 编辑传入现有 config） */
+    private fun showComposeEditor(config: ThemeConfig.Config?, initialNight: Boolean) {
+        val dialog = ThemeEditorDialogFragment.create(config, initialNight)
+        dialog.setOnDismissListener { loadThemes() }
+        showDialogFragment(dialog)
     }
 
     private fun createEditBinding(
@@ -1833,6 +1853,11 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             append(" \u00B7 ")
             val time = maxOf(pkg.updatedAt, entry.remoteUpdatedAt)
             append(if (time > 0) dateFormat.format(Date(time)) else getString(R.string.theme_time_unknown))
+            // AD-06 作者元数据副文本（缺省不追加，保持原渲染）
+            pkg.author?.trim()?.takeIf { it.isNotBlank() }?.let {
+                append(" \u00B7 ")
+                append(getString(R.string.theme_author, it))
+            }
         }
     }
 
@@ -1843,7 +1868,11 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         val primaryColor = config?.primaryColor.toPreviewColor(entry.packageInfo.isNightTheme)
         val accentColor = config?.accentColor.toPreviewColor(entry.packageInfo.isNightTheme)
         val bottomBackground = config?.bottomBackground.toPreviewColor(entry.packageInfo.isNightTheme)
-        val backgroundPath = config?.backgroundImgPath?.takeIf { it.isNotBlank() }
+        // AD-06 预览图优先：previewPath 文件存在时替换 backgroundImgPath 渲染列表卡片
+        val previewPath = config?.previewPath?.takeIf { it.isNotBlank() }
+            ?.let(::File)?.takeIf { it.exists() }?.absolutePath
+        val backgroundPath = previewPath
+            ?: config?.backgroundImgPath?.takeIf { it.isNotBlank() }
         val previewSignature = backgroundPath
             ?.takeIf { !it.startsWith("http", ignoreCase = true) }
             ?.let { path ->
@@ -2102,6 +2131,9 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     companion object {
         private val themeRemoteSyncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+        /** AD-05 Compose 主题编辑器默认入口开关：true=新编辑器，false=旧 View 弹窗（兼容期可回退） */
+        private const val USE_COMPOSE_EDITOR = true
         private const val EDIT_DIALOG_WIDTH_RATIO = 0.94f
         private const val EDIT_DIALOG_HEIGHT_RATIO = 0.68f
         private const val EDIT_DIALOG_HEIGHT_RATIO_COMPACT = 0.74f

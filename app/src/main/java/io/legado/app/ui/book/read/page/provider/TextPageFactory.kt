@@ -117,9 +117,9 @@ class TextPageFactory(dataSource: DataSource) : PageFactory<TextPage>(dataSource
 
     override val curPage: TextPage
         get() = if (useDoublePageSpread) {
-            spreadPageAt(0) ?: messageOrEmptyPage()
+            spreadPageAt(0, removeAloudSpan = false) ?: messageOrEmptyPage()
         } else {
-            pageAtOffset(0) ?: messageOrEmptyPage()
+            pageAtOffset(0, removeAloudSpan = false) ?: messageOrEmptyPage()
         }
 
     override val nextPage: TextPage
@@ -198,7 +198,8 @@ class TextPageFactory(dataSource: DataSource) : PageFactory<TextPage>(dataSource
 
     private fun spreadPageAt(
         spreadOffset: Int,
-        pairOffset: Int = 0
+        pairOffset: Int = 0,
+        removeAloudSpan: Boolean = true
     ): TextPage? = with(dataSource) {
         ReadBook.msg?.let {
             return@with if (spreadOffset == 0 && pairOffset == 0) TextPage(text = it).format() else null
@@ -206,7 +207,7 @@ class TextPageFactory(dataSource: DataSource) : PageFactory<TextPage>(dataSource
         val position = spreadPositionAt(spreadOffset) ?: return@with null
         val targetIndex = position.index + pairOffset
         if (targetIndex !in 0 until position.chapter.pageSize) return@with null
-        return@with position.chapter.pageOrPlaceholder(targetIndex)
+        return@with position.chapter.pageOrPlaceholder(targetIndex, removeAloudSpan)
     }
 
     private fun spreadPositionAt(spreadOffset: Int): SpreadPosition? = with(dataSource) {
@@ -229,18 +230,18 @@ class TextPageFactory(dataSource: DataSource) : PageFactory<TextPage>(dataSource
         }
     }
 
-    private fun pageAtOffset(offset: Int): TextPage? = with(dataSource) {
+    private fun pageAtOffset(offset: Int, removeAloudSpan: Boolean = true): TextPage? = with(dataSource) {
         ReadBook.msg?.let {
             return@with TextPage(text = it).format()
         }
         val chapter = currentChapter ?: return@with null
         val targetIndex = pageIndex + offset
         return@with when {
-            targetIndex in 0 until chapter.pageSize -> chapter.pageOrPlaceholder(targetIndex)
+            targetIndex in 0 until chapter.pageSize -> chapter.pageOrPlaceholder(targetIndex, removeAloudSpan)
             targetIndex >= chapter.pageSize -> nextChapter?.let { next ->
                 val nextIndex = targetIndex - chapter.pageSize
                 if (nextIndex in 0 until next.pageSize) {
-                    next.pageOrPlaceholder(nextIndex)
+                    next.pageOrPlaceholder(nextIndex, true)
                 } else {
                     null
                 }
@@ -248,7 +249,7 @@ class TextPageFactory(dataSource: DataSource) : PageFactory<TextPage>(dataSource
             else -> prevChapter?.let { prev ->
                 val prevIndex = prev.pageSize + targetIndex
                 if (prevIndex in 0 until prev.pageSize) {
-                    prev.pageOrPlaceholder(prevIndex)
+                    prev.pageOrPlaceholder(prevIndex, true)
                 } else {
                     null
                 }
@@ -256,11 +257,10 @@ class TextPageFactory(dataSource: DataSource) : PageFactory<TextPage>(dataSource
         }
     }
 
-    // C1 投影化（H4）：removePageAloudSpan 清理点整体删除，页级高亮由绘制期 isReadAloud 现算
-    private fun TextChapter.pageOrPlaceholder(index: Int): TextPage {
+    private fun TextChapter.pageOrPlaceholder(index: Int, removeAloudSpan: Boolean): TextPage {
         val page = getPage(index)
         if (page != null) {
-            return page
+            return if (removeAloudSpan) page.removePageAloudSpan() else page
         }
         return TextPage(title = title).apply { textChapter = this@pageOrPlaceholder }.format()
     }
@@ -304,7 +304,7 @@ class TextPageFactory(dataSource: DataSource) : PageFactory<TextPage>(dataSource
             }
         }
         nextChapter?.let {
-            return@with it.getPage(0)
+            return@with it.getPage(0)?.removePageAloudSpan()
                 ?: TextPage(title = it.title).format()
         }
         TextPage().format()
@@ -320,7 +320,7 @@ class TextPageFactory(dataSource: DataSource) : PageFactory<TextPage>(dataSource
             }
         }
         prevChapter?.let {
-            return@with it.getPage(spreadStartIndex(it.lastIndex))
+            return@with it.getPage(spreadStartIndex(it.lastIndex))?.removePageAloudSpan()
                 ?: TextPage(title = it.title).format()
         }
         TextPage().format()

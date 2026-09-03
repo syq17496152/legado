@@ -68,6 +68,7 @@ import io.legado.app.help.CoverThumbnailCache
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.TopBarConfig
 import io.legado.app.help.glide.ImageLoader
+import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.help.glide.OkHttpModelLoader
 import io.legado.app.help.source.clearExploreKindsCache
 import io.legado.app.help.source.exploreKinds
@@ -3687,6 +3688,26 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             }
             val isVideo = withContext(IO) {
                 SearchBookOpenHelper.isVideoResult(book, sourceTypeHint)
+            }
+            if (isVideo) {
+                // video-playlist-continuity：发现列表整表注入（跨影片续播）
+                // 列表来源兜底链：modern 发现列表 → 套件 widget 横排 → 套件 widget 榜单
+                // （suite 模式影片来自 widgetBooks，composeDiscoverBooks 恒空导致此前漏注入）
+                val holderList: List<SearchBook>? = if (composeDiscoverBooks.any { it.bookUrl == book.bookUrl }) {
+                    composeDiscoverBooks.toList()
+                } else {
+                    composeSuiteWidgetBooks.values.firstOrNull { list ->
+                        list.any { it.bookUrl == book.bookUrl }
+                    } ?: composeSuiteRankedWidgetBooks.values.flatMap { it.values }.firstOrNull { list ->
+                        list.any { it.bookUrl == book.bookUrl }
+                    }
+                }
+                if (holderList != null) {
+                    val idx = holderList.indexOfFirst { it.bookUrl == book.bookUrl }
+                    if (idx >= 0) {
+                        VideoPlaylistHolder.set(holderList, idx)
+                    }
+                }
             }
             // 两次 IO 挂起后 Fragment 可能已 detach，用可空 context 兜底避免 requireContext() 崩溃。
             val ctx = context ?: return@launch

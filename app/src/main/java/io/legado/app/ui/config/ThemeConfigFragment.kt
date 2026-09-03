@@ -5,12 +5,16 @@ import android.os.Bundle
 import android.view.View
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import io.legado.app.R
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.LauncherIconHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
+import io.legado.app.help.config.ThemePackageManager
 import io.legado.app.ui.config.compose.ComposeSettingFragment
 import io.legado.app.ui.config.compose.SettingActionSpec
 import io.legado.app.ui.config.compose.SettingChoiceOption
@@ -19,6 +23,7 @@ import io.legado.app.ui.config.compose.SettingPageSpec
 import io.legado.app.ui.config.compose.SettingSectionSpec
 import io.legado.app.ui.config.compose.SettingSwitchSpec
 import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.startActivity
 
@@ -62,6 +67,16 @@ class ThemeConfigFragment : ComposeSettingFragment() {
                             checked = booleanSetting(PreferKey.mainTransparentStatusBar, false),
                             onCheckedChange = {
                                 updateBooleanSetting(PreferKey.mainTransparentStatusBar, it)
+                            }
+                        ),
+                        SettingSwitchSpec(
+                            key = PreferKey.followDynamicColor,
+                            title = "跟随系统动态色",
+                            summary = "使用系统壁纸配色作为主题色来源（Android 12+，应用后生效）",
+                            checked = booleanSetting(PreferKey.followDynamicColor, false),
+                            visible = Build.VERSION.SDK_INT >= 31,
+                            onCheckedChange = {
+                                updateBooleanSetting(PreferKey.followDynamicColor, it)
                             }
                         ),
                         SettingSwitchSpec(
@@ -141,6 +156,18 @@ class ThemeConfigFragment : ComposeSettingFragment() {
             PreferKey.launcherIcon -> LauncherIconHelp.changeIcon(
                 stringSetting(PreferKey.launcherIcon, DEFAULT_LAUNCHER_ICON)
             )
+
+            // AD-07 动态色开关：重应用当前激活主题（双 mode），使系统配色替换生效
+            PreferKey.followDynamicColor -> {
+                lifecycleScope.launch {
+                    runCatching {
+                        ThemePackageManager.reapplyCurrentTheme(requireContext())
+                    }.onFailure { e ->
+                        e.printOnDebug()
+                        AppLog.put("reapply for dynamic color failed: ${e.message}")
+                    }
+                }
+            }
 
             PreferKey.mainTransparentStatusBar,
             PreferKey.transparentStatusBar,

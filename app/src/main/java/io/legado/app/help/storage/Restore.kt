@@ -260,15 +260,15 @@ object Restore {
             map.forEach { (key, value) ->
                 if (BackupConfig.keyIsNotIgnore(key)) {
                     when (key) {
-                        in BackupAES.sensitivePrefKeys -> {
+                        PreferKey.webDavPassword -> {
                             kotlin.runCatching {
                                 aes.decryptStr(value.toString())
                             }.getOrNull()?.let {
                                 edit.putString(key, it)
                             } ?: let {
-                                // 解密失败回退明文读取（兼容手工编辑的备份文件）；
-                                // 当前已有值则不覆盖，防止坏备份清空现有敏感配置
-                                if (appCtx.getPrefString(key).isNullOrBlank()) {
+                                if (appCtx.getPrefString(PreferKey.webDavPassword)
+                                        .isNullOrBlank()
+                                ) {
                                     edit.putString(key, value.toString())
                                 }
                             }

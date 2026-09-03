@@ -198,7 +198,7 @@ private fun ConfigTopBar(
     // 简化说明: 壁纸全幅显示（crop 裁切对齐归 H13 Glass 统一组件，此处按 MainTopBarView 视觉近似）
     val wallpaper = remember(wallpaperFile) { wallpaperFile?.let(::decodeTopBarBitmap) }
     val bgColor = remember(config) {
-        Color(TopBarConfig.withOpacity(TopBarConfig.resolveBackgroundColor(config), config.wallpaperAlpha))
+        Color(TopBarConfig.resolveDisplayBackgroundColor(config))
     }
     val radius = TopBarConfig.cornerRadius(context, config)
     var menuExpanded by remember { mutableStateOf(false) }

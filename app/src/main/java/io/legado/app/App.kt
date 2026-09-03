@@ -140,6 +140,12 @@ class App : Application() {
                 }
             }
         }
+        // AD-04 内置主题色板重放：色板更新后对未自定义内置主题的用户重放（applyDayNightInit 前，冷启动免广播）
+        val paletteVersion = getPrefInt(PreferKey.builtinThemePaletteVersion)
+        if (paletteVersion < ThemePackageManager.BUILTIN_THEME_PALETTE_VERSION) {
+            ThemePackageManager.replayBuiltinPaletteIfUnmodified()
+            putPrefInt(PreferKey.builtinThemePaletteVersion, ThemePackageManager.BUILTIN_THEME_PALETTE_VERSION)
+        }
         applyDayNightInit(this)
         registerActivityLifecycleCallbacks(LifecycleHelp)
         defaultSharedPreferences.registerOnSharedPreferenceChangeListener(AppConfig)

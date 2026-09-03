@@ -1,5 +1,6 @@
 package io.legado.app.ui.theme
 
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
@@ -9,6 +10,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import android.content.Context
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.ui.widget.components.ThemeSpec
@@ -70,6 +72,32 @@ val Typography.subtitleLargeX: TextStyle get() = TextStyle(fontSize = 19.sp)
 val Typography.headlineSmallX: TextStyle get() = TextStyle(fontSize = 21.sp)
 val Typography.titleLargeX: TextStyle get() = TextStyle(fontSize = 22.sp)
 
+/**
+ * 构建 M3 ColorScheme（AD-03：双入口唯一实现）。
+ *
+ * LegadoTheme 与 LegadoComposeTheme 统一委托本函数 → ThemeSpec.toM3Scheme()（34 槽位），
+ * 消除双入口映射语义漂移。E-Ink 无需特判：applyTheme 已强制 ThemeStore 5 色源为黑白，
+ * toM3Scheme 全槽派生自动灰阶。
+ */
+fun buildLegadoColorScheme(context: Context): ColorScheme {
+    val isNightTheme = AppConfig.isNightTheme
+    val primaryColorValue = ThemeStore.primaryColor(context)
+    val accentColor = ThemeStore.accentColor(context)
+    val bgColor = ThemeStore.backgroundColor(context)
+    val textPrimaryColor = ThemeStore.textColorPrimary(context)
+    val textSecondaryColor = ThemeStore.textColorSecondary(context)
+    val isLight = !isNightTheme && ColorUtils.isColorLight(bgColor)
+    return ThemeSpec(
+        primary = Color(accentColor),
+        secondary = Color(primaryColorValue),
+        accent = Color(accentColor),
+        background = Color(bgColor),
+        textPrimary = Color(textPrimaryColor),
+        textSecondary = Color(textSecondaryColor),
+        isLight = isLight
+    ).toM3Scheme()
+}
+
 @Composable
 fun LegadoTheme(
     content: @Composable () -> Unit
@@ -92,15 +120,7 @@ fun LegadoTheme(
         themeVersion, isNightTheme, primaryColorValue, accentColor, bgColor,
         textPrimaryColor, textSecondaryColor
     ) {
-        ThemeSpec(
-            primary = Color(accentColor),
-            secondary = Color(primaryColorValue),
-            accent = Color(accentColor),
-            background = Color(bgColor),
-            textPrimary = Color(textPrimaryColor),
-            textSecondary = Color(textSecondaryColor),
-            isLight = isLight
-        ).toM3Scheme()
+        buildLegadoColorScheme(context)
     }
 
     MaterialTheme(

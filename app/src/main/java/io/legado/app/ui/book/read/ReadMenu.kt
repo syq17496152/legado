@@ -4,8 +4,6 @@ import android.content.Context
 import android.database.ContentObserver
 import android.graphics.RectF
 import android.net.Uri
-import android.os.Handler
-import android.os.Looper
 import android.provider.Settings
 import android.util.AttributeSet
 import android.view.ViewGroup
@@ -175,17 +173,10 @@ class ReadMenu @JvmOverloads constructor(
         if (!LocalConfig.readMenuHelpVersionIsLast) {
             callBack.showHelp()
         }
-        scheduleAutoHide()
     }
 
     fun runMenuOut(anim: Boolean = !AppConfig.isEInkMode, onMenuOutEnd: (() -> Unit)? = null) {
-        cancelAutoHide()
-        if (isMenuOutAnimating) {
-            // 自动隐藏触发的收起动画进行中，用户的按钮点击（带回调）不能丢弃：
-            // 改挂到本次收起结束时执行（S5-1 竞态修复：否则菜单按钮动作偶发静默丢失）
-            if (onMenuOutEnd != null) this.onMenuOutEnd = onMenuOutEnd
-            return
-        }
+        if (isMenuOutAnimating) return
         isMenuOutAnimating = true
         callBack.onMenuHide()
         this.onMenuOutEnd = onMenuOutEnd
@@ -292,19 +283,6 @@ class ReadMenu @JvmOverloads constructor(
     private var onMenuOutEnd: (() -> Unit)? = null
     private var contentObserver: ContentObserver? = null
 
-    // 菜单自动隐藏（S5-1：显示 3s 后静止自动收起，与 VideoFragment F2 同模式）
-    private val autoHideHandler = Handler(Looper.getMainLooper())
-    private val autoHideRunnable = Runnable { runMenuOut() }
-
-    private fun scheduleAutoHide(delayMs: Long = 3000L) {
-        autoHideHandler.removeCallbacks(autoHideRunnable)
-        autoHideHandler.postDelayed(autoHideRunnable, delayMs)
-    }
-
-    private fun cancelAutoHide() {
-        autoHideHandler.removeCallbacks(autoHideRunnable)
-    }
-
     private val immersiveMenu: Boolean
         get() = AppConfig.readBarStyleFollowPage && ReadBookConfig.durConfig.curBgType() == 0
 
@@ -345,7 +323,6 @@ class ReadMenu @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        cancelAutoHide()
         contentObserver?.let {
             context.contentResolver.unregisterContentObserver(it)
             contentObserver = null

@@ -669,10 +669,7 @@ class MainTopBarView @JvmOverloads constructor(
                 animated = ImageTypeUtils.isAnimatedImage(file),
                 alpha = alpha,
                 crop = topBarWallpaperCrop(config),
-                fallbackColor = TopBarConfig.withOpacity(
-                    TopBarConfig.resolveBackgroundColor(config),
-                    config.wallpaperAlpha
-                )
+                fallbackColor = TopBarConfig.resolveDisplayBackgroundColor(config)
             )
         }
         backgroundLayer.setContent {

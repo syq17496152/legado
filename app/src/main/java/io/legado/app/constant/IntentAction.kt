@@ -23,9 +23,6 @@ object IntentAction {
     const val selectChapter = "selectChapter"
     const val moveTo = "moveTo"
     const val playFromPosition = "playFromPosition"
-    // C1 朗读原语化：seek 两套（段号 / 章节绝对字符位）
-    const val seekReadAloudProgress = "seekReadAloudProgress"
-    const val seekReadAloudTextPosition = "seekReadAloudTextPosition"
     const val init = "init"
     const val remove = "remove"
     const val stopPlay = "stopPlay"

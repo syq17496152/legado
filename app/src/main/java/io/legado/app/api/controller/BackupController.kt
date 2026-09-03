@@ -2,6 +2,7 @@ package io.legado.app.api.controller
 
 import fi.iki.elonen.NanoHTTPD
 import io.legado.app.api.ReturnData
+import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.book.BookHelp
@@ -10,7 +11,6 @@ import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.storage.Backup
 import io.legado.app.help.storage.BackupAES
-import io.legado.app.help.storage.BackupConfig
 import io.legado.app.help.storage.BookCacheSelectorConfig
 import io.legado.app.model.BookCover
 import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
@@ -234,22 +234,18 @@ object BackupController {
             appCtx.getSharedPreferences(webBackupPath, "config")?.let { sp ->
                 val edit = sp.edit()
                 appCtx.defaultSharedPreferences.all.forEach { (key, value) ->
-                    // P1-A1-1/2 一致性补齐：Web 备份端点与本地路径共用 keyIsNotIgnore 过滤，
-                    // 消除"Web 备份比本地备份多导出内部键"的缺口
-                    if (BackupConfig.keyIsNotIgnore(key)) {
-                        when (key) {
-                            in BackupAES.sensitivePrefKeys -> {
-                                edit.putString(key, aes.runCatching {
-                                    encryptBase64(value.toString())
-                                }.getOrDefault(value.toString()))
-                            }
-                            else -> when (value) {
-                                is Int -> edit.putInt(key, value)
-                                is Boolean -> edit.putBoolean(key, value)
-                                is Long -> edit.putLong(key, value)
-                                is Float -> edit.putFloat(key, value)
-                                is String -> edit.putString(key, value)
-                            }
+                    when (key) {
+                        PreferKey.webDavPassword -> {
+                            edit.putString(key, aes.runCatching {
+                                encryptBase64(value.toString())
+                            }.getOrDefault(value.toString()))
+                        }
+                        else -> when (value) {
+                            is Int -> edit.putInt(key, value)
+                            is Boolean -> edit.putBoolean(key, value)
+                            is Long -> edit.putLong(key, value)
+                            is Float -> edit.putFloat(key, value)
+                            is String -> edit.putString(key, value)
                         }
                     }
                 }

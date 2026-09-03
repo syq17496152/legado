@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Base64
 import androidx.annotation.Keep
+import androidx.core.graphics.toColorInt
 import androidx.documentfile.provider.DocumentFile
 import io.legado.app.R
 import io.legado.app.constant.AppLog
@@ -17,9 +18,11 @@ import io.legado.app.utils.externalFiles
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getFile
+import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.isSameOrSubFileOf
 import io.legado.app.utils.normalizeFileName
+import io.legado.app.utils.putPrefInt
 import io.legado.app.utils.putPrefString
 import io.legado.app.utils.readBytesLimited
 import io.legado.app.help.http.newCallResponse
@@ -62,6 +65,9 @@ object ThemePackageManager {
     private const val panelBackgroundPrefix = "panel_background"
     private const val uiFontPrefix = "ui_font"
     private const val titleFontPrefix = "title_font"
+
+    /** AD-06 预览图包内资产前缀（导出文件化：包内固定命名 preview.png） */
+    private const val previewPrefix = "preview"
     private const val redReaderSchemaDirName = "reader_schema"
     private const val builtinDayDirName = "builtin_day"
     private const val builtinNightDirName = "builtin_night"
@@ -292,6 +298,13 @@ object ThemePackageManager {
         reapplyRestoredAppliedTheme(context, currentNight)
     }
 
+    /** AD-07：动态色开关等色源策略变化后，重应用当前激活主题（双 mode 重放保持一致） */
+    suspend fun reapplyCurrentTheme(context: Context) = withContext(IO) {
+        val currentNight = AppConfig.isNightTheme
+        reapplyRestoredAppliedTheme(context, !currentNight)
+        reapplyRestoredAppliedTheme(context, currentNight)
+    }
+
     suspend fun restoreAppliedThemes(context: Context) = withContext(IO) {
         restoreAppliedTheme(context, false)
         restoreAppliedTheme(context, true)
@@ -414,15 +427,56 @@ object ThemePackageManager {
         ThemeConfig.applyConfig(context, config, switchNightMode = false, notify = false)
     }
 
+    /** 内置色板版本：≥100 为本项目扩展语义预留；此常量随内置色板更新递增（AD-04） */
+    const val BUILTIN_THEME_PALETTE_VERSION = 2
+
+    /**
+     * AD-04 内置主题色板重放：色板更新后，仅对「主题名仍为内置名且背景色仍为旧内置值」
+     * （即用户未自定义）的 mode 重放新色板；冷启动调用（applyDayNightInit 前，天然无需广播刷新）。
+     */
+    fun replayBuiltinPaletteIfUnmodified() {
+        runCatching {
+            val ctx = appCtx
+            val newNight = builtinEntry(true).packageInfo.config ?: return@runCatching
+            val newDay = builtinEntry(false).packageInfo.config ?: return@runCatching
+            // 夜间：主题名未变 + 背景色仍为旧内置值（用户未自定义）
+            if (ctx.getPrefString(PreferKey.dNThemeName) == builtinNightName
+                && ctx.getPrefInt(PreferKey.cNBackground) == "#212121".toColorInt()
+            ) {
+                ctx.putPrefInt(PreferKey.cNPrimary, newNight.primaryColor.toColorInt())
+                ctx.putPrefInt(PreferKey.cNAccent, newNight.accentColor.toColorInt())
+                ctx.putPrefInt(PreferKey.cNBackground, newNight.backgroundColor.toColorInt())
+                ctx.putPrefInt(PreferKey.cNBBackground, newNight.bottomBackground.toColorInt())
+            }
+            // 日间：同判据
+            if (ctx.getPrefString(PreferKey.dThemeName) == builtinDayName
+                && ctx.getPrefInt(PreferKey.cBackground) == "#F5F5F5".toColorInt()
+            ) {
+                ctx.putPrefInt(PreferKey.cPrimary, newDay.primaryColor.toColorInt())
+                ctx.putPrefInt(PreferKey.cAccent, newDay.accentColor.toColorInt())
+                ctx.putPrefInt(PreferKey.cBackground, newDay.backgroundColor.toColorInt())
+                ctx.putPrefInt(PreferKey.cBBackground, newDay.bottomBackground.toColorInt())
+            }
+        }.onFailure {
+            AppLog.put("replayBuiltinPalette failed: ${it.message}")
+        }
+    }
+
     private fun builtinEntry(isNightTheme: Boolean): Entry {
         val name = builtinName(isNightTheme)
+        // AD-04 默认色板现代化（M3 调性，替换 md 原色遗留；可读性自检见 design.md 验证矩阵）
         val config = ThemeConfig.Config(
             themeName = name,
             isNightTheme = isNightTheme,
-            primaryColor = if (isNightTheme) "#455A64" else "#795548",
-            accentColor = if (isNightTheme) "#FF8A65" else "#E53935",
-            backgroundColor = if (isNightTheme) "#212121" else "#F5F5F5",
-            bottomBackground = if (isNightTheme) "#303030" else "#EEEEEE",
+            primaryColor = if (isNightTheme) "#FF7FA3C9" else "#FF3E6B8C",
+            accentColor = if (isNightTheme) "#FF93B6E8" else "#FF4A7BC4",
+            backgroundColor = if (isNightTheme) "#FF16181C" else "#FFF6F7F9",
+            bottomBackground = if (isNightTheme) "#FF1D2026" else "#FFEFF1F5",
+            cardColor = if (isNightTheme) "#FF212836" else "#FFFFFFFF",
+            mutedColor = if (isNightTheme) "#FF12161D" else "#FFE9EDF3",
+            searchFieldBackgroundColor = if (isNightTheme) "#FF12161D" else "#FFE9EDF3",
+            tabBackgroundColor = if (isNightTheme) "#FF12161D" else "#FFE9EDF3",
+            shelfColor = if (isNightTheme) "#FF16181C" else "#FFF6F7F9",
             transparentNavBar = true,
             backgroundImgPath = null,
             backgroundImgBlur = 0,
@@ -455,7 +509,11 @@ object ThemePackageManager {
             dirName = dirName,
             isNightTheme = config.isNightTheme,
             updatedAt = System.currentTimeMillis(),
-            config = packagedConfig
+            config = packagedConfig,
+            // AD-06 元数据双写：Package 与 Config 同步携带（非 Red 导入路径为 null，行为不变）
+            author = packagedConfig.author,
+            previewPath = packagedConfig.previewPath,
+            minAppVersion = packagedConfig.minAppVersion
         )
         File(dir, packageFileName).writeText(GSON.toJson(pkg))
         ThemeConfig.addConfig(resolveConfigPaths(pkg, dir))
@@ -647,17 +705,27 @@ object ThemePackageManager {
 
     private suspend fun importRedGzip(file: File): List<Entry> {
         val redPackage = readRedThemePackage(file)
-        if (redPackage.type != "theme" || redPackage.data.isEmpty()) {
+        // AD-06：type 放宽为前缀匹配，未知 type 降级警告并尝试解析（data 为空仍抛错）
+        if (!redPackage.type.startsWith("theme")) {
+            AppLog.put("red theme package type unexpected: ${redPackage.type}, try parse anyway")
+        }
+        if (redPackage.data.isEmpty()) {
             throw IllegalArgumentException(appCtx.getString(R.string.theme_red_invalid))
         }
         val configs = redPackage.data.flatMap { item ->
             listOfNotNull(
                 item.light
                     ?.takeIf { it.hasMeaningfulThemeContent(item.lightBackgroundImage) }
-                    ?.toThemeConfig(item.name, false, item.lightBackgroundImage),
+                    ?.toThemeConfig(
+                        item.name, false, item.lightBackgroundImage,
+                        author = item.author, minAppVersion = item.minAppVersion
+                    ),
                 item.dark
                     ?.takeIf { it.hasMeaningfulThemeContent(item.darkBackgroundImage) }
-                    ?.toThemeConfig(item.name, true, item.darkBackgroundImage)
+                    ?.toThemeConfig(
+                        item.name, true, item.darkBackgroundImage,
+                        author = item.author, minAppVersion = item.minAppVersion
+                    )
             )
         }
         if (configs.isEmpty()) {
@@ -970,8 +1038,11 @@ object ThemePackageManager {
                     RedPackageFormat.RAW_GZIP_JSON -> Unit
                     else -> throw IllegalArgumentException(appCtx.getString(R.string.theme_red_invalid))
                 }
-                GZIPInputStream(input).bufferedReader(Charsets.UTF_8).use { reader ->
-                    GSON.fromJsonObject<RedThemePackage>(reader.readText()).getOrThrow()
+                // AD-06：.red 包内 JSON 条目加同源字节上限（对齐 Package manifest 的 maxPackageManifestBytes）
+                GZIPInputStream(input).use { gzip ->
+                    GSON.fromJsonObject<RedThemePackage>(
+                        String(gzip.readBytesLimited(maxPackageManifestBytes), Charsets.UTF_8)
+                    ).getOrThrow()
                 }
             }
         }.getOrElse {
@@ -982,7 +1053,9 @@ object ThemePackageManager {
     private fun RedThemeColors.toThemeConfig(
         name: String,
         isNightTheme: Boolean,
-        inlineBackground: String? = null
+        inlineBackground: String? = null,
+        author: String? = null,
+        minAppVersion: String? = null
     ): ThemeConfig.Config {
         val backgroundPath = inlineBackground?.let {
             writeInlineRedImage(
@@ -1025,7 +1098,9 @@ object ThemePackageManager {
             uiCornerReplyFollow = true,
             fontScale = null,
             uiFontPath = null,
-            titleFontPath = null
+            titleFontPath = null,
+            author = author,
+            minAppVersion = minAppVersion
         )
     }
 
@@ -1217,12 +1292,15 @@ object ThemePackageManager {
         )
         val uiFont = copyAsset(config.uiFontPath, dir, uiFontPrefix, keepOriginalName = true)
         val titleFont = copyAsset(config.titleFontPath, dir, titleFontPrefix, keepOriginalName = true)
+        // AD-06 预览图文件化：复制为包内 preview.<ext> 并改写 previewPath 为相对路径
+        val preview = copyAsset(config.previewPath, dir, previewPrefix)
         return config.copy(
             backgroundImgPath = background,
             bookInfoBackgroundImgPath = bookInfo,
             panelBackgroundImgPath = panelBackground,
             uiFontPath = uiFont,
-            titleFontPath = titleFont
+            titleFontPath = titleFont,
+            previewPath = preview
         )
     }
 
@@ -1395,10 +1473,10 @@ object ThemePackageManager {
         val config = pkg.config ?: ThemeConfig.Config(
             themeName = pkg.name,
             isNightTheme = pkg.isNightTheme,
-            primaryColor = "#795548",
-            accentColor = "#E53935",
-            backgroundColor = if (pkg.isNightTheme) "#212121" else "#F5F5F5",
-            bottomBackground = if (pkg.isNightTheme) "#303030" else "#EEEEEE",
+            primaryColor = if (pkg.isNightTheme) "#FF7FA3C9" else "#FF3E6B8C",
+            accentColor = if (pkg.isNightTheme) "#FF93B6E8" else "#FF4A7BC4",
+            backgroundColor = if (pkg.isNightTheme) "#FF16181C" else "#FFF6F7F9",
+            bottomBackground = if (pkg.isNightTheme) "#FF1D2026" else "#FFEFF1F5",
             transparentNavBar = true,
             backgroundImgPath = null,
             backgroundImgBlur = 0
@@ -1410,7 +1488,9 @@ object ThemePackageManager {
             bookInfoBackgroundImgPath = resolvePath(config.bookInfoBackgroundImgPath, dir),
             panelBackgroundImgPath = resolvePath(config.panelBackgroundImgPath, dir),
             uiFontPath = resolvePath(config.uiFontPath, dir),
-            titleFontPath = resolvePath(config.titleFontPath, dir)
+            titleFontPath = resolvePath(config.titleFontPath, dir),
+            // AD-06 预览图与 uiFontPath 同源解析（导入包内相对路径 → 本地绝对路径）
+            previewPath = resolvePath(config.previewPath, dir)
         )
     }
 
@@ -1512,7 +1592,11 @@ object ThemePackageManager {
         val dirName: String,
         val isNightTheme: Boolean,
         val updatedAt: Long,
-        val config: ThemeConfig.Config?
+        val config: ThemeConfig.Config?,
+        // AD-06 Red 包元数据双写（可空，旧包缺省 null）
+        val author: String? = null,
+        val previewPath: String? = null,
+        val minAppVersion: String? = null
     )
 
     @Keep
@@ -1540,7 +1624,10 @@ object ThemePackageManager {
         val light: RedThemeColors? = null,
         val dark: RedThemeColors? = null,
         val lightBackgroundImage: String = "",
-        val darkBackgroundImage: String = ""
+        val darkBackgroundImage: String = "",
+        // AD-06 Red v2 扩展元数据（version>=100 生效，旧包缺省 null）
+        val author: String? = null,
+        val minAppVersion: String? = null
     )
 
     @Keep
@@ -1569,7 +1656,9 @@ object ThemePackageManager {
         val switchBorder: Boolean = false,
         val tabBorder: Boolean = false,
         val tabBackgroundColor: String = "",
-        val shelfColor: String = ""
+        val shelfColor: String = "",
+        // AD-06 v2 兼容读 base64 内嵌预览图（新导出一律文件化，弃用内嵌）
+        val previewImage: String = ""
     )
 
     private enum class RedPackageFormat {
