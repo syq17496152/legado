@@ -1,49 +1,42 @@
 package io.legado.app.ui.rss.article
 
-import android.content.res.Configuration
-import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import io.legado.app.R
 import io.legado.app.base.VMBaseFragment
-import io.legado.app.constant.AppLog
-import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssArticle
-import io.legado.app.databinding.FragmentRssArticlesBinding
-import io.legado.app.databinding.ViewLoadMoreBinding
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.VideoPlay
 import io.legado.app.ui.image.ImagePlay
+import io.legado.app.ui.main.rss.RssFragment
+import io.legado.app.ui.rss.article.compose.ListBottomInset
+import io.legado.app.ui.rss.article.compose.RssArticleListBridge
+import io.legado.app.ui.rss.article.compose.RssArticleListState
+import io.legado.app.ui.rss.article.compose.toRssArticleListStyle
 import io.legado.app.ui.rss.read.ReadRss
-import io.legado.app.ui.widget.recycler.LoadMoreView
-import io.legado.app.ui.widget.recycler.VerticalDivider
-import io.legado.app.ui.widget.number.NumberPickerDialog
-import io.legado.app.utils.applyMainBottomBarPadding
-import io.legado.app.utils.applyNavigationBarPadding
-import io.legado.app.utils.dpToPx
-import io.legado.app.utils.setEdgeEffectColor
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.Job
+import io.legado.app.ui.theme.LegadoTheme
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
-class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.fragment_rss_articles),
-    BaseRssArticlesAdapter.CallBack {
+/**
+ * D4 §3.4 兼容层壳（modern 嵌入专用，design-b3-d4-flagship）：
+ * childFragmentManager 契约不变（renderCurrentSort 零改动），壳内 ComposeView 承载
+ * RssArticleListBridge；壳仅保留参数、VM 桥、宿主回调、ReadRss/定位联动。
+ * View 侧五代 Adapter 家族随批 3 删除（§6）。
+ */
+class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.fragment_rss_articles) {
 
     constructor(sortName: String, sortUrl: String, searchKey: String?) : this() {
         arguments = Bundle().apply {
@@ -52,307 +45,132 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
             putString("searchKey", searchKey)
         }
     }
-    private var isResumed = false
 
-    private val binding by viewBinding(FragmentRssArticlesBinding::bind)
     // modern-rss: 嵌入 RssFragment（新版订阅）时取父 Fragment 作用域 RssSortViewModel，其余（RssSortActivity）取 Activity 作用域
     private val activityViewModel by lazy(LazyThreadSafetyMode.NONE) {
         ViewModelProvider(parentFragment ?: requireActivity())[RssSortViewModel::class.java]
     }
     override val viewModel by viewModels<RssArticlesViewModel>()
     private val isPreload by lazy { activityViewModel.rssSource?.preload ?: false }
-    private val orientation by lazy { resources.configuration.orientation }
-    private val adapter: BaseRssArticlesAdapter<*> by lazy {
-        when (activityViewModel.articleStyle) {
-            1 -> RssArticlesAdapter1(requireContext(), this@RssArticlesFragment)
-            2 -> RssArticlesAdapter2(requireContext(), this@RssArticlesFragment)
-            4 -> RssArticlesAdapter4(requireContext(), this@RssArticlesFragment)
-            3 -> RssArticlesAdapter3(requireContext(), this@RssArticlesFragment)
-            else -> RssArticlesAdapter(requireContext(), this@RssArticlesFragment)
-        }
-    }
-    private val loadMoreView: LoadMoreView by lazy {
-        LoadMoreView(requireContext())
-    }
-    private var articlesFlowJob: Job? = null
-    override val isGridLayout: Boolean
-        get() = activityViewModel.articleStyle == 2
-    private var fullRefresh = false
-    // modern-rss: 顶部覆盖顶栏（MainTopBarView）占位
-    private var topOverlaySpace = 0
-    private var topOverlayEnabled = false
     private val embeddedInModernRss: Boolean
-        get() = parentFragment is io.legado.app.ui.main.rss.RssFragment
+        get() = parentFragment is RssFragment
+
+    /** §3.4 兼容层：Compose state holder（组合期就绪；setTopOverlaySpace 先到时经 snapshotState 驱动重组） */
+    internal var listState: RssArticleListState? = null
+        private set
+
+    /** 顶部覆盖顶栏占位（snapshotState 承载：View 侧写入即驱动 Compose 重组，对齐原 view?.post 回放语义） */
+    private val topOverlaySpacePx = mutableStateOf(0)
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         viewModel.init(arguments)
-        initView()
-        initData()
+        viewModel.bindOrigin(activityViewModel.url)
+        setupComposeContent(view)
+        scheduleInitialLoad()
     }
 
-    private fun initView() = binding.run {
-        refreshLayout.setColorSchemeColors(accentColor)
-        recyclerView.setEdgeEffectColor(primaryColor)
-        // modern-rss: 嵌入新版订阅页时预留 MainActivity 主底部栏空间
-        if (embeddedInModernRss) {
-            recyclerView.applyMainBottomBarPadding(withInitialPadding = true)
-        } else {
-            recyclerView.applyNavigationBarPadding()
-        }
-        loadMoreView.setOnClickListener {
-            if (!loadMoreView.isLoading) {
-                scrollToBottom(true)
-            }
-        }
-        val layoutManager = when (activityViewModel.articleStyle) {
-            3 -> {
-                recyclerView.setPadding(20, 0, 20, 0)
-                recyclerView.addItemDecoration(object : RecyclerView.ItemDecoration() {
-                    override fun getItemOffsets(
-                        outRect: Rect,
-                        view: View,
-                        parent: RecyclerView,
-                        state: RecyclerView.State
-                    ) {
-                        outRect.set(20,30,20,30)
-                    }
-                })
-                recyclerView.itemAnimator = null
-                if (orientation == Configuration.ORIENTATION_LANDSCAPE) { //横屏三列
-                    StaggeredGridLayoutManager(3, StaggeredGridLayoutManager.VERTICAL)
-                } else {
-                    StaggeredGridLayoutManager(2, StaggeredGridLayoutManager.VERTICAL)
+    private fun setupComposeContent(view: View) {
+        val composeView = view.findViewById<ComposeView>(R.id.recycler_view) ?: return
+        composeView.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        composeView.setContent {
+            LegadoTheme {
+                val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+                // modern 嵌入：VM 驱动的初始/登录刷新圈不显示（对齐原 isRefreshing = !embeddedInModernRss）；
+                // 手势下拉经 pullRefreshing 展示（对齐 SwipeRefreshLayout 自动刷新语义）。
+                // design §3.4 注意②：嵌入态语义由 isRefreshing 参数控制，组件不感知 parentFragment
+                var pullRefreshing by remember { mutableStateOf(false) }
+                LaunchedEffect(uiState.isRefreshing) {
+                    if (!uiState.isRefreshing) pullRefreshing = false
                 }
-            }
-            2 -> {
-                recyclerView.setPadding(8, 0, 8, 0)
-                GridLayoutManager(requireContext(), 2)
-            }
-            4 -> {
-                recyclerView.setPadding(4, 0, 4, 0)
-                GridLayoutManager(requireContext(), 3)
-            }
-            else -> {
-                recyclerView.addItemDecoration(VerticalDivider(requireContext()))
-                LinearLayoutManager(requireContext())
+                RssArticleListBridge(
+                    viewModel = viewModel,
+                    style = remember { (activityViewModel.articleStyle ?: 0).toRssArticleListStyle() },
+                    isRefreshing = pullRefreshing || (uiState.isRefreshing && !embeddedInModernRss),
+                    bottomInset = if (embeddedInModernRss) {
+                        ListBottomInset.MAIN_BOTTOM_BAR
+                    } else {
+                        ListBottomInset.NAVIGATION_BARS
+                    },
+                    topOverlaySpacePx = topOverlaySpacePx.value,
+                    onHostStateReady = { listState = it },
+                    onHostStateDisposed = { listState = null },
+                    onLoadMore = ::loadMoreArticles,
+                    onRefresh = {
+                        pullRefreshing = true
+                        loadArticles()
+                    },
+                    onArticleClick = ::readArticle,
+                )
             }
         }
-        recyclerView.layoutManager = layoutManager
-        recyclerView.adapter = adapter
-        applyTopOverlaySpace()
-        adapter.addFooterView {
-            ViewLoadMoreBinding.bind(loadMoreView)
-        }
-        refreshLayout.setOnRefreshListener {
-            loadArticles()
-        }
-        recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                super.onScrolled(recyclerView, dx, dy)
-                if (!recyclerView.canScrollVertically(1)) {
-                    scrollToBottom()
-                    return
-                }
-                if (layoutManager is StaggeredGridLayoutManager) {
-                    val visibleItemCount = layoutManager.childCount
-                    val totalItemCount = layoutManager.itemCount
-                    val firstVisibleItemPositions = layoutManager.findFirstVisibleItemPositions(null)
-                    val firstVisibleItemPosition = firstVisibleItemPositions?.minOrNull() ?: 0
-                    if (isPreload  && (visibleItemCount + firstVisibleItemPosition) >= (totalItemCount - 5)) {
-                        scrollToBottom()
-                    }
-                }
-            }
-        })
+    }
+
+    /** 初始加载时机：preload 旁路立即加载；否则首次 RESUMED 一次性触发（对齐原 repeatOnLifecycle+cancel） */
+    private fun scheduleInitialLoad() {
         if (isPreload) {
-            refreshLayout.post {
-                refreshLayout.isRefreshing = !embeddedInModernRss
+            view?.post {
                 loadArticles()
             }
-            return@run
+            return
         }
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                refreshLayout.isRefreshing = !embeddedInModernRss
                 loadArticles()
                 this@launch.cancel()
             }
         } //只刷新可见页面,非预加载时使用
     }
 
-    /** modern-rss: 供 RssFragment（新版订阅）设置顶部覆盖顶栏占位空间 */
+    /** modern-rss: 供 RssFragment（新版订阅）设置顶部覆盖顶栏占位空间（调用点签名不变，§3.4） */
     fun setTopOverlaySpace(space: Int, overlay: Boolean) {
-        topOverlaySpace = space
-        topOverlayEnabled = overlay
-        view?.post {
-            applyTopOverlaySpace()
-        }
+        topOverlaySpacePx.value = if (embeddedInModernRss) space else 0
     }
 
-    private fun applyTopOverlaySpace() {
-        if (view == null || !embeddedInModernRss) return
-        binding.recyclerView.clipToPadding = true
-        binding.recyclerView.setPadding(
-            binding.recyclerView.paddingLeft,
-            topOverlaySpace,
-            binding.recyclerView.paddingRight,
-            binding.recyclerView.paddingBottom
-        )
-        binding.refreshLayout.setProgressViewOffset(
-            true,
-            (topOverlaySpace - 28.dpToPx()).coerceAtLeast(0),
-            topOverlaySpace + 56.dpToPx()
-        )
+    /** 供 RssFragment.gotoTop 定位（§3.4 新 API；currentRssScrollTarget findViewById 兜底随 B5 移除） */
+    fun scrollToTop() {
+        listState?.requestScrollToTop()
     }
 
-    private fun initData() {
-        val rssUrl = activityViewModel.url ?: return
-        articlesFlowJob?.cancel()
-        articlesFlowJob = viewLifecycleOwner.lifecycleScope.launch {
-            appDb.rssArticleDao.flowByOriginSort(rssUrl, viewModel.sortName)
-                .catch {
-                    AppLog.put("订阅文章界面获取数据失败\n${it.localizedMessage}", it)
-                }.flowOn(IO).collect { newList ->
-                    if (!isResumed || fullRefresh || newList.isEmpty()) {
-                        adapter.setItems(newList)
-                    } else {
-                        //用DiffUtil只对差异数据进行更新
-                        //注意RecyclerView的复用机制,切换标签时采用差异化更新会报ViewHolder的状态管理混乱
-                        adapter.setItems(newList, object : DiffUtil.ItemCallback<RssArticle>() {
-                            override fun areItemsTheSame(
-                                oldItem: RssArticle, newItem: RssArticle
-                            ): Boolean {
-                                return oldItem.link == newItem.link
-                            }
-
-                            override fun areContentsTheSame(
-                                oldItem: RssArticle, newItem: RssArticle
-                            ): Boolean {
-                                return oldItem.title == newItem.title && oldItem.image == newItem.image && oldItem.read == newItem.read
-                            }
-
-                            override fun getChangePayload(
-                                oldItem: RssArticle, newItem: RssArticle
-                            ): Any? {
-                                return if (oldItem.read != newItem.read) { "read" }
-                                else if (oldItem.title != newItem.title) { "title" }
-                                else { null }
-                            }
-                        }, true)
-                    }
-                    delay(200) // 200毫秒防抖
-                }
-        }
+    /** 供 RssSortActivity 登录后刷新当前列表 */
+    fun refreshAfterLogin() {
+        loadArticles()
     }
 
-    override fun onResume() {
-        super.onResume()
-        isResumed = true
-        adapter.upResumed(isResumed)
-        // 阶段8 F11：位置记忆——从播放器返回时滚动到退出时正在看的文章位置
-        VideoPlay.lastPlayedArticleLink?.let { link ->
-            VideoPlay.lastPlayedArticleLink = null  // 一次性使用，清除标记
-            val position = adapter.getItems().indexOfFirst { it.link == link }
-            if (position >= 0) {
-                binding.recyclerView.scrollToPosition(position)
-            }
-        }
-        // image-gallery-activity: 从图片浏览器返回时滚动到退出时正在看的文章位置
-        ImagePlay.lastPlayedArticleLink?.let { link ->
-            ImagePlay.lastPlayedArticleLink = null  // 一次性使用，清除标记
-            val position = adapter.getItems().indexOfFirst { it.link == link }
-            if (position >= 0) {
-                binding.recyclerView.scrollToPosition(position)
-            }
-        }
-    }
-
-    override fun onPause() {
-        isResumed = false
-        adapter.upResumed(isResumed)
-        super.onPause()
-    }
-
-    private fun loadArticles(fullRefresh: Boolean = false) {
-        this.fullRefresh = fullRefresh
+    private fun loadArticles() {
         activityViewModel.rssSource?.let {
             viewModel.loadArticles(it)
         }
     }
 
-    /** 供 RssSortActivity 登录后刷新当前列表 */
-    fun refreshAfterLogin() {
-        loadArticles(fullRefresh = true)
-    }
-
-    private fun loadArticles(targetPage: Int) {
-        fullRefresh = true
-        activityViewModel.rssSource?.let {
-            viewModel.loadArticles(it, targetPage)
-        }
-    }
-
-    private fun getCurrentPage(): Int = viewModel.page
-
-    private fun showPageMenu(): Boolean {
-        val source = activityViewModel.rssSource ?: return false
-        return !source.ruleNextPage.isNullOrEmpty()
-    }
-
-    fun showPagePicker() {
-        if (!showPageMenu()) return
-        val currentPage = getCurrentPage()
-        NumberPickerDialog(requireContext())
-            .setTitle(getString(R.string.change_page))
-            .setMinValue(1)
-            .setMaxValue(999)
-            .setValue(currentPage)
-            .show { targetPage ->
-                if (targetPage != currentPage) {
-                    fullRefresh = true
-                    loadArticles(targetPage)
-                    binding.recyclerView.scrollToPosition(0)
-                }
-            }
-    }
-
-    private fun scrollToBottom(forceLoad: Boolean = false) {
+    private fun loadMoreArticles() {
         if (viewModel.isLoading) return
-        fullRefresh = false
-        if ((loadMoreView.hasMore && adapter.getActualItemCount() > 0) || forceLoad) {
-            loadMoreView.hasMore()
-            activityViewModel.rssSource?.let {
-                viewModel.loadMore(it)
-            }
+        activityViewModel.rssSource?.let {
+            viewModel.loadMore(it)
         }
     }
 
-    override fun observeLiveBus() {
-        viewModel.loadErrorLiveData.observe(viewLifecycleOwner) {
-            loadMoreView.error(it)
-        }
-        viewModel.loadFinallyLiveData.observe(viewLifecycleOwner) { hasMore ->
-            binding.refreshLayout.isRefreshing = false
-            if (!hasMore) {
-                loadMoreView.noMore()
-            }
-        }
-        viewModel.pageLiveData.observe(viewLifecycleOwner) { page ->
-            (requireActivity() as? RssSortActivity)?.updatePageMenu(page, showPageMenu())
-        }
-    }
-
-    override fun readRss(rssArticle: RssArticle) {
-        fullRefresh = false //read会触发数据库更新,此时进行差异化更新
+    private fun readArticle(rssArticle: RssArticle) {
         // 传递文章列表给播放器，支持上下滑动切换文章（video-article-swipe-switch spec）
-        val rssArticles = adapter.getItems()
-        // 阶段8 F9：传递分页上下文给播放器，支持播放器内分页加载
         ReadRss.readRss(
-            this, rssArticle, activityViewModel.rssSource, rssArticles,
+            this, rssArticle, activityViewModel.rssSource, listState?.articles.orEmpty(),
             sortName = viewModel.sortName,
             sortUrl = viewModel.sortUrl,
             nextPageUrl = viewModel.nextPageUrl,
             page = viewModel.page
         )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 阶段8 F11 / image-gallery-activity：从播放器/图片浏览器返回时一次性定位
+        //（原 scrollToPosition 语义 → state.requestScrollToLink，由 ScrollRestoreEffect 消费）
+        VideoPlay.lastPlayedArticleLink?.let { link ->
+            VideoPlay.lastPlayedArticleLink = null  // 一次性使用，清除标记
+            listState?.requestScrollToLink(link)
+        }
+        ImagePlay.lastPlayedArticleLink?.let { link ->
+            ImagePlay.lastPlayedArticleLink = null  // 一次性使用，清除标记
+            listState?.requestScrollToLink(link)
+        }
     }
 }
