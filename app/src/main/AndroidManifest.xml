@@ -663,6 +663,17 @@
                 <data android:pathAdvancedPattern=".*\\.7[zZ]" />
                 <data android:pathPattern=".*\\.7z" />
                 <data android:pathPattern=".*\\.7Z" />
+                <!-- red theme package (archive-compatible) -->
+                <data android:pathAdvancedPattern=".*\\.[rR][eE][dD]" />
+                <data android:pathPattern=".*\\.red" />
+                <data android:pathPattern=".*\\.RED" />
+            </intent-filter>
+            <!-- 接收分享的主题/套件包（对齐 archive） -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
             </intent-filter>
         </activity>
 

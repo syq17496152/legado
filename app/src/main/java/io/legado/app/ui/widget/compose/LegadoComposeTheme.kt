@@ -11,6 +11,8 @@ import androidx.compose.ui.text.font.FontFamily
 import io.legado.app.lib.theme.rememberThemeUiPalette
 import io.legado.app.lib.theme.titleTypeface
 import io.legado.app.lib.theme.uiTypeface
+import io.legado.app.ui.theme.buildLegadoColorScheme
+import io.legado.app.ui.theme.ThemeSync
 
 /**
  * 统一的 Compose 主题字体下发。
@@ -19,15 +21,24 @@ import io.legado.app.lib.theme.uiTypeface
  * Compose Text 回退到系统字体、标题字体几乎不生效。用本包裹在 ComposeView 的 setContent 根或
  * 各共享脚手架（AppManagementScaffold / ComposePreferenceScreen / AppDialogFrame）外层，即可让
  * 其内所有未显式指定 fontFamily 的文本都继承主题「界面字体」，标题样式继承「标题字体」。
+ *
+ * AD-03（archive-theme-parity-audit）：colorScheme 桥接收敛——委托
+ * [buildLegadoColorScheme]（ThemeSpec.toM3Scheme 唯一实现，与 LegadoTheme 同源同语义），
+ * 消除双入口映射漂移。双 key（ThemeSync.version + palette.signature）覆盖两条刷新通道：
+ * ThemeConfig 直写 cPrimary 只 bump version、ThemeStore 直写只动 signature，并集杜绝单边刷新窗口。
  */
 @Composable
 fun LegadoComposeTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
+    val themeVersion = ThemeSync.version
     val themeSignature = rememberThemeUiPalette().signature
     val bodyFamily = remember(context, themeSignature) { FontFamily(context.uiTypeface()) }
     val titleFamily = remember(context, themeSignature) { FontFamily(context.titleTypeface()) }
+    val colorScheme = remember(themeVersion, themeSignature) {
+        buildLegadoColorScheme(context)
+    }
     MaterialTheme(
-        colorScheme = MaterialTheme.colorScheme,
+        colorScheme = colorScheme,
         shapes = MaterialTheme.shapes,
         typography = MaterialTheme.typography.withUiFontFamilies(bodyFamily, titleFamily)
     ) {

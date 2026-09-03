@@ -33,7 +33,6 @@ object NetworkLog {
         "cookie",
         "set-cookie",
         "x-api-key",
-        "x-goog-api-key",
         "api-key",
         "x-auth-token",
         "x-access-token",

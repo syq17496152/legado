@@ -5,7 +5,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
-import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
@@ -165,17 +164,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         }
     }
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        // s2-8：多选态优先消费系统 BACK——先退多选态再退页。BaseActivity 注册的
-        // dispatcher callback 直连 finish；同 owner 后注册的 callback 在链首优先执行。
-        onBackPressedDispatcher.addCallback(this) {
-            if (isSelectMode.value) {
-                selectedUrls.value = emptySet()
-                isSelectMode.value = false
-                upCountView()
-            } else {
-                finish()
-            }
-        }
         initComposeContent()
         upBookSource()
         initLiveDataGroup()

@@ -67,38 +67,10 @@ class KeyboardToolPop(
 
     fun attachToWindow(window: Window) {
         window.decorView.viewTreeObserver.addOnGlobalLayoutListener(this)
-        prepare()
-    }
-
-    /**
-     * insets 驱动模式的准备：预测量工具条高度（showAtLocation 前需 measuredHeight>0）
-     */
-    fun prepare() {
         contentView.measure(
             View.MeasureSpec.UNSPECIFIED,
             View.MeasureSpec.UNSPECIFIED,
         )
-    }
-
-    /**
-     * insets 驱动显隐（S3-4 接线）：edge-to-edge 页面 WindowVisibleDisplayFrame 不再反映
-     * IME 高度，onGlobalLayout 检测失效，由宿主 Activity 的 WindowInsets 回调调用本方法。
-     * padding/显隐语义与 onGlobalLayout 保持一致。
-     */
-    fun onImeVisibilityChanged(showing: Boolean, imeHeight: Int) {
-        val preShowing = mIsSoftKeyBoardShowing
-        mIsSoftKeyBoardShowing = showing
-        if (showing) {
-            rootView.setPadding(0, 0, 0, imeHeight + contentView.measuredHeight)
-            if (!isShowing) {
-                showAtLocation(rootView, Gravity.BOTTOM, 0, 0)
-            }
-        } else {
-            rootView.setPadding(0, 0, 0, 0)
-            if (preShowing) {
-                dismiss()
-            }
-        }
     }
 
     override fun onGlobalLayout() {

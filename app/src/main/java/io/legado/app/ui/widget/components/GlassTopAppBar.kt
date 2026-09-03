@@ -84,7 +84,7 @@ fun GlassTopAppBar(
     // 简化说明: 壁纸全幅显示，crop 裁切按 MainTopBarView 视觉近似（精确对齐归后续统一组件）
     val wallpaper = remember(wallpaperFile) { wallpaperFile?.let(::decodeTopBarWallpaper) }
     val defaultColor = if (isRegular) {
-        Color(TopBarConfig.withOpacity(TopBarConfig.resolveBackgroundColor(config), config.wallpaperAlpha))
+        Color(TopBarConfig.resolveDisplayBackgroundColor(config))
     } else {
         Color(context.primaryColor)
     }

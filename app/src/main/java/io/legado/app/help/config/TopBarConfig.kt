@@ -16,6 +16,8 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.ImageTypeUtils
 import io.legado.app.utils.compress.ZipUtils
 import io.legado.app.utils.externalFiles
+import io.legado.app.utils.getCompatColor
+import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getFile
@@ -33,6 +35,8 @@ object TopBarConfig {
     const val DEFAULT_DIR_NAME = "default"
     const val STYLE_DEFAULT = "default"
     const val STYLE_REGULAR = "regular"
+    /** 默认（内置）顶栏包的显示底色透明度百分比：92% 主题背景色微透，兼顾玻璃感与可读性 */
+    const val DEFAULT_TOP_BAR_ALPHA = 92
     private const val packageFileName = "top_bar.json"
     private const val remoteListTimeoutMillis = 4_000L
     private const val activeDayKey = PreferKey.topBarPackageDay
@@ -302,11 +306,35 @@ object TopBarConfig {
     }
 
     fun defaultBackgroundColor(isNight: Boolean): Int {
-        return if (isNight) Color.BLACK else Color.WHITE
+        return when {
+            // E-Ink 契约：applyTheme 强制写 WHITE，保持白底黑字
+            AppConfig.isEInkMode -> Color.WHITE
+            isNight -> appCtx.getPrefInt(
+                PreferKey.cNBackground,
+                appCtx.getCompatColor(R.color.md_grey_900)
+            )
+            else -> appCtx.getPrefInt(
+                PreferKey.cBackground,
+                appCtx.getCompatColor(R.color.md_grey_100)
+            )
+        }
     }
 
     fun resolveBackgroundColor(config: Config): Int {
         return config.backgroundColor ?: defaultBackgroundColor(config.isNightMode)
+    }
+
+    /**
+     * 渲染端统一显示底色：内置包固定 92% 主题背景色（微透玻璃感），
+     * 自定义包保持用户配置的 wallpaperAlpha 调制。数据层 backgroundColor 始终不透明。
+     */
+    fun resolveDisplayBackgroundColor(config: Config): Int {
+        val base = resolveBackgroundColor(config)
+        return if (config.updatedAt == 0L) {
+            withOpacity(base, DEFAULT_TOP_BAR_ALPHA)
+        } else {
+            withOpacity(base, config.wallpaperAlpha)
+        }
     }
 
     fun resolveCornerScale(config: Config): Float {

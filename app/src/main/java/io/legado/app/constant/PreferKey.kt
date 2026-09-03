@@ -256,6 +256,10 @@ object PreferKey {
 
     const val dThemeName = "durThemeName"
     const val dNThemeName = "durThemeNameNight"
+    /** 内置主题色板版本（AD-04：色板更新后对未自定义内置主题的用户重放） */
+    const val builtinThemePaletteVersion = "builtinThemePaletteVersion"
+    /** Material You 跟随系统动态色（AD-07，Android 12+） */
+    const val followDynamicColor = "followDynamicColor"
 
     const val cPrimary = "colorPrimary"
     const val cAccent = "colorAccent"

@@ -54,6 +54,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
@@ -137,12 +138,57 @@ object ReadBook : CoroutineScope by MainScope() {
         if (!fromReadAloud && BaseReadAloudService.isRun) {
             readAloudUserNavigationUntil =
                 System.currentTimeMillis() + READ_ALOUD_USER_NAVIGATION_LOCK_MS
+            // C1 手动翻页挂钩（OQ-7 收口：挂 UI 导航唯一汇合点 markReadAloudUserNavigation，
+            // 引擎驱动路径 fromReadAloud=true 天然排除）
+            callBack?.get()?.onManualPageChanged()
         }
     }
 
     fun isReadAloudUserNavigationActive(): Boolean {
         return BaseReadAloudService.isRun &&
                 System.currentTimeMillis() < readAloudUserNavigationUntil
+    }
+
+    /**
+     * C1 原语 B 配套闸门（LC :2120 同名同义）：原语 B/原语 A 跨章打开章节期间置 true，
+     * 防止手动翻页挂钩/朗读重启链把"对齐动作"误判为用户翻页。
+     */
+    @Volatile
+    var skipReadAloudSyncOnce = false
+
+    /**
+     * C1 引擎侧独立加载正文入口（LC :575-611 对齐）：三章缓存优先，未命中走既有异步装载链。
+     * 只填充相邻章缓存槽，不触碰显示状态。
+     * 简化说明:LC 为排版 channel await，本项目复用既有 loadContent 装载链 + 轮询等待（200ms/30s 上限）
+     * | 已知上限:目标章仅支持相邻章（switchReadAloudChapterKeepingView 只 ±1）+ 加载失败超时返回 null
+     * | 升级路径:P3 rebase 时若需任意章 seek，改为 getTextChapterAsync 直挂 channel await
+     */
+    suspend fun loadTextChapterForReadAloud(index: Int, scope: CoroutineScope): TextChapter? {
+        when (index) {
+            durChapterIndex -> curTextChapter?.takeIf { it.isCompleted }?.let { return it }
+            durChapterIndex - 1 -> prevTextChapter?.takeIf { it.isCompleted }?.let { return it }
+            durChapterIndex + 1 -> nextTextChapter?.takeIf { it.isCompleted }?.let { return it }
+        }
+        if (index !in durChapterIndex - 1..durChapterIndex + 1) return null
+        withContext(IO) {
+            loadContent(index, upContent = false, resetPageOffset = false)
+        }
+        val deadline = System.currentTimeMillis() + 30_000L
+        while (System.currentTimeMillis() < deadline) {
+            currentCoroutineContext().ensureActive()
+            val chapter = when (index) {
+                durChapterIndex -> curTextChapter
+                durChapterIndex - 1 -> prevTextChapter
+                durChapterIndex + 1 -> nextTextChapter
+                else -> null
+            }
+            if (chapter?.isCompleted == true) return chapter
+            delay(200)
+        }
+        AppLog.putDebugWithTag(
+            AppLog.TAG_READ_ALOUD, "loadTextChapterForReadAloud 超时:$index", level = AppLog.Level.WARN
+        )
+        return null
     }
 
     fun markRecentRead(book: Book, readTime: Long = System.currentTimeMillis()) {
@@ -551,7 +597,7 @@ object ReadBook : CoroutineScope by MainScope() {
             val nextPagePos = it.getNextPageLength(durChapterPos)
             if (nextPagePos >= 0) {
                 hasNextPage = true
-                it.getPage(durPageIndex)?.removePageAloudSpan()
+                // C1：页级高亮存储态已投影化（H6 删除），红字由 upContent 重绘时现算
                 durChapterPos = nextPagePos
                 callBack?.get()?.cancelSelect()
                 callBack?.get()?.upContent()
@@ -762,12 +808,13 @@ object ReadBook : CoroutineScope by MainScope() {
 
     /**
      * 朗读
+     * C1 原语 A 通道：setAloudStart 需指定朗读页（可与显示页不同），故增加 pageIndex 参数。
      */
-    fun readAloud(play: Boolean = true, startPos: Int = 0) {
+    fun readAloud(play: Boolean = true, startPos: Int = 0, pageIndex: Int = durPageIndex) {
         book ?: return
         val textChapter = curTextChapter ?: return
         if (textChapter.isCompleted) {
-            ReadAloud.play(appCtx, play, startPos = startPos)
+            ReadAloud.play(appCtx, play, pageIndex = pageIndex, startPos = startPos)
         }
     }
 
@@ -2024,6 +2071,12 @@ object ReadBook : CoroutineScope by MainScope() {
         fun sureNewProgress(progress: BookProgress)
 
         fun cancelSelect()
+
+        /**
+         * C1 手动翻页挂钩（LC onManualPageChanged :2289-2301）：仅在朗读中发生用户主动导航时回调，
+         * 由 markReadAloudUserNavigation 触发；默认空实现，朗读页覆写做强制追页/面板派生刷新。
+         */
+        fun onManualPageChanged() {}
     }
 
 }

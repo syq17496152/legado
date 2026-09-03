@@ -208,7 +208,8 @@ private constructor(private val mContext: Context) : ThemeStoreInterface {
                 ThemeUtils.resolveColor(
                     context,
                     androidx.appcompat.R.attr.colorPrimary,
-                    "#455A64".toColorInt()
+                    // AD-04 默认色板现代化：对齐内置日间主题 primaryColor
+                    "#FF3E6B8C".toColorInt()
                 )
             )
         }
@@ -221,7 +222,8 @@ private constructor(private val mContext: Context) : ThemeStoreInterface {
                 ThemeUtils.resolveColor(
                     context,
                     androidx.appcompat.R.attr.colorPrimaryDark,
-                    "#37474F".toColorInt()
+                    // AD-04：日 primary darken 派生
+                    "#FF2C4A6B".toColorInt()
                 )
             )
         }
@@ -234,7 +236,8 @@ private constructor(private val mContext: Context) : ThemeStoreInterface {
                 ThemeUtils.resolveColor(
                     context,
                     androidx.appcompat.R.attr.colorAccent,
-                    "#263238".toColorInt()
+                    // AD-04：对齐内置日间主题 accentColor
+                    "#FF4A7BC4".toColorInt()
                 )
             )
         }

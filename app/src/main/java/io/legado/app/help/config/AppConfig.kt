@@ -71,6 +71,8 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var editThemeDark = appCtx.getPrefInt(PreferKey.editThemeDark, 0)
     var editTemeAuto = appCtx.getPrefBoolean(PreferKey.editTemeAuto)
     var isEInkMode = appCtx.getPrefString(PreferKey.themeMode) == "3"
+    /** AD-07 Material You 跟随系统动态色（仅 Android 12+ 生效，见 ThemeConfig.applyConfig） */
+    var followDynamicColor = appCtx.getPrefBoolean(PreferKey.followDynamicColor)
     var clickActionTL = appCtx.getPrefInt(PreferKey.clickActionTL, 2)
     var clickActionTC = appCtx.getPrefInt(PreferKey.clickActionTC, 2)
     var clickActionTR = appCtx.getPrefInt(PreferKey.clickActionTR, 1)
@@ -98,6 +100,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
+            PreferKey.followDynamicColor -> followDynamicColor = appCtx.getPrefBoolean(PreferKey.followDynamicColor)
             PreferKey.editFontScale -> editFontScale = appCtx.getPrefInt(PreferKey.editFontScale, 16)
             PreferKey.editNonPrintable -> editNonPrintable = appCtx.getPrefInt(PreferKey.editNonPrintable, 0)
             PreferKey.editAutoWrap -> editAutoWrap = appCtx.getPrefBoolean(PreferKey.editAutoWrap, true)

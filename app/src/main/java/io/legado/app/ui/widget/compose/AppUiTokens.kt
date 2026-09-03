@@ -21,25 +21,3 @@ object AppListSpacing {
     val Normal = 8.dp
     val Section = 12.dp
 }
-
-/**
- * Page-level spacing tokens (B2 freeze, 2026-08-30).
- * All values sit on the 4dp grid. Legacy [AppListSpacing] stays untouched
- * and must not spread to new code (6dp is a registered half-step exemption).
- */
-object AppPageSpacing {
-    /** 页面左右安全边距 */
-    val PageHorizontal = 16.dp
-    /** 顶栏下内容起始间距 */
-    val PageTop = 8.dp
-    /** 区块之间（表单分组/信息区） */
-    val SectionGap = 16.dp
-    /** 卡片与卡片之间 */
-    val CardGap = 12.dp
-    /** 行内元素间距（图标-文字） */
-    val ItemGapInline = 8.dp
-    /** 滚动列表尾部留白（无底栏页） */
-    val ListBottom = 24.dp
-    /** 列表尾部 FAB + 导航桥接避让 */
-    val NavBridgeBottom = 88.dp
-}
