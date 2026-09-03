@@ -1791,7 +1791,6 @@
     <string name="theme_source_both">本地+云端</string>
     <string name="theme_current_applied">当前应用</string>
     <string name="theme_time_unknown">未记录时间</string>
-    <string name="theme_author">作者：%1$s</string>
     <string name="theme_apply">应用</string>
     <string name="theme_applied_state">已应用</string>
     <string name="theme_zip_exported">主题 ZIP 已导出</string>
@@ -1809,9 +1808,6 @@
     <string name="theme_card_shadow">卡片阴影</string>
     <string name="theme_card_background_blur">卡片模糊</string>
     <string name="theme_value_follow_default">跟随默认</string>
-    <string name="theme_preview">实时预览</string>
-    <string name="theme_editor_suggest_palette">壁纸提取配色</string>
-    <string name="theme_editor_hex_color">十六进制色值</string>
     <string name="theme_image_main_background">主界面背景</string>
     <string name="theme_image_book_info_background">详情页背景</string>
     <string name="theme_image_blur">背景图片模糊</string>

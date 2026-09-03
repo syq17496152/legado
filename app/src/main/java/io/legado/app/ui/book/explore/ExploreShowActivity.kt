@@ -13,7 +13,6 @@ import io.legado.app.base.VMBaseActivity
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.databinding.ActivityExploreShowBinding
 import io.legado.app.help.webView.WebViewPool
-import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.ui.book.SearchBookOpenHelper
 import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
@@ -202,13 +201,6 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
         lifecycleScope.launch {
             val isVideo = withContext(IO) {
                 SearchBookOpenHelper.isVideoResult(book, viewModel.sourceTypeHint())
-            }
-            if (isVideo) {
-                // video-playlist-continuity：发现分类列表整表注入（跨影片续播；列表单源语义自然）
-                val idx = composeBooks.indexOfFirst { it.bookUrl == book.bookUrl }
-                if (idx >= 0) {
-                    VideoPlaylistHolder.set(composeBooks.toList(), idx)
-                }
             }
             SearchBookOpenHelper.open(this@ExploreShowActivity, book, isVideo)
         }

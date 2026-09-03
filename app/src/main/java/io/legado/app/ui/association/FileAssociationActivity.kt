@@ -1,6 +1,5 @@
 package io.legado.app.ui.association
 
-import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.viewModels
@@ -117,7 +116,7 @@ class FileAssociationActivity :
                 onDismissAction = { finish() }
             )
         }
-        resolveImportUri()?.let { data ->
+        intent.data?.let { data ->
             if (data.isContentScheme() && data.canRead()) {
                 viewModel.dispatchIntent(data)
             } else {
@@ -134,20 +133,6 @@ class FileAssociationActivity :
                     }.request()
             }
         } ?: finish()
-    }
-
-    /** 兼容 VIEW(data) 与 SEND(EXTRA_STREAM/clipData) 两种来源（对齐 archive）。 */
-    private fun resolveImportUri(): Uri? {
-        intent.data?.let { return it }
-        if (Intent.ACTION_SEND == intent.action) {
-            intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { return it }
-            intent.clipData?.let { clip ->
-                for (i in 0 until clip.itemCount) {
-                    clip.getItemAt(i)?.uri?.let { return it }
-                }
-            }
-        }
-        return null
     }
 
     private fun importBubble(uri: Uri) {

@@ -2194,7 +2194,6 @@
     <string name="theme_source_both">Local + cloud</string>
     <string name="theme_current_applied">Applied</string>
     <string name="theme_time_unknown">No time recorded</string>
-    <string name="theme_author">Author: %1$s</string>
     <string name="theme_apply">Apply</string>
     <string name="theme_applied_state">Applied</string>
     <string name="theme_zip_exported">Theme ZIP exported</string>
@@ -2212,9 +2211,6 @@
     <string name="theme_card_shadow">Card shadow</string>
     <string name="theme_card_background_blur">Card blur</string>
     <string name="theme_value_follow_default">Follow default</string>
-    <string name="theme_preview">Live preview</string>
-    <string name="theme_editor_suggest_palette">Suggested from wallpaper</string>
-    <string name="theme_editor_hex_color">Hex color</string>
     <string name="theme_image_main_background">Main background</string>
     <string name="theme_image_book_info_background">Book detail background</string>
     <string name="theme_image_blur">Background image blur</string>
