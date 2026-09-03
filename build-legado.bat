@@ -42,6 +42,7 @@ set "DEFAULT_APP_ID=io.legado.miss.app"
 :: ----------------------------
 
 if /i "%~1"=="clean" goto DO_CLEAN
+if /i "%~1"=="daemon-stop" goto DO_DAEMON_STOP
 
 :: Parse build type
 set "BUILD_TYPE=debug"
@@ -98,16 +99,16 @@ if not exist "%PROJECT_DIR%\gradlew.bat" (
 echo [OK] Project: %PROJECT_DIR%
 echo.
 
-:: Clean Kotlin daemon cache (fix AccessDeniedException)
-if exist "%LOCALAPPDATA%\kotlin\daemon" (
-    echo [CLEAN] Removing Kotlin daemon cache...
-    rd /s /q "%LOCALAPPDATA%\kotlin\daemon" 2>nul
-)
-
-:: Stop stale Gradle daemons
-echo [CLEAN] Stopping stale Gradle daemons...
-cd /d "%PROJECT_DIR%"
-call "%PROJECT_DIR%\gradlew.bat" --stop >nul 2>&1
+:: 2026-09-03 local-build-speedup（P1 daemon 复用）：
+:: 已移除"每次构建前删除 Kotlin daemon 缓存 + gradlew --stop"逻辑——该逻辑导致
+:: Kotlin 增量编译快照每次丢失、compileAppDebugKotlin 准全量重编（增量打包 7m33s 实测根因）。
+:: 内存安全由三重保险替代：jvmargs Xmx 限幅 + idletimeout 600000 空闲自退（连带回收 Kotlin daemon）
+:: + daemon-stop 手动清场入口。Kotlin daemon 缓存损坏时手动执行:
+::   build-legado.bat daemon-stop
+::   rd /s /q "%LOCALAPPDATA%\kotlin\daemon"
+echo [SKIP] Keeping daemons alive for incremental build (daemon-stop to force cleanup)
+echo [MEM-BEFORE]
+powershell -NoProfile -Command "$os=Get-CimInstance Win32_OperatingSystem; $t=[math]::Round($os.TotalVisibleMemorySize/1MB,2); $f=[math]::Round($os.FreePhysicalMemory/1MB,2); $j=(Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | Measure-Object WorkingSetSize -Sum).Sum/1GB; Write-Host ('  system {0}pct used ({1:0.0}/{2:0.0}GB) | java RSS total {3:0.00}GB' -f [math]::Round(($t-$f)/$t*100,1),($t-$f),$t,[math]::Round($j,2))" 2>nul
 
 :: Ensure gradle-home dir exists
 if not exist "%GRADLE_USER_HOME%" mkdir "%GRADLE_USER_HOME%"
@@ -131,10 +132,19 @@ if not "%CUSTOM_APP_ID%"=="" set "P_FLAGS=%P_FLAGS% -PcustomAppId=%CUSTOM_APP_ID
 if not "%APP_VERSION%"=="" set "P_FLAGS=%P_FLAGS% -PappVersion=%APP_VERSION%"
 
 :: Build with optional Gradle project properties
+:: 2026-09-03 local-build-speedup（P1/P1b）：
+:: ① 移除 --no-daemon：复用 daemon 保住 Kotlin 增量编译快照（VFS/配置缓存同步生效）
+:: ② debug 分支注入降堆参数（红队 H5：-D 覆盖会整体替换 properties 参数串，
+::    必须完整复制原串仅改 Xmx 4g→3g）；release 不注入，沿用 properties 4g（R8 OOM 防回归）
+set "HEAP_ARGS="
+if "%BUILD_TYPE%"=="debug" (
+set HEAP_ARGS=-Dorg.gradle.jvmargs="-XX:+UseParallelGC -Xmx3g -Xms256m -XX:MaxMetaspaceSize=768m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8" -Dkotlin.daemon.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=768m"
+)
+
 if "%BUILD_TYPE%"=="release" (
-    call "%PROJECT_DIR%\gradlew.bat" assembleAppRelease --no-daemon %P_FLAGS%
+    call "%PROJECT_DIR%\gradlew.bat" assembleAppRelease %HEAP_ARGS% %P_FLAGS%
 ) else (
-    call "%PROJECT_DIR%\gradlew.bat" assembleAppDebug --no-daemon %P_FLAGS%
+    call "%PROJECT_DIR%\gradlew.bat" assembleAppDebug %HEAP_ARGS% %P_FLAGS%
 )
 
 if errorlevel 1 (
@@ -220,7 +230,10 @@ if "!APK_FOUND!"=="1" (
     )
 )
 
-call :STOP_DAEMON
+:: 2026-09-03 local-build-speedup：成功路径不再强制清场（原 call :STOP_DAEMON 已移除），
+:: daemon 复用是增量提速核心；内存由 idletimeout 空闲自退回收，daemon-stop 可手动清场
+echo [MEM-AFTER]
+powershell -NoProfile -Command "$os=Get-CimInstance Win32_OperatingSystem; $t=[math]::Round($os.TotalVisibleMemorySize/1MB,2); $f=[math]::Round($os.FreePhysicalMemory/1MB,2); $j=(Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | Measure-Object WorkingSetSize -Sum).Sum/1GB; Write-Host ('  system {0}pct used ({1:0.0}/{2:0.0}GB) | java RSS total {3:0.00}GB (daemon auto-exits after 10min idle; run daemon-stop to force cleanup)' -f [math]::Round(($t-$f)/$t*100,1),($t-$f),$t,[math]::Round($j,2))" 2>nul
 
 echo.
 pause
@@ -253,6 +266,18 @@ cd /d "%PROJECT_DIR%"
 call "%PROJECT_DIR%\gradlew.bat" clean
 echo.
 echo   Done. Run: build-legado.bat [debug^|release] [package_name]
+echo.
+pause
+exit /b 0
+
+:DO_DAEMON_STOP
+echo ============================================================
+echo   Manual daemon cleanup (local-build-speedup 2026-09-03)
+echo ============================================================
+call :STOP_DAEMON
+echo.
+echo   Daemons stopped. Kotlin daemon cache (if corrupted):
+echo     rd /s /q "%LOCALAPPDATA%\kotlin\daemon"
 echo.
 pause
 exit /b 0

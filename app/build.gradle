@@ -14,18 +14,53 @@ plugins {
 //    alias libs.plugins.google.services  // 禁用 Google Services，用于包名验证调试
 }
 
-static def releaseTime() {
-    return new Date().format("yy.MMddHH", TimeZone.getTimeZone("GMT+8"))
+// 版本号 ValueSource 化（local-build-speedup 2026-09-03）：
+// configuration cache 开启后，配置期求值的时间戳会被缓存复用导致"版本号不更新"，
+// ValueSource 将求值结果纳入 CC 缓存键（输入变化触发重配置），CC 复用安全且版本号正确
+import org.gradle.api.provider.ValueSource
+import org.gradle.api.provider.ValueSourceParameters
+import org.gradle.api.file.DirectoryProperty
+
+abstract class ReleaseTimeValueSource implements ValueSource<String, ValueSourceParameters.None> {
+    @Override
+    String obtain() {
+        return new Date().format("yy.MMddHH", TimeZone.getTimeZone("GMT+8"))
+    }
+}
+
+abstract class GitCommitsParameters implements ValueSourceParameters {
+    abstract DirectoryProperty getProjectDir()
+}
+
+abstract class GitCommitsValueSource implements ValueSource<Integer, GitCommitsParameters> {
+    @Override
+    Integer obtain() {
+        try {
+            // 用 ProcessBuilder 而非 ExecOperations：后者在 CC 上下文中 exec 静默失败（实测 versionCode 回退 1）
+            def proc = new ProcessBuilder("git", "rev-list", "HEAD", "--count")
+                    .directory(parameters.projectDir.get().asFile)
+                    .start()
+            def finished = proc.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+            def result = finished ? proc.inputStream.text.trim() : ""
+            if (finished && proc.exitValue() == 0 && result) {
+                return Integer.parseInt(result)
+            }
+        } catch (Exception ignored) {}
+        return 1
+    }
+}
+
+def releaseTimeProvider = providers.of(ReleaseTimeValueSource) {}
+def gitCommitsProvider = providers.of(GitCommitsValueSource) {
+    parameters {
+        projectDir = layout.projectDirectory
+    }
 }
 
 def name = "legado"
-// 版本号支持 -PappVersion 显式覆盖（双包同版本发版），缺省按构建时间生成
-def version = (project.findProperty("appVersion") as String) ?: "3." + releaseTime()
-def gitCommits = 1
-try {
-    def result = 'git rev-list HEAD --count'.execute().text.trim()
-    if (result) gitCommits = Integer.parseInt(result)
-} catch (Exception ignored) {}
+// 版本号支持 -PappVersion 显式覆盖（双包同版本发版），缺省按构建时间生成（执行期求值）
+def version = (project.findProperty("appVersion") as String) ?: "3.${releaseTimeProvider.get()}"
+def gitCommits = gitCommitsProvider.get()
 
 android {
     compileSdk = compile_sdk_version

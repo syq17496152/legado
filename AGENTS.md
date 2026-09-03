@@ -95,12 +95,14 @@ OpenSpec 步骤 5→6 之间必须真机/模拟器验证，禁止只改代码不
 ### 5. 书源/订阅源自测交付
 新生成或优化的书源/订阅源必须自测通过才算完成：每一步规则先到 Legado 源码核实（禁凭经验臆测）；自测不通过=未完成。完整规范（5阶段闭环+陷阱清单+JVM仿真器）：`.trae/skills/legado-source-creator/SKILL.md`
 
-### 6. 打包/构建后必须清理构建 daemon（强制门禁）
-构建会产生残留 `Gradle daemon` + `Kotlin daemon`（实测各 2.6~4.2GB），`--no-daemon` 管不住 Kotlin daemon，空闲默认 2~3 小时才自退，频繁打包必打爆 32G 内存。
-- ✅ 走 `build-legado.bat` → 已内置 `:STOP_DAEMON` 自动清场
-- ⚠️ 走 **直接 `gradlew assembleAppDebug/assembleAppRelease`（无 `--no-daemon`）或 IDE/Run** → 构建结束后**必须**执行 `stop-daemons.bat` 补一次清场，禁止直接结束不管
+### 6. 构建 daemon 管理规则（2026-09-03 local-build-speedup 更新）
+> daemon 复用是增量编译提速核心（实测：打包前清场导致 Kotlin 增量快照丢失，增量打包 7m33s 的根因）。内存安全三重保险：jvmargs Xmx 限幅（debug 3g / release 4g）+ `daemon.idletimeout=600000` 空闲 10 分钟自退（连带回收 Kotlin daemon）+ `daemon-stop` 手动清场。
+- ✅ 走 `build-legado.bat`：默认保留 daemon 复用；构建失败自动清场；需手动清场用 `build-legado.bat daemon-stop`
+- ✅ 走 `ai_tests/scripts/quick_build_install.py`：编译成功保留 daemon，失败自动清场
+- ⚠️ 直接 `gradlew assembleAppDebug/assembleAppRelease`：建议构建后 `build-legado.bat daemon-stop` 清场（或等 10 分钟空闲自退）
 - 命令必须带 App 前缀（`assembleAppDebug`/`assembleAppRelease`），禁止 `assembleDebug`
-> 完整规范：`docs/project-flow/build-apk-guide.md` §4.10；配套 `gradle.properties` 已限制 `-Xmx3g` + `kotlin.daemon.jvmargs` + `daemon.idletimeout=600000`
+- Kotlin daemon 缓存损坏（AccessDeniedException）时：先 `build-legado.bat daemon-stop`，再手动 `rd /s /q %LOCALAPPDATA%\kotlin\daemon`
+> 完整规范：`docs/project-flow/build-apk-guide.md` §4.10；设计文档：`docs/specs/local-build-speedup/`（含基线实测数据）
 
 ## 记忆系统（memory-mechanism-redesign，AD-11 已启用）
 | 配置项 | 值 |
