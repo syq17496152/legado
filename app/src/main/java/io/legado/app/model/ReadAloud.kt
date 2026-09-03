@@ -26,61 +26,6 @@ object ReadAloud {
     val ttsEngine get() = ReadBook.book?.getTtsEngine() ?: AppConfig.ttsEngine
     var httpTTS: HttpTTS? = null
 
-    // ---------------- C1 位置原语（对齐 LC/model/ReadAloud.kt :60-125） ----------------
-
-    @Volatile
-    var aloudPosition: ReadAloudPosition? = null
-        private set
-    private var pendingSwitchPosition: ReadAloudPosition? = null
-    private var positionGeneration = 0L
-
-    /** 原语 A 前置：登记待确认的朗读起点（UI 调）。 */
-    @Synchronized
-    fun beginPositionSwitch(position: ReadAloudPosition) {
-        pendingSwitchPosition = position
-    }
-
-    @Synchronized
-    fun cancelPositionSwitch() {
-        pendingSwitchPosition = null
-    }
-
-    /** 引擎是唯一有权更新并发布此位置的主体（LC :83 注释契约）。 */
-    @Synchronized
-    fun publishAloudPosition(
-        position: ReadAloudPosition,
-        syncView: Boolean = false,
-    ): ReadAloudPositionUpdate {
-        val previousPosition = aloudPosition
-        aloudPosition = position
-        val generation = ++positionGeneration
-        val switchConfirmed = pendingSwitchPosition == position
-        if (switchConfirmed) pendingSwitchPosition = null
-        AppLog.putDebugWithTag(
-            AppLog.TAG_READ_ALOUD,
-            "发布位置 ch:${position.chapterIndex} pos:${position.chapterPosition} " +
-                "gen:$generation confirmed:$switchConfirmed syncView:$syncView",
-            level = AppLog.Level.INFO
-        )
-        return ReadAloudPositionUpdate(position, previousPosition, switchConfirmed, generation, syncView)
-            .also { postEvent(EventBus.READ_ALOUD_POSITION, it) }
-    }
-
-    /** 消费端防乱序：过期事件直接丢弃。 */
-    @Synchronized
-    fun isCurrentPosition(update: ReadAloudPositionUpdate): Boolean =
-        update.generation == positionGeneration && update.position == aloudPosition
-
-    /** 停止/切引擎时清空位置并递增代数，使所有在途事件失效（LC :117-125）。 */
-    @Synchronized
-    fun clearAloudPosition() {
-        aloudPosition = null
-        positionGeneration++
-        pendingSwitchPosition = null
-    }
-
-    // ---------------- 命令层 ----------------
-
     private fun getReadAloudClass(): Class<*> {
         val ttsEngine = ttsEngine
         if (ttsEngine.isNullOrBlank()) {
@@ -194,38 +139,6 @@ object ReadAloud {
             intent.putExtra("continuePlayback", continuePlayback)
             context.startForegroundServiceCompat(intent)
         }
-    }
-
-    /** C1 seek：按朗读单元号跳转（syncView=true 时 UI 显式传送对齐，LC :478-492）。 */
-    fun seekToProgress(
-        context: Context,
-        chapterIndex: Int,
-        position: Int,
-        syncView: Boolean = true
-    ) {
-        if (!BaseReadAloudService.isRun) return
-        val intent = Intent(context, aloudClass)
-        intent.action = IntentAction.seekReadAloudProgress
-        intent.putExtra("chapterIndex", chapterIndex)
-        intent.putExtra("position", position)
-        intent.putExtra("syncView", syncView)
-        context.startForegroundServiceCompat(intent)
-    }
-
-    /** C1 seek：按章节绝对字符位跳转（LC :493-502）。 */
-    fun seekToTextPosition(
-        context: Context,
-        chapterIndex: Int,
-        chapterPosition: Int,
-        syncView: Boolean = true
-    ) {
-        if (!BaseReadAloudService.isRun) return
-        val intent = Intent(context, aloudClass)
-        intent.action = IntentAction.seekReadAloudTextPosition
-        intent.putExtra("chapterIndex", chapterIndex)
-        intent.putExtra("chapterPosition", chapterPosition)
-        intent.putExtra("syncView", syncView)
-        context.startForegroundServiceCompat(intent)
     }
 
     fun selectChapter(

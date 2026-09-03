@@ -112,7 +112,6 @@ enum class ReadAloudConfigGroup(
         setOf(
             PreferKey.readAloudByPage,
             PreferKey.streamReadAloudAudio,
-            PreferKey.forcePageFollow,
             PreferKey.ttsFollowSys,
             PreferKey.ttsSpeechRate
         )
@@ -390,13 +389,6 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
                 key = PreferKey.streamReadAloudAudio,
                 title = getString(R.string.stream_read_aloud_audio),
                 summary = getString(R.string.stream_read_aloud_audio_summary),
-                defaultValue = false
-            ),
-            // C1：强制追页（手动翻页=从新页第一段重读），默认关闭保持脱节派生体验
-            switch(
-                key = PreferKey.forcePageFollow,
-                title = getString(R.string.read_aloud_force_page_follow),
-                summary = getString(R.string.read_aloud_force_page_follow_summary),
                 defaultValue = false
             ),
             switch(
