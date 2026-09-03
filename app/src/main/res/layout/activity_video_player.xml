@@ -104,39 +104,6 @@
                             android:text="@string/author"
                             android:textColor="@color/tv_text_summary"
                             android:textSize="@dimen/text_12sp" />
-
-                        <!-- video-player-dual-layout K6：跨影片「上一部/下一部」入口（书源队列/订阅源文章列表，无上下文时隐藏） -->
-                        <TextView
-                            android:id="@+id/tv_prev_film"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="?attr/selectableItemBackground"
-                            android:contentDescription="@string/play_prev_film"
-                            android:paddingStart="4dp"
-                            android:paddingTop="4dp"
-                            android:paddingEnd="10dp"
-                            android:paddingBottom="4dp"
-                            android:singleLine="true"
-                            android:text="@string/play_prev_film"
-                            android:textColor="@color/primaryText"
-                            android:textSize="@dimen/text_12sp"
-                            android:visibility="gone" />
-
-                        <TextView
-                            android:id="@+id/tv_next_film"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="?attr/selectableItemBackground"
-                            android:contentDescription="@string/play_next_film"
-                            android:paddingStart="10dp"
-                            android:paddingTop="4dp"
-                            android:paddingEnd="4dp"
-                            android:paddingBottom="4dp"
-                            android:singleLine="true"
-                            android:text="@string/play_next_film"
-                            android:textColor="@color/primaryText"
-                            android:textSize="@dimen/text_12sp"
-                            android:visibility="gone" />
                     </LinearLayout>
 
                     <androidx.core.widget.NestedScrollView
@@ -215,6 +182,58 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
                         android:text="@string/favorite"
+                        android:textColor="@color/tv_text_summary"
+                        android:textSize="@dimen/text_11sp" />
+                </LinearLayout>
+
+                <!-- video-player-dual-layout W3：跨影片「上一部」按钮（与功能按钮区同构，书源队列/订阅源文章列表） -->
+                <LinearLayout
+                    android:id="@+id/action_prev"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:contentDescription="@string/play_prev_film"
+                        android:src="@drawable/ic_skip_previous"
+                        app:tint="@color/primaryText" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/play_prev_film"
+                        android:textColor="@color/tv_text_summary"
+                        android:textSize="@dimen/text_11sp" />
+                </LinearLayout>
+
+                <!-- video-player-dual-layout W3：跨影片「下一部」按钮（书源队列/订阅源文章列表） -->
+                <LinearLayout
+                    android:id="@+id/action_next"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:contentDescription="@string/play_next_film"
+                        android:src="@drawable/ic_skip_next"
+                        app:tint="@color/primaryText" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/play_next_film"
                         android:textColor="@color/tv_text_summary"
                         android:textSize="@dimen/text_11sp" />
                 </LinearLayout>

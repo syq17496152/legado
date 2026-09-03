@@ -405,7 +405,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             // 传统布局拆卸：先退 GSY 全屏窗口（backFromFull），再释放播放器
             runCatching { playerView.backFromFull(this) }
             runCatching { playerView.getCurrentPlayer().release() }
-            binding.tvNextFilm.setOnClickListener(null)
         }
         // 旧会话若处于全屏态，复位为常规态（新视频从常态开始播放）
         if (isFullScreen) {
@@ -635,10 +634,6 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         binding.legacyContainer.visible()
         updateSourceDependentMenu()
         setupPlayerView()
-        binding.tvNextFilm.setOnClickListener {
-            // K5/K6：跨影片切换（书源列表队列；无下一影片时 switchToBookFromList 内部 toast 边界提示）
-            VideoPlay.switchToBookFromList(+1, playerView.getCurrentPlayer())
-        }
         bindLegacyActions()
         bindLegacyInfo()
         composeTitle = VideoPlay.videoTitle ?: ""
@@ -667,6 +662,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
         // 收藏：复用沉浸式同一链（已收藏弹编辑框，未收藏先收藏）
         binding.actionStar.setOnClickListener { onFragmentStarClicked() }
+        // W3（用户反馈①②）：上一部/下一部——书源队列 → 订阅源文章列表（等价沉浸式上滑/下滑语义）
+        binding.actionPrev.setOnClickListener { switchLegacyFilm(-1) }
+        binding.actionNext.setOnClickListener { switchLegacyFilm(+1) }
         // 悬浮窗：复用既有双分支实现（legacy 自动取 playerView）
         binding.actionFloat.setOnClickListener { startFloatingWindow() }
         // 设置：BottomSheet 面板（与沉浸式同一组件，host=PLAYER_PAGE）
@@ -728,6 +726,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      */
     private fun bindLegacyInfo() {
         val book = VideoPlay.book
+        // W3 诊断日志：确认分支走向与数据状态（图片/按钮问题定位）
+        AppLog.put("bindLegacyInfo: book=${if (book != null) book.name.take(4) else "null"}, routes=${VideoPlay.rssRoutes?.size}, episodes=${VideoPlay.rssEpisodes?.size}, articles=${VideoPlay.rssArticles?.size}, articleIdx=${VideoPlay.rssArticleIndex}, articleImg=${VideoPlay.rssArticles?.getOrNull(VideoPlay.rssArticleIndex)?.image?.isNotBlank()}")
         when {
             book != null -> {
                 binding.data.visible()
@@ -909,13 +909,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      */
     private fun switchLegacyFilm(offset: Int) {
         val current = VideoPlay.book?.bookUrl
+        val articles = VideoPlay.rssArticles
         if (current != null && VideoPlaylistHolder.containsBookUrl(current)
             && VideoPlaylistHolder.neighborOf(current, offset) != null
         ) {
             VideoPlay.switchToBookFromList(offset, playerView.getCurrentPlayer())
             return
         }
-        val articles = VideoPlay.rssArticles
         if (!articles.isNullOrEmpty()) {
             val target = VideoPlay.rssArticleIndex + offset
             if (target in articles.indices) {
@@ -925,6 +925,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             } else {
                 toastOnUi(if (offset > 0) "已是最后一个" else "已是第一个")
             }
+        } else {
+            toastOnUi(if (offset > 0) "暂无下一部" else "暂无上一部")
         }
     }
 
@@ -936,8 +938,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      */
     private fun upNextFilmVisible() {
         if (useViewPagerMode) {
-            binding.tvPrevFilm.gone()
-            binding.tvNextFilm.gone()
+            binding.actionPrev.gone()
+            binding.actionNext.gone()
             return
         }
         val current = VideoPlay.book?.bookUrl
@@ -953,8 +955,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             hasPrev = false
             hasNext = false
         }
-        binding.tvPrevFilm.visibility = if (hasPrev) View.VISIBLE else View.GONE
-        binding.tvNextFilm.visibility = if (hasNext) View.VISIBLE else View.GONE
+        binding.actionPrev.visibility = if (hasPrev) View.VISIBLE else View.GONE
+        binding.actionNext.visibility = if (hasNext) View.VISIBLE else View.GONE
     }
 
     /**
@@ -1969,9 +1971,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 currentFragment?.updateVideoTitle(title)
             } else {
                 composeTitle = title
+                // video-player-dual-layout W3（用户反馈④）：传统布局信息区随播放就绪刷新
+                // （订阅源 title/image/description 分阶段到达：嗅探 setUp → VIDEO_SUB_TITLE，此时刷新信息区）
+                if (VideoPlay.book == null) {
+                    showRssLegacyInfo()
+                    upNextFilmVisible()
+                }
             }
-            // R3 修复：startPlay 异步赋值 videoUrl，VIDEO_SUB_TITLE 在每次 player.setUp 后触发，此时 videoUrl 已就绪
-            // P0-1: 统一 ViewPager2 模式，updateVideoUrlDisplay 已移除
         }
 
         observeEvent<ArrayList<Int>>(EventBus.UP_VIDEO_INFO) {
@@ -2024,6 +2030,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                         } else {
                             upEpisodesView()
                         }
+                        // video-player-dual-layout W3（用户反馈①④）：线路/集数数据异步到达后
+                        // 刷新信息区（封面/简介/计数行）与「上一部/下一部」按钮可见性
+                        showRssLegacyInfo()
+                        upNextFilmVisible()
                     }
                 }
             }
