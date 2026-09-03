@@ -408,6 +408,8 @@
     <string name="search_book_key">搜索书名、作者</string>
     
     <string name="rss_search_key">搜索订阅源内容</string>
+    <string name="no_more">没有更多</string>
+    <string name="rss_article_list_empty">暂无文章</string>
     <string name="rss_source_manage">订阅源管理</string>
     <string name="rss_source_manage_summary">管理订阅源和源仓库。</string>
     <string name="rss_search_type">搜索结果类型</string>
@@ -680,6 +682,7 @@
     <string name="expand_setting">更多阅读设置</string>
     <string name="more_setting">更多设置</string>
     <string name="read_aloud_by_page">按页朗读</string>
+    <string name="read_aloud_force_page_follow">强制追页</string>
     <string name="speak_engine">朗读引擎</string>
     <string name="bg_image">背景图片</string>
     <string name="bg_color">背景颜色</string>
@@ -1008,6 +1011,7 @@
     <string name="pref_media_button_per_next">媒体按钮•上一首|下一首</string>
     <string name="pref_media_button_per_next_summary">上一段|下一段/上一章|下一章</string>
     <string name="read_aloud_by_page_summary">及时翻页，翻页时会停顿一下</string>
+    <string name="read_aloud_force_page_follow_summary">朗读中手动翻页时，自动从新页第一段重新朗读</string>
     <string name="check_source_show_debug_message">校验显示详细信息</string>
     <string name="check_source_show_debug_message_summary">书源校验时显示网络请求步骤和时间</string>
     <string name="need_login">需要登录</string>
@@ -1791,7 +1795,6 @@
     <string name="theme_source_both">本地+云端</string>
     <string name="theme_current_applied">当前应用</string>
     <string name="theme_time_unknown">未记录时间</string>
-    <string name="theme_author">作者：%1$s</string>
     <string name="theme_apply">应用</string>
     <string name="theme_applied_state">已应用</string>
     <string name="theme_zip_exported">主题 ZIP 已导出</string>
@@ -1809,9 +1812,6 @@
     <string name="theme_card_shadow">卡片阴影</string>
     <string name="theme_card_background_blur">卡片模糊</string>
     <string name="theme_value_follow_default">跟随默认</string>
-    <string name="theme_preview">实时预览</string>
-    <string name="theme_editor_suggest_palette">壁纸提取配色</string>
-    <string name="theme_editor_hex_color">十六进制色值</string>
     <string name="theme_image_main_background">主界面背景</string>
     <string name="theme_image_book_info_background">详情页背景</string>
     <string name="theme_image_blur">背景图片模糊</string>

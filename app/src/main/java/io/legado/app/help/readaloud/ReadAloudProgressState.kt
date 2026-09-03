@@ -1,4 +1,4 @@
-﻿package io.legado.app.help.readaloud
+package io.legado.app.help.readaloud
 
 data class ReadAloudProgressState(
     val bookUrl: String = "",

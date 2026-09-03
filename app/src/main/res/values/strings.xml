@@ -440,6 +440,8 @@
     <string name="search_book_key">Search book name/author</string>
     
     <string name="rss_search_key">Search RSS content</string>
+    <string name="no_more">No more</string>
+    <string name="rss_article_list_empty">No articles yet</string>
     <string name="rss_source_manage">RSS Sources management</string>
     <string name="rss_source_manage_summary">Manage RSS sources and source repositories.</string>
     <string name="rss_search_type">Search result type</string>
@@ -711,6 +713,7 @@
     <string name="expand_setting">More reading settings</string>
     <string name="more_setting">More settings</string>
     <string name="read_aloud_by_page">Speak by pages</string>
+    <string name="read_aloud_force_page_follow">Force page follow</string>
     <string name="speak_engine">Speak Engine</string>
     <string name="bg_image">Background images</string>
     <string name="bg_color">Background color</string>
@@ -1046,6 +1049,7 @@
     <string name="pref_media_button_per_next">Media Buttons • Previous | Next</string>
     <string name="pref_media_button_per_next_summary">Previous Paragraph|Next Paragraph/Previous Chapter|Next Chapter</string>
     <string name="read_aloud_by_page_summary">Turning pages in time, with a pause when the page is turned</string>
+    <string name="read_aloud_force_page_follow_summary">Manually turning pages while reading aloud restarts from the first paragraph of the new page</string>
     <string name="check_source_show_debug_message">Check book source shows debug message</string>
     <string name="check_source_show_debug_message_summary">Show network status and timestamp during source checking</string>
     <string name="need_login">need login</string>
@@ -2194,7 +2198,6 @@
     <string name="theme_source_both">Local + cloud</string>
     <string name="theme_current_applied">Applied</string>
     <string name="theme_time_unknown">No time recorded</string>
-    <string name="theme_author">Author: %1$s</string>
     <string name="theme_apply">Apply</string>
     <string name="theme_applied_state">Applied</string>
     <string name="theme_zip_exported">Theme ZIP exported</string>
@@ -2212,9 +2215,6 @@
     <string name="theme_card_shadow">Card shadow</string>
     <string name="theme_card_background_blur">Card blur</string>
     <string name="theme_value_follow_default">Follow default</string>
-    <string name="theme_preview">Live preview</string>
-    <string name="theme_editor_suggest_palette">Suggested from wallpaper</string>
-    <string name="theme_editor_hex_color">Hex color</string>
     <string name="theme_image_main_background">Main background</string>
     <string name="theme_image_book_info_background">Book detail background</string>
     <string name="theme_image_blur">Background image blur</string>

@@ -1,13 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.swiperefreshlayout.widget.SwipeRefreshLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/refresh_layout"
+<!-- D4 §3.4：缩壳为单 ComposeView（id 保留 recycler_view 作 RssFragment.currentRssScrollTarget
+     旧 findViewById 路径的兜底；兜底代码与该 id 随 B5 巡检批次一并移除） -->
+<androidx.compose.ui.platform.ComposeView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/recycler_view"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
-
-    <io.legado.app.ui.widget.recycler.RecyclerViewAtPager2
-        android:id="@+id/recycler_view"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:clipToPadding="false" />
-
-</androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+    android:layout_height="match_parent" />
