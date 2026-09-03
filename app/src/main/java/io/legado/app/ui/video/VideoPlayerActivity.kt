@@ -791,7 +791,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      * - 封面：rssArticle.image ←（兜底）rssEpisode.cover[预留字段恒空] → 默认图
      */
     private fun showRssLegacyInfo() {
+        // W3（用户反馈④）：article 兜底链补全——集数模式（rssArticles 空）接 rssStar/rssRecord.toRssArticle()，
+        //   封面/简介从阅读记录/收藏实体带过来，不再空白
         val article = VideoPlay.rssArticles?.getOrNull(VideoPlay.rssArticleIndex)
+            ?: VideoPlay.rssStar?.toRssArticle()
+            ?: VideoPlay.rssRecord?.toRssArticle()
         binding.tvName.text = VideoPlay.videoTitle ?: article?.title ?: ""
         // 副信息行：列表计数
         val articles = VideoPlay.rssArticles
@@ -898,16 +902,58 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     /**
-     * K6/W2：「下一部」入口可见性——存在播放列表队列且有下一影片时显示
-     * （书架/历史直进无列表上下文 → 隐藏，与 VideoPlaylistHolder 队列语义一致）
+     * K6/W3：跨影片切换上一部/下一部（用户反馈①②）
+     * 优先级：①书源播放列表队列（switchToBookFromList，内部含边界 toast）
+     *        ②订阅源文章列表（switchToArticle，文章数据已切换 → 立即 bindLegacyInfo 刷新信息区）
+     *        ③订阅源集数模式（rssArticles 空）→ 无跨文章上下文，按钮已隐藏
+     */
+    private fun switchLegacyFilm(offset: Int) {
+        val current = VideoPlay.book?.bookUrl
+        if (current != null && VideoPlaylistHolder.containsBookUrl(current)
+            && VideoPlaylistHolder.neighborOf(current, offset) != null
+        ) {
+            VideoPlay.switchToBookFromList(offset, playerView.getCurrentPlayer())
+            return
+        }
+        val articles = VideoPlay.rssArticles
+        if (!articles.isNullOrEmpty()) {
+            val target = VideoPlay.rssArticleIndex + offset
+            if (target in articles.indices) {
+                VideoPlay.switchToArticle(target, playerView)
+                // 文章元数据（title/image/description）已同步切换，立即刷新信息区
+                bindLegacyInfo()
+            } else {
+                toastOnUi(if (offset > 0) "已是最后一个" else "已是第一个")
+            }
+        }
+    }
+
+    /**
+     * K6/W3：「上一部/下一部」入口可见性（用户反馈①②）
+     * - 书源：VideoPlaylistHolder 队列有邻居才显示
+     * - 订阅源文章模式：列表索引范围内显示
+     * - 订阅源集数模式/单URL：隐藏
      */
     private fun upNextFilmVisible() {
         if (useViewPagerMode) {
+            binding.tvPrevFilm.gone()
             binding.tvNextFilm.gone()
             return
         }
-        val current = VideoPlay.book?.bookUrl ?: VideoPlay.videoUrl
-        val hasNext = VideoPlaylistHolder.neighborOf(current, +1) != null
+        val current = VideoPlay.book?.bookUrl
+        val hasPrev: Boolean
+        val hasNext: Boolean
+        if (VideoPlay.book != null || VideoPlaylistHolder.containsBookUrl(current)) {
+            hasPrev = VideoPlaylistHolder.neighborOf(current, -1) != null
+            hasNext = VideoPlaylistHolder.neighborOf(current, +1) != null
+        } else if (!VideoPlay.rssArticles.isNullOrEmpty()) {
+            hasPrev = VideoPlay.rssArticleIndex > 0
+            hasNext = VideoPlay.rssArticleIndex < VideoPlay.rssArticles!!.size - 1
+        } else {
+            hasPrev = false
+            hasNext = false
+        }
+        binding.tvPrevFilm.visibility = if (hasPrev) View.VISIBLE else View.GONE
         binding.tvNextFilm.visibility = if (hasNext) View.VISIBLE else View.GONE
     }
 
@@ -1643,10 +1689,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 // video-player-dual-layout W2-B1：退出全屏恢复顶栏与信息区
                 binding.composeTopBar.visible()
                 supportActionBar?.show()
+                // video-player-dual-layout W3（用户反馈③）：所有源类型统一恢复 data+按钮区
+                // （原 book 分支才恢复 data，订阅源全屏返回后信息区/按钮区丢失）
+                binding.data.visible()
+                binding.legacyActions.visible()
                 if (VideoPlay.book != null) {
                     binding.chaptersContainer.visible()
-                    binding.data.visible()
-                    binding.legacyActions.visible()
                 } else {
                     if (!VideoPlay.rssRoutes.isNullOrEmpty() || !VideoPlay.rssEpisodes.isNullOrEmpty()) {
                         // R3 多线路 / R1 多集：退出全屏恢复线路+集数列表
