@@ -1,7 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- D4 §5.1：RssSortActivity 全 Compose（GlassTopAppBar+SortTabBar+HorizontalPager 于 RssSortScreen），
-     本 XML 缩壳为单 ComposeView 宿主；VMBaseActivity<VB> 绑定壳保留，§6 旧布局退役随基类重构批次执行 -->
-<androidx.compose.ui.platform.ComposeView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/compose_root"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent" />
+    android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:orientation="vertical">
+
+    <!-- L-D4 RSS 文章分类页：顶栏 Compose 化（GlassTopAppBar + 菜单下沉 AppDropdownMenu），
+         多行标签+ViewPager+文章列表 View 内核保留（AD-20 内核桥接） -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <LinearLayout
+        android:id="@+id/tabs_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="8dp"
+        app:layout_constraintTop_toBottomOf="@id/compose_top_bar" />
+
+    <androidx.viewpager.widget.ViewPager
+        android:id="@+id/view_pager"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        tools:ignore="SpeakableTextPresentCheck" />
+
+</LinearLayout>
