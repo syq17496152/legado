@@ -14,6 +14,7 @@ import io.legado.app.ui.image.ImageGalleryActivity
 import io.legado.app.ui.image.ImagePlay
 import io.legado.app.ui.video.VideoPlayerActivity
 import io.legado.app.utils.startActivity
+import io.legado.app.utils.postEvent
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -137,6 +138,17 @@ object ReadRss {
         if (type == 2) {
             //视频播放：设置文章列表到 VideoPlay 单例，支持上下滑动切换文章
             VideoPlay.rssArticles = rssArticles
+            // dual-layout：列表主查询 flowByOriginSort 不含 image 列（CursorWindow 优化），
+            // 内存对象 image 恒 null → 播放页信息区无封面。异步单行 getImage 回填，
+            // 完成后发 sticky VIDEO_SUB_TITLE 触发播放页信息区重刷
+            fragment.viewLifecycleOwner.lifecycleScope.launch(IO) {
+                rssArticles?.forEach { article ->
+                    if (article.image.isNullOrBlank()) {
+                        article.image = appDb.rssArticleDao.getImage(article.origin, article.link)
+                    }
+                }
+                postEvent(EventBus.VIDEO_SUB_TITLE, VideoPlay.videoTitle ?: "")
+            }
             // B3 修复：分离 null 兜底与 -1 兜底，-1 时输出 WARN 并兜底为 0（配合 B2 source 同步更新）
             val matchedIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link }
             VideoPlay.rssArticleIndex = if (matchedIndex == null) {

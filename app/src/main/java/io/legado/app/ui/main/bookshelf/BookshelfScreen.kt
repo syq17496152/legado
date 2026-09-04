@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import io.legado.app.ui.widget.components.AppShapes
@@ -37,7 +38,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +47,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import android.content.Context
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -195,24 +201,81 @@ fun BookshelfScreen(
                     )
                 }
             }
-            // 刷新条件化（ui-theme-governance-followup F2/红队 R5-3）：仅列表回顶才放行下拉刷新，
-            // 非顶部下拉不误触发全量刷新（onRefresh 短路，指示器不出现）
-            PullToRefreshBox(
+            // 使用 SwipeRefreshLayout (View) + ComposeView 实现下拉刷新，
+            // 对齐 archive BooksFragment.setOnChildScrollUpCallback 行为：
+            // 仅当列表/网格处于顶部 (canScrollBackward == false) 时允许下拉刷新，
+            // 避免非顶部下拉误触发刷新，且刷新指示器正确显示/隐藏。
+            SwipeRefreshContainer(
                 isRefreshing = isRefreshing,
-                onRefresh = {
-                    val atTop = if (layout >= 2) {
-                        !gridState.canScrollBackward
-                    } else {
-                        !listState.canScrollBackward
-                    }
-                    if (atTop) onRefresh()
-                },
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                content()
-            }
+                onRefresh = onRefresh,
+                canScrollBackward = if (layout >= 2) gridState.canScrollBackward else listState.canScrollBackward,
+                content = content
+            )
         }
     }
+}
+
+/**
+ * SwipeRefreshLayout 容器（对齐 archive BooksFragment.setOnChildScrollUpCallback）：
+ * 使用 AndroidView 承载 SwipeRefreshLayout + ComposeView，
+ * 通过 setOnChildScrollUpCallback 根据 Compose 滚动状态动态启用/禁用下拉刷新，
+ * 避免非顶部下拉误触发刷新且指示器残留。
+ */
+@Composable
+private fun SwipeRefreshContainer(
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
+    canScrollBackward: Boolean,
+    content: @Composable () -> Unit,
+) {
+    val context = LocalContext.current
+    // 修复①（滚动/刷新重叠）：canScrollBackward 参数捕获的是重组时的布尔拷贝，
+    // 滚动惯性期间可能过时 → SwipeRefreshLayout 用过时值劫持手势误触发刷新。
+    // rememberUpdatedState 保证回调每次读到最近重组的最新值。
+    val currentCanScrollBackward by rememberUpdatedState(canScrollBackward)
+    val currentOnRefresh by rememberUpdatedState(onRefresh)
+    // 修复②（内容冻结）：factory 捕获首次 content 后 update 从不重设，
+    // 刷新/换组/排序变化后内层 ComposeView 仍显示旧列表 → rememberUpdatedState 转发
+    val currentContent by rememberUpdatedState(content)
+    AndroidView(
+        factory = { ctx ->
+            val swipeRefresh = SwipeRefreshLayout(ctx).apply {
+                setColorSchemeResources(androidx.compose.material3.R.color.m3_refresh_color)
+                // 进度条位置微调，避免与顶栏重叠
+                setProgressViewOffset(true, -28, 56)
+            }
+            val composeView = androidx.compose.ui.viewinterop.ComposeView(ctx).apply {
+                setViewCompositionStrategy(androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+                setContent {
+                    io.legado.app.ui.theme.LegadoTheme {
+                        currentContent()
+                    }
+                }
+            }
+            // 将 ComposeView 作为 SwipeRefreshLayout 的唯一子视图
+            swipeRefresh.addView(composeView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            swipeRefresh
+        },
+        update = { swipeRefresh ->
+            // 核心修复：根据 canScrollBackward 动态控制是否允许下拉刷新
+            // canScrollBackward = true 表示可向上滚动(不在顶部)，此时禁用下拉刷新
+            swipeRefresh.setOnChildScrollUpCallback { _, _ -> currentCanScrollBackward }
+            // 同步刷新状态（相等时跳过，防止每帧旧值回写打断隐藏动画 → 指示器常驻）
+            if (swipeRefresh.isRefreshing != isRefreshing) {
+                swipeRefresh.isRefreshing = isRefreshing
+            }
+            // 刷新监听：仅在允许刷新时回调
+            swipeRefresh.setOnRefreshListener {
+                if (!currentCanScrollBackward) {
+                    currentOnRefresh()
+                } else {
+                    // 非顶部被触发（极少见），直接停止刷新动画
+                    swipeRefresh.isRefreshing = false
+                }
+            }
+        },
+        modifier = Modifier.fillMaxSize(),
+    )
 }
 
 internal fun List<Book>.sortedByBook(sortType: Int): List<Book> {

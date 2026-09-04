@@ -130,6 +130,9 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
     }
 
     fun upToc(books: List<Book>, onlyUpdateRead: Boolean) {
+        // 修复（刷新转圈秒收圈竞态）：execute 异步入队，复位协程可能先读到 upTocIdle 初始 true
+        // → 入队前同步置 false，保证复位协程等待真实排空信号
+        _upTocIdle.value = false
         execute(context = upTocPool) {
             books.filter {
                 !it.isLocal && it.canUpdate

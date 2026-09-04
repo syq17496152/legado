@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.main.bookshelf.style1
+package io.legado.app.ui.main.bookshelf.style1
 
 import android.os.Bundle
 import android.view.View
@@ -176,6 +176,17 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         binding.viewPagerBookshelf.setContent {
             LegadoTheme {
                 BookshelfContent()
+            }
+        }
+        // 修复（刷新指示器常驻）：复位协程挂 viewLifecycleOwner，切 Tab 视图销毁时被取消
+        // 而 refreshing 是 Fragment 级字段 → 返回后指示器常驻。视图重建后若仍在刷新，重挂复位协程
+        if (refreshing) {
+            refreshResetJob?.cancel()
+            refreshResetJob = viewLifecycleOwner.lifecycleScope.launch {
+                val idle = withTimeoutOrNull(5_000) {
+                    activityViewModel.upTocIdle.first { it }
+                }
+                if (idle == true || refreshing) refreshing = false
             }
         }
     }

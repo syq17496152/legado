@@ -1,52 +1,21 @@
 package io.legado.app.ui.book
 
 import android.content.Context
-import android.content.Intent
 import io.legado.app.constant.BookSourceType
 import io.legado.app.constant.BookType
 import io.legado.app.constant.SourceType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.ui.book.info.BookInfoNavigator
-import io.legado.app.ui.video.VideoPlayerActivity
 
 object SearchBookOpenHelper {
 
-    const val EXTRA_COVER_URL = "coverUrl"
-
     fun open(context: Context, book: SearchBook, isVideo: Boolean) {
-        if (isVideo) {
-            openVideo(context, book)
-            return
-        }
+        // dual-layout W4（用户反馈③）：视频书与其他类型书源统一走详情页
+        // （此前 isVideo 直进播放器且经 initSource save() 自动入架；
+        //   现由用户在详情页点「加入书架/开始播放」主动操作，播放即入架与文本书一致）
         context.startActivity(BookInfoNavigator.intent(context, book).apply {
             putExtra("videoTitle", book.name)
-        })
-    }
-
-    private fun openVideo(context: Context, book: SearchBook) {
-        openActivity(context, book, VideoPlayerActivity::class.java, true)
-    }
-
-    private fun openActivity(
-        context: Context,
-        book: SearchBook,
-        target: Class<*>,
-        prepareInPlayer: Boolean
-    ) {
-        context.startActivity(Intent(context, target).apply {
-            putExtra("name", book.name)
-            putExtra("author", book.author)
-            putExtra("bookUrl", book.bookUrl)
-            putExtra("origin", book.origin)
-            putExtra("originName", book.originName)
-            putExtra(EXTRA_COVER_URL, book.coverUrl)
-            putExtra("videoTitle", book.name)
-            if (target == VideoPlayerActivity::class.java && prepareInPlayer) {
-                putExtra("sourceKey", book.origin)
-                putExtra("sourceType", SourceType.book)
-                putExtra(VideoPlayerActivity.EXTRA_PREPARE_BOOK_INFO, true)
-            }
         })
     }
 
