@@ -1,6 +1,5 @@
 package io.legado.app.ui.book.toc.rule
 
-import android.annotation.SuppressLint
 import android.os.Bundle
 import androidx.activity.viewModels
 import androidx.compose.material.icons.Icons
@@ -26,13 +25,12 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.TxtTocRule
 import io.legado.app.databinding.ActivityTxtTocRuleBinding
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.association.ImportTxtTocRuleDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeSuggestionTextInputDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.MenuAction
@@ -89,6 +87,9 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
             )
         }
     }
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initComposeHost()
@@ -334,7 +335,6 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
         viewModel.update(*updated.toTypedArray())
     }
 
-    @SuppressLint("InflateParams")
     private fun showImportDialog() {
         val aCache = ACache.get(cacheDir = false)
         val defaultUrl = "https://gitee.com/fisher52/YueDuJson/raw/master/myTxtChapterRule.json"
@@ -346,28 +346,25 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
         if (!cacheUrls.contains(defaultUrl)) {
             cacheUrls.add(0, defaultUrl)
         }
-        alert(titleResource = R.string.import_on_line) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "url"
-                editView.setFilterValues(cacheUrls)
-                editView.delCallBack = {
-                    cacheUrls.remove(it)
+        // 弹框托管（ui-theme-governance-polish tasks 9.4 孤岛家族迁移）
+        // FilterEditText 历史建议（setFilterValues/delCallBack）→ Suggestion 对话框等价托管（点击填入/可删除）
+        showComposeSuggestionTextInputDialog(
+            title = getString(R.string.import_on_line),
+            hint = "url",
+            suggestions = cacheUrls,
+            deletable = true,
+            onSuggestionDeleted = { url ->
+                cacheUrls.remove(url)
+                aCache.put(importTocRuleKey, cacheUrls.joinToString(","))
+            },
+            onPositive = { text ->
+                if (text.isAbsUrl() && !cacheUrls.contains(text)) {
+                    cacheUrls.add(0, text)
                     aCache.put(importTocRuleKey, cacheUrls.joinToString(","))
                 }
+                showDialogFragment(ImportTxtTocRuleDialog(text))
             }
-            customView { alertBinding.root }
-            okButton {
-                val text = alertBinding.editView.text?.toString()
-                text?.let {
-                    if (it.isAbsUrl() && !cacheUrls.contains(it)) {
-                        cacheUrls.add(0, it)
-                        aCache.put(importTocRuleKey, cacheUrls.joinToString(","))
-                    }
-                    showDialogFragment(ImportTxtTocRuleDialog(it))
-                }
-            }
-            cancelButton()
-        }
+        )
     }
 
     override fun saveTxtTocRule(txtTocRule: TxtTocRule) {

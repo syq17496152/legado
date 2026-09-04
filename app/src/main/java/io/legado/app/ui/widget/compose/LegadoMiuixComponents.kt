@@ -2,6 +2,7 @@ package io.legado.app.ui.widget.compose
 
 import android.os.Build
 import android.widget.ImageView
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -9,6 +10,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -58,6 +60,7 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -283,13 +286,35 @@ fun LegadoMiuixSwitch(
     onCheckedChange: (Boolean) -> Unit,
     palette: LegadoMiuixPalette,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    stroke: Color? = null,
+    compact: Boolean = false
 ) {
-    val switchModifier = modifier.shadow(
-        elevation = if (enabled) 3.dp else 1.dp,
+    // stroke：仅未选中态描边（对齐原 BookshelfMiniSwitch 语义），双渲染路径共用同一 modifier
+    // （miuix colors 无 stroke 槽，不能走 colors 参数）；compact：38x22dp mini 尺寸且关阴影
+    // （复现原书架私有开关视觉，规避 E-Ink 下 shadow 永久灰圈）
+    var switchModifier = modifier.shadow(
+        elevation = if (compact) 0.dp else if (enabled) 3.dp else 1.dp,
         shape = RoundedCornerShape(50),
         clip = false
     )
+    if (stroke != null) {
+        switchModifier = switchModifier.border(
+            width = 1.dp,
+            color = if (checked) Color.Transparent else stroke,
+            shape = RoundedCornerShape(50)
+        )
+    }
+    if (compact) {
+        CompactMiuixSwitch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            palette = palette,
+            modifier = switchModifier,
+            enabled = enabled
+        )
+        return
+    }
     if (canUseRealMiuix()) {
         MiuixSwitch(
             checked = checked,
@@ -325,6 +350,63 @@ fun LegadoMiuixSwitch(
             disabledUncheckedTrackColor = palette.surfaceVariant.copy(alpha = 0.46f)
         )
     )
+}
+
+/**
+ * mini 自绘开关（compact 模式专用）：38x22dp 轨道 / 16dp thumb / 无阴影，复现原
+ * BookshelfMiniSwitch 视觉。库 Switch 尺寸固定无法经 colors 缩放，故 compact 走自绘。
+ * 语义：toggleable(role=Switch)（自绘无内层 Switch，需自带点击与语义）；thumb 颜色
+ * 与标准路径一致取 resolvedOnAccent 自适应黑白（浅 accent 下对比度改善）。
+ */
+@Composable
+private fun CompactMiuixSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    palette: LegadoMiuixPalette,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    val trackWidth = 38.dp
+    val trackHeight = 22.dp
+    val thumbSize = 16.dp
+    val thumbPadding = 3.dp
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) trackWidth - thumbSize - thumbPadding else thumbPadding,
+        animationSpec = tween(durationMillis = 150),
+        label = "compactSwitchThumb"
+    )
+    Box(
+        modifier = modifier
+            .width(trackWidth)
+            .height(trackHeight)
+            .clip(RoundedCornerShape(50))
+            .background(
+                if (checked) {
+                    if (enabled) palette.accent else palette.accent.copy(alpha = 0.24f)
+                } else {
+                    if (enabled) palette.surfaceVariant else palette.surfaceVariant.copy(alpha = 0.46f)
+                }
+            )
+            .then(
+                if (enabled) {
+                    Modifier.toggleable(
+                        value = checked,
+                        role = Role.Switch,
+                        onValueChange = onCheckedChange
+                    )
+                } else {
+                    Modifier
+                }
+            )
+    ) {
+        Box(
+            modifier = Modifier
+                .size(thumbSize)
+                .offset(x = thumbOffset, y = thumbPadding)
+                .clip(CircleShape)
+                .background(palette.resolvedOnAccent)
+        )
+    }
 }
 
 @Composable

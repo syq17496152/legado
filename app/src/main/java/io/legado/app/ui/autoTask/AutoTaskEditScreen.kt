@@ -25,6 +25,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,6 +42,8 @@ import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsCard
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.toMiuixPalette
 
 /**
  * L-C16 自动任务编辑页（S3 表单编辑页）：全 Compose 内容区。
@@ -80,6 +83,8 @@ fun AutoTaskEditScreen(
 
     val frequencyOptions = stringArrayResource(R.array.auto_task_cron_frequency_items)
     val scrollState = rememberScrollState()
+    // 取色纳管（ui-theme-governance-polish §8）
+    val palette = rememberAppDialogStyle().toMiuixPalette()
 
     Column(modifier = modifier.fillMaxSize()) {
         GlassTopAppBar(
@@ -124,11 +129,18 @@ fun AutoTaskEditScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f)
                         )
+                        // 取色纳管（ui-theme-governance-polish §8）
                         Switch(
                             checked = state.enable,
                             onCheckedChange = {
                                 onStateChange(state.copy(enable = it))
-                            }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = palette.accent,
+                                uncheckedTrackColor = palette.surfaceVariant,
+                                checkedThumbColor = palette.resolvedOnAccent,
+                                uncheckedThumbColor = palette.secondaryText.copy(alpha = 0.72f)
+                            )
                         )
                     }
                     Row(
@@ -141,11 +153,18 @@ fun AutoTaskEditScreen(
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f)
                         )
+                        // 取色纳管（ui-theme-governance-polish §8）
                         Switch(
                             checked = state.enabledCookieJar,
                             onCheckedChange = {
                                 onStateChange(state.copy(enabledCookieJar = it))
-                            }
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = palette.accent,
+                                uncheckedTrackColor = palette.surfaceVariant,
+                                checkedThumbColor = palette.resolvedOnAccent,
+                                uncheckedThumbColor = palette.secondaryText.copy(alpha = 0.72f)
+                            )
                         )
                     }
                 }

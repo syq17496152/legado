@@ -165,6 +165,7 @@ fun AppDialogFrame(
     message: String? = null,
     scrollContent: Boolean = true,
     messageInContent: Boolean = false,
+    titleTrailing: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
     actions: @Composable () -> Unit
 ) {
@@ -189,15 +190,21 @@ fun AppDialogFrame(
                     .fillMaxWidth()
                     .imePadding()
             ) {
-                Text(
-                    text = title,
-                    color = style.primaryText,
-                    fontSize = MaterialTheme.typography.titleLarge.fontSize,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = style.titleFontFamily,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                // 标题行（ui-theme-governance-polish P2）：titleTrailing 槽用于三点菜单收纳低频按钮，
+                // 默认 null 时与旧结构等价（Text 独占）；weight(1f)+maxLines(2)+Ellipsis 保留防长标题挤出
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = title,
+                        modifier = Modifier.weight(1f),
+                        color = style.primaryText,
+                        fontSize = MaterialTheme.typography.titleLarge.fontSize,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFamily = style.titleFontFamily,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    titleTrailing?.invoke()
+                }
                 if (!message.isNullOrBlank() && !messageInContent) {
                     Spacer(modifier = Modifier.height(8.dp))
                     AppDialogMessageText(message = message, style = style)
@@ -339,6 +346,15 @@ class ComposeTextInputDialog : ComposeDialogFragment() {
     private var validateInput: ((String) -> Boolean)? = null
     private var onPositive: ((String) -> Unit)? = null
     private var onNeutral: (() -> Unit)? = null
+    // 负向按钮回调（ui-theme-governance-polish P7）：保留旧 View alert"取消→副作用"语义
+    private var onNegative: (() -> Unit)? = null
+    // dismiss 回调（P7）：旧 View alert 的 onDismiss 等价物，供调用方协程 resume
+    private var onDismissed: (() -> Unit)? = null
+
+    override fun onDismiss(dialog: android.content.DialogInterface) {
+        super.onDismiss(dialog)
+        onDismissed?.invoke()
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -400,7 +416,10 @@ class ComposeTextInputDialog : ComposeDialogFragment() {
                         LegadoMiuixActionButton(
                             text = negativeText,
                             palette = palette,
-                            onClick = { dismissAllowingStateLoss() },
+                            onClick = {
+                                onNegative?.invoke()
+                                dismissAllowingStateLoss()
+                            },
                             cornerRadius = style.actionRadius
                         )
                         onPositive?.let { positiveCallback ->
@@ -439,7 +458,9 @@ class ComposeTextInputDialog : ComposeDialogFragment() {
             maxLines: Int = if (readOnly) 6 else 4,
             validateInput: ((String) -> Boolean)? = null,
             onPositive: (String) -> Unit,
-            onNeutral: (() -> Unit)? = null
+            onNeutral: (() -> Unit)? = null,
+            onNegative: (() -> Unit)? = null,
+            onDismissed: (() -> Unit)? = null
         ): ComposeTextInputDialog {
             return ComposeTextInputDialog().apply {
                 arguments = Bundle().apply {
@@ -457,6 +478,8 @@ class ComposeTextInputDialog : ComposeDialogFragment() {
                 this.validateInput = validateInput
                 this.onPositive = onPositive
                 this.onNeutral = onNeutral
+                this.onNegative = onNegative
+                this.onDismissed = onDismissed
             }
         }
 

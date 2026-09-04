@@ -64,6 +64,7 @@ import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.LegadoMiuixSlider
+import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import kotlinx.coroutines.delay
@@ -787,9 +788,12 @@ private fun SourceFolderAscendingRow(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(end = 8.dp)
             )
-            androidx.compose.material3.Switch(
+            // 开关主题化（ui-theme-governance-polish P1）：换托管 LegadoMiuixSwitch + style palette，
+            // 替换脱离取色基线的裸 M3 Switch（colorScheme 直读不随 ThemeStore主题色变化）
+            LegadoMiuixSwitch(
                 checked = checked,
-                onCheckedChange = onCheckedChange
+                onCheckedChange = onCheckedChange,
+                palette = style.toMiuixPalette()
             )
         }
     }

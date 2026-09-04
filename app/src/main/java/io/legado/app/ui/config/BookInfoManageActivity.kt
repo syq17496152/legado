@@ -11,8 +11,6 @@ import io.legado.app.databinding.ActivityThemeManageBinding
 import io.legado.app.help.config.BookInfoComponentConfig
 import io.legado.app.help.config.BookInfoComponentItem
 import io.legado.app.help.config.BookInfoPageStyle
-import io.legado.app.ui.widget.MainTopBarView
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 
@@ -23,8 +21,11 @@ class BookInfoManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     private val styleState = mutableStateOf(BookInfoPageStyle.CLASSIC)
     private val componentsState = mutableStateOf<List<BookInfoComponentItem>>(emptyList())
 
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initTopBar()
+        hideTopBar()
 
         // Load initial state
         styleState.value = BookInfoComponentConfig.loadStyle()
@@ -38,12 +39,9 @@ class BookInfoManageActivity : BaseActivity<ActivityThemeManageBinding>() {
         initComposeContent()
     }
 
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.book_info_manage))
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
+    // followup F5：统一管理族壳——View TitleBar 摘除（AppManagementScaffold 接管顶栏，返回由 Screen onBack 提供）
+    private fun hideTopBar() {
+        binding.titleBar.visibility = android.view.View.GONE
     }
 
     private fun initComposeContent() {
@@ -61,6 +59,7 @@ class BookInfoManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                 BookInfoManageScreen(
                     style = styleState.value,
                     components = componentsState.value,
+                    onBack = { finish() },
                     onStyleChanged = ::onStyleChanged,
                     onComponentToggle = ::onComponentToggle,
                     onReset = ::onReset,

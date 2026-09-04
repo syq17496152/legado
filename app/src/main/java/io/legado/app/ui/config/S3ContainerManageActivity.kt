@@ -1,4 +1,4 @@
-package io.legado.app.ui.config
+﻿package io.legado.app.ui.config
 
 import android.os.Bundle
 import android.view.ViewGroup
@@ -33,6 +33,9 @@ class S3ContainerManageActivity : BaseActivity<ActivityS3ContainerManageBinding>
 
     private val containersState = mutableStateOf<List<S3Container>>(emptyList())
     private val waitDialog by lazy { WaitDialog(this) }
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initComposeContent()

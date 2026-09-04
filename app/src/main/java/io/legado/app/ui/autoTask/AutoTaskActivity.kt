@@ -18,14 +18,13 @@ import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.databinding.ActivityAutoTaskBinding
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.DirectLinkUpload
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.model.AutoTaskRule
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.ui.widget.compose.showComposeSuggestionTextInputDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.MenuAction
@@ -211,46 +210,46 @@ class AutoTaskActivity : VMBaseActivity<ActivityAutoTaskBinding, AutoTaskViewMod
             .getAsString(importRecordKey)
             ?.splitNotBlank(",")
             ?.toMutableList() ?: mutableListOf()
-        alert(titleResource = R.string.import_on_line) {
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "url"
-                editView.setFilterValues(cacheUrls)
-                editView.delCallBack = {
-                    cacheUrls.remove(it)
+        // 弹框托管（ui-theme-governance-polish tasks 9.4 孤岛家族迁移）
+        // FilterEditText 历史建议（setFilterValues/delCallBack）→ Suggestion 对话框等价托管（点击填入/可删除）
+        showComposeSuggestionTextInputDialog(
+            title = getString(R.string.import_on_line),
+            hint = "url",
+            suggestions = cacheUrls,
+            deletable = true,
+            onSuggestionDeleted = { url ->
+                cacheUrls.remove(url)
+                aCache.put(importRecordKey, cacheUrls.joinToString(","))
+            },
+            onPositive = { text ->
+                if (text.isAbsUrl() && !cacheUrls.contains(text)) {
+                    cacheUrls.add(0, text)
                     aCache.put(importRecordKey, cacheUrls.joinToString(","))
                 }
+                showDialogFragment(ImportAutoTaskDialog(text))
             }
-            customView { alertBinding.root }
-            okButton {
-                val text = alertBinding.editView.text?.toString()
-                text?.let {
-                    if (it.isAbsUrl() && !cacheUrls.contains(it)) {
-                        cacheUrls.add(0, it)
-                        aCache.put(importRecordKey, cacheUrls.joinToString(","))
-                    }
-                    showDialogFragment(ImportAutoTaskDialog(it))
-                }
-            }
-            cancelButton()
-        }
+        )
     }
 
     private fun showBatchCronDialog() {
-        val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-            editView.hint = getString(R.string.auto_task_cron)
-        }
-        alert(titleResource = R.string.auto_task_batch_cron) {
-            customView { alertBinding.root }
-            okButton {
-                val cron = alertBinding.editView.text?.toString()?.trim().orEmpty()
+        // 弹框托管（ui-theme-governance-polish tasks 9.4 孤岛家族迁移）
+        // 行为差异：cron 校验走 validateInput，失败时弹框不关闭；原 View alert 点击确定后必然关闭
+        showComposeTextInputDialog(
+            title = getString(R.string.auto_task_batch_cron),
+            hint = getString(R.string.auto_task_cron),
+            validateInput = { input ->
+                val cron = input.trim()
                 if (cron.isNotBlank() && CronSchedule.parse(cron) != null) {
-                    viewModel.updateCron(selectedIds.toList(), cron)
+                    true
                 } else {
                     toastOnUi(R.string.auto_task_cron_invalid)
+                    false
                 }
+            },
+            onPositive = { input ->
+                viewModel.updateCron(selectedIds.toList(), input.trim())
             }
-            cancelButton()
-        }
+        )
     }
 
     // ---- 选择状态 ----

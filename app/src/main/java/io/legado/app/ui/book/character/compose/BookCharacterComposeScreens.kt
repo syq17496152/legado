@@ -101,10 +101,13 @@ import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.ui.book.read.config.SpeechVoiceRoutePickerDialog
 import io.legado.app.ui.book.read.config.speechRouteSummary
 import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.compose.AppManagementAction
+import io.legado.app.ui.widget.compose.AppManagementScaffold
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.LegadoMiuixPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixSlider
+import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.utils.ColorUtils
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -280,7 +283,6 @@ fun CharacterManageScreen(
     onDelete: (BookCharacter) -> Unit,
     onOpenRelations: () -> Unit
 ) {
-    val style = rememberCharacterStyle()
     val roleSections = remember(characters) { characterRoleSections(characters) }
     var selectedRoleLevel by remember(characters) {
         mutableStateOf(
@@ -290,14 +292,22 @@ fun CharacterManageScreen(
     }
     val selectedSection = roleSections.firstOrNull { it.roleLevel == selectedRoleLevel }
         ?: roleSections.first()
-    CharacterScaffold(
-        title = "角色资料",
-        subtitle = bookName,
+    // followup F5：统一管理族壳（AppManagementScaffold 平移；CharacterScaffold 保留供 Card/Edit 页复用）
+    val palette = rememberAppManagementPalette()
+    AppManagementScaffold(
+        title = if (bookName.isNotBlank()) "角色资料 · $bookName" else "角色资料",
+        selectedCount = 0,
+        totalCount = characters.size,
+        palette = palette,
         onBack = onBack,
-        actions = {
-            TextButton(onClick = onOpenRelations) { Text("关系网", color = style.colors.accent) }
-        }
-    ) {
+        topActions = listOf(
+            AppManagementAction(
+                text = "关系网",
+                iconRes = R.drawable.ic_groups,
+                onClick = onOpenRelations
+            )
+        )
+    ) { _ ->
         Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),

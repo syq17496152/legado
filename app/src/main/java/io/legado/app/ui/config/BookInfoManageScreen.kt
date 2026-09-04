@@ -34,6 +34,7 @@ import io.legado.app.help.config.BookInfoPageStyle
 import io.legado.app.ui.widget.compose.AppManagementCard
 import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementPalette
+import io.legado.app.ui.widget.compose.AppManagementScaffold
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
@@ -46,6 +47,7 @@ import io.legado.app.ui.theme.bodyLargeX
 internal fun BookInfoManageScreen(
     style: BookInfoPageStyle,
     components: List<BookInfoComponentItem>,
+    onBack: () -> Unit,
     onStyleChanged: (BookInfoPageStyle) -> Unit,
     onComponentToggle: (Int, Boolean) -> Unit,
     onReset: () -> Unit,
@@ -53,99 +55,108 @@ internal fun BookInfoManageScreen(
 ) {
     val palette = rememberAppManagementPalette()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(palette.settings.page)
-    ) {
-        // Tab bar
-        StyleTabBar(
-            style = style,
-            palette = palette,
-            onStyleChanged = onStyleChanged
-        )
+    // followup F5：统一管理族壳（AppManagementScaffold 平移，宿主 View TitleBar 已摘除）
+    AppManagementScaffold(
+        title = stringResource(R.string.book_info_manage),
+        selectedCount = 0,
+        totalCount = components.size,
+        palette = palette,
+        onBack = onBack
+    ) { _ ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(palette.settings.page)
+        ) {
+            // Tab bar
+            StyleTabBar(
+                style = style,
+                palette = palette,
+                onStyleChanged = onStyleChanged
+            )
 
-        Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-        // Summary text
-        val summaryText = when (style) {
-            BookInfoPageStyle.CLASSIC -> stringResource(R.string.book_info_components_hint)
-            BookInfoPageStyle.IMMERSIVE_COMPOSE -> stringResource(R.string.book_info_style_immersive_hint)
-        }
-        Text(
-            text = summaryText,
-            color = palette.settings.secondaryText,
-            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
-            modifier = Modifier.padding(horizontal = 18.dp),
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis
-        )
+            // Summary text
+            val summaryText = when (style) {
+                BookInfoPageStyle.CLASSIC -> stringResource(R.string.book_info_components_hint)
+                BookInfoPageStyle.IMMERSIVE_COMPOSE -> stringResource(R.string.book_info_style_immersive_hint)
+            }
+            Text(
+                text = summaryText,
+                color = palette.settings.secondaryText,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+                modifier = Modifier.padding(horizontal = 18.dp),
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
 
-        Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-        when (style) {
-            BookInfoPageStyle.CLASSIC -> {
-                // Component list
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
-                ) {
-                    itemsIndexed(
-                        items = components,
-                        key = { _, item -> item.type.name }
-                    ) { index, item ->
-                        ComponentItemRow(
-                            item = item,
-                            palette = palette,
-                            onCheckedChange = { checked ->
-                                onComponentToggle(index, checked)
-                            }
+            when (style) {
+                BookInfoPageStyle.CLASSIC -> {
+                    // Component list
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentPadding = PaddingValues(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
+                    ) {
+                        itemsIndexed(
+                            items = components,
+                            key = { _, item -> item.type.name }
+                        ) { index, item ->
+                            ComponentItemRow(
+                                item = item,
+                                palette = palette,
+                                onCheckedChange = { checked ->
+                                    onComponentToggle(index, checked)
+                                }
+                            )
+                        }
+                    }
+
+                    // Reset button
+                    LegadoMiuixActionButton(
+                        text = stringResource(R.string.reset),
+                        palette = palette.miuix,
+                        onClick = onReset,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 16.dp)
+                    )
+                }
+
+                BookInfoPageStyle.IMMERSIVE_COMPOSE -> {
+                    // Immersive info panel
+                    AppManagementCard(
+                        palette = palette,
+                        modifier = Modifier
+                            .fillMaxWidth(),
+                        insidePadding = PaddingValues(16.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.book_info_style_immersive_title),
+                            color = palette.settings.primaryText,
+                            fontSize = MaterialTheme.typography.bodyLargeX.fontSize,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = stringResource(R.string.book_info_style_immersive_desc),
+                            color = palette.settings.secondaryText,
+                            fontSize = 13.5.sp,
+                            lineHeight = 20.sp,
+                            maxLines = 6,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
+
+                    Spacer(modifier = Modifier.weight(1f))
                 }
-
-                // Reset button
-                LegadoMiuixActionButton(
-                    text = stringResource(R.string.reset),
-                    palette = palette.miuix,
-                    onClick = onReset,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 16.dp)
-                )
-            }
-
-            BookInfoPageStyle.IMMERSIVE_COMPOSE -> {
-                // Immersive info panel
-                AppManagementCard(
-                    palette = palette,
-                    modifier = Modifier
-                        .fillMaxWidth(),
-                    insidePadding = PaddingValues(16.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.book_info_style_immersive_title),
-                        color = palette.settings.primaryText,
-                        fontSize = MaterialTheme.typography.bodyLargeX.fontSize,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = stringResource(R.string.book_info_style_immersive_desc),
-                        color = palette.settings.secondaryText,
-                        fontSize = 13.5.sp,
-                        lineHeight = 20.sp,
-                        maxLines = 6,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
             }
         }
     }

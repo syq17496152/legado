@@ -309,6 +309,15 @@ object TopBarConfig {
         return config.backgroundColor ?: defaultBackgroundColor(config.isNightMode)
     }
 
+    /**
+     * 显式自定义背景色判定（ui-theme-governance-polish P5/AD-05）：
+     * resolveBackgroundColor 兜底后与默认值做值比较——禁止用 backgroundColor != null 判定
+     * （defaultConfig 恒填默认色恒真陷阱），也禁止裸值比较（自定义包 JSON 可为 null）。
+     */
+    fun hasCustomBackground(config: Config): Boolean {
+        return resolveBackgroundColor(config) != defaultBackgroundColor(config.isNightMode)
+    }
+
     fun resolveCornerScale(config: Config): Float {
         return config.cornerScale ?: 1f
     }

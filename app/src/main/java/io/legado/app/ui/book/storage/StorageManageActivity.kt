@@ -1,4 +1,4 @@
-package io.legado.app.ui.book.storage
+﻿package io.legado.app.ui.book.storage
 
 import android.os.Bundle
 import androidx.activity.viewModels
@@ -33,6 +33,9 @@ class StorageManageActivity : BaseActivity<ActivityStorageManageBinding>() {
     private var composeError by mutableStateOf<String?>(null)
     // 原始分项数据（删除需用 deletePaths）
     private var currentDetails = listOf<CacheStorageDetail>()
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initComposeHost()

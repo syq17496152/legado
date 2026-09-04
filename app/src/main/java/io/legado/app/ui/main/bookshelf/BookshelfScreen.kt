@@ -1,4 +1,4 @@
-package io.legado.app.ui.main.bookshelf
+﻿package io.legado.app.ui.main.bookshelf
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -18,12 +18,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import io.legado.app.ui.widget.components.AppShapes
@@ -40,6 +39,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -130,8 +130,21 @@ fun BookshelfScreen(
             }
         }
         // 非文件夹（style1）不再在 Compose 侧渲染分组 Tab——分组切换由调用方 MainTopBarView 顶栏驱动
-        if (loading) {
-            // 骨架屏必须与最终布局一致，避免"先画双列再刷成单列"的闪变（bug7）
+        // ui-theme-governance-followup F2：state hoist 至分支外（loading 时不组合会导致滚动位置归零）
+        // + rememberSaveable（无 key=跨分组保持滚动位置，有意决策，越界由 LazyGrid clamp 兜底）
+        val listState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+        val gridState = rememberSaveable(saver = LazyGridState.Saver) { LazyGridState() }
+        LaunchedEffect(topScrollTrigger) {
+            if (topScrollTrigger > 0) {
+                if (layout >= 2) {
+                    gridState.scrollToItem(0)
+                } else {
+                    listState.scrollToItem(0)
+                }
+            }
+        }
+        if (loading && books.isEmpty()) {
+            // 骨架屏仅首次加载（无数据）全屏展示；已有数据时静默刷新保持列表（滚动位置不丢）
             if (layout >= 2) {
                 ShelfGridSkeleton(columns = layout, modifier = Modifier.fillMaxSize())
             } else {
@@ -153,17 +166,6 @@ fun BookshelfScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
-            val listState = rememberLazyListState()
-            val gridState = rememberLazyGridState()
-            LaunchedEffect(topScrollTrigger) {
-                if (topScrollTrigger > 0) {
-                    if (layout >= 2) {
-                        gridState.scrollToItem(0)
-                    } else {
-                        listState.scrollToItem(0)
-                    }
-                }
-            }
             val content: @Composable () -> Unit = {
                 if (layout >= 2) {
                     BookGrid(
@@ -193,9 +195,18 @@ fun BookshelfScreen(
                     )
                 }
             }
+            // 刷新条件化（ui-theme-governance-followup F2/红队 R5-3）：仅列表回顶才放行下拉刷新，
+            // 非顶部下拉不误触发全量刷新（onRefresh 短路，指示器不出现）
             PullToRefreshBox(
                 isRefreshing = isRefreshing,
-                onRefresh = onRefresh,
+                onRefresh = {
+                    val atTop = if (layout >= 2) {
+                        !gridState.canScrollBackward
+                    } else {
+                        !listState.canScrollBackward
+                    }
+                    if (atTop) onRefresh()
+                },
                 modifier = Modifier.fillMaxSize(),
             ) {
                 content()

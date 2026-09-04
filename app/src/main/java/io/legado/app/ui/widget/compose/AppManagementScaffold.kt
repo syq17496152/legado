@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -31,8 +32,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -58,6 +61,8 @@ import io.legado.app.ui.widget.components.decodeTopBarWallpaper
 data class AppManagementAction(
     val text: String,
     @param:DrawableRes val iconRes: Int? = null,
+    // followup F5：icon 槽位（红队第 3 轮⑤：iconRes DrawableRes 与 ImageVector 不可逆转换）
+    val icon: ImageVector? = null,
     val primary: Boolean = false,
     val danger: Boolean = false,
     val onClick: () -> Unit = {},
@@ -82,10 +87,16 @@ fun AppManagementScaffold(
     content: @Composable (AppManagementPalette) -> Unit
 ) {
     LegadoComposeTheme {
+    // 根背景（followup F4 v3）：透明度>0 时叠半透明 backgroundColor（透出 decorView 底图/背景），0=原状透明
+    val rootContext = LocalContext.current
+    val bgAlpha = remember(ThemeSync.version) { AppConfig.manageBgAlphaFraction }
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Transparent)
+            .then(
+                if (bgAlpha > 0f) Modifier.background(Color(rootContext.backgroundColor).copy(alpha = bgAlpha))
+                else Modifier
+            )
     ) {
         AppManagementTopBar(
             title = title,
@@ -138,18 +149,25 @@ private fun AppManagementTopBar(
         }
     }
     val wallpaper = remember(wallpaperFile) { wallpaperFile?.let(::decodeTopBarWallpaper) }
-    val topBarColor = when {
-        isRegular -> Color(
-            TopBarConfig.withOpacity(
-                TopBarConfig.resolveBackgroundColor(config),
-                config.wallpaperAlpha
-            )
-        )
+    // 顶栏背景三级决策链（ui-theme-governance-polish P5/AD-05）：
+    // 显式自定义背景色（resolve 兜底后值比较）→ 沉浸开关 → 默认主色
+    val topBarBase = when {
+        TopBarConfig.hasCustomBackground(config) ->
+            Color(TopBarConfig.resolveBackgroundColor(config))
         AppConfig.immersiveManageBar -> Color(context.backgroundColor)
         else -> Color(context.primaryColor)
     }
-    val topBarContentColor = if (isRegular) contrastOn(topBarColor) else Color(context.titleTextColor)
+    // 内容色先于减淡决策（对比度基于不透明基色计算；非 REGULAR 由 titleTextColor
+    // 统一为 contrastOn(基色)——红队 R3-P1-1/R2-P2-3）
+    val topBarContentColor = contrastOn(topBarBase)
     val cornerRadius = if (isRegular) TopBarConfig.cornerRadius(context, config) else 0f
+    // 顶栏着色（followup F4 v3）：有顶栏包壁纸走原 withOpacity 语义；否则半透明叠 backgroundColor
+    // （透出全局底图/背景，0=不透明基色原状）
+    val topBarColor = if (wallpaper != null && isRegular) {
+        Color(TopBarConfig.withOpacity(TopBarConfig.resolveBackgroundColor(config), config.wallpaperAlpha))
+    } else {
+        topBarBase.copy(alpha = remember(themeVersion) { AppConfig.manageBgAlphaFraction })
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -225,8 +243,19 @@ private fun AppManagementTopAction(
     palette: AppManagementPalette,
     contentColor: Color
 ) {
-    val iconRes = action.iconRes ?: R.drawable.ic_more_vert
     val menuActions = action.menuActions
+    // followup F5：icon（ImageVector）优先渲染，fallback iconRes；
+    // menuActions 场景走 AndroidView setImageResource 仅支持 iconRes
+    if (action.icon != null && menuActions == null) {
+        AppManagementVectorIconAction(
+            icon = action.icon,
+            contentDescription = action.text,
+            tint = if (action.danger) palette.settings.danger else contentColor,
+            onClick = action.onClick
+        )
+        return
+    }
+    val iconRes = action.iconRes ?: R.drawable.ic_more_vert
     if (menuActions != null) {
         AppManagementMoreActionButton(
             actionsProvider = menuActions,
@@ -241,6 +270,27 @@ private fun AppManagementTopAction(
             contentDescription = action.text,
             tint = if (action.danger) palette.settings.danger else contentColor,
             onClick = action.onClick
+        )
+    }
+}
+
+@Composable
+private fun AppManagementVectorIconAction(
+    icon: ImageVector,
+    contentDescription: String?,
+    tint: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = modifier.size(36.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(20.dp)
         )
     }
 }

@@ -1,4 +1,4 @@
-package io.legado.app.ui.book.source.manage
+﻿package io.legado.app.ui.book.source.manage
 
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -163,6 +163,9 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             )
         }
     }
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initComposeContent()
         upBookSource()

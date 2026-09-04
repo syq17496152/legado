@@ -1,4 +1,4 @@
-package io.legado.app.ui.book.character
+﻿package io.legado.app.ui.book.character
 
 import android.app.Activity
 import android.os.Bundle
@@ -40,6 +40,9 @@ class BookCharacterManageActivity : BaseActivity<ViewBinding>(
     private var characterBookKey: String = ""
     private var book: Book? = null
     private var characters by mutableStateOf<List<BookCharacter>>(emptyList())
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         bookUrl = intent.getStringExtra(EXTRA_BOOK_URL)

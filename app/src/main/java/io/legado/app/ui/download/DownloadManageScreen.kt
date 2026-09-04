@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -32,7 +31,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -53,7 +51,6 @@ import io.legado.app.service.DownloadStatus
 import io.legado.app.service.DownloadTaskType
 import io.legado.app.ui.book.cache.formatBytes
 import io.legado.app.ui.widget.RoundedTagBarView
-import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.AppEditDialog
 import io.legado.app.ui.widget.components.AppMenuSheet
 import io.legado.app.ui.widget.components.BookListCardMetrics
@@ -61,11 +58,14 @@ import io.legado.app.ui.widget.components.ConfirmDialog
 import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.ui.widget.components.EditField
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
-import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.ListCard
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.ShelfListSkeleton
 import io.legado.app.ui.widget.components.VerticalScrollbar
+import io.legado.app.ui.widget.compose.AppManagementAction
+import io.legado.app.ui.widget.compose.AppManagementMenuAction
+import io.legado.app.ui.widget.compose.AppManagementScaffold
+import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 
 /** C6 单源：Tab 枚举唯一权威定义（Activity 与 Screen 共用，消除双份裸 Int 对齐） */
 enum class DownloadTab(val labelRes: Int) {
@@ -119,7 +119,6 @@ fun DownloadManageScreen(
     modifier: Modifier = Modifier
 ) {
     // D4：旋转屏保持（布尔态直接 saveable；item 态存任务 id 回查列表，DisplayItem 非 Parcelable）
-    var moreMenuVisible by rememberSaveable { mutableStateOf(false) }
     var menuItemId by rememberSaveable { mutableStateOf<Long?>(null) }
     var deleteChoiceItemId by rememberSaveable { mutableStateOf<Long?>(null) }
     var confirmItemId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -135,120 +134,127 @@ fun DownloadManageScreen(
 
     val listState = rememberLazyListState()
 
-    Column(modifier = modifier.fillMaxSize()) {
-        GlassTopAppBar(
-            title = stringResource(R.string.download_manage),
-            navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-            onNavClick = onBack,
-            actions = {
-                Box {
-                    IconButton(onClick = { moreMenuVisible = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = null)
-                    }
-                    AppDropdownMenu(
-                        expanded = moreMenuVisible,
-                        onDismiss = { moreMenuVisible = false },
-                        actions = listOf(
-                            MenuAction(
-                                icon = Icons.Default.Wifi,
-                                title = stringResource(R.string.network_policy),
-                                header = true,
-                                onClick = {}
-                            ),
-                            MenuAction(
-                                icon = Icons.Default.Wifi,
-                                title = stringResource(R.string.download_network_wifi_only),
-                                checked = onlyWifi,
-                                onClick = {
-                                    moreMenuVisible = false
-                                    onOnlyWifiChange(true)
-                                }
-                            ),
-                            MenuAction(
-                                icon = Icons.Default.Public,
-                                title = stringResource(R.string.download_network_any),
-                                checked = !onlyWifi,
-                                onClick = {
-                                    moreMenuVisible = false
-                                    onOnlyWifiChange(false)
-                                }
-                            ),
-                            MenuAction(
-                                icon = Icons.Default.Download,
-                                title = stringResource(R.string.download_dir_setting),
-                                onClick = {
-                                    moreMenuVisible = false
-                                    dirSettingVisible = true
-                                }
-                            ),
-                            MenuAction(
-                                icon = Icons.Default.DeleteSweep,
-                                title = stringResource(R.string.clear_completed_tasks),
-                                onClick = {
-                                    moreMenuVisible = false
-                                    clearConfirmVisible = true
-                                }
-                            )
-                        )
-                    )
-                }
+    // followup F5：统一管理族壳（AppManagementScaffold 平移，删页内自绘 GlassTopAppBar）
+    val palette = rememberAppManagementPalette()
+    val moreMenuActions = listOf(
+        MenuAction(
+            icon = Icons.Default.Wifi,
+            title = stringResource(R.string.network_policy),
+            header = true,
+            onClick = {}
+        ),
+        MenuAction(
+            icon = Icons.Default.Wifi,
+            title = stringResource(R.string.download_network_wifi_only),
+            checked = onlyWifi,
+            onClick = {
+                onOnlyWifiChange(true)
+            }
+        ),
+        MenuAction(
+            icon = Icons.Default.Public,
+            title = stringResource(R.string.download_network_any),
+            checked = !onlyWifi,
+            onClick = {
+                onOnlyWifiChange(false)
+            }
+        ),
+        MenuAction(
+            icon = Icons.Default.Download,
+            title = stringResource(R.string.download_dir_setting),
+            onClick = {
+                dirSettingVisible = true
+            }
+        ),
+        MenuAction(
+            icon = Icons.Default.DeleteSweep,
+            title = stringResource(R.string.clear_completed_tasks),
+            onClick = {
+                clearConfirmVisible = true
             }
         )
+    )
 
-        // 顶部标签栏：嵌入 RoundedTagBarView（与新版发现头部同一组件，样式/主题联动完全一致——
-        // 胶囊选中态 + tagBar 圆角底 + TopBarConfig 配色），对齐 bookshelf_tag_bar_height(38dp)
-        // C6：标签文案来自 DownloadTab 单源枚举
-        AndroidView(
-            factory = { ctx ->
-                RoundedTagBarView(ctx).apply {
-                    setOnTagClickListener { index ->
-                        if (index in DownloadTab.entries.indices) onTabChange(index)
-                    }
-                }
-            },
-            update = { view ->
-                val labelItems = DownloadTab.entries.map {
-                    RoundedTagBarView.Item(view.context.getString(it.labelRes))
-                }
-                view.submitItems(labelItems, tabIndex.coerceIn(0, DownloadTab.entries.lastIndex))
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(38.dp)
-        )
-
-        when {
-            isLoading && items.isEmpty() -> ShelfListSkeleton(compact = true)
-            items.isEmpty() -> EmptyStatePlaceholder(
-                icon = Icons.Default.Download,
-                title = stringResource(R.string.download_empty),
-                modifier = Modifier.fillMaxSize()
-            )
-            else -> Box(modifier = Modifier.fillMaxSize()) {
-                LazyColumn(
-                    state = listState,
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = 16.dp, vertical = 8.dp
-                    ),
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .navigationBarsPadding()
-                ) {
-                    itemsIndexed(items, key = { _, item -> item.id }) { _, item ->
-                        DownloadTaskItemRow(
-                            item = item,
-                            onClick = { menuItemId = item.id },
-                            onErrorDetailClick = { errorDetailItemId = item.id }
+    AppManagementScaffold(
+        title = stringResource(R.string.download_manage),
+        selectedCount = 0,
+        totalCount = items.size,
+        modifier = modifier,
+        palette = palette,
+        onBack = onBack,
+        topActions = listOf(
+            AppManagementAction(
+                text = stringResource(R.string.more_menu),
+                menuActions = {
+                    moreMenuActions.map { menuAction ->
+                        AppManagementMenuAction(
+                            text = menuAction.title,
+                            // header 分组标签映射为禁用行（ModernActionPopup 无 header 语义）
+                            enabled = !menuAction.header,
+                            checked = menuAction.checked == true,
+                            onClick = menuAction.onClick
                         )
                     }
                 }
-                VerticalScrollbar(
-                    listState = listState,
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxSize()
+            )
+        )
+    ) { _ ->
+        Column(modifier = Modifier.fillMaxSize()) {
+            // 顶部标签栏：嵌入 RoundedTagBarView（与新版发现头部同一组件，样式/主题联动完全一致——
+            // 胶囊选中态 + tagBar 圆角底 + TopBarConfig 配色），对齐 bookshelf_tag_bar_height(38dp)
+            // C6：标签文案来自 DownloadTab 单源枚举
+            AndroidView(
+                factory = { ctx ->
+                    RoundedTagBarView(ctx).apply {
+                        setOnTagClickListener { index ->
+                            if (index in DownloadTab.entries.indices) onTabChange(index)
+                        }
+                    }
+                },
+                update = { view ->
+                    val labelItems = DownloadTab.entries.map {
+                        RoundedTagBarView.Item(view.context.getString(it.labelRes))
+                    }
+                    view.submitItems(labelItems, tabIndex.coerceIn(0, DownloadTab.entries.lastIndex))
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(38.dp)
+            )
+
+            when {
+                isLoading && items.isEmpty() -> ShelfListSkeleton(compact = true)
+                items.isEmpty() -> EmptyStatePlaceholder(
+                    icon = Icons.Default.Download,
+                    title = stringResource(R.string.download_empty),
+                    modifier = Modifier.fillMaxSize()
                 )
+                else -> Box(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        state = listState,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            horizontal = 16.dp, vertical = 8.dp
+                        ),
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .navigationBarsPadding()
+                    ) {
+                        itemsIndexed(items, key = { _, item -> item.id }) { _, item ->
+                            DownloadTaskItemRow(
+                                item = item,
+                                onClick = { menuItemId = item.id },
+                                onErrorDetailClick = { errorDetailItemId = item.id }
+                            )
+                        }
+                    }
+                    VerticalScrollbar(
+                        listState = listState,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxSize()
+                    )
+                }
             }
         }
     }

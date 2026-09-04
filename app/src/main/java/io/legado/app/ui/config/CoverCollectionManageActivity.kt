@@ -47,6 +47,9 @@ class CoverCollectionManageActivity : BaseActivity<ActivityCoverCollectionManage
         it.uri?.let { toastOnUi(R.string.export_success) }
     }
 
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initTopBar()
         initComposeContent()
@@ -54,6 +57,9 @@ class CoverCollectionManageActivity : BaseActivity<ActivityCoverCollectionManage
     }
 
     private fun initTopBar() = binding.titleBar.run {
+        // followup F5（B 类风险登记）：S3 容器按钮挂在 View 顶栏且联动 updateContainerMenu 可见性状态，
+        // 迁移 AppManagementScaffold 需桥接业务状态（风险大），本期保守仅做顶栏基色对齐（backgroundColor 同源，消 primaryColor 断层）
+        overlayOpaqueBackground = true
         applyStatusBarPadding(withInitialPadding = true)
         setMode(MainTopBarView.Mode.SUB)
         setTitle(getString(R.string.cover_collection_manage))

@@ -1,4 +1,4 @@
-package io.legado.app.ui.download
+﻿package io.legado.app.ui.download
 
 import android.content.Intent
 import android.net.Uri
@@ -61,6 +61,9 @@ class DownloadManageActivity : BaseActivity<ActivityDownloadManageBinding>() {
     private var onlyWifi by mutableStateOf(false)
     // D6：目录状态化（原实现每次重组重读 Pref+构造 File）
     private var currentDir by mutableStateOf("")
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         currentDir = currentTargetDir()

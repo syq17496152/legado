@@ -113,7 +113,7 @@ abstract class BaseActivity<VB : ViewBinding>(
             } else {
                 // T2（theme-arch-gap）：豁免页不重建，重刷底色 tint（initTheme 只在
                 // onCreate 走）+ 系统栏 + 背景图；Compose 侧经 ThemeSync 即时换肤
-                window.decorView.applyBackgroundTint(backgroundColor)
+                window.decorView.applyBackgroundTint(manageHostTintColor())
                 setupSystemBar()
                 upBackgroundImage()
             }
@@ -158,6 +158,20 @@ abstract class BaseActivity<VB : ViewBinding>(
         setupSystemBar()
     }
 
+    /**
+     * 管理页背景透明度钩子（ui-theme-governance-polish P6/AD-06）：管理族宿主 override true。
+     * 单点覆盖三条刷新链路（onCreate initTheme / RECREATE 豁免分支 / onResume token 比对外的
+     * 全部 applyBackgroundTint 调用），豁免页宿主主题切换不丢 alpha（红队 N2-P1-4）。
+     */
+    protected open fun manageBackgroundAlphaEnabled(): Boolean = false
+
+    /** 宿主 tint 底色（followup F4 v3）：decorView 恒不透明 backgroundColor 原色；
+     * 透明度由内容层根（AppManagementScaffold/AppSettingPalette page）半透明叠加实现，
+     * 有背景图时 decorView 由 upBackgroundImage 铺底图，不再参与 tint（红队 R5-1 语义回归修正） */
+    protected fun manageHostTintColor(): Int {
+        return backgroundColor
+    }
+
     abstract fun onActivityCreated(savedInstanceState: Bundle?)
 
     final override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -188,12 +202,12 @@ abstract class BaseActivity<VB : ViewBinding>(
             Theme.Transparent -> setTheme(R.style.AppTheme_Transparent)
             Theme.Dark -> {
                 setTheme(R.style.AppTheme_Dark)
-               window.decorView.applyBackgroundTint(backgroundColor)
+               window.decorView.applyBackgroundTint(manageHostTintColor())
             }
 
             Theme.Light -> {
                 setTheme(R.style.AppTheme_Light)
-               window.decorView.applyBackgroundTint(backgroundColor)
+               window.decorView.applyBackgroundTint(manageHostTintColor())
             }
 
             else -> {
@@ -204,7 +218,7 @@ abstract class BaseActivity<VB : ViewBinding>(
                 } else {
                     setTheme(R.style.AppTheme_Light)
                 }
-               window.decorView.applyBackgroundTint(backgroundColor)
+               window.decorView.applyBackgroundTint(manageHostTintColor())
             }
         }
         if (!recreateOnThemeChange) {
@@ -241,7 +255,7 @@ abstract class BaseActivity<VB : ViewBinding>(
             window.decorView.background = drawable
         } else {
             window.decorView.background = null
-            window.decorView.applyBackgroundTint(backgroundColor)
+            window.decorView.applyBackgroundTint(manageHostTintColor())
         }
     }
 

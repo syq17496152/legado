@@ -1,4 +1,4 @@
-package io.legado.app.ui.rss.subscription
+﻿package io.legado.app.ui.rss.subscription
 
 import android.os.Bundle
 import android.view.View
@@ -44,6 +44,9 @@ class RuleSubActivity : BaseActivity<ActivityRuleSubBinding>(),
     private val ruleSubsState = mutableStateListOf<RuleSub>()
     private val searchQueryState = mutableStateOf("")
     private val typeLabels by lazy { resources.getStringArray(R.array.rule_type).toList() }
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initComposeContent()

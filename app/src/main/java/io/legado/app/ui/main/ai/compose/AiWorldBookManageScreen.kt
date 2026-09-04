@@ -35,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -582,7 +583,18 @@ private fun WorldBookCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Switch(checked = book.isGloballyEnabled(), onCheckedChange = { onToggle() })
+            // 取色纳管（ui-theme-governance-polish §8）：AiComposeStyle → LegadoMiuixPalette
+            val palette = style.toWorldBookMiuixPalette()
+            Switch(
+                checked = book.isGloballyEnabled(),
+                onCheckedChange = { onToggle() },
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = palette.accent,
+                    uncheckedTrackColor = palette.surfaceVariant,
+                    checkedThumbColor = palette.resolvedOnAccent,
+                    uncheckedThumbColor = palette.secondaryText.copy(alpha = 0.72f)
+                )
+            )
         }
         Row(
             modifier = Modifier
@@ -659,7 +671,18 @@ private fun EntryRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Switch(checked = entry.enabled, onCheckedChange = { onToggle() })
+            // 取色纳管（ui-theme-governance-polish §8）：AiComposeStyle → LegadoMiuixPalette
+            val palette = style.toWorldBookMiuixPalette()
+            Switch(
+                checked = entry.enabled,
+                onCheckedChange = { onToggle() },
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = palette.accent,
+                    uncheckedTrackColor = palette.surfaceVariant,
+                    checkedThumbColor = palette.resolvedOnAccent,
+                    uncheckedThumbColor = palette.secondaryText.copy(alpha = 0.72f)
+                )
+            )
         }
         Row(
             modifier = Modifier
@@ -1012,7 +1035,18 @@ private fun LabeledSwitch(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, color = style.colors.primaryText, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        // 取色纳管（ui-theme-governance-polish §8）：AiComposeStyle → LegadoMiuixPalette
+        val palette = style.toWorldBookMiuixPalette()
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = palette.accent,
+                uncheckedTrackColor = palette.surfaceVariant,
+                checkedThumbColor = palette.resolvedOnAccent,
+                uncheckedThumbColor = palette.secondaryText.copy(alpha = 0.72f)
+            )
+        )
     }
 }
 

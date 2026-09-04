@@ -17,21 +17,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.NavigateNext
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -46,8 +41,9 @@ import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
-import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.compose.AppManagementScaffold
+import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 
 /**
  * L-C9 文件管理页（S2 列表管理页）：全 Compose 内容区。
@@ -80,72 +76,63 @@ fun FileManageScreen(
 ) {
     var deleteTarget by remember { mutableStateOf<Int?>(null) }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        GlassTopAppBar(
-            title = stringResource(R.string.file_manage),
-            navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-            onNavClick = onBack
-        )
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = onSearchQueryChange,
-            placeholder = { Text(stringResource(R.string.screen)) },
-            leadingIcon = {
-                Icon(
-                    Icons.Default.Search,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            },
-            singleLine = true,
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
-                focusedBorderColor = MaterialTheme.colorScheme.primary
-            ),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
-        )
-        PathBar(pathSegments = pathSegments, onJumpPath = onJumpPath)
-        if (isLoading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        Box(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
-            if (items.isEmpty() && !isLoading) {
-                EmptyStatePlaceholder(
-                    icon = Icons.Default.Folder,
-                    title = stringResource(R.string.empty),
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    itemsIndexed(items = items, key = { _, item -> item.path }) { index, item ->
-                        Box {
-                            FileManageItemRow(
-                                item = item,
-                                onClick = {
-                                    when {
-                                        item.isUpDir -> onUpDir()
-                                        item.isDir -> onOpenDir(index)
-                                        else -> onOpenFile(index)
+    // followup F5：统一管理族壳（AppManagementScaffold 平移，删页内自绘 GlassTopAppBar/OutlinedTextField 搜索）
+    val palette = rememberAppManagementPalette()
+    AppManagementScaffold(
+        title = stringResource(R.string.file_manage),
+        selectedCount = 0,
+        totalCount = items.size,
+        modifier = modifier,
+        palette = palette,
+        searchQuery = searchQuery,
+        searchHint = stringResource(R.string.screen),
+        onSearchChange = onSearchQueryChange,
+        onBack = onBack
+    ) { _ ->
+        Column(modifier = Modifier.fillMaxSize()) {
+            PathBar(pathSegments = pathSegments, onJumpPath = onJumpPath)
+            if (isLoading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            Box(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
+                if (items.isEmpty() && !isLoading) {
+                    EmptyStatePlaceholder(
+                        icon = Icons.Default.Folder,
+                        title = stringResource(R.string.empty),
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        itemsIndexed(items = items, key = { _, item -> item.path }) { index, item ->
+                            Box {
+                                FileManageItemRow(
+                                    item = item,
+                                    onClick = {
+                                        when {
+                                            item.isUpDir -> onUpDir()
+                                            item.isDir -> onOpenDir(index)
+                                            else -> onOpenFile(index)
+                                        }
+                                    },
+                                    onLongClick = {
+                                        if (!item.isUpDir) deleteTarget = index
                                     }
-                                },
-                                onLongClick = {
-                                    if (!item.isUpDir) deleteTarget = index
-                                }
-                            )
-                            AppDropdownMenu(
-                                expanded = deleteTarget == index,
-                                onDismiss = { deleteTarget = null },
-                                actions = listOf(
-                                    MenuAction(
-                                        icon = Icons.Default.Delete,
-                                        title = stringResource(R.string.delete),
-                                        onClick = { deleteTarget = null; onDelete(index) }
+                                )
+                                AppDropdownMenu(
+                                    expanded = deleteTarget == index,
+                                    onDismiss = { deleteTarget = null },
+                                    actions = listOf(
+                                        MenuAction(
+                                            icon = Icons.Default.Delete,
+                                            title = stringResource(R.string.delete),
+                                            onClick = { deleteTarget = null; onDelete(index) }
+                                        )
                                     )
                                 )
+                            }
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                thickness = 0.5.dp
                             )
                         }
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                            thickness = 0.5.dp
-                        )
                     }
                 }
             }

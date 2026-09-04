@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,6 +27,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 
 /**
  * 单选弹窗（公共组件库三期 Dialog 族）。
@@ -49,6 +51,8 @@ fun SingleChoiceDialog(
 ) {
     var currentIndex by remember(selectedIndex) { mutableStateOf(selectedIndex) }
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.7f
+    // 取色纳管（ui-theme-governance-polish §8）
+    val style = rememberAppDialogStyle()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -75,18 +79,23 @@ fun SingleChoiceDialog(
                             .clickable { currentIndex = index }
                             .padding(horizontal = 16.dp)
                     ) {
+                        // 取色纳管（ui-theme-governance-polish §8）
                         RadioButton(
                             selected = selected,
-                            onClick = { currentIndex = index }
+                            onClick = { currentIndex = index },
+                            colors = RadioButtonDefaults.colors(
+                                selectedColor = style.accent,
+                                unselectedColor = style.secondaryText
+                            )
                         )
                         Spacer(Modifier.width(16.dp))
                         Text(
                             text = option,
                             style = MaterialTheme.typography.bodyLarge,
                             color = if (selected) {
-                                MaterialTheme.colorScheme.primary
+                                style.accent
                             } else {
-                                MaterialTheme.colorScheme.onSurface
+                                style.primaryText
                             },
                         )
                     }
@@ -97,7 +106,8 @@ fun SingleChoiceDialog(
             TextButton(onClick = { onSelect(currentIndex) }) {
                 Text(
                     text = stringResource(R.string.ok),
-                    color = MaterialTheme.colorScheme.primary,
+                    // 取色纳管（ui-theme-governance-polish §8）
+                    color = style.accent,
                     modifier = Modifier.sizeIn(minHeight = 48.dp),
                 )
             }

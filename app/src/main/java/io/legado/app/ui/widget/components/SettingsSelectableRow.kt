@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -88,10 +89,14 @@ fun SettingsSelectableRow(
             .padding(start = 8.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // 取色纳管（ui-theme-governance-polish §8）
         Checkbox(
             checked = checked,
             onCheckedChange = onToggleSelect,
-            colors = CheckboxDefaults.colors()
+            colors = CheckboxDefaults.colors(
+                checkedColor = palette.accent,
+                uncheckedColor = palette.secondaryText
+            )
         )
         Column(
             modifier = Modifier
@@ -120,9 +125,15 @@ fun SettingsSelectableRow(
                 )
             }
         }
+        // 取色纳管（ui-theme-governance-polish §8）
         Switch(
             checked = enabled,
-            onCheckedChange = onToggleEnable
+            onCheckedChange = onToggleEnable,
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = palette.accent,
+                uncheckedTrackColor = palette.secondaryText,
+                checkedThumbColor = palette.onAccent
+            )
         )
         if (onEdit != null) {
             IconButton(onClick = onEdit) {

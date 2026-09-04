@@ -176,7 +176,9 @@ fun Fragment.showComposeTextInputDialog(
     maxLines: Int = if (readOnly) 6 else 4,
     validateInput: ((String) -> Boolean)? = null,
     onPositive: (String) -> Unit,
-    onNeutral: (() -> Unit)? = null
+    onNeutral: (() -> Unit)? = null,
+    onNegative: (() -> Unit)? = null,
+    onDismissed: (() -> Unit)? = null
 ) {
     showDialogFragment(
         ComposeTextInputDialog.create(
@@ -192,7 +194,9 @@ fun Fragment.showComposeTextInputDialog(
             maxLines = maxLines,
             validateInput = validateInput,
             onPositive = onPositive,
-            onNeutral = onNeutral
+            onNeutral = onNeutral,
+            onNegative = onNegative,
+            onDismissed = onDismissed
         )
     )
 }
@@ -428,7 +432,9 @@ fun AppCompatActivity.showComposeTextInputDialog(
     maxLines: Int = if (readOnly) 6 else 4,
     validateInput: ((String) -> Boolean)? = null,
     onPositive: (String) -> Unit,
-    onNeutral: (() -> Unit)? = null
+    onNeutral: (() -> Unit)? = null,
+    onNegative: (() -> Unit)? = null,
+    onDismissed: (() -> Unit)? = null
 ) {
     showDialogFragment(
         ComposeTextInputDialog.create(
@@ -444,7 +450,9 @@ fun AppCompatActivity.showComposeTextInputDialog(
             maxLines = maxLines,
             validateInput = validateInput,
             onPositive = onPositive,
-            onNeutral = onNeutral
+            onNeutral = onNeutral,
+            onNegative = onNegative,
+            onDismissed = onDismissed
         )
     )
 }

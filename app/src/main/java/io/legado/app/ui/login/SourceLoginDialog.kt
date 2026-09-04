@@ -14,17 +14,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -68,6 +73,8 @@ import io.legado.app.ui.widget.compose.LegadoMiuixPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixSelectField
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
+import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.GSON
 import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.fromJsonArray
@@ -244,6 +251,25 @@ class SourceLoginDialog() : ComposeDialogFragment(), SourceLoginJsExtensions.Cal
                     val style = rememberAppDialogStyle()
                     val palette = style.toMiuixPalette()
                     val source = viewModel.source
+                    // 低频操作收纳三点菜单（ui-theme-governance-polish P2，对齐换源弹框范式）
+                    var overflowExpanded by remember { mutableStateOf(false) }
+                    val overflowActions = listOf(
+                        MenuAction(
+                            icon = Icons.Filled.Visibility,
+                            title = stringResource(R.string.show_login_header),
+                            onClick = { showLoginHeaderDialog(source) }
+                        ),
+                        MenuAction(
+                            icon = Icons.Filled.Delete,
+                            title = stringResource(R.string.del_login_header),
+                            onClick = { source?.removeLoginHeader() }
+                        ),
+                        MenuAction(
+                            icon = Icons.Filled.Description,
+                            title = stringResource(R.string.log),
+                            onClick = { showDialogFragment<AppLogDialog>() }
+                        )
+                    )
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -260,31 +286,25 @@ class SourceLoginDialog() : ComposeDialogFragment(), SourceLoginJsExtensions.Cal
                             ) {},
                             title = getString(R.string.login_source, source?.getTag() ?: ""),
                             scrollContent = true,
+                            titleTrailing = {
+                                Box {
+                                    IconButton(onClick = { overflowExpanded = true }) {
+                                        Icon(
+                                            imageVector = Icons.Filled.MoreVert,
+                                            contentDescription = stringResource(R.string.more)
+                                        )
+                                    }
+                                    AppDropdownMenu(
+                                        expanded = overflowExpanded,
+                                        onDismiss = { overflowExpanded = false },
+                                        actions = overflowActions
+                                    )
+                                }
+                            },
                             content = {
                                 LoginRowsContent(source, style)
                             },
                             actions = {
-                                LegadoMiuixActionButton(
-                                    text = stringResource(R.string.show_login_header),
-                                    palette = palette,
-                                    onClick = { showLoginHeaderDialog(source) },
-                                    cornerRadius = style.actionRadius
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                LegadoMiuixActionButton(
-                                    text = stringResource(R.string.del_login_header),
-                                    palette = palette,
-                                    onClick = { source?.removeLoginHeader() },
-                                    cornerRadius = style.actionRadius
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                LegadoMiuixActionButton(
-                                    text = stringResource(R.string.log),
-                                    palette = palette,
-                                    onClick = { showDialogFragment<AppLogDialog>() },
-                                    cornerRadius = style.actionRadius
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
                                 LegadoMiuixActionButton(
                                     text = stringResource(R.string.ok),
                                     palette = palette,

@@ -13,13 +13,12 @@ import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.databinding.ActivityTranslucenceBinding
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.IntentData
 import io.legado.app.lib.dialogs.SelectItem
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.utils.SelectImageContract
 import io.legado.app.utils.checkWrite
 import io.legado.app.utils.externalFiles
@@ -188,18 +187,20 @@ class HandleFileActivity :
     }
 
     private fun showInputDirectoryDialog() {
-        val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-            editView.hint = getString(R.string.enter_directory_path)
-        }
-
-        alert(getString(R.string.manual_input)) {
-            customView { alertBinding.root }
-            okButton {
-                val inputPath = alertBinding.editView.text.toString()
+        // 弹框托管（ui-theme-governance-polish tasks 9.4 孤岛家族迁移）
+        // 行为差异：空值校验走 validateInput，失败时弹框不关闭；原 View alert 点确定后必然关闭
+        showComposeTextInputDialog(
+            title = getString(R.string.manual_input),
+            hint = getString(R.string.enter_directory_path),
+            validateInput = { inputPath ->
                 if (inputPath.isBlank()) {
                     toastOnUi(getString(R.string.empty_directory_input))
-                    return@okButton
+                    false
+                } else {
+                    true
                 }
+            },
+            onPositive = { inputPath ->
                 val file = File(inputPath)
                 if (file.exists() &&
                     file.isDirectory &&
@@ -210,47 +211,47 @@ class HandleFileActivity :
                 } else {
                     toastOnUi(getString(R.string.invalid_directory))
                 }
-            }
-            onDismiss {
+            },
+            onDismissed = {
                 finish()
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun showInputImgSrcDialog() {
-        val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-            editView.hint = getString(R.string.enter_img_src_path)
-        }
-
-        alert(getString(R.string.manual_input)) {
-            customView { alertBinding.root }
-            okButton {
-                val inputPath = alertBinding.editView.text.toString()
+        // 弹框托管（ui-theme-governance-polish tasks 9.4 孤岛家族迁移）
+        // 行为差异：空值校验走 validateInput，失败时弹框不关闭；原 View alert 点确定后必然关闭
+        showComposeTextInputDialog(
+            title = getString(R.string.manual_input),
+            hint = getString(R.string.enter_img_src_path),
+            validateInput = { inputPath ->
                 if (inputPath.isBlank()) {
                     toastOnUi(getString(R.string.empty_img_src_input))
-                    return@okButton
+                    false
+                } else {
+                    true
                 }
+            },
+            onPositive = { inputPath ->
                 if (inputPath.startsWith("http", true)) {
                     onResult(Intent().setData(inputPath.toUri()))
-                    return@okButton
-                }
-                val file = File(inputPath)
-                if (file.exists() &&
-                    file.isFile &&
-                    isExternalStorage(file) &&
-                    file.canRead()
-                ) {
-                    onResult(Intent().setData(Uri.fromFile(file)))
                 } else {
-                    toastOnUi(getString(R.string.invalid_file_path))
+                    val file = File(inputPath)
+                    if (file.exists() &&
+                        file.isFile &&
+                        isExternalStorage(file) &&
+                        file.canRead()
+                    ) {
+                        onResult(Intent().setData(Uri.fromFile(file)))
+                    } else {
+                        toastOnUi(getString(R.string.invalid_file_path))
+                    }
                 }
-            }
-            onDismiss {
+            },
+            onDismissed = {
                 finish()
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun isExternalStorage(path: File): Boolean {

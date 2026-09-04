@@ -1,4 +1,4 @@
-package io.legado.app.ui.config
+﻿package io.legado.app.ui.config
 
 import android.os.Build
 import android.os.Bundle
@@ -17,6 +17,7 @@ import io.legado.app.ui.config.compose.SettingChoiceOption
 import io.legado.app.ui.config.compose.SettingChoiceSpec
 import io.legado.app.ui.config.compose.SettingPageSpec
 import io.legado.app.ui.config.compose.SettingSectionSpec
+import io.legado.app.ui.config.compose.SettingSliderSpec
 import io.legado.app.ui.config.compose.SettingSwitchSpec
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.postEvent
@@ -25,6 +26,9 @@ import io.legado.app.utils.startActivity
 class ThemeConfigFragment : ComposeSettingFragment() {
 
     override val titleRes: Int = R.string.theme_setting
+
+    // 透明度滑条拖动中间值回显（红队 R1-P1-10：渲染层 spec.value 驱动，无宿主会松手弹回）
+    private var manageBgAlphaDraft: Int? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -71,6 +75,28 @@ class ThemeConfigFragment : ComposeSettingFragment() {
                             checked = booleanSetting(PreferKey.immersiveManageBar, true),
                             onCheckedChange = {
                                 updateBooleanSetting(PreferKey.immersiveManageBar, it)
+                            }
+                        ),
+                        // 管理页背景透明度（ui-theme-governance-polish P6/AD-06）：
+                        // 拖动 draft+refreshSettings 实时回显，Finished 提交+RECREATE（拖动中不重建）
+                        SettingSliderSpec(
+                            key = PreferKey.manageBgAlpha,
+                            title = getString(R.string.manage_bg_alpha),
+                            summary = getString(R.string.manage_bg_alpha_summary),
+                            value = manageBgAlphaDraft
+                                ?: intSetting(PreferKey.manageBgAlpha, 0),
+                            valueRange = 0..100,
+                            onValueChange = {
+                                manageBgAlphaDraft = it
+                                refreshSettings()
+                            },
+                            onValueChangeFinished = {
+                                manageBgAlphaDraft?.let { draft ->
+                                    updateIntSetting(PreferKey.manageBgAlpha, draft)
+                                }
+                                manageBgAlphaDraft = null
+                                refreshSettings()
+                                recreateActivities()
                             }
                         ),
                         SettingActionSpec(

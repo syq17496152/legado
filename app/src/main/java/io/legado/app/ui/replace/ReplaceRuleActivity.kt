@@ -1,4 +1,4 @@
-package io.legado.app.ui.replace
+﻿package io.legado.app.ui.replace
 
 import android.annotation.SuppressLint
 import android.os.Bundle
@@ -105,6 +105,9 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
             )
         }
     }
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initComposeContent()

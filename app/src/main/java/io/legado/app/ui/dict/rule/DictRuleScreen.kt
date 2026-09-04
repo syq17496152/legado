@@ -1,39 +1,19 @@
 package io.legado.app.ui.dict.rule
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Rule
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,22 +21,20 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
-import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
-import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsSelectableRow
 import io.legado.app.ui.widget.components.ShelfListSkeleton
-import io.legado.app.ui.widget.compose.rememberAppSettingPalette
+import io.legado.app.ui.widget.compose.AppManagementAction
+import io.legado.app.ui.widget.compose.AppManagementMenuAction
+import io.legado.app.ui.widget.compose.AppManagementScaffold
+import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -107,36 +85,56 @@ fun DictRuleScreen(
         }
     }
 
-    var moreMenuVisible by remember { mutableStateOf(false) }
+    // followup F5：统一管理族壳（AppManagementScaffold 平移，删页内自绘 GlassTopAppBar/SelectionActionBar）
+    val palette = rememberAppManagementPalette()
+    val allSelected = localItems.isNotEmpty() && selectionCount >= localItems.size
 
-    Column(modifier = modifier.fillMaxSize()) {
-        GlassTopAppBar(
-            title = stringResource(R.string.dict_rule),
-            navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-            onNavClick = onBack,
-            actions = {
-                // topbar-icon-semantics-fix 3.3：alwaysShow 项直出一级图标（对齐原版 dict_rule.xml always）
-                topMenuActions.filter { it.alwaysShow }.forEach { action ->
-                    IconButton(onClick = action.onClick) {
-                        Icon(action.icon, contentDescription = action.title)
-                    }
-                }
-                val overflowActions = topMenuActions.filter { !it.alwaysShow }
-                if (overflowActions.isNotEmpty()) {
-                    Box {
-                        IconButton(onClick = { moreMenuVisible = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = null)
-                        }
-                        AppDropdownMenu(
-                            expanded = moreMenuVisible,
-                            onDismiss = { moreMenuVisible = false },
-                            actions = overflowActions
-                        )
-                    }
-                }
+    AppManagementScaffold(
+        title = stringResource(R.string.dict_rule),
+        selectedCount = selectionCount,
+        totalCount = localItems.size,
+        modifier = modifier,
+        palette = palette,
+        onBack = onBack,
+        topActions = buildList {
+            // topbar-icon-semantics-fix 3.3：alwaysShow 项直出一级图标（对齐原版 dict_rule.xml always）
+            topMenuActions.filter { it.alwaysShow }.forEach { action ->
+                add(
+                    AppManagementAction(
+                        text = action.title,
+                        icon = action.icon,
+                        onClick = action.onClick
+                    )
+                )
             }
-        )
-
+            val overflowActions = topMenuActions.filter { !it.alwaysShow }
+            if (overflowActions.isNotEmpty()) {
+                add(
+                    AppManagementAction(
+                        text = stringResource(R.string.more_menu),
+                        menuActions = {
+                            overflowActions.map { menuAction ->
+                                AppManagementMenuAction(
+                                    text = menuAction.title,
+                                    checked = menuAction.checked == true,
+                                    onClick = menuAction.onClick
+                                )
+                            }
+                        }
+                    )
+                )
+            }
+        },
+        bottomActions = selMenuActions.map { action ->
+            AppManagementAction(text = action.title, onClick = action.onClick)
+        } + AppManagementAction(
+            text = stringResource(R.string.delete),
+            danger = true,
+            onClick = onDeleteSelection
+        ),
+        onSelectAll = { onSelectAll(!allSelected) },
+        onInvertSelection = onRevertSelection
+    ) { contentPalette ->
         Box(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
             when {
                 isLoading -> ShelfListSkeleton(compact = true)
@@ -218,119 +216,6 @@ fun DictRuleScreen(
                         }
                     }
                 }
-            }
-        }
-
-        SelectionActionBar(
-            selectionCount = selectionCount,
-            totalCount = localItems.size,
-            selMenuActions = selMenuActions,
-            onSelectAll = onSelectAll,
-            onRevertSelection = onRevertSelection,
-            onDeleteSelection = onDeleteSelection
-        )
-    }
-}
-
-/** 底部批量操作栏（SelectActionBar 的 Compose 版，同 12.54 复用） */
-@Composable
-private fun SelectionActionBar(
-    selectionCount: Int,
-    totalCount: Int,
-    selMenuActions: List<MenuAction>,
-    onSelectAll: (Boolean) -> Unit,
-    onRevertSelection: () -> Unit,
-    onDeleteSelection: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val enabled = selectionCount > 0
-    val allSelected = totalCount > 0 && selectionCount >= totalCount
-    var menuVisible by remember { mutableStateOf(false) }
-    // H10: 选择操作栏直色（palette.row = UiCorner.surfaceColor(cardColor)），替代 M3 surface 派生色
-    val palette = rememberAppSettingPalette()
-
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = Color(palette.row),
-        shadowElevation = 8.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .padding(start = 8.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .combinedClickable(
-                        onClick = { onSelectAll(!allSelected) },
-                        enabled = totalCount > 0
-                    )
-                    .height(48.dp)
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = allSelected,
-                    onCheckedChange = { onSelectAll(it) },
-                    enabled = totalCount > 0,
-                    colors = CheckboxDefaults.colors()
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = if (allSelected) {
-                        stringResource(R.string.select_cancel_count, selectionCount, totalCount)
-                    } else {
-                        stringResource(R.string.select_all_count, selectionCount, totalCount)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = palette.primaryText
-                )
-            }
-            TextButton(
-                onClick = onRevertSelection,
-                enabled = enabled
-            ) {
-                Text(stringResource(R.string.revert_selection))
-            }
-            TextButton(
-                onClick = onDeleteSelection,
-                enabled = enabled
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = null,
-                    tint = if (enabled) MaterialTheme.colorScheme.error
-                    else palette.primaryText.copy(alpha = 0.38f),
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = stringResource(R.string.delete),
-                    color = if (enabled) MaterialTheme.colorScheme.error
-                    else palette.primaryText.copy(alpha = 0.38f)
-                )
-            }
-            Box {
-                IconButton(
-                    onClick = { menuVisible = true },
-                    enabled = enabled
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = null,
-                        tint = if (enabled) palette.primaryText
-                        else palette.primaryText.copy(alpha = 0.38f)
-                    )
-                }
-                AppDropdownMenu(
-                    expanded = menuVisible,
-                    onDismiss = { menuVisible = false },
-                    actions = selMenuActions
-                )
             }
         }
     }

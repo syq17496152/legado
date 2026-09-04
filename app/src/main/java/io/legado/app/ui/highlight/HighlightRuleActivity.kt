@@ -1,4 +1,4 @@
-package io.legado.app.ui.highlight
+﻿package io.legado.app.ui.highlight
 
 import android.os.Bundle
 import androidx.activity.compose.setContent
@@ -39,6 +39,9 @@ class HighlightRuleActivity :
     // Compose 桥接状态（双轨过渡：列表/搜索在 Compose 侧渲染）
     private var composeRules by mutableStateOf(listOf<HighlightRule>())
     private var composeSearchQuery by mutableStateOf("")
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         binding.composeHost.setContent {

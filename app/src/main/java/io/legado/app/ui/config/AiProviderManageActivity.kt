@@ -14,14 +14,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,9 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,12 +40,12 @@ import io.legado.app.constant.EventBus
 import io.legado.app.databinding.ActivityAiProviderManageBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.main.ai.AiProviderConfig
-import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.compose.AppManagementCard
 import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementMoreActionButton
 import io.legado.app.ui.widget.compose.AppManagementPalette
+import io.legado.app.ui.widget.compose.AppManagementScaffold
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
@@ -68,6 +62,9 @@ class AiProviderManageActivity : BaseActivity<ActivityAiProviderManageBinding>()
     private var providersState by mutableStateOf<List<AiProviderConfig>>(emptyList())
     private var modelCountsState by mutableStateOf<Map<String, Int>>(emptyMap())
     private var currentProviderIdState by mutableStateOf<String?>(null)
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         binding.composeRoot.setViewCompositionStrategy(
@@ -164,18 +161,19 @@ private fun AiProviderManageScreen(
     CompositionLocalProvider(
         LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = palette.settings.bodyFontFamily)
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = palette.settings.page,
-            contentColor = palette.settings.primaryText
-        ) {
+        // followup F5：统一管理族壳（AppManagementScaffold 平移，删页内自绘 GlassTopAppBar 顶栏与根 Surface）
+        AppManagementScaffold(
+            title = stringResource(R.string.ai_provider_manage_title),
+            selectedCount = 0,
+            totalCount = providers.size,
+            palette = palette,
+            onBack = onBack
+        ) { _ ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    // H15：顶栏换 GlassTopAppBar（自带状态栏 inset），父容器移除重复 statusBarsPadding
                     .navigationBarsPadding()
             ) {
-                AiProviderTopBar(onBack = onBack)
                 Text(
                     text = stringResource(R.string.ai_provider_manage_summary),
                     color = palette.settings.secondaryText,
@@ -222,16 +220,6 @@ private fun AiProviderManageScreen(
             }
         }
     }
-}
-
-@Composable
-private fun AiProviderTopBar(onBack: () -> Unit) {
-    // H15（2026-08-28）：自绘 54dp 透明顶栏 → GlassTopAppBar（统一 Compose 顶栏基线，随顶栏管理消费 TopBarConfig）
-    GlassTopAppBar(
-        title = stringResource(R.string.ai_provider_manage_title),
-        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-        onNavClick = onBack
-    )
 }
 
 @Composable

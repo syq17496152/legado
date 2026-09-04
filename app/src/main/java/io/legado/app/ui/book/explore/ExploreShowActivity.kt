@@ -1,4 +1,4 @@
-package io.legado.app.ui.book.explore
+﻿package io.legado.app.ui.book.explore
 
 import android.os.Bundle
 import androidx.activity.viewModels
@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.databinding.ActivityExploreShowBinding
 import io.legado.app.help.webView.WebViewPool
@@ -201,6 +202,15 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
         lifecycleScope.launch {
             val isVideo = withContext(IO) {
                 SearchBookOpenHelper.isVideoResult(book, viewModel.sourceTypeHint())
+            }
+            if (isVideo) {
+                // video-playlist-continuity：发现分类列表整表注入（跨影片续播；followup F1 恢复被 revert 移除的注入）
+                // 统一 isVideo 过滤（红队 R2-2：防混排分类上滑落入文本书）
+                val videoList = composeBooks.filter { SearchBookOpenHelper.isVideoResult(it, viewModel.sourceTypeHint()) }
+                val idx = videoList.indexOfFirst { it.bookUrl == book.bookUrl }
+                if (idx >= 0) {
+                    VideoPlaylistHolder.set(videoList, idx)
+                }
             }
             SearchBookOpenHelper.open(this@ExploreShowActivity, book, isVideo)
         }

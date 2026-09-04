@@ -86,7 +86,16 @@ abstract class ComposeDialogFragment : DialogFragment() {
         }
     }
 
+    /**
+     * 返回键拦截钩子（ui-theme-governance-polish P3）：返回 true 表示已消费（如 dirty 确认拦截），
+     * 默认 false 全量调用点零感知。按键与手势两条返回路径均汇入 handleDialogBack。
+     */
+    protected open fun onBackIntercepted(): Boolean = false
+
     private fun handleDialogBack(): Boolean {
+        if (onBackIntercepted()) {
+            return true
+        }
         if (isCancelable) {
             dismissAllowingStateLoss()
         }

@@ -1,6 +1,7 @@
-package io.legado.app.ui.widget
+﻿package io.legado.app.ui.widget
 
 import android.animation.LayoutTransition
+import kotlin.math.abs
 import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -732,6 +733,9 @@ class MainTopBarView @JvmOverloads constructor(
     private fun animateFilterToggle(expanded: Boolean) {
         filterToggleButton.setImageResource(R.drawable.ic_expand_more)
         val targetRotation = if (expanded) 180f else 0f
+        // 幂等守卫（ui-theme-governance-followup F3）：目标角与当前一致时不重启动画，
+        // 防渲染链路高频调用导致旋转动画反复重置
+        if (abs(filterToggleButton.rotation - targetRotation) < 0.5f) return
         filterToggleButton.animate().cancel()
         if (!isAttachedToWindow) {
             filterToggleButton.rotation = targetRotation
@@ -760,6 +764,10 @@ class MainTopBarView @JvmOverloads constructor(
         return LayoutTransition().apply {
             setAnimateParentHierarchy(false)
             enableTransitionType(LayoutTransition.CHANGING)
+            // ui-theme-governance-followup F3：禁用 APPEARING/DISAPPEARING 的系统默认 alpha
+            // 动画（淡入淡出波及整行与 filterToggleButton，浅色主题下"透明一下再复原"闪烁根因）
+            disableTransitionType(LayoutTransition.APPEARING)
+            disableTransitionType(LayoutTransition.DISAPPEARING)
             setDuration(LayoutTransition.APPEARING, 220L)
             setDuration(LayoutTransition.DISAPPEARING, 160L)
             setDuration(LayoutTransition.CHANGE_APPEARING, 300L)
@@ -770,8 +778,6 @@ class MainTopBarView @JvmOverloads constructor(
             setStartDelay(LayoutTransition.CHANGE_APPEARING, 0L)
             setStartDelay(LayoutTransition.CHANGE_DISAPPEARING, 0L)
             setStartDelay(LayoutTransition.CHANGING, 0L)
-            setInterpolator(LayoutTransition.APPEARING, topBarEaseOut)
-            setInterpolator(LayoutTransition.DISAPPEARING, topBarEaseInOut)
             setInterpolator(LayoutTransition.CHANGE_APPEARING, topBarEaseOut)
             setInterpolator(LayoutTransition.CHANGE_DISAPPEARING, topBarEaseInOut)
             setInterpolator(LayoutTransition.CHANGING, topBarEaseOut)
@@ -807,3 +813,4 @@ class MainTopBarView @JvmOverloads constructor(
         }
     }
 }
+

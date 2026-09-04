@@ -64,6 +64,8 @@ import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.ui.widget.components.AppShapes
 import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
 import java.util.regex.PatternSyntaxException
@@ -141,6 +143,8 @@ fun RegexTestScreen(
     var dotAll by remember { mutableStateOf(false) }      // 点匹配换行
     var useRegex by remember { mutableStateOf(initialIsRegex) }  // 是否使用正则
     var realtimePreview by remember { mutableStateOf(true) }     // 实时预览开关
+    // 取色纳管（ui-theme-governance-polish §8）
+    val palette = rememberAppDialogStyle().toMiuixPalette()
     
     // 测试结果状态
     var testResult by remember { mutableStateOf<TestResult?>(null) }
@@ -335,10 +339,17 @@ fun RegexTestScreen(
                                 style = MaterialTheme.typography.bodySmall
                             )
                             Spacer(modifier = Modifier.width(4.dp))
+                            // 取色纳管（ui-theme-governance-polish §8）
                             Switch(
                                 checked = realtimePreview,
                                 onCheckedChange = { realtimePreview = it },
-                                modifier = Modifier.height(24.dp)
+                                modifier = Modifier.height(24.dp),
+                                colors = SwitchDefaults.colors(
+                                    checkedTrackColor = palette.accent,
+                                    uncheckedTrackColor = palette.surfaceVariant,
+                                    checkedThumbColor = palette.resolvedOnAccent,
+                                    uncheckedThumbColor = palette.secondaryText.copy(alpha = 0.72f)
+                                )
                             )
                         }
                     }

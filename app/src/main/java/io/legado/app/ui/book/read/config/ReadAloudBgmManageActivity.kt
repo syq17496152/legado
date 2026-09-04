@@ -131,6 +131,9 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
         }
     }
 
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initTopBar()
         initView()
@@ -145,6 +148,8 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
 
     /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原「导入/导出 ZIP/新增分组/管理分组」工具栏菜单改为 action 插槽图标。 */
     private fun initTopBar() = binding.titleBar.run {
+        // followup F5（C 类顶栏对齐）：不透明 backgroundColor 底，消与页面底色的 primaryColor 断层；列表不动
+        overlayOpaqueBackground = true
         applyStatusBarPadding(withInitialPadding = true)
         setMode(MainTopBarView.Mode.SUB)
         setTitle("智能音频")

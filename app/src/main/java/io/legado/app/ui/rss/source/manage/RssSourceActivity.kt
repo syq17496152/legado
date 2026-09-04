@@ -1,4 +1,4 @@
-package io.legado.app.ui.rss.source.manage
+﻿package io.legado.app.ui.rss.source.manage
 
 import android.os.Bundle
 import android.view.MenuItem
@@ -95,6 +95,9 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
             )
         }
     }
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initComposeContent()

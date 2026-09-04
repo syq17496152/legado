@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -206,6 +207,8 @@ private fun ServersRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    // 取色纳管（ui-theme-governance-polish §8）
+    val style = rememberAppDialogStyle()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -215,7 +218,11 @@ private fun ServersRow(
     ) {
         RadioButton(
             selected = selected,
-            onClick = onClick
+            onClick = onClick,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = style.accent,
+                unselectedColor = style.secondaryText
+            )
         )
         Text(
             text = server.name,

@@ -136,7 +136,12 @@ fun rememberAppSettingPalette(): AppSettingPalette {
     } else {
         Color(context.secondaryTextColor)
     }
-    val page = Color(context.backgroundColor)
+    // followup F4 v3：透明度语义（0=不透明原状，>0 半透明叠加透出底图；红队 R5-1 预混废弃）
+    val page = if (io.legado.app.help.config.AppConfig.manageBgAlphaFraction > 0f) {
+        Color(context.backgroundColor).copy(alpha = io.legado.app.help.config.AppConfig.manageBgAlphaFraction)
+    } else {
+        Color(context.backgroundColor)
+    }
     val row = UiCorner.surfaceColor(rowBaseColor)
     val rowPressed = UiCorner.surfaceColor(rowBaseColor, pressed = true)
     val divider = Color(themeUiPalette.dividerColor)

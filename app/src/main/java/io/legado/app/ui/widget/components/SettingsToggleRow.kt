@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.toMiuixPalette
 
 /**
  * 设置开关行（36dp RowIcon 图标块 + 标题 + 副标题 + M3 Switch）
@@ -30,6 +32,8 @@ fun SettingsToggleRow(
     subtitle: String? = null,
     enabled: Boolean = true
 ) {
+    // 取色纳管（ui-theme-governance-polish §8）
+    val palette = rememberAppDialogStyle().toMiuixPalette()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -61,14 +65,16 @@ fun SettingsToggleRow(
             }
         }
         Spacer(modifier = Modifier.width(8.dp))
+        // 取色纳管（ui-theme-governance-polish §8）
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
             enabled = enabled,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colorScheme.primary,
-                checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-                checkedBorderColor = MaterialTheme.colorScheme.primary
+                checkedTrackColor = palette.accent,
+                uncheckedTrackColor = palette.surfaceVariant,
+                checkedThumbColor = palette.resolvedOnAccent,
+                uncheckedThumbColor = palette.secondaryText.copy(alpha = 0.72f)
             )
         )
     }

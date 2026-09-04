@@ -104,6 +104,9 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
         }
     }
 
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         bookUrl = intent.getStringExtra("bookUrl") ?: ReadBook.book?.bookUrl
         book = bookUrl?.let { appDb.bookDao.getBook(it) }
@@ -122,6 +125,8 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
     }
 
     private fun initTopBar() = binding.titleBar.run {
+        // followup F5（C 类顶栏对齐）：不透明 backgroundColor 底，消与页面底色的 primaryColor 断层；列表不动
+        overlayOpaqueBackground = true
         applyStatusBarPadding(withInitialPadding = true)
         setMode(MainTopBarView.Mode.SUB)
         setTitle(getString(R.string.paragraph_rule_manage))

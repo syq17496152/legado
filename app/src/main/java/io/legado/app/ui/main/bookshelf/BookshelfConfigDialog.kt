@@ -1,4 +1,4 @@
-package io.legado.app.ui.main.bookshelf
+﻿package io.legado.app.ui.main.bookshelf
 
 import android.content.DialogInterface
 import android.os.Bundle
@@ -6,7 +6,6 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -28,7 +27,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
@@ -66,6 +64,7 @@ import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.LegadoMiuixSlider
+import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import kotlinx.coroutines.delay
@@ -999,44 +998,14 @@ private fun BookshelfDisplaySwitchRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        BookshelfMiniSwitch(
+        // 开关视觉统一（ui-theme-governance-polish P1）：私有 MiniSwitch 迁移至公共
+        // LegadoMiuixSwitch compact 模式（38x22 无阴影）+ stroke 描边，取色走统一基线
+        LegadoMiuixSwitch(
             checked = item.checked,
-            style = style
-        )
-    }
-}
-
-@Composable
-private fun BookshelfMiniSwitch(
-    checked: Boolean,
-    style: AppDialogStyle
-) {
-    val trackWidth = 38.dp
-    val trackHeight = 22.dp
-    val thumbSize = 16.dp
-    val edge = 3.dp
-    val thumbOffset by animateDpAsState(
-        targetValue = if (checked) trackWidth - thumbSize - edge else edge,
-        label = "bookshelfMiniSwitchThumb"
-    )
-    Box(
-        modifier = Modifier
-            .size(trackWidth, trackHeight)
-            .clip(RoundedCornerShape(50))
-            .background(if (checked) style.accent else style.fieldSurface)
-            .border(
-                width = 1.dp,
-                color = if (checked) Color.Transparent else style.stroke,
-                shape = RoundedCornerShape(50)
-            )
-    ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .offset(x = thumbOffset)
-                .size(thumbSize)
-                .clip(CircleShape)
-                .background(if (checked) Color.White else style.secondaryText.copy(alpha = 0.62f))
+            onCheckedChange = item.onCheckedChange,
+            palette = style.toMiuixPalette(),
+            stroke = style.stroke,
+            compact = true
         )
     }
 }

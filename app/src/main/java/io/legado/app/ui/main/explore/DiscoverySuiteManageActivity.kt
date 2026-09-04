@@ -119,6 +119,9 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
     private var loadedSourceTagUrlsState by mutableStateOf<Set<String>>(emptySet())
     private var screenModeState by mutableStateOf<DiscoverySuiteManageMode>(DiscoverySuiteManageMode.List)
 
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initTopBar()
         onBackPressedDispatcher.addCallback(this) {
@@ -131,6 +134,9 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
     }
 
     private fun initTopBar() = binding.titleBar.run {
+        // followup F5（B 类风险登记）：WidgetEditor 等多级模式与 View 顶栏联动复杂，迁移 AppManagementScaffold
+        // 风险大，本期保守仅做顶栏基色对齐（backgroundColor 同源，消 primaryColor 断层）
+        overlayOpaqueBackground = true
         applyStatusBarPadding(withInitialPadding = true)
         setMode(MainTopBarView.Mode.SUB)
         setSearchEntryVisible(false)

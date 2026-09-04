@@ -1,4 +1,4 @@
-package io.legado.app.ui.file
+﻿package io.legado.app.ui.file
 
 import android.os.Bundle
 import androidx.activity.addCallback
@@ -33,6 +33,9 @@ class FileManageActivity : VMBaseActivity<ActivityFileManageBinding, FileManageV
     private var searchQuery by mutableStateOf("")
     private var isLoading by mutableStateOf(true)
     private val currentFiles = arrayListOf<File>()
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         intent.getStringExtra(EXTRA_ROOT_PATH)

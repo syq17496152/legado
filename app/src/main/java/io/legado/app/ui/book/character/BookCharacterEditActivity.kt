@@ -28,7 +28,6 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.AiGeneratedImage
 import io.legado.app.data.entities.AiImageGroup
 import io.legado.app.data.entities.BookCharacter
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.databinding.ItemAiGeneratedImageBinding
 import io.legado.app.help.ai.AiImageGalleryManager
 import io.legado.app.help.ai.AiImageGalleryManager.GalleryFilter

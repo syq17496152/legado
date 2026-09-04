@@ -1,4 +1,4 @@
-package io.legado.app.ui.main.bookshelf.style1
+﻿package io.legado.app.ui.main.bookshelf.style1
 
 import android.os.Bundle
 import android.view.View
@@ -24,6 +24,8 @@ import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.RoundedTagBarView
 import io.legado.app.utils.observeEvent
+import io.legado.app.help.book.isVideo
+import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.data.appDb
@@ -145,7 +147,17 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
                 }
             },
             onRetry = { upConnect() },
-            onBookClick = { book -> startActivityForBook(book) },
+            onBookClick = { book ->
+                if (book.isVideo) {
+                    // video-playlist-continuity：书架视频书整表注入（跨影片续播，followup F1 恢复）
+                    val videoList = displayedBooks.filter { it.isVideo }.map { it.toSearchBook() }
+                    val idx = videoList.indexOfFirst { it.bookUrl == book.bookUrl }
+                    if (idx >= 0) {
+                        VideoPlaylistHolder.set(videoList, idx)
+                    }
+                }
+                startActivityForBook(book)
+            },
             onBookLongClick = { book ->
                 BookInfoNavigator.open(requireContext(), book)
             },

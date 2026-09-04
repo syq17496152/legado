@@ -1,5 +1,6 @@
-package io.legado.app.help.config
+﻿package io.legado.app.help.config
 
+import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
 import io.legado.app.BuildConfig
@@ -86,6 +87,18 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     val immersiveManageBar: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.immersiveManageBar, true)
+
+    /**
+     * 管理页背景透明度 fraction（followup F4 v3 最终语义）：0f=不透明（默认，原状），
+     * 1f=全透明（透出 decorView 底图/背景）。E-Ink 强制 0f（不透明契约）。
+     * 消费点：内容层根/顶栏 backgroundColor.copy(alpha=fraction) 半透明叠加，可透出底图；
+     * 禁止预混不透明色（v2 教训：底图透出被消灭）。
+     */
+    val manageBgAlphaFraction: Float
+        get() {
+            if (isEInkMode) return 0f
+            return appCtx.getPrefInt(PreferKey.manageBgAlpha, 0).coerceIn(0, 100) / 100f
+        }
     var optimizeRender = CanvasRecorderFactory.isSupport
             && appCtx.getPrefBoolean(PreferKey.optimizeRender, false)
     var recordLog = appCtx.getPrefBoolean(PreferKey.recordLog)

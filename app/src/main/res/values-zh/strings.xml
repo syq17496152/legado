@@ -2728,4 +2728,7 @@ bookUrl：%7$s
 <string name="paragraph_import_conflict_overwrite">覆盖现有规则</string>
 <string name="paragraph_import_conflict_overwrite_description">保留原 ID、排序和书籍绑定</string>
 <string name="paragraph_import_result">新增：%1$d\n覆盖：%2$d\n跳过：%3$d\n重命名：%4$d</string>
-</resources>
+    <string name="theme_preview">实时预览</string>
+    <string name="theme_editor_suggest_palette">壁纸提取配色</string>
+    <string name="theme_editor_hex_color">十六进制色值</string><string name="manage_bg_alpha">管理页背景透明度</string>
+    <string name="manage_bg_alpha_summary">0 为不透明（默认原状），100 为完全透明（透出背景底图）；对全部管理页与设置页生效</string></resources>

@@ -1,4 +1,4 @@
-package io.legado.app.ui.config
+﻿package io.legado.app.ui.config
 
 import android.graphics.Color
 import android.net.Uri
@@ -113,6 +113,9 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             toastOnUi(getString(R.string.image_crop_failed, getString(R.string.unknown)))
         }
     }
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initTopBar()

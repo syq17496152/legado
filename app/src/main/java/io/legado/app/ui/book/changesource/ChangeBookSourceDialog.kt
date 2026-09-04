@@ -366,6 +366,73 @@ class ChangeBookSourceDialog() : ComposeDialogFragment(),
             title = titleText,
             message = authorText.takeIf { it.isNotBlank() },
             scrollContent = false,
+            // 三点菜单迁移至标题栏（ui-theme-governance-polish P2）：对齐登录弹框范式，筛选行腾出空间
+            titleTrailing = {
+                Box {
+                    IconButton(onClick = { overflowExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.MoreVert,
+                            contentDescription = stringResource(R.string.more)
+                        )
+                    }
+                    AppDropdownMenu(
+                        expanded = overflowExpanded,
+                        onDismiss = { overflowExpanded = false },
+                        actions = listOf(
+                            MenuAction(
+                                icon = Icons.Filled.Refresh,
+                                title = stringResource(R.string.refresh_list),
+                                onClick = { viewModel.startRefreshList() }
+                            ),
+                            MenuAction(
+                                icon = Icons.Filled.Person,
+                                title = stringResource(R.string.checkAuthor),
+                                checked = AppConfig.changeSourceCheckAuthor,
+                                onClick = {
+                                    AppConfig.changeSourceCheckAuthor =
+                                        !AppConfig.changeSourceCheckAuthor
+                                    viewModel.refresh()
+                                }
+                            ),
+                            MenuAction(
+                                icon = Icons.Filled.Sort,
+                                title = stringResource(R.string.load_word_count),
+                                checked = AppConfig.changeSourceLoadWordCount,
+                                onClick = {
+                                    AppConfig.changeSourceLoadWordCount =
+                                        !AppConfig.changeSourceLoadWordCount
+                                    viewModel.onLoadWordCountChecked(
+                                        AppConfig.changeSourceLoadWordCount
+                                    )
+                                }
+                            ),
+                            MenuAction(
+                                icon = Icons.Filled.Info,
+                                title = stringResource(R.string.load_info),
+                                checked = AppConfig.changeSourceLoadInfo,
+                                onClick = {
+                                    AppConfig.changeSourceLoadInfo =
+                                        !AppConfig.changeSourceLoadInfo
+                                }
+                            ),
+                            MenuAction(
+                                icon = Icons.Filled.Menu,
+                                title = stringResource(R.string.load_toc),
+                                checked = AppConfig.changeSourceLoadToc,
+                                onClick = {
+                                    AppConfig.changeSourceLoadToc =
+                                        !AppConfig.changeSourceLoadToc
+                                }
+                            ),
+                            MenuAction(
+                                icon = Icons.Filled.Close,
+                                title = stringResource(R.string.close),
+                                onClick = { dismissAllowingStateLoss() }
+                            )
+                        )
+                    )
+                }
+            },
             content = {
                 SettingsSearchBar(
                     query = screenKey,
@@ -411,70 +478,6 @@ class ChangeBookSourceDialog() : ComposeDialogFragment(),
                         onClick = { viewModel.startOrStopSearch() },
                         cornerRadius = style.actionRadius
                     )
-                    Box {
-                        IconButton(onClick = { overflowExpanded = true }) {
-                            Icon(
-                                imageVector = Icons.Filled.MoreVert,
-                                contentDescription = stringResource(R.string.more)
-                            )
-                        }
-                        AppDropdownMenu(
-                            expanded = overflowExpanded,
-                            onDismiss = { overflowExpanded = false },
-                            actions = listOf(
-                                MenuAction(
-                                    icon = Icons.Filled.Refresh,
-                                    title = stringResource(R.string.refresh_list),
-                                    onClick = { viewModel.startRefreshList() }
-                                ),
-                                MenuAction(
-                                    icon = Icons.Filled.Person,
-                                    title = stringResource(R.string.checkAuthor),
-                                    checked = AppConfig.changeSourceCheckAuthor,
-                                    onClick = {
-                                        AppConfig.changeSourceCheckAuthor =
-                                            !AppConfig.changeSourceCheckAuthor
-                                        viewModel.refresh()
-                                    }
-                                ),
-                                MenuAction(
-                                    icon = Icons.Filled.Sort,
-                                    title = stringResource(R.string.load_word_count),
-                                    checked = AppConfig.changeSourceLoadWordCount,
-                                    onClick = {
-                                        AppConfig.changeSourceLoadWordCount =
-                                            !AppConfig.changeSourceLoadWordCount
-                                        viewModel.onLoadWordCountChecked(
-                                            AppConfig.changeSourceLoadWordCount
-                                        )
-                                    }
-                                ),
-                                MenuAction(
-                                    icon = Icons.Filled.Info,
-                                    title = stringResource(R.string.load_info),
-                                    checked = AppConfig.changeSourceLoadInfo,
-                                    onClick = {
-                                        AppConfig.changeSourceLoadInfo =
-                                            !AppConfig.changeSourceLoadInfo
-                                    }
-                                ),
-                                MenuAction(
-                                    icon = Icons.Filled.Menu,
-                                    title = stringResource(R.string.load_toc),
-                                    checked = AppConfig.changeSourceLoadToc,
-                                    onClick = {
-                                        AppConfig.changeSourceLoadToc =
-                                            !AppConfig.changeSourceLoadToc
-                                    }
-                                ),
-                                MenuAction(
-                                    icon = Icons.Filled.Close,
-                                    title = stringResource(R.string.close),
-                                    onClick = { dismissAllowingStateLoss() }
-                                )
-                            )
-                        )
-                    }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 if (searchBooks.isEmpty()) {

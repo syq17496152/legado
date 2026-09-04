@@ -1,4 +1,4 @@
-package io.legado.app.ui.main.bookshelf
+﻿package io.legado.app.ui.main.bookshelf
 
 import android.os.Bundle
 import androidx.compose.runtime.getValue
@@ -33,6 +33,9 @@ class BookshelfTagManageActivity : BaseActivity<ActivityBookshelfTagManageBindin
     private var groupsState by mutableStateOf<List<BookshelfTagGroupUi>>(emptyList())
     private var loadingState by mutableStateOf(true)
     private var assignmentState by mutableStateOf<BookTagAssignmentUi?>(null)
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         binding.composeRoot.setViewCompositionStrategy(

@@ -22,11 +22,9 @@ import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.ui.book.read.config.AdvancedTitleConfigDialog
 import io.legado.app.ui.book.read.page.LottieImageBitmapCache
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
 import io.legado.app.ui.widget.compose.ComposeTextInputDialog
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.readBytes
 import io.legado.app.utils.readBytesLimited
@@ -84,18 +82,18 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         }
     }
 
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initTopBar()
+        hideTopBar()
         initComposeContent()
         loadEntries()
     }
 
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.advanced_title_manage))
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
+    // followup F5：统一管理族壳——View TitleBar 摘除（AppManagementScaffold 接管顶栏，返回由 Screen onBack 提供）
+    private fun hideTopBar() {
+        binding.titleBar.visibility = View.GONE
     }
 
     override fun onDestroy() {
@@ -127,6 +125,7 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                                 runCatching { AdvancedTitlePackageManager.readTemplate(entry) }.getOrNull()
                             }
                         },
+                        onBack = { finish() },
                         onApply = ::applyEntry,
                         onEdit = ::editEntry,
                         onMoreActions = ::entryActions,

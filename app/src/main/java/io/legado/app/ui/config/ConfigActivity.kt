@@ -1,4 +1,4 @@
-package io.legado.app.ui.config
+﻿package io.legado.app.ui.config
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -124,6 +124,9 @@ class ConfigActivity : VMBaseActivity<ViewBinding, ConfigViewModel>() {
     override val recreateOnThemeChange: Boolean
         get() = false
 
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         titleComposeView.setViewCompositionStrategy(
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
@@ -147,6 +150,8 @@ class ConfigActivity : VMBaseActivity<ViewBinding, ConfigViewModel>() {
                 replaceFragment(configTag, DiscoverySubscriptionConfigFragment::class.java)
             ConfigTag.DISCOVERY_CONFIG -> replaceFragment(configTag, DiscoveryConfigFragment::class.java)
             ConfigTag.SUBSCRIPTION_CONFIG -> replaceFragment(configTag, SubscriptionConfigFragment::class.java)
+            // video-player-dual-layout：视频播放器全局设置页（路线 B 普通 Fragment）
+            ConfigTag.VIDEO_PLAYER -> replaceFragment(configTag, VideoPlayerConfigFragment::class.java)
             else -> finish()
         }
     }

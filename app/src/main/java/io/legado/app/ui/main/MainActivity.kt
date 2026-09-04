@@ -61,7 +61,6 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.ActivityMainBinding
 import io.legado.app.constant.AppLog
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.CrashHandler
@@ -2217,30 +2216,23 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     /**
-     * 设置本地密码
+     * 设置本地密码（ui-theme-governance-polish P7）：旧 View alert 输入弹框
+     * 迁移至托管 Compose 弹框（AppDialogFrame 体系），行为语义等价：
+     * 确定→密码落盘；取消→password 置空；任意关闭→协程恢复继续备份流程
      */
     private suspend fun setLocalPassword() = suspendCancellableCoroutine sc@{ block ->
         if (LocalConfig.password != null) {
             block.resume(null)
             return@sc
         }
-        alert(R.string.set_local_password, R.string.set_local_password_summary) {
-            val editTextBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "password"
-            }
-            customView {
-                editTextBinding.root
-            }
-            onDismiss {
-                block.resume(null)
-            }
-            okButton {
-                LocalConfig.password = editTextBinding.editView.text.toString()
-            }
-            cancelButton {
-                LocalConfig.password = ""
-            }
-        }
+        showComposeTextInputDialog(
+            title = getString(R.string.set_local_password),
+            hint = "password",
+            message = getString(R.string.set_local_password_summary),
+            onPositive = { LocalConfig.password = it },
+            onNegative = { LocalConfig.password = "" },
+            onDismissed = { block.resume(null) }
+        )
     }
 
     private fun notifyAppCrash() {

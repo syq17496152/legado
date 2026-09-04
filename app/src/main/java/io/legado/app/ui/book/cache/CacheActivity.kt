@@ -39,7 +39,6 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.databinding.ActivityCacheBookBinding
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.databinding.DialogSelectSectionExportBinding
 import io.legado.app.help.ConcurrentRateLimiter
 import io.legado.app.help.book.getExportFileName
@@ -137,6 +136,9 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             startExport(dirPath, pendingExportBook)
         }
     }
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         groupId = intent.getLongExtra("groupId", -1)
@@ -615,21 +617,19 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         }
     }
 
-    @SuppressLint("SetTextI18n")
     private fun alertExportFileName() {
-        alert(R.string.export_file_name) {
-            val message = "Variable: name, author."
-            setMessage(message)
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = "file name js"
-                editView.setText(AppConfig.bookExportFileName)
+        // 弹框托管（ui-theme-governance-polish tasks 9.4 孤岛家族迁移）
+        showComposeTextInputDialog(
+            title = getString(R.string.export_file_name),
+            message = "Variable: name, author.",
+            hint = "file name js",
+            initialValue = AppConfig.bookExportFileName.orEmpty(),
+            positiveText = getString(R.string.ok),
+            negativeText = getString(R.string.cancel),
+            onPositive = { text ->
+                AppConfig.bookExportFileName = text
             }
-            customView { alertBinding.root }
-            okButton {
-                AppConfig.bookExportFileName = alertBinding.editView.text?.toString()
-            }
-            cancelButton()
-        }
+        )
     }
 
     private fun getTypeName(): String {
@@ -720,35 +720,34 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
      * B12 缓存并发率设置对话框
      */
     private fun showCacheRateDialog() {
-        var rateEdit: EditText? = null
-        val alertDialog = alert(R.string.cache_concurrent_rate) {
-            setMessage(getString(R.string.cache_rate_desc))
-            val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
-                editView.hint = getString(R.string.cache_rate_hint)
-                editView.inputType = InputType.TYPE_CLASS_TEXT
-                AppConfig.cacheConcurrentRate?.let { editView.setText(it) }
+        // 弹框托管（ui-theme-governance-polish tasks 9.4 孤岛家族迁移）
+        // 行为等价：原 View 版通过覆写确定按钮点击实现"无效格式→toast 且不关闭"，validateInput 语义一致
+        showComposeTextInputDialog(
+            title = getString(R.string.cache_concurrent_rate),
+            message = getString(R.string.cache_rate_desc),
+            hint = getString(R.string.cache_rate_hint),
+            initialValue = AppConfig.cacheConcurrentRate.orEmpty(),
+            positiveText = getString(R.string.ok),
+            negativeText = getString(R.string.cancel),
+            validateInput = { value ->
+                if (!value.isNullOrBlank() && !ConcurrentRateLimiter.isValidRate(value)) {
+                    toastOnUi(R.string.cache_rate_invalid)
+                    false
+                } else {
+                    true
+                }
+            },
+            onPositive = { value ->
+                AppConfig.cacheConcurrentRate = value.ifBlank { null }
+                kotlin.runCatching {
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_CACHE_CONCURRENT,
+                        "缓存并发率设置变更 -> $value",
+                        level = AppLog.Level.INFO
+                    )
+                }
             }
-            rateEdit = alertBinding.editView
-            customView { alertBinding.root }
-            positiveButton(R.string.ok)
-            cancelButton()
-        }
-        alertDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-            val value = rateEdit?.text?.toString()
-            if (!value.isNullOrBlank() && !ConcurrentRateLimiter.isValidRate(value)) {
-                toastOnUi(R.string.cache_rate_invalid)
-                return@setOnClickListener
-            }
-            AppConfig.cacheConcurrentRate = if (value.isNullOrBlank()) null else value
-            kotlin.runCatching {
-                AppLog.putDebugWithTag(
-                    AppLog.TAG_CACHE_CONCURRENT,
-                    "缓存并发率设置变更 -> $value",
-                    level = AppLog.Level.INFO
-                )
-            }
-            alertDialog.hide()
-        }
+        )
     }
 
 }

@@ -11,24 +11,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -37,12 +28,12 @@ import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.help.book.library.LibraryContainerConfig
 import io.legado.app.help.book.library.LibraryContainerManager
-import io.legado.app.ui.widget.components.GlassTopAppBar
-import io.legado.app.ui.widget.components.rememberTopBarContentColor
+import io.legado.app.ui.widget.compose.AppManagementAction
 import io.legado.app.ui.widget.compose.AppManagementCard
 import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementMoreActionButton
+import io.legado.app.ui.widget.compose.AppManagementScaffold
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import androidx.compose.material3.MaterialTheme
@@ -62,21 +53,25 @@ internal fun LibraryContainerManageScreen(
     CompositionLocalProvider(
         LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = palette.settings.bodyFontFamily)
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = palette.settings.page,
-            contentColor = palette.settings.primaryText
-        ) {
+        // followup F5：统一管理族壳（AppManagementScaffold 平移，删页内自绘 GlassTopAppBar 顶栏与根 Surface）
+        AppManagementScaffold(
+            title = stringResource(R.string.library_container_manage_title),
+            selectedCount = 0,
+            totalCount = containers.size,
+            palette = palette,
+            onBack = onBack,
+            topActions = listOf(
+                AppManagementAction(
+                    text = stringResource(R.string.more_menu),
+                    menuActions = pageMenuActions
+                )
+            )
+        ) { _ ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    // H15：顶栏换 GlassTopAppBar（自带状态栏 inset），父容器移除重复 statusBarsPadding
                     .navigationBarsPadding()
             ) {
-                LibraryContainerTopBar(
-                    onBack = onBack,
-                    pageMenuActions = pageMenuActions
-                )
                 Text(
                     text = "书库容器只用于同步阅读章节缓存，不参与备份、主题、气泡或缓存包同步。阅读时会先读取目录索引，只有命中缓存章节才请求正文。",
                     color = palette.settings.secondaryText,
@@ -116,27 +111,6 @@ internal fun LibraryContainerManageScreen(
             }
         }
     }
-}
-
-@Composable
-private fun LibraryContainerTopBar(
-    onBack: () -> Unit,
-    pageMenuActions: () -> List<AppManagementMenuAction>
-) {
-    // H15（2026-08-28）：自绘 54dp 顶栏 → GlassTopAppBar；硬编码中文"书库容器"/"更多"→ strings.xml
-    GlassTopAppBar(
-        title = stringResource(R.string.library_container_manage_title),
-        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-        onNavClick = onBack,
-        actions = {
-            AppManagementMoreActionButton(
-                actionsProvider = pageMenuActions,
-                palette = rememberAppManagementPalette(),
-                contentDescription = stringResource(R.string.more_menu),
-                tint = rememberTopBarContentColor()
-            )
-        }
-    )
 }
 
 @Composable

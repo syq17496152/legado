@@ -2,7 +2,6 @@ package io.legado.app.ui.main.ai
 
 import android.content.Intent
 import android.os.Bundle
-import android.text.InputType
 import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -53,12 +52,10 @@ import io.legado.app.base.BaseActivity
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookCharacter
 import io.legado.app.databinding.ActivityAiChatBinding
-import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.ai.AiImageGalleryManager
 import io.legado.app.help.book.characterBookKey
 import io.legado.app.help.character.BookCharacterProfileMeta
 import io.legado.app.help.config.AppConfig
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.config.AiWorldBookManageActivity
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
@@ -72,6 +69,7 @@ import io.legado.app.ui.widget.compose.BookCoverImage
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeMultiChoiceDialog
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.widget.image.CoverImageView
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -480,27 +478,27 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
     }
 
     private fun showDefaultCompanionPromptDialog(companion: AiChatCompanionConfig) {
-        val binding = DialogEditTextBinding.inflate(layoutInflater).apply {
-            editView.setSingleLine(false)
-            editView.minLines = 8
-            editView.inputType = InputType.TYPE_CLASS_TEXT or
-                    InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-                    InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            editView.setText(companion.prompt)
-        }
-        alert(title = "${companion.name} · 人格") {
-            customView { binding.root }
-            okButton {
-                val prompt = binding.editView.text?.toString().orEmpty().trim()
+        // 弹框托管（ui-theme-governance-polish tasks 9.4 孤岛家族迁移）
+        // 行为差异：原 View 输入框含 TYPE_TEXT_FLAG_CAP_SENTENCES（首句自动大写），Compose 版无对应参数；
+        // 空值校验改走 validateInput，校验失败时弹框不再自动关闭（原 View alert 点击确定后必然关闭）
+        showComposeTextInputDialog(
+            title = "${companion.name} · 人格",
+            initialValue = companion.prompt,
+            minLines = 8,
+            maxLines = 8,
+            validateInput = { prompt ->
                 if (prompt.isBlank()) {
                     toastOnUi("提示词不能为空")
+                    false
                 } else {
-                    AppConfig.upsertAiChatCompanion(companion.copy(prompt = prompt))
-                    refreshToken.intValue += 1
+                    true
                 }
+            },
+            onPositive = { prompt ->
+                AppConfig.upsertAiChatCompanion(companion.copy(prompt = prompt.trim()))
+                refreshToken.intValue += 1
             }
-            cancelButton()
-        }
+        )
     }
 
     private fun confirmDeleteCompanion(companion: AiChatCompanionConfig) {

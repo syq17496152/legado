@@ -1,4 +1,4 @@
-package io.legado.app.ui.config
+﻿package io.legado.app.ui.config
 
 import android.os.Bundle
 import android.view.ViewGroup
@@ -67,6 +67,9 @@ class LibraryContainerManageActivity : BaseActivity<ActivityS3ContainerManageBin
             pendingExportDecryptKey = null
         }
     }
+
+    // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
+    override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initComposeContent()

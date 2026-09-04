@@ -26,6 +26,7 @@ import io.legado.app.ui.book.import.ImportBookScreen
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.SelectActionBar
+import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.widget.components.MenuAction
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
@@ -359,19 +360,18 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
     }
 
     private fun alertImportFileName() {
-        alert(R.string.import_file_name) {
-            setMessage("""使用js处理文件名变量src，将书名作者分别赋值到变量name author""")
-            val alertBinding = io.legado.app.databinding.DialogEditTextBinding
-                .inflate(layoutInflater).apply {
-                    editView.hint = "js"
-                    editView.setText(AppConfig.bookImportFileName)
-                }
-            customView { alertBinding.root }
-            okButton {
-                AppConfig.bookImportFileName = alertBinding.editView.text?.toString()
+        // 弹框托管（ui-theme-governance-polish tasks 9.4 孤岛家族迁移）
+        showComposeTextInputDialog(
+            title = getString(R.string.import_file_name),
+            message = """使用js处理文件名变量src，将书名作者分别赋值到变量name author""",
+            hint = "js",
+            initialValue = AppConfig.bookImportFileName.orEmpty(),
+            positiveText = getString(R.string.ok),
+            negativeText = getString(R.string.cancel),
+            onPositive = { text ->
+                AppConfig.bookImportFileName = text
             }
-            cancelButton()
-        }
+        )
     }
 
     @Synchronized

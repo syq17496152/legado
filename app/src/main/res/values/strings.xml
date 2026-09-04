@@ -3192,4 +3192,7 @@ function login() {
     <string name="video_no_audio_track">无可用音轨</string>
     <string name="video_ratio_playing">画面比例: %1$s</string>
     <string name="video_audio_track_playing">音轨: %1$s</string>
-</resources>
+    <string name="theme_preview">Live preview</string>
+    <string name="theme_editor_suggest_palette">Suggested from wallpaper</string>
+    <string name="theme_editor_hex_color">Hex color</string><string name="manage_bg_alpha">Management page background transparency</string>
+    <string name="manage_bg_alpha_summary">0 = opaque (default), 100 = fully transparent (shows background image); applies to all management &amp; settings pages</string></resources>

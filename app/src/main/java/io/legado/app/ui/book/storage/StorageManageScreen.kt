@@ -14,17 +14,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,16 +34,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
-import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.AppTextDialog
 import io.legado.app.ui.widget.components.ConfirmDialog
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
-import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.MetricGrid
 import io.legado.app.ui.widget.components.MetricItem
 import io.legado.app.ui.widget.components.SettingsClickRow
 import io.legado.app.ui.widget.components.ShelfListSkeleton
+import io.legado.app.ui.widget.compose.AppManagementAction
+import io.legado.app.ui.widget.compose.AppManagementMenuAction
+import io.legado.app.ui.widget.compose.AppManagementScaffold
+import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 
 /**
  * 书库存储管理页 Compose 受控组件（L-B15 枝叶页，S2 列表族）。
@@ -77,41 +75,46 @@ fun StorageManageScreen(
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var moreMenuVisible by remember { mutableStateOf(false) }
     var detailIndex by remember { mutableStateOf<Int?>(null) }
     var deleteIndex by remember { mutableStateOf<Int?>(null) }
     var clearAllVisible by remember { mutableStateOf(false) }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        GlassTopAppBar(
-            title = stringResource(R.string.storage_manage),
-            navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-            onNavClick = onBack,
-            actions = {
-                Box {
-                    IconButton(onClick = { moreMenuVisible = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = null)
-                    }
-                    AppDropdownMenu(
-                        expanded = moreMenuVisible,
-                        onDismiss = { moreMenuVisible = false },
-                        actions = listOf(
-                            MenuAction(
-                                icon = Icons.Default.Refresh,
-                                title = stringResource(R.string.refresh),
-                                onClick = onRefresh
-                            ),
-                            MenuAction(
-                                icon = Icons.Default.DeleteSweep,
-                                title = stringResource(R.string.clear_all_cache),
-                                onClick = { clearAllVisible = true }
-                            )
-                        )
-                    )
-                }
-            }
+    // followup F5：统一管理族壳（AppManagementScaffold 平移，删页内自绘 GlassTopAppBar）
+    val palette = rememberAppManagementPalette()
+    val moreMenuActions = listOf(
+        MenuAction(
+            icon = Icons.Default.Refresh,
+            title = stringResource(R.string.refresh),
+            onClick = onRefresh
+        ),
+        MenuAction(
+            icon = Icons.Default.DeleteSweep,
+            title = stringResource(R.string.clear_all_cache),
+            onClick = { clearAllVisible = true }
         )
+    )
 
+    AppManagementScaffold(
+        title = stringResource(R.string.storage_manage),
+        selectedCount = 0,
+        totalCount = items.size,
+        modifier = modifier,
+        palette = palette,
+        onBack = onBack,
+        topActions = listOf(
+            AppManagementAction(
+                text = stringResource(R.string.more_menu),
+                menuActions = {
+                    moreMenuActions.map { menuAction ->
+                        AppManagementMenuAction(
+                            text = menuAction.title,
+                            onClick = menuAction.onClick
+                        )
+                    }
+                }
+            )
+        )
+    ) { _ ->
         Box(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
             when {
                 isLoading -> ShelfListSkeleton()

@@ -1,4 +1,4 @@
-package io.legado.app.ui.book.search
+﻿package io.legado.app.ui.book.search
 
 import android.content.Context
 import android.content.Intent
@@ -35,6 +35,7 @@ import io.legado.app.data.entities.SearchBook
 import io.legado.app.data.entities.SearchKeyword
 import io.legado.app.databinding.ActivityBookSearchBinding
 import io.legado.app.help.book.isVideo
+import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.Selector
 import io.legado.app.lib.theme.TopBarSearchStyle
@@ -621,6 +622,13 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
                 )
             }
             if (isVideo) {
+                // video-playlist-continuity：注入同源搜索结果列表（跨影片续播，followup F1 恢复）
+                // 一期收敛同源子序列（跨源追加涉切源上下文，S9 混源 Provider 后续扩展）
+                val sameOrigin = searchResults.filter { it.origin == book.origin && SearchBookOpenHelper.isVideoResult(it, viewModel.searchScope.getSingleBookSourcePart()?.bookSourceType) }
+                val idx = sameOrigin.indexOfFirst { it.bookUrl == book.bookUrl }
+                if (idx >= 0) {
+                    VideoPlaylistHolder.set(sameOrigin, idx)
+                }
                 SearchBookOpenHelper.open(this@SearchActivity, book, true)
             } else {
                 SearchBookOpenHelper.open(this@SearchActivity, book, false)

@@ -516,4 +516,7 @@ object PreferKey {
     const val epubCoreScheduleMode = "epubCoreScheduleMode"
     const val fastScrollerTouchTargetDp = "fastScrollerTouchTargetDp"
     const val readMenuAlpha = "readMenuAlpha"
+    // 管理页背景透明度（ui-theme-governance-polish P6）：单 key 不分日夜（管理页日夜同源背景，
+    // 显式决策非静默偏离 dialogAlpha 的分 key 范式），get/set 双向 coerceIn(0,100)
+    const val manageBgAlpha = "manageBgAlpha"
 }

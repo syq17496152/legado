@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,6 +53,7 @@ import io.legado.app.ui.widget.compose.AppManagementCard
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementMoreActionButton
 import io.legado.app.ui.widget.compose.AppManagementPalette
+import io.legado.app.ui.widget.compose.AppManagementScaffold
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixPalette
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
@@ -69,6 +71,7 @@ internal fun AdvancedTitleManageScreen(
     activeId: String,
     loading: Boolean,
     previewProvider: suspend (AdvancedTitlePackageManager.Entry) -> String?,
+    onBack: () -> Unit,
     onApply: (AdvancedTitlePackageManager.Entry) -> Unit,
     onEdit: (AdvancedTitlePackageManager.Entry) -> Unit,
     onMoreActions: (AdvancedTitlePackageManager.Entry) -> List<AppManagementMenuAction>,
@@ -80,54 +83,63 @@ internal fun AdvancedTitleManageScreen(
             fontFamily = palette.settings.bodyFontFamily
         )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(palette.settings.page)
-        ) {
-            Text(
-                text = if (loading) {
-                    LocalContext.current.getString(R.string.loading)
-                } else {
-                    LocalContext.current.getString(R.string.advanced_title_manage_summary)
-                },
-                color = palette.settings.secondaryText,
-                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
-                lineHeight = 18.sp,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
-            )
-
-            LazyColumn(
+        // followup F5：统一管理族壳（AppManagementScaffold 平移，宿主 View TitleBar 已摘除）
+        AppManagementScaffold(
+            title = stringResource(R.string.advanced_title_manage),
+            selectedCount = 0,
+            totalCount = entries.size,
+            palette = palette,
+            onBack = onBack
+        ) { _ ->
+            Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
+                    .fillMaxSize()
+                    .background(palette.settings.page)
             ) {
-                items(entries, key = { it.id }) { entry ->
-                    AdvancedTitleItem(
-                        entry = entry,
-                        active = entry.id == activeId,
-                        palette = palette,
-                        previewProvider = previewProvider,
-                        onApply = { onApply(entry) },
-                        onEdit = { onEdit(entry) },
-                        moreActions = onMoreActions(entry)
-                    )
-                }
-            }
+                Text(
+                    text = if (loading) {
+                        LocalContext.current.getString(R.string.loading)
+                    } else {
+                        LocalContext.current.getString(R.string.advanced_title_manage_summary)
+                    },
+                    color = palette.settings.secondaryText,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
+                )
 
-            LegadoMiuixActionButton(
-                text = LocalContext.current.getString(R.string.import_str),
-                palette = palette.miuix,
-                onClick = onImport,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                minHeight = 48.dp,
-                primary = true
-            )
-            Spacer(modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars))
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
+                ) {
+                    items(entries, key = { it.id }) { entry ->
+                        AdvancedTitleItem(
+                            entry = entry,
+                            active = entry.id == activeId,
+                            palette = palette,
+                            previewProvider = previewProvider,
+                            onApply = { onApply(entry) },
+                            onEdit = { onEdit(entry) },
+                            moreActions = onMoreActions(entry)
+                        )
+                    }
+                }
+
+                LegadoMiuixActionButton(
+                    text = LocalContext.current.getString(R.string.import_str),
+                    palette = palette.miuix,
+                    onClick = onImport,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    minHeight = 48.dp,
+                    primary = true
+                )
+                Spacer(modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars))
+            }
         }
     }
 }
