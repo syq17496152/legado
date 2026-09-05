@@ -96,6 +96,9 @@ def parse_args():
     parser.add_argument("--l2-evidence", metavar="PATH",
                         help="L2 真机验证报告路径（AI 代答 L2 门禁时必传；"
                              "要求文件存在且修改时间为当日）")
+    parser.add_argument("--skip-build", action="store_true",
+                        help="跳过 Stage2 构建，复用 output/apk/ 各目录下最新产物直接走校验+发布+tag"
+                             "（复用场景：三包已由 build-legado.bat 手工产出；发布版本取各包文件名版本 max）")
     return parser.parse_args()
 
 
@@ -223,6 +226,44 @@ def scan_apk_files(config: dict, specified_version: Optional[str] = None) -> Tup
         size_mb = apk_path.stat().st_size / (1024 * 1024)
         log("SCAN", f"  {pkg_type}: {apk_path.name} ({size_mb:.1f}MB)")
 
+    return version, result
+
+
+def collect_latest_artifacts(config: dict) -> Tuple[str, Dict[str, Path]]:
+    """--skip-build 模式：各包目录取 mtime 最新产物（不限文件名版本），发布版本取各包版本 max。
+
+    复用场景：三包已由 build-legado.bat 分批产出（文件名时间戳可能跨小时不一致），
+    versionName 差异在 Stage3 以 WARN 提示（skip_build 宽松模式），不阻断发布。
+    """
+    apk_dirs = config["apk_dirs"]
+    apk_patterns = config["apk_patterns"]
+    version_pattern = config["version_pattern"]
+
+    result: Dict[str, Path] = {}
+    versions: List[str] = []
+    for pkg_type, dir_rel in apk_dirs.items():
+        dir_path = PROJECT_ROOT / dir_rel
+        pattern = apk_patterns.get(pkg_type, "*.apk")
+        if not dir_path.exists():
+            log("SCAN", f"目录不存在: {dir_path}", "ERROR")
+            sys.exit(1)
+        candidates = [p for p in dir_path.glob(pattern) if extract_version(p.name, version_pattern)]
+        if not candidates:
+            log("SCAN", f"{pkg_type} 目录无匹配产物: {dir_path}\\{pattern}", "ERROR")
+            sys.exit(1)
+        latest = max(candidates, key=lambda p: p.stat().st_mtime)
+        ver = extract_version(latest.name, version_pattern)
+        if ver:
+            versions.append(ver)
+        result[pkg_type] = latest
+        size_mb = latest.stat().st_size / (1024 * 1024)
+        log("SCAN", f"  {pkg_type}: {latest.name} ({size_mb:.1f}MB, mtime 最新)")
+
+    version = max(versions, key=lambda v: [int(p) for p in v.split(".")])
+    log("SCAN", f"--skip-build 复用三包，发布版本取 max: {version}")
+    distinct = sorted(set(versions))
+    if len(distinct) > 1:
+        log("SCAN", f"三包文件名版本存在差异 {distinct}（跨小时构建所致，versionName 差异仅 WARN）", "WARN")
     return version, result
 
 
@@ -431,11 +472,20 @@ def run_tool(tool: Path, tool_args: List[str]) -> Tuple[bool, str]:
         return False, "tool timeout (300s)"
 
 
-def stage3_verify(config: dict, version: str, dry_run: bool) -> Tuple[Dict[str, Path], str]:
-    """Stage3 校验强化（R2-R5）：致命项 fail-fast exit，建议项 WARN 清单"""
+def stage3_verify(config: dict, version: str, dry_run: bool,
+                  skip_build: bool = False, pre_scanned: Optional[Dict[str, Path]] = None) -> Tuple[Dict[str, Path], str]:
+    """Stage3 校验强化（R2-R5）：致命项 fail-fast exit，建议项 WARN 清单。
+
+    skip_build=True：使用 pre_scanned 产物（collect_latest_artifacts 扫描结果），
+    跳过按版本过滤的三包齐全重扫；versionName 与发布版本不一致降级 WARN（跨小时构建差异）。
+    """
     # 致命项 1：三包齐全（重扫兜底，不信任 Stage2 [ARTIFACT] 解析）
-    _, apks = scan_apk_files(config, version)
-    missing = [k for k in EXPECTED_PACKAGES if k not in apks]
+    if skip_build and pre_scanned is not None:
+        apks = dict(pre_scanned)
+        missing = [k for k in EXPECTED_PACKAGES if k not in apks]
+    else:
+        _, apks = scan_apk_files(config, version)
+        missing = [k for k in EXPECTED_PACKAGES if k not in apks]
 
     if dry_run:
         # dry-run 允许无产物（bump 新版本尚未构建），仅模拟校验；
@@ -489,6 +539,10 @@ def stage3_verify(config: dict, version: str, dry_run: bool) -> Tuple[Dict[str, 
             # 允许"精确相等或以版本号为前缀"；其余不一致为致命错误
             if ver_name.startswith(version):
                 log("VERIFY", f"[{pkg}] versionName 含构建后缀: {ver_name}（基版本 {version} 匹配）")
+            elif skip_build and ver_name[:9] == version[:9]:
+                # --skip-build 复用模式：跨小时构建的文件名版本差异（如 3.26.090517 vs 3.26.090518），
+                # versionName 由构建时刻公式生成导致差异——同日期（前 9 字符 3.YY.MMDD）即降级 WARN 不阻断
+                log("VERIFY", f"[{pkg}] --skip-build 复用包版本差异: {ver_name} vs 发布版本 {version}（同日构建，WARN 放行）", "WARN")
             else:
                 log("VERIFY", f"[{pkg}] 版本不一致: 期望 {version}，实际 {ver_name}", "ERROR")
                 sys.exit(1)
@@ -776,11 +830,17 @@ def main():
     # Stage1 版本确认
     version = stage1_confirm_version(args, config)
 
-    # Stage2 三包构建
-    stage2_build_three(version, args.dry_run)
+    # Stage2 三包构建 / --skip-build 复用已有产物
+    artifacts: Dict[str, Path] = {}
+    if args.skip_build:
+        version, artifacts = collect_latest_artifacts(config)
+        log("MAIN", f"--skip-build 复用模式：发布版本 {version}（跳过构建，产物来自 output/apk/）")
+    else:
+        stage2_build_three(version, args.dry_run)
 
     # Stage3 校验强化（含 updateLog 当日条目 fail-fast）
-    apks, body = stage3_verify(config, version, args.dry_run)
+    apks, body = stage3_verify(config, version, args.dry_run,
+                               skip_build=args.skip_build, pre_scanned=artifacts)
     log("MAIN", f"Release body 预览（前 200 字符）:\n{body[:200]}...")
 
     # L2 真机门禁（不可跳过，无 flag 旁路）
