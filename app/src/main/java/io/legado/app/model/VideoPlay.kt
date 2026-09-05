@@ -925,6 +925,11 @@ object VideoPlay : CoroutineScope by MainScope(){
      * 页面销毁了记得调用是否所有的video
      */
     fun releaseAllVideos() {
+        // 诊断埋点：releaseVideos() 触发源定位（铁证：2026-09-04 播放页 10s 后播放器被莫名整体回收）
+        AppLog.put(
+            "VideoPlay.releaseAllVideos: caller=" +
+                Throwable().stackTrace.take(4).joinToString(" <- ") { "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" }
+        )
         if (videoManager.listener() != null) {
             videoManager.listener().onCompletion()
         }

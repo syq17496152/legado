@@ -18,6 +18,11 @@ class FloatingPlayer : StandardGSYVideoPlayer {
     constructor(context: Context) : super(context)
     constructor(context: Context, attrs: AttributeSet) : super(context, attrs)
 
+    init {
+        // dual-layout W3-fix：与 VideoPlayer 同策略——音频焦点丢失暂停而非释放（防悬浮窗被整体回收）
+        mReleaseWhenLossAudio = false
+    }
+
     lateinit var fullscreenB: ImageView
 
     override fun init(context: Context?) {

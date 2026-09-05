@@ -48,6 +48,21 @@ class VideoPlayer: StandardGSYVideoPlayer {
     constructor(context: Context?) : super(context)
     constructor(context: Context?, attrs: AttributeSet?) : super(context, attrs)
 
+    init {
+        // dual-layout W3-fix：音频焦点丢失改为暂停而非释放（GSY 默认 mReleaseWhenLossAudio=true）
+        // 铁证：2026-09-04 模拟器日志，起播 10s 后播放器被 releaseVideos() 整体回收
+        // （ExoPlayer 网络错误自动重试排程后 2ms 即被杀 → isReleased=true → 黑屏死播放器），
+        // 释放链唯一入口 releaseVideos()，静态排查无布局切换/onNewIntent/视图 detach 证据，
+        // 最大嫌疑即 GSY 默认"焦点丢失=整体释放"。改为暂停（GSY 官方语义），
+        // 并在 onAudioFocusLoss 埋点，后续若复现可从日志确认触发源
+        mReleaseWhenLossAudio = false
+    }
+
+    override fun onAudioFocusLoss() {
+        AppLog.put("GSY VideoPlayer onAudioFocusLoss: policy=pause-no-release")
+        super.onAudioFocusLoss()
+    }
+
     private var episodeList: TextView? = null
     private var playbackSpeed: TextView? = null
     /** video-gesture-overhaul: 改为 internal 供 VideoFragment 访问（长按倍速恢复原速） */
