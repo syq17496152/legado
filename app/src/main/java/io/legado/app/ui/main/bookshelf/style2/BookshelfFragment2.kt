@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.main.bookshelf.style2
+package io.legado.app.ui.main.bookshelf.style2
 
 import android.os.Bundle
 import android.view.View
@@ -34,10 +34,8 @@ import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 
 class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2) {
 
@@ -54,11 +52,8 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
     private var currentBooks by mutableStateOf(listOf<Book>())
     private var loading by mutableStateOf(true)
     private var error by mutableStateOf(false)
-    private var refreshing by mutableStateOf(false)
     private var topScrollTrigger by mutableLongStateOf(0L)
     private var booksJob: Job? = null
-    // 1.3：刷新复位协程单一 Job 管理（同 1.2）
-    private var refreshResetJob: Job? = null
 
     // 受控布局配置（config-needs-restart-fix AD-04/实锤2）：
     // style2 原先零事件监听，配置变更完全无响应；现补 REFRESH+STRUCTURE 双监听（对齐 archive Fragment2:607-615）
@@ -107,7 +102,6 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
             groupId = currentGroupId,
             isFolder = true,
             topScrollTrigger = topScrollTrigger,
-            isRefreshing = refreshing,
             layout = shelfLayout,
             showBookname = shelfShowBookname,
             listItemStyle = shelfListItemStyle,
@@ -117,17 +111,9 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
             showReadProgress = shelfShowReadProgress,
             showLastUpdateTime = shelfShowLastUpdateTime,
             onRefresh = {
-                refreshing = true
+                // 对齐 archive：转圈已由 SwipeRefreshContainer 触发即收，
+                // 这里仅触发后台目录更新，列表由 DB flow 静默刷新
                 activityViewModel.upToc(currentBooks, onlyUpdateRead)
-                // 1.3：事件驱动复位（同 1.2）——upToc 队列排空后收转圈，5s 超时兜底，
-                // 协程挂 viewLifecycleOwner（页面销毁自动取消，无冻结滞留）
-                refreshResetJob?.cancel()
-                refreshResetJob = viewLifecycleOwner.lifecycleScope.launch {
-                    val idle = withTimeoutOrNull(5_000) {
-                        activityViewModel.upTocIdle.first { it }
-                    }
-                    if (idle == true || refreshing) refreshing = false
-                }
             },
             onRetry = { upConnect() },
             onGroupSelected = { onGroupSelected(it) },

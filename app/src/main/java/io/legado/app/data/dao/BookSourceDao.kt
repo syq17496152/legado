@@ -318,6 +318,9 @@ interface BookSourceDao {
     @Query("select * from book_sources_part where bookSourceUrl = :key")
     fun getBookSourcePart(key: String): BookSourcePart?
 
+    @Query("select * from book_sources_part where bookSourceUrl in (:keys)")
+    fun getBookSourceParts(keys: List<String>): List<BookSourcePart>
+
     @Query("select count(*) from book_sources")
     fun allCount(): Int
 

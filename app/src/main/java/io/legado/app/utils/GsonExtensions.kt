@@ -33,6 +33,9 @@ val INITIAL_GSON: Gson by lazy {
         )
         .registerTypeAdapter(Int::class.java, IntJsonDeserializer())
         .registerTypeAdapter(String::class.java, StringJsonDeserializer())
+        // spinner-fix delta 2026-09-05：宽松布尔解析（primitive+boxed 双注册，兼容 0/1 数字型布尔）
+        .registerTypeAdapter(Boolean::class.java, BooleanJsonDeserializer())
+        .registerTypeAdapter(java.lang.Boolean::class.java, BooleanJsonDeserializer())
         .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
         .disableHtmlEscaping()
         .setPrettyPrinting()
@@ -165,6 +168,35 @@ class IntJsonDeserializer : JsonDeserializer<Int?> {
                     prim.asNumber.toInt()
                 } else {
                     null
+                }
+            }
+
+            else -> null
+        }
+    }
+
+}
+
+/**
+ * Boolean 宽松解析（spinner-fix delta 2026-09-05 大合集导入修复）：
+ * 第三方合集（如源仓库导出工具）常以 0/1 数字或字符串表达布尔字段（enabled 等），
+ * Gson 默认 BOOLEAN 适配器对 NUMBER 抛 IllegalStateException 导致整包解析失败。
+ * 语义：0=false，非0=true；"true"/"1"=true；JSON 布尔直取；null/未知=null（走字段默认值）
+ */
+class BooleanJsonDeserializer : JsonDeserializer<Boolean?> {
+
+    override fun deserialize(
+        json: JsonElement,
+        typeOfT: Type?,
+        context: JsonDeserializationContext?
+    ): Boolean? {
+        return when {
+            json.isJsonPrimitive -> {
+                val prim = json.asJsonPrimitive
+                when {
+                    prim.isBoolean -> prim.asBoolean
+                    prim.isNumber -> prim.asNumber.toDouble() != 0.0
+                    else -> prim.asString.lowercase().let { it == "true" || it == "1" }
                 }
             }
 

@@ -74,6 +74,9 @@ class ImportRssSourceDialog() : ComposeDialogFragment(),
     private val successCount = mutableStateOf<Int?>(null)
     private val errorLive = mutableStateOf<String?>(null)
 
+    /** 合集下载进度（已完成/总数），来自 progressLiveData 桥接（spinner-fix delta 2026-09-05） */
+    private val progressState = mutableStateOf<Pair<Int, Int>?>(null)
+
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
         if (arguments?.getBoolean("finishOnDismiss") == true) {
@@ -111,6 +114,9 @@ class ImportRssSourceDialog() : ComposeDialogFragment(),
         viewModel.errorLiveData.observe(viewLifecycleOwner) {
             errorLive.value = it
         }
+        viewModel.progressLiveData.observe(viewLifecycleOwner) {
+            progressState.value = it
+        }
         viewModel.importSource(source)
     }
 
@@ -142,6 +148,10 @@ class ImportRssSourceDialog() : ComposeDialogFragment(),
         }
 
         val loading = successCount.value == null && errorLive.value == null
+        // spinner-fix delta 2026-09-05：进度挂 title 展示（ImportSourceSheet 不新增参数）
+        val sheetTitle = progressState.value?.let { (done, total) ->
+            "${getString(R.string.import_rss_source)} · ${getString(R.string.import_fetching_progress, done, total)}"
+        } ?: getString(R.string.import_rss_source)
         val errorMsg = errorLive.value ?: if (successCount.value != null && successCount.value == 0) {
             getString(R.string.wrong_format)
         } else {
@@ -179,7 +189,7 @@ class ImportRssSourceDialog() : ComposeDialogFragment(),
         )
 
         ImportSourceSheet(
-            title = getString(R.string.import_rss_source),
+            title = sheetTitle,
             items = items,
             selected = selectFlags,
             showComment = showComment,

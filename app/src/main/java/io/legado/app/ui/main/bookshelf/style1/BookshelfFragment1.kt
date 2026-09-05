@@ -34,10 +34,8 @@ import io.legado.app.data.entities.BookGroup
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 
 class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1) {
 
@@ -55,10 +53,7 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     private var loading by mutableStateOf(true)
     private var error by mutableStateOf(false)
     private var topScrollTrigger by mutableLongStateOf(0L)
-    private var refreshing by mutableStateOf(false)
     private var booksJob: Job? = null
-    // 1.2：刷新复位协程单一 Job 管理（新刷新先 cancel 旧复位协程，防竞态）
-    private var refreshResetJob: Job? = null
 
     // 受控布局配置（config-needs-restart-fix AD-04）：onFragmentCreated 中 migrate 后全量重读，
     // REFRESH/STRUCTURE 事件回调重读传入 BookshelfScreen，替代 Screen 内 remember{AppConfig.x} 快照
@@ -124,7 +119,6 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             groupId = selectedGroupId,
             isFolder = false,
             topScrollTrigger = topScrollTrigger,
-            isRefreshing = refreshing,
             layout = shelfLayout,
             showBookname = shelfShowBookname,
             listItemStyle = shelfListItemStyle,
@@ -134,17 +128,9 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
             showReadProgress = shelfShowReadProgress,
             showLastUpdateTime = shelfShowLastUpdateTime,
             onRefresh = {
-                refreshing = true
+                // 对齐 archive：转圈已由 SwipeRefreshContainer 触发即收，
+                // 这里仅触发后台目录更新，列表由 DB flow 静默刷新
                 activityViewModel.upToc(currentBooks, onlyUpdateRead)
-                // 1.2：事件驱动复位——upToc 队列排空（upTocIdle.first { it }）后收转圈，
-                // 5s 超时兜底防信号丢失；协程挂 viewLifecycleOwner（页面销毁自动取消，无冻结滞留）
-                refreshResetJob?.cancel()
-                refreshResetJob = viewLifecycleOwner.lifecycleScope.launch {
-                    val idle = withTimeoutOrNull(5_000) {
-                        activityViewModel.upTocIdle.first { it }
-                    }
-                    if (idle == true || refreshing) refreshing = false
-                }
             },
             onRetry = { upConnect() },
             onBookClick = { book ->
@@ -176,17 +162,6 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
         binding.viewPagerBookshelf.setContent {
             LegadoTheme {
                 BookshelfContent()
-            }
-        }
-        // 修复（刷新指示器常驻）：复位协程挂 viewLifecycleOwner，切 Tab 视图销毁时被取消
-        // 而 refreshing 是 Fragment 级字段 → 返回后指示器常驻。视图重建后若仍在刷新，重挂复位协程
-        if (refreshing) {
-            refreshResetJob?.cancel()
-            refreshResetJob = viewLifecycleOwner.lifecycleScope.launch {
-                val idle = withTimeoutOrNull(5_000) {
-                    activityViewModel.upTocIdle.first { it }
-                }
-                if (idle == true || refreshing) refreshing = false
             }
         }
     }

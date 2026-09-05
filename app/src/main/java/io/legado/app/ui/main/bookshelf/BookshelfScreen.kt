@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import io.legado.app.ui.widget.components.AppShapes
@@ -39,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -102,7 +104,6 @@ fun BookshelfScreen(
     groupId: Long,
     isFolder: Boolean,
     topScrollTrigger: Long = 0L,
-    isRefreshing: Boolean = false,
     layout: Int,
     showBookname: Int,
     listItemStyle: Int,
@@ -206,7 +207,6 @@ fun BookshelfScreen(
             // 仅当列表/网格处于顶部 (canScrollBackward == false) 时允许下拉刷新，
             // 避免非顶部下拉误触发刷新，且刷新指示器正确显示/隐藏。
             SwipeRefreshContainer(
-                isRefreshing = isRefreshing,
                 onRefresh = onRefresh,
                 canScrollBackward = if (layout >= 2) gridState.canScrollBackward else listState.canScrollBackward,
                 content = content
@@ -223,7 +223,6 @@ fun BookshelfScreen(
  */
 @Composable
 private fun SwipeRefreshContainer(
-    isRefreshing: Boolean,
     onRefresh: () -> Unit,
     canScrollBackward: Boolean,
     content: @Composable () -> Unit,
@@ -237,14 +236,30 @@ private fun SwipeRefreshContainer(
     // 修复②（内容冻结）：factory 捕获首次 content 后 update 从不重设，
     // 刷新/换组/排序变化后内层 ComposeView 仍显示旧列表 → rememberUpdatedState 转发
     val currentContent by rememberUpdatedState(content)
+    // 对齐 archive BooksFragment L168-171 语义：触发瞬间收圈，转圈与数据层解耦。
+    // （旧修复③"等数据经重组链写回 isRefreshing=false"已删除——嵌套 ComposeView 场景
+    // 重组链断裂导致转圈永久残留，铁证 090418 包仍复现；数据更新由 DB flow 静默刷列表）
     AndroidView(
         factory = { ctx ->
             val swipeRefresh = SwipeRefreshLayout(ctx).apply {
-                setColorSchemeResources(androidx.compose.material3.R.color.m3_refresh_color)
+                // 刷新指示器颜色跟随主题主色：
+                // 注意用 setColorSchemeColors（颜色值）而非 setColorSchemeResources（资源 ID），
+                // 铁证：theme 属性解析出的 0xff546e7a 是颜色值，误传 Resources API 导致
+                // NotFoundException 书架闪退（2026-09-04 崩溃日志）
+                val tv = android.util.TypedValue()
+                val resolved = ctx.theme.resolveAttribute(androidx.appcompat.R.attr.colorPrimary, tv, true)
+                val colorInt = when {
+                    resolved && tv.type >= android.util.TypedValue.TYPE_FIRST_COLOR_INT &&
+                        tv.type <= android.util.TypedValue.TYPE_LAST_COLOR_INT -> tv.data
+                    resolved && tv.resourceId != 0 -> androidx.core.content.ContextCompat.getColor(ctx, tv.resourceId)
+                    // 主题未定义 colorPrimary 时的兜底色（取应用默认蓝灰主色），避免 resourceId=0 再炸
+                    else -> 0xFF546E7A.toInt()
+                }
+                setColorSchemeColors(colorInt)
                 // 进度条位置微调，避免与顶栏重叠
                 setProgressViewOffset(true, -28, 56)
             }
-            val composeView = androidx.compose.ui.viewinterop.ComposeView(ctx).apply {
+            val composeView = androidx.compose.ui.platform.ComposeView(ctx).apply {
                 setViewCompositionStrategy(androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
                 setContent {
                     io.legado.app.ui.theme.LegadoTheme {
@@ -260,18 +275,11 @@ private fun SwipeRefreshContainer(
             // 核心修复：根据 canScrollBackward 动态控制是否允许下拉刷新
             // canScrollBackward = true 表示可向上滚动(不在顶部)，此时禁用下拉刷新
             swipeRefresh.setOnChildScrollUpCallback { _, _ -> currentCanScrollBackward }
-            // 同步刷新状态（相等时跳过，防止每帧旧值回写打断隐藏动画 → 指示器常驻）
-            if (swipeRefresh.isRefreshing != isRefreshing) {
-                swipeRefresh.isRefreshing = isRefreshing
-            }
-            // 刷新监听：仅在允许刷新时回调
+            // 对齐 archive BooksFragment L168-169：触发瞬间立即收圈，
+            // 数据更新走 currentOnRefresh 后台静默执行，转圈不跟随数据完成
             swipeRefresh.setOnRefreshListener {
-                if (!currentCanScrollBackward) {
-                    currentOnRefresh()
-                } else {
-                    // 非顶部被触发（极少见），直接停止刷新动画
-                    swipeRefresh.isRefreshing = false
-                }
+                swipeRefresh.isRefreshing = false
+                currentOnRefresh()
             }
         },
         modifier = Modifier.fillMaxSize(),

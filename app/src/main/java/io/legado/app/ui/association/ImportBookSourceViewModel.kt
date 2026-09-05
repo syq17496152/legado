@@ -18,6 +18,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.decompressed
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
+import io.legado.app.help.http.plainImportClient
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.model.RuleUpdate
 import io.legado.app.utils.GSON
@@ -29,6 +30,11 @@ import io.legado.app.utils.isJsonArray
 import io.legado.app.utils.isJsonObject
 import io.legado.app.utils.isUri
 import io.legado.app.utils.splitNotBlank
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 
 class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
@@ -36,6 +42,9 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
     var groupName: String? = null
     val errorLiveData = MutableLiveData<String>()
     val successLiveData = MutableLiveData<Int>()
+
+    /** 合集子链接下载进度（已完成/总数），驱动导入弹框 loading 文案（spinner-fix delta 2026-09-05） */
+    val progressLiveData = MutableLiveData<Pair<Int, Int>>()
 
     val allSources = arrayListOf<BookSource>()
     val checkSources = arrayListOf<BookSourcePart?>()
@@ -138,9 +147,9 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
                         val json = JsonPath.parse(mText)
                         json.read<List<String>>("$.sourceUrls")
                     }.onSuccess { listUrl ->
-                        listUrl.forEach {
-                            importSourceUrl(it)
-                        }
+                        // spinner-fix delta 2026-09-05：合集子链接并行下载+进度上报，
+                        // 替换原串行逐个下载（大合集每个最坏 60s 且全程无进度 → 用户感知"长时间无响应"）
+                        importSourceUrls(listUrl)
                     }.onFailure {
                         GSON.fromJsonObject<BookSource>(mText).getOrThrow().let {
                             if (it.bookSourceUrl.isEmpty()) {
@@ -161,7 +170,7 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
                     }
 
                 mText.isAbsUrl() -> {
-                    importSourceUrl(mText)
+                    importSourceUrls(listOf(mText))
                 }
 
                 mText.isUri() -> {
@@ -187,13 +196,47 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
         }
     }
 
-    private suspend fun importSourceUrl(url: String) {
-        RuleUpdate.cacheBookSourceMap[url]?.also {
-            allSources.addAll(it)
-            RuleUpdate.cacheBookSourceMap.remove(url)
-            return
+    /**
+     * 合集子链接并行下载（spinner-fix delta 2026-09-05）：
+     * - 限流并发（searchThreadCount），防无界并发打爆网络层
+     * - 实时进度 postValue((已完成 to 总数))
+     * - 聚合语义：单个子链接失败不影响其余（记 AppLog）；全部失败才抛第一个异常（与原串行失败语义等价）
+     * - 结果聚合回主协程单线程 addAll（allSources 为非线程安全 ArrayList，禁止并行写）
+     */
+    private suspend fun importSourceUrls(urls: List<String>) {
+        val total = urls.size
+        val done = java.util.concurrent.atomic.AtomicInteger(0)
+        val results = coroutineScope {
+            val semaphore = Semaphore(AppConfig.searchThreadCount)
+            urls.map { url ->
+                async {
+                    semaphore.withPermit {
+                        val r = kotlin.runCatching { fetchBookSourcesFromUrl(url) }
+                        progressLiveData.postValue(done.incrementAndGet() to total)
+                        r
+                    }
+                }
+            }.awaitAll()
         }
-        okHttpClient.newCallResponseBody {
+        results.forEach { r ->
+            r.getOrNull()?.let { allSources.addAll(it) }
+        }
+        val failures = results.filter { it.isFailure }
+        failures.forEach {
+            AppLog.put("ImportSourceUrlError:${it.exceptionOrNull()?.localizedMessage}")
+        }
+        if (failures.size == urls.size) {
+            throw failures.first().exceptionOrNull() ?: NoStackTraceException("全部子链接获取失败")
+        }
+    }
+
+    /** 下载并解析单个子链接，返回书源列表（不直接写 allSources，由聚合方统一写入） */
+    private suspend fun fetchBookSourcesFromUrl(url: String): List<BookSource> {
+        RuleUpdate.cacheBookSourceMap[url]?.also {
+            RuleUpdate.cacheBookSourceMap.remove(url)
+            return it
+        }
+        return plainImportClient.newCallResponseBody {
             if (url.endsWith("#requestWithoutUA")) {
                 url(url.substringBeforeLast("#requestWithoutUA"))
                 header(AppConst.UA_NAME, "null")
@@ -202,19 +245,25 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
             }
         }.decompressed().byteStream().use {
             GSON.fromJsonArray<BookSource>(it).getOrThrow().let { list ->
-                val source = list.firstOrNull() ?: return@let
+                val source = list.firstOrNull() ?: throw NoStackTraceException("不是书源")
                 if (source.bookSourceUrl.isEmpty()) {
                     throw NoStackTraceException("不是书源")
                 }
-                allSources.addAll(list)
+                list
             }
         }
     }
 
     private fun comparisonSource() {
         execute {
-            allSources.forEach {
-                val source = appDb.bookSourceDao.getBookSourcePart(it.bookSourceUrl)
+            // spinner-fix delta 2026-09-05：批量 IN 查询替代逐条——4MB 合集数千条逐条 Room
+            // 事务查询数十秒，是"导入卡住不显示"的真凶；分批 500 规避 SQLite 变量上限
+            val existing = allSources.map { it.bookSourceUrl }
+                .chunked(500)
+                .flatMap { appDb.bookSourceDao.getBookSourceParts(it) }
+                .associateBy { it.bookSourceUrl }
+            allSources.forEachIndexed { index, it ->
+                val source = existing[it.bookSourceUrl]
                 checkSources.add(source)
                 selectStatus.add(source == null || source.lastUpdateTime < it.lastUpdateTime)
                 newSourceStatus.add(source == null)

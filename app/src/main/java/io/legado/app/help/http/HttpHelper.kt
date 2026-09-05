@@ -230,8 +230,27 @@ val okHttpClientManga by lazy {
 }
 
 /**
+ * 书源/订阅源合集导入专用客户端（spinner-fix delta 2026-09-05）：
+ * 用户实测真机上大合集下载超时（同 URL 原版纯 OkHttp <5s 完成）——两处 fork 差异叠加：
+ * 1) CronetInterceptor 部分真机环境对 302+大响应体引入超时；
+ * 2) DoH 公共解析器无运营商 CDN 调度上下文，模拟器取证铁证：重定向域名被 DoH 解析到
+ *    被墙 IP 段（TCP SYN_SENT 永久卡住打爆 callTimeout），curl/原版走系统 DNS 5 秒完成。
+ * 方案：剔除 Cronet + 强制系统 DNS（运营商就近调度），完全对齐原版导入行为。
+ */
+val plainImportClient: OkHttpClient by lazy {
+    okHttpClient.newBuilder().run {
+        val filtered = interceptors().filterNot {
+            it.javaClass.name == "io.legado.app.lib.cronet.CronetInterceptor"
+        }
+        interceptors().clear()
+        interceptors().addAll(filtered)
+        dns(Dns.SYSTEM)
+        build()
+    }
+}
+
+/**
  * FR-3: 视频流专用 OkHttpClient（强制 HTTP/1.1）
- *
  * 根因：ExoPlayerHelper L417/L740 Range 嗅探请求用 okHttpClient（含 CronetInterceptor），
  *   Cronet 引擎走 HTTP/2 可能触发 ERR_HTTP2_PROTOCOL_ERROR（日志铁证 3 次）
  *
