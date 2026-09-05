@@ -26,10 +26,11 @@ object AppUpdateGitHub : AppUpdate.AppUpdateInterface {
         }
 
     private suspend fun getLatestRelease(): List<AppReleaseInfo> {
+        // 更新源指向本 fork 发布仓（修复硬编码上游原版仓导致应用内更新对 fork 发版失效）
         val lastReleaseUrl = if (checkVariant.isBeta()) {
-            "https://api.github.com/repos/gedoor/legado/releases/tags/beta"
+            "https://api.github.com/repos/syq17496152/legado/releases/tags/beta"
         } else {
-            "https://api.github.com/repos/gedoor/legado/releases/latest"
+            "https://api.github.com/repos/syq17496152/legado/releases/latest"
         }
         val res = okHttpClient.newCallResponse {
             url(lastReleaseUrl)
@@ -53,20 +54,24 @@ object AppUpdateGitHub : AppUpdate.AppUpdateInterface {
         scope: CoroutineScope,
     ): Coroutine<AppUpdate.UpdateInfo> {
         return Coroutine.async(scope) {
-            getLatestRelease()
-                .filter { it.appVariant == checkVariant }
-                .firstOrNull { it.versionName > AppConst.appInfo.versionName }
-                ?.let {
-                    return@async AppUpdate.UpdateInfo(
-                        it.versionName,
-                        it.note,
-                        it.downloadUrl,
-                        it.name,
-                        it.assetSize,
-                        it.createdAt
-                    )
-                }
-                ?: throw NoStackTraceException("已是最新版本")
+            checkAwait()
         }.timeout(10000)
+    }
+
+    suspend fun checkAwait(): AppUpdate.UpdateInfo {
+        return getLatestRelease()
+            .filter { it.appVariant == checkVariant }
+            .firstOrNull { it.versionName > AppConst.appInfo.versionName }
+            ?.let {
+                AppUpdate.UpdateInfo(
+                    it.versionName,
+                    it.note,
+                    it.downloadUrl,
+                    it.name,
+                    it.assetSize,
+                    it.createdAt
+                )
+            }
+            ?: throw NoStackTraceException("已是最新版本")
     }
 }

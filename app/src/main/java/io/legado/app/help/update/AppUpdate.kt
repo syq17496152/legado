@@ -2,6 +2,7 @@ package io.legado.app.help.update
 
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.coroutine.Coroutine
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 
 object AppUpdate {
@@ -23,10 +24,20 @@ object AppUpdate {
     }
 
     private object PreferredAppUpdate : AppUpdateInterface {
-        // 简化说明: 目标项目无 AppUpdateConfig/AppUpdateInternal,Archive 的多源择优逻辑无法直移,
-        // 这里以 GitHub 源作为首选更新检查源。
-        override fun check(scope: CoroutineScope): Coroutine<UpdateInfo> {
-            return AppUpdateGitHub.check(scope)
+        // 多源择优：Gitee 为主源（国内网络稳定，指向本 fork 发布仓），
+        // Gitee 请求失败或未检出更新（发布滞后）时降级 GitHub 源兜底，
+        // 两源均无更新时透传"已是最新版本"；CancellationException 必须透传防吞取消
+        override fun check(scope: CoroutineScope): Coroutine<AppUpdate.UpdateInfo> {
+            return Coroutine.async(scope) {
+                val gitee = try {
+                    AppUpdateGitee.checkAwait()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    null
+                }
+                gitee ?: AppUpdateGitHub.checkAwait()
+            }.timeout(20000)
         }
     }
 

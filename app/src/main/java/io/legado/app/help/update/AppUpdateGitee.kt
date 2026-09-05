@@ -64,24 +64,28 @@ object AppUpdateGitee : AppUpdate.AppUpdateInterface {
         scope: CoroutineScope,
     ): Coroutine<AppUpdate.UpdateInfo> {
         return Coroutine.async(scope) {
-            getLatestRelease()
-                .filter {
-                    if (AppConst.appInfo.appVariant == AppVariant.BETA_RELEASE) { //不切版本
-                        it.appVariant == AppConst.appInfo.appVariant
-                    } else {
-                        it.appVariant == checkVariant
-                    }
-                }
-                .firstOrNull { it.versionName > AppConst.appInfo.versionName }
-                ?.let {
-                    return@async AppUpdate.UpdateInfo(
-                        it.versionName,
-                        it.note,
-                        it.downloadUrl,
-                        it.name
-                    )
-                }
-            throw NoStackTraceException("已是最新版本")
+            checkAwait()
         }.timeout(10000)
+    }
+
+    suspend fun checkAwait(): AppUpdate.UpdateInfo {
+        return getLatestRelease()
+            .filter {
+                if (AppConst.appInfo.appVariant == AppVariant.BETA_RELEASE) { //不切版本
+                    it.appVariant == AppConst.appInfo.appVariant
+                } else {
+                    it.appVariant == checkVariant
+                }
+            }
+            .firstOrNull { it.versionName > AppConst.appInfo.versionName }
+            ?.let {
+                AppUpdate.UpdateInfo(
+                    it.versionName,
+                    it.note,
+                    it.downloadUrl,
+                    it.name
+                )
+            }
+            ?: throw NoStackTraceException("已是最新版本")
     }
 }
