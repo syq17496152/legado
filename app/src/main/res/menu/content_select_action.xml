@@ -37,19 +37,4 @@
     <item
         android:id="@+id/menu_share_image"
         android:title="@string/share" />
-
-    <item
-        android:id="@+id/menu_search_content"
-        android:title="@string/search_content"
-        app:showAsAction="never" />
-
-    <item
-        android:id="@+id/menu_browser"
-        android:title="@string/browser"
-        app:showAsAction="never" />
-
-    <item
-        android:id="@+id/menu_share_str"
-        android:title="@string/share"
-        app:showAsAction="never" />
 </menu>

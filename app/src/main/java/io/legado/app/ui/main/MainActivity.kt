@@ -2257,19 +2257,21 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                     }
                 }
             }
-        }
-        if (BuildConfig.DEBUG) {
-            return
-        }
-        showComposeConfirmDialog(
-            title = getString(R.string.draw),
-            message = "检测到阅读发生了崩溃，是否打开崩溃日志以便报告问题？",
-            positiveText = getString(R.string.yes),
-            negativeText = getString(R.string.no),
-            onPositive = {
-                showDialogFragment<CrashLogsDialog>()
+            // ui-batch-fix-0905: 崩溃确认弹框必须仅在真实崩溃后出现（修复回归：弹框曾被移出
+            // appCrash 块导致 release 包每次主页创建/重建都误弹"检测到崩溃"）
+            if (BuildConfig.DEBUG) {
+                return
             }
-        )
+            showComposeConfirmDialog(
+                title = getString(R.string.draw),
+                message = "检测到阅读发生了崩溃，是否打开崩溃日志以便报告问题？",
+                positiveText = getString(R.string.yes),
+                negativeText = getString(R.string.no),
+                onPositive = {
+                    showDialogFragment<CrashLogsDialog>()
+                }
+            )
+        }
     }
 
     /**

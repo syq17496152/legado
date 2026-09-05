@@ -175,7 +175,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     private var folderComposeMargin by mutableStateOf(AppConfig.sourceMargin)
     private var folderComposeSpanCount by mutableStateOf(2)
     // 更多菜单弹窗句柄（ModernActionPopup，生命周期由弹窗自身管理）
-    private var groupMenuPopup: ModernActionPopup.Handle? = null
+    private var moreMenuPopup: ModernActionPopup.Handle? = null
     // D1: 分组模式（sourceGroupStyle!=0 && sourceGroupMode==1）→ 文件夹视图
     private val isFolderViewMode: Boolean
         get() = AppConfig.sourceGroupStyle != 0 && AppConfig.sourceGroupMode == 1
@@ -953,22 +953,15 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         return !singleUrl
     }
 
-    // 顶栏对齐 Archive MainTopBarView（RSS 模式）：标题 + 全局搜索 + 星标 + 刷新 + 更多菜单
-    // 搜索按钮直接弹 RssSearchActivity 全屏搜索页（对齐发现页 SearchActivity 交互，无就地过滤 overlay）：
-    // 本项目 RSS 为订阅源列表，需 更多菜单 容纳 分组配置/阅读记录/分组跳转/设置，故保留 moreButton
+    // 顶栏对齐 Archive MainTopBarView（RSS 模式）：标题 + 全局搜索 + 更多菜单
+    // 搜索按钮直接弹 RssSearchActivity 全屏搜索页（对齐发现页 SearchActivity 交互，无就地过滤 overlay）
+    // ui-batch-fix-0905 头部收口：搜索留在外面，其余操作（阅读记录/星标/刷新/订阅源管理/布局设置/分组管理）
+    // 全部收口到 moreButton 三点菜单；分组信息列举删除（不再展示所有分组跳转）
     private fun initComposeTopBar() {
         binding.topBar.applyStatusBarPadding(withInitialPadding = true)
         binding.topBar.setMode(MainTopBarView.Mode.RSS)
         binding.topBar.setTitle(getString(R.string.rss))
         binding.topBar.setSearchHint(getString(R.string.rss_search_key))
-        // 星标：收藏订阅源
-        binding.topBar.starButton.setOnClickListener {
-            startActivity<RssFavoritesActivity>()
-        }
-        // 刷新：重新加载当前列表流
-        binding.topBar.refreshButton.setOnClickListener {
-            upRssFlowJob()
-        }
         // 顶栏搜索按钮：弹 RssSearchActivity 全屏搜索页（key=null 空关键词进入）
         // fix-rss-search-scope: 按当前浏览上下文（分组/类型/未分组）限定搜索范围，根目录保持全局
         binding.topBar.searchButton.setOnClickListener {
@@ -976,41 +969,33 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         }
         // 登录为每源入口（列表长按菜单），不在订阅页顶栏显示；搜索已改为弹全屏搜索页，隐藏内置搜索条
         binding.topBar.setSearchEntryVisible(false)
-        binding.topBar.setActionsVisible(login = false)
-        // topbar-icon-semantics-fix 3.4：对齐原版 main_rss.xml always 四项——
-        // 星标=starButton（既有✓）；历史/分组/设置恢复一级图标（走 actionsBar 插槽统一染色与风格适配）；
-        // more 溢出无剩余项（RSS 模式默认隐藏，移除强制打开逻辑）
-        // 一级历史按钮：阅读记录（原版 menu_read_record always）
-        binding.topBar.addActionButton(R.drawable.ic_history, R.string.history) {
-            showDialogFragment<ReadRecordDialog>()
-        }
-        // 一级分组按钮：弹分组跳转子菜单（原版 menu_group always；含本项目进化的分组配置/分组管理入口）
-        val groupButton = binding.topBar.addActionButton(R.drawable.ic_groups, R.string.group)
-        groupButton.setOnClickListener { showGroupMenu(it) }
-        // 一级设置按钮：订阅源管理（原版 menu_rss_config always）
-        binding.topBar.addActionButton(R.drawable.ic_settings, R.string.setting) {
-            startActivity<RssSourceActivity>()
-        }
-    }
-
-    // 分组子菜单（分组配置 + 分组管理 + 动态分组跳转；星标收藏已并入顶栏星标按钮）
-    private fun showGroupMenu(anchor: View) {
-        val actions = buildList {
-            add(ModernActionPopup.Action(getString(R.string.source_folder_config)) {
-                showFolderConfig()
-            })
-            // bugfix ⑪: 分组子菜单加回"分组管理"入口（复用既有 GroupManageDialog，与 RssSourceActivity 一致）
-            add(ModernActionPopup.Action(getString(R.string.group_manage)) {
-                showDialogFragment<io.legado.app.ui.rss.source.manage.GroupManageDialog>()
-            })
-            groups.forEach { group ->
-                add(ModernActionPopup.Action(group) {
-                    currentGroup = group
+        // ui-batch-fix-0905：星标/刷新等一级按钮收口到三点菜单（setMode(Mode.RSS) 默认隐藏 moreButton，
+        // 此处经典路径手动启用；modern 形态走 initModernRssView → setMode 自动隐藏，互不影响）
+        binding.topBar.setActionsVisible(star = false, refresh = false, login = false)
+        binding.topBar.moreButton.isVisible = true
+        binding.topBar.moreButton.setOnClickListener { anchor ->
+            val actions = buildList {
+                add(ModernActionPopup.Action(getString(R.string.history)) {
+                    showDialogFragment<ReadRecordDialog>()
+                })
+                add(ModernActionPopup.Action(getString(R.string.favorite)) {
+                    startActivity<RssFavoritesActivity>()
+                })
+                add(ModernActionPopup.Action(getString(R.string.refresh)) {
                     upRssFlowJob()
                 })
+                add(ModernActionPopup.Action(getString(R.string.setting)) {
+                    startActivity<RssSourceActivity>()
+                })
+                add(ModernActionPopup.Action(getString(R.string.source_folder_config)) {
+                    showFolderConfig()
+                })
+                add(ModernActionPopup.Action(getString(R.string.group_manage)) {
+                    showDialogFragment<io.legado.app.ui.rss.source.manage.GroupManageDialog>()
+                })
             }
+            moreMenuPopup = ModernActionPopup.show(anchor, actions, moreMenuPopup)
         }
-        groupMenuPopup = ModernActionPopup.show(anchor, actions, groupMenuPopup)
     }
 
     fun gotoTop() {

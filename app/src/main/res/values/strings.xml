@@ -956,6 +956,7 @@
     <string name="search_content">Search content</string>
     <string name="rss_source_empty">Empty now!</string>
     <string name="explore_empty">Empty now!</string>
+    <string name="explore_group_empty">No explore source groups yet</string>
     <string name="page_key_set_help">Focusing on the input box and pressing a physical key will automatically enter the value of the key, and multiple keys will be automatically separated by commas.</string>
     <string name="theme_name">Theme name</string>
     <string name="auto_clear_expired">"Clear expired search histories automatically "</string>

@@ -2,13 +2,11 @@ package io.legado.app.ui.book.read
 
 import io.legado.app.ui.widget.components.AppShapes
 import android.annotation.SuppressLint
-import android.app.SearchManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ResolveInfo
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
-import android.net.Uri
 import android.os.Build
 import android.text.TextPaint
 import android.view.Gravity
@@ -70,10 +68,8 @@ import io.legado.app.ui.widget.compose.installViewTreeOwnersFrom
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefString
-import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.sendToClip
-import io.legado.app.utils.share
 import io.legado.app.utils.toastOnUi
 import kotlin.math.ceil
 
@@ -331,24 +327,6 @@ class TextActionMenu(private val context: Context, private val callBack: CallBac
     private fun onMenuItemSelected(action: TextMenuAction) {
         when (action.itemId) {
             R.id.menu_copy -> context.sendToClip(callBack.selectedText)
-            R.id.menu_share_str -> context.share(callBack.selectedText)
-            R.id.menu_browser -> {
-                kotlin.runCatching {
-                    val intent = if (callBack.selectedText.isAbsUrl()) {
-                        Intent(Intent.ACTION_VIEW).apply {
-                            data = Uri.parse(callBack.selectedText)
-                        }
-                    } else {
-                        Intent(Intent.ACTION_WEB_SEARCH).apply {
-                            putExtra(SearchManager.QUERY, callBack.selectedText)
-                        }
-                    }
-                    context.startActivity(intent)
-                }.onFailure {
-                    it.printOnDebug()
-                    context.toastOnUi(it.localizedMessage ?: "ERROR")
-                }
-            }
 
             else -> action.intent?.let {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

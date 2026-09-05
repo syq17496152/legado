@@ -1377,12 +1377,6 @@ class ReadBookActivity : BaseReadBookActivity(),
                 return true
             }
 
-            R.id.menu_search_content -> {
-                viewModel.searchContentQuery = selectedText
-                openSearchActivity(selectedText)
-                return true
-            }
-
             R.id.menu_dict -> {
                 showDialogFragment(DictDialog(selectedText))
                 return true

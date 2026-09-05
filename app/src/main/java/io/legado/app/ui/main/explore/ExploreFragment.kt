@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.main.explore
+package io.legado.app.ui.main.explore
 
 import android.content.Context
 import android.content.Intent
@@ -3620,6 +3620,12 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
 
     /** H7: 经典模式「分组」系统子菜单 → ModernActionPopup（对齐全局菜单视觉） */
     private fun showExploreGroupPopup() {
+        // ui-batch-fix-0905：分组数据为空时 ModernActionPopup.show 静默返回（点击无任何反应的
+        // 用户感知根因），此处补空态反馈；非空路径行为不变
+        if (groups.isEmpty()) {
+            context?.toastOnUi(R.string.explore_group_empty)
+            return
+        }
         val actions = groups.map { g ->
             ModernActionPopup.Action(title = g) {
                 searchView?.setQuery("group:$g", true) ?: upExploreData("group:$g")

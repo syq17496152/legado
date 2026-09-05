@@ -1176,6 +1176,22 @@ object VideoPlay : CoroutineScope by MainScope(){
             rssEpisodeIndex = chapterInVolumeIndex
             // video-booksource-align-rss AD-01：书源侧 VideoPlaybackQueue 接入删除（单页化后
             // 无扁平位映射/占位页需求），组件文件保留供订阅源多集分页改造后续用
+        } else if (bookSourceForRoutes?.bookSourceType == BookSourceType.video) {
+            // ui-batch-fix-0905：无卷书源回退——TOC 为扁平章节列表（无卷行）时映射整体跳过，
+            // 导致沉浸式左下角集数选择器与详情抽屉空白（与订阅源体验不一致）。
+            // 镜像 parseRssRoutes 扁平回退：全部章节包装为单线路"线路1"，
+            // 复用 UP_VIDEO_INFO 事件链，UI 层零改动（线路选择器沿用 size>1 渲染规则，单线路不显示）
+            val flatToc = toc.orEmpty().filter { !it.isVolume }
+            if (flatToc.isNotEmpty()) {
+                val episodes = flatToc.map { RssEpisode(title = it.title, url = it.url) }
+                val singleRoute = listOf(RssRoute(name = "线路1", episodes = episodes))
+                rssRoutes = singleRoute
+                upEpisodes()
+                rssEpisodes = episodes
+                rssRouteIndex = 0
+                rssEpisodeIndex = chapterInVolumeIndex.coerceIn(0, (episodes.size - 1).coerceAtLeast(0))
+                AppLog.put("initSource: 无卷书源单线路回退, episodes=${episodes.size}, rssEpisodeIndex=$rssEpisodeIndex")
+            }
         }
         // P0: singleUrl 模式（直接传 videoUrl 播放）不需要源，跳过 source == null 检查
         // 根因：adb am start 传 videoUrl 直接播放 m3u8 时，sourceKey 为 null 导致 source == null，

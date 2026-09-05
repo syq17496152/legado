@@ -43,12 +43,6 @@
         app:showAsAction="never" />
 
     <item
-        android:id="@+id/menu_check_rss_source"
-        android:icon="@drawable/ic_check_source"
-        android:title="@string/check_selected_rss"
-        app:showAsAction="never" />
-
-    <item
         android:id="@+id/menu_check_selected_interval"
         android:title="@string/check_selected_interval"
         app:showAsAction="never" />

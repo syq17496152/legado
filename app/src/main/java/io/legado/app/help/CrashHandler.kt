@@ -151,7 +151,9 @@ class CrashHandler(val context: Context) : Thread.UncaughtExceptionHandler {
                 val fileDoc = FileDoc.fromUri(uri, true)
                 fileDoc.createFileIfNotExist(fileName, "crash")
                     .writeText(crashLog)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                // ui-batch-fix-0905: 写盘失败不再静默，至少在内存/日志文件留痕便于排查"有提示无日志"
+                AppLog.put("崩溃日志写入备份目录失败：${e.localizedMessage}")
             }
             kotlin.runCatching {
                 appCtx.externalCacheDir?.let { rootFile ->
@@ -164,6 +166,9 @@ class CrashHandler(val context: Context) : Thread.UncaughtExceptionHandler {
                     FileUtils.createFileIfNotExist(rootFile, "crash", fileName)
                         .writeText(crashLog)
                 }
+            }.onFailure {
+                // ui-batch-fix-0905: externalCache 兜底写盘失败留痕
+                AppLog.put("崩溃日志写入外部缓存失败：${it.localizedMessage}")
             }
         }
 
