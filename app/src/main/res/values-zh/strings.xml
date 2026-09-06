@@ -2322,6 +2322,8 @@ bookUrl：%7$s
 <string name="merge_discovery_rss_summary">底部栏只保留一个入口，长按可在发现页和订阅页之间切换。</string>
 <string name="bottom_bar_effect_mode">底栏样式</string>
 <string name="bottom_bar_effect_mode_summary">当前样式：%s</string>
+<string name="bottom_bar_hide_search">隐藏主界面搜索框</string>
+<string name="bottom_bar_hide_search_summary">隐藏悬浮底栏右侧的搜索按钮，仅悬浮底栏模式生效；自定义底栏套装请在底栏管理内设置</string>
 <string name="liquid_glass_level">毛玻璃程度</string>
 <string name="liquid_glass_level_summary">当前程度：%s。数值越高，折射和流体质感越强。</string>
 <string name="frosted_glass_level">毛玻璃程度</string>

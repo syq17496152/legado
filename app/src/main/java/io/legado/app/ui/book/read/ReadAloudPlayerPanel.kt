@@ -4870,7 +4870,8 @@ private fun PlayerControlDock(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(40.dp),
+                // heightIn(min)：大字号缩放下 pill 文本撑开防截断
+                .heightIn(min = 40.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             FeaturePill(
@@ -5423,7 +5424,8 @@ private fun CharactersSheet(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(40.dp)
+                // heightIn(min)：大字号缩放下按钮文本撑开防截断
+                .heightIn(min = 40.dp)
         ) {
             SheetActionButton(
                 text = "\u5b8c\u6574\u89d2\u8272\u9875",

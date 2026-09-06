@@ -661,11 +661,12 @@ private fun MenuBottomBar(
             )
         }
         // 章节行（上一章/进度/下一章）
+        // heightIn(min)：大字号缩放下随文本撑开，防"上一章/下一章"截断
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .heightIn(min = 48.dp)
                 .padding(horizontal = 8.dp),
         ) {
             TextButton(onClick = action.onPrevChapter, enabled = state.canPrev) {

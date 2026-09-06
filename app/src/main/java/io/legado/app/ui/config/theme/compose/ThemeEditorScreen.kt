@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.config.theme.compose
+package io.legado.app.ui.config.theme.compose
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.legado.app.R
 import io.legado.app.help.config.ThemePaletteExtractor
 import io.legado.app.ui.theme.LegadoTypography
+import io.legado.app.ui.widget.components.ColorPickerSheet
 import io.legado.app.ui.widget.components.ThemeSpec
 import io.legado.app.ui.widget.components.toM3Scheme
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -128,18 +129,20 @@ fun ThemeEditorScreen(
     editingSlot?.let { slot ->
         val current = state.colorOf(slot)
         val allowFollowDefault = state.isOptionalSlot(slot)
-        SimpleColorPickerDialog(
+        // 优化版取色器（预置色板+HSL 滑块+活预览），替换原 SimpleColorPickerDialog（红队 D5：旧弹窗保留一个迭代期兜底）
+        ColorPickerSheet(
             title = stringResource(slot.titleRes()),
-            initialColor = ThemePaletteExtractor.parseHexOrNull(current)?.let { Color(it) }
-                ?: Color.Gray,
-            allowFollowDefault = allowFollowDefault && current == null,
+            initialColor = ThemePaletteExtractor.parseHexOrNull(current)
+                ?: Color.Gray.toArgb(),
             onDismiss = { editingSlot = null },
-            onConfirm = { hex ->
-                if (hex == null) {
-                    viewModel.clearOptionalColor(slot)
-                } else {
-                    viewModel.updateColor(slot, hex)
-                }
+            // sheet 回传不透明 ARGB Int → toHex6（#%06X 掩码 0xFFFFFF）与 VM 内 parseHexOrNull 归一链兼容
+            onConfirm = { argb ->
+                viewModel.updateColor(slot, ThemePaletteExtractor.toHex6(argb))
+                editingSlot = null
+            },
+            allowFollowDefault = allowFollowDefault && current == null,
+            onFollowDefault = {
+                viewModel.clearOptionalColor(slot)
                 editingSlot = null
             }
         )
@@ -808,6 +811,7 @@ private fun SectionCard(
 
 /**
  * 简化取色弹窗：预设色板网格 + hex 输入（任务允许的简化实现）。
+ * 已被 ColorPickerSheet（优化版取色器）替换，当前零调用方；保留一个迭代期作为回切兜底，确认稳定后删除。
  */
 @Composable
 private fun SimpleColorPickerDialog(

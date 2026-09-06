@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -209,7 +210,8 @@ private fun StyleTabButton(
 
     Box(
         modifier = modifier
-            .height(42.dp)
+            // heightIn(min)：大字号缩放下 Tab 文本撑开防截断
+            .heightIn(min = 42.dp)
             .background(backgroundColor, RoundedCornerShape(palette.miuix.actionRadius ?: 12.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center

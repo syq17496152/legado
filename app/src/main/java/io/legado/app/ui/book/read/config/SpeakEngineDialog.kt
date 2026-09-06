@@ -603,7 +603,8 @@ private fun InfoPill(text: String, style: AppDialogStyle) {
 
 @Composable
 private fun InlineEngineAction(text: String, color: Color, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.height(32.dp)) {
+    // heightIn(min)：大字号缩放（fontScale 1.4x+）下按钮随文本撑开，防截断
+    TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 32.dp)) {
         Text(text, color = color, fontSize = MaterialTheme.typography.bodySmall.fontSize)
     }
 }

@@ -15,6 +15,7 @@ import io.legado.app.help.DebugFloatBallManager
 import io.legado.app.help.DispatchersMonitor
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
+import io.legado.app.help.config.NavigationBarIconConfig
 import io.legado.app.model.CheckSource
 import io.legado.app.model.ImageProvider
 import io.legado.app.receiver.SharedReceiverActivity
@@ -129,6 +130,15 @@ class OtherConfigFragment : ComposeSettingFragment() {
                             title = getString(R.string.show_rss),
                             defaultValue = true
                         ),
+                        // 悬浮底栏搜索框显隐（红队 D2 裁决：仅默认底栏套装下可见，
+                        // 自定义套装激活时 applyCurrentBottomConfig 会以套装配置覆写该 pref，直写会被静默回滚）
+                        switch(
+                            key = PreferKey.floatingBottomBarHideSearch,
+                            title = getString(R.string.bottom_bar_hide_search),
+                            summary = getString(R.string.bottom_bar_hide_search_summary),
+                            defaultValue = false,
+                            visible = isDefaultNavBarPackage()
+                        ),
                         choice(
                             key = PreferKey.defaultHomePage,
                             title = getString(R.string.default_home_page),
@@ -145,6 +155,15 @@ class OtherConfigFragment : ComposeSettingFragment() {
             )
         )
     }
+
+    /**
+     * 日/夜两侧底栏均为默认套装时才显示悬浮底栏搜索框开关。
+     * 自定义套装的 hideSearchInFloatingStyle 由套装包托管（底栏管理内编辑），
+     * 该 pref 只是 applyCurrentBottomConfig 的派生缓存，避免用户直写后被静默回滚。
+     */
+    private fun isDefaultNavBarPackage(): Boolean =
+        NavigationBarIconConfig.activeDirName(false) == NavigationBarIconConfig.DEFAULT_DIR_NAME &&
+            NavigationBarIconConfig.activeDirName(true) == NavigationBarIconConfig.DEFAULT_DIR_NAME
 
     override fun onSettingPreferenceChanged(key: String) {
         when (key) {

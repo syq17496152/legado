@@ -1004,7 +1004,8 @@ private fun SpeakerActionButton(
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier.height(42.dp),
+        // heightIn(min)：大字号缩放下文本撑开防截断
+        modifier = modifier.heightIn(min = 42.dp),
         color = style.accent,
         shape = RoundedCornerShape(LocalContext.current.composeActionRadius())
     ) {

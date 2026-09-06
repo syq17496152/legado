@@ -108,11 +108,12 @@ fun ImportSourceSheet(
 
     AppModalBottomSheet(onDismiss = onDismiss) {
         // ---------- 顶部：标题 + 菜单 ----------
+        // heightIn(min)：大字号缩放下标题撑开防截断
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .heightIn(min = 56.dp)
                 .padding(start = 16.dp, end = 4.dp)
         ) {
             Text(
@@ -230,7 +231,7 @@ fun ImportSourceSheet(
                 onClick = onDismiss,
                 shape = AppShapes.Button,
                 modifier = Modifier
-                    .height(48.dp)
+                    .heightIn(min = 48.dp)
                     .width(96.dp)
             ) {
                 Text(text = stringResource(R.string.cancel))
@@ -239,7 +240,7 @@ fun ImportSourceSheet(
                 onClick = onImport,
                 shape = AppShapes.Button,
                 modifier = Modifier
-                    .height(48.dp)
+                    .heightIn(min = 48.dp)
                     .width(96.dp)
             ) {
                 Text(text = stringResource(R.string.import_str))

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -54,7 +56,9 @@ fun ColorPickerSheet(
     title: String,
     initialColor: Int,
     onConfirm: (Int) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    allowFollowDefault: Boolean = false,
+    onFollowDefault: () -> Unit = {}
 ) {
     val initialHsv = FloatArray(3)
     androidx.core.graphics.ColorUtils.colorToHSL(initialColor, initialHsv)
@@ -194,13 +198,27 @@ fun ColorPickerSheet(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Button(
-                onClick = { onConfirm(ColorUtils.withAlpha(currentColor, 1f)) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-            ) {
-                Text(text = stringResource(R.string.ok))
+            // 可选槽位支持"跟随默认"（恢复默认色并清除自定义值），默认关闭保持向后兼容
+            // heightIn(min)：大字号缩放下按钮文本撑开防截断
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (allowFollowDefault) {
+                    OutlinedButton(
+                        onClick = onFollowDefault,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                    ) {
+                        Text(text = stringResource(R.string.theme_value_follow_default))
+                    }
+                }
+                Button(
+                    onClick = { onConfirm(ColorUtils.withAlpha(currentColor, 1f)) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                ) {
+                    Text(text = stringResource(R.string.ok))
+                }
             }
         }
     }

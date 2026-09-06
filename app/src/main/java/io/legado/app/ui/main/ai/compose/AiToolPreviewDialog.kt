@@ -331,7 +331,8 @@ private fun EmptyPreviewText(text: String, style: AiComposeStyle) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(110.dp),
+            // heightIn(min)：大字号缩放下多行空态文本撑开防裁切
+            .heightIn(min = 110.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
