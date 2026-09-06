@@ -44,6 +44,14 @@ object PlayerInstancePool {
     private const val MAX_POOL_SIZE = 3
 
     /**
+     * video-regression-fix-0906 热修开关：实例池总开关（当前 false=直建直毁）。
+     * 真机铁证：复用实例 prepare 报 "Ignoring messages sent after release"（池内实例已被
+     * 外部路径 release 成死实例）→ 真机全部视频无法播放。池代码保留，死实例根因
+     * （外部 release 路径与池生命周期竞态）定位后再恢复 true。
+     */
+    private const val POOL_ENABLED = false
+
+    /**
      * 池内空闲实例队列（队首=最近归还，队尾=最久未用）
      */
     private val pool = ArrayDeque<ExoPlayer>()
@@ -146,10 +154,33 @@ object PlayerInstancePool {
      */
     @Synchronized
     fun acquire(looper: Looper): ExoPlayer {
+        // video-regression-fix-0906 热修：真机铁证"acquire hit (reuse)"拿到的实例 prepare 时报
+        // "Ignoring messages sent after release"（池内实例已被外部路径 release 成死实例），
+        // 25s BUFFERING 超时后释放 → 后续全部复用死实例 → 真机无一可播。
+        // 实例池整体降级为直建直毁（丢失复用性能 ~100ms/次，换确定性可用），复用逻辑保留待排查后重启用
+        if (!POOL_ENABLED) {
+            val selector = createTrackSelector()
+            val player = ExoPlayer.Builder(appCtx, sharedRendererFactory)
+                .setLooper(looper)
+                .setTrackSelector(selector)
+                .setLoadControl(createLoadControl())
+                .setMediaSourceFactory(
+                    DefaultMediaSourceFactory(ExoPlayerHelper.resolvingDataSource)
+                        .setLiveTargetOffsetMs(5000)
+                )
+                .build()
+            selectorMap[player] = selector
+            AppLog.put(
+                "PlayerPool: POOL_DISABLED acquire (create new), " +
+                    "playerId=${System.identityHashCode(player)}"
+            )
+            return player
+        }
         val reused = pool.removeFirstOrNull()
         if (reused != null) {
             AppLog.put(
                 "PlayerPool: acquire hit (reuse), poolSize=${pool.size}, " +
+                    "playerId=${System.identityHashCode(reused)}, " +
                     "selector=${System.identityHashCode(selectorMap[reused])}"
             )
             return reused
@@ -192,6 +223,17 @@ object PlayerInstancePool {
      */
     @Synchronized
     fun recycle(player: ExoPlayer) {
+        // video-regression-fix-0906 热修：POOL_DISABLED 下 recycle 直毁（配合 acquire 直建）
+        if (!POOL_ENABLED) {
+            selectorMap.remove(player)
+            taintedPool.remove(player)
+            kotlin.runCatching { player.release() }
+            AppLog.put(
+                "PlayerPool: POOL_DISABLED recycle -> release directly, " +
+                    "playerId=${System.identityHashCode(player)}"
+            )
+            return
+        }
         // video-play-7001-videograph-fix 2.2/AD-02：污染隔离——注入过 effects 的实例用完即毁，永不回池
         if (taintedPool.remove(player)) {
             AppLog.put("PlayerPool: tainted instance recycle -> release directly (never re-pool)")

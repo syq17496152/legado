@@ -159,7 +159,9 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             "ExoPlayer BUFFERING timeout, trigger fallback, " +
                 "isFirstPlay=$isFirstPlay, " +
                 "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}, " +
-                "fallbackIndex=$currentFallbackIndex/${fallbackTypes.size}"
+                "fallbackIndex=$currentFallbackIndex/${fallbackTypes.size}, " +
+                // video-regression-fix-0906 日志增强：实例指纹（超时实例是否为池复用死实例的直接证据）
+                "playerId=${System.identityHashCode(mInternalPlayer)}"
         )
         tryNextFallback()
     }
@@ -550,7 +552,9 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             prepareAsyncCallCount++
             AppLog.put(
                 "ExoPlayer prepareAsyncInternal: callCount=$prepareAsyncCallCount, " +
-                    "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+                    "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}, " +
+                    // video-regression-fix-0906 日志增强：实例指纹（追踪池复用死实例）
+                    "playerId=${System.identityHashCode(mInternalPlayer)}"
             )
             if (currentUrl == lastPrepareUrl && currentHeaders == lastPrepareHeaders
                 && currentSniffJob?.isActive == true

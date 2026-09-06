@@ -81,6 +81,11 @@ object VideoPlaybackPipeline {
         val book = ctx.book ?: throw IllegalArgumentException("Pipeline.playBookChapter: book required")
         val bookSource = ctx.source as? BookSource
             ?: throw IllegalArgumentException("Pipeline.playBookChapter: BookSource required")
+        // video-regression-fix-0906 日志增强：采集链入口固定标记（此前全链入口无日志，失败时无法确认链路是否启动）
+        AppLog.put(
+            "Pipeline: playBookChapter entry, token=${ctx.token}, " +
+                "chapterUrlEnd=${chapter.url.takeLast(20)}, bookUrlHash=${(book.bookUrl ?: "").hashCode()}"
+        )
         SniffEngine.invalidate()
         return Coroutine.async(ctx.scope, IO) {
             if (VideoUrlExtractor.isDirectVideoStreamUrl(chapter.url)) {
@@ -267,6 +272,11 @@ object VideoPlaybackPipeline {
                 AppLog.put("Pipeline: token expired (${ctx.token} < ${VideoPlay.currentSwitchToken}), drop late callback")
                 return@withContext
             }
+            // video-regression-fix-0906 日志增强：setUp 定点标记（连接采集链与播放器实例，配合 playerId 追踪死实例）
+            AppLog.put(
+                "Pipeline: setUpAndPlay, token=${ctx.token}, urlEnd=${url.takeLast(20)}, " +
+                    "playerId=${System.identityHashCode(ctx.player)}, autoPlay=${VideoPlay.autoPlay}"
+            )
             // AD-08：setUp 前统一发一次 VIDEO_SUB_TITLE（书源链从 0 到 1 是行为增强）
             postEvent(EventBus.VIDEO_SUB_TITLE, ctx.title)
             ctx.player.mapHeadData = headers

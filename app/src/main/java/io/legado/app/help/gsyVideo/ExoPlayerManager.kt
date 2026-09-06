@@ -156,6 +156,13 @@ class ExoPlayerManager : BasePlayerManager() {
      */
     @SuppressLint("NewApi")
     override fun release() {
+        // video-regression-fix-0906 日志增强：wrapper 级释放定点标记（追踪 release 与实例池生命周期的时序竞态）
+        if (mediaPlayer != null) {
+            AppLog.put(
+                "ExoPlayerManager.release: wrapper release begin, " +
+                    "mediaPlayerHash=${System.identityHashCode(mediaPlayer)}"
+            )
+        }
         if (mediaPlayer != null) {
             mediaPlayer!!.setSurface(null)
             mediaPlayer!!.release()
