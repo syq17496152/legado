@@ -19,7 +19,7 @@ import io.legado.app.utils.getCompatColor
  * - 复用专用布局 [ItemRssArticleInfoSourceBinding]（左选中图标 + 源名称 + origin）
  * - 选中状态用 ic_check 图标 + 主题色文字（替代原 ✓ 前缀）
  *
- * 参考 [ChangeRssSourceAdapter] 的结构，差异：
+ * 参考原 ChangeRssSourceAdapter（已迁移至 ChangeRssArticleSourceDialog）的结构，差异：
  * - 增加 isSelected 字段标记当前选中源
  * - 增加 setSelected 方法更新选中状态
  */

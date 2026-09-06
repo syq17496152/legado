@@ -929,7 +929,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     }
 
     // fix-rss-search-scope: 按当前浏览上下文计算搜索范围（分组/类型/未分组），全部时 null 保持全局
-    // 判定以 currentGroup 优先（与 upRssFlowJob 列表查询分支一致，兜底菜单分组跳转 L955-960 的并存状态）
+    // 判定以 currentGroup 优先（与 upRssFlowJob 列表查询分支一致；原更多菜单分组跳转入口已随 ui-batch-fix-0905 头部收口删除，currentGroup 现仅经顶栏胶囊/文件夹点击变更）
     private fun buildSearchScope(): String? {
         return kotlin.runCatching {
             when {
@@ -1026,7 +1026,7 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
     }
 
     // F-P1-8 应用列表视图（订阅源固定卡片网格展示：用户决策"订阅源默认卡片，无列表展示"，
-    // 列数按屏幕宽度 + sourceMargin 间距自适应，不再受 sourceLayout 列表/紧凑模式影响）
+    // 列数经 effectiveSpanCount 读取 sourceLayout（Grid2-6 显式生效），0/1 回退屏幕宽度自适应）
     private fun applyListView() {
         binding.recyclerView.removeItemDecoration(gridSpacingDecoration)
         val marginDp = AppConfig.sourceMargin

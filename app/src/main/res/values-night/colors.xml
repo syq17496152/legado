@@ -13,6 +13,9 @@
 
     <color name="night_mask">#69000000</color>
 
+    <!-- 弹窗底色 fallback（对齐 Archive）：夜间 #1C1C1E -->
+    <color name="dialog_surface">#1C1C1E</color>
+
     <color name="transparent10">#10ffffff</color>
     <color name="transparent20">#20ffffff</color>
     <color name="transparent30">#30ffffff</color>

@@ -485,6 +485,8 @@ fun View.applyMainBottomBarPadding(withInitialPadding: Boolean = false) {
     // 简化说明: 相对 Archive 版移除了 RecyclerView ItemDecoration 与未存在资源
     // (R.dimen.main_content_bottom_bar_padding / R.id.main_bottom_bar_space_decoration),
     // 目标项目无对应资源且当前仅用于 ScrollView,底部留白以 90dp 等效值补齐。
+    // 已知上限: 90dp 等效值与原 Decoration 实测值可能存在像素级差异
+    // 升级路径: 补齐对应 dimen 资源与 Decoration 后恢复 archive 同构实现
     val initialPadding = if (withInitialPadding) bottomPadding else 0
     setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
         val bottomSpace = windowInsets.navigationBarHeight + 90.dpToPx()

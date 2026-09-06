@@ -56,6 +56,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
 import com.shuyu.gsyvideoplayer.listener.GSYSampleCallBack
+import com.shuyu.gsyvideoplayer.video.StandardGSYVideoPlayer
 import com.shuyu.gsyvideoplayer.video.base.GSYVideoView
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -469,7 +470,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                     finish()
                     return@launch
                 }
-                // P0-1: 统一 ViewPager2 模式，所有场景都用 ViewPager2
+                // P0-1: 统一 ViewPager2 模式（video-player-dual-layout D2 起按持久化 layoutMode 分发：沉浸式走 ViewPager2，传统布局走 legacyContainer）
                 // 书源/单URL模式：单 Fragment + 禁用滑动
                 // 订阅源模式：多 Fragment + 垂直滑动
                 // startPlay 由首个 Fragment 的 activatePlayer() 触发
@@ -481,7 +482,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 restorePlayHistory()
             }
         } else {
-            // 非新建恢复：从悬浮窗返回，也用 ViewPager2 模式
+            // 非新建恢复：从悬浮窗返回，按 layoutMode 分发布局（D3）
             VideoPlay.isResumeFromFloat = true
             // T1.13 方案B: 恢复场景也保存状态快照
             snapshotVideoUrl = VideoPlay.videoUrl
@@ -680,7 +681,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         panel.show(supportFragmentManager, VideoSettingsPanel.TAG)
     }
 
-    /** W2-B2：收藏状态同步（图标随 VideoPlay.rssStar 切换，与顶栏 upStarMenu 同源） */
+    /** W2-B2：传统布局收藏图标同步（当前未被调用，收藏状态由 Compose 顶栏 upStarMenu 驱动；如启用需在收藏状态变化处接线） */
     private fun upLegacyStarState() {
         if (VideoPlay.rssStar != null) {
             binding.ivActionStar.setImageResource(R.drawable.ic_star)
@@ -916,6 +917,21 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             VideoPlay.switchToBookFromList(offset, playerView.getCurrentPlayer())
             return
         }
+        // video-regression-fix-0906 AD-04 修订（整体考虑）：书源无跨影片邻居时降级集内切换
+        // （上/下一集），与沉浸式上滑降级语义一致；越界由 upDurIndex 内部 toast
+        if (VideoPlay.book != null) {
+            val eps = VideoPlay.episodes
+            val targetIdx = VideoPlay.chapterInVolumeIndex + offset
+            if (!eps.isNullOrEmpty() && targetIdx >= 0 && targetIdx < eps.size) {
+                val stdPlayer = playerView.getCurrentPlayer() as? StandardGSYVideoPlayer
+                if (stdPlayer != null) {
+                    VideoPlay.upDurIndex(offset, stdPlayer)
+                    return
+                }
+            }
+            toastOnUi(if (offset > 0) "已是最后一个视频" else "已到开头")
+            return
+        }
         if (!articles.isNullOrEmpty()) {
             val target = VideoPlay.rssArticleIndex + offset
             if (target in articles.indices) {
@@ -946,8 +962,15 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         val hasPrev: Boolean
         val hasNext: Boolean
         if (VideoPlay.book != null || VideoPlaylistHolder.containsBookUrl(current)) {
-            hasPrev = VideoPlaylistHolder.neighborOf(current, -1) != null
-            hasNext = VideoPlaylistHolder.neighborOf(current, +1) != null
+            // video-regression-fix-0906 AD-04 修订（整体考虑）：书源跨影片邻居或集内邻居任一存在即显示
+            // （集内邻居=上一集/下一集，与沉浸式上滑降级语义一致）
+            val crossPrev = VideoPlaylistHolder.neighborOf(current, -1) != null
+            val crossNext = VideoPlaylistHolder.neighborOf(current, +1) != null
+            val eps = VideoPlay.episodes
+            val inPrev = !eps.isNullOrEmpty() && VideoPlay.chapterInVolumeIndex - 1 >= 0
+            val inNext = !eps.isNullOrEmpty() && VideoPlay.chapterInVolumeIndex + 1 < eps.size
+            hasPrev = crossPrev || inPrev
+            hasNext = crossNext || inNext
         } else if (!VideoPlay.rssArticles.isNullOrEmpty()) {
             hasPrev = VideoPlay.rssArticleIndex > 0
             hasNext = VideoPlay.rssArticleIndex < VideoPlay.rssArticles!!.size - 1
@@ -2126,7 +2149,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     /**
      * F1 Level 4: 用系统浏览器打开视频 URL（最终兜底方案）
      *
-     * 适用场景：ExoPlayer 和 WebView 都无法播放时，交给系统浏览器处理。
+     * 适用场景：ExoPlayer 播放失败时，交给系统浏览器处理（原 WebView 播放器已删除，见 showVideoPlayErrorDialog 三通道收敛说明）。
      * 注意：系统浏览器不支持自定义 Headers，仅适用于无需防盗链的直链（mp4 等）。
      */
     private fun openInSystemBrowser(url: String) {

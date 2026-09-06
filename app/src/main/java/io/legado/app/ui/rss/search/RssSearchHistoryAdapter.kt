@@ -11,7 +11,7 @@ import splitties.views.onLongClick
 /**
  * 订阅源搜索历史 Adapter（rss-unified-search 新增）
  *
- * 参考 [io.legado.app.ui.book.search.HistoryKeyAdapter] 的设计：
+ * 参考原 HistoryKeyAdapter（已 Compose 化移除）的设计：
  * - 点击搜索历史项触发搜索
  * - 长按触发爆炸动画并删除该项
  *

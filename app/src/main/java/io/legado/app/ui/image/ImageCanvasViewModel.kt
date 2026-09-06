@@ -47,7 +47,6 @@ import java.util.concurrent.Executors
  *
  * 日志规范（tasks.md §AOAdapt 日志模板）：
  * - 永久日志：AppLog.putDebugWithTag + TAG_IMAGE_CANVAS（recordLog 守卫）
- * - 临时日志：Log.d + "ImageCanvasDebug"（验证后 Grep 一次性移除）
  */
 class ImageCanvasViewModel(application: Application) : BaseViewModel(application) {
 

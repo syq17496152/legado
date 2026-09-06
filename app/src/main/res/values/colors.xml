@@ -23,6 +23,9 @@
 
     <color name="transparent">#00000000</color>
 
+    <!-- 弹窗底色 fallback（对齐 Archive）：dialogSurfaceBackground 独立来源，不随背景图透明 -->
+    <color name="dialog_surface">#FFFFFFFF</color>
+
     <color name="transparent10">#10000000</color>
     <color name="transparent20">#20000000</color>
     <color name="transparent30">#30000000</color>

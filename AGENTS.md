@@ -25,7 +25,7 @@
 | 规则引擎 | `app/src/main/java/io/legado/app/model/analyzeRule/AnalyzeRule.kt` |
 | 阅读核心（全局单例） | `app/src/main/java/io/legado/app/model/ReadBook.kt` |
 | 网络书核心 | `app/src/main/java/io/legado/app/model/webBook/WebBook.kt` |
-| 数据库 | `app/src/main/java/io/legado/app/data/AppDatabase.kt`（Room，legado.db，当前 v108，schema 在 `app/schemas/`；**版本号以 AppDatabase.kt `version` 字段为准，文档禁止硬编码快照**） |
+| 数据库 | `app/src/main/java/io/legado/app/data/AppDatabase.kt`（Room，legado.db，schema 在 `app/schemas/`；**版本号以 AppDatabase.kt `version` 字段为准，文档禁止硬编码快照**） |
 | 依赖版本 | `gradle/libs.versions.toml` |
 
 ## 代码约束
@@ -37,6 +37,7 @@
 - Room 实体：`data class` + `@Parcelize` + `@Entity`，字段全部有默认值
 - 错误处理用 `kotlin.runCatching`（带 `kotlin.` 前缀），字符串判空用 `isNullOrBlank()`
 - ❌ 禁用 Timber / `CoroutineExceptionHandler`；日志用 `AppLog.put()`，异常用 `Coroutine.onError`
+- **注释规范**：实施代码开发必须添加必要注释（复杂逻辑/非自明意图处），且必须保证注释与代码行为一致的正确性；代码变更导致既有注释过时时，必须同步纠正，禁止残留过时注释
 
 > 完整规范：`docs/project-rules/naming_rules.md` | `checkstyle_rules.md`
 

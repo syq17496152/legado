@@ -1252,9 +1252,12 @@ class BookInfoActivity :
                     .putExtra("inBookshelf", viewModel.inBookshelf)
             )
             book.isVideo -> {
-                // video-regression-fix-0906 AD-04：详情页直进注入单元素播放队列（集内降级判断依据，
-                // 使沉浸式上滑/传统上下部按钮不再静默无反应）
-                VideoPlaylistHolder.set(listOf(book.toSearchBook()), 0)
+                // video-regression-fix-0906 AD-04 修订（用户反馈：发现列表进详情后上下部/上滑失效）：
+                // 详情页直进仅在当前影片不在已注入队列中时注入单元素兜底；列表页（发现/搜索/书架）已注入的
+                // 完整队列（含当前影片时）必须保留（跨影片邻居上下文），严禁单元素覆盖
+                if (!VideoPlaylistHolder.containsBookUrl(book.bookUrl)) {
+                    VideoPlaylistHolder.set(listOf(book.toSearchBook()), 0)
+                }
                 readBookResult.launch(
                     Intent(this, VideoPlayerActivity::class.java)
                         .putExtra("bookUrl", book.bookUrl)

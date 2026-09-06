@@ -7,14 +7,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
@@ -29,7 +26,8 @@ import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 /**
  * L-E5 精准管理（S2 配置列表页）：聚合入口两张卡片。
  * 卡片1 数据管理（URL记录/存储管理/缓存管理/下载管理/文件管理）。
- * 卡片2 日志与诊断（崩溃日志/保存日志/创建堆转储，自 AboutFragment 迁入）。
+ * 卡片2 日志与诊断（日志管理——log-system-upgrade 用户反馈收口：
+ * 崩溃日志/保存日志/创建堆转储三项菜单移除，功能收口至日志管理页右上角溢出菜单）。
  *
  * 内容区全 Compose：SettingsCard 卡片 + SettingsClickRow 跳转行，顶栏由 ConfigActivity 提供。
  */
@@ -41,9 +39,6 @@ fun PreciseManageScreen(
     onDownloadManageClick: () -> Unit,
     onFileManageClick: () -> Unit,
     onLogManageClick: () -> Unit,
-    onCrashLogClick: () -> Unit,
-    onSaveLogClick: () -> Unit,
-    onCreateHeapDumpClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     // H9: 根背景直色（palette.page = ThemeStore 背景色），替代 M3 surface；divider 归位 palette.divider
@@ -109,39 +104,11 @@ fun PreciseManageScreen(
             modifier = Modifier.fillMaxWidth(),
             title = stringResource(R.string.log_diagnostics)
         ) {
-            // log-system-upgrade：日志管理中心（4 Tab 全功能入口）
+            // log-system-upgrade：日志管理唯一入口（崩溃日志/保存日志/创建堆转储收口至其右上角溢出菜单）
             SettingsClickRow(
                 icon = Icons.Default.Description,
                 title = stringResource(R.string.log_manage),
                 onClick = onLogManageClick
-            )
-            HorizontalDivider(
-                color = palette.divider.copy(alpha = 0.5f),
-                thickness = 0.5.dp
-            )
-            // log-system-upgrade：改跳日志管理中心崩溃 Tab（原 CrashLogsDialog 弹框保留于 MainActivity 崩溃善后链路）
-            SettingsClickRow(
-                icon = Icons.Default.BugReport,
-                title = stringResource(R.string.crash_log),
-                onClick = onCrashLogClick
-            )
-            HorizontalDivider(
-                color = palette.divider.copy(alpha = 0.5f),
-                thickness = 0.5.dp
-            )
-            SettingsClickRow(
-                icon = Icons.Default.SaveAlt,
-                title = stringResource(R.string.save_log),
-                onClick = onSaveLogClick
-            )
-            HorizontalDivider(
-                color = palette.divider.copy(alpha = 0.5f),
-                thickness = 0.5.dp
-            )
-            SettingsClickRow(
-                icon = Icons.Default.Memory,
-                title = stringResource(R.string.create_heap_dump),
-                onClick = onCreateHeapDumpClick
             )
         }
     }

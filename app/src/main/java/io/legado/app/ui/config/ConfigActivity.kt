@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.config
+package io.legado.app.ui.config
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -201,6 +201,8 @@ private fun ConfigTopBar(
             ?.let { TopBarConfig.currentWallpaperFile(context, config.isNightMode) }
     }
     // 简化说明: 壁纸全幅显示（crop 裁切对齐归 H13 Glass 统一组件，此处按 MainTopBarView 视觉近似）
+    // 已知上限: 忽略顶栏包 wallpaperCrop 配置，裁切场景视觉不一致
+    // 升级路径: 复用 ComposeThemeImageCrop 对齐 MainTopBarView.topBarWallpaperCrop
     val wallpaper = remember(wallpaperFile) { wallpaperFile?.let(::decodeTopBarBitmap) }
     val bgColor = remember(config) {
         Color(TopBarConfig.withOpacity(TopBarConfig.resolveBackgroundColor(config), config.wallpaperAlpha))

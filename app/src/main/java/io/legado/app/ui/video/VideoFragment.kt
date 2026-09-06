@@ -52,7 +52,7 @@ import splitties.init.appCtx
  * 交互：
  * - 单击切换控件显隐（PURE↔NORMAL / FULLSCREEN内显隐切换）
  * - 双指拉伸触发全屏（scaleFactor > 1.2）
- * - 横屏视频自动显示全屏按钮
+ * - 全屏按钮常显（横竖屏一致），点击切换全屏
  */
 class VideoFragment : Fragment() {
 
@@ -577,8 +577,7 @@ class VideoFragment : Fragment() {
                 showControlsAnimated()
                 _playerView?.setGsyControlVisibility(true)  // F2 修复：同步显示 GSY 原始控件
                 // P0 修复：显示控件后重新设置全屏按钮 visibility
-                // btn_fullscreen 默认 gone，需根据视频宽高比重新判断
-                // 防止 onPrepared 时序问题或容器显隐后子控件 visibility 丢失
+                // 全屏按钮现恒显示（横竖屏一致），保留调用防止容器显隐后子控件 visibility 丢失
                 val pv = _playerView
                 if (pv != null && pv.currentVideoWidth > 0 && pv.currentVideoHeight > 0) {
                     updateFullscreenButtonVisibility(pv.currentVideoWidth, pv.currentVideoHeight)
@@ -645,7 +644,7 @@ class VideoFragment : Fragment() {
      * U1 优化：btn_fullscreen 已移入 rightButtons 容器作为第一个按钮，
      * 随 rightButtons 整体参与显隐动画（3秒自动隐藏+单击重新显示）。
      * btn_fullscreen 自身的 visibility 仍由 updateFullscreenButtonVisibility 控制
-     *（横屏视频 visible / 竖屏视频 gone / 全屏态始终 visible）。
+     *（横竖屏视频均 visible / 全屏态始终 visible）。
      */
     private fun getOverlayControls(): List<View> {
         val list = mutableListOf<View>()
@@ -1314,7 +1313,7 @@ class VideoFragment : Fragment() {
                 return true
             }
         }
-        // 检查左下角容器（标题+线路选择器+集数选择器+全屏按钮）
+        // 检查左下角容器（标题+线路选择器+集数选择器；全屏按钮已迁入右侧按钮容器，由上方检查覆盖）
         leftBottomContainer?.let {
             if (it.visibility == View.VISIBLE) {
                 val loc = IntArray(2)

@@ -18,7 +18,7 @@ import io.legado.app.utils.NetworkUtils
  */
 
 /**
- * 书源首字（参考 BookSourceAdapterGrid L79 已有实现）
+ * 书源首字（按首字符取首字，取自已迁移的列表页实现）
  * 空名称返回空字符串（不显示"?"，与 Grid 模式一致）
  */
 fun BookSourcePart.sourceInitial(): String {
@@ -26,7 +26,7 @@ fun BookSourcePart.sourceInitial(): String {
 }
 
 /**
- * 订阅源首字（参考 RssSourceAdapterGrid L79 已有实现）
+ * 订阅源首字（按首字符取首字，取自已迁移的列表页实现）
  * 空名称返回空字符串（不显示"?"，与 Grid 模式一致）
  */
 fun RssSource.sourceInitial(): String {

@@ -101,6 +101,7 @@ object BookHelp {
     /**
      * 目录刷新后迁移章节缓存文件(nb 主内容 + nr 去重标题标记)
      * 简化说明:按 URL 精确匹配 + 标题兜底(单匹配),仅处理在线书,跳过卷章节
+     * 已知上限:章节 URL 变更且标题匹配不唯一时迁移不到,对应缓存将重新下载
      * 升级路径:Phase 4/5 搬入 archive BookHelp 后替换为 contentCacheIdentity 全量迁移
      */
     fun remapContentCache(

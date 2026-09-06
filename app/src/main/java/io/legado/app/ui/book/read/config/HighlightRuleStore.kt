@@ -341,6 +341,8 @@ object HighlightRuleStore {
                 )
             }
             // 简化说明：跳过 migrateBgImage（依赖 TextLine.copyBgImageToInternal）
+            // 已知上限：旧数据背景图文件不迁移，升级后规则背景图可能丢失
+            // 升级路径：fork 内实现 TextLine.copyBgImageToInternal 后补迁移链
             base
         }
     }

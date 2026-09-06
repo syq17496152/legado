@@ -26,7 +26,7 @@ import io.legado.app.utils.visible
 /**
  * 订阅源统一搜索结果 Adapter（rss-unified-search 新增）
  *
- * 参考 [io.legado.app.ui.book.search.SearchAdapter] 的多源聚合展示设计：
+ * 参考原 SearchAdapter（已 Compose 化移除）的多源聚合展示设计：
  * - 多源聚合后通过 [SearchRssArticle.origins] 显示来源数 BadgeView
  * - 已读状态通过标题颜色区分（参考 RssArticlesAdapter 已读变灰策略）
  * - 图片加载携带 origin 参数（参考 RssArticlesAdapter，部分源需要 referer/cookie）

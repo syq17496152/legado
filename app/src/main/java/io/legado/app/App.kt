@@ -113,11 +113,11 @@ class App : Application() {
         // hasSubtleSideEffectsSetThreadAssertsDisabledForTesting（150 时代用于禁用线程断言），此处移除调用
         oldConfig = Configuration(resources.configuration)
         // F-暗夜紫默认主题：首次安装时将暗夜紫设为夜间主题配置
-        // 语义：真·首次安装（夜间主题名与 themeMode 均未设置过）→ 预设暗夜紫配色 + 强制夜间模式（themeMode="2"）；
-        // 老用户（已设置过 themeMode 或夜间主题名）不受影响，仍保留原主题模式与配色。
+        // 语义：夜间主题名（dNThemeName）未设置时预设暗夜紫配色；themeMode 亦未设置时才强制夜间模式（themeMode="2"）；
+        // 已设置过夜间主题名的用户不受影响，保留原配色。
         val firstInstallDarkPurple = getPrefString(PreferKey.dNThemeName).isNullOrBlank()
         if (firstInstallDarkPurple) {
-            // T12（theme-arch-gap）：字面量换 DARK_PURPLE_THEME_NAME 常量（单一来源）
+            // T12（theme-arch-gap）：字面量换 DARK_PURPLE_THEME_NAME 常量（注：下方 F-暗夜紫可回切块仍残留"暗夜紫"字面量比较，待收敛）
             val purple = ThemeConfig.configList.firstOrNull {
                 it.themeName == AppearanceKitManager.DARK_PURPLE_THEME_NAME
             }
@@ -356,7 +356,7 @@ class App : Application() {
     }
 
     /**
-     * 创建通知ID
+     * 创建通知渠道（下载/朗读/Web 服务/AI 任务，API 26+）
      */
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -418,7 +418,7 @@ class App : Application() {
     /**
      * 线程池拆分配置迁移：老用户首次升级到新版本时，将旧 threadCount 迁移为 searchThreadCount + updateCacheThreadCount
      *
-     * 触发条件：pref_migrated_thread_count 标志位不存在（首次升级或备份恢复后重新迁移）
+     * 触发条件：migratedThreadCount 标志位不存在（首次升级或备份恢复后重新迁移）
      * 迁移规则：
      * - 旧 threadCount != 32（用户修改过）→ 仅当新配置为默认值时才覆盖（避免覆盖备份恢复的值）
      * - 旧 threadCount == 32（默认值）→ 保持新配置默认值（32/16）

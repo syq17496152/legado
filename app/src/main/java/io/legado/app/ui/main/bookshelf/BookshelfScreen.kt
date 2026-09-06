@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.main.bookshelf
+package io.legado.app.ui.main.bookshelf
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -704,7 +704,7 @@ private fun BookList(
 
 /**
  * 列表条目（对齐 archive BookshelfListItem 双样式，A3 全量）：
- * Classic = 无背景 clip 2dp；RoundedCard = palette.settings.row 填充 + 边框 + actionRadius 圆角（基线 B）。
+ * Classic = 无背景 clip 2dp；RoundedCard = palette.settings.row 填充 + 可选阴影 + actionRadius 圆角（基线 B）。
  * 简介行受 introLines 控制（0=隐藏）；compact 模式 author/进度合并单行；状态右列（角标/更新时间）。
  */
 @Composable

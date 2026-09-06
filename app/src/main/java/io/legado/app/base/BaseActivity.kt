@@ -34,6 +34,7 @@ import io.legado.app.utils.applyOpenTint
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.disableAutoFill
 import io.legado.app.utils.fullScreen
+import androidx.core.view.ViewCompat
 import io.legado.app.utils.hideSoftInput
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.setLightStatusBar
@@ -111,9 +112,9 @@ abstract class BaseActivity<VB : ViewBinding>(
             if (recreateOnThemeChange) {
                 recreate()
             } else {
-                // T2（theme-arch-gap）：豁免页不重建，重刷底色 tint（initTheme 只在
+                // T2（theme-arch-gap）：豁免页不重建，重刷窗口底色（initTheme 只在
                 // onCreate 走）+ 系统栏 + 背景图；Compose 侧经 ThemeSync 即时换肤
-                window.decorView.applyBackgroundTint(manageHostTintColor())
+                applyWindowBackgroundColor()
                 setupSystemBar()
                 upBackgroundImage()
             }
@@ -165,9 +166,9 @@ abstract class BaseActivity<VB : ViewBinding>(
      */
     protected open fun manageBackgroundAlphaEnabled(): Boolean = false
 
-    /** 宿主 tint 底色（followup F4 v3）：decorView 恒不透明 backgroundColor 原色；
-     * 透明度由内容层根（AppManagementScaffold/AppSettingPalette page）半透明叠加实现，
-     * 有背景图时 decorView 由 upBackgroundImage 铺底图，不再参与 tint（红队 R5-1 语义回归修正） */
+    /** 宿主 tint 底色（followup F4 v3）：backgroundColor 原色（背景图模式下为透明，仅管理族
+     * tint 分支可达，此时 decorView 由 upBackgroundImage 铺底图，透明 tint 等效原样透出）；
+     * 透明度由内容层根（AppManagementScaffold/AppSettingPalette page）半透明叠加实现 */
     protected fun manageHostTintColor(): Int {
         return backgroundColor
     }
@@ -197,17 +198,31 @@ abstract class BaseActivity<VB : ViewBinding>(
 
     open fun onCompatOptionsItemSelected(item: MenuItem) = super.onOptionsItemSelected(item)
 
+    /**
+     * 窗口底色策略（对齐 Archive applyWindowBackgroundColor）：清 decorView tint + fallback 实色。
+     * 管理族宿主（manageBackgroundAlphaEnabled）保留 tint 钩子——管理页背景透明度消费链
+     * （ui-theme-governance-polish P6/AD-06）依赖 backgroundColor 常驻 tint，不回退。
+     */
+    private fun applyWindowBackgroundColor() {
+        if (manageBackgroundAlphaEnabled()) {
+            window.decorView.applyBackgroundTint(manageHostTintColor())
+            return
+        }
+        ViewCompat.setBackgroundTintList(window.decorView, null)
+        window.decorView.setBackgroundColor(ThemeConfig.getFallbackBackgroundColor(this))
+    }
+
     open fun initTheme() {
         when (theme) {
             Theme.Transparent -> setTheme(R.style.AppTheme_Transparent)
             Theme.Dark -> {
                 setTheme(R.style.AppTheme_Dark)
-               window.decorView.applyBackgroundTint(manageHostTintColor())
+               applyWindowBackgroundColor()
             }
 
             Theme.Light -> {
                 setTheme(R.style.AppTheme_Light)
-               window.decorView.applyBackgroundTint(manageHostTintColor())
+               applyWindowBackgroundColor()
             }
 
             else -> {
@@ -218,7 +233,7 @@ abstract class BaseActivity<VB : ViewBinding>(
                 } else {
                     setTheme(R.style.AppTheme_Light)
                 }
-               window.decorView.applyBackgroundTint(manageHostTintColor())
+               applyWindowBackgroundColor()
             }
         }
         if (!recreateOnThemeChange) {
@@ -238,10 +253,22 @@ abstract class BaseActivity<VB : ViewBinding>(
     }
 
     open fun upBackgroundImage() {
-        if (!imageBg) return
+        // 对齐 Archive 三分支：无图（或 E-Ink）→ 恢复清 tint+实色底，避免旧图/tint 残留；
+        // 有图 → 清 tint 后铺底图；加载失败 → 回落实色底不留半态。
+        // 管理族宿主无图时保持现状（tint 钩子由 applyWindowBackgroundColor 内部分支处理）
+        if (!imageBg) {
+            if (!manageBackgroundAlphaEnabled()) {
+                applyWindowBackgroundColor()
+            }
+            return
+        }
+        if (AppConfig.isEInkMode) {
+            applyWindowBackgroundColor()
+            return
+        }
         // T2（theme-arch-gap）背景图回落四件套：
         // ①getBgImage 返 null（未设置/背景不可用）时回落清 decorView 自定义背景，
-        //   恢复主题底色 tint（修旧图残留）②OOM/异常时同样回落不保留半态
+        //   恢复实色底（修旧图残留）②OOM/异常时同样回落不保留半态
         val drawable: Drawable? = try {
             ThemeConfig.getBgImage(this, windowManager.windowSize)
         } catch (_: OutOfMemoryError) {
@@ -252,10 +279,11 @@ abstract class BaseActivity<VB : ViewBinding>(
             null
         }
         if (drawable != null) {
+            ViewCompat.setBackgroundTintList(window.decorView, null)
             window.decorView.background = drawable
         } else {
             window.decorView.background = null
-            window.decorView.applyBackgroundTint(manageHostTintColor())
+            applyWindowBackgroundColor()
         }
     }
 

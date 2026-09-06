@@ -916,7 +916,7 @@ class DragSelectTouchHelper(
 
         /**
          * 安全调用 getItemId 并检查是否在原选中集合中。
-         * 解决 position 越界或 item 未加载导致 getItemId 抛异常的崩溃（如 BookSourceAdapter.getItemId NPE）。
+         * 解决 position 越界或 item 未加载导致 getItemId 抛异常的崩溃（如原书源列表 Adapter 的 getItemId NPE 案例）。
          */
         private fun safeContainsItemId(position: Int): Boolean {
             return try {

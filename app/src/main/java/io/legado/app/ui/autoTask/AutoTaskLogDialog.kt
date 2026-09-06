@@ -36,6 +36,8 @@ import androidx.compose.material3.MaterialTheme
  * 迁移后继承 [ComposeDialogFragment]，复用 [AppDialogFrame] 统一主题/墨水屏/圆角/字体管理。
  * 简化说明：原 item 的 autoLink="web"（URL 可点击）在 Compose 无内置等价实现，
  * 改为 [SelectionContainer] 保持文本可选中复制；app_log 菜单保留给 AppLogDialog 共用。
+ * 已知上限：日志内 URL 不再可点击跳转，仅可选中复制
+ * 升级路径：用 AnnotatedString + ClickableText 注入链接点击处理恢复 autoLink 能力
  */
 class AutoTaskLogDialog() : ComposeDialogFragment() {
 

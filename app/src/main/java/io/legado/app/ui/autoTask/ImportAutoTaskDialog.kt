@@ -61,6 +61,8 @@ import io.legado.app.ui.theme.bodyTertiary
  * 错误占位 / 列表行（勾选-状态-打开）/ 底部（全选计数-取消-导入）。
  * 简化说明：行勾选冲突处理改为「整行点击切换 + Checkbox 只读」，替代原 isPressed 判定；
  * CodeDialog / WaitDialog 按设计保留原样复用。
+ * 已知上限：Checkbox 不响应独立点击（由整行切换接管），触达热区与原实现有差异
+ * 升级路径：Checkbox onCheckedChange 独立消费点击并屏蔽整行重复响应
  */
 class ImportAutoTaskDialog() : ComposeDialogFragment(),
     CodeDialog.Callback {

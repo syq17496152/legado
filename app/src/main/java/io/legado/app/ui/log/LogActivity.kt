@@ -8,6 +8,7 @@ import io.legado.app.R
 import io.legado.app.base.BaseActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.databinding.ActivityLogManageBinding
+import io.legado.app.help.CrashHandler
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.ui.theme.LegadoTheme
@@ -22,6 +23,7 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
+import kotlinx.coroutines.delay
 import splitties.init.appCtx
 import java.io.File
 import java.io.FileFilter
@@ -29,12 +31,14 @@ import java.io.FileFilter
 /**
  * 日志管理中心（log-system-upgrade AD-04）：全屏 4 Tab（应用日志/崩溃日志/文件日志/堆转储）。
  * 状态 owner = LogManageState（本 Activity 持有），Screen 纯展示 + 回调；
- * 扫描/删除/清除全部走 Coroutine.async IO 线程；查看走尾部截断（AD-05）；删除逐文件容错（AD-06）。
+ * 文件类扫描/删除/清除走 Coroutine.async IO 线程，应用日志删除为同步内存操作（AppLog.removeLogs）；
+ * 查看走尾部截断（AD-05）；文件删除逐文件容错（AD-06）。
  */
 class LogActivity : BaseActivity<ActivityLogManageBinding>() {
 
     companion object {
-        // 跨页跳转直达指定 Tab（ordinal：0 应用/1 崩溃/2 文件/3 堆转储），如精准管理页「崩溃日志」入口传 1
+        // 跨页跳转直达指定 Tab（ordinal：0 应用/1 崩溃/2 文件/3 堆转储）；原精准管理页「崩溃日志」入口
+        // 已随 log-system-upgrade 收口移除，当前暂无调用方，机制保留待复用
         const val EXTRA_INITIAL_TAB = "initialTab"
         const val TAB_CRASH = 1
 
@@ -58,6 +62,7 @@ class LogActivity : BaseActivity<ActivityLogManageBinding>() {
                     onDeleteAppLogs = { deleteAppLogs(it) },
                     onDeleteFiles = { deleteFiles(it) },
                     onClearAll = { clearAll() },
+                    onCreateHeapDump = { createHeapDump() },
                     onExport = { LogExporter.saveLog() },
                     onShareFile = { shareFile(it) },
                     onViewFile = { viewFile(it) },
@@ -167,6 +172,36 @@ class LogActivity : BaseActivity<ActivityLogManageBinding>() {
     }
 
     // ===================== 查看与分享 =====================
+
+    /**
+     * 创建堆转储（log-system-upgrade 用户反馈收口：自 PreciseManageFragment 平移，含交互时序保留完整逻辑）
+     * 协程结束时（无论成败）刷新全部 Tab 数据；成功后堆转储副本同时写入备份目录
+     */
+    private fun createHeapDump() {
+        Coroutine.async {
+            val backupPath = AppConfig.backupPath ?: let {
+                toastOnUi("未设置备份目录")
+                return@async
+            }
+            if (!AppConfig.recordHeapDump) {
+                toastOnUi("未开启堆转储记录，请去其他设置里打开记录堆转储")
+                delay(3000)
+            }
+            toastOnUi("开始创建堆转储")
+            System.gc()
+            CrashHandler.doHeapDump(true)
+            val doc = FileDoc.fromUri(Uri.parse(backupPath), true)
+            if (!LogExporter.copyHeapDump(doc)) {
+                toastOnUi("未找到堆转储文件")
+            } else {
+                toastOnUi("已保存至备份目录")
+            }
+        }.onError {
+            AppLog.put("保存堆转储失败\n${it.localizedMessage}", it)
+        }.onFinally {
+            refreshAll()
+        }
+    }
 
     /** 应用日志详情：完整消息 + Throwable 堆栈 */
     private fun viewAppLog(entry: AppLog.LogEntry) {

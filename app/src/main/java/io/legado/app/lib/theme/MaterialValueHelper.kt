@@ -11,7 +11,9 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.toColorInt
 import androidx.fragment.app.Fragment
 import io.legado.app.R
+import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.ThemeConfig
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.dpToPx
 
@@ -69,8 +71,13 @@ val Context.primaryColorDark: Int
 val Context.accentColor: Int
     get() = ThemeStore.accentColor(this)
 
+// 配置背景图且非 E-Ink 时返回透明（对齐 Archive L74-79）：消费点透出 decorView 背景图，主界面头部实现沉浸底色
 val Context.backgroundColor: Int
-    get() = ThemeStore.backgroundColor(this)
+    get() = if (!AppConfig.isEInkMode && ThemeConfig.hasUsableBgImage(this)) {
+        Color.TRANSPARENT
+    } else {
+        ThemeStore.backgroundColor(this)
+    }
 
 val Context.bottomBackground: Int
     get() = ThemeStore.bottomBackground(this)
@@ -106,8 +113,9 @@ val Fragment.primaryColorDark: Int
 val Fragment.accentColor: Int
     get() = ThemeStore.accentColor(requireContext())
 
+// 委托 Context 扩展（对齐 Archive L118），保证 Fragment 侧与 View 侧透明语义一致
 val Fragment.backgroundColor: Int
-    get() = ThemeStore.backgroundColor(requireContext())
+    get() = requireContext().backgroundColor
 
 val Fragment.bottomBackground: Int
     get() = ThemeStore.bottomBackground(requireContext())
@@ -175,8 +183,13 @@ val Context.filletBackground: GradientDrawable
         return background
     }
 
+// 弹窗底色独立来源（对齐 Archive L196-200）：不消费 backgroundColor，避免背景图模式下弹窗整体透明穿帮
 val Context.dialogSurfaceBackground: GradientDrawable
-    get() = UiCorner.opaqueRounded(backgroundColor, UiCorner.panelRadius(this))
+    get() {
+        val surfaceColor = themeColorOrNull(PreferKey.themeCardColor)
+            ?: ContextCompat.getColor(this, R.color.dialog_surface)
+        return UiCorner.opaqueRounded(surfaceColor, UiCorner.panelRadius(this))
+    }
 
 @ColorInt
 fun String?.toThemeTextColorOrNull(): Int? {

@@ -748,8 +748,11 @@ class BookInfoComposeActivity :
             )
 
             book.isVideo -> {
-                // video-regression-fix-0906 AD-04：详情页直进注入单元素播放队列（集内降级判断依据）
-                io.legado.app.help.video.VideoPlaylistHolder.set(listOf(book.toSearchBook()), 0)
+                // video-regression-fix-0906 AD-04 修订：列表页已注入的完整队列（含当前影片时）保留（严禁单元素覆盖），
+                // 仅当前影片不在已注入队列中时注入单元素兜底
+                if (!io.legado.app.help.video.VideoPlaylistHolder.containsBookUrl(book.bookUrl)) {
+                    io.legado.app.help.video.VideoPlaylistHolder.set(listOf(book.toSearchBook()), 0)
+                }
                 readBookResult.launch(
                     Intent(this, io.legado.app.ui.video.VideoPlayerActivity::class.java)
                         .putExtra("bookUrl", book.bookUrl)

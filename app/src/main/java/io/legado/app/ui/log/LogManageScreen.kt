@@ -18,12 +18,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,8 +52,10 @@ import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.ui.widget.components.AppConfirmDialog
+import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.compose.AppSettingPalette
 import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.utils.FileDoc
@@ -100,6 +107,7 @@ fun LogManageScreen(
     onDeleteAppLogs: (List<AppLog.LogEntry>) -> Unit,
     onDeleteFiles: (List<LogFileItem>) -> Unit,
     onClearAll: () -> Unit,
+    onCreateHeapDump: () -> Unit,
     onExport: () -> Unit,
     onShareFile: (LogFileItem) -> Unit,
     onViewFile: (LogFileItem) -> Unit,
@@ -154,23 +162,37 @@ fun LogManageScreen(
                         )
                     }
                 } else {
-                    // 一级动作 ≤3（topbar-icon-semantics-fix）：多选 / 导出 / 一键清除
-                    IconButton(onClick = { state.selecting = true }) {
-                        Icon(
-                            Icons.Default.Done,
-                            contentDescription = stringResource(R.string.log_select)
-                        )
-                    }
-                    IconButton(onClick = onExport) {
-                        Icon(
-                            Icons.Default.SaveAlt,
-                            contentDescription = stringResource(R.string.log_export_logs)
-                        )
-                    }
-                    IconButton(onClick = { state.showClearConfirm = true }) {
-                        Icon(
-                            Icons.Default.DeleteSweep,
-                            contentDescription = stringResource(R.string.log_clear_all)
+                    // 右上角规范收口（用户反馈+topbar-icon-semantics-fix）：三个竖点溢出菜单承载操作项
+                    var menuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.log_manage)
+                            )
+                        }
+                        AppDropdownMenu(
+                            expanded = menuExpanded,
+                            onDismiss = { menuExpanded = false },
+                            actions = listOf(
+                                MenuAction(
+                                    Icons.Default.Done,
+                                    stringResource(R.string.log_select)
+                                ) { state.selecting = true },
+                                MenuAction(
+                                    Icons.Default.Memory,
+                                    stringResource(R.string.create_heap_dump)
+                                ) { onCreateHeapDump() },
+                                MenuAction(
+                                    Icons.Default.SaveAlt,
+                                    stringResource(R.string.log_export_logs)
+                                ) { onExport() },
+                                MenuAction(
+                                    Icons.Default.DeleteSweep,
+                                    stringResource(R.string.log_clear_all),
+                                    tint = palette.danger
+                                ) { state.showClearConfirm = true }
+                            )
                         )
                     }
                 }
@@ -376,7 +398,7 @@ private fun AppLogsContent(
         }
         if (filtered.isEmpty()) {
             EmptyStatePlaceholder(
-                icon = Icons.Default.SaveAlt,
+                icon = Icons.Default.BugReport,
                 title = stringResource(R.string.log_empty),
                 modifier = Modifier.weight(1f)
             )
@@ -440,6 +462,17 @@ private fun AppLogRow(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // 多选模式显式勾选框（与文件类 Tab 一致：仅背景色选中态不可见）
+        if (selecting) {
+            Checkbox(
+                checked = selected,
+                onCheckedChange = { onClick() },
+                colors = CheckboxDefaults.colors(
+                    checkedColor = palette.accent,
+                    uncheckedColor = palette.secondaryText
+                )
+            )
+        }
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -498,7 +531,7 @@ private fun FilesContent(
         }
         if (items.isEmpty()) {
             EmptyStatePlaceholder(
-                icon = Icons.Default.SaveAlt,
+                icon = Icons.Default.BugReport,
                 title = emptyText,
                 modifier = Modifier.weight(1f)
             )
@@ -528,6 +561,21 @@ private fun FilesContent(
                             .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // 多选模式显式勾选框（用户反馈：仅背景色选中态不可见，无法确认多选已生效）
+                        if (state.selecting) {
+                            Checkbox(
+                                checked = selected,
+                                onCheckedChange = {
+                                    state.selectedFileKeys =
+                                        if (selected) state.selectedFileKeys - item.name
+                                        else state.selectedFileKeys + item.name
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = palette.accent,
+                                    uncheckedColor = palette.secondaryText
+                                )
+                            )
+                        }
                         Column(Modifier.weight(1f)) {
                             Text(
                                 text = item.name,

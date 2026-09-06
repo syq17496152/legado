@@ -1479,7 +1479,7 @@ object VideoPlay : CoroutineScope by MainScope(){
     }
 
     /**
-     * 判断当前源是否为多线路多集按需采集新模式（type=2 + ruleRoutes/ruleEpisodes 非空）
+     * 判断当前源是否为多线路多集按需采集新模式（ruleRoutes/ruleEpisodes 非空即判定，不校验源 type）
      * UI 层据此决定调用 switchToRoute（异步按需采集）还是 switchRssRoute（内存切换）
      * video-booksource-multiroute：视频书源（目录含线路卷）同样视为多线路模式
      */
@@ -1495,7 +1495,7 @@ object VideoPlay : CoroutineScope by MainScope(){
 
     /**
      * 多线路多集按需采集：切换线路时重新执行 ruleEpisodes 采集新线路集数列表
-     * 仅用于 type=2 + ruleRoutes/ruleEpisodes 非空的新模式（废弃老模式 switchRssRoute）
+     * 仅用于 ruleRoutes/ruleEpisodes 非空的新模式（废弃老模式 switchRssRoute；不限源 type）
      *
      * @param routeIndex 线路索引（0-based）
      * @param player 播放器实例（与 playRssEpisode 一致用 GSYBaseVideoPlayer 父类）
@@ -1852,7 +1852,7 @@ object VideoPlay : CoroutineScope by MainScope(){
     /**
      * R1 多集选择播放：播放指定集
      *
-     * 参考 startPlay RssSource 分支的 AnalyzeUrl + setUp + startPlayLogic 模式
+     * 采集链已委托 VideoPlaybackPipeline.playEpisode（AnalyzeUrl/setUp/startPlayLogic 由 Pipeline 统一实现）
      */
     fun playRssEpisode(player: GSYBaseVideoPlayer, episode: RssEpisode) {
         // video-booksource-multiroute：视频书源分派——episode 来自卷章映射，按索引走章节播放链

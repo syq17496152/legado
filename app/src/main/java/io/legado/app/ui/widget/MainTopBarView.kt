@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.widget
+package io.legado.app.ui.widget
 
 import android.animation.LayoutTransition
 import kotlin.math.abs
@@ -107,7 +107,7 @@ class MainTopBarView @JvmOverloads constructor(
     private var statusBarInsetTop: Int = 0
     private val topBarEaseOut = PathInterpolator(0.22f, 0.61f, 0.36f, 1.00f)
     private val topBarEaseInOut = PathInterpolator(0.45f, 0.00f, 0.20f, 1.00f)
-    /** 覆盖式宿主(顶栏浮在列表之上，如发现页)置 true，使默认样式顶栏不透明，避免列表透出。 */
+    /** 覆盖式宿主(顶栏浮在列表之上)置 true，使顶栏不透明（default/regular 风格均生效；regular 下同时抑制顶栏包配置背景与壁纸），避免列表透出。 */
     var overlayOpaqueBackground = false
         set(value) {
             if (field == value) return

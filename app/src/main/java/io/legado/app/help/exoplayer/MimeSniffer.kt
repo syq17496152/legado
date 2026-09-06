@@ -331,6 +331,7 @@ object MimeSniffer {
         var pos = 0
         // 简化说明：扫描前 4KB（实际 MP4 moov 通常在前 1KB 内）
         // 已知上限：moov box 极大时可能超出 4KB，但 moov 在 mdat 后的场景已通过 mdat 检测覆盖
+        // 升级路径：引入完整 MP4 box 遍历器精确定位 moov，消除扫描窗口限制
         val scanLimit = minOf(head.size, 4096)
         while (pos + 8 <= scanLimit) {
             val size = readBigEndianInt(head, pos)

@@ -492,7 +492,7 @@ object PreferKey {
     const val aiTavilyMaxResults = "aiTavilyMaxResults"
     const val aiFloatingBallSide = "aiFloatingBallSide"
     const val aiFloatingBallYPercent = "aiFloatingBallYPercent"
-    // ===== archive-ui P1-F：补充 archive AppConfig 引用的 PreferKey 常量（当前 PreferKey 缺失） =====
+    // ===== archive-ui P1-F：archive AppConfig 依赖的 PreferKey 常量（合并时补入本文件） =====
     const val aiBaseUrl = "aiBaseUrl"
     const val aiApiKey = "aiApiKey"
     const val aiCurrentModel = "aiCurrentModel"
