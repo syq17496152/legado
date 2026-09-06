@@ -599,8 +599,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
 
         // 文章列表模式：定位到用户点击的文章索引（非0时需设置）
-        if (!VideoPlay.rssArticles.isNullOrEmpty() && VideoPlay.rssArticleIndex > 0) {
-            binding.viewPager.setCurrentItem(VideoPlay.rssArticleIndex, false)
+        // 索引钳制：rssArticles 可能被替换为更短列表而 rssArticleIndex 未同步复位，
+        // 直接 setCurrentItem 越界会触发预取帧校验崩溃（IndexOutOfBoundsException）
+        VideoPlay.rssArticles?.takeIf { it.isNotEmpty() }?.let { articles ->
+            if (VideoPlay.rssArticleIndex > 0) {
+                val target = VideoPlay.rssArticleIndex.coerceAtMost(articles.size - 1)
+                binding.viewPager.setCurrentItem(target, false)
+            }
         }
         // video-booksource-align-rss AD-01：书源单页恒 0，历史集数定位由
         // startPlay 内 chapterInVolumeIndex 章节解析承担，无需 ViewPager 定位
@@ -1092,8 +1097,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      * R3 抖音风格：线路切换后更新 ViewPager2
      */
     fun onRssRouteChangedForViewPager() {
-        videoPagerAdapter?.notifyDataSetChanged()
+        // 先归位到 0 再 notify：若先 notify，ViewPager2 同步期间 currentItem 可能仍指向
+        // 已收缩数据之外的旧位置，预取帧校验越界（与 ARTICLES_LOADED 越界插入同类风险）
         binding.viewPager.setCurrentItem(0, false)
+        videoPagerAdapter?.notifyDataSetChanged()
     }
 
     private fun initView() {
@@ -2068,8 +2075,14 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
         // 阶段8 F9：分页加载完成通知，刷新 adapter
         observeEvent<Int>(EventBus.ARTICLES_LOADED) { addedCount ->
-            val oldCount = videoPagerAdapter?.itemCount ?: 0
-            videoPagerAdapter?.notifyItemRangeInserted(oldCount, addedCount)
+            // 修复 IndexOutOfBoundsException（崩溃 20260906 position=40）：
+            // loadMoreArticles 先替换 rssArticles（N→N+M）再发事件，此时 itemCount 已是
+            // 追加后的 N+M，直接用作 positionStart 属越界插入，导致 RecyclerView 内部
+            // 计数膨胀到 N+2M 与真实 itemCount 脱钩，GapWorker 预取帧校验 position 时崩溃。
+            // 正确做法：以真实数据反推插入起点（追加前基数 N = 当前总数 - 新增数）
+            val adapter = videoPagerAdapter ?: return@observeEvent
+            val positionStart = ((VideoPlay.rssArticles?.size ?: 0) - addedCount).coerceAtLeast(0)
+            adapter.notifyItemRangeInserted(positionStart, addedCount)
         }
 
         // video-booksource-align-rss AD-02：书源列表切换影片完成——episodes 已整体切换（initSource 重建）
@@ -2086,8 +2099,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 return@observeEvent
             }
             currentFragment?.deactivatePlayer()
-            videoPagerAdapter?.notifyDataSetChanged()
+            // 先归位到 0 再 notify：避免 notify 后 currentItem 仍指向已收缩数据之外的旧位置
             binding.viewPager.setCurrentItem(0, false)
+            videoPagerAdapter?.notifyDataSetChanged()
             currentFragment = getVideoFragment(0)
             val fragment = currentFragment
             if (fragment?.playerView != null) {
