@@ -86,6 +86,8 @@ object VideoPlaybackPipeline {
             if (VideoUrlExtractor.isDirectVideoStreamUrl(chapter.url)) {
                 AppLog.put("Pipeline: L0 直链快速路径, urlEnd=${chapter.url.takeLast(24)}")
                 VideoPlay.videoUrl = chapter.url
+                // video-regression-fix-0906 AD-03：登记已解析章节（布局切换短路重采集依据）
+                VideoPlay.resolvedChapterUrl = chapter.url
                 val analyzeUrl = AnalyzeUrl(
                     chapter.url,
                     source = ctx.source,
@@ -137,6 +139,8 @@ object VideoPlaybackPipeline {
                     }
                     val sniffedUrl = candidate?.url ?: mUrl
                     VideoPlay.videoUrl = sniffedUrl
+                    // video-regression-fix-0906 AD-03：登记已解析章节（布局切换短路重采集依据）
+                    VideoPlay.resolvedChapterUrl = chapter.url
                     val analyzeUrl = AnalyzeUrl(
                         sniffedUrl,
                         source = ctx.source,
@@ -158,7 +162,40 @@ object VideoPlaybackPipeline {
                     VideoPlay.isLoadingFalse()
                 }.onError {
                     AppLog.put("获取资源链接出错\n$it", it, true)
+                    // video-regression-fix-0906 AD-03：采集失败清解析登记（防短路复用失效地址）
+                    VideoPlay.resolvedChapterUrl = null
                 }
+        }
+    }
+
+    /**
+     * video-regression-fix-0906 AD-03：书源章节短路重放（布局切换复用已解析地址）
+     *
+     * 前置：startPlayBookChapter 已校验 VideoPlay.videoUrl 非空且 resolvedChapterUrl == chapter.url。
+     * 不 invalidate SniffEngine、不 getContent、不嗅探——直接 AnalyzeUrl + 头合并（Referer 兜底）+ setUp。
+     * 起播失败由 startPlayBookChapter 的 12s 看门狗回退全量采集链（本函数不做错误处理）。
+     */
+    fun replayBookChapter(ctx: PipelineContext): Coroutine<*> {
+        val chapter = ctx.chapter ?: throw IllegalArgumentException("Pipeline.replayBookChapter: chapter required")
+        val book = ctx.book ?: throw IllegalArgumentException("Pipeline.replayBookChapter: book required")
+        val resolved = VideoPlay.videoUrl
+            ?: throw IllegalArgumentException("Pipeline.replayBookChapter: videoUrl null")
+        return Coroutine.async(ctx.scope, IO) {
+            AppLog.put("Pipeline: replayBookChapter 短路重放, urlEnd=${resolved.takeLast(24)}")
+            val analyzeUrl = AnalyzeUrl(
+                resolved,
+                source = ctx.source,
+                ruleData = book,
+                chapter = chapter
+            )
+            val merged = HeaderResolver.merge(
+                candidate = null,
+                baseHeaders = analyzeUrl.headerMap,
+                refererFallback = ctx.refererFallback,
+                targetUrl = resolved
+            )
+            setUpAndPlay(ctx, analyzeUrl.url, merged, resolvePageUrl = resolved.startsWith("file://"))
+            VideoPlay.isLoadingFalse()
         }
     }
 

@@ -56,6 +56,12 @@ object AppLog {
 
     private val mLogs = arrayListOf<LogEntry>()
 
+    // log-system-upgrade AD-03: 内存容量 100→500（AI 解析需要更大回溯窗口；单条经 truncateSafely 限 2000 字符，峰值约 1MB）
+    private const val MAX_LOG_SIZE = 500
+
+    // log-system-upgrade: 快照 getter 加同步锁（put* 系列同锁 this），避免 UI 侧快照时并发 add/remove 抛 ConcurrentModificationException
+    // 注：@Synchronized 不适用于无后备字段的属性，getter 用 @get:Synchronized（video-regression-fix-0906 编译修复）
+    @get:Synchronized
     val logs get() = mLogs.toList()
 
     /**
@@ -106,7 +112,7 @@ object AppLog {
         if (toast) {
             appCtx.toastOnUi(safeMsg)
         }
-        if (mLogs.size > 100) {
+        if (mLogs.size >= MAX_LOG_SIZE) {
             mLogs.removeLastOrNull()
         }
         mLogs.add(0, LogEntry(System.currentTimeMillis(), safeMsg, throwable, Level.ERROR))
@@ -119,6 +125,17 @@ object AppLog {
     @Synchronized
     fun clear() {
         mLogs.clear()
+    }
+
+    /**
+     * log-system-upgrade：内存日志多选删除（LogActivity 应用日志 Tab 用）
+     * LogEntry 是 data class，equals 按值比较——重复内容日志会被误删，必须按对象引用（===）删除，
+     * 同时规避 UI 多选期间实时插入导致的索引漂移（AD-04 红队 R2 修复项）
+     */
+    @Synchronized
+    fun removeLogs(entries: Collection<LogEntry>) {
+        if (entries.isEmpty()) return
+        mLogs.removeAll { entry -> entries.any { it === entry } }
     }
 
     /**
@@ -169,7 +186,7 @@ object AppLog {
         val fileMsg = if (throwable == null) safeMsg
         else "$safeMsg\n${throwable.stackTraceToString()}"
         LogUtils.d(tag, fileMsg)
-        if (mLogs.size > 100) mLogs.removeLastOrNull()
+        if (mLogs.size >= MAX_LOG_SIZE) mLogs.removeLastOrNull()
         mLogs.add(0, LogEntry(System.currentTimeMillis(), safeMsg, throwable, level))
         // V-004-P0-ImageLog: ERROR/WARN/INFO 级别在 release 包也输出到 logcat（DEBUG 保留守卫避免噪音）
         if (BuildConfig.DEBUG || level == Level.ERROR || level == Level.WARN || level == Level.INFO) {
@@ -190,7 +207,7 @@ object AppLog {
         if (toast) {
             appCtx.toastOnUi(safeMsg)
         }
-        if (mLogs.size > 100) {
+        if (mLogs.size >= MAX_LOG_SIZE) {
             mLogs.removeLastOrNull()
         }
         if (throwable == null) {

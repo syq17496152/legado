@@ -44,6 +44,8 @@ import io.legado.app.ui.book.manga.ReadMangaActivity
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.video.VideoPlayerActivity
+import io.legado.app.data.entities.SearchBook
+import io.legado.app.help.video.VideoPlaylistHolder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -94,6 +96,20 @@ class MyFeatureBooksActivity : ComponentActivity() {
     }
 
     private fun openBook(book: BookShelfDisplay) {
+        // video-regression-fix-0906 AD-04：特色书视频入口注入播放队列（列表内跨影片切换）
+        if (book.isVideo) {
+            val videoList = videos.map { b ->
+                SearchBook().apply {
+                    this.bookUrl = b.bookUrl
+                    this.name = b.name
+                    this.origin = b.origin
+                }
+            }
+            val idx = videoList.indexOfFirst { it.bookUrl == book.bookUrl }
+            if (idx >= 0) {
+                VideoPlaylistHolder.set(videoList, idx)
+            }
+        }
         startActivity(
             Intent(
                 this,

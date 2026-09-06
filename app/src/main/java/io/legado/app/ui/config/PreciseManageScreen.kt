@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
@@ -39,6 +40,7 @@ fun PreciseManageScreen(
     onCacheManageClick: () -> Unit,
     onDownloadManageClick: () -> Unit,
     onFileManageClick: () -> Unit,
+    onLogManageClick: () -> Unit,
     onCrashLogClick: () -> Unit,
     onSaveLogClick: () -> Unit,
     onCreateHeapDumpClick: () -> Unit,
@@ -107,6 +109,17 @@ fun PreciseManageScreen(
             modifier = Modifier.fillMaxWidth(),
             title = stringResource(R.string.log_diagnostics)
         ) {
+            // log-system-upgrade：日志管理中心（4 Tab 全功能入口）
+            SettingsClickRow(
+                icon = Icons.Default.Description,
+                title = stringResource(R.string.log_manage),
+                onClick = onLogManageClick
+            )
+            HorizontalDivider(
+                color = palette.divider.copy(alpha = 0.5f),
+                thickness = 0.5.dp
+            )
+            // log-system-upgrade：改跳日志管理中心崩溃 Tab（原 CrashLogsDialog 弹框保留于 MainActivity 崩溃善后链路）
             SettingsClickRow(
                 icon = Icons.Default.BugReport,
                 title = stringResource(R.string.crash_log),

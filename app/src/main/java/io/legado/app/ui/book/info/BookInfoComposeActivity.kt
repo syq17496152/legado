@@ -747,11 +747,15 @@ class BookInfoComposeActivity :
                     .putExtra("inBookshelf", viewModel.inBookshelf)
             )
 
-            book.isVideo -> readBookResult.launch(
-                Intent(this, io.legado.app.ui.video.VideoPlayerActivity::class.java)
-                    .putExtra("bookUrl", book.bookUrl)
-                    .putExtra("inBookshelf", viewModel.inBookshelf)
-            )
+            book.isVideo -> {
+                // video-regression-fix-0906 AD-04：详情页直进注入单元素播放队列（集内降级判断依据）
+                io.legado.app.help.video.VideoPlaylistHolder.set(listOf(book.toSearchBook()), 0)
+                readBookResult.launch(
+                    Intent(this, io.legado.app.ui.video.VideoPlayerActivity::class.java)
+                        .putExtra("bookUrl", book.bookUrl)
+                        .putExtra("inBookshelf", viewModel.inBookshelf)
+                )
+            }
 
             else -> readBookResult.launch(
                 Intent(

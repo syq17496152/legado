@@ -55,6 +55,10 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
         private const val FALLBACK_RETRY_THRESHOLD = 3
         // video-play-7001-videograph-fix 2.3/AD-03：单次播放会话内 7001 重建上限（防重建循环）
         private const val MAX_7001_REBUILD = 2
+        // video-regression-fix-0906 AD-01：单次播放会话内 4003 解码失败重建上限（1 次）
+        // 铁证：用户真机日志"播放失败"均为 4003 + queueInputBuffer at Released state
+        // （快速切换视频时旧 MediaCodec 释放与新实例竞争），重建实例即可恢复
+        private const val MAX_4003_REBUILD = 1
     }
     private val window = Timeline.Window()
 
@@ -86,6 +90,12 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
      * 新 prepare 会话（prepareAsyncInternal）时归零，单会话内超过 MAX_7001_REBUILD 走降级链
      */
     private var rebuild7001Count = 0
+
+    /**
+     * video-regression-fix-0906 AD-01：当前播放会话内 4003 解码失败重建计数
+     * 新 prepare 会话时归零，单会话内超过 MAX_4003_REBUILD 走既有不可恢复错误链
+     */
+    private var rebuild4003Count = 0
 
     /**
      * FR-3: scope 取消标志位（AtomicBoolean 保证多线程可见性）
@@ -418,6 +428,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 appendLine("播放地址: ${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
                 appendLine("建议: 可重试，或复制到系统浏览器播放")
             }
+            // video-regression-fix-0906 AD-03：全降级失败清书源解析登记（防短路重放持续复用失效地址）
+            VideoPlay.resolvedChapterUrl = null
             postEvent(EventBus.VIDEO_PLAY_ERROR, errorInfo)
         }
     }
@@ -559,6 +571,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             retryCount = 0
             // video-play-7001-videograph-fix 2.3：新播放会话重置 7001 重建计数
             rebuild7001Count = 0
+            // video-regression-fix-0906 AD-01：新播放会话重置 4003 重建计数
+            rebuild4003Count = 0
             // exoplayer-resilience Layer 2：新播放重置不可恢复错误计数
             // 理由：新播放/切换视频/切回 ExoPlayer 时给新的累计机会，避免历史失败影响当前播放
             unrecoverableFailCount = 0
@@ -910,6 +924,65 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             val contentType = fallbackTypes.getOrNull(currentFallbackIndex)
             if (contentType != null) {
                 applyMediaSourceByType(contentType, currentUrl, currentHeaders)
+            } else {
+                tryNextFallback()
+            }
+            return
+        }
+
+        // video-regression-fix-0906 AD-01：ERROR_CODE_DECODING_FAILED(4003) 解码竞态重建重试
+        // 铁证（用户真机日志）：快速切换视频时旧 MediaCodec 已 Released 仍被 queueInputBuffer
+        // → 4003 终止播放。方案对齐 7001 先例：旧实例 markTainted + 清池 + acquire 全新实例重建，
+        // 按当前降级类型重建 MediaSource 重试；单会话超 MAX_4003_REBUILD 走既有不可恢复错误链
+        if (error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED) {
+            if (rebuild4003Count >= MAX_4003_REBUILD) {
+                AppLog.put(
+                    "ExoPlayer 解码失败(4003): rebuild limit reached($rebuild4003Count), advance existing unrecoverable chain, " +
+                        "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+                )
+                // 不消耗 unrecoverableFailCount 双计——直接走既有不可恢复错误处理（降级链/统一提示）
+                unrecoverableFailCount++
+                tryNextFallback()
+                return
+            }
+            rebuild4003Count++
+            AppLog.put(
+                "ExoPlayer 解码失败(4003): 解码竞态重建重试(#$rebuild4003Count/$MAX_4003_REBUILD), " +
+                    "tainted旧实例+清池+acquire全新实例, urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+            )
+            val oldPlayer4003 = mInternalPlayer
+            // 旧实例解码器已 Released 竞态，标记污染用完即毁不入池
+            runCatching { oldPlayer4003?.let { PlayerInstancePool.markTainted(it) } }
+            // 清池：避免其他复用实例携带竞态残留
+            runCatching { PlayerInstancePool.clear() }
+            oldPlayer4003?.let { old ->
+                detachFromPlayer(old)
+                PlayerInstancePool.recycle(old)
+            }
+            mInternalPlayer = null
+            // 全新实例初始化链（对齐 7001 重建链）
+            if (mRendererFactory == null) {
+                mRendererFactory = PlayerInstancePool.sharedRendererFactory
+            }
+            if (mLoadControl == null) {
+                mLoadControl = PlayerInstancePool.createLoadControl()
+            }
+            mInternalPlayer = PlayerInstancePool.acquire(Looper.myLooper()!!)
+            mTrackSelector = PlayerInstancePool.trackSelectorOf(mInternalPlayer)
+            mEventLogger = mTrackSelector?.let { EventLogger(it) }
+            attachToPlayer(mInternalPlayer)
+            if (mSpeedPlaybackParameters != null) {
+                mInternalPlayer.playbackParameters = mSpeedPlaybackParameters
+            }
+            if (isLooping) {
+                mInternalPlayer.repeatMode = Player.REPEAT_MODE_ALL
+            }
+            if (mSurface != null) mInternalPlayer.setVideoSurface(mSurface)
+            isScopeCancelled.set(false)
+            isReleased = false
+            val contentType4003 = fallbackTypes.getOrNull(currentFallbackIndex)
+            if (contentType4003 != null) {
+                applyMediaSourceByType(contentType4003, currentUrl, currentHeaders)
             } else {
                 tryNextFallback()
             }

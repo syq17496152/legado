@@ -64,6 +64,7 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import splitties.systemservices.connectivityManager
@@ -381,6 +382,14 @@ object VideoPlay : CoroutineScope by MainScope(){
      */
     @Volatile
     var hasPlayedSuccessfully: Boolean = false
+
+    /**
+     * video-regression-fix-0906 AD-03：当前 videoUrl 已解析成功的章节 URL（书源链）
+     * 布局切换短路重采集用——resolvedChapterUrl == chapter.url 时复用 videoUrl 直起播，
+     * 免 getContent/三层嗅探死窗；起播失败/章节变化时置 null 回退全量采集链
+     */
+    @Volatile
+    var resolvedChapterUrl: String? = null
     var book: Book? = null
     var toc: List<BookChapter>? =  null
     var chapter: BookChapter? = null
@@ -460,6 +469,17 @@ object VideoPlay : CoroutineScope by MainScope(){
         if (switchBookAppending) return false
         val next = VideoPlaylistHolder.neighborOf(book.bookUrl, offset)
         if (next == null) {
+            // video-regression-fix-0906 AD-04：无队列（详情页直进等入口）降级集内切换；
+            // 越界 toast。严禁此处再转投本函数（upDurIndex 末集越界会回投，防互递归）
+            val eps = episodes
+            val targetIdx = chapterInVolumeIndex + offset
+            if (!eps.isNullOrEmpty() && targetIdx >= 0 && targetIdx < eps.size) {
+                AppLog.put("switchToBookFromList: 无队列降级集内切换, offset=$offset, targetIdx=$targetIdx")
+                val stdPlayer = player as? StandardGSYVideoPlayer
+                if (stdPlayer != null) {
+                    return upDurIndex(offset, stdPlayer)
+                }
+            }
             appCtx.toastOnUi(if (offset > 0) "已是最后一个视频" else "已到开头")
             return false
         }
@@ -1590,6 +1610,44 @@ object VideoPlay : CoroutineScope by MainScope(){
         // 4.8b（Z9）：嗅探前捕获原始 URL（书源正文链接可重嗅），作为播放历史键
         originalPlayUrl = chapter.url
         videoTitle = chapter.title
+        // video-regression-fix-0906 AD-03：短路重采集——布局切换等场景当前章节已解析出视频地址
+        // 时复用直起播，免 getContent/三层嗅探死窗（对齐订阅源切布局丝滑体验）
+        val cachedUrl = videoUrl
+        if (!cachedUrl.isNullOrBlank() && resolvedChapterUrl == chapter.url) {
+            AppLog.put("startPlayBookChapter: 短路重采集, 复用已解析地址, urlEnd=${cachedUrl.takeLast(24)}")
+            val token = switchTokenCounter.incrementAndGet()
+            currentSwitchToken = token
+            // 新起播尝试：重置成功标志供看门狗判定（对齐 initSource"新源视为首次播放"语义）
+            hasPlayedSuccessfully = false
+            VideoPlaybackPipeline.replayBookChapter(
+                VideoPlaybackPipeline.PipelineContext(
+                    scope = loadScope,
+                    player = player,
+                    source = source,
+                    token = token,
+                    title = chapter.title,
+                    refererFallback = chapter.url,
+                    ruleData = book,
+                    book = book,
+                    chapter = chapter
+                )
+            )
+            // AD-03 兜底：12s 内未起播（地址失效等）→ 清解析缓存自动回退全量采集链一次
+            Coroutine.async(loadScope, IO) {
+                delay(12000)
+                if (currentSwitchToken == token && !hasPlayedSuccessfully
+                    && resolvedChapterUrl == chapter.url
+                ) {
+                    AppLog.put("startPlayBookChapter: 短路复用超时未起播, 自动回退全量采集链")
+                    resolvedChapterUrl = null
+                    videoUrl = null
+                    withContext(Main) {
+                        startPlayBookChapter(player, book, chapter)
+                    }
+                }
+            }
+            return
+        }
         val token = switchTokenCounter.incrementAndGet()
         currentSwitchToken = token
         VideoPlaybackPipeline.playBookChapter(

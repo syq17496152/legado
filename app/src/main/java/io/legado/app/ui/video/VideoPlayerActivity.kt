@@ -1053,7 +1053,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     fun onBookVerticalFling(velocityY: Float) {
         if (!useViewPagerMode) return
         if (VideoPlay.book == null) return
-        val player = currentFragment?.playerView?.currentPlayer ?: return
+        // video-regression-fix-0906 AD-04：播放器未就绪时 toast 明示，不再静默无反应
+        val player = currentFragment?.playerView?.currentPlayer ?: run {
+            splitties.init.appCtx.toastOnUi("播放器尚未就绪，请稍候再滑动")
+            return
+        }
         if (velocityY < 0) {
             VideoPlay.switchToBookFromList(+1, player)
         } else {

@@ -517,6 +517,11 @@
             android:name=".ui.urlrecord.UrlRecordActivity"
             android:configChanges="orientation|screenSize"
             android:hardwareAccelerated="true" />
+        <!-- log-system-upgrade: 日志管理中心 -->
+        <activity
+            android:name=".ui.log.LogActivity"
+            android:configChanges="orientation|screenSize"
+            android:hardwareAccelerated="true" />
         <!-- precise-manage: 存储管理 -->
         <activity
             android:name=".ui.book.storage.StorageManageActivity"

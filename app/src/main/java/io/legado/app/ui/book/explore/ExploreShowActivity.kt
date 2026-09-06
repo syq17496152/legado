@@ -1,8 +1,7 @@
-﻿package io.legado.app.ui.book.explore
+package io.legado.app.ui.book.explore
 
 import android.os.Bundle
 import androidx.activity.viewModels
-import androidx.appcompat.widget.AppCompatImageButton
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -16,6 +15,7 @@ import io.legado.app.databinding.ActivityExploreShowBinding
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.ui.book.SearchBookOpenHelper
 import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.number.NumberPickerDialog
 import io.legado.app.utils.applyStatusBarPadding
@@ -44,9 +44,36 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
     private var oldPage = -1
     private var isClearAll = false
 
-    private var pageButton: AppCompatImageButton? = null
+    // video-regression-fix-0906 AD-05：三点溢出菜单弹窗句柄（ModernActionPopup，书架页同款接线模式）
+    private var moreMenuPopup: ModernActionPopup.Handle? = null
 
-    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原「第 N 页」菜单项改为页码切换 action 图标按钮。 */
+    /** video-regression-fix-0906 AD-05：页码跳页（原三横线 pageButton 逻辑收口到三点菜单） */
+    private fun showPagePicker() {
+        val page = viewModel.pageLiveData.value ?: 1
+        NumberPickerDialog(this@ExploreShowActivity)
+            .setTitle(getString(R.string.change_page))
+            .setMaxValue(999)
+            .setMinValue(1)
+            .setValue(page)
+            .show { targetPage ->
+                if (page != targetPage) {
+                    oldPage = targetPage
+                    viewModel.skipPage(targetPage)
+                    isClearAll = true
+                    composeBooks.clear()
+                    composeHasMore.value = true
+                    composeHasPrevious.value = targetPage > 1
+                    composeBottomError.value = null
+                    composeTopError.value = null
+                    composeTopLoading.value = false
+                    scrollToBottom(forceLoad = true)
+                }
+            }
+    }
+
+    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)。
+     * video-regression-fix-0906 AD-05：moreButton 三点原为死按钮（宿主未接线），
+     * 现接 ModernActionPopup 收纳「第 N 页」跳页；删除三横线 pageButton 消除双按钮功能重复。 */
     private fun initTopBar() = binding.titleBar.run {
         applyStatusBarPadding(withInitialPadding = true)
         setMode(MainTopBarView.Mode.SUB)
@@ -54,27 +81,13 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
         setSearchEntryVisible(false)
         // Mode.SUB 下 titleSelect 显示「标题+返回箭头」，点击回退
         titleSelect.setOnClickListener { finish() }
-        pageButton = addActionButton(R.drawable.ic_menu, R.string.menu_page) {
-            val page = viewModel.pageLiveData.value ?: 1
-            NumberPickerDialog(this@ExploreShowActivity)
-                .setTitle(getString(R.string.change_page))
-                .setMaxValue(999)
-                .setMinValue(1)
-                .setValue(page)
-                .show { targetPage ->
-                    if (page != targetPage) {
-                        oldPage = targetPage
-                        viewModel.skipPage(targetPage)
-                        isClearAll = true
-                        composeBooks.clear()
-                        composeHasMore.value = true
-                        composeHasPrevious.value = targetPage > 1
-                        composeBottomError.value = null
-                        composeTopError.value = null
-                        composeTopLoading.value = false
-                        scrollToBottom(forceLoad = true)
-                    }
-                }
+        moreButton.setOnClickListener { anchor ->
+            val actions = buildList {
+                add(ModernActionPopup.Action(getString(R.string.menu_page, viewModel.pageLiveData.value ?: 1)) {
+                    showPagePicker()
+                })
+            }
+            moreMenuPopup = ModernActionPopup.show(anchor, actions, moreMenuPopup)
         }
     }
 
@@ -94,9 +107,6 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
         }
         viewModel.upAdapterLiveData.observe(this) {
             bookshelfTick.intValue++
-        }
-        viewModel.pageLiveData.observe(this) {
-            pageButton?.contentDescription = getString(R.string.menu_page, it)
         }
         viewModel.initData(intent)
     }

@@ -18,6 +18,7 @@ import java.net.InetAddress
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicIntegerArray
 
 /**
  * T4.1: DoH（DNS over HTTPS）实现（对齐 Square 官方方案）
@@ -134,6 +135,15 @@ object DohDns : Dns {
 
     /** N-P1-2: 最近一次 DoH 成功的服务器索引（成功优先置顶出发） */
     private val lastSuccessServer = AtomicInteger(0)
+
+    /** video-regression-fix-0906 AD-02: 单服务器连续失败熔断阈值（真机日志铁证 server#2 全程 UnknownHostException 99 次仍每次参与并行） */
+    private const val SERVER_BREAK_THRESHOLD = 5
+
+    /** video-regression-fix-0906 AD-02: 各服务器连续失败计数（成功清零自愈） */
+    private val serverFailCounts = AtomicIntegerArray(DOH_SERVERS.size)
+
+    /** video-regression-fix-0906 AD-02: 各服务器熔断标记（0=正常 1=熔断；会话级，成功自愈） */
+    private val serverBrokenFlags = AtomicIntegerArray(DOH_SERVERS.size)
 
     /**
      * DoH 客户端列表（每服务器一个，懒加载）
@@ -330,8 +340,11 @@ object DohDns : Dns {
      */
     private fun parallelLookup(clients: List<DnsOverHttps>, hostname: String): QueryResult? {
         val startMs = System.currentTimeMillis()
-        val order = serverOrder(clients.size)
-        val channel = Channel<QueryResult?>(capacity = clients.size)
+        // video-regression-fix-0906 AD-02: 剔除已熔断服务器（全部熔断时全量兜底，避免无服务器可用）
+        val activeIdx = (0 until clients.size).filter { serverBrokenFlags.get(it) == 0 }
+            .ifEmpty { (0 until clients.size).toList() }
+        val order = serverOrder(clients.size).filter { it in activeIdx }
+        val channel = Channel<QueryResult?>(capacity = order.size)
         val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         order.forEach { idx ->
             scope.launch {
@@ -345,6 +358,23 @@ object DohDns : Dns {
                     }
                     ?.takeIf { it.isNotEmpty() }
                     ?.let { QueryResult(idx, it, System.currentTimeMillis() - startMs) }
+                if (result == null) {
+                    // video-regression-fix-0906 AD-02: 服务器级连续失败计数，达阈值熔断本会话跳过
+                    if (serverFailCounts.incrementAndGet(idx) >= SERVER_BREAK_THRESHOLD
+                        && serverBrokenFlags.get(idx) == 0) {
+                        serverBrokenFlags.set(idx, 1)
+                        AppLog.put(
+                            "DohDns: server#${idx + 1} 连续失败≥$SERVER_BREAK_THRESHOLD 熔断, 本会话并行查询跳过该节点"
+                        )
+                    }
+                } else {
+                    // 成功自愈：清零计数并解除熔断
+                    serverFailCounts.set(idx, 0)
+                    if (serverBrokenFlags.get(idx) != 0) {
+                        serverBrokenFlags.set(idx, 0)
+                        AppLog.put("DohDns: server#${idx + 1} 解析成功, 解除熔断")
+                    }
+                }
                 channel.send(result)
             }
         }
@@ -352,7 +382,7 @@ object DohDns : Dns {
             withTimeoutOrNull(PARALLEL_TOTAL_TIMEOUT_MS) {
                 var result: QueryResult? = null
                 var received = 0
-                while (result == null && received < clients.size) {
+                while (result == null && received < order.size) {
                     val r = channel.receive()
                     received++
                     if (r != null) result = r
