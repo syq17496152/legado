@@ -1,38 +1,59 @@
-﻿package io.legado.app.ui.config
+package io.legado.app.ui.config
 
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
-import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
-import androidx.appcompat.widget.AppCompatImageButton
-import android.widget.ScrollView
-import android.widget.TextView
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
-import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
@@ -46,36 +67,35 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.MainBottomNavConfig
 import io.legado.app.help.config.NavigationBarIconConfig
 import io.legado.app.lib.cloud.CloudStorageType
-import io.legado.app.lib.dialogs.alert
-import io.legado.app.lib.theme.UiCorner
-import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
-import io.legado.app.lib.theme.primaryTextColor
-import io.legado.app.lib.theme.themeCardColorOrDefault
-import io.legado.app.lib.theme.themeMutedColorOrDefault
-import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.book.cache.WebDavTaskManager
 import io.legado.app.ui.book.cache.WebDavTaskStatus
 import io.legado.app.ui.book.cache.WebDavTaskType
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.image.ImageCropContract
-import io.legado.app.ui.widget.MainTopBarView
-import io.legado.app.ui.widget.ModernActionPopup
-import io.legado.app.ui.widget.compose.AppManagementMenuAction
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.installGlassTopBar
+import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.AppManagementListRow
-import io.legado.app.ui.widget.compose.rememberAppManagementPalette
+import io.legado.app.ui.widget.compose.AppManagementMenuAction
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.AppPackageManageItemCard
 import io.legado.app.ui.widget.compose.AppPackageManageScreen
 import io.legado.app.ui.widget.compose.AppPackageManageSettingCard
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.rememberAppManagementPalette
+import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
-import io.legado.app.ui.widget.number.NumberPickerDialog
+import io.legado.app.ui.widget.compose.showComposeNumberPickerDialog
 import io.legado.app.utils.ImageCropHelper
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getFile
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.postEvent
+import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
@@ -100,7 +120,8 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
     private var isNightMode by mutableStateOf(false)
     private var bottomNavItemsState by mutableStateOf(MainBottomNavConfig.items())
     private var editingEntry: NavigationBarIconConfig.Entry? = null
-    private var editingDialog: LinearLayout? = null
+    // W3.2：编辑弹框 Compose 化——原 editingDialog(View) 全量重建改为 editVersion 快照计数驱动重组
+    private var editVersion by mutableIntStateOf(0)
     private var pendingConfig: NavigationBarIconConfig.Config? = null
     private var pendingColorTarget = 0
     private var pendingIconRequest: IconRequest? = null
@@ -109,8 +130,8 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
     private val handledWebDavTasks = mutableSetOf<String>()
     private var loadVersion = 0
     private var cloudContainerId: String? = null
-    private var containerActionButton: AppCompatImageButton? = null
-    private var containerMenuPopup: ModernActionPopup.Handle? = null
+    // W3.2：S3 容器按钮显隐改 Compose 状态驱动（对齐 TopBarManage 3.1 模式）
+    private var containerActionVisible by mutableStateOf(false)
     private val dateFormat by lazy { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
 
     private val selectIcon = registerForActivityResult(HandleFileContract()) { result ->
@@ -277,18 +298,33 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
     }
 
     /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，容器切换/同步任务改为 action 插槽图标。 */
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.navigation_bar_manage))
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
-        containerActionButton = addActionButton(R.drawable.ic_outline_cloud_24, R.string.s3_bucket) {
-            showContainerSelector()
-        }
-        addActionButton(R.drawable.ic_history, R.string.package_sync_task_menu) {
-            showNavigationBarSyncTasks()
-        }
+    // W3.2：顶栏运行时替换为 GlassTopAppBar（透壁纸语义，W1 模式）。S3 容器/同步任务保留一级图标语义
+    private fun initTopBar() {
+        installGlassTopBar(
+            binding,
+            titleProvider = { getString(R.string.navigation_bar_manage) },
+            actionsProvider = {
+                buildList {
+                    if (containerActionVisible) {
+                        add(
+                            MenuAction(
+                                icon = Icons.Filled.Cloud,
+                                title = getString(R.string.s3_bucket),
+                                alwaysShow = true
+                            ) { showContainerSelector() }
+                        )
+                    }
+                    add(
+                        MenuAction(
+                            icon = Icons.Filled.History,
+                            title = getString(R.string.package_sync_task_menu),
+                            alwaysShow = true
+                        ) { showNavigationBarSyncTasks() }
+                    )
+                }
+            },
+            onBack = { finish() }
+        )
         updateContainerMenu()
     }
 
@@ -334,20 +370,13 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
     }
 
     private fun showBottomNavItemsDialog() {
-        alert(R.string.bottom_bar_items_manage) {
-            customView {
-                ComposeView(this@NavigationBarManageActivity).apply {
-                    setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
-                    setContent {
-                        BottomNavItemsManageContent(
-                            initialItems = bottomNavItemsState,
-                            onItemsChange = ::saveBottomNavItems
-                        )
-                    }
-                }
-            }
-            okButton()
-        }
+        // W3.2：alert(customView 塞 ComposeView)→ComposeDialogFragment 壳（MC-7）
+        showDialogFragment(
+            NavigationBarItemsDialog.create(
+                initialItems = bottomNavItemsState,
+                onItemsChange = ::saveBottomNavItems
+            )
+        )
     }
 
     private fun saveBottomNavItems(items: List<MainBottomNavConfig.ItemState>) {
@@ -373,18 +402,18 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
 
     private fun updateContainerMenu() {
         val containers = AppCloudStorage.listContainers().filter { it.enabled }
-        val button = containerActionButton ?: return
         if (AppCloudStorage.type != CloudStorageType.S3) {
             cloudContainerId = containers.firstOrNull()?.id
-            button.isVisible = false
+            containerActionVisible = false
             return
         }
         cloudContainerId = AppCloudStorage.selectedContainer(CLOUD_SCOPE)?.id
             ?: containers.firstOrNull()?.id
-        button.isVisible = true
+        containerActionVisible = true
     }
 
-    private fun showContainerSelector(anchor: View? = null) {
+    // W3.2：ModernActionPopup(View 锚点)→showComposeActionListDialog（对齐 TopBarManage 3.1 模式）
+    private fun showContainerSelector() {
         lifecycleScope.launch {
             val containers = withContext(Dispatchers.IO) { AppCloudStorage.listContainers().filter { it.enabled } }
             if (containers.isEmpty()) {
@@ -392,17 +421,17 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
                 return@launch
             }
             val selected = cloudContainerId ?: AppCloudStorage.selectedContainer(CLOUD_SCOPE)?.id
-            val popupAnchor = anchor ?: containerActionButton ?: binding.titleBar.moreButton
-            val actions = containers.map { container ->
-                ModernActionPopup.Action(AppCloudStorage.containerDisplayLabel(container)) {
-                    if (container.id == selected) return@Action
-                    AppCloudStorage.selectContainer(CLOUD_SCOPE, container.id)
-                    cloudContainerId = container.id
-                    updateContainerMenu()
-                    loadPackages()
-                }
+            showComposeActionListDialog(
+                title = getString(R.string.s3_bucket),
+                labels = containers.map { AppCloudStorage.containerDisplayLabel(it) }
+            ) { index ->
+                val container = containers.getOrNull(index) ?: return@showComposeActionListDialog
+                if (container.id == selected) return@showComposeActionListDialog
+                AppCloudStorage.selectContainer(CLOUD_SCOPE, container.id)
+                cloudContainerId = container.id
+                updateContainerMenu()
+                loadPackages()
             }
-            containerMenuPopup = ModernActionPopup.show(popupAnchor, actions, containerMenuPopup)
         }
     }
     private fun loadPackages() {
@@ -459,173 +488,157 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
         }
         editingEntry = base
         pendingConfig = editingEntry!!.config.copy(icons = editingEntry!!.config.icons.toMutableMap())
-        val root = buildEditView()
-        editingDialog = root
-        alert(R.string.navigation_bar_edit) {
-            customView { editDialogScrollContainer(root) }
-            okButton {
-                saveEditingPackage()
-            }
-            cancelButton()
-        }
-    }
-
-    private fun editDialogScrollContainer(content: View): ScrollView {
-        return object : ScrollView(this) {
-            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-                val maxHeight = (resources.displayMetrics.heightPixels * 0.68f).toInt()
-                    .coerceAtLeast(320.dp)
-                val limitedHeightSpec = View.MeasureSpec.makeMeasureSpec(maxHeight, View.MeasureSpec.AT_MOST)
-                super.onMeasure(widthMeasureSpec, limitedHeightSpec)
-            }
-        }.apply {
-            isFillViewport = false
-            isVerticalScrollBarEnabled = true
-            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
-            addView(
-                content,
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
+        refreshEditDialog()
+        // W3.2：alert(customView=ScrollView 包动态 LinearLayout)→ComposeDialogFragment 壳（MC-7）
+        showDialogFragment(
+            NavigationBarEditDialog.create(
+                title = getString(R.string.navigation_bar_edit),
+                initialName = pendingConfig?.name.orEmpty(),
+                rowsProvider = ::buildNavBarEditRows,
+                iconRowsProvider = ::buildNavBarIconRows,
+                onSave = { name ->
+                    saveEditingPackage(name)
+                }
             )
-        }
+        )
     }
 
-    private fun buildEditView(): LinearLayout {
+    // W3.2：原 editDialogScrollContainer（ScrollView 高度限制壳）随 View 弹框废弃，滚动由 AppDialogFrame scrollContent 承担
+
+    // W3.2：原 buildEditView(View) 改为行数据构建器，由 NavigationBarEditDialog Compose 渲染。
+    // 显式读取 editVersion 建立重组依赖：任意配置修改后 refreshEditDialog 自增即触发行数据重建。
+    private fun buildNavBarEditRows(): List<NavBarEditRow> {
         val config = pendingConfig!!
         normalizeStandardBottomConfig(config)
         val currentEntry = editingEntry
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(2, 2, 2, 4)
-            applyUiBodyTypefaceDeep(this@NavigationBarManageActivity.uiTypeface())
-            addView(PackageManageUi.nameInput(this@NavigationBarManageActivity, config.name, getString(R.string.navigation_bar_name)))
-            addView(optionRow(getString(R.string.bottom_bar_layout_mode), layoutModeLabel(config.layoutMode)) {
-                showComposeChoiceListDialog(
-                    getString(R.string.bottom_bar_layout_mode),
-                    listOf(
-                        getString(R.string.bottom_bar_layout_floating),
-                        getString(R.string.bottom_bar_layout_standard),
-                        getString(R.string.bottom_bar_layout_sidebar)
-                    )
-                ) { index ->
-                    config.layoutMode = when (index) {
-                        1 -> "standard"
-                        2 -> "sidebar"
-                        else -> "floating"
+        editVersion
+        return buildList {
+            add(
+                NavBarEditRow(getString(R.string.bottom_bar_layout_mode), layoutModeLabel(config.layoutMode)) {
+                    showComposeChoiceListDialog(
+                        getString(R.string.bottom_bar_layout_mode),
+                        listOf(
+                            getString(R.string.bottom_bar_layout_floating),
+                            getString(R.string.bottom_bar_layout_standard),
+                            getString(R.string.bottom_bar_layout_sidebar)
+                        )
+                    ) { index ->
+                        config.layoutMode = when (index) {
+                            1 -> "standard"
+                            2 -> "sidebar"
+                            else -> "floating"
+                        }
+                        normalizeStandardBottomConfig(config)
+                        refreshEditDialog()
                     }
-                    normalizeStandardBottomConfig(config)
-                    refreshEditDialog()
                 }
-            })
+            )
             if (config.layoutMode != "sidebar") {
                 if (config.layoutMode == "floating") {
-                    addView(optionRow(getString(R.string.bottom_bar_material_mode), effectModeLabel(config.effectMode)) {
-                        showComposeChoiceListDialog(
-                            getString(R.string.bottom_bar_material_mode),
-                            listOf(
-                                getString(R.string.bottom_bar_effect_solid),
-                                getString(R.string.bottom_bar_effect_glass),
-                                getString(R.string.bottom_bar_effect_frosted)
-                            )
-                        ) { index ->
-                            config.effectMode = when (index) {
-                                0 -> "solid"
-                                2 -> "frosted"
-                                else -> "glass"
+                    add(
+                        NavBarEditRow(getString(R.string.bottom_bar_material_mode), effectModeLabel(config.effectMode)) {
+                            showComposeChoiceListDialog(
+                                getString(R.string.bottom_bar_material_mode),
+                                listOf(
+                                    getString(R.string.bottom_bar_effect_solid),
+                                    getString(R.string.bottom_bar_effect_glass),
+                                    getString(R.string.bottom_bar_effect_frosted)
+                                )
+                            ) { index ->
+                                config.effectMode = when (index) {
+                                    0 -> "solid"
+                                    2 -> "frosted"
+                                    else -> "glass"
+                                }
+                                refreshEditDialog()
                             }
+                        }
+                    )
+                    add(
+                        NavBarEditRow(
+                            getString(R.string.search),
+                            getString(if (config.hideSearchInFloatingStyle) R.string.disabled else R.string.enabled)
+                        ) {
+                            config.hideSearchInFloatingStyle = !config.hideSearchInFloatingStyle
                             refreshEditDialog()
                         }
-                    })
-                    addView(optionRow(
-                        getString(R.string.search),
-                        getString(if (config.hideSearchInFloatingStyle) R.string.disabled else R.string.enabled)
-                    ) {
-                        config.hideSearchInFloatingStyle = !config.hideSearchInFloatingStyle
-                        refreshEditDialog()
-                    })
+                    )
                 }
                 if (config.layoutMode == "standard") {
-                    addView(optionRow(getString(R.string.bottom_bar_wallpaper), wallpaperLabel(config.wallpaperPath)) {
-                        showBottomWallpaperSelector()
-                    })
-                }
-                addView(optionRow(getString(R.string.bottom_bar_opacity), "${config.opacity}%") {
-                    showAlphaPicker(getString(R.string.bottom_bar_opacity), config.opacity) {
-                        config.opacity = it
-                    }
-                })
-                addView(optionRow(
-                    getString(R.string.bottom_bar_border_color),
-                    config.borderColor?.let(::colorLabel) ?: getString(R.string.disable)
-                ) {
-                    showOptionalColorSelector(
-                        getString(R.string.bottom_bar_border_color),
-                        config.borderColor,
-                        COLOR_BORDER
+                    add(
+                        NavBarEditRow(getString(R.string.bottom_bar_wallpaper), wallpaperLabel(config.wallpaperPath)) {
+                            showBottomWallpaperSelector()
+                        }
                     )
-                })
-                addView(optionRow(getString(R.string.bottom_bar_border_alpha), "${config.borderAlpha}%") {
-                    showAlphaPicker(getString(R.string.bottom_bar_border_alpha), config.borderAlpha) {
-                        config.borderAlpha = it
-                    }
-                })
-            } else {
-                addView(optionRow(
-                    getString(R.string.navigation_bar_sidebar_background),
-                    if (config.sidebarBackgroundPath.isNullOrBlank()) {
-                        getString(R.string.select_image)
-                    } else {
-                        getString(R.string.theme_image_selected)
-                    }
-                ) {
-                    showComposeChoiceListDialog(
-                        getString(R.string.navigation_bar_sidebar_background),
-                        buildList {
-                            add(getString(R.string.select_image))
-                            if (!config.sidebarBackgroundPath.isNullOrBlank()) {
-                                add(getString(R.string.delete))
-                            }
-                        }
-                    ) { index ->
-                        if (index == 0) {
-                            pendingSidebarBackgroundEntry = currentEntry
-                            selectSidebarBackground.launch {
-                                mode = HandleFileContract.IMAGE
-                                title = getString(R.string.navigation_bar_sidebar_background)
-                            }
-                        } else if (currentEntry != null) {
-                            editingEntry = NavigationBarIconConfig.clearSidebarBackground(currentEntry)
-                            pendingConfig = editingEntry!!.config.copy(icons = editingEntry!!.config.icons.toMutableMap())
-                            notifyAppliedIfNeeded(editingEntry!!)
-                            refreshEditDialog()
-                            loadPackages()
-                        }
-                    }
-                })
-            }
-            NavigationBarIconConfig.items
-                .filter { config.layoutMode == "sidebar" || it.key != "ai" }
-                .let { NavigationBarIconConfig.extraItems + it }
-                .forEach { item ->
-                    if (item.menuId == 0) {
-                        addView(singleIconRow(item))
-                    } else {
-                        addView(iconRow(item))
-                    }
                 }
+                add(
+                    NavBarEditRow(getString(R.string.bottom_bar_opacity), "${config.opacity}%") {
+                        showAlphaPicker(getString(R.string.bottom_bar_opacity), config.opacity) {
+                            config.opacity = it
+                        }
+                    }
+                )
+                add(
+                    NavBarEditRow(
+                        getString(R.string.bottom_bar_border_color),
+                        config.borderColor?.let(::colorLabel) ?: getString(R.string.disable)
+                    ) {
+                        showOptionalColorSelector(
+                            getString(R.string.bottom_bar_border_color),
+                            config.borderColor,
+                            COLOR_BORDER
+                        )
+                    }
+                )
+                add(
+                    NavBarEditRow(getString(R.string.bottom_bar_border_alpha), "${config.borderAlpha}%") {
+                        showAlphaPicker(getString(R.string.bottom_bar_border_alpha), config.borderAlpha) {
+                            config.borderAlpha = it
+                        }
+                    }
+                )
+            } else {
+                add(
+                    NavBarEditRow(
+                        getString(R.string.navigation_bar_sidebar_background),
+                        if (config.sidebarBackgroundPath.isNullOrBlank()) {
+                            getString(R.string.select_image)
+                        } else {
+                            getString(R.string.theme_image_selected)
+                        }
+                    ) {
+                        showComposeChoiceListDialog(
+                            getString(R.string.navigation_bar_sidebar_background),
+                            buildList {
+                                add(getString(R.string.select_image))
+                                if (!config.sidebarBackgroundPath.isNullOrBlank()) {
+                                    add(getString(R.string.delete))
+                                }
+                            }
+                        ) { index ->
+                            if (index == 0) {
+                                pendingSidebarBackgroundEntry = currentEntry
+                                selectSidebarBackground.launch {
+                                    mode = HandleFileContract.IMAGE
+                                    title = getString(R.string.navigation_bar_sidebar_background)
+                                }
+                            } else if (currentEntry != null) {
+                                editingEntry = NavigationBarIconConfig.clearSidebarBackground(currentEntry)
+                                pendingConfig = editingEntry!!.config.copy(icons = editingEntry!!.config.icons.toMutableMap())
+                                notifyAppliedIfNeeded(editingEntry!!)
+                                refreshEditDialog()
+                                loadPackages()
+                            }
+                        }
+                    }
+                )
+            }
         }
     }
 
+    // W3.2：原 View 全量重建改为版本计数——Dialog 行数据 provider 读取本状态，自增即触发重组
     private fun refreshEditDialog() {
-        val root = editingDialog ?: return
-        root.removeAllViews()
-        buildEditView().let { rebuilt ->
-            while (rebuilt.childCount > 0) {
-                root.addView(rebuilt.getChildAt(0).also { rebuilt.removeView(it) })
-            }
-        }
+        editVersion++
     }
 
     private fun showBottomWallpaperSelector() {
@@ -671,20 +684,20 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
         }
     }
 
-    private fun optionRow(title: String, value: String, onClick: () -> Unit): View {
-        return PackageManageUi.optionRow(this, title, value, onClick)
-    }
+    // W3.2：原 optionRow（PackageManageUi View 行助手）随 View 弹框废弃
 
+    // W3.2：NumberPickerDialog(View)→showComposeNumberPickerDialog（MC 门禁统一弹框基线）
     private fun showAlphaPicker(title: String, value: Int, apply: (Int) -> Unit) {
-        NumberPickerDialog(this)
-            .setTitle(title)
-            .setMinValue(0)
-            .setMaxValue(100)
-            .setValue(value)
-            .show {
-                apply(it.coerceIn(0, 100))
+        showComposeNumberPickerDialog(
+            title = title,
+            value = value,
+            minValue = 0,
+            maxValue = 100,
+            onValue = { picked ->
+                apply(picked.coerceIn(0, 100))
                 refreshEditDialog()
             }
+        )
     }
 
     private fun showOptionalColorSelector(title: String, color: Int?, target: Int) {
@@ -721,72 +734,48 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
         pendingColorTarget = 0
     }
 
-    private fun iconRow(item: NavigationBarIconConfig.NavItem): View {
-        val entry = editingEntry ?: return View(this)
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(14.dp, 8.dp, 14.dp, 8.dp)
-            background = UiCorner.opaqueRounded(
-                context.themeCardColorOrDefault(),
-                UiCorner.actionRadius(context)
-            )
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = 8.dp
+    // W3.2：原 iconRow/singleIconRow/previewButton/singlePreviewButton(View) 改为图标行数据构建器
+    private fun buildNavBarIconRows(): List<NavBarIconRow> {
+        val entry = editingEntry ?: return emptyList()
+        val config = pendingConfig ?: return emptyList()
+        editVersion
+        return NavigationBarIconConfig.items
+            .filter { config.layoutMode == "sidebar" || it.key != "ai" }
+            .let { NavigationBarIconConfig.extraItems + it }
+            .map { item ->
+                val previews = if (item.menuId == 0) {
+                    listOf(navIconPreview(entry, item, single = true))
+                } else {
+                    listOf(
+                        navIconPreview(entry, item, single = false, selected = false),
+                        navIconPreview(entry, item, single = false, selected = true)
+                    )
+                }
+                NavBarIconRow(titleRes = item.titleRes, previews = previews)
             }
-            addView(TextView(context).apply {
-                setText(item.titleRes)
-                textSize = 15f
-                setTextColor(primaryTextColor)
-                typeface = this@NavigationBarManageActivity.uiTypeface()
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            })
-            addView(previewButton(entry, item, false))
-            addView(previewButton(entry, item, true))
-        }
     }
 
-    private fun singleIconRow(item: NavigationBarIconConfig.NavItem): View {
-        val entry = editingEntry ?: return View(this)
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(14.dp, 8.dp, 14.dp, 8.dp)
-            background = UiCorner.opaqueRounded(
-                context.themeCardColorOrDefault(),
-                UiCorner.actionRadius(context)
-            )
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = 8.dp
-            }
-            addView(TextView(context).apply {
-                setText(item.titleRes)
-                textSize = 15f
-                setTextColor(primaryTextColor)
-                typeface = this@NavigationBarManageActivity.uiTypeface()
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            })
-            addView(singlePreviewButton(entry, item))
+    private fun navIconPreview(
+        entry: NavigationBarIconConfig.Entry,
+        item: NavigationBarIconConfig.NavItem,
+        single: Boolean,
+        selected: Boolean = false
+    ): NavBarIconPreview {
+        val drawable = if (single) {
+            NavigationBarIconConfig.previewSingleDrawable(this, entry, item)
+        } else {
+            NavigationBarIconConfig.previewDrawable(this, entry, item, selected)
         }
-    }
-
-    private fun singlePreviewButton(entry: NavigationBarIconConfig.Entry, item: NavigationBarIconConfig.NavItem): ImageView {
-        return ImageView(this).apply {
-            contentDescription = getString(item.titleRes)
-            setPadding(8.dp, 8.dp, 8.dp, 8.dp)
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-            setImageDrawable(NavigationBarIconConfig.previewSingleDrawable(this@NavigationBarManageActivity, entry, item))
-            background = UiCorner.actionSelector(
-                context.themeMutedColorOrDefault(),
-                context.themeCardColorOrDefault(),
-                UiCorner.actionRadius(context)
-            )
-            layoutParams = LinearLayout.LayoutParams(44.dp, 44.dp).apply { marginStart = 8.dp }
-            setOnClickListener {
-                showComposeChoiceListDialog(
-                    contentDescription,
-                    listOf(getString(R.string.select_image), getString(R.string.delete))
-                ) { index ->
+        val desc = getString(
+            when {
+                single -> item.titleRes
+                selected -> R.string.navigation_icon_selected
+                else -> R.string.navigation_icon_normal
+            }
+        )
+        return NavBarIconPreview(drawable, desc) {
+            if (single) {
+                showComposeChoiceListDialog(desc, listOf(getString(R.string.select_image), getString(R.string.delete))) { index ->
                     if (index == 0) {
                         val code = requestSingleIconBase + NavigationBarIconConfig.extraItems.indexOf(item)
                         pendingIconRequest = IconRequest(code, entry, item, selected = false, single = true)
@@ -804,27 +793,8 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
                         loadPackages()
                     }
                 }
-            }
-        }
-    }
-
-    private fun previewButton(entry: NavigationBarIconConfig.Entry, item: NavigationBarIconConfig.NavItem, selected: Boolean): ImageView {
-        return ImageView(this).apply {
-            contentDescription = getString(if (selected) R.string.navigation_icon_selected else R.string.navigation_icon_normal)
-            setPadding(8.dp, 8.dp, 8.dp, 8.dp)
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-            setImageDrawable(NavigationBarIconConfig.previewDrawable(this@NavigationBarManageActivity, entry, item, selected))
-            background = UiCorner.actionSelector(
-                context.themeMutedColorOrDefault(),
-                context.themeCardColorOrDefault(),
-                UiCorner.actionRadius(context)
-            )
-            layoutParams = LinearLayout.LayoutParams(44.dp, 44.dp).apply { marginStart = 8.dp }
-            setOnClickListener {
-                showComposeChoiceListDialog(
-                    contentDescription,
-                    listOf(getString(R.string.select_image), getString(R.string.delete))
-                ) { index ->
+            } else {
+                showComposeChoiceListDialog(desc, listOf(getString(R.string.select_image), getString(R.string.delete))) { index ->
                     if (index == 0) {
                         val code = NavigationBarIconConfig.items.indexOf(item) * 2 + if (selected) 1 else 0
                         pendingIconRequest = IconRequest(code, entry, item, selected)
@@ -846,14 +816,14 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
         }
     }
 
-    private fun saveEditingPackage() {
+    // W3.2：名称改由 Dialog 输入框回传（原 editingDialog.findViewWithTag("name") View 取值废弃）
+    private fun saveEditingPackage(name: String) {
         val config = pendingConfig ?: return
         normalizeStandardBottomConfig(config)
-        val name = editingDialog?.findViewWithTag<EditText>("name")?.text?.toString()?.trim().orEmpty()
         lifecycleScope.launch {
             kotlin.runCatching {
                 withContext(Dispatchers.IO) {
-                    NavigationBarIconConfig.addOrUpdate(config.copy(name = name), editingEntry)
+                    NavigationBarIconConfig.addOrUpdate(config.copy(name = name.trim()), editingEntry)
                 }
             }.onSuccess {
                 if (notifyAppliedIfNeeded(it)) {
@@ -1280,6 +1250,224 @@ private fun BottomNavItemsManageContent(
                         )
                     }
                 )
+            }
+        }
+    }
+}
+
+/**
+ * W3.2 编辑弹框行数据（原 buildEditView 的 optionRow View 行的数据化）
+ */
+data class NavBarEditRow(
+    val title: String,
+    val value: String,
+    val onClick: () -> Unit
+)
+
+/**
+ * W3.2 图标预览单元（原 previewButton/singlePreviewButton ImageView 的数据化）
+ * drawable 由 NavigationBarIconConfig.preview*Drawable 生成，Compose 侧 AndroidView 包装渲染
+ */
+data class NavBarIconPreview(
+    val drawable: Drawable?,
+    val contentDesc: String,
+    val onClick: () -> Unit
+)
+
+data class NavBarIconRow(
+    @StringRes val titleRes: Int,
+    val previews: List<NavBarIconPreview>
+)
+
+/**
+ * W3.2：底栏主题编辑弹框（替代原 alert{customView=ScrollView 包 buildEditView}，MC-7 合规）
+ * 纯壳设计：行数据/图标数据由 Activity provider 提供（读取 Activity.editVersion 建立重组依赖），
+ * 配置交互回调直接走 Activity 方法，保存时回传名称（原 EditText findViewWithTag 取值废弃）
+ */
+class NavigationBarEditDialog : ComposeDialogFragment() {
+
+    override val dialogSize: AppDialogSize = AppDialogSize.Management
+
+    private var dialogTitle: String = ""
+    private var initialName: String = ""
+    private var rowsProvider: (() -> List<NavBarEditRow>)? = null
+    private var iconRowsProvider: (() -> List<NavBarIconRow>)? = null
+    private var onSave: ((String) -> Unit)? = null
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                val style = rememberAppDialogStyle()
+                CompositionLocalProvider(
+                    LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
+                ) {
+                    var name by rememberSaveable { mutableStateOf(initialName) }
+                    AppDialogFrame(
+                        title = dialogTitle,
+                        content = {
+                            Column {
+                                OutlinedTextField(
+                                    value = name,
+                                    onValueChange = { name = it },
+                                    label = { Text(stringResource(R.string.navigation_bar_name)) },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                                )
+                                val rows = rowsProvider?.invoke().orEmpty()
+                                val palette = rememberAppManagementPalette()
+                                rows.forEach { row ->
+                                    AppManagementListRow(
+                                        title = row.title,
+                                        subtitle = row.value,
+                                        palette = palette,
+                                        onClick = row.onClick
+                                    )
+                                }
+                                val iconRows = iconRowsProvider?.invoke().orEmpty()
+                                iconRows.forEach { iconRow ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = stringResource(iconRow.titleRes),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        iconRow.previews.forEach { preview ->
+                                            AndroidView(
+                                                factory = { context ->
+                                                    ImageView(context).apply {
+                                                        scaleType = ImageView.ScaleType.CENTER_INSIDE
+                                                        val d = context.resources.displayMetrics.density
+                                                        setPadding((8 * d).toInt(), (8 * d).toInt(), (8 * d).toInt(), (8 * d).toInt())
+                                                    }
+                                                },
+                                                update = { iv ->
+                                                    iv.contentDescription = preview.contentDesc
+                                                    iv.setImageDrawable(preview.drawable)
+                                                },
+                                                modifier = Modifier
+                                                    .size(44.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .clickable(onClick = preview.onClick)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        actions = {
+                            val miuixPalette = style.toMiuixPalette()
+                            LegadoMiuixActionButton(
+                                text = stringResource(R.string.cancel),
+                                palette = miuixPalette,
+                                onClick = { dismissAllowingStateLoss() },
+                                cornerRadius = style.actionRadius
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            LegadoMiuixActionButton(
+                                text = stringResource(R.string.ok),
+                                palette = miuixPalette,
+                                onClick = {
+                                    dismissAllowingStateLoss()
+                                    onSave?.invoke(name)
+                                },
+                                primary = true,
+                                cornerRadius = style.actionRadius
+                            )
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    companion object {
+        fun create(
+            title: String,
+            initialName: String,
+            rowsProvider: () -> List<NavBarEditRow>,
+            iconRowsProvider: () -> List<NavBarIconRow>,
+            onSave: (String) -> Unit
+        ): NavigationBarEditDialog {
+            return NavigationBarEditDialog().apply {
+                this.dialogTitle = title
+                this.initialName = initialName
+                this.rowsProvider = rowsProvider
+                this.iconRowsProvider = iconRowsProvider
+                this.onSave = onSave
+            }
+        }
+    }
+}
+
+/**
+ * W3.2：底栏栏项管理弹框壳（替代原 alert{customView 塞 ComposeView}，MC-7 合规）
+ * 内容复用既有 [BottomNavItemsManageContent]（拖拽排序+可见开关），确定按钮仅关闭（改动即时保存）
+ */
+class NavigationBarItemsDialog : ComposeDialogFragment() {
+
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
+
+    private var initialItems: List<MainBottomNavConfig.ItemState> = emptyList()
+    private var onItemsChange: ((List<MainBottomNavConfig.ItemState>) -> Unit)? = null
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        val changeCallback = onItemsChange
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                val style = rememberAppDialogStyle()
+                CompositionLocalProvider(
+                    LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
+                ) {
+                    AppDialogFrame(
+                        title = stringResource(R.string.bottom_bar_items_manage),
+                        content = {
+                            BottomNavItemsManageContent(
+                                initialItems = initialItems,
+                                onItemsChange = { changeCallback?.invoke(it) }
+                            )
+                        },
+                        actions = {
+                            LegadoMiuixActionButton(
+                                text = stringResource(R.string.ok),
+                                palette = style.toMiuixPalette(),
+                                onClick = { dismissAllowingStateLoss() },
+                                primary = true,
+                                cornerRadius = style.actionRadius
+                            )
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    companion object {
+        fun create(
+            initialItems: List<MainBottomNavConfig.ItemState>,
+            onItemsChange: (List<MainBottomNavConfig.ItemState>) -> Unit
+        ): NavigationBarItemsDialog {
+            return NavigationBarItemsDialog().apply {
+                this.initialItems = initialItems
+                this.onItemsChange = onItemsChange
             }
         }
     }
