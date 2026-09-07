@@ -6,18 +6,19 @@ import io.legado.app.data.entities.SearchRssArticle
 /**
  * 订阅源搜索多源文章共享 Holder（rss-unified-search 新增）
  *
- * 用于在 [RssSearchAdapter] 点击进入详情页时，将多源文章映射传递给详情页（RssArticleInfoActivity /
+ * 用于在 [RssSearchActivity]（my-compose-full W2.1 前 [RssSearchAdapter]，已 Compose 化移除）点击进入
+ * 详情页时，将多源文章映射传递给详情页（RssArticleInfoActivity /
  * ReadRssActivity / VideoPlayerActivity），详情页通过"换源"菜单弹出 [ChangeRssArticleSourceDialog]
  * 时读取此 Holder 中的数据。
  *
  * 设计依据：rss-unified-search design.md §5
  *
  * 遗漏点 37 修复：使用 @Volatile 保证跨线程可见性
- * - 写入：RssSearchAdapter 主线程调用 showArticleInfo 时写入
+ * - 写入：RssSearchActivity 主线程调用 showArticleInfo 时写入
  * - 读取：ChangeRssArticleSourceDialog 内 IO 线程查询订阅源信息时读取
  *
  * 生命周期：
- * - 写入时机：RssSearchAdapter.showArticleInfo 调用 startActivity 跳转详情页之前
+ * - 写入时机：RssSearchActivity.showArticleInfo 调用 startActivity 跳转详情页之前
  * - 清理时机：RssArticleInfoActivity.onDestroy / ReadRssActivity.onDestroy / VideoPlayerActivity.onDestroy
  */
 object RssSearchSourceHolder {

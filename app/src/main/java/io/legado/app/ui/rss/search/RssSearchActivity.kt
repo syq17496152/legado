@@ -14,13 +14,12 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.google.android.flexbox.FlexboxLayoutManager
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppLog
@@ -32,10 +31,9 @@ import io.legado.app.help.config.AppConfig
 
 import io.legado.app.lib.theme.Selector
 import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.backgroundColor
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.about.AppLogDialog
+import io.legado.app.ui.book.search.SearchInputHelpScreen
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppDropdownMenu
@@ -44,10 +42,8 @@ import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyNavigationBarMargin
-import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
-import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -69,22 +65,19 @@ import kotlinx.coroutines.launch
  * - 搜索结果跳转通过 [ReadRss.readRss]（先转 RssArticle 再 toRecord）
  * - 历史记录使用 type=1（订阅源搜索历史），与书源 type=0 隔离
  *
+ * my-compose-full W2.1：内容区（结果列表/输入帮助区）Compose 化，
+ * RssSearchAdapter/RssSearchHistoryAdapter（View 版）随迁移除，
+ * 结果列表复用 [RssSearchResultScreen]、输入帮助区直接复用书源搜索的 [SearchInputHelpScreen]
+ * （订阅源无书架概念，bookshelfBooks 传空列表）。
+ *
  * 设计依据：rss-unified-search design.md §4.2 / §5
  */
 class RssSearchActivity :
-    VMBaseActivity<ActivityRssSearchBinding, RssSearchViewModel>(),
-    RssSearchAdapter.CallBack,
-    RssSearchHistoryAdapter.CallBack {
+    VMBaseActivity<ActivityRssSearchBinding, RssSearchViewModel>() {
 
     override val binding by viewBinding(ActivityRssSearchBinding::inflate)
     override val viewModel by viewModels<RssSearchViewModel>()
 
-    private val adapter by lazy { RssSearchAdapter(this, this) }
-    private val historyKeyAdapter by lazy {
-        RssSearchHistoryAdapter(this, this).apply {
-            setHasStableIds(true)
-        }
-    }
     // rss-search-compose 壳层化：Compose 顶栏搜索/菜单状态（替代原 SearchView + Menu）
     private var composeSearchQuery by mutableStateOf("")
     private var menuExpanded by mutableStateOf(false)
@@ -92,10 +85,15 @@ class RssSearchActivity :
     private var composeGroups by mutableStateOf(listOf<String>())
     private var historyFlowJob: Job? = null
     private var isManualStopSearch = false
+    // W2.1 内容区 Compose 化：列表/历史快照状态驱动（替代 RecyclerView Adapter）
+    private var searchResults by mutableStateOf(listOf<SearchRssArticle>())
+    private var historyKeywords by mutableStateOf(listOf<SearchKeyword>())
+    private var hasSearched by mutableStateOf(false)
+    private var resultScrollToTopSignal by mutableIntStateOf(0)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.llInputHelp.setBackgroundColor(backgroundColor)
-        initRecyclerView()
+        initResultsCompose()
+        initInputHelpCompose()
         initComposeTopBar()
         initOtherView()
         initData()
@@ -133,9 +131,10 @@ class RssSearchActivity :
                         query = composeSearchQuery,
                         onQueryChange = {
                             composeSearchQuery = it
-                            // 输入变化：停止当前搜索，隐藏 FAB，更新搜索历史
+                            // 输入变化：停止当前搜索，隐藏 FAB，回到搜索历史，清空结果空态标记
                             viewModel.stop()
                             binding.fbStartStop.invisible()
+                            hasSearched = false
                             upHistory(it.trim())
                             visibleInputHelp(true)
                         },
@@ -144,6 +143,39 @@ class RssSearchActivity :
                     )
                 }
             }
+        }
+    }
+
+    // W2.1：搜索结果列表 Compose 渲染（替代 RecyclerView + RssSearchAdapter）
+    private fun initResultsCompose() {
+        binding.composeResults.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        binding.composeResults.setContent {
+            RssSearchResultScreen(
+                articles = searchResults,
+                isLoading = viewModel.isSearchLiveData.value == true,
+                hasSearched = hasSearched,
+                scrollToTopSignal = resultScrollToTopSignal,
+                onArticleClick = { showArticleInfo(it) }
+            )
+        }
+    }
+
+    // W2.1：输入帮助区（搜索历史）复用书源搜索 Compose 组件，订阅源无书架概念传空列表
+    private fun initInputHelpCompose() {
+        binding.composeInputHelp.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        binding.composeInputHelp.setContent {
+            SearchInputHelpScreen(
+                bookshelfBooks = emptyList(),
+                historyKeywords = historyKeywords,
+                onBookClick = { },
+                onHistoryClick = { searchHistory(it) },
+                onHistoryDelete = { deleteHistory(it) },
+                onClearHistory = { alertClearHistory() }
+            )
         }
     }
 
@@ -264,38 +296,12 @@ class RssSearchActivity :
     private fun submitSearch(query: String) {
         query.trim().let { searchKey ->
             isManualStopSearch = false
+            hasSearched = true
             viewModel.saveSearchKey(searchKey)
             viewModel.searchKey = ""
             viewModel.search(searchKey)
         }
         visibleInputHelp(false)
-    }
-
-    private fun initRecyclerView() {
-        binding.recyclerView.setEdgeEffectColor(primaryColor)
-        binding.rvHistoryKey.setEdgeEffectColor(primaryColor)
-        binding.rvHistoryKey.layoutManager = FlexboxLayoutManager(this)
-        binding.rvHistoryKey.adapter = historyKeyAdapter
-        binding.rvHistoryKey.applyNavigationBarMargin()
-        binding.recyclerView.layoutManager = LinearLayoutManager(this)
-        binding.recyclerView.adapter = adapter
-        binding.recyclerView.itemAnimator = null
-        binding.recyclerView.applyNavigationBarPadding()
-        adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
-            override fun onItemRangeInserted(positionStart: Int, itemCount: Int) {
-                super.onItemRangeInserted(positionStart, itemCount)
-                if (positionStart == 0) {
-                    binding.recyclerView.scrollToPosition(0)
-                }
-            }
-
-            override fun onItemRangeMoved(fromPosition: Int, toPosition: Int, itemCount: Int) {
-                super.onItemRangeMoved(fromPosition, toPosition, itemCount)
-                if (toPosition == 0) {
-                    binding.recyclerView.scrollToPosition(0)
-                }
-            }
-        })
     }
 
     private fun initOtherView() {
@@ -314,7 +320,6 @@ class RssSearchActivity :
             }
         }
         binding.fbStartStop.applyNavigationBarMargin(true)
-        binding.tvClearHistory.setOnClickListener { alertClearHistory() }
     }
 
     private fun initData() {
@@ -335,7 +340,13 @@ class RssSearchActivity :
             }
         }
         viewModel.searchRssLiveData.observe(this) {
-            adapter.setItems(it)
+            // 新搜索会以更短的列表重置（流式追加则只增长），据此判断是否需要回到顶部
+            val isFreshSearch = it.size < searchResults.size ||
+                (it.isNotEmpty() && searchResults.isNotEmpty() && it.first().deduplicationKey() != searchResults.first().deduplicationKey())
+            searchResults = it
+            if (isFreshSearch) {
+                resultScrollToTopSignal++
+            }
         }
         // 订阅源分组数据（用于菜单显示）
         lifecycleScope.launch {
@@ -388,12 +399,7 @@ class RssSearchActivity :
             }.catch {
                 AppLog.put("订阅源搜索界面获取搜索历史数据失败\n${it.localizedMessage}", it)
             }.flowOn(IO).conflate().collect {
-                historyKeyAdapter.setItems(it)
-                if (it.isEmpty()) {
-                    binding.tvClearHistory.invisible()
-                } else {
-                    binding.tvClearHistory.visible()
-                }
+                historyKeywords = it
             }
         }
     }
@@ -446,12 +452,12 @@ class RssSearchActivity :
      *
      * 设计依据：rss-unified-search design.md §5（用户反馈"按书源逻辑应有详情页"）
      */
-    override fun showArticleInfo(article: SearchRssArticle) {
+    private fun showArticleInfo(article: SearchRssArticle) {
         // 保存搜索结果数据到 Holder，供详情页读取
         RssSearchSourceHolder.searchArticle = article
         RssSearchSourceHolder.articles = article.originArticles
         // 将搜索结果列表转为 List<RssArticle>，供播放页上/下一个切换（废除 AD-07 简化原则）
-        RssSearchSourceHolder.rssArticles = adapter.getItems().mapNotNull { it.getDefaultArticle() }
+        RssSearchSourceHolder.rssArticles = searchResults.mapNotNull { it.getDefaultArticle() }
         // 跳转详情页
         startActivity<RssArticleInfoActivity>()
     }
@@ -459,7 +465,7 @@ class RssSearchActivity :
     /**
      * 点击历史关键字，直接发起搜索
      */
-    override fun searchHistory(key: String) {
+    private fun searchHistory(key: String) {
         composeSearchQuery = key
         submitSearch(key)
     }
@@ -467,7 +473,7 @@ class RssSearchActivity :
     /**
      * 删除搜索记录
      */
-    override fun deleteHistory(searchKeyword: SearchKeyword) {
+    private fun deleteHistory(searchKeyword: SearchKeyword) {
         viewModel.deleteHistory(searchKeyword)
     }
 

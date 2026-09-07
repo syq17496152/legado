@@ -1,14 +1,25 @@
 package io.legado.app.ui.main.my
 
+import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.View
-import android.view.ViewGroup
-import androidx.core.view.isVisible
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Subscriptions
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
 import io.legado.app.constant.EventBus
@@ -16,15 +27,8 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.databinding.FragmentMyConfigBinding
 import io.legado.app.service.WebService
 import io.legado.app.ui.main.MainFragmentInterface
-import io.legado.app.ui.widget.MainTopBarView
-import android.content.Context
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Collections
-import androidx.compose.material.icons.filled.Subscriptions
-import androidx.compose.material.icons.filled.Schedule
-import androidx.lifecycle.lifecycleScope
 import io.legado.app.data.appDb
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MetricItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -36,7 +40,6 @@ import io.legado.app.utils.getPrefString
 import io.legado.app.utils.observeEventSticky
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.showHelp
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.LogUtils
 
@@ -64,7 +67,6 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         requireContext().putPrefBoolean(PreferKey.webService, WebService.isRun)
-        initTopBar()
         installComposeContent()
         updateSettingsState()
     }
@@ -108,32 +110,33 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
         }
     }
 
-    // 顶栏对齐 Archive MainTopBarView（Mode.MY）：标题 + 搜索按钮 + 更多菜单；样式受顶栏/主题设置全量管理
-    // header-search-unify：关闭 searchEntry 胶囊（仅保留 searchButton → 全屏设置搜索页），形态对齐订阅页
-    private fun initTopBar() {
-        binding.topBar.applyStatusBarPadding(withInitialPadding = true)
-        binding.topBar.setMode(MainTopBarView.Mode.MY)
-        binding.topBar.setTitle(getString(R.string.my))
-        binding.topBar.setSearchEntryVisible(false)
-        binding.topBar.searchButton.setOnClickListener {
-            SettingsSearchActivity.start(requireContext())
-        }
-        // topbar-icon-semantics-fix 3.4：帮助恢复一级问号图标（原版 main_my.xml menu_help always；
-        // 此前 moreButton 点击直接弹帮助，视觉语义不符）。原版 main_my.xml 仅 help 一项，
-        // 恢复一级后溢出无剩余项，moreButton 隐藏（走 addActionButton/actionsBar 插槽统一染色与风格适配）
-        binding.topBar.addActionButton(R.drawable.ic_help, R.string.help) { showHelp("appHelp") }
-        binding.topBar.moreButton.isVisible = false
-    }
-
+    // my-compose-full W2.4：Compose 壳——顶栏（GlassTopAppBar，透壁纸语义）+ 内容（MySettingsScreen）
+    // 同一 ComposeView 渲染，替代原 MainTopBarView Mode.MY + preFragment 动态插 ComposeView 双层结构。
+    // 路由逻辑零改动：onRowClick → handleSettingsRowClick，搜索入口 → SettingsSearchActivity，
+    // 帮助 → showHelp（原 topbar-icon-semantics-fix 3.4 语义：help 一级图标保留）
     private fun installComposeContent() {
-        binding.preFragment.removeAllViews()
-        val composeView = ComposeView(requireContext()).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
+        binding.composeHost.setContent {
+            Column {
+                // GlassTopAppBar 无 modifier 槽，状态栏避让由外层 Box 承担（等价原 applyStatusBarPadding）
+                Box(modifier = Modifier.statusBarsPadding()) {
+                    GlassTopAppBar(
+                        title = getString(R.string.my),
+                        actions = {
+                            IconButton(onClick = { SettingsSearchActivity.start(requireContext()) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = getString(R.string.search)
+                                )
+                            }
+                            IconButton(onClick = { showHelp("appHelp") }) {
+                                Icon(
+                                    imageVector = Icons.Default.HelpOutline,
+                                    contentDescription = getString(R.string.help)
+                                )
+                            }
+                        }
+                    )
+                }
                 MySettingsScreen(
                     sections = sections,
                     subSearchItems = subSearchItems,
@@ -165,7 +168,6 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
                 )
             }
         }
-        binding.preFragment.addView(composeView)
     }
 
     private fun updateSettingsState() {

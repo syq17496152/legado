@@ -7,16 +7,13 @@
     android:orientation="vertical"
     tools:context="io.legado.app.ui.about.AboutActivity">
 
-    <io.legado.app.ui.widget.MainTopBarView
-        android:id="@+id/title_bar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+    <!-- my-compose-full W2.2：顶栏由 installGlassTopBar 运行时插入 ComposeView，原 MainTopBarView 节点移除 -->
 
+    <!-- 壳纯化：去掉自绘圆角卡背景，透壁纸（背景由 installGlassTopBar 插入的顶栏承载） -->
     <LinearLayout
         android:id="@+id/ll_about"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/shape_card_view"
         android:orientation="vertical"
         android:layout_margin="6dp"
         android:padding="10dp">

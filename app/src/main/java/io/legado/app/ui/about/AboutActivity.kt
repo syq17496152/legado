@@ -4,14 +4,16 @@ import android.os.Bundle
 import android.text.Spannable
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.StarRate
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
 import io.legado.app.databinding.ActivityAboutBinding
-import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.themeCardColorOrDefault
-import io.legado.app.ui.widget.MainTopBarView
-import io.legado.app.utils.applyStatusBarPadding
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.share
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -23,10 +25,6 @@ class AboutActivity : BaseActivity<ActivityAboutBinding>() {
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initTopBar()
-        binding.llAbout.background = UiCorner.opaqueRounded(
-            themeCardColorOrDefault(),
-            UiCorner.panelRadius(this)
-        )
         val fTag = "aboutFragment"
         var aboutFragment = supportFragmentManager.findFragmentByTag(fTag)
         if (aboutFragment == null) aboutFragment = AboutFragment()
@@ -48,18 +46,30 @@ class AboutActivity : BaseActivity<ActivityAboutBinding>() {
         }
     }
 
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.about))
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
-        addActionButton(R.drawable.ic_scoring, R.string.scoring) {
-            openUrl("market://details?id=$packageName")
-        }
-        addActionButton(R.drawable.ic_share, R.string.share) {
-            share(getString(R.string.app_share_description_sigma), getString(R.string.app_name))
-        }
+    // my-compose-full W2.2：壳纯化——顶栏运行时替换为 GlassTopAppBar（透壁纸语义），
+    // 原 MainTopBarView Mode.SUB 与 llAbout 自绘卡背景（UiCorner）一并移除
+    private fun initTopBar() {
+        installGlassTopBar(
+            binding,
+            titleProvider = { getString(R.string.about) },
+            actionsProvider = {
+                listOf(
+                    MenuAction(
+                        icon = Icons.Filled.StarRate,
+                        title = getString(R.string.scoring),
+                        alwaysShow = true
+                    ) { openUrl("market://details?id=$packageName") },
+                    MenuAction(
+                        icon = Icons.Filled.Share,
+                        title = getString(R.string.share),
+                        alwaysShow = true
+                    ) {
+                        share(getString(R.string.app_share_description_sigma), getString(R.string.app_name))
+                    }
+                )
+            },
+            onBack = { finish() }
+        )
     }
 
 }

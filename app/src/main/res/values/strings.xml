@@ -308,6 +308,7 @@
     <string name="del_all">Delete all</string>
     <string name="searchHistory">Search history</string>
     <string name="search_history_empty">No search history yet</string>
+    <string name="rss_search_result_empty">No results found</string>
     <string name="clear">Clear</string>
     <string name="filter">Filter</string>
     <string name="filter_all">All</string>

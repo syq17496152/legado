@@ -306,6 +306,7 @@
     <string name="del_all">删除所有</string>
     <string name="searchHistory">搜索历史</string>
     <string name="search_history_empty">暂无搜索历史</string>
+    <string name="rss_search_result_empty">暂无搜索结果</string>
     <string name="clear">清除</string>
     <string name="filter">过滤</string>
     <string name="filter_all">全部</string>
