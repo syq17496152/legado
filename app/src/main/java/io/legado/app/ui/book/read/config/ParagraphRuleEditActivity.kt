@@ -21,12 +21,15 @@ import io.legado.app.model.ReadBook
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.stackTraceStr
 import io.legado.app.ui.code.CodeEditActivity
-import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import io.legado.app.ui.widget.code.addJsPattern
 import io.legado.app.utils.GSON
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getClipText
 import io.legado.app.utils.sendToClip
@@ -44,12 +47,6 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
     private var focusedEditText: EditText? = null
     private var bindToken = 0
     private var bindingLargeRuleFields = false
-    private var fullscreenActionButton: AppCompatImageButton? = null
-    private var saveActionButton: AppCompatImageButton? = null
-    private var debugActionButton: AppCompatImageButton? = null
-    private var copyActionButton: AppCompatImageButton? = null
-    private var pasteActionButton: AppCompatImageButton? = null
-    private var helpActionButton: AppCompatImageButton? = null
 
     private val textEditLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -71,31 +68,59 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
         }
     }
 
-    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原段落规则编辑菜单项迁为 action 插槽图标。 */
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.paragraph_rule_edit))
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
-        fullscreenActionButton = addActionButton(R.drawable.ic_code, R.string.edit_content) { onFullEditClicked() }
-        saveActionButton = addActionButton(R.drawable.ic_save, R.string.action_save) { save() }
-        debugActionButton = addActionButton(R.drawable.ic_bug_report, R.string.debug) { debugRule() }
-        copyActionButton = addActionButton(R.drawable.ic_export, R.string.copy_rule) { sendToClip(GSON.toJson(getRule())) }
-        pasteActionButton = addActionButton(R.drawable.ic_import, R.string.paste_rule) { pasteRule() }
-        helpActionButton = addActionButton(R.drawable.ic_help, R.string.help) { showHelp("paragraphRuleHelp") }
-        updateActionButtonStates()
+    // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar（原 MainTopBarView Mode.SUB 消亡）；
+    // 大字段编辑期禁用编辑类 action（原 updateActionButtonStates 改 Compose 状态驱动）
+    private var topActionsEnabled by mutableStateOf(true)
+
+    private fun initTopBar() {
+        installGlassTopBar(
+            binding,
+            titleProvider = { getString(R.string.paragraph_rule_edit) },
+            actionsProvider = {
+                listOf(
+                    MenuAction(
+                        iconRes = R.drawable.ic_code,
+                        title = getString(R.string.edit_content),
+                        enabled = topActionsEnabled,
+                        alwaysShow = true
+                    ) { onFullEditClicked() },
+                    MenuAction(
+                        iconRes = R.drawable.ic_save,
+                        title = getString(R.string.action_save),
+                        enabled = topActionsEnabled,
+                        alwaysShow = true
+                    ) { save() },
+                    MenuAction(
+                        iconRes = R.drawable.ic_bug_report,
+                        title = getString(R.string.debug),
+                        enabled = topActionsEnabled,
+                        alwaysShow = true
+                    ) { debugRule() },
+                    MenuAction(
+                        iconRes = R.drawable.ic_export,
+                        title = getString(R.string.copy_rule),
+                        enabled = topActionsEnabled,
+                        alwaysShow = true
+                    ) { sendToClip(GSON.toJson(getRule())) },
+                    MenuAction(
+                        iconRes = R.drawable.ic_import,
+                        title = getString(R.string.paste_rule),
+                        enabled = topActionsEnabled,
+                        alwaysShow = true
+                    ) { pasteRule() },
+                    MenuAction(
+                        iconRes = R.drawable.ic_help,
+                        title = getString(R.string.help),
+                        alwaysShow = true
+                    ) { showHelp("paragraphRuleHelp") }
+                )
+            },
+            onBack = { finish() }
+        )
     }
 
     private fun updateActionButtonStates() {
-        val enabled = !bindingLargeRuleFields
-        listOf(
-            fullscreenActionButton,
-            saveActionButton,
-            debugActionButton,
-            copyActionButton,
-            pasteActionButton
-        ).forEach { it?.isEnabled = enabled }
+        topActionsEnabled = !bindingLargeRuleFields
     }
 
     private fun initView() = binding.run {

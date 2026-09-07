@@ -84,7 +84,8 @@ import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.ui.main.bookshelf.compose.BookshelfListRenderConfig
 import io.legado.app.ui.main.bookshelf.compose.rememberBookshelfListRenderConfig
-import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.AppManagementListRow
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
@@ -92,7 +93,6 @@ import io.legado.app.ui.widget.compose.appSettingPanelBackground
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -133,14 +133,18 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
         loadSourceOptions()
     }
 
-    private fun initTopBar() = binding.titleBar.run {
-        // followup F5（B 类风险登记）：WidgetEditor 等多级模式与 View 顶栏联动复杂，迁移 AppManagementScaffold
-        // 风险大，本期保守仅做顶栏基色对齐（backgroundColor 同源，消 primaryColor 断层）
-        overlayOpaqueBackground = true
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { handleBackNavigation() }
+    // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar，标题/动作随 screenModeState 动态桥接
+    //（原 MainTopBarView setTitle+actionsBar 重建链改 Compose 状态驱动）
+    private var topBarTitleState by mutableStateOf("")
+    private var topBarActionsState by mutableStateOf(listOf<MenuAction>())
+
+    private fun initTopBar() {
+        installGlassTopBar(
+            binding,
+            titleProvider = { topBarTitleState },
+            actionsProvider = { topBarActionsState },
+            onBack = { handleBackNavigation() }
+        )
     }
 
     private fun initComposeContent() {
@@ -235,8 +239,8 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
         invalidateOptionsMenu()
     }
 
-    private fun updateTitleBar() = binding.titleBar.run {
-        setTitle(when (val mode = screenModeState) {
+    private fun updateTitleBar() {
+        topBarTitleState = when (val mode = screenModeState) {
             DiscoverySuiteManageMode.List -> getString(R.string.discovery_suite_manage_title)
             is DiscoverySuiteManageMode.Detail -> getString(R.string.discovery_suite_manage)
             is DiscoverySuiteManageMode.WidgetEditor -> {
@@ -248,22 +252,29 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
                     getString(R.string.edit)
                 }
             }
-        })
-        actionsBar.removeAllViews()
-        when (val mode = screenModeState) {
+        }
+        topBarActionsState = when (val mode = screenModeState) {
             DiscoverySuiteManageMode.List -> {
-                addActionButton(R.drawable.ic_add, R.string.discovery_suite_create) {
-                    showCreateSuiteDialog()
-                }
+                listOf(
+                    MenuAction(
+                        iconRes = R.drawable.ic_add,
+                        title = getString(R.string.discovery_suite_create),
+                        alwaysShow = true
+                    ) { showCreateSuiteDialog() }
+                )
             }
             is DiscoverySuiteManageMode.Detail -> {
                 configState.suites.firstOrNull { it.id == mode.suiteId }?.let { suite ->
-                    addActionButton(R.drawable.ic_add, R.string.discovery_suite_add_widget) {
-                        openWidgetEditor(suite, null)
-                    }
-                }
+                    listOf(
+                        MenuAction(
+                            iconRes = R.drawable.ic_add,
+                            title = getString(R.string.discovery_suite_add_widget),
+                            alwaysShow = true
+                        ) { openWidgetEditor(suite, null) }
+                    )
+                } ?: emptyList()
             }
-            is DiscoverySuiteManageMode.WidgetEditor -> Unit
+            is DiscoverySuiteManageMode.WidgetEditor -> emptyList()
         }
     }
 

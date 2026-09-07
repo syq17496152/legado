@@ -6,8 +6,9 @@
     android:layout_height="match_parent"
     tools:context=".ui.book.explore.ExploreShowActivity">
 
-    <io.legado.app.ui.widget.MainTopBarView
-        android:id="@+id/title_bar"
+    <!-- W7.2（Delta 3→1）：MainTopBarView 替换为 ComposeView（GlassTopAppBar），约束链顺延 -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:layout_constraintTop_toTopOf="parent" />
@@ -17,7 +18,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/title_bar">
+        app:layout_constraintTop_toBottomOf="@id/compose_top_bar">
 
         <androidx.compose.ui.platform.ComposeView
             android:id="@+id/compose_list"

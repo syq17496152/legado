@@ -41,14 +41,14 @@ import android.widget.LinearLayout
 /**
  * 菜单动作项，由 [AppMenuSheet] / [AppDropdownMenu] 数据驱动渲染
  *
- * @property icon 图标
+ * @property icon 图标（ImageVector 源；与 [iconRes] 双源二选一，icon 优先）
  * @property title 标题（调用方传 stringResource，遵守 §6.1 禁硬编码中文）
  * @property tint 图标与文字颜色，默认 null 走主题 onSurfaceVariant
  * @property checked 勾选态（复选类菜单），null 不显示勾选标记
  * @property onClick 点击回调
  */
 data class MenuAction(
-    val icon: ImageVector,
+    val icon: ImageVector? = null,
     val title: String,
     val tint: androidx.compose.ui.graphics.Color? = null,
     val checked: Boolean? = null,
@@ -58,6 +58,10 @@ data class MenuAction(
     // AD-04 后原 ConfigTopBar 已消灭）；AppMenuSheet/AppDropdownMenu 忽略。
     // 注意：header=true 是溢出菜单内分组标签，不得与 alwaysShow=true 组合。
     val alwaysShow: Boolean = false,
+    // W7.2（my-compose-full Delta 3→1）：drawable 资源源（原 MainTopBarView addActionButton 页迁移承载）
+    @param:androidx.annotation.DrawableRes val iconRes: Int? = null,
+    // W7.2：启用态（原 addActionButton isEnabled 切换承载，false 时图标不响应点击）
+    val enabled: Boolean = true,
     val onClick: () -> Unit
 )
 
@@ -114,10 +118,8 @@ fun AppMenuSheet(
                         .clickable(onClick = action.onClick)
                         .padding(horizontal = 24.dp)
                 ) {
-                    Icon(
-                        imageVector = action.icon,
-                        contentDescription = action.title,
-                        tint = action.tint ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                    MenuActionIcon(
+                        action = action,
                         modifier = Modifier.width(24.dp)
                     )
                     Spacer(modifier = Modifier.width(20.dp))
@@ -148,12 +150,8 @@ fun RowScope.TopBarActionRow(actions: List<MenuAction>) {
     val overflowActions = actions.filter { !it.alwaysShow || it.header }
     var menuExpanded by remember { mutableStateOf(false) }
     primaryActions.forEach { action ->
-        IconButton(onClick = action.onClick) {
-            Icon(
-                imageVector = action.icon,
-                contentDescription = action.title,
-                modifier = Modifier.size(20.dp)
-            )
+        IconButton(onClick = action.onClick, enabled = action.enabled) {
+            MenuActionIcon(action = action)
         }
     }
     if (overflowActions.isNotEmpty()) {
@@ -175,6 +173,27 @@ fun RowScope.TopBarActionRow(actions: List<MenuAction>) {
 }
 
 /**
+ * MenuAction 图标双源渲染（W7.2）：icon（ImageVector）优先，fallback iconRes（painterResource）。
+ */
+@Composable
+fun MenuActionIcon(action: MenuAction, modifier: Modifier = Modifier) {
+    when {
+        action.icon != null -> Icon(
+            imageVector = action.icon,
+            contentDescription = action.title,
+            tint = action.tint ?: MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = modifier
+        )
+        action.iconRes != null -> Icon(
+            painter = androidx.compose.ui.res.painterResource(action.iconRes),
+            contentDescription = action.title,
+            tint = action.tint ?: MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = modifier
+        )
+    }
+}
+
+/**
  * 运行时顶栏替换（subpage-topbar-unify 二期，共用布局页迁移模式）：
  * 共用布局（如 ActivityThemeManageBinding 14 页）全部迁移前 XML 的 MainTopBarView
  * 节点必须保留；已迁移页在运行时移除该节点并插入 ComposeView 承载 GlassTopAppBar。
@@ -190,7 +209,8 @@ fun ComponentActivity.installGlassTopBar(
     container.findViewById<View>(io.legado.app.R.id.title_bar)?.let { container.removeView(it) }
     val cv = ComposeView(this).apply {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-        layoutParams = android.widget.LinearLayout.LayoutParams(
+        // W7.2：通用 LayoutParams（容器 generateLayoutParams 自转换），兼容非 LinearLayout 根布局
+        layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         )

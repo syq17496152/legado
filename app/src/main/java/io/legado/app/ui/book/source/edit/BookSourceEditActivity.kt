@@ -3,7 +3,6 @@ package io.legado.app.ui.book.source.edit
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.view.MenuItem
 import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -38,8 +37,8 @@ import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
-import io.legado.app.ui.widget.MainTopBarView
-import io.legado.app.ui.widget.ModernActionPopup
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.dialog.UrlOptionDialog
 import io.legado.app.ui.widget.dialog.VariableDialog
 import io.legado.app.ui.widget.keyboard.KeyboardToolPop
@@ -49,7 +48,6 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.imeHeight
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.launch
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.navigationBarHeight
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setEdgeEffectColor
@@ -102,7 +100,6 @@ class BookSourceEditActivity :
     private val softKeyboardTool by lazy {
         KeyboardToolPop(this, lifecycleScope, binding.root, this)
     }
-    private var sourceEditMenuPopup: ModernActionPopup.Handle? = null
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         softKeyboardTool.attachToWindow(window)
@@ -120,48 +117,74 @@ class BookSourceEditActivity :
         }
     }
 
-    /** subpage-topbar-unify: 书源编辑子页头部统一为 MainTopBarView，菜单（15+项）由 moreButton 弹 PopupMenu 承载。 */
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.edit_book_source))
-        titleSelect.setOnClickListener { finish() }
-        // topbar-icon-semantics-fix 3.2：代码/保存/调试恢复一级图标
-        //（对齐原版 source_edit.xml showAsAction=always；addActionButton 走 actionsBar 插槽，
-        //  updateIconColors 统一染色随主题/顶栏刷新，禁硬编码 tint）
-        addActionButton(R.drawable.ic_code, R.string.edit_content) { onFullEditClicked() }
-        addActionButton(R.drawable.ic_save, R.string.action_save) {
-            saveSource(getSource()) {
-                setResult(RESULT_OK, Intent().putExtra("origin", it.bookSourceUrl))
-                finish()
-            }
-        }
-        addActionButton(R.drawable.ic_bug_report, R.string.debug_source) {
-            saveSource(getSource()) { source ->
-                startActivity<BookSourceDebugActivity> {
-                    putExtra("key", source.bookSourceUrl)
+    // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar——代码/保存/调试一级图标 + 溢出菜单
+    //（原 MainTopBarView moreButton+ModernActionPopup menuRes 链删除，条目行为同 onCompatOptionsItemSelected）
+    private fun initTopBar() {
+        installGlassTopBar(
+            binding,
+            titleProvider = { getString(R.string.edit_book_source) },
+            actionsProvider = {
+                buildList {
+                    add(
+                        MenuAction(
+                            iconRes = R.drawable.ic_code,
+                            title = getString(R.string.edit_content),
+                            alwaysShow = true
+                        ) { onFullEditClicked() }
+                    )
+                    add(
+                        MenuAction(
+                            iconRes = R.drawable.ic_save,
+                            title = getString(R.string.action_save),
+                            alwaysShow = true
+                        ) {
+                            saveSource(getSource()) {
+                                setResult(RESULT_OK, Intent().putExtra("origin", it.bookSourceUrl))
+                                finish()
+                            }
+                        }
+                    )
+                    add(
+                        MenuAction(
+                            iconRes = R.drawable.ic_bug_report,
+                            title = getString(R.string.debug_source),
+                            alwaysShow = true
+                        ) {
+                            saveSource(getSource()) { source ->
+                                startActivity<BookSourceDebugActivity> {
+                                    putExtra("key", source.bookSourceUrl)
+                                }
+                            }
+                        }
+                    )
+                    // 登录入口条件显隐（原 prepare 中 menu_login.isVisible 逻辑平移）
+                    if (!getSource().loginUrl.isNullOrBlank()) {
+                        add(
+                            MenuAction(title = getString(R.string.login)) {
+                                handleSourceEditMenuAction(R.id.menu_login)
+                            }
+                        )
+                    }
+                    add(MenuAction(title = getString(R.string.search)) { handleSourceEditMenuAction(R.id.menu_search) })
+                    add(MenuAction(title = getString(R.string.cookie)) { handleSourceEditMenuAction(R.id.menu_clear_cookie) })
+                    add(
+                        MenuAction(
+                            title = getString(R.string.auto_complete),
+                            checked = viewModel.autoComplete
+                        ) { handleSourceEditMenuAction(R.id.menu_auto_complete) }
+                    )
+                    add(MenuAction(title = getString(R.string.copy_source)) { handleSourceEditMenuAction(R.id.menu_copy_source) })
+                    add(MenuAction(title = getString(R.string.paste_source)) { handleSourceEditMenuAction(R.id.menu_paste_source) })
+                    add(MenuAction(title = getString(R.string.set_source_variable)) { handleSourceEditMenuAction(R.id.menu_set_source_variable) })
+                    add(MenuAction(title = getString(R.string.import_by_qr_code)) { handleSourceEditMenuAction(R.id.menu_qr_code_camera) })
+                    add(MenuAction(title = getString(R.string.qr_share)) { handleSourceEditMenuAction(R.id.menu_share_qr) })
+                    add(MenuAction(title = getString(R.string.str_share)) { handleSourceEditMenuAction(R.id.menu_share_str) })
+                    add(MenuAction(title = getString(R.string.log)) { handleSourceEditMenuAction(R.id.menu_log) })
+                    add(MenuAction(title = getString(R.string.help)) { handleSourceEditMenuAction(R.id.menu_help) })
                 }
-            }
-        }
-        moreButton.setOnClickListener { showSourceEditMenu() }
-    }
-
-    private fun showSourceEditMenu() {
-        ModernActionPopup.showFromMenu(
-            anchor = binding.titleBar.moreButton,
-            menuRes = R.menu.source_edit,
-            previousPopup = sourceEditMenuPopup,
-            prepare = {
-                // 代码/保存/调试已恢复为一级图标（3.2），弹出菜单中隐藏避免重复入口
-                findItem(R.id.menu_fullscreen_edit)?.isVisible = false
-                findItem(R.id.menu_save)?.isVisible = false
-                findItem(R.id.menu_debug_source)?.isVisible = false
-                findItem(R.id.menu_login)?.isVisible = !getSource().loginUrl.isNullOrBlank()
-                findItem(R.id.menu_auto_complete)?.isChecked = viewModel.autoComplete
-            }
-        ) {
-            onCompatOptionsItemSelected(it)
-        }
+            },
+            onBack = { finish() }
+        )
     }
 
     private val textEditLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -197,8 +220,9 @@ class BookSourceEditActivity :
         }
     }
 
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
+    // W7.2：原 onCompatOptionsItemSelected 改私有分发（溢出菜单 MenuAction 直调，itemId 语义不变）
+    private fun handleSourceEditMenuAction(itemId: Int) {
+        when (itemId) {
             R.id.menu_fullscreen_edit -> onFullEditClicked()
 
             R.id.menu_save -> saveSource(getSource()) {
@@ -239,7 +263,6 @@ class BookSourceEditActivity :
             }
 
         }
-        return super.onCompatOptionsItemSelected(item)
     }
 
     private fun initView() {

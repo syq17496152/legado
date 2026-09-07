@@ -50,6 +50,7 @@ import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.MenuActionIcon
 import io.legado.app.ui.widget.components.TagChip
 
 data class ImportBookDisplayItem(
@@ -91,7 +92,7 @@ fun ImportBookScreen(
                 //（对齐原版 book_remote.xml/import_book.xml always：刷新/排序/选目录）
                 menuActions.filter { it.alwaysShow }.forEach { action ->
                     IconButton(onClick = action.onClick) {
-                        Icon(action.icon, contentDescription = action.title)
+                        MenuActionIcon(action = action)
                     }
                 }
                 val overflowActions = menuActions.filter { !it.alwaysShow }

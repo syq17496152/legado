@@ -14,11 +14,14 @@ import io.legado.app.data.entities.SearchBook
 import io.legado.app.databinding.ActivityExploreShowBinding
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.ui.book.SearchBookOpenHelper
-import io.legado.app.ui.widget.MainTopBarView
-import io.legado.app.ui.widget.ModernActionPopup
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.TopBarActionRow
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.number.NumberPickerDialog
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.stableSearchBookKey
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
@@ -44,8 +47,7 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
     private var oldPage = -1
     private var isClearAll = false
 
-    // video-regression-fix-0906 AD-05：三点溢出菜单弹窗句柄（ModernActionPopup，书架页同款接线模式）
-    private var moreMenuPopup: ModernActionPopup.Handle? = null
+    // W7.2：原 moreMenuPopup 随 ModernActionPopup 链删除（跳页入口迁 GlassTopAppBar 溢出菜单）
 
     /** video-regression-fix-0906 AD-05：页码跳页（原三横线 pageButton 逻辑收口到三点菜单） */
     private fun showPagePicker() {
@@ -71,23 +73,25 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
             }
     }
 
-    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)。
-     * video-regression-fix-0906 AD-05：moreButton 三点原为死按钮（宿主未接线），
-     * 现接 ModernActionPopup 收纳「第 N 页」跳页；删除三横线 pageButton 消除双按钮功能重复。 */
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(intent.getStringExtra("exploreName"))
-        setSearchEntryVisible(false)
-        // Mode.SUB 下 titleSelect 显示「标题+返回箭头」，点击回退
-        titleSelect.setOnClickListener { finish() }
-        moreButton.setOnClickListener { anchor ->
-            val actions = buildList {
-                add(ModernActionPopup.Action(getString(R.string.menu_page, viewModel.pageLiveData.value ?: 1)) {
-                    showPagePicker()
-                })
+    // W7.2（Delta 3→1）：顶栏归一 GlassTopAppBar（布局 compose_top_bar 直挂），跳页入口收敛至溢出菜单
+    private fun initTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = intent.getStringExtra("exploreName").orEmpty(),
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = { finish() },
+                    actions = {
+                        TopBarActionRow(
+                            listOf(
+                                MenuAction(title = getString(R.string.menu_page, viewModel.pageLiveData.value ?: 1)) {
+                                    showPagePicker()
+                                }
+                            )
+                        )
+                    }
+                )
             }
-            moreMenuPopup = ModernActionPopup.show(anchor, actions, moreMenuPopup)
         }
     }
 

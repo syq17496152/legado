@@ -2,10 +2,11 @@ package io.legado.app.ui.book.source.debug
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.MenuItem
 import android.view.View
 import androidx.activity.viewModels
 import androidx.appcompat.widget.SearchView
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -13,15 +14,16 @@ import io.legado.app.databinding.ActivitySourceDebugBinding
 import io.legado.app.help.source.clearExploreKindsCache
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.lib.dialogs.selector
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.qrcode.QrCodeResult
-import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.dialog.TextDialog
-import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.utils.applyNavigationBarPadding
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.launch
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
@@ -46,7 +48,6 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
             startSearch(it)
         }
     }
-    private var debugMenuPopup: ModernActionPopup.Handle? = null
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initTopBar()
@@ -190,27 +191,35 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
         })
     }
 
-    /** subpage-topbar-unify: 书源调试子页头部统一为 MainTopBarView，搜索框解耦独立驻留，菜单由 moreButton 弹 PopupMenu 承载。 */
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.debug_source))
-        titleSelect.setOnClickListener { finish() }
-        moreButton.setOnClickListener { showDebugMenu() }
-    }
-
-    private fun showDebugMenu() {
-        ModernActionPopup.showFromMenu(
-            anchor = binding.titleBar.moreButton,
-            menuRes = R.menu.book_source_debug,
-            previousPopup = debugMenuPopup
-        ) { menuItem ->
-            onCompatOptionsItemSelected(menuItem)
+    // W7.2（Delta 3→1）：顶栏归一 GlassTopAppBar（布局 compose_top_bar 直挂，ConstraintLayout 页不用运行时替换）
+    private fun initTopBar() {
+        binding.composeTopBar.setContent {
+            LegadoTheme {
+                GlassTopAppBar(
+                    title = getString(R.string.debug_source),
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = { finish() },
+                    actions = {
+                        TopBarActionRow(
+                            listOf(
+                                MenuAction(title = getString(R.string.scan_qr_code)) { handleDebugMenuAction(R.id.menu_scan) },
+                                MenuAction(title = getString(R.string.search_src)) { handleDebugMenuAction(R.id.menu_search_src) },
+                                MenuAction(title = getString(R.string.boo_src)) { handleDebugMenuAction(R.id.menu_book_src) },
+                                MenuAction(title = getString(R.string.toc_src)) { handleDebugMenuAction(R.id.menu_toc_src) },
+                                MenuAction(title = getString(R.string.content_src)) { handleDebugMenuAction(R.id.menu_content_src) },
+                                MenuAction(title = getString(R.string.refresh_explore)) { handleDebugMenuAction(R.id.menu_refresh_explore) },
+                                MenuAction(title = getString(R.string.help)) { handleDebugMenuAction(R.id.menu_help) }
+                            )
+                        )
+                    }
+                )
+            }
         }
     }
 
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
-        when (item.itemId) {
+    // W7.2：原 onCompatOptionsItemSelected 改私有分发（溢出菜单 MenuAction 直调，itemId 语义不变）
+    private fun handleDebugMenuAction(itemId: Int) {
+        when (itemId) {
             R.id.menu_scan -> qrCodeResult.launch()
             R.id.menu_search_src -> showDialogFragment(TextDialog("html", viewModel.searchSrc))
             R.id.menu_book_src -> showDialogFragment(TextDialog("html", viewModel.bookSrc))
@@ -225,7 +234,6 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
 
             R.id.menu_help -> showHelp("debugHelp")
         }
-        return super.onCompatOptionsItemSelected(item)
     }
 
 }

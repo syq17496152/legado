@@ -15,10 +15,10 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReadMenuCustomButton
 import io.legado.app.databinding.ActivityParagraphRuleEditBinding
 import io.legado.app.ui.code.CodeEditActivity
-import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.code.addJsPattern
 import io.legado.app.utils.GSON
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getClipText
 import io.legado.app.utils.postEvent
@@ -35,11 +35,7 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
     override val binding by viewBinding(ActivityParagraphRuleEditBinding::inflate)
     private var button = ReadMenuCustomButton()
     private var focusedEditText: EditText? = null
-    private var fullscreenActionButton: AppCompatImageButton? = null
-    private var saveActionButton: AppCompatImageButton? = null
-    private var copyActionButton: AppCompatImageButton? = null
-    private var pasteActionButton: AppCompatImageButton? = null
-    private var helpActionButton: AppCompatImageButton? = null
+    // W7.2：原 5 个 AppCompatImageButton handle 为死写链（仅赋值无消费），随迁移删除
 
     private val textEditLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -63,18 +59,42 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
         }
     }
 
-    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原菜单项迁为 action 插槽图标（阅读菜单调试项原已隐藏，不添加）。 */
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.read_menu_custom_button_edit))
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
-        fullscreenActionButton = addActionButton(R.drawable.ic_code, R.string.edit_content) { onFullEditClicked() }
-        saveActionButton = addActionButton(R.drawable.ic_save, R.string.action_save) { save() }
-        copyActionButton = addActionButton(R.drawable.ic_export, R.string.copy_rule) { sendToClip(GSON.toJson(getButton())) }
-        pasteActionButton = addActionButton(R.drawable.ic_import, R.string.paste_rule) { pasteButton() }
-        helpActionButton = addActionButton(R.drawable.ic_help, R.string.help) { showHelp("readMenuCustomButtonHelp") }
+    // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar（原 MainTopBarView Mode.SUB 消亡）
+    private fun initTopBar() {
+        installGlassTopBar(
+            binding,
+            titleProvider = { getString(R.string.read_menu_custom_button_edit) },
+            actionsProvider = {
+                listOf(
+                    MenuAction(
+                        iconRes = R.drawable.ic_code,
+                        title = getString(R.string.edit_content),
+                        alwaysShow = true
+                    ) { onFullEditClicked() },
+                    MenuAction(
+                        iconRes = R.drawable.ic_save,
+                        title = getString(R.string.action_save),
+                        alwaysShow = true
+                    ) { save() },
+                    MenuAction(
+                        iconRes = R.drawable.ic_export,
+                        title = getString(R.string.copy_rule),
+                        alwaysShow = true
+                    ) { sendToClip(GSON.toJson(getButton())) },
+                    MenuAction(
+                        iconRes = R.drawable.ic_import,
+                        title = getString(R.string.paste_rule),
+                        alwaysShow = true
+                    ) { pasteButton() },
+                    MenuAction(
+                        iconRes = R.drawable.ic_help,
+                        title = getString(R.string.help),
+                        alwaysShow = true
+                    ) { showHelp("readMenuCustomButtonHelp") }
+                )
+            },
+            onBack = { finish() }
+        )
     }
 
     private fun initView() = binding.run {

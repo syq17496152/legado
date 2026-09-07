@@ -23,10 +23,10 @@ import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.lib.theme.themeMutedColorOrDefault
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.ReadBook
-import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
@@ -54,26 +54,41 @@ class AiReadAloudUsageRecordActivity : BaseActivity<ActivityThemeManageBinding>(
         load()
     }
 
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle("消耗记录")
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
-        addActionButton(R.drawable.ic_screen, R.string.filter) {
-            showTypeFilter()
-        }
-        addActionButton(R.drawable.ic_bottom_books) {
-            currentBookOnly = !currentBookOnly
-            selectedIds.clear()
-            load()
-        }
-        addActionButton(R.drawable.ic_outline_delete, R.string.delete) {
-            deleteSelected()
-        }
-        addActionButton(R.drawable.ic_clear_all, R.string.clear) {
-            confirmClearAll()
-        }
+    // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar（原 MainTopBarView Mode.SUB 消亡）
+    private fun initTopBar() {
+        installGlassTopBar(
+            binding,
+            titleProvider = { "消耗记录" }, // 简化说明:沿承原实现硬编码标题，无既有字符串资源 | 升级路径:补资源后替换
+            actionsProvider = {
+                listOf(
+                    MenuAction(
+                        iconRes = R.drawable.ic_screen,
+                        title = getString(R.string.filter),
+                        alwaysShow = true
+                    ) { showTypeFilter() },
+                    MenuAction(
+                        iconRes = R.drawable.ic_bottom_books,
+                        title = getString(R.string.bookshelf),
+                        alwaysShow = true
+                    ) {
+                        currentBookOnly = !currentBookOnly
+                        selectedIds.clear()
+                        load()
+                    },
+                    MenuAction(
+                        iconRes = R.drawable.ic_outline_delete,
+                        title = getString(R.string.delete),
+                        alwaysShow = true
+                    ) { deleteSelected() },
+                    MenuAction(
+                        iconRes = R.drawable.ic_clear_all,
+                        title = getString(R.string.clear),
+                        alwaysShow = true
+                    ) { confirmClearAll() }
+                )
+            },
+            onBack = { finish() }
+        )
     }
 
     private fun initView() = binding.run {

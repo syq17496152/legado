@@ -33,9 +33,9 @@ import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.lib.theme.themeMutedColorOrDefault
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.utils.MD5Utils
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -146,19 +146,37 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
         super.onDestroy()
     }
 
-    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原「导入/导出 ZIP/新增分组/管理分组」工具栏菜单改为 action 插槽图标。 */
-    private fun initTopBar() = binding.titleBar.run {
-        // followup F5（C 类顶栏对齐）：不透明 backgroundColor 底，消与页面底色的 primaryColor 断层；列表不动
-        overlayOpaqueBackground = true
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle("智能音频")
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
-        addActionButton(R.drawable.ic_download, R.string.import_str) { showImportActions() }
-        addActionButton(R.drawable.ic_export, R.string.export) { exportCurrentAudioPackage() }
-        addActionButton(R.drawable.ic_add, R.string.add) { showGroupEditor() }
-        addActionButton(R.drawable.ic_folder_open, 0) { showGroupManage() }
+    // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar（原 MainTopBarView Mode.SUB 消亡）
+    private fun initTopBar() {
+        installGlassTopBar(
+            binding,
+            titleProvider = { "智能音频" }, // 简化说明:沿承原实现硬编码标题，无既有字符串资源 | 升级路径:补资源后替换
+            actionsProvider = {
+                listOf(
+                    MenuAction(
+                        iconRes = R.drawable.ic_download,
+                        title = getString(R.string.import_str),
+                        alwaysShow = true
+                    ) { showImportActions() },
+                    MenuAction(
+                        iconRes = R.drawable.ic_export,
+                        title = getString(R.string.export),
+                        alwaysShow = true
+                    ) { exportCurrentAudioPackage() },
+                    MenuAction(
+                        iconRes = R.drawable.ic_add,
+                        title = getString(R.string.add),
+                        alwaysShow = true
+                    ) { showGroupEditor() },
+                    MenuAction(
+                        iconRes = R.drawable.ic_folder_open,
+                        title = getString(R.string.group_manage),
+                        alwaysShow = true
+                    ) { showGroupManage() }
+                )
+            },
+            onBack = { finish() }
+        )
     }
 
     private fun initView() = binding.run {

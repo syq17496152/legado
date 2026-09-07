@@ -30,6 +30,7 @@ import io.legado.app.base.VMBaseActivity
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.MenuActionIcon
 import androidx.viewbinding.ViewBinding
 
 /**
@@ -170,9 +171,8 @@ private fun RowScope.ConfigMenuActions(actions: List<MenuAction>) {
     var menuExpanded by remember { mutableStateOf(false) }
     primaryActions.forEach { action ->
         IconButton(onClick = action.onClick) {
-            Icon(
-                imageVector = action.icon,
-                contentDescription = action.title,
+            MenuActionIcon(
+                action = action,
                 // 2.4：action 图标绘制尺寸统一 20dp（bookshelf-refresh-and-title-fix R4）
                 modifier = Modifier.size(20.dp)
             )

@@ -35,13 +35,13 @@ import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
-import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.utils.GSON
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.readText
@@ -124,20 +124,27 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
         load()
     }
 
-    private fun initTopBar() = binding.titleBar.run {
-        // followup F5（C 类顶栏对齐）：不透明 backgroundColor 底，消与页面底色的 primaryColor 断层；列表不动
-        overlayOpaqueBackground = true
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.paragraph_rule_manage))
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
-        addActionButton(R.drawable.ic_import, R.string.import_str) {
-            showImportActions()
-        }
-        addActionButton(R.drawable.ic_help, R.string.help) {
-            showHelp("paragraphRuleHelp")
-        }
+    // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar（原 MainTopBarView Mode.SUB 消亡）
+    private fun initTopBar() {
+        installGlassTopBar(
+            binding,
+            titleProvider = { getString(R.string.paragraph_rule_manage) },
+            actionsProvider = {
+                listOf(
+                    MenuAction(
+                        iconRes = R.drawable.ic_import,
+                        title = getString(R.string.import_str),
+                        alwaysShow = true
+                    ) { showImportActions() },
+                    MenuAction(
+                        iconRes = R.drawable.ic_help,
+                        title = getString(R.string.help),
+                        alwaysShow = true
+                    ) { showHelp("paragraphRuleHelp") }
+                )
+            },
+            onBack = { finish() }
+        )
     }
 
     private fun initView() = binding.run {

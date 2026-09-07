@@ -50,7 +50,7 @@ class MainTopBarView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : LinearLayout(context, attrs), StatusBarInsetAware {
 
-    enum class Mode { BOOKSHELF, DISCOVERY, RSS, READ_RECORD, MY, SUB }
+    enum class Mode { BOOKSHELF, DISCOVERY, RSS, READ_RECORD, MY }
 
     val titleSelect = LinearLayout(context)
     val titleText = TextView(context)
@@ -213,8 +213,9 @@ class MainTopBarView @JvmOverloads constructor(
 
     fun setMode(mode: Mode) {
         this.mode = mode
+        // W7.2（Delta 3→1 终态）：Mode.SUB 枚举删除，本组件仅剩主 Tab 消费
         moreButton.isVisible =
-            mode == Mode.BOOKSHELF || mode == Mode.READ_RECORD || mode == Mode.MY || mode == Mode.SUB
+            mode == Mode.BOOKSHELF || mode == Mode.READ_RECORD || mode == Mode.MY
         searchButton.isVisible = mode == Mode.DISCOVERY || mode == Mode.RSS || mode == Mode.MY
         filterButton.isVisible = mode == Mode.DISCOVERY
         starButton.isVisible = mode == Mode.RSS
@@ -223,22 +224,9 @@ class MainTopBarView @JvmOverloads constructor(
         // 2.1（bookshelf-refresh-and-title-fix）：去除书架 24sp 特判，全主 Tab 统一 20sp
         // （基线 = titleLarge 20sp/Medium，对齐 View ToolbarTitle，主题统一 AD-19）
         titleText.textSize = 20f
-        // subpage-topbar-unify: SUB 子页形态标题左侧显示返回箭头（替代下拉箭头），点击由宿主接 onBackPressed
-        titleArrow.setImageResource(
-            if (mode == Mode.SUB) R.drawable.ic_arrow_back else R.drawable.ic_arrow_drop_down
-        )
-        // SUB 子页为「返回箭头+标题」（箭头在前），主 Tab 保持「标题+下拉箭头」（箭头在后）
-        arrangeTitleSelect(arrowFirst = mode == Mode.SUB)
+        titleArrow.setImageResource(R.drawable.ic_arrow_drop_down)
         titleText.applyUiTitleTypeface(context)
         applyTopBarStyle(force = true)
-    }
-
-    /** subpage-topbar-unify: 调整 titleSelect 内箭头与标题的排列顺序（主 Tab 下拉箭头在后，SUB 返回箭头在前）。 */
-    private fun arrangeTitleSelect(arrowFirst: Boolean) {
-        val wantArrowIndex = if (arrowFirst) 0 else 1
-        if (titleSelect.indexOfChild(titleArrow) == wantArrowIndex) return
-        titleSelect.removeView(titleArrow)
-        titleSelect.addView(titleArrow, wantArrowIndex)
     }
 
     fun setTitle(text: CharSequence) {
@@ -677,11 +665,8 @@ class MainTopBarView @JvmOverloads constructor(
             // （色相+透明度合一，与 GlassTopAppBar/AppManagementTopBar 同源）；wallpaperAlpha
             // 只作用于壁纸图
             val fallbackBase = TopBarConfig.resolvePageBarColorWithAlpha(context, config)
-            subBarContentColor = if (mode == Mode.SUB && file == null) {
-                if (ColorUtils.isColorLight(fallbackBase)) Color.BLACK else Color.WHITE
-            } else {
-                null
-            }
+            // W7.2：Mode.SUB 删除，SUB 无壁纸态内容色特判随之消灭
+            subBarContentColor = null
             ComposeThemeImageState(
                 file = file,
                 animated = ImageTypeUtils.isAnimatedImage(file),
