@@ -1,7 +1,11 @@
 package io.legado.app.ui.book.source.manage
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -47,6 +51,9 @@ internal fun BookSourceScreen(
     sourceHostHeaders: Map<String, String?>,
     debugMessages: Map<String, String>,
     isChecking: Boolean,
+    // 批D：校验进度横幅（原 Snackbar 承载，改 Compose 状态驱动）
+    checkBannerText: String? = null,
+    onCancelCheck: () -> Unit = {},
     reorderEnabled: Boolean,
     onReorder: (List<BookSourcePart>) -> Unit,
     onToggleSelect: (BookSourcePart) -> Unit,
@@ -108,11 +115,21 @@ internal fun BookSourceScreen(
         )
     }
 
-    AppManagementLazyColumn(
-        palette = palette,
-        state = lazyListState,
-        contentPadding = PaddingValues(bottom = 24.dp)
-    ) {
+    // 批D：校验进度横幅（原 Snackbar 承载，校验中显示在列表顶部，可取消）
+    Column(modifier = Modifier.fillMaxSize()) {
+        checkBannerText?.takeIf { it.isNotBlank() }?.let { bannerText ->
+            CheckProgressBanner(
+                text = bannerText,
+                palette = palette,
+                onCancel = onCancelCheck
+            )
+        }
+        AppManagementLazyColumn(
+            palette = palette,
+            state = lazyListState,
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
         if (reorderEnabled) {
             // 手动排序:扁平列表 + 拖动手柄重排(长按仍为多选,不冲突)。
             items(
@@ -158,6 +175,46 @@ internal fun BookSourceScreen(
                 }
             }
         }
+        }
+    }
+}
+
+@Composable
+private fun CheckProgressBanner(
+    text: String,
+    palette: AppManagementPalette,
+    onCancel: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
+    ) {
+        CircularProgressIndicator(
+            color = palette.settings.accent,
+            strokeWidth = 2.dp,
+            modifier = Modifier.size(16.dp)
+        )
+        Text(
+            text = text,
+            color = palette.settings.secondaryText,
+            fontSize = 13.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 8.dp)
+        )
+        Text(
+            text = stringResource(R.string.cancel),
+            color = palette.settings.accent,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier
+                .clickable(onClick = onCancel)
+                .padding(horizontal = 10.dp, vertical = 8.dp)
+        )
     }
 }
 

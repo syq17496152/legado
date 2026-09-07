@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.book.source.manage
+package io.legado.app.ui.book.source.manage
 
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -37,7 +37,6 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.google.android.material.snackbar.Snackbar
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppLog
@@ -60,7 +59,6 @@ import io.legado.app.ui.config.CheckSourceConfig
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
-import io.legado.app.ui.widget.SelectActionBar
 import io.legado.app.ui.widget.compose.AppManagementAction
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementScaffold
@@ -108,8 +106,7 @@ import kotlinx.coroutines.launch
 /**
  * 书源管理界面
  */
-class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceViewModel>(),
-    SelectActionBar.CallBack {
+class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceViewModel>() {
     override val binding by viewBinding(ActivityBookSourceBinding::inflate)
     override val viewModel by viewModels<BookSourceViewModel>()
     private val importRecordKey = "bookSourceRecordKey"
@@ -120,7 +117,8 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         private set
     private var sortAscending = true
         private set
-    private var snackBar: Snackbar? = null
+    // 批D：校验进度横幅（原 Snackbar 改 Compose 状态驱动）
+    private val checkBannerState = mutableStateOf<String?>(null)
     private var groupSourcesByDomain = false
     private val hostMap = hashMapOf<String, String>()
     private val finalMessageRegex = Regex("成功|失败")
@@ -178,10 +176,11 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     private fun initComposeContent() {
         binding.titleBar.visibility = View.GONE
-        binding.selectActionBar.visibility = View.GONE
         val container = binding.recyclerView.parent as? ViewGroup ?: return
         val index = container.indexOfChild(binding.recyclerView)
         container.removeView(binding.recyclerView)
+        // 批D：View 选择栏节点摘除（原 GONE 隐藏，对齐 ReplaceRule 迁移模式）
+        container.removeView(binding.selectActionBar)
         val cv = ComposeView(this).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             layoutParams = ViewGroup.LayoutParams(
@@ -285,6 +284,8 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                         sourceHostHeaders = sourceHostHeaders,
                         debugMessages = debugMessagesState,
                         isChecking = isCheckingState.value,
+                        checkBannerText = checkBannerState.value,
+                        onCancelCheck = ::cancelSourceCheck,
                         reorderEnabled = sort == BookSourceSort.Default &&
                             searchQueryState.value.isBlank() &&
                             !groupSourcesByDomain,
@@ -537,7 +538,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 isSelectMode.value = selectedUrls.value.isNotEmpty()
                 updateSourceHostHeaders(data)
                 refreshDebugMessages()
-                upCountView()
                 delay(500)
             }
         }
@@ -569,24 +569,22 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         }
     }
 
-    override fun selectAll(selectAll: Boolean) {
+    fun selectAll(selectAll: Boolean) {
         if (selectAll) {
             selectedUrls.value = sourcesState.map { it.bookSourceUrl }.toSet()
         } else {
             selectedUrls.value = emptySet()
         }
         isSelectMode.value = selectedUrls.value.isNotEmpty()
-        upCountView()
     }
 
-    override fun revertSelection() {
+    fun revertSelection() {
         val allUrls = sourcesState.map { it.bookSourceUrl }.toSet()
         selectedUrls.value = allUrls - selectedUrls.value
         isSelectMode.value = selectedUrls.value.isNotEmpty()
-        upCountView()
     }
 
-    override fun onClickSelectBarMainAction() {
+    fun onClickSelectBarMainAction() {
         showComposeConfirmDialog(
             title = getString(R.string.draw),
             message = getString(R.string.sure_del),
@@ -597,7 +595,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 viewModel.del(getSelectedSources())
                 selectedUrls.value = emptySet()
                 isSelectMode.value = false
-                upCountView()
             }
         )
     }
@@ -757,21 +754,12 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     override fun observeLiveBus() {
         observeEvent<String>(EventBus.CHECK_SOURCE) { msg ->
-            snackBar?.setText(msg) ?: let {
-                snackBar = Snackbar
-                    .make(binding.root, msg, Snackbar.LENGTH_INDEFINITE)
-                    .setAction(R.string.cancel) {
-                        CheckSource.stop(this)
-                        Debug.finishChecking()
-                        updateCheckingState(false)
-                        refreshDebugMessages(force = true)
-                    }.apply { show() }
-            }
+            // 批D：原 Snackbar 改 Compose 横幅状态（取消动作见 cancelSourceCheck）
+            checkBannerState.value = msg
         }
         observeEvent<Int>(EventBus.CHECK_SOURCE_DONE) {
             keepScreenOn(false)
-            snackBar?.dismiss()
-            snackBar = null
+            checkBannerState.value = null
             updateCheckingState(false)
             refreshDebugMessages(force = true)
             groups.forEach { group ->
@@ -781,6 +769,15 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 }
             }
         }
+    }
+
+    // 批D：校验横幅取消动作（承接原 Snackbar action 逻辑）
+    private fun cancelSourceCheck() {
+        checkBannerState.value = null
+        CheckSource.stop(this)
+        Debug.finishChecking()
+        updateCheckingState(false)
+        refreshDebugMessages(force = true)
     }
 
     private fun startCheckMessageRefreshJob(firstItem: Int, lastItem: Int) {
@@ -814,11 +811,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         }
     }
 
-    private fun upCountView() {
-        binding.selectActionBar
-            .upCountView(getSelectedSources().size, sourcesState.size)
-    }
-
     private fun getSelectedSources(): List<BookSourcePart> {
         val urls = selectedUrls.value
         return sourcesState.filter { it.bookSourceUrl in urls }
@@ -833,7 +825,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         }
         selectedUrls.value = current
         isSelectMode.value = current.isNotEmpty()
-        upCountView()
     }
 
     private fun toggleSourceEnabled(source: BookSourcePart, enabled: Boolean) {
@@ -878,7 +869,6 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         }
         selectedUrls.value = newSelected
         isSelectMode.value = newSelected.isNotEmpty()
-        upCountView()
     }
 
     private fun buildSourceHostHeaders(sources: List<BookSourcePart>): Map<String, String?> {

@@ -1,11 +1,9 @@
-﻿package io.legado.app.ui.rss.source.manage
+package io.legado.app.ui.rss.source.manage
 
 import android.os.Bundle
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.viewModels
-import androidx.appcompat.widget.PopupMenu
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
@@ -23,7 +21,6 @@ import io.legado.app.ui.association.showShibbolethDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
-import io.legado.app.ui.widget.SelectActionBar
 import io.legado.app.ui.widget.compose.AppManagementAction
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementScaffold
@@ -54,9 +51,7 @@ import kotlinx.coroutines.launch
 /**
  * 订阅源管理
  */
-class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceViewModel>(),
-    PopupMenu.OnMenuItemClickListener,
-    SelectActionBar.CallBack {
+class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceViewModel>() {
 
     override val binding by viewBinding(ActivityRssSourceBinding::inflate)
     override val viewModel by viewModels<RssSourceViewModel>()
@@ -107,10 +102,11 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
 
     private fun initComposeContent() {
         binding.titleBar.visibility = View.GONE
-        binding.selectActionBar.visibility = View.GONE
         val container = binding.recyclerView.parent as? ViewGroup ?: return
         val index = container.indexOfChild(binding.recyclerView)
         container.removeView(binding.recyclerView)
+        // 批D：View 选择栏节点摘除（原 GONE 隐藏，对齐 ReplaceRule 迁移模式）
+        container.removeView(binding.selectActionBar)
         val cv = ComposeView(this).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             layoutParams = ViewGroup.LayoutParams(
@@ -253,13 +249,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         )
     }
 
-    private fun initSelectActionBar() {
-        binding.selectActionBar.setMainActionText(R.string.delete)
-        binding.selectActionBar.inflateMenu(R.menu.rss_source_sel)
-        binding.selectActionBar.setOnMenuItemClickListener(this)
-        binding.selectActionBar.setCallBack(this)
-    }
-
     private fun initGroupFlow() {
         lifecycleScope.launch {
             appDb.rssSourceDao.flowGroups().conflate().collect {
@@ -267,21 +256,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
                 groups.addAll(it)
             }
         }
-    }
-
-    override fun onMenuItemClick(item: MenuItem): Boolean {
-        when (item.itemId) {
-            R.id.menu_enable_selection -> enableSelected()
-            R.id.menu_disable_selection -> disableSelected()
-            R.id.menu_add_group -> selectionAddToGroups()
-            R.id.menu_remove_group -> selectionRemoveFromGroups()
-            R.id.menu_top_sel -> topSelected()
-            R.id.menu_bottom_sel -> bottomSelected()
-            R.id.menu_export_selection -> exportSelected()
-            R.id.menu_share_source -> shareSelected()
-            R.id.menu_check_selected_interval -> checkSelectedInterval()
-        }
-        return true
     }
 
     private fun enableSelected() {
@@ -357,25 +331,19 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         )
     }
 
-    override fun selectAll(selectAll: Boolean) {
+    fun selectAll(selectAll: Boolean) {
         if (selectAll) {
             selectedUrls.value = sourcesState.map { it.sourceUrl }.toSet()
         } else {
             selectedUrls.value = emptySet()
         }
         isSelectMode.value = selectedUrls.value.isNotEmpty()
-        upCountView()
     }
 
-    override fun revertSelection() {
+    fun revertSelection() {
         val allUrls = sourcesState.map { it.sourceUrl }.toSet()
         selectedUrls.value = allUrls - selectedUrls.value
         isSelectMode.value = selectedUrls.value.isNotEmpty()
-        upCountView()
-    }
-
-    override fun onClickSelectBarMainAction() {
-        delSourceDialog()
     }
 
     private fun delSourceDialog() {
@@ -433,7 +401,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
                 val currentUrls = it.mapTo(mutableSetOf()) { source -> source.sourceUrl }
                 selectedUrls.value = selectedUrls.value.filter { url -> url in currentUrls }.toSet()
                 isSelectMode.value = selectedUrls.value.isNotEmpty()
-                upCountView()
                 delay(100)
             }
         }
@@ -471,7 +438,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         }
         selectedUrls.value = current
         isSelectMode.value = current.isNotEmpty()
-        upCountView()
     }
 
     private fun toggleSourceEnabled(source: RssSource, enabled: Boolean) {
@@ -568,14 +534,6 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
             newSelected.add(sourcesState[i].sourceUrl)
         }
         selectedUrls.value = newSelected
-        upCountView()
-    }
-
-    private fun upCountView() {
-        binding.selectActionBar.upCountView(
-            getSelectedSources().size,
-            sourcesState.size
-        )
     }
 
 }
