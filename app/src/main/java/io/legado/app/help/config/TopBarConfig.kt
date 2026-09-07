@@ -7,6 +7,8 @@ import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.AppCloudStorage
+import io.legado.app.lib.theme.backgroundColor
+import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.lib.theme.themeColorOrNull
 import io.legado.app.lib.theme.themeMutedColorOrDefault
@@ -307,6 +309,28 @@ object TopBarConfig {
 
     fun resolveBackgroundColor(config: Config): Int {
         return config.backgroundColor ?: defaultBackgroundColor(config.isNightMode)
+    }
+
+    /**
+     * 子页面顶栏背景三级决策链（subpage-topbar-unify AD-01/AD-05）：
+     * 1. 顶栏包显式自定义背景色（hasCustomBackground 值比较判定，避免 defaultConfig 恒填默认色恒真陷阱）
+     * 2. 沉浸开关开启 → 页面底色（context.backgroundColor）
+     * 3. 兜底 → 主题主色（context.primaryColor）
+     *
+     * 本函数是全 App 顶栏语义色唯一权威源（对标 NG topBarContainer 单源模式）：非壁纸态基色
+     * 一律由此产出；壁纸态叠加语义（withOpacity + resolveBackgroundColor）不走本函数，
+     * 由各顶栏组件保持原逻辑（AD-02：保护顶栏包"默认包底色"契约）。
+     */
+    fun resolvePageBarColor(context: Context, config: Config): Int {
+        return when {
+            hasCustomBackground(config) -> resolveBackgroundColor(config)
+            // 沉浸分支：设置全局背景图时 backgroundColor 返回 TRANSPARENT（MaterialValueHelper），
+            // 透明基色会让顶栏透出窗口黑底（subpage-topbar-unify L2 实锤，spec Drawbacks 预案），
+            // 此时回退主色；管理族半透明 alpha（manageBgAlphaFraction）叠加不受影响
+            AppConfig.immersiveManageBar -> context.backgroundColor
+                .takeIf { it != Color.TRANSPARENT } ?: context.primaryColor
+            else -> context.primaryColor
+        }
     }
 
     /**

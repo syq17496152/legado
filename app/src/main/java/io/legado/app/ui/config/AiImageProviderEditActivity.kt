@@ -64,15 +64,9 @@ class AiImageProviderEditActivity : BaseActivity<ActivityAiImageProviderEditBind
     }
 
     private fun initComposeContent() {
+        // subpage-topbar-unify 3.3：XML 残留 TitleBar 已删，Compose 全权接管顶栏+内容
         val container = binding.root as? ViewGroup ?: return
-        val titleBar = binding.titleBar
-        val index = container.indexOfChild(titleBar)
-        // Remove all children after the title bar (the ScrollView and save button)
-        while (container.childCount > index + 1) {
-            container.removeViewAt(index + 1)
-        }
-        // Also remove the title bar itself since Compose handles the top bar
-        container.removeView(titleBar)
+        container.removeAllViews()
         val cv = ComposeView(this).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             layoutParams = ViewGroup.LayoutParams(

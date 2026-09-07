@@ -40,6 +40,7 @@ import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.widget.compose.ComposeThemeImageLayer
 import io.legado.app.ui.widget.compose.ComposeThemeImageCrop
 import io.legado.app.ui.widget.compose.ComposeThemeImageState
+import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.ImageTypeUtils
 import io.legado.app.utils.StatusBarInsetAware
 import io.legado.app.utils.eventObservable
@@ -96,6 +97,9 @@ class MainTopBarView @JvmOverloads constructor(
     }
     private var backdropGlassActive = false
     private var mode = Mode.BOOKSHELF
+    // subpage-topbar-unify AD-01：SUB 子页非壁纸态顶栏内容色（决策链基色的对比色）；
+    // null = 非该形态，内容色回归主题文字色（titleTextColor/primaryTextColor 原逻辑）
+    private var subBarContentColor: Int? = null
     private var styleSignature: String? = null
     private var primaryBarRequested = false
     private var selectsBarRequested = false
@@ -645,7 +649,9 @@ class MainTopBarView @JvmOverloads constructor(
     }
 
     private fun updateIconColors() {
-        val color = context.primaryTextColor
+        // subpage-topbar-unify AD-01：SUB 子页非壁纸态顶栏为决策链实色底，图标色对比适配；
+        // 主 Tab/壁纸态/玻璃透明态保持 primaryTextColor 原逻辑
+        val color = subBarContentColor ?: context.primaryTextColor
         titleArrow.setColorFilter(color)
         searchEntryIcon.setColorFilter(color)
         listOf(moreButton, searchButton, filterButton, starButton, refreshButton, loginButton, filterToggleButton).forEach {
@@ -658,6 +664,8 @@ class MainTopBarView @JvmOverloads constructor(
 
     private fun renderBackgroundLayer(config: TopBarConfig.Config?, radius: Float) {
         val state = if (config == null) {
+            // 默认样式/玻璃覆盖态：背景层透明（露出宿主底色），内容色回归主题文字色
+            subBarContentColor = null
             ComposeThemeImageState(
                 file = null,
                 fallbackColor = Color.TRANSPARENT
@@ -665,15 +673,25 @@ class MainTopBarView @JvmOverloads constructor(
         } else {
             val file = TopBarConfig.currentWallpaperFile(context, AppConfig.isNightTheme)
             val alpha = config.wallpaperAlpha.coerceIn(0, 100) / 100f
+            // subpage-topbar-unify AD-01：SUB 子页无壁纸时基色走 resolvePageBarColor 三级决策链
+            // 单源（自定义背景色→沉浸页面底色→主题主色）；主 Tab 保持 resolve 原语义（黑白基线）；
+            // 壁纸态一律顶栏包原语义（AD-02）
+            val fallbackBase = if (mode == Mode.SUB && file == null) {
+                TopBarConfig.resolvePageBarColor(context, config)
+            } else {
+                TopBarConfig.resolveBackgroundColor(config)
+            }
+            subBarContentColor = if (mode == Mode.SUB && file == null) {
+                if (ColorUtils.isColorLight(fallbackBase)) Color.BLACK else Color.WHITE
+            } else {
+                null
+            }
             ComposeThemeImageState(
                 file = file,
                 animated = ImageTypeUtils.isAnimatedImage(file),
                 alpha = alpha,
                 crop = topBarWallpaperCrop(config),
-                fallbackColor = TopBarConfig.withOpacity(
-                    TopBarConfig.resolveBackgroundColor(config),
-                    config.wallpaperAlpha
-                )
+                fallbackColor = TopBarConfig.withOpacity(fallbackBase, config.wallpaperAlpha)
             )
         }
         backgroundLayer.setContent {

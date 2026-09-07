@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.dp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.TopBarConfig
 import io.legado.app.lib.theme.elevation
-import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.titleTextColor
 import io.legado.app.ui.theme.ThemeSync
 import java.io.File
@@ -85,10 +84,12 @@ fun GlassTopAppBar(
     // 已知上限: 裁切取景与 View 侧实现存在像素级偏差，极端宽高比壁纸观感可能有差
     // 升级路径: 精确对齐归后续统一顶栏组件
     val wallpaper = remember(wallpaperFile) { wallpaperFile?.let(::decodeTopBarWallpaper) }
-    val defaultColor = if (isRegular) {
+    // 非壁纸基色统一走 TopBarConfig.resolvePageBarColor 三级决策链（subpage-topbar-unify AD-01）：
+    // 自定义背景色 → 沉浸开关页面底色 → 主题主色；壁纸态保持顶栏包原语义（AD-02）
+    val defaultColor = if (wallpaper != null && isRegular) {
         Color(TopBarConfig.withOpacity(TopBarConfig.resolveBackgroundColor(config), config.wallpaperAlpha))
     } else {
-        Color(context.primaryColor)
+        Color(TopBarConfig.resolvePageBarColor(context, config))
     }
     // 默认容器色：跟随 TopBarConfig（regular）/「颜色主题」colorPrimary（默认），可覆盖
     val barColor = containerColor ?: defaultColor

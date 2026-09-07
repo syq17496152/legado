@@ -1,7 +1,6 @@
-﻿package io.legado.app.ui.rss.subscription
+package io.legado.app.ui.rss.subscription
 
 import android.os.Bundle
-import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -53,11 +52,11 @@ class RuleSubActivity : BaseActivity<ActivityRuleSubBinding>(),
         initData()
     }
 
-    // H17（2026-08-28）：系统 options menu 链删除——TitleBar 已 GONE，本页全 Compose，
+    // H17（2026-08-28）：系统 options menu 链删除——本页全 Compose，
     // 新增入口由 Compose 顶栏 onClick=::addSubscription 覆盖，inflate source_subscription 为不可达死代码。
+    // subpage-topbar-unify 3.2：XML 残留 TitleBar 节点已删，顶栏由 Compose 全权接管。
 
     private fun initComposeContent() {
-        binding.titleBar.visibility = View.GONE
         val container = binding.recyclerView.parent as? ViewGroup ?: return
         val index = container.indexOfChild(binding.recyclerView)
         container.removeView(binding.recyclerView)

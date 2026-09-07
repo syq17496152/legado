@@ -49,8 +49,6 @@ import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.TopBarConfig
 import io.legado.app.lib.theme.backgroundColor
-import io.legado.app.lib.theme.primaryColor
-import io.legado.app.lib.theme.titleTextColor
 import androidx.compose.material3.MaterialTheme
 import io.legado.app.ui.theme.ThemeSync
 import io.legado.app.ui.theme.subtitleLarge
@@ -149,14 +147,10 @@ private fun AppManagementTopBar(
         }
     }
     val wallpaper = remember(wallpaperFile) { wallpaperFile?.let(::decodeTopBarWallpaper) }
-    // 顶栏背景三级决策链（ui-theme-governance-polish P5/AD-05）：
-    // 显式自定义背景色（resolve 兜底后值比较）→ 沉浸开关 → 默认主色
-    val topBarBase = when {
-        TopBarConfig.hasCustomBackground(config) ->
-            Color(TopBarConfig.resolveBackgroundColor(config))
-        AppConfig.immersiveManageBar -> Color(context.backgroundColor)
-        else -> Color(context.primaryColor)
-    }
+    // 顶栏背景三级决策链（subpage-topbar-unify AD-01）：统一消费 TopBarConfig.resolvePageBarColor
+    // 单源（显式自定义背景色 → 沉浸开关页面底色 → 默认主色），逻辑原实现提炼至此；
+    // 不加 remember：保持原直算语义，immersiveManageBar 切换后重组即时生效
+    val topBarBase = Color(TopBarConfig.resolvePageBarColor(context, config))
     // 内容色先于减淡决策（对比度基于不透明基色计算；非 REGULAR 由 titleTextColor
     // 统一为 contrastOn(基色)——红队 R3-P1-1/R2-P2-3）
     val topBarContentColor = contrastOn(topBarBase)
