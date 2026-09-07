@@ -437,6 +437,9 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         binding.rssFragmentContainer.isGone = true
         binding.rssWebContainer.isGone = true
         binding.pbRssLoading.gone()
+        // bugfix-0908 T2：经典模式"文件夹"展示样式的视图随模式切换一并隐藏，
+        // 否则切新版订阅后残留并叠在加载完的订阅页下面（回归自 e706bae53 只修了反向残留）
+        binding.folderComposeView.gone()
         initModernRssView()
         observeRssSources()
     }

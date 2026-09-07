@@ -1,4 +1,4 @@
-<resources>
+﻿<resources>
     <!--App-->
     <string name="app_name">阅读M</string>
     <string name="app_name_a">阅读M·A</string>
@@ -1362,11 +1362,6 @@
     <string name="my_metric_rss_source">订阅源</string>
     <string name="my_metric_read_time">累计阅读</string>
     <string name="unit_hour">小时</string>
-    <string name="my_feature_books">书架媒体</string>
-    <string name="my_feature_books_desc">从书架打开视频/图片·漫画类书籍</string>
-    <string name="my_feature_video">视频</string>
-    <string name="my_feature_image">图片·漫画</string>
-    <string name="my_feature_books_empty">书架中暂无视频或图片·漫画书籍</string>
     <string name="highlight_rule_manage_desc">管理高亮规则组与匹配模式</string>
     <string name="record_url_switch">开启URL记录</string>
     <string name="clear_7_days_ago">清除7天前的记录</string>

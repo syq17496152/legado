@@ -114,7 +114,7 @@ internal fun buildSettingsSections(context: Context): List<MySettingsSectionMode
                 // video-player-dual-layout R11：视频播放器全局设置入口（布局模式/播放器类型/缓存等中心化配置）
                 actionRow("videoPlayerSetting", R.string.video_setting, R.string.video_setting_summary),
                 actionRow("rssSearch", R.string.rss_search, R.string.rss_search_summary),
-                actionRow("featureBooks", R.string.my_feature_books, R.string.my_feature_books_desc),
+                // bugfix-0908 T3：书架媒体页与书架页视频书点击（播放队列注入）功能重复，入口与页面删除
                 actionRow("bookmark", R.string.bookmark, R.string.all_bookmark),
                 actionRow("readRecord", R.string.read_record, R.string.read_record_summary),
                 actionRow("setting", R.string.other_setting, R.string.other_setting_s)
@@ -332,7 +332,7 @@ internal fun Activity.handleSettingsRowClick(key: String, searchTarget: MySettin
         // W3.5 孤儿治理：fileManage 死分支删除（我的页无该入口行，FileManageActivity 活入口在精准管理/AI 设置页）
 
         "readRecord" -> startActivity<ReadRecordActivity>()
-        "featureBooks" -> startActivity<MyFeatureBooksActivity>()
+        // bugfix-0908 T3：featureBooks 分支删除（书架媒体入口移除）
         "highlightRule" -> startActivity<HighlightRuleActivity>()
         "rssSearch" -> RssSearchActivity.start(this, null)
         "about" -> startActivity<AboutActivity>()

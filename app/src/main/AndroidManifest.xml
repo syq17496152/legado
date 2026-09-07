@@ -316,9 +316,6 @@
             android:name=".ui.book.character.BookCharacterManageActivity"
             android:launchMode="standard" />
         <activity
-            android:name=".ui.main.my.MyFeatureBooksActivity"
-            android:launchMode="standard" />
-        <activity
             android:name=".ui.book.character.BookCharacterEditActivity"
             android:launchMode="standard"
             android:windowSoftInputMode="adjustResize|stateHidden" />

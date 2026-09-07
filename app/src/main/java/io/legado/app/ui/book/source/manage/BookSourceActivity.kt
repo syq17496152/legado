@@ -119,8 +119,9 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         private set
     // 批D：校验进度横幅（原 Snackbar 改 Compose 状态驱动）
     private val checkBannerState = mutableStateOf<String?>(null)
+    // bugfix-0908 T5：数据版本信号（实际变更时递增），替代原 BookSourceScreen 内 1 万条 joinToString 巨串指纹
+    internal var sourceDataVersion by mutableStateOf(0)
     private var groupSourcesByDomain = false
-    private val hostMap = hashMapOf<String, String>()
     private val finalMessageRegex = Regex("成功|失败")
     private val sourcesState = mutableStateListOf<BookSourcePart>()
     private val selectedUrls = mutableStateOf<Set<String>>(emptySet())
@@ -286,6 +287,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                         isChecking = isCheckingState.value,
                         checkBannerText = checkBannerState.value,
                         onCancelCheck = ::cancelSourceCheck,
+                        dataVersion = sourceDataVersion,
                         reorderEnabled = sort == BookSourceSort.Default &&
                             searchQueryState.value.isBlank() &&
                             !groupSourcesByDomain,
@@ -430,7 +432,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     private fun setGroupSourcesByDomain(enabled: Boolean) {
         groupSourcesByDomain = enabled
         showSourceHostState.value = enabled
-        updateSourceHostHeaders(sourcesState)
+        // bugfix-0908 T5：host 头随 flow map 步（IO）重算回填，无需在此同步重建
         refreshBookSources()
     }
 
@@ -479,11 +481,17 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                     appDb.bookSourceDao.flowSearch(searchKey)
                 }
             }.map { data ->
-                hostMap.clear()
-                if (groupSourcesByDomain) {
+                // bugfix-0908 T5：host 解析收敛到本 map 步（IO 线程）一次性预计算局部表，
+                // 消除原比较器内重复查询与 hostMap 跨线程写（1 万条卡死/崩溃根因之一）
+                val localHosts = if (groupSourcesByDomain) {
+                    data.associate { it.bookSourceUrl to getSourceHostName(it.bookSourceUrl) }
+                } else {
+                    emptyMap()
+                }
+                val sorted = if (groupSourcesByDomain) {
                     data.sortedWith(
-                        compareBy<BookSourcePart> { getSourceHost(it.bookSourceUrl) == "#" }
-                            .thenBy { getSourceHost(it.bookSourceUrl) }
+                        compareBy<BookSourcePart> { localHosts[it.bookSourceUrl] == "#" }
+                            .thenBy { localHosts[it.bookSourceUrl].orEmpty() }
                             .thenByDescending { it.lastUpdateTime })
                 } else if (sortAscending) {
                     when (sort) {
@@ -526,18 +534,23 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                         else -> data.reversed()
                     }
                 }
+                sorted to localHosts
             }.flowWithLifecycleAndDatabaseChange(
                 lifecycle,
                 table = AppDatabase.BOOK_SOURCE_TABLE_NAME
             ).catch {
                 AppLog.put("书源界面更新书源出错", it)
-            }.flowOn(IO).conflate().collect { data ->
-                sourcesState.replaceByIndex(data, ::sameBookSourcePartContent)
+            }.flowOn(IO).conflate().collect { (data, localHosts) ->
+                val listChanged = sourcesState.replaceByIndex(data, ::sameBookSourcePartContent)
                 val currentUrls = data.mapTo(mutableSetOf()) { it.bookSourceUrl }
                 selectedUrls.value = selectedUrls.value.filter { it in currentUrls }.toSet()
                 isSelectMode.value = selectedUrls.value.isNotEmpty()
-                updateSourceHostHeaders(data)
+                val headersChanged = updateSourceHostHeaders(data, localHosts)
                 refreshDebugMessages()
+                // bugfix-0908 T5：仅实际变更时递增重组版本（identical 重发射不重置拖拽中间态）
+                if (listChanged || headersChanged) {
+                    sourceDataVersion++
+                }
                 delay(500)
             }
         }
@@ -871,29 +884,38 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         isSelectMode.value = newSelected.isNotEmpty()
     }
 
-    private fun buildSourceHostHeaders(sources: List<BookSourcePart>): Map<String, String?> {
+    private fun buildSourceHostHeaders(
+        sources: List<BookSourcePart>,
+        localHosts: Map<String, String>
+    ): Map<String, String?> {
         if (!groupSourcesByDomain) return emptyMap()
         val headers = linkedMapOf<String, String?>()
         var lastHost: String? = null
-        sources.forEachIndexed { index, source ->
-            val host = getSourceHost(source.bookSourceUrl)
-            headers[source.bookSourceUrl] = if (index == 0 || host != lastHost) host else null
+        sources.forEach { source ->
+            val host = localHosts[source.bookSourceUrl]
+            headers[source.bookSourceUrl] = if (host != lastHost) host else null
             lastHost = host
         }
         return headers
     }
 
-    private fun updateSourceHostHeaders(sources: List<BookSourcePart>) {
-        val next = buildSourceHostHeaders(sources)
+    private fun updateSourceHostHeaders(
+        sources: List<BookSourcePart>,
+        localHosts: Map<String, String>
+    ): Boolean {
+        val next = buildSourceHostHeaders(sources, localHosts)
+        var changed = false
         sourceHostHeaders.keys
             .filter { it !in next }
             .toList()
-            .forEach { sourceHostHeaders.remove(it) }
+            .forEach { sourceHostHeaders.remove(it); changed = true }
         next.forEach { (url, header) ->
             if (sourceHostHeaders[url] != header) {
                 sourceHostHeaders[url] = header
+                changed = true
             }
         }
+        return changed
     }
 
     private fun refreshDebugMessages(force: Boolean = false) {
@@ -930,10 +952,10 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         }.toMap()
     }
 
-    private fun getSourceHost(origin: String): String {
-        return hostMap.getOrPut(origin) {
-            NetworkUtils.getSubDomainOrNull(origin) ?: "#"
-        }
+    // bugfix-0908 T5：hostMap/getSourceHost 删除（原 IO 比较器写 + 主线程读的跨线程竞争源），
+    // 改 getSourceHostName 纯查询（IO map 步内局部表构建用）
+    private fun getSourceHostName(origin: String): String {
+        return NetworkUtils.getSubDomainOrNull(origin) ?: "#"
     }
 
     private fun sourceMenuActions(bookSource: BookSourcePart): List<AppManagementMenuAction> {

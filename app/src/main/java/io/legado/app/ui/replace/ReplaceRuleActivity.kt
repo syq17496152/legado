@@ -116,10 +116,12 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
     }
 
     private fun initComposeContent() {
-        // W5.1：View 节点摘除（原 GONE 隐藏残留清理，对齐 W1/W2 迁移模式）
+        // bugfix-0908 T1：本布局 titleBar/selectActionBar 与 recyclerView 不同父容器
+        //（根 LinearLayout vs 中间 FrameLayout），removeView 会静默 no-op 导致双搜索框
+        //（根因见 docs/specs/real-device-bugfix-0908）——改 GONE 隐藏（与父容器无关）
+        binding.titleBar.visibility = View.GONE
+        binding.selectActionBar.visibility = View.GONE
         val container = binding.recyclerView.parent as? ViewGroup ?: return
-        container.removeView(binding.titleBar)
-        container.removeView(binding.selectActionBar)
         val index = container.indexOfChild(binding.recyclerView)
         container.removeView(binding.recyclerView)
         val cv = ComposeView(this).apply {

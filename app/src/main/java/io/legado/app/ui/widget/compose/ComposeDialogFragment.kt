@@ -63,6 +63,17 @@ abstract class ComposeDialogFragment : DialogFragment() {
                 window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             } else {
                 attr.windowAnimations = dialogWindowAnimations
+                // bugfix-0908 T4：主题"弹框不透明度"(dialogAlpha)<100 时卡片半透明，
+                // 以当前窗口 dim 为基线单调上浮补偿可读性（100=零改动，E-Ink 分支不受影响）。
+                // 边界：仅覆盖窗口内 AppDialogFrame 弹框，非窗口内嵌面不适用。
+                val layoutAlpha = AppConfig.dialogAlpha / 100f
+                if (layoutAlpha < 1f) {
+                    val baseline = attr.dimAmount.coerceIn(0f, 1f)
+                    val compensation = 1f - layoutAlpha
+                    attr.dimAmount = (baseline + (1f - baseline) * compensation)
+                        .coerceAtLeast(baseline)
+                    attr.flags = attr.flags or WindowManager.LayoutParams.FLAG_DIM_BEHIND
+                }
             }
             window.attributes = attr
             window.setBackgroundDrawableResource(R.color.transparent)

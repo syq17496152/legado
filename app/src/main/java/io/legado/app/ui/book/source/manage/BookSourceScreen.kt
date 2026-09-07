@@ -54,6 +54,8 @@ internal fun BookSourceScreen(
     // 批D：校验进度横幅（原 Snackbar 承载，改 Compose 状态驱动）
     checkBannerText: String? = null,
     onCancelCheck: () -> Unit = {},
+    // bugfix-0908 T5：数据版本信号（宿主实际变更时递增），替代原万级 joinToString 指纹
+    dataVersion: Int = 0,
     reorderEnabled: Boolean,
     onReorder: (List<BookSourcePart>) -> Unit,
     onToggleSelect: (BookSourcePart) -> Unit,
@@ -63,32 +65,33 @@ internal fun BookSourceScreen(
 ) {
     val palette = rememberAppManagementPalette()
     val lazyListState = rememberLazyListState()
+    // bugfix-0908 T5：原 sourcesSignature（万级 joinToString 巨串，每次重组重建+比较）删除，
+    // 改 dataVersion 整数版本信号驱动 orderedSources 重置（宿主仅在实际变更时递增）
     val sourceSnapshot = sources.toList()
-    val sourcesSignature = sourceSnapshot.joinToString(separator = "\u001F") {
-        listOf(
-            it.bookSourceUrl,
-            it.bookSourceName,
-            it.bookSourceGroup.orEmpty(),
-            it.customOrder,
-            it.enabled,
-            it.enabledExplore,
-            it.hasLoginUrl,
-            it.lastUpdateTime,
-            it.respondTime,
-            it.weight,
-            it.hasExploreUrl,
-            it.eventListener,
-            it.bookSourceType
-        ).joinToString(separator = "\u001E")
-    }
     // 拖拽过程的本地顺序;sources 内容变化(落库后重新发射)时重置同步。
     var orderedSources by remember { mutableStateOf(sourceSnapshot, referentialEqualityPolicy()) }
-    LaunchedEffect(reorderEnabled, sourcesSignature) {
+    LaunchedEffect(reorderEnabled, dataVersion) {
         orderedSources = sourceSnapshot
     }
     val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
         orderedSources = orderedSources.toMutableList().apply {
             add(to.index, removeAt(from.index))
+        }
+    }
+    // bugfix-0908 T5：预构建扁平 RowModel（含域名分组头），单 items(key) 批量提交，
+    // 消除原 forEach 万级闭包展开与 content 作用域内 SnapshotStateMap 直读。
+    // 构建置于组合上下文（dataVersion 仅在宿主实际变更时递增）
+    val rowModels = remember(dataVersion, showSourceHost) {
+        buildList {
+            sources.forEach { source ->
+                if (showSourceHost) {
+                    val host = sourceHostHeaders[source.bookSourceUrl]
+                    if (host != null) {
+                        add(SourceRowModel(key = "host:${source.bookSourceUrl}", headerText = host, source = source))
+                    }
+                }
+                add(SourceRowModel(key = source.bookSourceUrl, headerText = null, source = source))
+            }
         }
     }
 
@@ -154,25 +157,18 @@ internal fun BookSourceScreen(
                 }
             }
         } else {
-            sources.forEach { source ->
-                val hostText = if (showSourceHost) sourceHostHeaders[source.bookSourceUrl] else null
-                hostText?.takeIf { it.isNotBlank() }?.let {
-                    item(
-                        key = "host:${source.bookSourceUrl}",
-                        contentType = "bookSourceHost"
-                    ) {
-                        BookSourceHostHeader(
-                            hostText = it,
-                            palette = palette
-                        )
-                    }
+            items(
+                items = rowModels,
+                key = { it.key },
+                contentType = { if (it.headerText != null) "bookSourceHost" else "bookSource" }
+            ) { row ->
+                if (row.headerText != null) {
+                    BookSourceHostHeader(
+                        hostText = row.headerText,
+                        palette = palette
+                    )
                 }
-                item(
-                    key = source.bookSourceUrl,
-                    contentType = "bookSource"
-                ) {
-                    itemRow(source)
-                }
+                itemRow(row.source)
             }
         }
         }
@@ -298,3 +294,10 @@ private fun BookSourceItemRow(
 }
 
 private val FINAL_DEBUG_MESSAGE_REGEX = Regex("成功|失败")
+
+/** bugfix-0908 T5：扁平行模型（域名分组头或普通源行），单 items(key) 批量提交 */
+private data class SourceRowModel(
+    val key: String,
+    val headerText: String?,
+    val source: BookSourcePart
+)

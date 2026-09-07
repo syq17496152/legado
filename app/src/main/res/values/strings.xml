@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--App-->
     <string name="app_name">阅读M</string>
@@ -1433,11 +1433,6 @@
     <string name="my_metric_rss_source">RSS feeds</string>
     <string name="my_metric_read_time">Read time</string>
     <string name="unit_hour"> h</string>
-    <string name="my_feature_books">Bookshelf media</string>
-    <string name="my_feature_books_desc">Open video / image &amp; manga books from bookshelf</string>
-    <string name="my_feature_video">Video</string>
-    <string name="my_feature_image">Images &amp; Manga</string>
-    <string name="my_feature_books_empty">No video or image books in bookshelf</string>
     <string name="highlight_rule_manage_desc">Manage highlight rule groups and patterns</string>
     <string name="record_url_switch">Enable URL record</string>
     <string name="clear_7_days_ago">Clear records older than 7 days</string>

@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -46,6 +47,7 @@ import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.number.NumberPickerDialog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -135,7 +137,12 @@ private fun SourcePickerPanel(
     onSetDelay: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    Column(modifier = Modifier.fillMaxWidth()) {
+    // bugfix-0908 T4：根节点补不透明弹框底色（原无 background 恒透出页面背景，与全站弹框不一致）
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(rememberAppDialogStyle().surface)
+    ) {
         GlassTopAppBar(
             title = stringResource(R.string.select_book_source),
             navIcon = Icons.AutoMirrored.Filled.ArrowBack,
