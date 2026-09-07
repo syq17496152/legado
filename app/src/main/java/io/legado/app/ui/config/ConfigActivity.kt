@@ -123,8 +123,6 @@ class ConfigActivity : VMBaseActivity<ViewBinding, ConfigViewModel>() {
             ConfigTag.PRECISE_MANAGE -> replaceFragment(configTag, PreciseManageFragment::class.java)
             ConfigTag.DISCOVERY_SUBSCRIPTION_CONFIG ->
                 replaceFragment(configTag, DiscoverySubscriptionConfigFragment::class.java)
-            ConfigTag.DISCOVERY_CONFIG -> replaceFragment(configTag, DiscoveryConfigFragment::class.java)
-            ConfigTag.SUBSCRIPTION_CONFIG -> replaceFragment(configTag, SubscriptionConfigFragment::class.java)
             // video-player-dual-layout：视频播放器全局设置页（路线 B 普通 Fragment）
             ConfigTag.VIDEO_PLAYER -> replaceFragment(configTag, VideoPlayerConfigFragment::class.java)
             else -> finish()

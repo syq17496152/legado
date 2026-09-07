@@ -19,7 +19,6 @@ import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
 import io.legado.app.ui.config.RelaySettingsActivity
 import io.legado.app.ui.dict.rule.DictRuleActivity
-import io.legado.app.ui.file.FileManageActivity
 import io.legado.app.ui.highlight.HighlightRuleActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.rss.search.RssSearchActivity
@@ -330,7 +329,8 @@ internal fun Activity.handleSettingsRowClick(key: String, searchTarget: MySettin
             putExtra("configTag", ConfigTag.VIDEO_PLAYER)
         }
 
-        "fileManage" -> startActivity<FileManageActivity>()
+        // W3.5 孤儿治理：fileManage 死分支删除（我的页无该入口行，FileManageActivity 活入口在精准管理/AI 设置页）
+
         "readRecord" -> startActivity<ReadRecordActivity>()
         "featureBooks" -> startActivity<MyFeatureBooksActivity>()
         "highlightRule" -> startActivity<HighlightRuleActivity>()
