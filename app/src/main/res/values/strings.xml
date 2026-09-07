@@ -2290,6 +2290,7 @@
         <string name="color_format_error">Invalid color format</string>
         <string name="cover_collection_export_failed_simple">Failed to export collection</string>
         <string name="cover_collection_no_images_to_export">No images to export</string>
+        <string name="cover_collection_empty">No images yet. Tap the import button to add.</string>
         <string name="cover_collection_zip_no_images">ZIP contains no available images</string>
         <string name="delete_success">Deleted</string>
         <string name="dialog_alpha">Dialog opacity</string>
