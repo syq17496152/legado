@@ -347,13 +347,7 @@ object TopBarConfig {
         } else {
             ((AppConfig.manageBgAlphaFraction.takeIf { it > 0f } ?: 1f).coerceIn(0f, 1f) * 255).toInt()
         }
-        val out = Color.argb(a, Color.red(base), Color.green(base), Color.blue(base))
-        android.util.Log.d(
-            "SubBarDebug",
-            "host=${context.javaClass.simpleName} base=${Integer.toHexString(base)} out=${Integer.toHexString(out)} " +
-                "immersive=${AppConfig.immersiveManageBar} hasCustom=${hasCustomBackground(config)} style=${config.style}"
-        )
-        return out
+        return Color.argb(a, Color.red(base), Color.green(base), Color.blue(base))
     }
 
     /**
