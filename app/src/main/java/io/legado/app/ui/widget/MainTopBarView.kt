@@ -673,14 +673,10 @@ class MainTopBarView @JvmOverloads constructor(
         } else {
             val file = TopBarConfig.currentWallpaperFile(context, AppConfig.isNightTheme)
             val alpha = config.wallpaperAlpha.coerceIn(0, 100) / 100f
-            // subpage-topbar-unify AD-01：SUB 子页无壁纸时基色走 resolvePageBarColor 三级决策链
-            // 单源（自定义背景色→沉浸页面底色→主题主色）；主 Tab 保持 resolve 原语义（黑白基线）；
-            // 壁纸态一律顶栏包原语义（AD-02）
-            val fallbackBase = if (mode == Mode.SUB && file == null) {
-                TopBarConfig.resolvePageBarColor(context, config)
-            } else {
-                TopBarConfig.resolveBackgroundColor(config)
-            }
+            // subpage-topbar-unify AD-01 修订：基色（含壁纸态）统一 resolvePageBarColor 三级决策链
+            // 单源（自定义背景色→沉浸页面底色→主题主色）；修复壁纸态黑白兜底污染（真机实锤：
+            // 壁纸包顶栏仍黑/白）。主 Tab 壁纸包视觉随主题——用户"全站跟随主题设置体系"诉求
+            val fallbackBase = TopBarConfig.resolvePageBarColor(context, config)
             subBarContentColor = if (mode == Mode.SUB && file == null) {
                 if (ColorUtils.isColorLight(fallbackBase)) Color.BLACK else Color.WHITE
             } else {

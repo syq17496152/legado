@@ -157,8 +157,9 @@ private fun AppManagementTopBar(
     val cornerRadius = if (isRegular) TopBarConfig.cornerRadius(context, config) else 0f
     // 顶栏着色（followup F4 v3）：有顶栏包壁纸走原 withOpacity 语义；否则半透明叠 backgroundColor
     // （透出全局底图/背景，0=不透明基色原状）
+    // 壁纸态基色同样走 resolvePageBarColor 单源（subpage-topbar-unify AD-01 修订：修复壁纸态黑白兜底污染）
     val topBarColor = if (wallpaper != null && isRegular) {
-        Color(TopBarConfig.withOpacity(TopBarConfig.resolveBackgroundColor(config), config.wallpaperAlpha))
+        Color(TopBarConfig.withOpacity(TopBarConfig.resolvePageBarColor(context, config), config.wallpaperAlpha))
     } else {
         topBarBase.copy(alpha = remember(themeVersion) { AppConfig.manageBgAlphaFraction })
     }
