@@ -1,140 +1,188 @@
 package io.legado.app.ui.config
 
-import android.content.Context
-import android.graphics.Color
-import android.view.Gravity
+import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.LinearLayout
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.ProgressBar
-import android.widget.ScrollView
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
-import io.legado.app.lib.dialogs.AndroidAlertBuilder
-import io.legado.app.lib.theme.UiCorner
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.primaryTextColor
-import io.legado.app.lib.theme.secondaryTextColor
-import io.legado.app.lib.theme.themeCardColorOrDefault
-import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.book.cache.WebDavTaskManager
 import io.legado.app.ui.book.cache.WebDavTaskState
 import io.legado.app.ui.book.cache.WebDavTaskStatus
 import io.legado.app.ui.book.cache.WebDavTaskType
-import io.legado.app.utils.applyTint
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppDialogSize
+import io.legado.app.ui.widget.compose.ComposeDialogFragment
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.toMiuixPalette
+import io.legado.app.utils.showDialogFragment
 
+/**
+ * 云端同步任务进度弹框（my-compose-full W6.3：原 AndroidAlertBuilder+编程式 View 列表
+ * 重写为 ComposeDialogFragment 基线，状态经 WebDavTaskManager.states collectAsState 定向刷新）。
+ */
 fun AppCompatActivity.showPackageSyncTaskDialog(types: Set<WebDavTaskType>) {
-    val content = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(4.dp(this@showPackageSyncTaskDialog), 4.dp(this@showPackageSyncTaskDialog), 4.dp(this@showPackageSyncTaskDialog), 4.dp(this@showPackageSyncTaskDialog))
+    val dialog = PackageSyncTaskDialog()
+    dialog.arguments = Bundle().apply {
+        putSerializable(ARG_TYPES, ArrayList(types))
     }
-    val scrollView = ScrollView(this).apply {
-        addView(
-            content,
-            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        )
-    }
-    val dialog = AndroidAlertBuilder(this).apply {
-        setTitle(R.string.package_sync_task_title)
-        customView { scrollView }
-        positiveButton(android.R.string.ok, null)
-    }.show().applyTint()
-    var job: Job? = lifecycleScope.launch {
-        WebDavTaskManager.states.collectLatest { states ->
-            val tasks = states.values
-                .filter { it.type in types }
-                .sortedWith(compareBy<WebDavTaskState> { it.status.sortOrder() }.thenBy { it.bookName })
-            content.renderPackageSyncTasks(tasks)
-        }
-    }
-    dialog.setOnDismissListener {
-        job?.cancel()
-        job = null
-    }
+    showDialogFragment(dialog)
 }
 
-private fun LinearLayout.renderPackageSyncTasks(tasks: List<WebDavTaskState>) {
-    removeAllViews()
-    if (tasks.isEmpty()) {
-        addView(emptyTaskView(context))
-        return
-    }
-    tasks.forEach { task ->
-        addView(taskRow(context, task))
-    }
-}
+private const val ARG_TYPES = "types"
 
-private fun emptyTaskView(context: Context): View {
-    return TextView(context).apply {
-        text = context.getString(R.string.package_sync_task_empty)
-        textSize = 14f
-        gravity = Gravity.CENTER
-        setTextColor(context.secondaryTextColor)
-        typeface = context.uiTypeface()
-        setPadding(12.dp(context), 24.dp(context), 12.dp(context), 24.dp(context))
-        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-    }
-}
+class PackageSyncTaskDialog : ComposeDialogFragment() {
 
-private fun taskRow(context: Context, task: WebDavTaskState): View {
-    return LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(14.dp(context), 12.dp(context), 14.dp(context), 12.dp(context))
-        background = UiCorner.opaqueRounded(
-            context.themeCardColorOrDefault(),
-            UiCorner.actionRadius(context)
-        )
-        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = 8.dp(context)
-        }
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(TextView(context).apply {
-                text = task.bookName
-                textSize = 15f
-                setTextColor(context.primaryTextColor)
-                typeface = context.uiTypeface()
-                maxLines = 1
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            })
-            addView(TextView(context).apply {
-                text = context.getString(task.type.titleRes())
-                textSize = 12f
-                setTextColor(context.accentColor)
-                typeface = context.uiTypeface()
-                background = UiCorner.opaqueRounded(
-                    context.accentColor.withAlpha(24),
-                    UiCorner.actionRadius(context)
-                )
-                setPadding(8.dp(context), 3.dp(context), 8.dp(context), 3.dp(context))
-            })
-        })
-        addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 7.dp(context), 0, 0)
-            if (task.active) {
-                addView(ProgressBar(context, null, android.R.attr.progressBarStyleSmall).apply {
-                    isIndeterminate = true
-                    layoutParams = LinearLayout.LayoutParams(22.dp(context), 22.dp(context)).apply {
-                        marginEnd = 6.dp(context)
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
+
+    @Suppress("UNCHECKED_CAST")
+    private fun taskTypes(): Set<WebDavTaskType> {
+        val list = arguments?.getSerializable(ARG_TYPES) as? ArrayList<WebDavTaskType>
+        return list?.toSet() ?: emptySet()
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        val types = taskTypes()
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                val style = rememberAppDialogStyle()
+                val states by WebDavTaskManager.states.collectAsState()
+                val tasks = states.values
+                    .filter { it.type in types }
+                    .sortedWith(compareBy<WebDavTaskState> { it.status.sortOrder() }.thenBy { it.bookName })
+                AppDialogFrame(
+                    title = stringResource(R.string.package_sync_task_title),
+                    content = {
+                        if (tasks.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.package_sync_task_empty),
+                                color = style.secondaryText,
+                                fontSize = 14.sp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 24.dp)
+                            )
+                        } else {
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(tasks, key = { "${it.type}|${it.bookName}" }) { task ->
+                                    PackageSyncTaskRow(task = task, style = style)
+                                }
+                            }
+                        }
+                    },
+                    actions = {
+                        val palette = style.toMiuixPalette()
+                        LegadoMiuixActionButton(
+                            text = stringResource(android.R.string.ok),
+                            palette = palette,
+                            onClick = { dismissAllowingStateLoss() }
+                        )
                     }
-                })
+                )
             }
-            addView(TextView(context).apply {
-                text = context.getString(R.string.package_sync_task_line, context.getString(task.status.titleRes()), task.message)
-                textSize = 13f
-                setTextColor(task.status.textColor(context))
-                typeface = context.uiTypeface()
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            })
-        })
+        }
+    }
+}
+
+@Composable
+private fun PackageSyncTaskRow(
+    task: WebDavTaskState,
+    style: io.legado.app.ui.widget.compose.AppDialogStyle
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(style.fieldSurface)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = task.bookName,
+                color = style.primaryText,
+                fontSize = 15.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = stringResource(task.type.titleRes()),
+                color = style.accent,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(style.accent.copy(alpha = 0.1f))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            )
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(top = 7.dp)
+        ) {
+            if (task.active) {
+                // 进行中任务复用 View 进度圈（22dp 小尺寸下与原视觉一致）
+                AndroidView(
+                    factory = { ctx ->
+                        ProgressBar(ctx, null, android.R.attr.progressBarStyleSmall).apply {
+                            isIndeterminate = true
+                        }
+                    },
+                    modifier = Modifier
+                        .size(22.dp)
+                        .padding(end = 6.dp)
+                )
+            }
+            Text(
+                text = stringResource(
+                    R.string.package_sync_task_line,
+                    stringResource(task.status.titleRes()),
+                    task.message
+                ),
+                color = task.status.textColor(style),
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 }
 
@@ -169,16 +217,10 @@ private fun WebDavTaskStatus.sortOrder(): Int {
     }
 }
 
-private fun WebDavTaskStatus.textColor(context: Context): Int {
+private fun WebDavTaskStatus.textColor(style: io.legado.app.ui.widget.compose.AppDialogStyle): Color {
     return when (this) {
-        WebDavTaskStatus.FAILED -> Color.rgb(196, 54, 54)
-        WebDavTaskStatus.RUNNING -> context.accentColor
-        else -> context.secondaryTextColor
+        WebDavTaskStatus.FAILED -> Color(0xFFC43636)
+        WebDavTaskStatus.RUNNING -> style.accent
+        else -> style.secondaryText
     }
 }
-
-private fun Int.withAlpha(alpha: Int): Int {
-    return Color.argb(alpha.coerceIn(0, 255), Color.red(this), Color.green(this), Color.blue(this))
-}
-
-private fun Int.dp(context: Context): Int = (this * context.resources.displayMetrics.density).toInt()
