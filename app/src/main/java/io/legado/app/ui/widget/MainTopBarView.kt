@@ -673,15 +673,10 @@ class MainTopBarView @JvmOverloads constructor(
         } else {
             val file = TopBarConfig.currentWallpaperFile(context, AppConfig.isNightTheme)
             val alpha = config.wallpaperAlpha.coerceIn(0, 100) / 100f
-            // subpage-topbar-unify AD-01 修订 v1.3：基色统一 resolvePageBarColor；透明度对齐
-            // 管理族 manageBgAlphaFraction（>0 同 alpha 半透明，=0 回退实色），保证 Glass 族/
-            // 管理族/SUB 族头部色系一致；wallpaperAlpha 只作用于壁纸图
-            val fallbackBase = TopBarConfig.resolvePageBarColor(context, config)
-            val barAlpha = AppConfig.manageBgAlphaFraction.takeIf { it > 0f } ?: 1f
-            val fadedBase = Color.argb(
-                (barAlpha.coerceIn(0f, 1f) * 255).toInt(),
-                Color.red(fallbackBase), Color.green(fallbackBase), Color.blue(fallbackBase)
-            )
+            // subpage-topbar-unify AD-01 v1.5：最终色唯一取色入口 resolvePageBarColorWithAlpha
+            // （色相+透明度合一，与 GlassTopAppBar/AppManagementTopBar 同源）；wallpaperAlpha
+            // 只作用于壁纸图
+            val fallbackBase = TopBarConfig.resolvePageBarColorWithAlpha(context, config)
             subBarContentColor = if (mode == Mode.SUB && file == null) {
                 if (ColorUtils.isColorLight(fallbackBase)) Color.BLACK else Color.WHITE
             } else {
@@ -692,7 +687,7 @@ class MainTopBarView @JvmOverloads constructor(
                 animated = ImageTypeUtils.isAnimatedImage(file),
                 alpha = alpha,
                 crop = topBarWallpaperCrop(config),
-                fallbackColor = fadedBase
+                fallbackColor = fallbackBase
             )
         }
         backgroundLayer.setContent {

@@ -334,6 +334,23 @@ object TopBarConfig {
     }
 
     /**
+     * 子页顶栏最终色（色相+透明度合一）——全 App 顶栏组件唯一取色入口
+     * （subpage-topbar-unify AD-01 v1.5 单一函数收敛：GlassTopAppBar/AppManagementTopBar/
+     * MainTopBarView 一律消费本函数，禁止各自计算）：
+     * 色相 = resolvePageBarColor 三级链；透明度 = manageBgAlphaFraction（>0 半透明对齐管理族
+     * 透明度设置，=0 回退实色防顶栏消失）。壁纸图由组件以 wallpaperAlpha 叠加在本色之上，
+     * wallpaperAlpha 不参与本色计算。
+     */
+    fun resolvePageBarColorWithAlpha(context: Context, config: Config): Int {
+        val base = resolvePageBarColor(context, config)
+        val a = AppConfig.manageBgAlphaFraction.takeIf { it > 0f } ?: 1f
+        return Color.argb(
+            (a.coerceIn(0f, 1f) * 255).toInt(),
+            Color.red(base), Color.green(base), Color.blue(base)
+        )
+    }
+
+    /**
      * 显式自定义背景色判定（ui-theme-governance-polish P5/AD-05）：
      * resolveBackgroundColor 兜底后与默认值做值比较——禁止用 backgroundColor != null 判定
      * （defaultConfig 恒填默认色恒真陷阱），也禁止裸值比较（自定义包 JSON 可为 null）。
