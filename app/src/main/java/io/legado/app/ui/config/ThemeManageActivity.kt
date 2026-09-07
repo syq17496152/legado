@@ -6,7 +6,6 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
-import androidx.appcompat.widget.AppCompatImageButton
 import androidx.core.view.isVisible
 import android.view.Menu
 import android.view.MenuItem
@@ -37,6 +36,10 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -106,10 +109,14 @@ import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.font.FontSelectDialog
 import io.legado.app.ui.image.ImageCropContract
 import io.legado.app.ui.widget.ModernActionPopup
-import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.installGlassTopBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.ui.widget.compose.AppManagementCard
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementPalette
+import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
@@ -121,7 +128,6 @@ import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.ImageCropHelper
 import io.legado.app.utils.ImageTypeUtils
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.fromJsonArray
@@ -195,8 +201,9 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private var pendingFontTarget = FontTarget.UI
     private var loadVersion = 0
     private var cloudContainerId: String? = null
-    private var containerActionButton: AppCompatImageButton? = null
-    private var containerMenuPopup: ModernActionPopup.Handle? = null
+    // subpage-topbar-unify 二期：顶栏统一组件化（GlassTopAppBar），标题/actions 状态化
+    private var topBarTitle by mutableStateOf("")
+    private var topBarActions by mutableStateOf<List<MenuAction>>(emptyList())
     private val pendingRemoteSyncTasks = linkedMapOf<String, RemoteSyncTask>()
     @Volatile
     private var syncingRemoteTasks = false
@@ -310,20 +317,36 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         container.addView(cv, index.coerceAtMost(container.childCount))
     }
 
-    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，容器切换/同步任务改为 action 插槽图标。 */
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.theme_manage_title))
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
-        containerActionButton = addActionButton(R.drawable.ic_outline_cloud_24, R.string.theme_s3_container_switch) {
-            showContainerSelector()
-        }
-        addActionButton(R.drawable.ic_history, R.string.package_sync_task_menu) {
-            showThemeSyncTasks()
-        }
+    /** subpage-topbar-unify: 子页头部统一为 GlassTopAppBar 二期组件。 */
+
+    private fun initTopBar() {
+        topBarTitle = getString(R.string.theme_manage_title)
+        rebuildTopBarActions()
+        installGlassTopBar(binding, { topBarTitle }, { topBarActions }) { finish() }
         updateContainerButton()
+    }
+
+    /** actions 重建：S3 容器按钮按云类型动态显隐（原 containerActionButton.isVisible 语义平移）。 */
+    private fun rebuildTopBarActions() {
+        val showS3 = AppCloudStorage.type == CloudStorageType.S3
+        topBarActions = buildList {
+            if (showS3) {
+                add(
+                    MenuAction(
+                        icon = Icons.Filled.Cloud,
+                        title = getString(R.string.theme_s3_container_switch),
+                        alwaysShow = true
+                    ) { showContainerSelector() }
+                )
+            }
+            add(
+                MenuAction(
+                    icon = Icons.Filled.History,
+                    title = getString(R.string.package_sync_task_menu),
+                    alwaysShow = true
+                ) { showThemeSyncTasks() }
+            )
+        }
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
@@ -338,12 +361,12 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         val containers = AppCloudStorage.listContainers().filter { it.enabled }
         if (AppCloudStorage.type != CloudStorageType.S3) {
             cloudContainerId = containers.firstOrNull()?.id
-            containerActionButton?.isVisible = false
+            rebuildTopBarActions()
             return
         }
         cloudContainerId = AppCloudStorage.selectedContainer(CLOUD_SCOPE)?.id
             ?: containers.firstOrNull()?.id
-        containerActionButton?.isVisible = true
+        rebuildTopBarActions()
     }
 
     private fun showContainerSelector() {
@@ -354,20 +377,17 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                 return@launch
             }
             val selected = cloudContainerId ?: AppCloudStorage.selectedContainer(CLOUD_SCOPE)?.id
-            val actions = containers.map { container ->
-                ModernActionPopup.Action(AppCloudStorage.containerDisplayLabel(container)) {
-                    if (container.id == selected) return@Action
-                    AppCloudStorage.selectContainer(CLOUD_SCOPE, container.id)
-                    cloudContainerId = container.id
-                    updateContainerButton()
-                    loadThemes()
-                }
+            showComposeActionListDialog(
+                title = getString(R.string.theme_s3_container_switch),
+                labels = containers.map { AppCloudStorage.containerDisplayLabel(it) }
+            ) { index ->
+                val container = containers.getOrNull(index) ?: return@showComposeActionListDialog
+                if (container.id == selected) return@showComposeActionListDialog
+                AppCloudStorage.selectContainer(CLOUD_SCOPE, container.id)
+                cloudContainerId = container.id
+                updateContainerButton()
+                loadThemes()
             }
-            containerMenuPopup = ModernActionPopup.show(
-                anchor = binding.titleBar.moreButton,
-                actions = actions,
-                previousPopup = containerMenuPopup
-            )
         }
     }
     private fun loadThemes() {

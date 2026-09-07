@@ -1,24 +1,42 @@
 package io.legado.app.ui.widget.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.activity.ComponentActivity
+import androidx.viewbinding.ViewBinding
+import android.view.View
+import android.view.ViewGroup
+import android.widget.LinearLayout
 
 /**
  * 菜单动作项，由 [AppMenuSheet] / [AppDropdownMenu] 数据驱动渲染
@@ -116,4 +134,76 @@ fun AppMenuSheet(
         }
         content?.invoke(this)
     }
+}
+
+/**
+ * 顶栏 action 分级渲染公共组件（subpage-topbar-unify 二期，三页统一顶栏共用）：
+ * alwaysShow 且非 header 的一级图标直出，其余进溢出下拉菜单。
+ * tint 不显式指定——由宿主顶栏组件（GlassTopAppBar）的 actionIconContentColor
+ * （contrastOn 容器色）统一继承（subpage-topbar-unify 红队 R5）。
+ */
+@Composable
+fun RowScope.TopBarActionRow(actions: List<MenuAction>) {
+    val primaryActions = actions.filter { it.alwaysShow && !it.header }
+    val overflowActions = actions.filter { !it.alwaysShow || it.header }
+    var menuExpanded by remember { mutableStateOf(false) }
+    primaryActions.forEach { action ->
+        IconButton(onClick = action.onClick) {
+            Icon(
+                imageVector = action.icon,
+                contentDescription = action.title,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+    if (overflowActions.isNotEmpty()) {
+        Box {
+            IconButton(onClick = { menuExpanded = true }) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            AppDropdownMenu(
+                expanded = menuExpanded,
+                onDismiss = { menuExpanded = false },
+                actions = overflowActions
+            )
+        }
+    }
+}
+
+/**
+ * 运行时顶栏替换（subpage-topbar-unify 二期，共用布局页迁移模式）：
+ * 共用布局（如 ActivityThemeManageBinding 14 页）全部迁移前 XML 的 MainTopBarView
+ * 节点必须保留；已迁移页在运行时移除该节点并插入 ComposeView 承载 GlassTopAppBar。
+ * 顶栏最终色走 resolvePageBarColorWithAlpha 单源（AD-01 v1.5）。
+ */
+fun ComponentActivity.installGlassTopBar(
+    binding: ViewBinding,
+    titleProvider: () -> String,
+    actionsProvider: () -> List<MenuAction>,
+    onBack: () -> Unit
+) {
+    val container = binding.root as? ViewGroup ?: return
+    container.findViewById<View>(io.legado.app.R.id.title_bar)?.let { container.removeView(it) }
+    val cv = ComposeView(this).apply {
+        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        layoutParams = android.widget.LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        setContent {
+            io.legado.app.ui.widget.compose.LegadoComposeTheme {
+                GlassTopAppBar(
+                    title = titleProvider(),
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = onBack,
+                    actions = { TopBarActionRow(actionsProvider()) }
+                )
+            }
+        }
+    }
+    container.addView(cv, 0)
 }

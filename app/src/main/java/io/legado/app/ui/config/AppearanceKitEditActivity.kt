@@ -1,4 +1,4 @@
-package io.legado.app.ui.config
+﻿package io.legado.app.ui.config
 
 import io.legado.app.ui.widget.components.AppShapes
 import android.os.Bundle
@@ -39,13 +39,17 @@ import io.legado.app.help.config.ComponentRef
 import io.legado.app.help.config.KitBinding
 import io.legado.app.help.config.MainLayoutPresetConfig
 import io.legado.app.help.config.StoredAppearanceKit
+import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.AppSettingPalette
 import io.legado.app.ui.widget.compose.AppSettingSectionTitle
 import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
-import io.legado.app.ui.widget.MainTopBarView
-import io.legado.app.utils.applyStatusBarPadding
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.installGlassTopBar
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import io.legado.app.ui.theme.labelXSmall
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.launch
 
@@ -58,6 +62,9 @@ class AppearanceKitEditActivity : BaseActivity<ActivityThemeManageBinding>() {
     private var kitState by mutableStateOf<StoredAppearanceKit?>(null)
     private var dayOptions by mutableStateOf(AppearanceKitEditOptions())
     private var nightOptions by mutableStateOf(AppearanceKitEditOptions())
+
+    // subpage-topbar-unify 二期：顶栏统一组件化（GlassTopAppBar）
+    private var topBarTitle by mutableStateOf("")
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initTopBar()
@@ -87,12 +94,10 @@ class AppearanceKitEditActivity : BaseActivity<ActivityThemeManageBinding>() {
         loadKit()
     }
 
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.edit))
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
+    /** subpage-topbar-unify 二期：子页头部统一为 GlassTopAppBar 单一组件。 */
+    private fun initTopBar() {
+        topBarTitle = getString(R.string.edit)
+        installGlassTopBar(binding, { topBarTitle }, { emptyList() }) { finish() }
     }
 
     private fun loadKit() {

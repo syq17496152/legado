@@ -1,4 +1,4 @@
-package io.legado.app.ui.config
+﻿package io.legado.app.ui.config
 
 import io.legado.app.ui.widget.components.AppShapes
 import android.os.Bundle
@@ -31,6 +31,12 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -67,7 +73,10 @@ import io.legado.app.help.glide.ImageLoader
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.ui.book.cache.WebDavTaskType
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.installGlassTopBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.AppSettingPalette
@@ -79,7 +88,6 @@ import io.legado.app.ui.widget.compose.releaseComposeImage
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.utils.externalFiles
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.getFile
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
@@ -96,6 +104,10 @@ class AppearanceKitActivity : BaseActivity<ActivityThemeManageBinding>() {
     override val binding: ActivityThemeManageBinding by lazy {
         ActivityThemeManageBinding.inflate(layoutInflater)
     }
+
+    // subpage-topbar-unify 二期：顶栏统一组件化（GlassTopAppBar），标题/actions 状态化
+    private var topBarTitle by mutableStateOf("")
+    private var topBarActions by mutableStateOf<List<MenuAction>>(emptyList())
 
     private var kitsState by mutableStateOf<List<AppearanceKit>>(emptyList())
     private var kitPreviewsState by mutableStateOf<Map<String, KitPreviewData>>(emptyMap())
@@ -126,17 +138,32 @@ class AppearanceKitActivity : BaseActivity<ActivityThemeManageBinding>() {
         refreshKits()
     }
 
-    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原「新建/导入/导出/同步任务」工具栏菜单改为 action 插槽图标。 */
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.appearance_kit_manage))
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
-        addActionButton(R.drawable.ic_add, R.string.appearance_kit_create) { showCreateKitDialog() }
-        addActionButton(R.drawable.ic_download, R.string.appearance_kit_import) { selectImportPackage() }
-        addActionButton(R.drawable.ic_export, R.string.appearance_kit_export) { exportCurrentKit() }
-        addActionButton(R.drawable.ic_history, R.string.package_sync_task_title) { showSyncTasks() }
+    /** subpage-topbar-unify 二期：子页头部统一为 GlassTopAppBar 单一组件，原「新建/导入/导出/同步任务」保持 action 图标。 */
+    private fun initTopBar() {
+        topBarTitle = getString(R.string.appearance_kit_manage)
+        topBarActions = listOf(
+            MenuAction(
+                icon = Icons.Filled.Add,
+                title = getString(R.string.appearance_kit_create),
+                alwaysShow = true
+            ) { showCreateKitDialog() },
+            MenuAction(
+                icon = Icons.Filled.Download,
+                title = getString(R.string.appearance_kit_import),
+                alwaysShow = true
+            ) { selectImportPackage() },
+            MenuAction(
+                icon = Icons.Filled.Upload,
+                title = getString(R.string.appearance_kit_export),
+                alwaysShow = true
+            ) { exportCurrentKit() },
+            MenuAction(
+                icon = Icons.Filled.History,
+                title = getString(R.string.package_sync_task_title),
+                alwaysShow = true
+            ) { showSyncTasks() }
+        )
+        installGlassTopBar(binding, { topBarTitle }, { topBarActions }) { finish() }
     }
 
     private fun installComposeContent() {
