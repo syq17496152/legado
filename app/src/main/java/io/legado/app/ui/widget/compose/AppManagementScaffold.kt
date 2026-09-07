@@ -151,6 +151,8 @@ private fun AppManagementTopBar(
     // 单源（显式自定义背景色 → 沉浸开关页面底色 → 默认主色），逻辑原实现提炼至此；
     // 不加 remember：保持原直算语义，immersiveManageBar 切换后重组即时生效
     val topBarBase = Color(TopBarConfig.resolvePageBarColor(context, config))
+    // 管理页透明度（followup F4 v3 沿用）：顶栏与基色半透明叠加的统一 alpha 源
+    val manageAlpha = remember(themeVersion) { AppConfig.manageBgAlphaFraction }
     // 内容色先于减淡决策（对比度基于不透明基色计算；非 REGULAR 由 titleTextColor
     // 统一为 contrastOn(基色)——红队 R3-P1-1/R2-P2-3）
     val topBarContentColor = contrastOn(topBarBase)
@@ -160,9 +162,12 @@ private fun AppManagementTopBar(
     // 壁纸态基色同样走 resolvePageBarColor 单源（AD-01 修订 v1.2：wallpaperAlpha 只作用于壁纸图，
     // 禁止混入基色——低 alpha 主色半透明透白底/黑底真机实锤）
     val topBarColor = if (wallpaper != null && isRegular) {
-        Color(TopBarConfig.resolvePageBarColor(context, config))
+        // 壁纸态：应用与 Glass 族相同的 barAlpha 半透明（AD-01 v1.3 色系一致要求）
+        Color(TopBarConfig.resolvePageBarColor(context, config)).copy(
+            alpha = manageAlpha.takeIf { it > 0f } ?: 1f
+        )
     } else {
-        topBarBase.copy(alpha = remember(themeVersion) { AppConfig.manageBgAlphaFraction })
+        topBarBase.copy(alpha = manageAlpha)
     }
     Box(
         modifier = Modifier
