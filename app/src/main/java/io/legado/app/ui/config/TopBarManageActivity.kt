@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.config
+package io.legado.app.ui.config
 
 import android.graphics.Color
 import android.net.Uri
@@ -8,9 +8,10 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.ViewGroup
 import android.widget.LinearLayout
-import androidx.appcompat.widget.AppCompatImageButton
-import androidx.core.view.isVisible
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.History
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,8 +36,8 @@ import io.legado.app.ui.book.cache.WebDavTaskStatus
 import io.legado.app.ui.book.cache.WebDavTaskType
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.image.ImageCropContract
-import io.legado.app.ui.widget.MainTopBarView
-import io.legado.app.ui.widget.ModernActionPopup
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppPackageManageItemCard
 import io.legado.app.ui.widget.compose.AppPackageManageScreen
@@ -46,7 +47,6 @@ import io.legado.app.ui.widget.compose.showComposeNumberPickerDialog
 import io.legado.app.ui.widget.compose.showComposeSingleChoiceDialog
 import io.legado.app.utils.ImageCropHelper
 import io.legado.app.utils.ImageTypeUtils
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.dismissDialogFragment
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getFile
@@ -81,8 +81,8 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private val handledWebDavTasks = mutableSetOf<String>()
     private var loadVersion = 0
     private var cloudContainerId: String? = null
-    private var containerActionButton: AppCompatImageButton? = null
-    private var containerMenuPopup: ModernActionPopup.Handle? = null
+    // W3.1：S3 容器按钮动态显隐改为 Compose 状态驱动（原 AppCompatImageButton isVisible 方式随顶栏迁移废弃）
+    private var containerActionVisible by mutableStateOf(false)
     private val dateFormat by lazy { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
 
     private val importPackage = registerForActivityResult(HandleFileContract()) {
@@ -188,19 +188,34 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         }
     }
 
-    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，容器切换/同步任务改为 action 插槽图标。 */
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.top_bar_manage))
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
-        containerActionButton = addActionButton(R.drawable.ic_outline_cloud_24, R.string.s3_bucket) {
-            showContainerSelector()
-        }
-        addActionButton(R.drawable.ic_history, R.string.package_sync_task_menu) {
-            showTopBarSyncTasks()
-        }
+    // W3.1：顶栏运行时替换为 GlassTopAppBar（透壁纸语义，W1 模式）。S3 容器/同步任务保留一级图标语义，
+    // 容器按钮显隐由 containerActionVisible 状态驱动（替代原 AppCompatImageButton.isVisible）
+    private fun initTopBar() {
+        installGlassTopBar(
+            binding,
+            titleProvider = { getString(R.string.top_bar_manage) },
+            actionsProvider = {
+                buildList {
+                    if (containerActionVisible) {
+                        add(
+                            MenuAction(
+                                icon = Icons.Filled.Cloud,
+                                title = getString(R.string.s3_bucket),
+                                alwaysShow = true
+                            ) { showContainerSelector() }
+                        )
+                    }
+                    add(
+                        MenuAction(
+                            icon = Icons.Filled.History,
+                            title = getString(R.string.package_sync_task_menu),
+                            alwaysShow = true
+                        ) { showTopBarSyncTasks() }
+                    )
+                }
+            },
+            onBack = { finish() }
+        )
         updateContainerMenu()
     }
 
@@ -214,18 +229,18 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     private fun updateContainerMenu() {
         val containers = AppCloudStorage.listContainers().filter { it.enabled }
-        val button = containerActionButton ?: return
         if (AppCloudStorage.type != CloudStorageType.S3) {
             cloudContainerId = containers.firstOrNull()?.id
-            button.isVisible = false
+            containerActionVisible = false
             return
         }
         cloudContainerId = AppCloudStorage.selectedContainer(CLOUD_SCOPE)?.id
             ?: containers.firstOrNull()?.id
-        button.isVisible = true
+        containerActionVisible = true
     }
 
-    private fun showContainerSelector(anchor: android.view.View? = null) {
+    // W3.1：容器切换 ModernActionPopup(View 锚点弹出)→showComposeActionListDialog（对齐 ThemeManage W1 模式）
+    private fun showContainerSelector() {
         lifecycleScope.launch {
             val containers = withContext(Dispatchers.IO) {
                 AppCloudStorage.listContainers().filter { it.enabled }
@@ -236,19 +251,17 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             }
             val selected = cloudContainerId
                 ?: AppCloudStorage.selectedContainer(CLOUD_SCOPE)?.id
-            val popupAnchor = anchor
-                ?: containerActionButton
-                ?: binding.titleBar.moreButton
-            val actions = containers.map { container ->
-                ModernActionPopup.Action(AppCloudStorage.containerDisplayLabel(container)) {
-                    if (container.id == selected) return@Action
-                    AppCloudStorage.selectContainer(CLOUD_SCOPE, container.id)
-                    cloudContainerId = container.id
-                    updateContainerMenu()
-                    loadPackages()
-                }
+            showComposeActionListDialog(
+                title = getString(R.string.s3_bucket),
+                labels = containers.map { AppCloudStorage.containerDisplayLabel(it) }
+            ) { index ->
+                val container = containers.getOrNull(index) ?: return@showComposeActionListDialog
+                if (container.id == selected) return@showComposeActionListDialog
+                AppCloudStorage.selectContainer(CLOUD_SCOPE, container.id)
+                cloudContainerId = container.id
+                updateContainerMenu()
+                loadPackages()
             }
-            containerMenuPopup = ModernActionPopup.show(popupAnchor, actions, containerMenuPopup)
         }
     }
 

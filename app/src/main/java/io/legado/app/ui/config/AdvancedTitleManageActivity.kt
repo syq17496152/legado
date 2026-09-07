@@ -2,7 +2,6 @@ package io.legado.app.ui.config
 
 import android.net.Uri
 import android.os.Bundle
-import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
@@ -86,14 +85,8 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        hideTopBar()
         initComposeContent()
         loadEntries()
-    }
-
-    // followup F5：统一管理族壳——View TitleBar 摘除（AppManagementScaffold 接管顶栏，返回由 Screen onBack 提供）
-    private fun hideTopBar() {
-        binding.titleBar.visibility = View.GONE
     }
 
     override fun onDestroy() {
@@ -104,10 +97,13 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private fun initComposeContent() {
         val container = binding.recyclerView.parent as? ViewGroup ?: return
         val index = container.indexOfChild(binding.recyclerView)
+        // my-compose-full W3.4：View 节点整体摘除（titleBar 由 AppManagementScaffold 接管，其余共用容器
+        // 节点 removeView 对齐 W1/W2 迁移模式，不再保留 GONE 隐藏残留）
+        container.removeView(binding.titleBar)
         container.removeView(binding.recyclerView)
-        binding.tabBar.visibility = View.GONE
-        binding.tvSummary.visibility = View.GONE
-        binding.btnAdd.visibility = View.GONE
+        container.removeView(binding.tabBar)
+        container.removeView(binding.tvSummary)
+        container.removeView(binding.btnAdd)
         container.addView(
             ComposeView(this).apply {
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)

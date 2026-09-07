@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.config
+package io.legado.app.ui.config
 
 import android.app.Activity
 import android.content.Intent
@@ -17,11 +17,10 @@ import io.legado.app.help.config.ShareNoteTemplateManager
 import io.legado.app.ui.book.read.ShareNoteImageRenderer
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.readBytes
 import io.legado.app.utils.readText
 import io.legado.app.utils.showDialogFragment
@@ -103,12 +102,14 @@ class ShareNoteTemplateManageActivity : BaseActivity<ActivityThemeManageBinding>
         loadTemplates()
     }
 
-    private fun initTopBar() = binding.titleBar.run {
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle("摘录分享模板")
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
+    // my-compose-full W3.3：顶栏运行时替换为 GlassTopAppBar（透壁纸语义，W1 模式），标题字符串资源化
+    private fun initTopBar() {
+        installGlassTopBar(
+            binding,
+            titleProvider = { getString(R.string.share_note_template_manage) },
+            actionsProvider = { emptyList() },
+            onBack = { finish() }
+        )
     }
 
     override fun onResume() {
@@ -125,10 +126,11 @@ class ShareNoteTemplateManageActivity : BaseActivity<ActivityThemeManageBinding>
     private fun initComposeContent() {
         val container = binding.recyclerView.parent as? ViewGroup ?: return
         val index = container.indexOfChild(binding.recyclerView)
+        // W3.3：共用容器节点 removeView 摘除（titleBar 由 installGlassTopBar 已移除），对齐 W1/W2 模式
         container.removeView(binding.recyclerView)
-        binding.tabBar.visibility = android.view.View.GONE
-        binding.tvSummary.visibility = android.view.View.GONE
-        binding.btnAdd.visibility = android.view.View.GONE
+        container.removeView(binding.tabBar)
+        container.removeView(binding.tvSummary)
+        container.removeView(binding.btnAdd)
         val cv = ComposeView(this).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             layoutParams = ViewGroup.LayoutParams(
@@ -228,20 +230,24 @@ class ShareNoteTemplateManageActivity : BaseActivity<ActivityThemeManageBinding>
     private fun showAddActions() {
         showDialogFragment(
             ComposeActionListDialog.create(
-                title = "添加模板",
-                labels = listOf("复制内置模板新建", "导入 HTML", "导入 ZIP"),
+                title = getString(R.string.share_note_template_add),
+                labels = listOf(
+                    getString(R.string.share_note_template_copy_builtin),
+                    getString(R.string.share_note_import_html),
+                    getString(R.string.share_note_import_zip)
+                ),
                 negativeText = getString(R.string.cancel)
             ) { index ->
                 when (index) {
                     0 -> copyTemplate(ShareNoteTemplateManager.builtinEntry(), editAfterCopy = true)
                     1 -> importTemplate.launch {
                         mode = HandleFileContract.FILE
-                        title = "导入 HTML"
+                        title = getString(R.string.share_note_import_html)
                         allowExtensions = arrayOf("html", "htm")
                     }
                     2 -> importTemplate.launch {
                         mode = HandleFileContract.FILE
-                        title = "导入 ZIP"
+                        title = getString(R.string.share_note_import_zip)
                         allowExtensions = arrayOf("zip")
                     }
                 }
@@ -338,7 +344,7 @@ class ShareNoteTemplateManageActivity : BaseActivity<ActivityThemeManageBinding>
                     )
                 }
             }.onFailure {
-                toastOnUi(it.localizedMessage ?: "导出失败")
+                toastOnUi(it.localizedMessage ?: getString(R.string.share_note_export_failed))
             }
         }
     }
