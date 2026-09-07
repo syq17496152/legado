@@ -161,13 +161,14 @@ private fun AppManagementTopBar(
     // （透出全局底图/背景，0=不透明基色原状）
     // 壁纸态基色同样走 resolvePageBarColor 单源（AD-01 修订 v1.2：wallpaperAlpha 只作用于壁纸图，
     // 禁止混入基色——低 alpha 主色半透明透白底/黑底真机实锤）
+    // 顶栏着色（subpage-topbar-unify AD-01 v1.4）：全组件顶栏实色主色——半透明顶栏观感取决于
+    // 各页底下透出层级，页面不同观感必然不同（真机实锤 manageBgAlpha=40 时书源管理(46,51,46)
+    // vs 备份恢复(98,128,111)），实色是唯一可达成全站一致的方案；manageBgAlpha 仅保留于页面
+    // 内容背景层（:97），不再作用于顶栏
     val topBarColor = if (wallpaper != null && isRegular) {
-        // 壁纸态：应用与 Glass 族相同的 barAlpha 半透明（AD-01 v1.3 色系一致要求）
-        Color(TopBarConfig.resolvePageBarColor(context, config)).copy(
-            alpha = manageAlpha.takeIf { it > 0f } ?: 1f
-        )
+        Color(TopBarConfig.resolvePageBarColor(context, config))
     } else {
-        topBarBase.copy(alpha = manageAlpha)
+        topBarBase
     }
     Box(
         modifier = Modifier

@@ -84,11 +84,9 @@ fun GlassTopAppBar(
     // 已知上限: 裁切取景与 View 侧实现存在像素级偏差，极端宽高比壁纸观感可能有差
     // 升级路径: 精确对齐归后续统一顶栏组件
     val wallpaper = remember(wallpaperFile) { wallpaperFile?.let(::decodeTopBarWallpaper) }
-    // 基色（含壁纸态）统一 resolvePageBarColor 三级决策链（AD-01 修订 v1.3）；
-    // 透明度对齐管理族 manageBgAlphaFraction（subpage-topbar-unify 真机反馈：Glass 族实色绿与
-    // 管理族半透明绿色系不一致）——用户设置>0 时同 alpha 半透明，未设置(0)回退实色防顶栏消失
-    val barAlpha = AppConfig.manageBgAlphaFraction.takeIf { it > 0f } ?: 1f
-    val defaultColor = Color(TopBarConfig.resolvePageBarColor(context, config)).copy(alpha = barAlpha)
+    // 基色（含壁纸态）统一 resolvePageBarColor 三级决策链，实色直出（AD-01 v1.4）：
+    // 半透明顶栏观感随各页底下层级漂移（真机实锤），实色是唯一全站一致方案
+    val defaultColor = Color(TopBarConfig.resolvePageBarColor(context, config))
     // 默认容器色：跟随 TopBarConfig（regular）/「颜色主题」colorPrimary（默认），可覆盖
     val barColor = containerColor ?: defaultColor
     // 默认阴影：跟随 barElevation 设置（View 侧 context.elevation，px→dp），可覆盖
