@@ -324,30 +324,30 @@ object TopBarConfig {
     fun resolvePageBarColor(context: Context, config: Config): Int {
         return when {
             hasCustomBackground(config) -> resolveBackgroundColor(config)
-            // 沉浸分支：设置全局背景图时 backgroundColor 返回 TRANSPARENT（MaterialValueHelper），
-            // 透明基色会让顶栏透出窗口黑底（subpage-topbar-unify L2 实锤，spec Drawbacks 预案），
-            // 此时回退主色；管理族半透明 alpha（manageBgAlphaFraction）叠加不受影响
+            // 沉浸分支（用户语义，六验裁决）：设置全局壁纸后期望顶栏透明透出壁纸——
+            // 有背景图时 backgroundColor=TRANSPARENT 是"沉浸透明"的正确信号，
+            // 禁止回退主色（v1.2 曾错误回退导致全绿）；无壁纸时 backgroundColor=页面底色
             AppConfig.immersiveManageBar -> context.backgroundColor
-                .takeIf { it != Color.TRANSPARENT } ?: context.primaryColor
             else -> context.primaryColor
         }
     }
 
     /**
      * 子页顶栏最终色（色相+透明度合一）——全 App 顶栏组件唯一取色入口
-     * （subpage-topbar-unify AD-01 v1.5 单一函数收敛：GlassTopAppBar/AppManagementTopBar/
-     * MainTopBarView 一律消费本函数，禁止各自计算）：
-     * 色相 = resolvePageBarColor 三级链；透明度 = manageBgAlphaFraction（>0 半透明对齐管理族
-     * 透明度设置，=0 回退实色防顶栏消失）。壁纸图由组件以 wallpaperAlpha 叠加在本色之上，
-     * wallpaperAlpha 不参与本色计算。
+     * （subpage-topbar-unify AD-01 v1.6）：三组件一律消费本函数，禁止各自计算。
+     * alpha 规则：基色自带透明（沉浸+全局壁纸=TRANSPARENT，用户"透明透壁纸"语义）
+     * → 保持原 alpha 透出壁纸；基色不透明 → 透明度设置 manageBgAlphaFraction
+     * （>0 半透明对齐管理族透明度设置，=0 回退实色）。壁纸图由组件以 wallpaperAlpha 叠加。
      */
     fun resolvePageBarColorWithAlpha(context: Context, config: Config): Int {
         val base = resolvePageBarColor(context, config)
-        val a = AppConfig.manageBgAlphaFraction.takeIf { it > 0f } ?: 1f
-        return Color.argb(
-            (a.coerceIn(0f, 1f) * 255).toInt(),
-            Color.red(base), Color.green(base), Color.blue(base)
-        )
+        val baseAlpha = (base ushr 24) and 0xFF
+        val a = if (baseAlpha < 0xFF) {
+            baseAlpha
+        } else {
+            ((AppConfig.manageBgAlphaFraction.takeIf { it > 0f } ?: 1f).coerceIn(0f, 1f) * 255).toInt()
+        }
+        return Color.argb(a, Color.red(base), Color.green(base), Color.blue(base))
     }
 
     /**
