@@ -1,16 +1,15 @@
 package io.legado.app.ui.book.cache
 
 import android.os.Bundle
-import android.graphics.Color
 import android.view.Menu
 import android.view.MenuItem
-import android.view.View
 import androidx.activity.viewModels
-import androidx.appcompat.widget.AppCompatImageButton
-import androidx.core.view.isVisible
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.SimpleItemAnimator
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.data.appDb
@@ -20,25 +19,15 @@ import io.legado.app.databinding.ActivityCacheManageBinding
 import io.legado.app.help.AppCloudStorage
 import io.legado.app.lib.cloud.CloudStorageType
 import io.legado.app.lib.cloud.S3ContainerScope
-import io.legado.app.lib.dialogs.AndroidAlertBuilder
-import io.legado.app.lib.theme.UiCorner
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.primaryTextColor
-import io.legado.app.lib.theme.themeCardColorOrDefault
-import io.legado.app.lib.theme.themeMutedColorOrDefault
-import io.legado.app.ui.widget.MainTopBarView
-import io.legado.app.utils.applyStatusBarPadding
-import io.legado.app.utils.gone
 import io.legado.app.utils.cnCompare
-import io.legado.app.utils.applyTint
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -46,9 +35,15 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * 缓存管理页（my-compose-full W4.1：composeHost + CacheManageScreen 全量重写）。
+ *
+ * ViewModel 复用（CacheManageActivityViewModel 零改动）；原 CacheManageAdapter 删除，
+ * 列表渲染迁移至 [CacheManageScreen]；任务态经 SnapshotStateMap 定向写实现等效 payload 局部刷新。
+ * 数据安全边界：删除/上传/恢复链路（含确认弹框与锁定任务门禁）逻辑原样保留在本 Activity。
+ */
 class CacheManageActivity :
     VMBaseActivity<ActivityCacheManageBinding, CacheManageActivityViewModel>(),
-    CacheManageAdapter.Callback,
     CacheChapterDialog.Callback {
 
     companion object {
@@ -58,22 +53,28 @@ class CacheManageActivity :
     override val binding by viewBinding(ActivityCacheManageBinding::inflate)
     override val viewModel by viewModels<CacheManageActivityViewModel>()
 
-    private val adapter by lazy { CacheManageAdapter(this, this) }
     private var audioTaskReloadJob: Job? = null
     private var lastMissingTaskReloadAt = 0L
     private val handledTerminalTaskReloads = hashSetOf<String>()
     private var cloudContainerId: String? = null
-    private var containerActionButton: AppCompatImageButton? = null
     private var rawItems: List<CacheBookItem> = emptyList()
     private var searchKey: String = ""
     private var sortMode: CacheManageSortMode = CacheManageSortMode.RECENT
+
+    // W4.1 Compose 桥接状态（Activity 为 VM/任务流与 Screen 的唯一桥）
+    private val audioStates = mutableStateMapOf<String, AudioCacheTaskState>()
+    private val webDavStates = mutableStateMapOf<String, WebDavTaskState>()
+    private var displayItems by mutableStateOf(listOf<CacheBookItem>())
+    private var summaryTextState by mutableStateOf("")
+    private var loadingState by mutableStateOf(false)
+    private var modeState by mutableStateOf(CacheManageMode.BOOK)
+    private var containerActionVisible by mutableStateOf(false)
 
     // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
     override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initTopBar()
-        initView()
+        initComposeHost()
         observeData()
         observeTasks()
         val initialSearchKey = intent.getStringExtra(EXTRA_INITIAL_SEARCH_KEY).orEmpty().trim()
@@ -88,52 +89,48 @@ class CacheManageActivity :
         updateContainerMenu()
     }
 
-    private fun initView() = binding.run {
-        tabBar.background = UiCorner.opaqueRounded(
-            themeMutedColorOrDefault(),
-            UiCorner.panelRadius(this@CacheManageActivity)
+    // W4.1：全页 Compose 渲染（顶栏 AppManagementScaffold+tab/列表/批量按钮均在 Screen 内）
+    private fun initComposeHost() {
+        binding.composeHost.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
-        listOf(btnBooks, btnAudio, btnManga).forEach {
-            it.background = UiCorner.actionSelector(
-                Color.TRANSPARENT,
-                themeCardColorOrDefault(),
-                UiCorner.actionRadius(this@CacheManageActivity)
-            )
+        binding.composeHost.setContent {
+            LegadoTheme {
+                CacheManageScreen(
+                    mode = modeState,
+                    items = displayItems,
+                    summaryText = summaryTextState,
+                    loading = loadingState,
+                    audioTaskStates = audioStates,
+                    webDavTaskStates = webDavStates,
+                    containerVisible = containerActionVisible,
+                    onModeSwitch = ::switchMode,
+                    onSearch = ::showSearchDialog,
+                    onSortSelect = ::showSortSelector,
+                    onContainerSelect = ::showContainerSelector,
+                    onUploadAll = ::uploadAll,
+                    onDeleteAll = ::deleteAll,
+                    onItemAction = ::dispatchItemAction
+                )
+            }
         }
-        recyclerView.layoutManager = LinearLayoutManager(this@CacheManageActivity)
-        recyclerView.adapter = adapter
-        (recyclerView.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
-        btnBooks.setOnClickListener { switchMode(CacheManageMode.BOOK) }
-        btnAudio.setOnClickListener { switchMode(CacheManageMode.AUDIO) }
-        btnManga.setOnClickListener { switchMode(CacheManageMode.MANGA) }
-        btnUploadAll.setOnClickListener { uploadAll() }
-        btnDeleteAll.setOnClickListener { deleteAll() }
-        updateTabs(CacheManageMode.BOOK)
     }
 
-    /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，原工具栏搜索/排序/容器切换改为 action 插槽图标。 */
-    private fun initTopBar() = binding.titleBar.run {
-        // followup F5（C 类顶栏对齐）：不透明 backgroundColor 底，消与页面底色的 primaryColor 断层；列表不动
-        overlayOpaqueBackground = true
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.cache_manage_title))
-        // Mode.SUB 下 titleSelect 显示「标题+返回箭头」，点击回退
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
-        addActionButton(R.drawable.ic_search, R.string.cache_manage_search_book) {
-            showSearchDialog()
+    // W4.1：原 8 个 Adapter.Callback 动作改为枚举分发（Screen → Activity 原方法链，确认弹框前置不变）
+    private fun dispatchItemAction(item: CacheBookItem, action: CacheItemAction) {
+        when (action) {
+            CacheItemAction.OPEN_CHAPTERS -> openChapters(item)
+            CacheItemAction.UPLOAD -> upload(item)
+            CacheItemAction.DOWNLOAD -> download(item)
+            CacheItemAction.SELECT_SYNC -> selectSyncAction(item)
+            CacheItemAction.RESTORE_BOOKSHELF -> restoreToBookshelf(item)
+            CacheItemAction.DELETE -> deleteBookCache(item)
+            CacheItemAction.STOP_AUDIO -> stopAudioCache(item)
+            CacheItemAction.SELECT_SOURCE -> selectSource(item)
         }
-        addActionButton(R.drawable.ic_baseline_sort_24, R.string.cache_manage_sort_title) {
-            showSortSelector()
-        }
-        containerActionButton = addActionButton(R.drawable.ic_outline_cloud_24, R.string.s3_bucket) {
-            showContainerSelector()
-        }
-        updateContainerMenu()
     }
 
-    /** 搜索：弹出关键词输入框，就地过滤列表（原 ActionBar 折叠式搜索的等价替代）。 */
+    /** 搜索：弹出关键词输入框，就地过滤列表。 */
     private fun showSearchDialog() {
         showComposeTextInputDialog(
             title = getString(R.string.cache_manage_search_book),
@@ -157,15 +154,14 @@ class CacheManageActivity :
 
     private fun updateContainerMenu() {
         val containers = AppCloudStorage.listContainers().filter { it.enabled }
-        val item = containerActionButton ?: return
         if (AppCloudStorage.type != CloudStorageType.S3) {
             cloudContainerId = containers.firstOrNull()?.id
-            item.isVisible = false
+            containerActionVisible = false
             return
         }
         cloudContainerId = AppCloudStorage.selectedContainer(S3ContainerScope.CACHE)?.id
             ?: containers.firstOrNull()?.id
-        item.isVisible = true
+        containerActionVisible = true
     }
 
     private fun showContainerSelector() {
@@ -199,14 +195,14 @@ class CacheManageActivity :
             applyFilters()
         }
         viewModel.summaryLiveData.observe(this) { summary ->
-            binding.tvSummary.text = getString(
+            summaryTextState = getString(
                 R.string.cache_manage_summary_state,
                 summary.bookCount,
                 summary.cachedChapterCount
             )
         }
         viewModel.loadingLiveData.observe(this) { loading ->
-            if (loading) binding.rotateLoading.visible() else binding.rotateLoading.gone()
+            loadingState = loading
         }
     }
 
@@ -231,26 +227,22 @@ class CacheManageActivity :
     }
 
     private fun applyFilters() {
-        val items = rawItems
+        displayItems = rawItems
             .asSequence()
             .filter { it.matchesSearch(searchKey) }
             .sortedWith(sortMode.comparator())
             .toList()
-        adapter.setItems(items)
-        binding.tvEmpty.run {
-            if (items.isEmpty()) {
-                text = getString(R.string.cache_manage_empty, getString(viewModel.mode.titleRes))
-                visible()
-            } else {
-                gone()
-            }
-        }
     }
 
     private fun observeTasks() {
         lifecycleScope.launch {
             AudioCacheTaskManager.states.collectLatest { states ->
-                adapter.updateTaskStates(states)
+                // 定向 diff 写入（等效原 Adapter PAYLOAD_TASK_STATE 局部刷新，避免整表重组）
+                val changed = (audioStates.keys + states.keys)
+                    .filterTo(hashSetOf()) { audioStates[it] != states[it] }
+                changed.forEach { key ->
+                    states[key]?.let { audioStates[key] = it } ?: audioStates.remove(key)
+                }
                 if (viewModel.mode == CacheManageMode.AUDIO) {
                     reloadAudioItemsWhenNeeded(states)
                 }
@@ -258,7 +250,11 @@ class CacheManageActivity :
         }
         lifecycleScope.launch {
             WebDavTaskManager.states.collectLatest { states ->
-                adapter.updateWebDavTaskStates(states)
+                val changed = (webDavStates.keys + states.keys)
+                    .filterTo(hashSetOf()) { webDavStates[it] != states[it] }
+                changed.forEach { key ->
+                    states[key]?.let { webDavStates[key] = it } ?: webDavStates.remove(key)
+                }
                 reloadItemsWhenWebDavTaskFinished(states)
             }
         }
@@ -274,6 +270,7 @@ class CacheManageActivity :
                 }
             }
     }
+
     private fun reloadAudioItemsWhenNeeded(states: Map<String, AudioCacheTaskState>) {
         val stateValues = states.values
         val activeTaskBookUrls = stateValues
@@ -282,7 +279,7 @@ class CacheManageActivity :
             .mapTo(hashSetOf<String>()) { it.bookUrl }
         if (activeTaskBookUrls.isNotEmpty()) {
             val visibleBookUrls = hashSetOf<String>()
-            adapter.getItems().forEach { item ->
+            displayItems.forEach { item ->
                 if (item.sourceVariants.isEmpty()) {
                     visibleBookUrls.add(item.book.bookUrl)
                 } else {
@@ -320,22 +317,13 @@ class CacheManageActivity :
 
     private fun switchMode(mode: CacheManageMode) {
         if (viewModel.mode == mode) return
-        updateTabs(mode)
+        modeState = mode
         rawItems = emptyList()
         applyFilters()
         viewModel.load(mode)
     }
 
-    private fun updateTabs(mode: CacheManageMode) = binding.run {
-        btnBooks.isSelected = mode == CacheManageMode.BOOK
-        btnAudio.isSelected = mode == CacheManageMode.AUDIO
-        btnManga.isSelected = mode == CacheManageMode.MANGA
-        btnBooks.setTextColor(if (mode == CacheManageMode.BOOK) accentColor else primaryTextColor)
-        btnAudio.setTextColor(if (mode == CacheManageMode.AUDIO) accentColor else primaryTextColor)
-        btnManga.setTextColor(if (mode == CacheManageMode.MANGA) accentColor else primaryTextColor)
-    }
-
-    override fun openChapters(item: CacheBookItem) {
+    private fun openChapters(item: CacheBookItem) {
         if (item.localCachedCount <= 0) {
             toastOnUi(R.string.cache_manage_download_first)
             return
@@ -343,7 +331,7 @@ class CacheManageActivity :
         showDialogFragment(CacheChapterDialog.newInstance(item.book))
     }
 
-    override fun upload(item: CacheBookItem) {
+    private fun upload(item: CacheBookItem) {
         selectSyncStrategy(R.string.cache_manage_upload_strategy_title) { strategy ->
             val queued = WebDavTaskManager.enqueueCacheUpload(item) {
                 viewModel.uploadCacheItem(item, strategy)
@@ -352,7 +340,7 @@ class CacheManageActivity :
         }
     }
 
-    override fun download(item: CacheBookItem) {
+    private fun download(item: CacheBookItem) {
         selectSyncStrategy(R.string.cache_manage_download_strategy_title) { strategy ->
             val queued = WebDavTaskManager.enqueueCacheDownload(item) {
                 viewModel.downloadRemoteCache(item, strategy)
@@ -361,7 +349,7 @@ class CacheManageActivity :
         }
     }
 
-    override fun selectSyncAction(item: CacheBookItem) {
+    private fun selectSyncAction(item: CacheBookItem) {
         val actions = listOf(
             R.string.cache_manage_upload to { upload(item) },
             R.string.action_download to { download(item) }
@@ -374,7 +362,7 @@ class CacheManageActivity :
         }
     }
 
-    override fun restoreToBookshelf(item: CacheBookItem) {
+    private fun restoreToBookshelf(item: CacheBookItem) {
         lifecycleScope.launch {
             kotlin.runCatching {
                 viewModel.restoreCacheToBookshelf(item)
@@ -394,7 +382,7 @@ class CacheManageActivity :
         }
     }
 
-    override fun deleteBookCache(item: CacheBookItem) {
+    private fun deleteBookCache(item: CacheBookItem) {
         selectDeleteTarget(
             item = item,
             localAvailable = item.localCachedCount > 0,
@@ -408,11 +396,11 @@ class CacheManageActivity :
         }
     }
 
-    override fun stopAudioCache(item: CacheBookItem) {
+    private fun stopAudioCache(item: CacheBookItem) {
         AudioCacheTaskManager.togglePause(item.book.bookUrl)
     }
 
-    override fun selectSource(item: CacheBookItem) {
+    private fun selectSource(item: CacheBookItem) {
         val variants = item.sourceVariants
         if (variants.size <= 1) return
         val labels: List<CharSequence> = variants.map { variant ->
@@ -438,7 +426,7 @@ class CacheManageActivity :
     }
 
     private fun uploadAll() {
-        val items = adapter.getItems().filter { it.cachedCount > 0 && !it.hasLockedCacheTask() }
+        val items = displayItems.filter { it.cachedCount > 0 && !it.hasLockedCacheTask() }
         if (items.isEmpty()) {
             toastOnUi(R.string.cache_manage_batch_empty)
             return
@@ -452,7 +440,7 @@ class CacheManageActivity :
     }
 
     private fun deleteAll() {
-        val items = adapter.getItems().filter {
+        val items = displayItems.filter {
             !it.hasLockedCacheTask() && (it.localCachedCount > 0 || it.hasRemoteCache())
         }
         if (items.isEmpty()) {
