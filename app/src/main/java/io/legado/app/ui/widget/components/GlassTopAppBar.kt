@@ -94,7 +94,8 @@ fun GlassTopAppBar(
     // 内容色：按容器色亮度取黑/白（亮底黑 / 暗底白），与 View Toolbar 对比度一致
     val contentColor = contrastOn(barColor)
     val cornerRadius = if (isRegular) TopBarConfig.cornerRadius(context, config) else 0f
-    Box(modifier = Modifier.shadow(barElevation)) {
+    // SubBarDebug 实验：临时禁用 shadow 验证白框来源（结论后回滚或定稿）
+    Box(modifier = Modifier.shadow(0.dp)) {
         if (wallpaper != null) {
             Image(
                 bitmap = wallpaper.asImageBitmap(),
