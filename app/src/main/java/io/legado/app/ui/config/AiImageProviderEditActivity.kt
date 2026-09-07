@@ -5,27 +5,35 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
 import io.legado.app.constant.EventBus
-import io.legado.app.databinding.ActivityAiImageProviderEditBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.main.ai.AiImageProviderConfig
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
-class AiImageProviderEditActivity : BaseActivity<ActivityAiImageProviderEditBinding>() {
+class AiImageProviderEditActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityAiImageProviderEditBinding::inflate)
+    // W5.2：原 activity_ai_image_provider_edit.xml 为死布局（运行时 removeAllViews 全丢弃）已删除，
+    // 改合成 ViewBinding 空壳（对齐 RelaySettingsActivity 模式），Compose 全权接管
+    override val binding: ViewBinding by lazy {
+        object : ViewBinding {
+            override fun getRoot(): android.view.View = root
+        }
+    }
+
+    private val root: FrameLayout by lazy { FrameLayout(this) }
     private var providerId: String? = null
 
     // Compose state

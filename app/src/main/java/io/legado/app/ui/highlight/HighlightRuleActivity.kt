@@ -1,9 +1,10 @@
-﻿package io.legado.app.ui.highlight
+package io.legado.app.ui.highlight
 
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.appcompat.app.AlertDialog
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -28,7 +29,7 @@ import io.legado.app.utils.fromJsonArray
  * F-P1-2 高亮规则管理页（借鉴阅读T，适配 SharedPreferences 存储）
  * F-P1-2 Phase 8 蛋蛋Max 补齐：分组管理 + 预设规则 + 导入导出
  *
- * L-C5 枝叶页：全 Compose 接管（HighlightRuleScreen），对话框族保留既有 DialogFragment/AlertDialog。
+ * L-C5 枝叶页：全 Compose 接管（HighlightRuleScreen），弹框已全部迁移 showCompose 系（W5.1 MC-7）。
  */
 class HighlightRuleActivity :
     VMBaseActivity<ActivityHighlightRuleBinding, HighlightRuleViewModel>() {
@@ -92,37 +93,48 @@ class HighlightRuleActivity :
         ))
     }
 
+    // W5.1：AlertDialog→Compose 弹框基线（MC-7）
     private fun showRestoreDefaultDialog() {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.highlight_rule_restore_title)
-            .setMessage(R.string.highlight_rule_restore_message)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setNeutralButton(R.string.highlight_rule_restore_overwrite) { _, _ -> confirmOverwrite() }
-            .setPositiveButton(R.string.highlight_rule_restore_merge) { _, _ ->
-                viewModel.restoreDefaults(RestoreMode.MERGE)
-                toastOnUi(R.string.highlight_rule_restore_merged_toast)
+        showComposeChoiceListDialog(
+            title = getString(R.string.highlight_rule_restore_title) + "\n" + getString(R.string.highlight_rule_restore_message),
+            labels = listOf(
+                getString(R.string.highlight_rule_restore_merge),
+                getString(R.string.highlight_rule_restore_overwrite)
+            )
+        ) { index ->
+            when (index) {
+                0 -> {
+                    viewModel.restoreDefaults(RestoreMode.MERGE)
+                    toastOnUi(R.string.highlight_rule_restore_merged_toast)
+                }
+                else -> confirmOverwrite()
             }
-            .show()
+        }
     }
 
     private fun confirmOverwrite() {
-        AlertDialog.Builder(this)
-            .setTitle(R.string.highlight_rule_restore_overwrite_confirm_title)
-            .setMessage(R.string.highlight_rule_restore_overwrite_confirm_message)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.highlight_rule_restore_overwrite_confirm_ok) { _, _ ->
+        showComposeConfirmDialog(
+            title = getString(R.string.highlight_rule_restore_overwrite_confirm_title),
+            message = getString(R.string.highlight_rule_restore_overwrite_confirm_message),
+            positiveText = getString(R.string.highlight_rule_restore_overwrite_confirm_ok),
+            negativeText = getString(android.R.string.cancel),
+            dangerPositive = true,
+            onPositive = {
                 viewModel.restoreDefaults(RestoreMode.OVERWRITE)
                 toastOnUi(R.string.highlight_rule_restore_overwritten_toast)
             }
-            .show()
+        )
     }
 
     private fun showDeleteDialog(rule: HighlightRule) {
-        AlertDialog.Builder(this)
-            .setMessage(getString(R.string.sure_del) + "\n" + rule.getDisplayName())
-            .setNegativeButton(R.string.no, null)
-            .setPositiveButton(R.string.yes) { _, _ -> viewModel.delete(rule) }
-            .show()
+        showComposeConfirmDialog(
+            title = getString(R.string.sure_del),
+            message = rule.getDisplayName(),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = { viewModel.delete(rule) }
+        )
     }
 
     private fun importRules() {

@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.replace
+package io.legado.app.ui.replace
 
 import android.annotation.SuppressLint
 import android.os.Bundle
@@ -116,9 +116,10 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
     }
 
     private fun initComposeContent() {
-        binding.titleBar.visibility = View.GONE
-        binding.selectActionBar.visibility = View.GONE
+        // W5.1：View 节点摘除（原 GONE 隐藏残留清理，对齐 W1/W2 迁移模式）
         val container = binding.recyclerView.parent as? ViewGroup ?: return
+        container.removeView(binding.titleBar)
+        container.removeView(binding.selectActionBar)
         val index = container.indexOfChild(binding.recyclerView)
         container.removeView(binding.recyclerView)
         val cv = ComposeView(this).apply {
@@ -213,7 +214,6 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
         } else {
             revertSelection()
         }
-        upCountView()
     }
 
     override fun revertSelection() {
@@ -223,7 +223,6 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
             .filter { it.id !in currentSelected }
             .map { it.id }
             .toSet()
-        upCountView()
     }
 
     override fun onClickSelectBarMainAction() {
@@ -282,7 +281,6 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
                 val currentIds = it.map { rule -> rule.id }.toSet()
                 selectedIds.value = selectedIds.value.filter { id -> id in currentIds }.toSet()
                 dataInit = true
-                upCountView()
                 delay(100)
             }
         }
@@ -399,7 +397,6 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
             current.add(rule.id)
         }
         selectedIds.value = current
-        upCountView()
     }
 
     private fun onToggleEnabled(rule: ReplaceRule, isEnabled: Boolean) {
@@ -465,13 +462,6 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
     override fun onDestroy() {
         super.onDestroy()
         Coroutine.async { ContentProcessor.upReplaceRules() }
-    }
-
-    private fun upCountView() {
-        binding.selectActionBar.upCountView(
-            selectedIds.value.size,
-            rulesState.size
-        )
     }
 
     private fun sameReplaceRuleContent(old: ReplaceRule, new: ReplaceRule): Boolean {

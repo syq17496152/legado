@@ -3,11 +3,13 @@ package io.legado.app.ui.config
 import android.net.Uri
 import android.os.Bundle
 import android.view.ViewGroup
-import androidx.appcompat.widget.AppCompatImageButton
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
@@ -16,11 +18,11 @@ import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.config.CoverCollectionManager
 import io.legado.app.lib.cloud.CloudStorageType
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getFile
 import io.legado.app.utils.startActivity
@@ -39,7 +41,8 @@ class CoverCollectionManageActivity : BaseActivity<ActivityCoverCollectionManage
     private val isNightState = mutableStateOf(false)
     private val entriesState = mutableStateOf<List<CoverCollectionManager.Entry>>(emptyList())
     private var cloudContainerId: String? = null
-    private var containerButton: AppCompatImageButton? = null
+    // W5.3：S3 容器按钮显隐改 Compose 状态驱动（对齐 TopBarManage 3.1 模式），顶栏迁 installGlassTopBar
+    private var containerActionVisible by mutableStateOf(false)
     private val importZip = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri -> importZip(uri) }
     }
@@ -56,26 +59,33 @@ class CoverCollectionManageActivity : BaseActivity<ActivityCoverCollectionManage
         loadCollections()
     }
 
-    private fun initTopBar() = binding.titleBar.run {
-        // followup F5（B 类风险登记）：S3 容器按钮挂在 View 顶栏且联动 updateContainerMenu 可见性状态，
-        // 迁移 AppManagementScaffold 需桥接业务状态（风险大），本期保守仅做顶栏基色对齐（backgroundColor 同源，消 primaryColor 断层）
-        overlayOpaqueBackground = true
-        applyStatusBarPadding(withInitialPadding = true)
-        setMode(MainTopBarView.Mode.SUB)
-        setTitle(getString(R.string.cover_collection_manage))
-        setSearchEntryVisible(false)
-        titleSelect.setOnClickListener { finish() }
-        containerButton = addActionButton(R.drawable.ic_outline_cloud_24, R.string.s3_bucket) {
-            showContainerSelector()
-        }
+    // W5.3：顶栏运行时替换为 GlassTopAppBar（透壁纸语义，W1 模式），S3 容器按钮保留一级图标语义
+    private fun initTopBar() {
+        installGlassTopBar(
+            binding,
+            titleProvider = { getString(R.string.cover_collection_manage) },
+            actionsProvider = {
+                if (containerActionVisible) {
+                    listOf(
+                        MenuAction(
+                            icon = Icons.Filled.Cloud,
+                            title = getString(R.string.s3_bucket),
+                            alwaysShow = true
+                        ) { showContainerSelector() }
+                    )
+                } else {
+                    emptyList()
+                }
+            },
+            onBack = { finish() }
+        )
     }
 
     private fun initComposeContent() {
         val container = binding.recyclerView.parent as? ViewGroup ?: return
-        // Remove TabBar, RecyclerView, and AddButton (keep TitleBar at index 0)
-        while (container.childCount > 1) {
-            container.removeViewAt(1)
-        }
+        // W5.3：View 节点全部摘除（titleBar 已由 installGlassTopBar 移除），对齐 W1/W2 迁移模式
+        container.removeView(binding.titleBar)
+        container.removeView(binding.recyclerView)
         val cv = ComposeView(this).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             layoutParams = ViewGroup.LayoutParams(
@@ -106,18 +116,14 @@ class CoverCollectionManageActivity : BaseActivity<ActivityCoverCollectionManage
     }
 
     private fun updateContainerMenu() {
-        val button = containerButton ?: return
         val containers = AppCloudStorage.listContainers().filter { it.enabled }
         if (AppCloudStorage.type != CloudStorageType.S3) {
             cloudContainerId = containers.firstOrNull()?.id
-            button.isVisible = false
+            containerActionVisible = false
             return
         }
         cloudContainerId = AppCloudStorage.selectedContainer(CLOUD_SCOPE)?.id
-        button.isVisible = true
-        button.contentDescription = containers.firstOrNull { it.id == cloudContainerId }
-            ?.let(AppCloudStorage::containerDisplayLabel)
-            ?: getString(R.string.s3_bucket)
+        containerActionVisible = true
     }
 
     private fun showContainerSelector() {
