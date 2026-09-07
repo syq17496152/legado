@@ -44,4 +44,10 @@ class CenterCropBitmapDrawable(
     }
 
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+
+    // 提供真实 bitmap 尺寸作为 intrinsic 尺寸；未覆写时默认返回 -1，
+    // 会导致 Drawable.toBitmap() 创建 0 尺寸 Bitmap 崩溃（Compose 背景转换场景）
+    override fun getIntrinsicWidth(): Int = bitmap.width
+
+    override fun getIntrinsicHeight(): Int = bitmap.height
 }

@@ -93,8 +93,13 @@ fun LegadoBackgroundBox(
         if (backgroundDrawable != null) {
             val resolvedOverlayAlpha = overlayAlpha
                 ?: if (backgroundColor.luminance() > 0.5f) 0.10f else 0.18f
+            // 防御：部分自定义 Drawable 的 intrinsic 尺寸可能 <=0，
+            // 直接 toBitmap() 会因 Bitmap.createBitmap(width<=0) 抛 IllegalArgumentException
             Image(
-                bitmap = backgroundDrawable.toBitmap().asImageBitmap(),
+                bitmap = backgroundDrawable.toBitmap(
+                    width = backgroundDrawable.intrinsicWidth.coerceAtLeast(1),
+                    height = backgroundDrawable.intrinsicHeight.coerceAtLeast(1)
+                ).asImageBitmap(),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
