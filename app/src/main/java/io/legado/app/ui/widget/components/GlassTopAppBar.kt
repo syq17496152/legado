@@ -3,11 +3,19 @@ package io.legado.app.ui.widget.components
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -30,6 +38,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.legado.app.help.config.AppConfig
@@ -50,6 +59,13 @@ import java.io.File
  * 仅 `STYLE_REGULAR` 顶栏包启用时应用背景色/壁纸/圆角/透明度；默认样式维持 colorPrimary 现状，
  * 避免既有页面顶栏默认态被改成黑/白底。
  *
+ * W6.5 插槽扩展（my-compose-full Delta 3→1 归一）：
+ * - [barHeight] 高度槽：传入时启用自绘紧凑布局（管理族 48dp 档），替代 M3 TopAppBar 默认高度
+ * - [secondRow] 双行布局槽：标题行下第二行（管理族搜索框内嵌槽，调用方自绘内容）
+ * - [titleFontFamily] 标题字体槽：管理族标题字体跟随页面包
+ * - statusBars 内嵌：自绘分支 windowInsetsPadding(statusBars)（对齐管理族原实现）
+ * 任一扩展槽传入即走自绘分支（渲染路径与 M3 分支同源：TopBarConfig 取色/壁纸/圆角单源）。
+ *
  * ⚠️ 死按钮防线（topbar-icon-semantics-fix AD-03）：[navIcon] 与 [onNavClick] 必须成对传入——
  * 仅当两者均非 null 时才渲染返回键；漏传 [onNavClick] 时导航图标会**静默不渲染**（无任何警告），
  * 导致页面无返回入口。调用方必须保证返回可达性。
@@ -63,7 +79,10 @@ fun GlassTopAppBar(
     onNavClick: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
     containerColor: Color? = null,
-    elevation: Dp? = null
+    elevation: Dp? = null,
+    barHeight: Dp? = null,
+    secondRow: (@Composable ColumnScope.() -> Unit)? = null,
+    titleFontFamily: FontFamily? = null
 ) {
     val context = LocalContext.current
     // 订阅全局主题信号：ThemeSync.bump() 后本组件重组，重读 primaryColor/elevation 最新值
@@ -95,6 +114,13 @@ fun GlassTopAppBar(
     val contentColor = contrastOn(barColor)
     val cornerRadius = if (isRegular) TopBarConfig.cornerRadius(context, config) else 0f
     // shadow 仅实色容器生效（W0 定稿）：半透明/透明顶栏画阴影会形成可见灰白框（真机实锤）
+    val useCustomLayout = barHeight != null || secondRow != null
+    // W6.5：标题字体槽（管理族 titleFontFamily 跟随页面包），null=M3 基线
+    val titleStyle = if (titleFontFamily != null) {
+        MaterialTheme.typography.titleLarge.copy(fontFamily = titleFontFamily)
+    } else {
+        MaterialTheme.typography.titleLarge
+    }
     Box(modifier = Modifier.shadow(if (barColor.alpha >= 0.99f) barElevation else 0.dp)) {
         if (wallpaper != null) {
             Image(
@@ -107,7 +133,69 @@ fun GlassTopAppBar(
                     .then(if (cornerRadius > 0f) Modifier.clip(RoundedCornerShape(cornerRadius)) else Modifier)
             )
         }
-        TopAppBar(
+        if (useCustomLayout) {
+            // W6.5 自绘分支（管理族委托形态，对齐原 AppManagementTopBar 布局）：
+            // statusBars 内嵌 + 单行(高度槽)/双行(搜索槽) + corner clip 背景
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(barColor)
+                    .then(
+                        if (cornerRadius > 0f) {
+                            Modifier.clip(RoundedCornerShape(cornerRadius))
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .windowInsetsPadding(WindowInsets.statusBars)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(barHeight ?: 64.dp)
+                        .padding(start = 4.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (navIcon != null && onNavClick != null) {
+                        IconButton(onClick = onNavClick) {
+                            Icon(
+                                navIcon,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    if (subtitle != null) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 12.dp)
+                        ) {
+                            Text(text = title, style = titleStyle, maxLines = 1, color = contentColor)
+                            Text(
+                                text = subtitle,
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                color = contentColor.copy(alpha = 0.8f)
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = title,
+                            style = titleStyle,
+                            maxLines = 1,
+                            color = contentColor,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 12.dp)
+                        )
+                    }
+                    actions()
+                }
+                secondRow?.invoke(this)
+            }
+        } else {
+            TopAppBar(
             modifier = if (cornerRadius > 0f) Modifier.clip(RoundedCornerShape(cornerRadius)) else Modifier,
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = if (wallpaper != null) Color.Transparent else barColor,
@@ -157,6 +245,7 @@ fun GlassTopAppBar(
             },
             actions = actions
         )
+        }
     }
 }
 

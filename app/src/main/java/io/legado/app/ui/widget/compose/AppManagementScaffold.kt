@@ -2,7 +2,6 @@ package io.legado.app.ui.widget.compose
 
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -18,7 +17,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,9 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -49,12 +45,14 @@ import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.TopBarConfig
 import io.legado.app.lib.theme.backgroundColor
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.MaterialTheme
 import io.legado.app.ui.theme.ThemeSync
 import io.legado.app.ui.theme.subtitleLarge
 import io.legado.app.ui.theme.subtitleLargeX
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.contrastOn
-import io.legado.app.ui.widget.components.decodeTopBarWallpaper
 
 data class AppManagementAction(
     val text: String,
@@ -88,6 +86,18 @@ fun AppManagementScaffold(
     // 根背景（followup F4 v3）：透明度>0 时叠半透明 backgroundColor（透出 decorView 底图/背景），0=原状透明
     val rootContext = LocalContext.current
     val bgAlpha = remember(ThemeSync.version) { AppConfig.manageBgAlphaFraction }
+    // 6.6 委托收官：内容色口径保留原 AppManagementTopBar 公式（contrastOn(resolvePageBarColorWithAlpha)，
+    // 与 GlassTopAppBar 内部同源），供管理族 Action 图标 tint 使用
+    val topBarContentColor = remember(ThemeSync.version) {
+        contrastOn(
+            Color(
+                TopBarConfig.resolvePageBarColorWithAlpha(
+                    rootContext,
+                    TopBarConfig.currentConfig(rootContext, AppConfig.isNightTheme)
+                )
+            )
+        )
+    }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -96,14 +106,36 @@ fun AppManagementScaffold(
                 else Modifier
             )
     ) {
-        AppManagementTopBar(
+        // 6.5/6.6（Delta 3→1 归一）：管理族顶栏委托扩展版 GlassTopAppBar——
+        // 高度槽 48dp+双行搜索槽+statusBars 内嵌+标题字体槽，渲染路径与 Glass 族单源
+        GlassTopAppBar(
             title = title,
-            palette = palette,
-            searchQuery = searchQuery,
-            searchHint = searchHint,
-            onSearchChange = onSearchChange,
-            actions = topActions,
-            onBack = onBack
+            navIcon = if (onBack != null) Icons.AutoMirrored.Filled.ArrowBack else null,
+            onNavClick = onBack,
+            actions = {
+                topActions.forEach { action ->
+                    AppManagementTopAction(
+                        action = action,
+                        palette = palette,
+                        contentColor = topBarContentColor
+                    )
+                }
+            },
+            barHeight = 48.dp,
+            titleFontFamily = palette.settings.titleFontFamily,
+            secondRow = if (onSearchChange != null) {
+                {
+                    AppManagementSearchField(
+                        query = searchQuery.orEmpty(),
+                        hint = searchHint.orEmpty(),
+                        palette = palette,
+                        onQueryChange = onSearchChange,
+                        modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+                    )
+                }
+            } else {
+                null
+            }
         )
         Box(modifier = Modifier.weight(1f)) {
             content(palette)
@@ -117,114 +149,6 @@ fun AppManagementScaffold(
             onInvertSelection = onInvertSelection
         )
     }
-    }
-}
-
-@Composable
-private fun AppManagementTopBar(
-    title: String,
-    palette: AppManagementPalette,
-    searchQuery: String?,
-    searchHint: String?,
-    onSearchChange: ((String) -> Unit)?,
-    actions: List<AppManagementAction>,
-    onBack: (() -> Unit)?
-) {
-    val context = LocalContext.current
-    val themeVersion = ThemeSync.version
-    // H15（2026-08-28）：接入「顶栏管理」TopBarConfig——顶栏管理配置优先（STYLE_REGULAR 消费
-    // 背景色/壁纸/透明度/圆角，对齐 GlassTopAppBar/MainTopBarView renderBackgroundLayer），
-    // 未启用回落 immersiveManageBar 开关（页面底色 vs 主题主色，H1 AD-01 保留 48dp 自绘形态）
-    val config = remember(themeVersion) {
-        TopBarConfig.currentConfig(context, AppConfig.isNightTheme)
-    }
-    val isRegular = config.style == TopBarConfig.STYLE_REGULAR
-    val wallpaperFile = remember(config.wallpaperPath, themeVersion) {
-        if (isRegular && !config.wallpaperPath.isNullOrBlank()) {
-            TopBarConfig.currentWallpaperFile(context, AppConfig.isNightTheme)
-        } else {
-            null
-        }
-    }
-    val wallpaper = remember(wallpaperFile) { wallpaperFile?.let(::decodeTopBarWallpaper) }
-    // 顶栏背景三级决策链（subpage-topbar-unify AD-01）：统一消费 TopBarConfig.resolvePageBarColor
-    // 单源（显式自定义背景色 → 沉浸开关页面底色 → 默认主色），逻辑原实现提炼至此；
-    // 不加 remember：保持原直算语义，immersiveManageBar 切换后重组即时生效
-    // 顶栏最终色唯一取色入口（AD-01 v1.5）：色相+透明度合一（与 GlassTopAppBar/MainTopBarView 同源）
-    val topBarBase = Color(TopBarConfig.resolvePageBarColorWithAlpha(context, config))
-    // 内容色先于减淡决策（对比度基于不透明基色计算；非 REGULAR 由 titleTextColor
-    // 统一为 contrastOn(基色)——红队 R3-P1-1/R2-P2-3）
-    val topBarContentColor = contrastOn(topBarBase)
-    val cornerRadius = if (isRegular) TopBarConfig.cornerRadius(context, config) else 0f
-    // 顶栏着色（AD-01 v1.5）：topBarBase 已含色相+透明度（resolvePageBarColorWithAlpha 单源），
-    // 壁纸态与非壁纸态同一基色，壁纸图由下方 Image 以 wallpaperAlpha 叠加
-    val topBarColor = topBarBase
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(topBarColor)
-            .then(if (cornerRadius > 0f) Modifier.clip(RoundedCornerShape(cornerRadius)) else Modifier)
-    ) {
-        if (wallpaper != null) {
-            Image(
-                bitmap = wallpaper.asImageBitmap(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                alpha = config.wallpaperAlpha.coerceIn(0, 100) / 100f,
-                modifier = Modifier.matchParentSize()
-            )
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.statusBars)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .padding(start = 4.dp, end = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                onBack?.let {
-                    AppManagementIconAction(
-                        iconRes = R.drawable.ic_arrow_back,
-                        contentDescription = null,
-                        tint = topBarContentColor,
-                        onClick = it
-                    )
-                }
-                Text(
-                    text = title,
-                    color = topBarContentColor,
-                    // 2.3（bookshelf-refresh-and-title-fix）：19sp/SemiBold 孤例漂移归位
-                    // titleLarge（20sp/Medium）基线，与 GlassTopAppBar/ConfigTopBar/View TitleBar 对齐
-                    style = MaterialTheme.typography.titleLarge,
-                    fontFamily = palette.settings.titleFontFamily,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 12.dp)
-                )
-                actions.forEach { action ->
-                    AppManagementTopAction(
-                        action = action,
-                        palette = palette,
-                        contentColor = topBarContentColor
-                    )
-                }
-            }
-            if (onSearchChange != null) {
-                AppManagementSearchField(
-                    query = searchQuery.orEmpty(),
-                    hint = searchHint.orEmpty(),
-                    palette = palette,
-                    onQueryChange = onSearchChange,
-                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
-                )
-            }
-        }
     }
 }
 
