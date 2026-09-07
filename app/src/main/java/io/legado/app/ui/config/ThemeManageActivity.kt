@@ -75,9 +75,6 @@ import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
 import io.legado.app.databinding.ActivityThemeManageBinding
-import io.legado.app.databinding.DialogImageBlurringBinding
-import io.legado.app.databinding.DialogThemePackageEditBinding
-import io.legado.app.databinding.ItemThemePackageOptionBinding
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.config.AppearanceKitManager
@@ -85,7 +82,6 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.config.ThemePackageManager
 import io.legado.app.help.glide.ImageLoader
-import io.legado.app.lib.dialogs.AndroidAlertBuilder
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.ThemeRuntimeKeys
@@ -122,8 +118,7 @@ import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
-import io.legado.app.ui.widget.number.NumberPickerDialog
-import io.legado.app.ui.widget.seekbar.SeekBarChangeListener
+import io.legado.app.ui.widget.compose.showComposeNumberPickerDialog
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.ImageCropHelper
@@ -169,36 +164,44 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     private var entriesState by mutableStateOf<List<ThemePackageManager.Entry>>(emptyList())
     private var summaryTextState by mutableStateOf("")
-    private var isNightTheme by mutableStateOf(false)
-    private var editDialogBinding: DialogThemePackageEditBinding? = null
-    private var editingEntry: ThemePackageManager.Entry? = null
-    private var pendingBlur = 0
-    private var pendingMainBackgroundPath: String? = null
-    private var pendingMainBackgroundCrop: String? = null
-    private var pendingBookInfoBackgroundPath: String? = null
-    private var pendingPanelBackgroundPath: String? = null
-    private var pendingPanelBackgroundScaleType = ThemeConfig.PANEL_BG_CROP
-    private var pendingPanelBorderColor: String? = null
-    private var pendingPanelBorderAlpha = 100
-    private var pendingUiCornerScale = 1f
-    private var pendingUiLayoutAlpha = 100
-    private var pendingDialogAlpha = 100
-    private var pendingCardColor: String? = null
-    private var pendingMutedColor: String? = null
-    private var pendingSearchFieldBackgroundColor: String? = null
-    private var pendingTabBackgroundColor: String? = null
-    private var pendingShelfColor: String? = null
-    private var pendingCardShadow: Int? = null
-    private var pendingCardBackgroundBlur: Float? = null
-    private var pendingFontScale = 0
-    private var pendingUiCornerSearchFollow = false
-    private var pendingUiCornerReplyFollow = false
-    private var pendingUiFontPath: String? = null
-    private var pendingTitleFontPath: String? = null
+    internal var isNightTheme by mutableStateOf(false)
+    // W5 专项（1.3 收官）：编辑弹框状态 Compose 化——原 DialogThemePackageEditBinding 显示层删除，
+    // pending* 状态 mutableStateOf 化供 ThemePackageEditDialog 直接响应式读取；持久化/回调链语义零改动
+    internal var editingEntry: ThemePackageManager.Entry? = null
+    internal var pendingBlur by mutableStateOf(0)
+    internal var pendingMainBackgroundPath: String? by mutableStateOf(null)
+    internal var pendingMainBackgroundCrop: String? by mutableStateOf(null)
+    internal var pendingBookInfoBackgroundPath: String? by mutableStateOf(null)
+    internal var pendingPanelBackgroundPath: String? by mutableStateOf(null)
+    internal var pendingPanelBackgroundScaleType by mutableStateOf(ThemeConfig.PANEL_BG_CROP)
+    internal var pendingPanelBorderColor: String? by mutableStateOf(null)
+    internal var pendingPanelBorderAlpha by mutableStateOf(100)
+    internal var pendingUiCornerScale by mutableStateOf(1f)
+    internal var pendingUiLayoutAlpha by mutableStateOf(100)
+    internal var pendingDialogAlpha by mutableStateOf(100)
+    internal var pendingCardColor: String? by mutableStateOf(null)
+    internal var pendingMutedColor: String? by mutableStateOf(null)
+    internal var pendingSearchFieldBackgroundColor: String? by mutableStateOf(null)
+    internal var pendingTabBackgroundColor: String? by mutableStateOf(null)
+    internal var pendingShelfColor: String? by mutableStateOf(null)
+    internal var pendingCardShadow: Int? by mutableStateOf(null)
+    internal var pendingCardBackgroundBlur: Float? by mutableStateOf(null)
+    internal var pendingFontScale by mutableStateOf(0)
+    internal var pendingUiCornerSearchFollow by mutableStateOf(false)
+    internal var pendingUiCornerReplyFollow by mutableStateOf(false)
+    internal var pendingUiFontPath: String? by mutableStateOf(null)
+    internal var pendingTitleFontPath: String? by mutableStateOf(null)
     private var editingConfigNight: Boolean? = null
-    private var pendingUiFontColor: String? = null
-    private var pendingTitleFontColor: String? = null
-    private var pendingFontTarget = FontTarget.UI
+    internal var pendingUiFontColor: String? by mutableStateOf(null)
+    internal var pendingTitleFontColor: String? by mutableStateOf(null)
+    internal var pendingFontTarget = FontTarget.UI
+    // 4 个必选色的规范化文本（原编辑弹框 rowPrimary/rowAccent/rowBackground/rowBottomBackground 的 tvValue 语义）
+    internal var editPrimaryValue by mutableStateOf("")
+    internal var editAccentValue by mutableStateOf("")
+    internal var editBackgroundValue by mutableStateOf("")
+    internal var editBottomValue by mutableStateOf("")
+    internal var editNameValue by mutableStateOf("")
+    internal var editNameReadOnly by mutableStateOf(false)
     private var loadVersion = 0
     private var cloudContainerId: String? = null
     // subpage-topbar-unify 二期：顶栏统一组件化（GlassTopAppBar），标题/actions 状态化
@@ -228,15 +231,12 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                 requestMainBackground -> {
                     pendingMainBackgroundPath = resultPath
                     pendingMainBackgroundCrop = formatMainBackgroundCrop(result)
-                    editDialogBinding?.let { binding -> updateImageRow(binding.rowMainBackground, ThemeImageTarget.MAIN) }
                 }
                 requestBookInfoBackground -> {
                     pendingBookInfoBackgroundPath = resultPath
-                    editDialogBinding?.let { binding -> updateImageRow(binding.rowBookInfoBackground, ThemeImageTarget.BOOK_INFO) }
                 }
                 requestPanelBackground -> {
                     pendingPanelBackgroundPath = resultPath
-                    editDialogBinding?.let { binding -> updateImageRow(binding.rowPanelBackground, ThemeImageTarget.PANEL) }
                 }
             }
         } else {
@@ -390,7 +390,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             }
         }
     }
-    private fun loadThemes() {
+    internal fun loadThemes() {
         val version = ++loadVersion
         val useCloud = AppConfig.syncThemePackages
         summaryTextState = appendPendingRemoteSummary(getString(R.string.theme_package_summary_default))
@@ -444,24 +444,8 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }
 
     private fun showManualAddDialog() {
-        val dialogBinding = createEditBinding(currentConfig(), null)
-        editDialogBinding = dialogBinding
-        editingEntry = null
-        val dialog = AndroidAlertBuilder(this).apply {
-            setTitle(getString(R.string.theme_manual_add))
-            customView { dialogBinding.root }
-            onDismiss {
-                editDialogBinding = null
-                editingEntry = null
-            }
-        }.build()
-        dialog.setOnShowListener {
-            dialog.applyTint()
-            applyThemeEditDialogSize(dialog)
-        }
-        applyThemeEditFonts(dialogBinding)
-        bindThemeEditDialogActions(dialog, dialogBinding)
-        dialog.show()
+        initEditState(currentConfig(), null)
+        showDialogFragment(ThemePackageEditDialog())
     }
 
     private fun showEditDialog(entry: ThemePackageManager.Entry) {
@@ -477,24 +461,8 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     entry
                 }
             }.onSuccess { localEntry ->
-                val dialogBinding = createEditBinding(ThemePackageManager.getConfig(localEntry), localEntry)
-                editDialogBinding = dialogBinding
-                editingEntry = localEntry
-                val dialog = AndroidAlertBuilder(this@ThemeManageActivity).apply {
-                    setTitle(getString(R.string.theme_edit))
-                    customView { dialogBinding.root }
-                    onDismiss {
-                        editDialogBinding = null
-                        editingEntry = null
-                    }
-                }.build()
-                dialog.setOnShowListener {
-                    dialog.applyTint()
-                    applyThemeEditDialogSize(dialog)
-                }
-                applyThemeEditFonts(dialogBinding)
-                bindThemeEditDialogActions(dialog, dialogBinding)
-                dialog.show()
+                initEditState(ThemePackageManager.getConfig(localEntry), localEntry)
+                showDialogFragment(ThemePackageEditDialog())
             }.onFailure {
                 if (it.isJobCancellation()) return@onFailure
                 toastOnUi(getString(R.string.theme_package_read_failed, it.localizedMessage))
@@ -502,10 +470,11 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         }
     }
 
-    private fun createEditBinding(
+    // W5 专项：原 createEditBinding 的状态初始化段（View 表单 inflate 段随 Compose 化删除）
+    private fun initEditState(
         current: ThemeConfig.Config,
         entry: ThemePackageManager.Entry?
-    ): DialogThemePackageEditBinding {
+    ) {
         val configNight = current.isNightTheme
         editingConfigNight = configNight
         pendingMainBackgroundPath = current.backgroundImgPath
@@ -541,425 +510,17 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         )
         pendingUiCornerSearchFollow = current.uiCornerSearchFollow ?: themeUiCornerSearchFollow(configNight)
         pendingUiCornerReplyFollow = current.uiCornerReplyFollow ?: themeUiCornerReplyFollow(configNight)
-        return DialogThemePackageEditBinding.inflate(layoutInflater).apply {
-            etName.setText(current.themeName)
-            setupColorRow(
-                rowPrimary,
-                R.string.theme_color_primary,
-                current.primaryColor,
-                colorPrimary,
-                ThemeStore.primaryColor(this@ThemeManageActivity)
-            )
-            setupColorRow(
-                rowAccent,
-                R.string.theme_color_accent,
-                current.accentColor,
-                colorAccent,
-                ThemeStore.accentColor(this@ThemeManageActivity)
-            )
-            setupColorRow(
-                rowBackground,
-                R.string.theme_color_background,
-                current.backgroundColor,
-                colorBackground,
-                ThemeStore.backgroundColor(this@ThemeManageActivity)
-            )
-            setupColorRow(
-                rowBottomBackground,
-                R.string.theme_color_bottom_background,
-                current.bottomBackground,
-                colorBottomBackground,
-                ThemeStore.bottomBackground(this@ThemeManageActivity)
-            )
-            setupOptionalColorRow(rowCardColor, R.string.theme_color_card, pendingCardColor, colorCard)
-            setupOptionalColorRow(rowMutedColor, R.string.theme_color_muted, pendingMutedColor, colorMuted)
-            setupOptionalColorRow(
-                rowSearchFieldBackgroundColor,
-                R.string.theme_color_search_field_background,
-                pendingSearchFieldBackgroundColor,
-                colorSearchFieldBackground
-            )
-            setupOptionalColorRow(
-                rowTabBackgroundColor,
-                R.string.theme_color_tab_background,
-                pendingTabBackgroundColor,
-                colorTabBackground
-            )
-            setupOptionalColorRow(rowShelfColor, R.string.theme_color_shelf, pendingShelfColor, colorShelf)
-            setupImageRow(rowMainBackground, R.string.theme_image_main_background, ThemeImageTarget.MAIN)
-            setupImageRow(rowBookInfoBackground, R.string.theme_image_book_info_background, ThemeImageTarget.BOOK_INFO)
-            setupImageRow(rowPanelBackground, R.string.theme_image_panel_background, ThemeImageTarget.PANEL)
-            setupPanelBackgroundModeRow(rowPanelBackgroundMode)
-            setupInterfaceRows(this)
-            setupEditGroups(this)
-            etName.isEnabled = entry?.source != ThemePackageManager.Source.REMOTE
-        }
+        editPrimaryValue = normalizeColor(current.primaryColor, colorPrimary)
+        editAccentValue = normalizeColor(current.accentColor, colorAccent)
+        editBackgroundValue = normalizeColor(current.backgroundColor, colorBackground)
+        editBottomValue = normalizeColor(current.bottomBackground, colorBottomBackground)
+        editNameValue = current.themeName
+        editNameReadOnly = entry?.source == ThemePackageManager.Source.REMOTE
+        editingEntry = entry
     }
 
-    private fun bindThemeEditDialogActions(
-        dialog: androidx.appcompat.app.AlertDialog,
-        binding: DialogThemePackageEditBinding
-    ) {
-        val entry = editingEntry
-        binding.btnDelete.visibility =
-            if (entry?.source == ThemePackageManager.Source.LOCAL) View.VISIBLE else View.GONE
-        binding.btnDelete.setOnClickListener {
-            val localEntry = editingEntry?.takeIf { it.source == ThemePackageManager.Source.LOCAL }
-                ?: return@setOnClickListener
-            confirmDeleteTheme(
-                localEntry,
-                getString(R.string.theme_delete_local_confirm)
-            ) {
-                ThemePackageManager.deleteLocal(localEntry)
-                withContext(Dispatchers.Main) {
-                    dialog.dismiss()
-                    loadThemes()
-                }
-            }
-        }
-        binding.btnCancel.setOnClickListener {
-            dialog.dismiss()
-        }
-        binding.btnConfirm.setOnClickListener {
-            if (saveTheme(binding)) {
-                dialog.dismiss()
-            }
-        }
-    }
 
-    private fun setupEditGroups(binding: DialogThemePackageEditBinding) = binding.run {
-        val tabs = listOf(
-            btnColorGroup to llColorGroup,
-            btnImageGroup to llImageGroup,
-            btnInterfaceGroup to llInterfaceGroup,
-            btnFontGroup to llFontGroup
-        )
-        tabs.forEach { (button, _) ->
-            button.background = UiCorner.actionSelector(
-                Color.TRANSPARENT,
-                themeCardColorOrDefault(),
-                UiCorner.actionRadius(this@ThemeManageActivity)
-            )
-            button.applyUiTitleTypeface(this@ThemeManageActivity)
-        }
-        fun select(index: Int) {
-            tabs.forEachIndexed { tabIndex, (button, group) ->
-                val selected = tabIndex == index
-                button.isSelected = selected
-                button.setTextColor(if (selected) accentColor else primaryTextColor)
-                group.visibility = if (selected) View.VISIBLE else View.GONE
-            }
-        }
-        tabs.forEachIndexed { index, (button, _) ->
-            button.setOnClickListener { select(index) }
-        }
-        select(0)
-    }
-
-    private fun setupInterfaceRows(binding: DialogThemePackageEditBinding) = binding.run {
-        setupCornerScaleRow(rowCornerScale)
-        setupLayoutAlphaRow(rowLayoutAlpha)
-        setupDialogAlphaRow(rowDialogAlpha)
-        setupPanelBorderColorRow(rowPanelBorderColor)
-        setupPanelBorderAlphaRow(rowPanelBorderAlpha)
-        setupOptionalIntRow(rowCardShadow, R.string.theme_card_shadow, 0, 24, pendingCardShadow) {
-            pendingCardShadow = it
-        }
-        setupOptionalFloatRow(rowCardBackgroundBlur, R.string.theme_card_background_blur, pendingCardBackgroundBlur) {
-            pendingCardBackgroundBlur = it
-        }
-        setupFontScaleRow(rowFontScale)
-        setupUiFontRow(rowUiFont)
-        setupOptionalColorRow(rowUiFontColor, R.string.theme_ui_font_color, pendingUiFontColor, colorUiFont)
-        setupTitleFontRow(rowTitleFont)
-        setupOptionalColorRow(rowTitleFontColor, R.string.theme_title_font_color, pendingTitleFontColor, colorTitleFont)
-        setupSwitchRow(rowSearchFollow, R.string.ui_corner_search_follow) {
-            pendingUiCornerSearchFollow = !pendingUiCornerSearchFollow
-            updateSwitchRow(rowSearchFollow, pendingUiCornerSearchFollow)
-        }
-        setupSwitchRow(rowReplyFollow, R.string.ui_corner_reply_follow) {
-            pendingUiCornerReplyFollow = !pendingUiCornerReplyFollow
-            updateSwitchRow(rowReplyFollow, pendingUiCornerReplyFollow)
-        }
-        updateSwitchRow(rowSearchFollow, pendingUiCornerSearchFollow)
-        updateSwitchRow(rowReplyFollow, pendingUiCornerReplyFollow)
-        applyThemeEditFonts(this)
-    }
-
-    private fun applyThemeEditDialogSize(dialog: androidx.appcompat.app.AlertDialog) {
-        val metrics = resources.displayMetrics
-        val heightRatio = if (metrics.heightPixels < 1600) {
-            EDIT_DIALOG_HEIGHT_RATIO_COMPACT
-        } else {
-            EDIT_DIALOG_HEIGHT_RATIO
-        }
-        dialog.setLayout(
-            (metrics.widthPixels * EDIT_DIALOG_WIDTH_RATIO).toInt(),
-            (metrics.heightPixels * heightRatio).toInt()
-        )
-    }
-
-    private fun applyThemeEditFonts(binding: DialogThemePackageEditBinding) {
-        // 弹窗背景/卡片始终跟随当前界面模式；跨模式编辑（如白天编辑夜间主题）时
-        // 若再把文字染成另一模式的字体色，会出现"卡片不变、文字变夜间"的割裂，
-        // 甚至浅色文字叠浅色卡片不可读。模式不一致时文字保持当前主题色，颜色值看色板行。
-        val previewFontColors = editingConfigNight == AppConfig.isNightTheme
-        val uiTf = loadUiTypeface(pendingUiFontPath.orEmpty()) ?: uiTypeface()
-        binding.root.applyUiBodyTypefaceDeep(uiTf)
-        val titleTf = loadUiTypeface(pendingTitleFontPath.orEmpty()) ?: titleTypeface()
-        listOf(
-            binding.rowPrimary.tvTitle,
-            binding.rowAccent.tvTitle,
-            binding.rowBackground.tvTitle,
-            binding.rowBottomBackground.tvTitle,
-            binding.rowCardColor.tvTitle,
-            binding.rowMutedColor.tvTitle,
-            binding.rowSearchFieldBackgroundColor.tvTitle,
-            binding.rowTabBackgroundColor.tvTitle,
-            binding.rowShelfColor.tvTitle,
-            binding.rowMainBackground.tvTitle,
-            binding.rowBookInfoBackground.tvTitle,
-            binding.rowPanelBackground.tvTitle,
-            binding.rowPanelBackgroundMode.tvTitle,
-            binding.rowCornerScale.tvTitle,
-            binding.rowLayoutAlpha.tvTitle,
-            binding.rowDialogAlpha.tvTitle,
-            binding.rowPanelBorderColor.tvTitle,
-            binding.rowPanelBorderAlpha.tvTitle,
-            binding.rowCardShadow.tvTitle,
-            binding.rowCardBackgroundBlur.tvTitle,
-            binding.rowFontScale.tvTitle,
-            binding.rowUiFont.tvTitle,
-            binding.rowUiFontColor.tvTitle,
-            binding.rowTitleFont.tvTitle,
-            binding.rowTitleFontColor.tvTitle,
-            binding.rowSearchFollow.tvTitle,
-            binding.rowReplyFollow.tvTitle,
-            binding.btnColorGroup,
-            binding.btnImageGroup,
-            binding.btnInterfaceGroup,
-            binding.btnFontGroup,
-            binding.btnCancel,
-            binding.btnConfirm
-        ).forEach {
-            it.applyUiTitleTypeface(this)
-            it.typeface = titleTf
-            if (previewFontColors) {
-                pendingTitleFontColor?.toColorInt()?.let { color ->
-                    it.setTextColor(color)
-                }
-            }
-        }
-        if (previewFontColors) {
-            val uiFontDemoColor = pendingUiFontColor.toThemeManageColorOrNull() ?: defaultFontDemoColor()
-            val titleFontDemoColor = pendingTitleFontColor.toThemeManageColorOrNull() ?: defaultFontDemoColor()
-            listOf(binding.rowUiFont.tvValue, binding.rowUiFontColor.tvValue).forEach {
-                it.setTextColor(uiFontDemoColor)
-            }
-            listOf(binding.rowTitleFont.tvValue, binding.rowTitleFontColor.tvValue).forEach {
-                it.setTextColor(titleFontDemoColor)
-            }
-        }
-        val actionRadius = UiCorner.actionRadius(this)
-        binding.btnCancel.background = UiCorner.actionSelector(
-            Color.TRANSPARENT,
-            themeCardColorOrDefault(),
-            actionRadius
-        )
-        binding.btnConfirm.background = UiCorner.actionSelector(
-            Color.TRANSPARENT,
-            themeCardColorOrDefault(),
-            actionRadius
-        )
-    }
-
-    private fun setupCornerScaleRow(row: ItemThemePackageOptionBinding) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(R.string.ui_corner_scale)
-        row.viewSwatch.visibility = View.INVISIBLE
-        row.tvValue.text = pendingUiCornerScale.toScaleText()
-        row.root.setOnClickListener {
-            NumberPickerDialog(this, isDecimalMode = true)
-                .setTitle(getString(R.string.ui_corner_scale))
-                .setMaxValue(30)
-                .setMinValue(0)
-                .setValue((pendingUiCornerScale * 10).toInt())
-                .setCustomButton(R.string.btn_default_s) {
-                    pendingUiCornerScale = 1f
-                    row.tvValue.text = pendingUiCornerScale.toScaleText()
-                }
-                .show {
-                    pendingUiCornerScale = (it / 10f).coerceIn(0f, 3f)
-                    row.tvValue.text = pendingUiCornerScale.toScaleText()
-                }
-        }
-    }
-
-    private fun setupLayoutAlphaRow(row: ItemThemePackageOptionBinding) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(R.string.ui_layout_alpha)
-        row.viewSwatch.visibility = View.INVISIBLE
-        row.tvValue.text = getString(R.string.ui_layout_alpha_value, pendingUiLayoutAlpha)
-        row.root.setOnClickListener {
-            NumberPickerDialog(this)
-                .setTitle(getString(R.string.ui_layout_alpha))
-                .setMaxValue(100)
-                .setMinValue(0)
-                .setValue(pendingUiLayoutAlpha)
-                .setCustomButton(R.string.btn_default_s) {
-                    pendingUiLayoutAlpha = 100
-                    row.tvValue.text = getString(R.string.ui_layout_alpha_value, pendingUiLayoutAlpha)
-                }
-                .show {
-                    pendingUiLayoutAlpha = it.coerceIn(0, 100)
-                    row.tvValue.text = getString(R.string.ui_layout_alpha_value, pendingUiLayoutAlpha)
-                }
-        }
-    }
-
-    private fun setupDialogAlphaRow(row: ItemThemePackageOptionBinding) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(R.string.dialog_alpha)
-        row.viewSwatch.visibility = View.INVISIBLE
-        row.tvValue.text = getString(R.string.ui_layout_alpha_value, pendingDialogAlpha)
-        row.root.setOnClickListener {
-            NumberPickerDialog(this)
-                .setTitle(getString(R.string.dialog_alpha))
-                .setMaxValue(100)
-                .setMinValue(0)
-                .setValue(pendingDialogAlpha)
-                .setCustomButton(R.string.btn_default_s) {
-                    pendingDialogAlpha = 100
-                    row.tvValue.text = getString(R.string.ui_layout_alpha_value, pendingDialogAlpha)
-                }
-                .show {
-                    pendingDialogAlpha = it.coerceIn(0, 100)
-                    row.tvValue.text = getString(R.string.ui_layout_alpha_value, pendingDialogAlpha)
-                }
-        }
-    }
-
-    private fun setupFontScaleRow(row: ItemThemePackageOptionBinding) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(R.string.font_scale)
-        row.viewSwatch.visibility = View.INVISIBLE
-        row.tvValue.text = if (pendingFontScale == 0) {
-            getString(R.string.btn_default_s)
-        } else {
-            "%.1f".format(Locale.US, pendingFontScale / 10f)
-        }
-        row.root.setOnClickListener {
-            NumberPickerDialog(this)
-                .setTitle(getString(R.string.font_scale))
-                .setMaxValue(16)
-                .setMinValue(8)
-                .setValue(if (pendingFontScale == 0) 10 else pendingFontScale)
-                .setCustomButton(R.string.btn_default_s) {
-                    pendingFontScale = 0
-                    setupFontScaleRow(row)
-                    editDialogBinding?.let { applyThemeEditFonts(it) }
-                }
-                .show {
-                    pendingFontScale = it.coerceIn(8, 16)
-                    setupFontScaleRow(row)
-                    editDialogBinding?.let { applyThemeEditFonts(it) }
-                }
-        }
-    }
-
-    private fun setupUiFontRow(row: ItemThemePackageOptionBinding) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(R.string.ui_font)
-        row.viewSwatch.visibility = View.INVISIBLE
-        row.tvValue.text = uiFontDisplayName(pendingUiFontPath)
-        row.root.setOnClickListener {
-            pendingFontTarget = FontTarget.UI
-            showDialogFragment<FontSelectDialog>()
-        }
-    }
-
-    private fun setupTitleFontRow(row: ItemThemePackageOptionBinding) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(R.string.title_font)
-        row.viewSwatch.visibility = View.INVISIBLE
-        row.tvValue.text = uiFontDisplayName(pendingTitleFontPath)
-        row.root.setOnClickListener {
-            pendingFontTarget = FontTarget.TITLE
-            showDialogFragment<FontSelectDialog>()
-        }
-    }
-
-    private fun setupSwitchRow(row: ItemThemePackageOptionBinding, titleRes: Int, onClick: () -> Unit) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(titleRes)
-        row.viewSwatch.visibility = View.INVISIBLE
-        row.root.setOnClickListener { onClick() }
-    }
-
-    private fun updateSwitchRow(row: ItemThemePackageOptionBinding, checked: Boolean) {
-        row.tvValue.text = getString(if (checked) R.string.enable else R.string.disable)
-    }
-
-    private fun setupColorRow(
-        row: ItemThemePackageOptionBinding,
-        titleRes: Int,
-        colorText: String,
-        target: Int,
-        fallbackColor: Int
-    ) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(titleRes)
-        row.viewSwatch.visibility = View.VISIBLE
-        val normalized = normalizeColor(colorText, fallbackColor)
-        row.tvValue.text = normalized
-        updateSwatch(row, normalized.toColorInt())
-        row.root.setOnClickListener {
-            ColorPickerDialog.newBuilder()
-                .setColor(colorIntOrDefault(row.tvValue.text?.toString(), fallbackColor))
-                .setShowAlphaSlider(false)
-                .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
-                .setDialogId(target)
-                .show(this)
-        }
-    }
-
-    private fun setupOptionalColorRow(
-        row: ItemThemePackageOptionBinding,
-        titleRes: Int,
-        colorText: String?,
-        target: Int
-    ) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(titleRes)
-        val normalized = normalizeOptionalColor(colorText)
-        row.viewSwatch.visibility = if (normalized == null) View.INVISIBLE else View.VISIBLE
-        row.tvValue.text = normalized ?: getString(R.string.theme_value_follow_default)
-        normalized?.toColorInt()?.let { updateSwatch(row, it) }
-        row.root.setOnClickListener {
-            showComposeChoiceListDialog(
-                getString(titleRes),
-                listOf(getString(R.string.theme_value_follow_default), getString(R.string.select_color))
-            ) { index ->
-                if (index == 0) {
-                    setOptionalColor(target, null)
-                } else {
-                    val currentColor = optionalColorForTarget(target)
-                    ColorPickerDialog.newBuilder()
-                        .setColor(colorIntOrDefault(currentColor, optionalColorFallback(target)))
-                        .setShowAlphaSlider(false)
-                        .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
-                        .setDialogId(target)
-                        .show(this)
-                }
-            }
-        }
-        row.root.setOnLongClickListener {
-            setOptionalColor(target, null)
-            true
-        }
-    }
-
-    private fun optionalColorForTarget(target: Int): String? {
+    internal fun optionalColorForTarget(target: Int): String? {
         return when (target) {
             colorCard -> pendingCardColor
             colorMuted -> pendingMutedColor
@@ -972,7 +533,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         }
     }
 
-    private fun optionalColorFallback(target: Int): Int {
+    internal fun optionalColorFallback(target: Int): Int {
         return when (target) {
             colorUiFont, colorTitleFont -> defaultFontDemoColor()
             else -> accentColor
@@ -989,149 +550,28 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         }
     }
 
-    private fun setupOptionalIntRow(
-        row: ItemThemePackageOptionBinding,
-        titleRes: Int,
-        min: Int,
-        max: Int,
-        value: Int?,
-        onChanged: (Int?) -> Unit
-    ) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(titleRes)
-        row.viewSwatch.visibility = View.INVISIBLE
-        row.tvValue.text = value?.toString() ?: getString(R.string.theme_value_follow_default)
-        row.root.setOnClickListener {
-            NumberPickerDialog(this)
-                .setTitle(getString(titleRes))
-                .setMinValue(min)
-                .setMaxValue(max)
-                .setValue(value ?: min)
-                .setCustomButton(R.string.btn_default_s) {
-                    onChanged(null)
-                    row.tvValue.text = getString(R.string.theme_value_follow_default)
-                }
-                .show {
-                    val next = it.coerceIn(min, max)
-                    onChanged(next)
-                    row.tvValue.text = next.toString()
-                }
-        }
-    }
 
-    private fun setupOptionalFloatRow(
-        row: ItemThemePackageOptionBinding,
-        titleRes: Int,
-        value: Float?,
-        onChanged: (Float?) -> Unit
-    ) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(titleRes)
-        row.viewSwatch.visibility = View.INVISIBLE
-        row.tvValue.text = value?.let { "%.1f".format(Locale.US, it) }
-            ?: getString(R.string.theme_value_follow_default)
-        row.root.setOnClickListener {
-            NumberPickerDialog(this, isDecimalMode = true)
-                .setTitle(getString(titleRes))
-                .setMinValue(0)
-                .setMaxValue(250)
-                .setValue(((value ?: 0f) * 10f).toInt())
-                .setCustomButton(R.string.btn_default_s) {
-                    onChanged(null)
-                    row.tvValue.text = getString(R.string.theme_value_follow_default)
-                }
-                .show {
-                    val next = (it / 10f).coerceIn(0f, 25f)
-                    onChanged(next)
-                    row.tvValue.text = "%.1f".format(Locale.US, next)
-                }
-        }
-    }
+    // W5 专项：原 updateImageRow 的行值文本逻辑（Dialog 渲染用）
+    internal fun cornerScaleText(): String = pendingUiCornerScale.toScaleText()
 
-    private fun updateSwatch(row: ItemThemePackageOptionBinding, color: Int) {
-        row.viewSwatch.background = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = UiCorner.scaledDp(11f)
-            setColor(color)
-            setStroke((1f * resources.displayMetrics.density).toInt().coerceAtLeast(1), ColorUtils.adjustAlpha(primaryTextColor, 0.16f))
-        }
-    }
-
-    private fun setupImageRow(row: ItemThemePackageOptionBinding, titleRes: Int, target: ThemeImageTarget) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(titleRes)
-        row.viewSwatch.visibility = View.INVISIBLE
-        updateImageRow(row, target)
-        row.root.setOnClickListener {
-            showImageActions(target)
-        }
-    }
-
-    private fun setupPanelBorderColorRow(row: ItemThemePackageOptionBinding) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(R.string.theme_panel_border_color)
-        val colorText = normalizeOptionalColor(pendingPanelBorderColor)
-        pendingPanelBorderColor = colorText
-        row.viewSwatch.visibility = if (colorText == null) View.INVISIBLE else View.VISIBLE
-        row.tvValue.text = colorText?.uppercase(Locale.ROOT) ?: getString(R.string.disable)
-        colorText?.toColorInt()?.let { updateSwatch(row, it) }
-        row.root.setOnClickListener {
-            showComposeChoiceListDialog(
-                getString(R.string.theme_panel_border_color),
-                listOf(getString(R.string.disable), getString(R.string.select_color))
-            ) { index ->
-                if (index == 0) {
-                    pendingPanelBorderColor = null
-                    setupPanelBorderColorRow(row)
-                } else {
-                    val currentColor = normalizeOptionalColor(pendingPanelBorderColor)
-                    ColorPickerDialog.newBuilder()
-                        .setColor(colorIntOrDefault(currentColor, accentColor))
-                        .setShowAlphaSlider(false)
-                        .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
-                        .setDialogId(colorPanelBorder)
-                        .show(this)
-                }
-            }
-        }
-    }
-    private fun setupPanelBorderAlphaRow(row: ItemThemePackageOptionBinding) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(R.string.theme_panel_border_alpha)
-        row.viewSwatch.visibility = View.INVISIBLE
-        row.tvValue.text = getString(R.string.ui_layout_alpha_value, pendingPanelBorderAlpha)
-        row.root.setOnClickListener {
-            NumberPickerDialog(this)
-                .setTitle(getString(R.string.theme_panel_border_alpha))
-                .setMaxValue(100)
-                .setMinValue(0)
-                .setValue(pendingPanelBorderAlpha)
-                .setCustomButton(R.string.btn_default_s) {
-                    pendingPanelBorderAlpha = 100
-                    row.tvValue.text = getString(R.string.ui_layout_alpha_value, pendingPanelBorderAlpha)
-                }
-                .show {
-                    pendingPanelBorderAlpha = it.coerceIn(0, 100)
-                    row.tvValue.text = getString(R.string.ui_layout_alpha_value, pendingPanelBorderAlpha)
-                }
-        }
-    }
-
-    private fun updateImageRow(row: ItemThemePackageOptionBinding, target: ThemeImageTarget) {
+    internal fun imageValueText(target: ThemeImageTarget): String {
         val path = when (target) {
             ThemeImageTarget.MAIN -> pendingMainBackgroundPath
             ThemeImageTarget.BOOK_INFO -> pendingBookInfoBackgroundPath
             ThemeImageTarget.PANEL -> pendingPanelBackgroundPath
         }
-        row.tvValue.text = when {
-            path.isNullOrBlank() && target == ThemeImageTarget.MAIN -> getString(R.string.theme_image_value_unselected_blur, pendingBlur)
+        return when {
+            path.isNullOrBlank() && target == ThemeImageTarget.MAIN ->
+                getString(R.string.theme_image_value_unselected_blur, pendingBlur)
             path.isNullOrBlank() -> getString(R.string.theme_image_value_unselected)
-            target == ThemeImageTarget.MAIN -> getString(R.string.theme_image_value_file_blur, File(path).name, pendingBlur)
+            target == ThemeImageTarget.MAIN ->
+                getString(R.string.theme_image_value_file_blur, File(path).name, pendingBlur)
             else -> File(path).name
         }
     }
 
-    private fun showImageActions(target: ThemeImageTarget) {
+    // W5 专项：图片行操作菜单（原行内点击改弹框行回调，状态化后无需手动刷行）
+    internal fun showImageActions(target: ThemeImageTarget) {
         val hasImage = when (target) {
             ThemeImageTarget.MAIN -> !pendingMainBackgroundPath.isNullOrBlank()
             ThemeImageTarget.BOOK_INFO -> !pendingBookInfoBackgroundPath.isNullOrBlank()
@@ -1166,15 +606,12 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                         ThemeImageTarget.MAIN -> {
                             pendingMainBackgroundPath = ""
                             pendingMainBackgroundCrop = null
-                            editDialogBinding?.let { updateImageRow(it.rowMainBackground, ThemeImageTarget.MAIN) }
                         }
                         ThemeImageTarget.BOOK_INFO -> {
                             pendingBookInfoBackgroundPath = ""
-                            editDialogBinding?.let { updateImageRow(it.rowBookInfoBackground, ThemeImageTarget.BOOK_INFO) }
                         }
                         ThemeImageTarget.PANEL -> {
                             pendingPanelBackgroundPath = ""
-                            editDialogBinding?.let { updateImageRow(it.rowPanelBackground, ThemeImageTarget.PANEL) }
                         }
                     }
                 }
@@ -1182,67 +619,27 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         }
     }
 
-    private fun setupPanelBackgroundModeRow(row: ItemThemePackageOptionBinding) {
-        applyOptionRowBackground(row)
-        row.tvTitle.text = getString(R.string.theme_image_panel_background_mode)
-        row.viewSwatch.visibility = View.INVISIBLE
-        updatePanelBackgroundModeRow(row)
-        row.root.setOnClickListener {
-            val modes = listOf(ThemeConfig.PANEL_BG_CROP, ThemeConfig.PANEL_BG_FIT)
-            showComposeChoiceListDialog(
-                getString(R.string.theme_image_panel_background_mode),
-                modes.map { panelBackgroundModeText(it) }
-            ) { index ->
-                pendingPanelBackgroundScaleType = modes[index]
-                updatePanelBackgroundModeRow(row)
-            }
-        }
-    }
 
-    private fun updatePanelBackgroundModeRow(row: ItemThemePackageOptionBinding) {
-        row.tvValue.text = panelBackgroundModeText(pendingPanelBackgroundScaleType)
-    }
-
-    private fun panelBackgroundModeText(mode: String): String {
+    internal fun panelBackgroundModeText(mode: String): String {
         return getString(
             if (mode == ThemeConfig.PANEL_BG_FIT) R.string.theme_image_mode_fit
             else R.string.theme_image_mode_crop
         )
     }
-
-    private fun applyOptionRowBackground(row: ItemThemePackageOptionBinding) {
-        row.root.background = UiCorner.opaqueRounded(
-            themeCardColorOrDefault(),
-            UiCorner.panelRadius(this)
+    // W5 专项：模糊度滑条弹框（原 alert{} View 弹框）改 Compose 数字选择器，语义等价（0~25）
+    internal fun showBlurDialog() {
+        showComposeNumberPickerDialog(
+            title = getString(R.string.theme_image_blur),
+            value = pendingBlur,
+            minValue = 0,
+            maxValue = 25,
+            onValue = { pendingBlur = it }
         )
     }
 
-    private fun showBlurDialog() {
-        alert(R.string.theme_image_blur) {
-            val blurBinding = DialogImageBlurringBinding.inflate(layoutInflater).apply {
-                seekBar.progress = pendingBlur
-                textViewValue.text = pendingBlur.toString()
-                seekBar.setOnSeekBarChangeListener(object : SeekBarChangeListener {
-                    override fun onProgressChanged(
-                        seekBar: android.widget.SeekBar,
-                        progress: Int,
-                        fromUser: Boolean
-                    ) {
-                        textViewValue.text = progress.toString()
-                    }
-                })
-            }
-            customView { blurBinding.root }
-            okButton {
-                pendingBlur = blurBinding.seekBar.progress.coerceIn(0, 25)
-                editDialogBinding?.let { updateImageRow(it.rowMainBackground, ThemeImageTarget.MAIN) }
-            }
-            cancelButton()
-        }
-    }
-
-    private fun saveTheme(dialogBinding: DialogThemePackageEditBinding): Boolean {
-        val name = dialogBinding.etName.text?.toString()?.trim().orEmpty()
+    // W5 专项：原 saveTheme(dialogBinding) 改从 Compose 状态取值（名称+4 必选色），其余字段仍读 pending* 状态
+    internal fun saveThemeFromDialog(nameInput: String): Boolean {
+        val name = nameInput.trim().orEmpty()
             .ifBlank { getString(if (isNightTheme) R.string.theme_night else R.string.theme_day) }
         val baseConfig = editingEntry?.let {
             kotlin.runCatching { ThemePackageManager.getConfig(it) }.getOrNull()
@@ -1252,19 +649,19 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                 themeName = name,
                 isNightTheme = isNightTheme,
                 primaryColor = normalizeColor(
-                    dialogBinding.rowPrimary.tvValue.text?.toString(),
+                    editPrimaryValue,
                     ThemeStore.primaryColor(this)
                 ),
                 accentColor = normalizeColor(
-                    dialogBinding.rowAccent.tvValue.text?.toString(),
+                    editAccentValue,
                     ThemeStore.accentColor(this)
                 ),
                 backgroundColor = normalizeColor(
-                    dialogBinding.rowBackground.tvValue.text?.toString(),
+                    editBackgroundValue,
                     ThemeStore.backgroundColor(this)
                 ),
                 bottomBackground = normalizeColor(
-                    dialogBinding.rowBottomBackground.tvValue.text?.toString(),
+                    editBottomValue,
                     ThemeStore.bottomBackground(this)
                 ),
                 transparentNavBar = true,
@@ -1502,26 +899,14 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         get() = false
 
     override fun selectFont(path: String) {
+        // W5 专项：状态化后仅更新路径，弹框行自动重组
         when (pendingFontTarget) {
-            FontTarget.UI -> {
-                pendingUiFontPath = path
-                editDialogBinding?.let {
-                    setupUiFontRow(it.rowUiFont)
-                    applyThemeEditFonts(it)
-                }
-            }
-
-            FontTarget.TITLE -> {
-                pendingTitleFontPath = path
-                editDialogBinding?.let {
-                    setupTitleFontRow(it.rowTitleFont)
-                    applyThemeEditFonts(it)
-                }
-            }
+            FontTarget.UI -> pendingUiFontPath = path
+            FontTarget.TITLE -> pendingTitleFontPath = path
         }
     }
 
-    private fun uiFontDisplayName(path: String?): String {
+    internal fun uiFontDisplayName(path: String?): String {
         if (path.isNullOrBlank()) {
             return getString(R.string.default_font)
         }
@@ -1552,12 +937,12 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         }
     }
 
-    private enum class FontTarget {
+    internal enum class FontTarget {
         UI,
         TITLE
     }
 
-    private fun Float.toScaleText(): String {
+    internal fun Float.toScaleText(): String {
         return if (this % 1f == 0f) {
             this.toInt().toString()
         } else {
@@ -1565,17 +950,17 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         }
     }
 
-    private fun normalizeColor(value: String?, fallbackColor: Int): String {
+    internal fun normalizeColor(value: String?, fallbackColor: Int): String {
         return normalizeOptionalColor(value) ?: colorToHex(fallbackColor)
     }
 
-    private fun normalizeOptionalColor(value: String?): String? {
+    internal fun normalizeOptionalColor(value: String?): String? {
         val normalized = value.normalizedEditableColorString() ?: return null
         val color = kotlin.runCatching { normalized.toColorInt() }.getOrNull() ?: return null
         return colorToHex(color)
     }
 
-    private fun colorIntOrDefault(value: String?, fallbackColor: Int): Int {
+    internal fun colorIntOrDefault(value: String?, fallbackColor: Int): Int {
         return normalizeOptionalColor(value)
             ?.let { kotlin.runCatching { it.toColorInt() }.getOrNull() }
             ?: fallbackColor
@@ -2038,7 +1423,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         )
     }
 
-    private fun confirmDeleteTheme(
+    internal fun confirmDeleteTheme(
         entry: ThemePackageManager.Entry,
         message: String,
         block: suspend () -> Unit
@@ -2049,72 +1434,68 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         }
         confirmDelete(message, block)
     }
+    // W5 专项：ThemePackageEditDialog 桥接——第三方取色器/字体选择回调链保持宿主承载
+    internal fun openColorPicker(dialogId: Int, currentColor: String?, fallbackColor: Int) {
+        ColorPickerDialog.newBuilder()
+            .setColor(colorIntOrDefault(currentColor, fallbackColor))
+            .setShowAlphaSlider(false)
+            .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
+            .setDialogId(dialogId)
+            .show(this)
+    }
+
+    internal fun openFontPicker(target: FontTarget) {
+        pendingFontTarget = target
+        showDialogFragment<FontSelectDialog>()
+    }
+
     override fun onColorSelected(dialogId: Int, color: Int) {
-        val binding = editDialogBinding ?: return
+        // W5 专项：状态化后直接写 Compose 状态（原 editDialogBinding 行刷新链删除）
         val hex = colorToHex(color)
         if (setOptionalColor(dialogId, hex)) {
             return
         }
-        val row = when (dialogId) {
-            colorPrimary -> binding.rowPrimary
-            colorAccent -> binding.rowAccent
-            colorBackground -> binding.rowBackground
-            colorBottomBackground -> binding.rowBottomBackground
-            colorPanelBorder -> binding.rowPanelBorderColor
-            else -> null
-        } ?: return
-        if (dialogId == colorPanelBorder) {
-            pendingPanelBorderColor = hex
+        when (dialogId) {
+            colorPrimary -> editPrimaryValue = hex
+            colorAccent -> editAccentValue = hex
+            colorBackground -> editBackgroundValue = hex
+            colorBottomBackground -> editBottomValue = hex
+            colorPanelBorder -> pendingPanelBorderColor = hex
         }
-        row.tvValue.text = hex
-        updateSwatch(row, color)
     }
 
-    private fun setOptionalColor(dialogId: Int, hex: String?): Boolean {
-        val binding = editDialogBinding ?: return false
-        val row = when (dialogId) {
+    internal fun setOptionalColor(dialogId: Int, hex: String?): Boolean {
+        return when (dialogId) {
             colorCard -> {
                 pendingCardColor = hex
-                binding.rowCardColor
+                true
             }
             colorMuted -> {
                 pendingMutedColor = hex
-                binding.rowMutedColor
+                true
             }
             colorSearchFieldBackground -> {
                 pendingSearchFieldBackgroundColor = hex
-                binding.rowSearchFieldBackgroundColor
+                true
             }
             colorTabBackground -> {
                 pendingTabBackgroundColor = hex
-                binding.rowTabBackgroundColor
+                true
             }
             colorShelf -> {
                 pendingShelfColor = hex
-                binding.rowShelfColor
+                true
             }
             colorUiFont -> {
                 pendingUiFontColor = hex
-                binding.rowUiFontColor
+                true
             }
             colorTitleFont -> {
                 pendingTitleFontColor = hex
-                binding.rowTitleFontColor
+                true
             }
-            else -> return false
+            else -> false
         }
-        if (hex == null) {
-            row.viewSwatch.visibility = View.INVISIBLE
-            row.tvValue.text = getString(R.string.theme_value_follow_default)
-        } else {
-            row.viewSwatch.visibility = View.VISIBLE
-            row.tvValue.text = hex
-            updateSwatch(row, hex.toColorInt())
-        }
-        if (dialogId == colorUiFont || dialogId == colorTitleFont) {
-            editDialogBinding?.let { applyThemeEditFonts(it) }
-        }
-        return true
     }
 
     override fun onDialogDismissed(dialogId: Int) = Unit
@@ -2131,18 +1512,18 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         private const val requestMainBackground = 301
         private const val requestBookInfoBackground = 302
         private const val requestPanelBackground = 303
-        private const val colorPrimary = 401
-        private const val colorAccent = 402
-        private const val colorBackground = 403
-        private const val colorBottomBackground = 404
-        private const val colorPanelBorder = 405
-        private const val colorCard = 406
-        private const val colorMuted = 407
-        private const val colorSearchFieldBackground = 408
-        private const val colorTabBackground = 409
-        private const val colorShelf = 410
-        private const val colorUiFont = 411
-        private const val colorTitleFont = 412
+        internal const val colorPrimary = 401
+        internal const val colorAccent = 402
+        internal const val colorBackground = 403
+        internal const val colorBottomBackground = 404
+        internal const val colorPanelBorder = 405
+        internal const val colorCard = 406
+        internal const val colorMuted = 407
+        internal const val colorSearchFieldBackground = 408
+        internal const val colorTabBackground = 409
+        internal const val colorShelf = 410
+        internal const val colorUiFont = 411
+        internal const val colorTitleFont = 412
         private const val CLOUD_SCOPE = "theme"
     }
 
@@ -2157,13 +1538,13 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         DELETE_BOTH(R.string.theme_delete_both)
     }
 
-    private enum class ThemeImageAction(val titleRes: Int) {
+    internal enum class ThemeImageAction(val titleRes: Int) {
         BLUR(R.string.theme_image_blur),
         SELECT(R.string.theme_image_select),
         DELETE(R.string.theme_image_delete)
     }
 
-    private enum class ThemeImageTarget {
+    internal enum class ThemeImageTarget {
         MAIN,
         BOOK_INFO,
         PANEL
