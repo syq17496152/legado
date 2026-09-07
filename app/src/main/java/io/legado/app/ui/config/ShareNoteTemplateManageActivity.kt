@@ -151,7 +151,10 @@ class ShareNoteTemplateManageActivity : BaseActivity<ActivityThemeManageBinding>
                 )
             }
         }
-        container.addView(cv, index)
+        // bugfix-0908f T3：index 在 removeView 之前计算，4 次移除后 childCount 收敛为 1，
+        // 裸 index=3 越界崩溃（IndexOutOfBoundsException index=3 count=1）——
+        // coerceAtMost 对齐同批 ThemeManage/TopBarManage/NavigationBarManage 写法
+        container.addView(cv, index.coerceAtMost(container.childCount))
     }
 
     private fun loadTemplates() {

@@ -22,11 +22,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -136,63 +138,68 @@ fun GlassTopAppBar(
         if (useCustomLayout) {
             // W6.5 自绘分支（管理族委托形态，对齐原 AppManagementTopBar 布局）：
             // statusBars 内嵌 + 单行(高度槽)/双行(搜索槽) + corner clip 背景
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(barColor)
-                    .then(
-                        if (cornerRadius > 0f) {
-                            Modifier.clip(RoundedCornerShape(cornerRadius))
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .windowInsetsPadding(WindowInsets.statusBars)
-            ) {
-                Row(
+            // bugfix-0908f T2：补内容色作用域——M3 分支经 navigationIcon/actionIconContentColor
+            // 提供对比度内容色，自绘分支此前漏包 LocalContentColor，nav/action 图标回落主题
+            // onSurface（黑），日夜主题不跟随顶栏容器色（真机实锤：书源管理返回/编辑书源图标黑）
+            CompositionLocalProvider(LocalContentColor provides contentColor) {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(barHeight ?: 64.dp)
-                        .padding(start = 4.dp, end = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (navIcon != null && onNavClick != null) {
-                        IconButton(onClick = onNavClick) {
-                            Icon(
-                                navIcon,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                    if (subtitle != null) {
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 12.dp)
-                        ) {
-                            Text(text = title, style = titleStyle, maxLines = 1, color = contentColor)
-                            Text(
-                                text = subtitle,
-                                style = MaterialTheme.typography.labelMedium,
-                                maxLines = 1,
-                                color = contentColor.copy(alpha = 0.8f)
-                            )
-                        }
-                    } else {
-                        Text(
-                            text = title,
-                            style = titleStyle,
-                            maxLines = 1,
-                            color = contentColor,
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 12.dp)
+                        .background(barColor)
+                        .then(
+                            if (cornerRadius > 0f) {
+                                Modifier.clip(RoundedCornerShape(cornerRadius))
+                            } else {
+                                Modifier
+                            }
                         )
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(barHeight ?: 64.dp)
+                            .padding(start = 4.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (navIcon != null && onNavClick != null) {
+                            IconButton(onClick = onNavClick) {
+                                Icon(
+                                    navIcon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        if (subtitle != null) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 12.dp)
+                            ) {
+                                Text(text = title, style = titleStyle, maxLines = 1, color = contentColor)
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    maxLines = 1,
+                                    color = contentColor.copy(alpha = 0.8f)
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = title,
+                                style = titleStyle,
+                                maxLines = 1,
+                                color = contentColor,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 12.dp)
+                            )
+                        }
+                        actions()
                     }
-                    actions()
+                    secondRow?.invoke(this)
                 }
-                secondRow?.invoke(this)
             }
         } else {
             TopAppBar(

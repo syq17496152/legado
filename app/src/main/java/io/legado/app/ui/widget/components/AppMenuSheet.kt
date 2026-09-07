@@ -18,6 +18,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -151,7 +152,8 @@ fun RowScope.TopBarActionRow(actions: List<MenuAction>) {
     var menuExpanded by remember { mutableStateOf(false) }
     primaryActions.forEach { action ->
         IconButton(onClick = action.onClick, enabled = action.enabled) {
-            MenuActionIcon(action = action)
+            // bugfix-0908f T2：一级图标统一 20dp 档（对齐 nav/MoreVert，消同栏 20/24 混排）
+            MenuActionIcon(action = action, modifier = Modifier.size(20.dp))
         }
     }
     if (overflowActions.isNotEmpty()) {
@@ -174,6 +176,10 @@ fun RowScope.TopBarActionRow(actions: List<MenuAction>) {
 
 /**
  * MenuAction 图标双源渲染（W7.2）：icon（ImageVector）优先，fallback iconRes（painterResource）。
+ * bugfix-0908f T2：默认 tint 恢复 R5 继承决策——W7.2 双源扩展时误钉 onSurfaceVariant（主题
+ * surface 色），顶栏图标既不随容器色对比度也不随日夜切换（真机实锤"颜色不对应"）。改为
+ * LocalContentColor.current：M3 TopAppBar 分支=actionIconContentColor，自绘分支=修复后的
+ * contentColor 作用域，菜单场景=菜单内容色；显式 action.tint 仍最优先。
  */
 @Composable
 fun MenuActionIcon(action: MenuAction, modifier: Modifier = Modifier) {
@@ -181,13 +187,13 @@ fun MenuActionIcon(action: MenuAction, modifier: Modifier = Modifier) {
         action.icon != null -> Icon(
             imageVector = action.icon,
             contentDescription = action.title,
-            tint = action.tint ?: MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = action.tint ?: LocalContentColor.current,
             modifier = modifier
         )
         action.iconRes != null -> Icon(
             painter = androidx.compose.ui.res.painterResource(action.iconRes),
             contentDescription = action.title,
-            tint = action.tint ?: MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = action.tint ?: LocalContentColor.current,
             modifier = modifier
         )
     }

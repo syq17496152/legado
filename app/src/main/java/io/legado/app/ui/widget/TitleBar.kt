@@ -192,14 +192,23 @@ class TitleBar @JvmOverloads constructor(
                 setBackgroundColor(Color.TRANSPARENT)
             } else {
                 // bugfix ③: 主界面头部(managed)读顶栏管理配色作为底色
-                setBackgroundColor(if (topBarColorManaged) {
-                    TopBarConfig.resolveBackgroundColor(
+                // bugfix-0908f T1：managed 分支改唯一取色入口 resolvePageBarColorWithAlpha
+                // （色相+透明度合一，AD-01 v1.5，与 MainTopBarView/GlassTopAppBar 同源）——
+                // 原	resolveBackgroundColor 纯色无透明度合成，经典发现头部呈不透明纯色
+                // （夜间主题下纯黑），与透壁纸的其他头部不一致
+                val managedColor = if (topBarColorManaged) {
+                    TopBarConfig.resolvePageBarColorWithAlpha(
+                        context,
                         TopBarConfig.currentConfig(context, AppConfig.isNightTheme)
                     )
                 } else {
                     context.primaryColor
-                })
-                elevation = context.elevation
+                }
+                setBackgroundColor(managedColor)
+                // 对齐 GlassTopAppBar W0 定稿：半透明底不画阴影（避免半透明头部下沿灰白框）
+                elevation = if (topBarColorManaged &&
+                    Color.alpha(managedColor) < 0xFF
+                ) 0f else context.elevation
             }
 
             stateListAnimator = null
@@ -211,7 +220,10 @@ class TitleBar @JvmOverloads constructor(
     fun refreshTopBarAppearance() {
         if (!topBarColorManaged || !isEInkModeExcluded()) return
         val config = TopBarConfig.currentConfig(context, AppConfig.isNightTheme)
-        setBackgroundColor(TopBarConfig.resolveBackgroundColor(config))
+        // bugfix-0908f T1：与 init 分支同源（色相+透明度合一），半透明底同步清阴影
+        val color = TopBarConfig.resolvePageBarColorWithAlpha(context, config)
+        setBackgroundColor(color)
+        elevation = if (Color.alpha(color) < 0xFF) 0f else context.elevation
     }
 
     private fun isEInkModeExcluded(): Boolean = !AppConfig.isEInkMode
