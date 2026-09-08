@@ -1,9 +1,9 @@
 package io.legado.app.help.readaloud.speech
 
 import io.legado.app.constant.PreferKey
-import io.legado.app.utils.GSON
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.putPrefString
+import org.json.JSONObject
 import splitties.init.appCtx
 
 /**
@@ -19,34 +19,46 @@ data class TtsEngineParams(
 
 object TtsEngineParamsStore {
 
-    private data class EngineParams(
-        val speechRate: Float = 1.0f,
-        val pitch: Float = 1.0f,
-        val volume: Float = 1.0f
-    )
+    private var cache: MutableMap<String, TtsEngineParams>? = null
 
-    private var cache: MutableMap<String, EngineParams>? = null
-
-    private fun load(): MutableMap<String, EngineParams> {
+    private fun load(): MutableMap<String, TtsEngineParams> {
         cache?.let { return it }
         val json = appCtx.getPrefString(PreferKey.ttsEngineParamsJson)
-        val map = runCatching {
-            GSON.fromJsonObject<Map<String, EngineParams>>(json).getOrNull()
-        }.getOrNull() ?: mutableMapOf()
-        val safe = map.toMutableMap()
-        cache = safe
-        return safe
+        val map = mutableMapOf<String, TtsEngineParams>()
+        runCatching {
+            val obj = JSONObject(json ?: return@runCatching)
+            val keys = obj.keys()
+            for (key in keys) {
+                val item = obj.optJSONObject(key) ?: continue
+                map[key] = TtsEngineParams(
+                    speechRate = item.optDouble("speechRate", 1.0).toFloat(),
+                    pitch = item.optDouble("pitch", 1.0).toFloat(),
+                    volume = item.optDouble("volume", 1.0).toFloat()
+                )
+            }
+        }
+        cache = map
+        return map
     }
 
-    private fun save(map: MutableMap<String, EngineParams>) {
+    private fun save(map: MutableMap<String, TtsEngineParams>) {
         cache = map
-        appCtx.putPrefString(PreferKey.ttsEngineParamsJson, GSON.toJson(map))
+        val obj = JSONObject()
+        for ((key, p) in map) {
+            obj.put(
+                key,
+                JSONObject()
+                    .put("speechRate", p.speechRate.toDouble())
+                    .put("pitch", p.pitch.toDouble())
+                    .put("volume", p.volume.toDouble())
+            )
+        }
+        appCtx.putPrefString(PreferKey.ttsEngineParamsJson, obj.toString())
     }
 
     fun get(engineValue: String): TtsEngineParams {
         if (engineValue.isBlank()) return TtsEngineParams()
-        val p = load()[engineValue] ?: return TtsEngineParams()
-        return TtsEngineParams(p.speechRate, p.pitch, p.volume)
+        return load()[engineValue] ?: TtsEngineParams()
     }
 
     fun save(
@@ -57,7 +69,7 @@ object TtsEngineParamsStore {
     ) {
         if (engineValue.isBlank()) return
         val map = load()
-        map[engineValue] = EngineParams(speechRate, pitch, volume)
+        map[engineValue] = TtsEngineParams(speechRate, pitch, volume)
         save(map)
     }
 }

@@ -48,6 +48,8 @@ object PreferKey {
     const val ttsFollowSys = "ttsFollowSys"
     const val ttsSpeechRate = "ttsSpeechRate"
     const val ttsEngineParamsJson = "ttsEngineParamsJson"
+    const val ttsCastingActiveId = "ttsCastingActiveId"
+    const val ttsCastingBookOverridePrefix = "ttsCastingBookOverride_"
     const val prevKeys = "prevKeyCodes"
     const val nextKeys = "nextKeyCodes"
     const val showDiscovery = "showDiscovery"

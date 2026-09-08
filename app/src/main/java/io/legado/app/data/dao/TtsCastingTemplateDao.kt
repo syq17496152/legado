@@ -12,13 +12,13 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TtsCastingTemplateDao {
 
-    @Query("select * from ttsCastingTemplates where enabled = 1 order by `order`")
+    @Query("select * from ttsCastingTemplates where enabled = 1 order by sortOrder")
     suspend fun getEnabled(): List<TtsCastingTemplate>
 
-    @Query("select * from ttsCastingTemplates order by `order`")
+    @Query("select * from ttsCastingTemplates order by sortOrder")
     fun observeAll(): Flow<List<TtsCastingTemplate>>
 
-    @Query("select * from ttsCastingTemplates order by `order`")
+    @Query("select * from ttsCastingTemplates order by sortOrder")
     suspend fun all(): List<TtsCastingTemplate>
 
     @Query("select * from ttsCastingTemplates where id = :id")

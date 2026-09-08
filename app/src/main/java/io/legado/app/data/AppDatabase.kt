@@ -55,9 +55,7 @@ import io.legado.app.data.entities.AiAgentJob
 import io.legado.app.data.entities.AiAgentSession
 import io.legado.app.data.entities.AiAgentTrace
 import io.legado.app.data.entities.TtsCastingTemplate
-import io.legado.app.data.entities.TtsTestEntity
 import io.legado.app.data.dao.TtsCastingTemplateDao
-import io.legado.app.data.dao.TtsTestDao
 import io.legado.app.data.entities.AiGeneratedImage
 import io.legado.app.data.entities.AiImageGroup
 import io.legado.app.data.entities.AiMemoryFragment
@@ -244,7 +242,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract val ttsCastingTemplateDao: TtsCastingTemplateDao
 
     // 二分排查对照
-    abstract val ttsTestDao: TtsTestDao
     abstract val playHistoryDao: PlayHistoryDao
     abstract val sourceRecycleBinDao: SourceRecycleBinDao
     abstract val urlRecordDao: UrlRecordDao
