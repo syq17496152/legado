@@ -2,6 +2,7 @@ package io.legado.app.help.readaloud.script
 
 import com.script.rhino.RhinoClassShutter
 import com.script.rhino.RhinoScriptEngine
+import com.script.buildScriptBindings
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.exception.NoStackTraceException
@@ -108,7 +109,10 @@ object TtsScriptEngineClient {
             append("))")
         }
         return RhinoClassShutter.withBookSourceClassPolicy(enabled = true, sourceLabel = sourceLabel) {
-            val scope = RhinoScriptEngine.getRuntimeScope(emptyMap<String, Any?>())
+            val bindings = buildScriptBindings { bindings ->
+                bindings["sourceLabel"] = sourceLabel
+            }
+            val scope = RhinoScriptEngine.getRuntimeScope(bindings)
             RhinoScriptEngine.eval(callJs, scope, null)
                 ?.toString()
                 ?: throw NoStackTraceException("TTS 脚本函数 $function 返回空")
