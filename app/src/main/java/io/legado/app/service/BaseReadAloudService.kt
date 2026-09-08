@@ -253,8 +253,15 @@ abstract class BaseReadAloudService : BaseService(),
                 intent.getIntExtra("chapters", 0)
             )
             IntentAction.stop -> stopSelf()
+            IntentAction.reInitTts -> onReInitTts()
         }
         return super.onStartCommand(intent, flags, startId)
+    }
+
+    /**
+     * 引擎内重建（AD-02）：同服务类型切换时不下发 STOP，由子类重建引擎（系统 TTS=clearTTS+initTts）
+     */
+    open fun onReInitTts() {
     }
 
     private fun newReadAloud(play: Boolean, pageIndex: Int, startPos: Int) {

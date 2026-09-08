@@ -1,6 +1,8 @@
 package io.legado.app.service
 
 import android.app.PendingIntent
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import io.legado.app.R
@@ -8,22 +10,21 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.exception.NoStackTraceException
-import io.legado.app.help.MediaHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
-import io.legado.app.lib.dialogs.SelectItem
+import io.legado.app.help.readaloud.speech.SpeechRoute
+import io.legado.app.help.readaloud.speech.TtsEngineParamsStore
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
-import io.legado.app.utils.GSON
 import io.legado.app.utils.LogUtils
-import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 
 /**
- * 本地朗读
+ * 本地朗读（AD-03/AD-05/AD-09）
+ * init 按路由包名构造 + 8s 超时看门狗 + 失败降级默认引擎明示 + 每引擎独立参数
  */
 class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener {
 
@@ -32,6 +33,25 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     private val ttsUtteranceListener = TTSUtteranceListener()
     private var speakJob: Coroutine<*>? = null
     private val TAG = "TTSReadAloudService"
+
+    // init 代际（AD-03）：每次 initTts 递增，迟到回调/看门狗按代际判定失效
+    @Volatile
+    private var initGeneration = 0
+
+    // 降级初始化标记：回退默认引擎的初始化单次不挂看门狗（防死循环，AD-03）
+    @Volatile
+    private var fallbackInit = false
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    // init 看门狗（AD-03：约 8s）
+    private val initWatchdog = Runnable {
+        if (ttsInitFinish || fallbackInit) return@Runnable
+        val engineLabel = currentEngineLabel()
+        AppLog.put("TTS 引擎初始化超时（8s）：$engineLabel")
+        toastOnUi("引擎 $engineLabel 初始化失败已回退默认")
+        startFallbackInit()
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -44,24 +64,51 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
 
     override fun onDestroy() {
         super.onDestroy()
+        mainHandler.removeCallbacks(initWatchdog)
         clearTTS()
     }
 
+    private fun currentEngineLabel(): String {
+        return ReadAloud.currentRoute.speakerName.ifBlank {
+            ReadAloud.currentRoute.engineValue.ifBlank { "系统默认" }
+        }
+    }
+
     @Synchronized
-    private fun initTts() {
+    private fun initTts(forceDefault: Boolean = false) {
         ttsInitFinish = false
-        val engine = GSON.fromJsonObject<SelectItem<String>>(ReadAloud.ttsEngine).getOrNull()?.value
-        LogUtils.d(TAG, "initTts engine:$engine")
-        textToSpeech = if (engine.isNullOrBlank()) {
+        initGeneration++
+        // 清理迟到看门狗，本轮重新判定
+        mainHandler.removeCallbacks(initWatchdog)
+        val route = SpeechRoute.resolveSpeechRoute(ReadAloud.ttsEngine)
+        // AD-03：回退初始化（单次）强制默认引擎，不挂看门狗
+        val engine = if (forceDefault || fallbackInit) {
+            ""
+        } else {
+            route.engineValue
+        }
+        LogUtils.d(TAG, "initTts engine:$engine generation:$initGeneration forceDefault:$forceDefault")
+        val created = if (engine.isBlank()) {
             TextToSpeech(this, this)
         } else {
             TextToSpeech(this, this, engine)
+        }
+        textToSpeech = created
+        if (!forceDefault && !fallbackInit) {
+            // 看门狗持 init 代际，迟到触发按代际失效（onDestroy/重入防护）
+            val generation = initGeneration
+            mainHandler.postDelayed({
+                if (generation == initGeneration && !ttsInitFinish && !fallbackInit) {
+                    initWatchdog.run()
+                }
+            }, WATCHDOG_TIMEOUT_MS)
         }
         upSpeechRate()
     }
 
     @Synchronized
     fun clearTTS() {
+        mainHandler.removeCallbacks(initWatchdog)
         textToSpeech?.runCatching {
             stop()
             shutdown()
@@ -75,11 +122,62 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
             textToSpeech?.let {
                 it.setOnUtteranceProgressListener(ttsUtteranceListener)
                 ttsInitFinish = true
+                // init 成功：撤看门狗，应用每引擎独立参数（AD-05）
+                mainHandler.removeCallbacks(initWatchdog)
+                applyEngineParams(it)
                 play()
             }
         } else {
-            toastOnUi(R.string.tts_init_failed)
+            // onInit 失败：降级默认引擎（单次）或暂停（AD-03 终止条件）
+            handleInitFailure()
         }
+    }
+
+    /**
+     * init 失败/超时统一降级入口（AD-03）：
+     * ①回退目标已是默认引擎→不再重建（防死循环），暂停朗读+通知终态；
+     * ②否则 clearTTS 后回退默认引擎重建（单次不挂看门狗）。
+     */
+    private fun handleInitFailure() {
+        mainHandler.removeCallbacks(initWatchdog)
+        if (fallbackInit) {
+            // 终止条件：回退目标已是默认引擎仍失败→暂停+通知（不无限循环）
+            toastOnUi("TTS 引擎初始化失败，已暂停朗读")
+            AppLog.put("TTS 引擎初始化失败（含回退），已暂停朗读", toast = true)
+            pauseReadAloud()
+            return
+        }
+        fallbackInit = true
+        val engineLabel = currentEngineLabel()
+        toastOnUi("引擎 $engineLabel 初始化失败已回退默认")
+        AppLog.put("TTS 引擎初始化失败已回退默认：$engineLabel", toast = true)
+        clearTTS()
+        kotlin.runCatching {
+            initTts(forceDefault = true)
+        }.onFailure {
+            AppLog.put("${getString(R.string.tts_init_failed)}\n$it", it, true)
+        }
+    }
+
+    /**
+     * 应用每引擎独立参数（AD-05）：语速/音调/音量，键=engineValue
+     */
+    private fun applyEngineParams(tts: TextToSpeech) {
+        val route = SpeechRoute.resolveSpeechRoute(ReadAloud.ttsEngine)
+        if (route.engineValue.isBlank()) return
+        val params = TtsEngineParamsStore.get(route.engineValue)
+        kotlin.runCatching {
+            if (params.speechRate != 1.0f) tts.setSpeechRate(params.speechRate)
+            if (params.pitch != 1.0f) tts.setPitch(params.pitch)
+            if (params.volume != 1.0f) tts.setVolume(params.volume, params.volume)
+        }
+    }
+
+    override fun onReInitTts() {
+        // AD-02：同服务类型切换，引擎内重建（fallback 状态重置，新引擎重新挂看门狗）
+        fallbackInit = false
+        clearTTS()
+        initTts()
     }
 
     @Synchronized
@@ -126,7 +224,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                     val result = tts.runCatching {
                         speak(text, TextToSpeech.QUEUE_ADD, null, AppConst.APP_TAG + i)
                     }.getOrElse {
-                        AppLog.put("tts出错\n${it.localizedMessage}", it, true)
+                        AppLog.put("tts朗读出错:$text")
                         TextToSpeech.ERROR
                     }
                     if (result == TextToSpeech.ERROR) {
@@ -198,6 +296,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
 
     /**
      * 朗读监听
+     * 段游标推进闸：仅 onDone/onError 推进；onStop 不推进（pause/stop/seek 流程已处理状态，防双推进）
      */
     private inner class TTSUtteranceListener : UtteranceProgressListener() {
 
@@ -226,6 +325,11 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                 return
             }
             nextParagraph()
+        }
+
+        override fun onStop(utteranceId: String?, interrupted: Boolean) {
+            // 三路推进闸（AD-09）：onStop 不推进游标——pause/stop/seek 流程已处理状态
+            LogUtils.d(TAG, "onStop utteranceId:$utteranceId interrupted:$interrupted")
         }
 
         override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
@@ -275,6 +379,17 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
 
     override fun aloudServicePendingIntent(actionStr: String): PendingIntent? {
         return servicePendingIntent<TTSReadAloudService>(actionStr)
+    }
+
+    companion object {
+        private const val WATCHDOG_TIMEOUT_MS = 8000L
+
+        /** 外部触发引擎内重建（AD-02 reInitTts IntentAction 分发入口） */
+        fun reInitTts(context: Context) {
+            val intent = Intent(context, TTSReadAloudService::class.java)
+            intent.action = IntentAction.reInitTts
+            context.startForegroundServiceCompat(intent)
+        }
     }
 
 }

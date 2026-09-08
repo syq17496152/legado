@@ -146,13 +146,31 @@ class HttpReadAloudService : BaseReadAloudService(),
         }
     }
 
+    // 当前章装配的引擎记录（AD-01）：由服务内按 ReadAloud.currentRoute.engineValue 查库装配，缺失明示报错
+    private var currentHttpTts: HttpTTS? = null
+
+    private fun resetCurrentHttpTts() {
+        currentHttpTts = null
+    }
+
+    private suspend fun resolveCurrentHttpTts(): HttpTTS {
+        currentHttpTts?.let { return it }
+        val id = ReadAloud.currentRoute.engineValue.toLongOrNull()
+            ?: throw NoStackTraceException("TTS 引擎配置无效（http id 缺失）")
+        val httpTts = appDb.httpTTSDao.get(id)
+            ?: throw NoStackTraceException("TTS 引擎记录不存在（id=$id），请检查引擎配置")
+        currentHttpTts = httpTts
+        return httpTts
+    }
+
     private fun downloadAndPlayAudios() {
         exoPlayer.clearMediaItems()
         downloadTask?.cancel()
+        resetCurrentHttpTts()
         downloadTask = execute {
             downloadTaskActiveLock.withLock {
                 ensureActive()
-                val httpTts = ReadAloud.httpTTS ?: throw NoStackTraceException("tts is null")
+                val httpTts = resolveCurrentHttpTts()
                 contentList.forEachIndexed { index, content ->
                     ensureActive()
                     if (index < nowSpeak) return@forEachIndexed
@@ -233,10 +251,11 @@ class HttpReadAloudService : BaseReadAloudService(),
     private fun downloadAndPlayAudiosStream() {
         exoPlayer.clearMediaItems()
         downloadTask?.cancel()
+        resetCurrentHttpTts()
         downloadTask = execute {
             downloadTaskActiveLock.withLock {
                 ensureActive()
-                val httpTts = ReadAloud.httpTTS ?: throw NoStackTraceException("tts is null")
+                val httpTts = resolveCurrentHttpTts()
                 val downloaderChannel = Channel<Downloader>()
                 launch {
                     for (downloader in downloaderChannel) {
@@ -444,7 +463,7 @@ class HttpReadAloudService : BaseReadAloudService(),
 
     private fun md5SpeakFileName(content: String, textChapter: TextChapter? = this.textChapter): String {
         return MD5Utils.md5Encode16(textChapter?.title ?: "") + "_" +
-                MD5Utils.md5Encode16("${ReadAloud.httpTTS?.url}-|-$speechRate-|-$content")
+                MD5Utils.md5Encode16("${currentHttpTts?.url.orEmpty()}-|-$speechRate-|-$content")
     }
 
     private fun createSilentSound(fileName: String) {

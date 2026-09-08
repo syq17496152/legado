@@ -139,6 +139,72 @@ data class SpeechRoute(
                 )
             )
         }
+
+        /**
+         * 引擎配置唯一解析入口（AD-01）：四态判定，纯字符串同步解析（不查库）。
+         * ① 新 SpeechRoute JSON → 直读 engineType/engineValue
+         * ② 双嵌套 legacy（SpeechRoute JSON 且 engineType=system 且 engineValue 内嵌 SelectItem JSON）
+         *    → 解包内层 value 作包名
+         * ③ legacy SelectItem JSON → 取 value 作包名映射 system 路由
+         * ④ 纯数字 → http 路由（engineValue=id）；空白 → default；裸包名串 → system 兼容
+         * 解析失败/未知 engineType → 回退 default 路由（调用方按 AD-08 明示，禁静默失效）
+         */
+        fun resolveSpeechRoute(raw: String?): SpeechRoute {
+            val value = raw?.trim().orEmpty()
+            if (value.isBlank()) {
+                return SpeechRoute(engineType = ENGINE_DEFAULT)
+            }
+            // ④ 纯数字 → legacy HttpTTS id
+            if (value.toLongOrNull() != null) {
+                return SpeechRoute(
+                    engineType = ENGINE_HTTP,
+                    engineValue = value,
+                    source = SOURCE_MANUAL
+                )
+            }
+            val obj = runCatching { JSONObject(value) }.getOrNull()
+                // 非 JSON 裸串 → legacy 裸包名兼容（fromTtsEngineValue 同语义）
+                ?: return SpeechRoute(
+                    engineType = ENGINE_SYSTEM,
+                    engineValue = value,
+                    speakerName = "系统默认",
+                    source = SOURCE_MANUAL
+                )
+            val route = when {
+                // ① 新 SpeechRoute JSON（含 engineType 键）
+                obj.has("engineType") -> fromJson(value)
+                // ③ legacy SelectItem JSON（title/value）→ 取 value 作包名，禁照抄整串
+                obj.has("title") || obj.has("value") -> SpeechRoute(
+                    engineType = ENGINE_SYSTEM,
+                    engineValue = obj.optString("value"),
+                    speakerName = obj.optString("title").ifBlank { "系统默认" },
+                    source = SOURCE_MANUAL
+                )
+                // 未知 JSON 结构 → 兜底 default
+                else -> SpeechRoute(engineType = ENGINE_DEFAULT)
+            }
+            // ② 双嵌套 legacy：system 路由的 engineValue 内嵌 SelectItem JSON → 解包内层 value
+            val unwrapped = if (
+                route.engineType == ENGINE_SYSTEM &&
+                route.engineValue.startsWith("{")
+            ) {
+                runCatching {
+                    val inner = JSONObject(route.engineValue)
+                    route.copy(
+                        engineValue = inner.optString("value"),
+                        speakerName = inner.optString("title").ifBlank { route.speakerName }
+                    )
+                }.getOrDefault(route)
+            } else {
+                route
+            }
+            // engineType 白名单校验：未知类型回退 default（AD-08 明示兜底）
+            return if (unwrapped.engineType in setOf(ENGINE_DEFAULT, ENGINE_SYSTEM, ENGINE_HTTP)) {
+                unwrapped
+            } else {
+                SpeechRoute(engineType = ENGINE_DEFAULT)
+            }
+        }
     }
 }
 

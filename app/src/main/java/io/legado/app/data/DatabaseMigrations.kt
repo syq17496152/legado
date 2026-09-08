@@ -25,7 +25,8 @@ object DatabaseMigrations {
             migration_93_94, migration_94_95, migration_95_96, migration_96_97,
             migration_97_98, migration_98_99, migration_99_100, migration_100_101,
             migration_101_102, migration_102_103, migration_103_104, migration_104_105,
-            migration_105_106, migration_106_107, migration_107_108, migration_108_109
+            migration_105_106, migration_106_107, migration_107_108, migration_108_109,
+            migration_109_110
         )
     }
 
@@ -1488,6 +1489,41 @@ object DatabaseMigrations {
      * rssSourceId='' 保存时仍会覆盖该条，属预期（4.8b 起新数据已填充源ID）。
      * 新表 DDL 与实体 Room schema 严格一致（列序/类型/NOT NULL/DEFAULT 子句）。
      */
+    /**
+     * optimize-tts-engine（AD-04/AD-09）：109→110
+     * ①httpTTS 增列 type（1=http 模板/2=script）+ script（JS 源码）——ALTER 增列，不 DROP 不重建
+     * ②ttsCastingTemplates 建表（多角色选角模板）——DDL 与 Room schema 严格一致
+     */
+    private val migration_109_110 = object : Migration(109, 110) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            val statements = listOf(
+                "109→110 httpTTS add type" to
+                        "ALTER TABLE `httpTTS` ADD COLUMN `type` INTEGER NOT NULL DEFAULT 1",
+                "109→110 httpTTS add script" to
+                        "ALTER TABLE `httpTTS` ADD COLUMN `script` TEXT NOT NULL DEFAULT ''",
+                "109→110 create ttsCastingTemplates" to
+                        ("""CREATE TABLE IF NOT EXISTS `ttsCastingTemplates` (
+                    `id` TEXT NOT NULL,
+                    `name` TEXT NOT NULL DEFAULT '',
+                    `builtin` INTEGER NOT NULL DEFAULT 0,
+                    `enabled` INTEGER NOT NULL DEFAULT 1,
+                    `order` INTEGER NOT NULL DEFAULT 0,
+                    `rulesJson` TEXT NOT NULL DEFAULT '',
+                    `fallbackSourceJson` TEXT NOT NULL DEFAULT '',
+                    `lastUpdateTime` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`id`)
+                )""")
+            )
+            statements.forEach { (tag, sql) ->
+                kotlin.runCatching { db.execSQL(sql) }
+                    .onFailure { e ->
+                        AppLog.put("AppDatabase Migration [$tag] 执行失败: ${e.message}")
+                    }
+            }
+            AppLog.put("AppDatabase Migration 109→110: httpTTS 增列(type/script)+ttsCastingTemplates 建表完成")
+        }
+    }
+
     private val migration_108_109 = object : Migration(108, 109) {
         override fun migrate(db: SupportSQLiteDatabase) {
             runCatchingSql(db, "108→109 playHistories rebuild add rssSourceId to PK") {

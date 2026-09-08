@@ -6,43 +6,82 @@ import android.os.Bundle
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.IntentAction
-import io.legado.app.data.appDb
-import io.legado.app.data.entities.HttpTTS
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.service.HttpReadAloudService
 import io.legado.app.service.TTSReadAloudService
 import io.legado.app.utils.LogUtils
-import io.legado.app.utils.StringUtils
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.startForegroundServiceCompat
 import io.legado.app.utils.toastOnUi
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.runBlocking
 import splitties.init.appCtx
 
 object ReadAloud {
-    private var aloudClass: Class<*> = getReadAloudClass()
+    // 当前生效路由（AD-01）：经 resolveSpeechRoute 纯同步解析，服务内装配以此为准
+    var currentRoute: SpeechRoute = SpeechRoute.resolveSpeechRoute(ttsEngine)
+        private set
+    private var aloudClass: Class<*> = routeToClass(currentRoute)
     val ttsEngine get() = ReadBook.book?.getTtsEngine() ?: AppConfig.ttsEngine
-    var httpTTS: HttpTTS? = null
+
+    private fun routeToClass(route: SpeechRoute): Class<*> {
+        return if (route.engineType == SpeechRoute.ENGINE_HTTP) {
+            HttpReadAloudService::class.java
+        } else {
+            TTSReadAloudService::class.java
+        }
+    }
 
     private fun getReadAloudClass(): Class<*> {
-        val ttsEngine = ttsEngine
-        if (ttsEngine.isNullOrBlank()) {
-            return TTSReadAloudService::class.java
-        }
-        if (StringUtils.isNumeric(ttsEngine)) {
-            httpTTS = runBlocking(IO) { appDb.httpTTSDao.get(ttsEngine.toLong()) }
-            if (httpTTS != null) {
-                return HttpReadAloudService::class.java
-            }
-        }
-        return TTSReadAloudService::class.java
+        return routeToClass(SpeechRoute.resolveSpeechRoute(ttsEngine))
+    }
+
+    /**
+     * 续播意图（AD-02）：切换期间上收数据层，面板 STOP 分支经 consumePendingSwitch 取用后重建续播
+     */
+    data class PendingSwitch(
+        val wasPlaying: Boolean,
+        val pageIndex: Int,
+        val startPos: Int
+    )
+
+    @Volatile
+    private var pendingSwitch: PendingSwitch? = null
+
+    fun consumePendingSwitch(): PendingSwitch? {
+        val pending = pendingSwitch
+        pendingSwitch = null
+        return pending
     }
 
     fun upReadAloudClass() {
-        stop(appCtx)
-        aloudClass = getReadAloudClass()
+        val oldClass = aloudClass
+        val newRoute = SpeechRoute.resolveSpeechRoute(ttsEngine)
+        val newClass = routeToClass(newRoute)
+        if (BaseReadAloudService.isRun) {
+            if (newClass == oldClass) {
+                // 同服务类型：引擎内重建（reInitTts），不整服务重启（AD-02）
+                val intent = Intent(appCtx, oldClass)
+                intent.action = IntentAction.reInitTts
+                runCatching {
+                    appCtx.startForegroundServiceCompat(intent)
+                }
+            } else {
+                // 跨类型：捕获续播意图 → 用重算前旧 Class 引用 stop（重算后字段已变，禁用字段发 Intent）→ 面板 STOP 消费 PendingSwitch 重建续播
+                pendingSwitch = PendingSwitch(
+                    wasPlaying = BaseReadAloudService.isPlay(),
+                    pageIndex = ReadBook.durPageIndex,
+                    startPos = ReadBook.durChapterPos
+                )
+                val intent = Intent(appCtx, oldClass)
+                intent.action = IntentAction.stop
+                runCatching {
+                    appCtx.startForegroundServiceCompat(intent)
+                }
+            }
+        }
+        currentRoute = newRoute
+        aloudClass = newClass
     }
 
     fun play(
