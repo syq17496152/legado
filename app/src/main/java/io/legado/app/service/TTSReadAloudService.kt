@@ -258,7 +258,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                     AppLog.put("tts出错 尝试重新初始化")
                     clearTTS()
                     initTts()
-                    return@execute
+                    return
                 }
             } else {
                 val result = tts.runCatching {
