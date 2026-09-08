@@ -27,7 +27,7 @@ interface TtsCastingTemplateDao {
     @Query("select * from ttsCastingTemplates where id = :id")
     fun flowById(id: String): Flow<TtsCastingTemplate?>
 
-    @Insert(OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(vararg templates: TtsCastingTemplate)
 
     @Update
