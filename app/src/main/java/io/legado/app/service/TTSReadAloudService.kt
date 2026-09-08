@@ -1,4 +1,4 @@
-package io.legado.app.service
+﻿package io.legado.app.service
 
 import android.app.PendingIntent
 import android.os.Handler
@@ -28,6 +28,7 @@ import io.legado.app.utils.LogUtils
 import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.ensureActive
 
 /**
