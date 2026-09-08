@@ -161,7 +161,19 @@ class HttpReadAloudService : BaseReadAloudService(),
         val httpTts = appDb.httpTTSDao.get(id)
             ?: throw NoStackTraceException("TTS 引擎记录不存在（id=$id），请检查引擎配置")
         currentHttpTts = httpTts
-        return httpTts
+        // AD-04：脚本引擎首次使用时拉取音色目录缓存进 speakersJson（供选角模板声源引用）
+        if (httpTts.type == 2 && httpTts.speakersJson.isBlank()) {
+            runCatching {
+                io.legado.app.help.readaloud.script.TtsScriptEngineClient.fetchVoicesCatalog(httpTts)
+                    ?.let { catalog ->
+                        appDb.httpTTSDao.update(httpTts.copy(speakersJson = catalog))
+                        currentHttpTts = httpTts.copy(speakersJson = catalog)
+                    }
+            }.onFailure {
+                AppLog.put("TTS 音色目录拉取失败：${it.localizedMessage}")
+            }
+        }
+        return currentHttpTts!!
     }
 
     private fun downloadAndPlayAudios() {

@@ -271,6 +271,8 @@ dependencies {
     //coreLibraryDesugaring('com.android.tools:desugar_jdk_libs_nio:2.0.4')
     coreLibraryDesugaring(libs.desugar)
     testImplementation(libs.junit)
+    // TTS 选角模板/路由解析单测需真实 org.json（returnDefaultValues 桩无法提供 JSONObject）
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.bundles.androidTest)
     //kotlin
     //noinspection GradleDependency,DifferentStdlibGradleVersion
