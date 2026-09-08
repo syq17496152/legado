@@ -1084,7 +1084,10 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
     }
 
     private fun setMode(mode: DisplayMode) {
-        val targetMode = if (!AppConfig.aiReadAloudRoleEnabled && mode == DisplayMode.Scene) {
+        // AD-09 期1：Scene 闸位解耦——选角模板激活（多人听书）或 AI 多角色开启 均可进入 Scene
+        val multiRoleAvailable = AppConfig.aiReadAloudRoleEnabled ||
+            TtsCastingStore.activeTemplateId() != null
+        val targetMode = if (!multiRoleAvailable && mode == DisplayMode.Scene) {
             DisplayMode.Immersive
         } else {
             mode
