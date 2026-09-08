@@ -28,7 +28,9 @@ import io.legado.app.utils.LogUtils
 import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
 /**
@@ -239,7 +241,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         val contentList = contentList
         var isAddedText = false
         for (i in nowSpeak until contentList.size) {
-            ensureActive()
+            currentCoroutineContext().ensureActive()
             var text = contentList[i]
             if (paragraphStartPos > 0 && i == nowSpeak) {
                 text = text.substring(paragraphStartPos)
@@ -307,7 +309,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         val textChapter = textChapter ?: return
         val contentList = contentList
         for (p in nowSpeak until contentList.size) {
-            ensureActive()
+            currentCoroutineContext().ensureActive()
             val paragraphStart = if (p == nowSpeak) paragraphStartPos else 0
             val paragraph = contentList[p]
             if (paragraph.isBlank() || paragraph.matches(AppPattern.notReadAloudRegex)) {
@@ -318,7 +320,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
             val segments = TtsTagSplitter.splitParagraph(p, paragraph, ruleSet.rules)
                 .filter { it.offsetInParagraph + it.length > paragraphStart }
             for (segment in segments) {
-                ensureActive()
+                currentCoroutineContext().ensureActive()
                 var text = paragraph.substring(
                     segment.offsetInParagraph,
                     segment.offsetInParagraph + segment.length
