@@ -46,6 +46,8 @@ import io.legado.app.help.IntentHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
 import io.legado.app.help.readaloud.ReadAloudSpeakerLoudnessManager
+import io.legado.app.help.readaloud.casting.CastingRuleSet
+import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.help.readaloud.role.ReadAloudPreprocessRuleConfig
 import io.legado.app.help.readaloud.role.ReadAloudQuotePair
 import io.legado.app.help.readaloud.role.ReadAloudRolePreprocessor
@@ -408,6 +410,36 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
         )
     }
 
+    /** 多人听书模板摘要（AD-09 期1 入口） */
+    private fun ttsCastingSummary(): String {
+        val activeId = TtsCastingStore.activeTemplateId()
+        val templates = runCatching {
+            kotlinx.coroutines.runBlocking { TtsCastingStore.all() }
+        }.getOrDefault(emptyList())
+        val active = templates.firstOrNull { it.id == activeId }
+        return if (active != null) {
+            "当前：${active.name}（共 ${templates.size} 个模板）"
+        } else {
+            "未启用（单声）· 共 ${templates.size} 个模板"
+        }
+    }
+
+    /** 多人听书模板循环切换（期1 极简入口：点击在 内置4模板→关闭 间循环） */
+    private fun cycleTtsCastingTemplate() {
+        val order = listOf(
+            CastingRuleSet.BUILTIN_DUAL_VOICE,
+            CastingRuleSet.BUILTIN_MALE_FEMALE,
+            CastingRuleSet.BUILTIN_MULTITTS_PASSTHROUGH,
+            CastingRuleSet.BUILTIN_MONO,
+            null
+        )
+        val current = TtsCastingStore.activeTemplateId()
+        val index = order.indexOf(current)
+        val next = order[(index + 1).mod(order.size)]
+        TtsCastingStore.setActiveTemplateId(next)
+        refreshSettings()
+    }
+
     private fun aiRoleItems(): List<SettingItemSpec> {
         val enabled = AppConfig.aiReadAloudRoleEnabled
         val hasModel = AppConfig.aiReadAloudRoleModelConfig != null
@@ -421,6 +453,12 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
             .size
         val loudnessCount = ReadAloudSpeakerLoudnessManager.learnedSpeakerCount()
         return listOf(
+            action(
+                key = KEY_TTS_CASTING_TEMPLATE,
+                title = "多人听书模板",
+                summary = ttsCastingSummary(),
+                onClick = ::cycleTtsCastingTemplate
+            ),
             switch(
                 key = PreferKey.aiReadAloudRoleEnabled,
                 title = "多角色",
