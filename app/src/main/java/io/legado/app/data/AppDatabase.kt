@@ -54,6 +54,7 @@ import io.legado.app.data.dao.UrlRecordDao
 import io.legado.app.data.entities.AiAgentJob
 import io.legado.app.data.entities.AiAgentSession
 import io.legado.app.data.entities.AiAgentTrace
+import io.legado.app.data.entities.TtsCastingTemplate
 import io.legado.app.data.entities.AiGeneratedImage
 import io.legado.app.data.entities.AiImageGroup
 import io.legado.app.data.entities.AiMemoryFragment
@@ -123,7 +124,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 109,
+    version = 110,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -138,6 +139,7 @@ val appDb by lazy {
         AiImageGroup::class, AiGeneratedImage::class,
         BookCharacter::class, BookCharacterRelation::class,
         BookAiChapterSummary::class, AiReadAloudRoleCache::class,
+        TtsCastingTemplate::class,
         ReadAloudBgmGroup::class, ReadAloudBgmTrack::class, ReadAloudBgmAssignmentCache::class,
         ReadAloudSpeakerGroup::class, ReadAloudSpeakerGroupItem::class,
         AiReadAloudUsageRecord::class,
@@ -234,6 +236,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract val coverGalleryDao: CoverGalleryDao
     abstract val autoTaskRuleDao: AutoTaskRuleDao
     abstract val bookHighlightDao: BookHighlightDao
+
+    // AD-09 范式选角模板层
+    abstract val ttsCastingTemplateDao: TtsCastingTemplateDao
     abstract val playHistoryDao: PlayHistoryDao
     abstract val sourceRecycleBinDao: SourceRecycleBinDao
     abstract val urlRecordDao: UrlRecordDao

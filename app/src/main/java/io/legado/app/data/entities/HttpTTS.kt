@@ -34,6 +34,11 @@ data class HttpTTS(
     var speakersJson: String = "",
     @ColumnInfo(defaultValue = "")
     var emotionsJson: String = "",
+    // AD-04 脚本引擎：1=http 模板（默认），2=script（JS 三函数契约）
+    @ColumnInfo(defaultValue = "1")
+    var type: Int = 1,
+    @ColumnInfo(defaultValue = "")
+    var script: String = "",
     @ColumnInfo(defaultValue = "0")
     var lastUpdateTime: Long = System.currentTimeMillis()
 ) : BaseSource {
@@ -57,7 +62,9 @@ data class HttpTTS(
                 header == source.header &&
                 jsLib == source.jsLib &&
                 enabledCookieJar == source.enabledCookieJar &&
-                loginCheckJs == source.loginCheckJs
+                loginCheckJs == source.loginCheckJs &&
+                type == source.type &&
+                script == source.script
     }
 
     @Suppress("MemberVisibilityCanBePrivate")
@@ -79,7 +86,10 @@ data class HttpTTS(
                     header = doc.readString("$.header"),
                     loginCheckJs = doc.readString("$.loginCheckJs"),
                     lastUpdateTime = doc.readLong("$.lastUpdateTime") ?: System.currentTimeMillis(),
-                    jsLib = doc.readString("$.jsLib")
+                    jsLib = doc.readString("$.jsLib"),
+                    // AD-04：type 缺省=1（http 模板），legacy JSON 无该字段自动兼容；script 缺省空
+                    type = doc.readLong("$.type")?.toInt()?.coerceIn(1, 2) ?: 1,
+                    script = doc.readString("$.script") ?: ""
                 )
             }
         }
