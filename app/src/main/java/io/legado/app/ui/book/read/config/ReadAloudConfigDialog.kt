@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.book.read.config
+package io.legado.app.ui.book.read.config
 
 import android.content.SharedPreferences
 import android.os.Bundle
@@ -87,7 +87,8 @@ import io.legado.app.utils.toastOnUi
 
 private const val KEY_AI_READ_ALOUD_BGM_MANAGE = "aiReadAloudBgmManage"
 private const val KEY_AI_READ_ALOUD_USAGE_RECORDS = "aiReadAloudUsageRecords"
-private const val KEY_AI_READ_ALOUD_MODEL_ROUTING = "aiReadAloudModelRouting"`nprivate const val KEY_TTS_CASTING_TEMPLATE = "ttsCastingTemplate"
+private const val KEY_AI_READ_ALOUD_MODEL_ROUTING = "aiReadAloudModelRouting"
+private const val KEY_TTS_CASTING_TEMPLATE = "ttsCastingTemplate"
 private const val KEY_READ_ALOUD_SPEAKER_MANAGE = "readAloudSpeakerManage"
 private const val KEY_READ_ALOUD_LOUDNESS_RESET = "readAloudSpeakerLoudnessReset"
 private const val KEY_MEDIA_BUTTON_PER_NEXT = "mediaButtonPerNext"
