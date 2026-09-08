@@ -1,4 +1,4 @@
-package io.legado.app.ui.book.read
+﻿package io.legado.app.ui.book.read
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -138,6 +138,7 @@ import io.legado.app.help.book.characterBookKey
 import io.legado.app.help.character.BookCharacterIdentityMigrator
 import io.legado.app.help.CoverDisplayResolver
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
 import io.legado.app.help.readaloud.ReadAloudSpeakerLoudnessManager
