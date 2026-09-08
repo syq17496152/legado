@@ -293,6 +293,58 @@ class SpeakEngineDialog() : ComposeDialogFragment(), SpeakEngineDialogActions {
         }
     }
 
+    /**
+     * 内置脚本引擎模板导入（AD-06/AD-09 期2）：
+     * 读取 assets/defaultData/tts/ 四个模板 JS → 创建 type=2 引擎记录（默认未启用，
+     * 用户在列表中选用即确认启用）；幂等=同名"模板·"记录跳过。
+     */
+    private fun importBuiltinScriptTemplates() {
+        val templates = listOf(
+            "MultiTTS 转发器" to "multitts_forwarder.js",
+            "CloneTTS" to "clonetts.js",
+            "OpenAI 兼容" to "openai_compat.js",
+            "Edge-TTS 代理" to "edge_proxy_template.js"
+        )
+        lifecycleScope.launch(IO) {
+            var imported = 0
+            var skipped = 0
+            templates.forEach { (name, file) ->
+                runCatching {
+                    val script = requireContext().assets
+                        .open("defaultData/tts/$file")
+                        .bufferedReader().use { it.readText() }
+                    val exists = appDb.httpTTSDao.flowAll().first()
+                        .firstOrNull { it.name == "模板·$name" && it.type == 2 }
+                    if (exists != null) {
+                        skipped++
+                        return@forEach
+                    }
+                    appDb.httpTTSDao.insert(
+                        HttpTTS(
+                            name = "模板·$name",
+                            url = "",
+                            type = 2,
+                            script = script,
+                            lastUpdateTime = System.currentTimeMillis()
+                        )
+                    )
+                    imported++
+                }.onFailure {
+                    AppLog.put("内置模板 $name 导入失败：${it.localizedMessage}", it)
+                }
+            }
+            launch(kotlinx.coroutines.Dispatchers.Main) {
+                toastOnUi(
+                    when {
+                        imported > 0 -> "已导入 $imported 个脚本引擎模板（默认未启用，请在列表中选用）"
+                        skipped > 0 -> "模板已存在，跳过导入"
+                        else -> "导入失败"
+                    }
+                )
+            }
+        }
+    }
+
     override fun exportSelected() {
         val id = SpeechRoute.fromTtsEngineValue(ttsEngine).engineValue.toLongOrNull()
         val tts = id?.let { appDb.httpTTSDao.get(it) }
@@ -485,7 +537,8 @@ private fun ImportChoiceDialog(
     onDismiss: () -> Unit,
     onDefault: () -> Unit,
     onLocal: () -> Unit,
-    onOnline: () -> Unit
+    onOnline: () -> Unit,
+    onBuiltinScriptTemplates: () -> Unit = {},Unit
 ) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -508,6 +561,12 @@ private fun ImportChoiceDialog(
                 ImportChoiceRow("默认规则", "导入内置 HTTP TTS 规则", style, onDefault)
                 ImportChoiceRow("本地导入", "从本机 txt/json 文件导入", style, onLocal)
                 ImportChoiceRow("在线导入", "通过 URL 导入朗读规则", style, onOnline)
+                ImportChoiceRow(
+                    "内置脚本引擎模板",
+                    "MultiTTS 转发/CloneTTS/OpenAI 兼容/Edge 代理（导入后默认未启用）",
+                    style,
+                    onBuiltinScriptTemplates
+                )
             }
         }
     }

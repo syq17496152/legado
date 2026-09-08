@@ -186,7 +186,11 @@ class HttpReadAloudService : BaseReadAloudService(),
                         createSilentSound(fileName)
                     } else if (!hasSpeakFile(fileName)) {
                         runCatching {
-                            val inputStream = getSpeakStream(httpTts, speakText)
+                            val inputStream = if (httpTts.type == 2) {
+                                getEngineSpeakStream(httpTts, speakText)
+                            } else {
+                                getSpeakStream(httpTts, speakText)
+                            }
                             if (inputStream != null) {
                                 createSpeakFile(fileName, inputStream)
                             } else {
@@ -250,6 +254,11 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun downloadAndPlayAudiosStream() {
+        // AD-04：脚本引擎走按段下载缓存路径（流式 DataSourceFactory 不适用脚本请求对象）
+        if (currentHttpTts?.type == 2) {
+            downloadAndPlayAudios()
+            return
+        }
         exoPlayer.clearMediaItems()
         downloadTask?.cancel()
         resetCurrentHttpTts()
@@ -363,6 +372,38 @@ class HttpReadAloudService : BaseReadAloudService(),
             .setDataSourceFactory(factory)
             .setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
             .createMediaSource(MediaItem.fromUri(fileName))
+    }
+
+    /**
+     * 引擎合成统一入口（§3.5/AD-04）：type=2 走脚本引擎（TtsScriptEngineClient），type=1 走 URL 模板
+     */
+    private suspend fun getEngineSpeakStream(httpTts: HttpTTS, speakText: String): InputStream? {
+        if (httpTts.type == 2) {
+            val request = io.legado.app.help.readaloud.script.TtsScriptEngineClient.synthesize(
+                httpTts,
+                speakText,
+                ReadAloud.currentRoute.toneID.ifBlank { null },
+                null, null, null
+            )
+            // 请求对象映射：url + "," + 选项JSON（method/headers/body，AnalyzeUrl 选项串解析）
+            val optionJson = org.json.JSONObject().apply {
+                put("method", request.method)
+                if (request.headers.isNotEmpty()) {
+                    put("headers", org.json.JSONObject(request.headers))
+                }
+                request.body?.let { put("body", it) }
+            }.toString()
+            val analyzeUrl = AnalyzeUrl(
+                request.url + "," + optionJson,
+                speakText = speakText,
+                speakSpeed = speechRate,
+                source = httpTts,
+                readTimeout = 300 * 1000L,
+                coroutineContext = currentCoroutineContext()
+            )
+            return analyzeUrl.getResponseAwait().body.byteStream()
+        }
+        return getSpeakStream(httpTts, speakText)
     }
 
     private suspend fun getSpeakStream(
