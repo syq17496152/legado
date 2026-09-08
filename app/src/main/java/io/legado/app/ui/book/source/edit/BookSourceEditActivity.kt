@@ -146,7 +146,7 @@ class BookSourceEditActivity :
                     )
                     add(
                         MenuAction(
-                            iconRes = R.drawable.ic_bug_report,
+                            iconRes = R.drawable.ic_bug_report_outline,
                             title = getString(R.string.debug_source),
                             alwaysShow = true
                         ) {

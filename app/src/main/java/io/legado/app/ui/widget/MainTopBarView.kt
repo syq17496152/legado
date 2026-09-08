@@ -67,7 +67,7 @@ class MainTopBarView @JvmOverloads constructor(
     }
     val searchButton = actionButton(R.drawable.ic_search, R.string.search)
     val filterButton = actionButton(R.drawable.ic_sort, R.string.sort)
-    val starButton = actionButton(R.drawable.ic_star, R.string.favorite)
+    val starButton = actionButton(R.drawable.ic_star_border, R.string.favorite)
     val refreshButton = actionButton(R.drawable.ic_refresh_black_24dp, R.string.refresh)
     val loginButton = actionButton(R.drawable.ic_bottom_person, R.string.login)
     val primaryBar = RoundedTagBarView(context)
@@ -441,7 +441,7 @@ class MainTopBarView @JvmOverloads constructor(
         listOf(moreButton, searchButton, filterButton, starButton, refreshButton, loginButton, filterToggleButton).forEach {
             it.background = ContextCompat.getDrawable(context, R.drawable.bg_discover_embedded_action)
             // bugfix-0908f 尺寸单源：容器/内边距×fontScale，与子页 Compose 顶栏（TopBarConfig 单源）同联动
-            val fs = AppContextWrapper.getFontScale(context)
+            val fs = AppContextWrapper.getFontScaleForContext(context)
             it.layoutParams = (it.layoutParams as LayoutParams).apply {
                 width = (resources.getDimensionPixelSize(R.dimen.bookshelf_action_button_size) * fs).toInt()
                 height = (resources.getDimensionPixelSize(R.dimen.bookshelf_action_button_size) * fs).toInt()
@@ -495,7 +495,7 @@ class MainTopBarView @JvmOverloads constructor(
         listOf(moreButton, searchButton, filterButton, starButton, refreshButton, loginButton, filterToggleButton).forEach {
             it.background = null
             // bugfix-0908f 尺寸单源：容器/内边距×fontScale，与子页 Compose 顶栏（TopBarConfig 单源）同联动
-            val fs = AppContextWrapper.getFontScale(context)
+            val fs = AppContextWrapper.getFontScaleForContext(context)
             it.layoutParams = (it.layoutParams as LayoutParams).apply {
                 width = (resources.getDimensionPixelSize(R.dimen.top_bar_regular_action_size) * fs).toInt()
                 height = (resources.getDimensionPixelSize(R.dimen.top_bar_regular_action_size) * fs).toInt()
@@ -524,7 +524,7 @@ class MainTopBarView @JvmOverloads constructor(
     private fun styleActionSlotButtons(regular: Boolean) {
         if (actionsBar.childCount == 0) return
         // bugfix-0908f：按钮容器/内边距跟随主题"字体大小"（fontScale），与标题 sp 缩放联动
-        val fs = AppContextWrapper.getFontScale(context)
+        val fs = AppContextWrapper.getFontScaleForContext(context)
         val size = (resources.getDimensionPixelSize(
             if (regular) R.dimen.top_bar_regular_action_size else R.dimen.bookshelf_action_button_size
         ) * fs).toInt()

@@ -91,7 +91,7 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
                         alwaysShow = true
                     ) { save() },
                     MenuAction(
-                        iconRes = R.drawable.ic_bug_report,
+                        iconRes = R.drawable.ic_bug_report_outline,
                         title = getString(R.string.debug),
                         enabled = topActionsEnabled,
                         alwaysShow = true
