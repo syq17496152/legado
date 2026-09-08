@@ -10,8 +10,16 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.MediaHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.help.readaloud.casting.CastingProsody
+import io.legado.app.help.readaloud.casting.CastingTag
+import io.legado.app.help.readaloud.casting.CastingRuleSet
+import io.legado.app.help.readaloud.casting.SystemEngineSource
+import io.legado.app.help.readaloud.casting.TtsCastingStore
+import io.legado.app.help.readaloud.casting.TtsTagSplitter
+import io.legado.app.help.readaloud.casting.TtsVoiceRef
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.TtsEngineParamsStore
 import io.legado.app.model.ReadAloud
@@ -25,8 +33,13 @@ import kotlinx.coroutines.ensureActive
 /**
  * 本地朗读（AD-03/AD-05/AD-09）
  * init 按路由包名构造 + 8s 超时看门狗 + 失败降级默认引擎明示 + 每引擎独立参数
+ * 多人模式（AD-09 期1）：选角模板分段 → 逐段 onDone 驱动（suspend utterance）
  */
 class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener {
+
+    companion object {
+        private const val WATCHDOG_TIMEOUT_MS = 8000L
+    }
 
     private var textToSpeech: TextToSpeech? = null
     private var ttsInitFinish = false
@@ -50,11 +63,21 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         val engineLabel = currentEngineLabel()
         AppLog.put("TTS 引擎初始化超时（8s）：$engineLabel")
         toastOnUi("引擎 $engineLabel 初始化失败已回退默认")
-        startFallbackInit()
+        handleInitFailure()
     }
 
     override fun onCreate() {
         super.onCreate()
+        // 内置选角模板幂等导入（AD-09：DefaultData 同款 assets 链，builtin 冲突跳过）
+        execute(executeContext = kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val json = assets.open("defaultData/tts/castingTemplates.json")
+                    .bufferedReader().use { it.readText() }
+                TtsCastingStore.importBuiltinTemplates(json)
+            }.onFailure {
+                AppLog.put("内置选角模板导入失败：${it.message}", it)
+            }
+        }
         kotlin.runCatching {
             initTts()
         }.onFailure {
@@ -160,7 +183,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     }
 
     /**
-     * 应用每引擎独立参数（AD-05）：语速/音调/音量，键=engineValue
+     * 应用每引擎独立参数（AD-05）：语速/音调/音量，键=engineValue（TtsEngineParamsStore 承载）
      */
     private fun applyEngineParams(tts: TextToSpeech) {
         val route = SpeechRoute.resolveSpeechRoute(ReadAloud.ttsEngine)
@@ -192,65 +215,174 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         super.play()
         MediaHelp.playSilentSound(this@TTSReadAloudService)
         speakJob?.cancel()
+        // 多人模式：逐段 onDone 驱动（AD-09 期1）；否则原整章预入队路径
         speakJob = execute {
-            LogUtils.d(TAG, "朗读列表大小 ${contentList.size}")
-            LogUtils.d(TAG, "朗读页数 ${textChapter?.pageSize}")
-            val tts = textToSpeech ?: throw NoStackTraceException("tts is null")
-            val contentList = contentList
-            var isAddedText = false
-            for (i in nowSpeak until contentList.size) {
-                ensureActive()
-                var text = contentList[i]
-                if (paragraphStartPos > 0 && i == nowSpeak) {
-                    text = text.substring(paragraphStartPos)
-                }
-                if (text.matches(AppPattern.notReadAloudRegex)) {
-                    continue
-                }
-                if (!isAddedText) {
-                    val result = tts.runCatching {
-                        speak(text, TextToSpeech.QUEUE_FLUSH, null, AppConst.APP_TAG + i)
-                    }.getOrElse {
-                        AppLog.put("tts出错\n${it.localizedMessage}", it, true)
-                        TextToSpeech.ERROR
-                    }
-                    if (result == TextToSpeech.ERROR) {
-                        AppLog.put("tts出错 尝试重新初始化")
-                        clearTTS()
-                        initTts()
-                        return@execute
-                    }
-                } else {
-                    val result = tts.runCatching {
-                        speak(text, TextToSpeech.QUEUE_ADD, null, AppConst.APP_TAG + i)
-                    }.getOrElse {
-                        AppLog.put("tts朗读出错:$text")
-                        TextToSpeech.ERROR
-                    }
-                    if (result == TextToSpeech.ERROR) {
-                        AppLog.put("tts朗读出错:$text")
-                    }
-                }
-                isAddedText = true
-                // 段落间停顿: 非末段后插入静音朗读项 (R7.1)
-                val pauseMs = AppConfig.ttsParagraphPauseMs
-                if (pauseMs > 0 && i < contentList.lastIndex) {
-                    tts.runCatching {
-                        @Suppress("DEPRECATION")
-                        playSilentUtterance(pauseMs.toLong(), TextToSpeech.QUEUE_ADD, "${AppConst.APP_TAG}pause$i")
-                    }
-                }
-            }
-            LogUtils.d(TAG, "朗读内容添加完成")
-            if (!isAddedText) {
-                playStop()
-                delay(1000)
-                if (!checkTimerAtChapterEnd()) {
-                    nextChapter()
-                }
+            val bookKey = ReadBook.book?.bookUrl.orEmpty()
+            val ruleSet = runCatching {
+                TtsCastingStore.resolveActiveRuleSet(bookKey)
+            }.getOrNull()
+            if (ruleSet != null && ruleSet.rules.isNotEmpty()) {
+                speakMultiRole(ruleSet)
+            } else {
+                speakLegacyLoop()
             }
         }.onError {
             AppLog.put("tts朗读出错\n${it.localizedMessage}", it, true)
+        }
+    }
+
+    /** 原整章预入队朗读路径（单声模板/多人未启用时走此路径，行为与重构前一致） */
+    private suspend fun speakLegacyLoop() {
+        LogUtils.d(TAG, "朗读列表大小 ${contentList.size}")
+        LogUtils.d(TAG, "朗读页数 ${textChapter?.pageSize}")
+        val tts = textToSpeech ?: throw NoStackTraceException("tts is null")
+        val contentList = contentList
+        var isAddedText = false
+        for (i in nowSpeak until contentList.size) {
+            ensureActive()
+            var text = contentList[i]
+            if (paragraphStartPos > 0 && i == nowSpeak) {
+                text = text.substring(paragraphStartPos)
+            }
+            if (text.matches(AppPattern.notReadAloudRegex)) {
+                continue
+            }
+            if (!isAddedText) {
+                val result = tts.runCatching {
+                    speak(text, TextToSpeech.QUEUE_FLUSH, null, AppConst.APP_TAG + i)
+                }.getOrElse {
+                    AppLog.put("tts出错\n${it.localizedMessage}", it, true)
+                    TextToSpeech.ERROR
+                }
+                if (result == TextToSpeech.ERROR) {
+                    AppLog.put("tts出错 尝试重新初始化")
+                    clearTTS()
+                    initTts()
+                    return@execute
+                }
+            } else {
+                val result = tts.runCatching {
+                    speak(text, TextToSpeech.QUEUE_ADD, null, AppConst.APP_TAG + i)
+                }.getOrElse {
+                    AppLog.put("tts朗读出错:$text")
+                    TextToSpeech.ERROR
+                }
+                if (result == TextToSpeech.ERROR) {
+                    AppLog.put("tts朗读出错:$text")
+                }
+            }
+            isAddedText = true
+            // 段落间停顿: 非末段后插入静音朗读项 (R7.1)
+            val pauseMs = AppConfig.ttsParagraphPauseMs
+            if (pauseMs > 0 && i < contentList.lastIndex) {
+                tts.runCatching {
+                    @Suppress("DEPRECATION")
+                    playSilentUtterance(pauseMs.toLong(), TextToSpeech.QUEUE_ADD, "${AppConst.APP_TAG}pause$i")
+                }
+            }
+        }
+        LogUtils.d(TAG, "朗读内容添加完成")
+        if (!isAddedText) {
+            playStop()
+            delay(1000)
+            if (!checkTimerAtChapterEnd()) {
+                nextChapter()
+            }
+        }
+    }
+
+    /**
+     * 多人模式逐段驱动循环（AD-09 期1）：
+     * TtsTagSplitter 分段（五元组）→ 模板 resolve(tag) → SystemEngineSource.utterance 逐句挂起。
+     * 进度账=精确字符账：段完成 readAloudNumber += seg.length；段界 +=1（换行）并做翻页判定。
+     */
+    private suspend fun speakMultiRole(ruleSet: CastingRuleSet) {
+        val bookKey = ReadBook.book?.bookUrl.orEmpty()
+        val source = SystemEngineSource(
+            this,
+            { textToSpeech },
+            { ttsInitFinish },
+            ReadAloud.currentRoute.engineValue
+        )
+        val textChapter = textChapter ?: return
+        val contentList = contentList
+        for (p in nowSpeak until contentList.size) {
+            ensureActive()
+            val paragraphStart = if (p == nowSpeak) paragraphStartPos else 0
+            val paragraph = contentList[p]
+            if (paragraph.isBlank() || paragraph.matches(AppPattern.notReadAloudRegex)) {
+                readAloudNumber += paragraph.length + 1 - paragraphStart
+                paragraphStartPos = 0
+                continue
+            }
+            val segments = TtsTagSplitter.splitParagraph(p, paragraph, ruleSet.rules)
+                .filter { it.offsetInParagraph + it.length > paragraphStart }
+            for (segment in segments) {
+                ensureActive()
+                var text = paragraph.substring(
+                    segment.offsetInParagraph,
+                    segment.offsetInParagraph + segment.length
+                )
+                if (segment.offsetInParagraph < paragraphStart) {
+                    text = text.substring(paragraphStart - segment.offsetInParagraph)
+                }
+                // 对白段剥离引号（正文显示保留）；纯静默段跳过
+                val speechText = if (segment.tag != CastingTag.NARRATION) {
+                    TtsTagSplitter.stripQuotesForSpeech(text)
+                } else {
+                    text
+                }
+                if (speechText.replace(AppPattern.notReadAloudRegex, "").isBlank()) {
+                    continue
+                }
+                val sourceRoute = runCatching {
+                    TtsCastingStore.resolveSourceForTag(bookKey, segment.tag, ruleSet)
+                }.getOrNull() ?: SpeechRoute(engineType = SpeechRoute.ENGINE_DEFAULT)
+                val voiceRef = if (sourceRoute.speakerName.isNotBlank()) {
+                    TtsVoiceRef(
+                        voiceId = sourceRoute.toneID,
+                        displayName = sourceRoute.speakerName,
+                        channel = TtsVoiceRef.CHANNEL_SYSTEM
+                    )
+                } else {
+                    null
+                }
+                val utteranceId = "${AppConst.APP_TAG}mr_${p}_${segment.offsetInParagraph}"
+                val completed = source.utterance(
+                    speechText,
+                    voiceRef,
+                    CastingProsody(),
+                    utteranceId
+                )
+                if (!completed) {
+                    // onStop（pause/stop/seek 已接管状态），静默退出循环
+                    return
+                }
+                readAloudNumber += text.length
+                // 翻页判定（对齐原 onStart/onRangeStart 语义）
+                textChapter?.let {
+                    if (pageIndex + 1 < it.pageSize &&
+                        readAloudNumber + 1 > it.getReadLength(pageIndex + 1)
+                    ) {
+                        pageIndex++
+                        ReadBook.moveToNextPage()
+                    }
+                    upTtsProgress(readAloudNumber + 1)
+                }
+            }
+            // 段界换行计数
+            readAloudNumber += 1 - paragraphStartPos
+            paragraphStartPos = 0
+            // 段间停顿（§1.8-F C10：逐段驱动下的插入位置）
+            val pauseMs = AppConfig.ttsParagraphPauseMs
+            if (pauseMs > 0 && p < contentList.lastIndex) {
+                delay(pauseMs.toLong())
+            }
+        }
+        // 章末
+        delay(500)
+        if (!checkTimerAtChapterEnd()) {
+            nextChapter()
         }
     }
 
@@ -379,17 +511,6 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
 
     override fun aloudServicePendingIntent(actionStr: String): PendingIntent? {
         return servicePendingIntent<TTSReadAloudService>(actionStr)
-    }
-
-    companion object {
-        private const val WATCHDOG_TIMEOUT_MS = 8000L
-
-        /** 外部触发引擎内重建（AD-02 reInitTts IntentAction 分发入口） */
-        fun reInitTts(context: Context) {
-            val intent = Intent(context, TTSReadAloudService::class.java)
-            intent.action = IntentAction.reInitTts
-            context.startForegroundServiceCompat(intent)
-        }
     }
 
 }
