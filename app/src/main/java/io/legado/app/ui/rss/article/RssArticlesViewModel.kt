@@ -9,6 +9,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssSource
+import io.legado.app.help.source.autoNextPageEnabled
 import io.legado.app.model.rss.Rss
 import io.legado.app.utils.stackTraceStr
 import kotlinx.coroutines.Dispatchers.IO
@@ -52,10 +53,12 @@ class RssArticlesViewModel(application: Application) : BaseViewModel(application
                 rssArticle.order = order--
             }
             appDb.rssArticleDao.insert(*articles.toTypedArray())
-            if (!rssSource.ruleNextPage.isNullOrEmpty()) {
+            // 分页源刷新首页时清理旧页数据（含隐式PAGE模式：未填下一页规则但URL含{{page}}）
+            if (!rssSource.ruleNextPage.isNullOrEmpty() || rssSource.autoNextPageEnabled(sortUrl)) {
                 appDb.rssArticleDao.clearOld(rssSource.sourceUrl, sortName, order)
             }
-            val hasMore = articles.isNotEmpty() && !rssSource.ruleNextPage.isNullOrEmpty()
+            val hasMore = articles.isNotEmpty() &&
+                    (!rssSource.ruleNextPage.isNullOrEmpty() || rssSource.autoNextPageEnabled(sortUrl))
             loadFinallyLiveData.postValue(hasMore)
             isLoading = false
         }.onError {

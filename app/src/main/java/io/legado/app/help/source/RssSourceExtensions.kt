@@ -23,6 +23,15 @@ private fun RssSource.getSortUrlsKey(): String {
     return MD5Utils.md5Encode(sourceUrl + sortUrl)
 }
 
+/**
+ * 老源兼容判定：未填列表下一页规则(ruleNextPage)但请求URL含{{page}}占位符时，
+ * 隐式按PAGE模式翻页（原版行为：搜索/分类字段通过{{page}}占位引用分页信息即可自动翻页）。
+ * 仅当URL确实含{{page}}时才启用，避免无分页占位符的源无限重复请求同一URL。
+ */
+fun RssSource.autoNextPageEnabled(requestUrl: String): Boolean {
+    return ruleNextPage.isNullOrEmpty() && !requestUrl.isNullOrEmpty() && requestUrl.contains("{{page}}")
+}
+
 suspend fun RssSource.sortUrls(): List<Pair<String, String>> {
     return arrayListOf<Pair<String, String>>().apply {
         val sortUrlsKey = getSortUrlsKey()

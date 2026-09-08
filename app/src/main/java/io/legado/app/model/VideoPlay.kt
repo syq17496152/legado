@@ -1782,7 +1782,8 @@ object VideoPlay : CoroutineScope by MainScope(){
                 rssArticles = currentList
                 // 更新下一页URL和是否有更多
                 rssNextPageUrl = newNextPageUrl
-                rssArticlesHasMore = !newNextPageUrl.isNullOrEmpty() && !rssSource.ruleNextPage.isNullOrEmpty()
+                // 解析器仅在存在分页能力时返回nextUrl（含隐式PAGE模式：未填下一页规则但URL含{{page}}）
+                rssArticlesHasMore = !newNextPageUrl.isNullOrEmpty()
                 // 通知 adapter 刷新（传递新增文章数量）
                 postEvent(EventBus.ARTICLES_LOADED, articles.size)
             }.onError {

@@ -5,6 +5,7 @@ import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssSource
+import io.legado.app.help.source.autoNextPageEnabled
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.Debug
@@ -74,6 +75,10 @@ object RssParserByRule {
                     }
                 }
                 Debug.log(sourceUrl, "└$nextUrl")
+            } else if (rssSource.autoNextPageEnabled(sortUrl)) {
+                // 老源兼容：未填下一页规则但URL含{{page}}占位符 → 隐式PAGE模式自动翻页
+                Debug.log(sourceUrl, "┌获取下一页链接(隐式PAGE模式)")
+                nextUrl = sortUrl
             }
             val ruleTitle = analyzeRule.splitSourceRule(rssSource.ruleTitle)
             val rulePubDate = analyzeRule.splitSourceRule(rssSource.rulePubDate)

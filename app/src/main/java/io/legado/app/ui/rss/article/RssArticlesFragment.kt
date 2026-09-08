@@ -21,6 +21,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.databinding.FragmentRssArticlesBinding
 import io.legado.app.databinding.ViewLoadMoreBinding
+import io.legado.app.help.source.autoNextPageEnabled
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.VideoPlay
@@ -296,7 +297,8 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
 
     private fun showPageMenu(): Boolean {
         val source = activityViewModel.rssSource ?: return false
-        return !source.ruleNextPage.isNullOrEmpty()
+        // 显式下一页规则 或 隐式PAGE模式（URL含{{page}}占位符）均可翻页
+        return !source.ruleNextPage.isNullOrEmpty() || source.autoNextPageEnabled(viewModel.sortUrl)
     }
 
     fun showPagePicker() {
