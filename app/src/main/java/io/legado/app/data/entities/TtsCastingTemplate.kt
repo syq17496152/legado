@@ -19,8 +19,8 @@ data class TtsCastingTemplate(
     var builtin: Boolean = false,
     @ColumnInfo(defaultValue = "1")
     var enabled: Boolean = true,
-    @ColumnInfo(name = "order", defaultValue = "0")
-    var order: Int = 0,
+    @ColumnInfo(name = "sortOrder", defaultValue = "0")
+    var sortOrder: Int = 0,
     // 规则数组 JSON：[{tag, match:{type: builtin_quote|regex|keyword, pattern}, sourceJson, prosody:{rate,pitch,volume}}]
     @ColumnInfo(defaultValue = "")
     var rulesJson: String = "",
