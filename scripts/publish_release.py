@@ -284,8 +284,9 @@ def read_update_log(log_path: Path, version: str) -> str:
         sys.exit(1)
 
     content = log_path.read_text(encoding="utf-8")
-    # 查找 **YYYY/MM/DD** 标题
-    date_pattern = re.compile(r"\*\*(\d{4}/\d{2}/\d{2})\*\*")
+    # 查找 **YYYY/MM/DD** 标题（兼容批量标题格式：**2026/09/08（第N批）**，
+    # 2026-09-07 起条目标题在日期后带批次名，旧正则要求日期后紧跟 ** 会匹配失败）
+    date_pattern = re.compile(r"\*\*(\d{4}/\d{2}/\d{2})")
     matches = list(date_pattern.finditer(content))
 
     target_idx = None
