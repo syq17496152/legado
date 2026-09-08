@@ -45,34 +45,35 @@
 
 ## 2. Scope（范围）
 
-### 2.1 做什么（In Scope，对应设计决策 AD-01~AD-08）
+### 2.1 做什么（In Scope，对应设计决策 AD-01~AD-09）
 
 1. **AD-01 引擎路由单源化（修 Bug 核心）**：SpeechRoute 成为引擎选择唯一协议。服务层统一经 `resolveSpeechRoute(raw)` **纯字符串同步解析（不查库）**，四态判定：SpeechRoute JSON（新格式）→ 直读分派；SpeechRoute JSON 且 engineType=system 且 engineValue 内嵌 JSON（双嵌套 legacy 存量）→ 解包内层 value 作包名；legacy SelectItem JSON → 取 value 作包名映射 system 路由；纯数字 → legacy HttpTTS id 映射为 http 路由。`getReadAloudClass` 按 route.engineType 同步分派 system/http（script 同走 http 服务；14 处 aloudClass 同步消费点与 4 个调用方零改动）。
 2. **AD-02 切换即时生效语义**：所有切换入口（SpeakEngineDialog / 播放面板 selectTtsEngine 等）统一走 `upReadAloudClass()`——续播意图上收数据层（服务运行中捕获 `PendingSwitch(wasPlaying/pageIndex/startPos)` 存 `ReadAloud` 静态记录，面板 STOP 分支从 `ReadAloud.consumePendingSwitch()` 取续播意图）、**先重算（同步）后 stop** 消除竞态窗口；同服务类型切换不下发 STOP，改发新增 `reInitTts` IntentAction 引擎内重建（`@Synchronized` clearTTS()+initTts()）；跨类型 stop→重算→重启；`refreshReadAloudClass` 仅用于未运行时。
 3. **AD-03 TTS init 超时与降级明示**：initTts 增加约 8s 超时看门狗，超时/onInit 失败 → clearTTS 回退默认引擎并 toast 明示；回调竞态用主线程 Handler 收敛。
-4. **AD-04 脚本引擎协议（SCRIPT_TTS）**：HttpTTS 实体新增 `type`（Int，1=http 模板默认，2=script）与 `script`（String，JS 源码）两列，ALTER TABLE 增量迁移（version 递增，覆盖安装真机验证，实施前核实无 @DatabaseView 引用 httpTTS）。脚本契约：头注 `@name/@schema/@capabilities/@defaultSpeed` + 三函数 `options()/voices()/synthesize(text,voice,params,options,ctx)`，synthesize 返回 URL 或请求对象（本期 HTTP 轮询型）。新增 `help/readaloud/script/TtsScriptEngineClient.kt`（Rhino 执行，强制 P0 沙箱：`RhinoClassShutter` 类白名单 + `SourceSandboxExtensions` 文件沙箱，文件访问走 `BookSourceStorageScope`；注意 HttpTTS 非 BookSource，类策略须显式启用，见 design 1.3）；voices() 结果缓存进既有 speakersJson；脚本路由走现有 HttpReadAloudService 合成链。执行约束：三函数统一包 `withTimeout(10s)`；体积限额（synthesized URL≤8KB、请求体≤256KB、脚本源码≤512KB、voices 目录超限截断）；synthesize 请求对象仅承接 url/method/headers/body 四字段，越界字段拒绝导入并明示；type=2 接入点收口 `getSpeakStream`；候选过滤 type==1（type=2 不进 AI 语音/多角色候选）。
+4. **AD-04 脚本引擎协议（SCRIPT_TTS）**：HttpTTS 实体新增 `type`（Int，1=http 模板默认，2=script）与 `script`（String，JS 源码）两列，ALTER TABLE 增量迁移（version 递增，覆盖安装真机验证，实施前核实无 @DatabaseView 引用 httpTTS）。脚本契约：头注 `@name/@schema/@capabilities/@defaultSpeed` + 三函数 `options()/voices()/synthesize(text,voice,params,options,ctx)`，synthesize 返回 URL 或请求对象（本期 HTTP 轮询型）。新增 `help/readaloud/script/TtsScriptEngineClient.kt`（Rhino 执行，强制 P0 沙箱：`RhinoClassShutter` 类白名单 + `SourceSandboxExtensions` 文件沙箱，文件访问走 `BookSourceStorageScope`；注意 HttpTTS 非 BookSource，类策略须显式启用，见 design §3.3）；voices() 结果缓存进既有 speakersJson；脚本路由走现有 HttpReadAloudService 合成链。执行约束：三函数统一包 `withTimeout(10s)`；体积限额（synthesized URL≤8KB、请求体≤256KB、脚本源码≤512KB、voices 目录超限截断）；synthesize 请求对象仅承接 url/method/headers/body 四字段，越界字段拒绝导入并明示；type=2 接入点收口 `getSpeakStream`；候选过滤 type==1（type=2 不进 AI 语音/多角色候选）。
 5. **AD-05 系统引擎增强**：SpeechVoiceCatalogRepository 枚举系统 TTS 引擎生成结构化 SpeechRoute（删除 SelectItem 嵌套补丁；fromTtsEngineValue 保留 legacy 兼容但新数据不再产生）；每引擎独立语速/音调/音量配置（新 PreferKey 或 SpeechRoute 扩展字段）；消除 runBlocking（路由解析不查库，httpTTS 装配收敛 HttpReadAloudService 服务内）。
 6. **AD-06 内置引擎模板库**：新增 `app/src/main/assets/defaultData/tts/` 四模板：`multitts_forwarder.js`（:8774 /forward + /voices，speed 按 `{{speakSpeed*5}}` 换算（默认 10→50）、volume/pitch 按 MultiTTS 参数域换算，真机校准判据：默认语速下 MultiTTS speed 参数=50）、`clonetts.js`（:8080 /api/tts，speed 换算 `{{speakSpeed/10.0}}` 并 clamp 0.5~2.0（默认 10→1.0），支持 /api/legado/all 批量导入入口）、`openai_compat.js`（OpenAI /v1/audio/speech 兼容）、`edge_proxy_template.js`（Edge-TTS 代理模板，@enabled false、端点留空由用户填、不硬编码任何第三方 IP）。SpeakEngineDialog 增加"内置模板"导入入口（启用需用户确认，逐个导入，冲突策略 OVERWRITE/KEEP_BOTH）。
 7. **AD-07 并发与缓存键增强**：保留现有 Channel 并发预下载；增加引擎级并发上限（concurrentRate 既有基建，脚本引擎默认 2）；缓存键扩展为引擎类型+voice+speed+volume+pitch+capabilities 声明维度（未声明维度不进缓存键）；缓存写 .part 临时文件 + rename 原子发布。
 8. **AD-08 失败降级链与明示**：合成/引擎失败 → 当前引擎重试 1 次 → 回退默认系统引擎并 toast 明示原因 → 连续失败暂停朗读并通知；路由解析失败明示"引擎配置无效已回退"，禁止静默失效。
-9. **存量兼容与稳健性治理**：legacy 数据全兼容（R9）；去 runBlocking、死代码清理、RSS/AI 语音回归保障（R10）。
+9. **AD-09 多角色 TTS 分层架构（2026-09-08 v1.2 用户裁决）**：基础服务层（系统引擎/本地 TTS App HTTP/在线引擎，既有零改动）→ 适配层（TtsVoiceSource 三类声源统一抽象：引擎级/provider 音色级/HTTP 参数级，音色枚举+按句换声统一接口）→ **范式模板配置层（本期新增核心）**：声明式模板 JSON（tag 分段规则+声源映射+韵律，借鉴 tts-server 范式）；**内置模板默认启用**（旁白对白双声-引号规则/男女对读/MultiTTS 对话透传/单声）+ 高级用户自定义模板与 JSON 导入导出分享（类比高亮规则体系）；L-d AI 多角色链修复服务侧路由消费并复用同一模板层。
+10. **存量兼容与稳健性治理**：legacy 数据全兼容（R9）；去 runBlocking、死代码清理、RSS/AI 语音回归保障（R10）。
 
 ### 2.2 不做什么（Out of Scope，简报"明确不做"逐条）
 
-1. **不重构 AiReadAloudRoleService 多角色链**：其已独立消费 SpeechRoute，本期仅保证兼容回归。
+1. **不重构 AiReadAloudRoleService 多角色 AI 链**（2026-09-08 修订）：AI 分镜/角色绑定链保持既有实现，本期仅修复其服务侧路由消费缺失（复用 AD-09 逐段路由消费机制）并保证兼容回归；**新增的 L1 双声源零配置路径为独立实现，不依赖 AI 链**（原"多角色链零改动"表述废止——服务侧路由消费修复触及该链边界）。
 2. **不做 SSE / WS 流式合成**：脚本引擎本期仅支持 HTTP 轮询型，流式登记为后续增强。
 3. **不做 SoundTouch 变声**：登记后续增强。
 4. **不做无缝章衔接 handoff**：登记后续增强。
-5. **不做 NG 式 AI 分镜 / LLM 依赖**：不引入多角色 AI 分镜能力。
+5. **不做 NG 式人名级 AI 分镜**（2026-09-08 修订）：L1 仅为本地启发式旁白/对白二分，人名级角色区分依赖 AI 分镜（属 L2 既有链），本期不引入 LLM 依赖。
 6. **不 DROP 任何表、不丢用户存量 httpTTS 数据**：数据库只做 ALTER TABLE 增列，规避 NG 缺点。
-7. **内置模板默认全部停用**（除用户显式启用），不内置任何第三方代理端点（规避 NG/C 硬编码第三方 IP 缺点）。
+7. **引擎模板（type=2 JS）默认全部停用**（除用户显式启用），不内置任何第三方代理端点（规避 NG/C 硬编码第三方 IP 缺点）；**AD-09 范式选角模板（casting）内置 4 个默认启用**（其中单声模板=关闭多人）。
 
 ### 2.3 影响模块清单（预估 20-25 文件）
 
 | 类别 | 文件 |
 |------|------|
 | 修改 | `model/ReadAloud.kt`（路由解析重构+去 runBlocking）、`service/TTSReadAloudService.kt`（init 超时/降级/引擎参数/reInitTts）、`service/HttpReadAloudService.kt`（服务内装配+script 引擎接入+缓存键+原子写）、`help/readaloud/speech/SpeechModels.kt`（resolveSpeechRoute）、`help/readaloud/speech/SpeechVoiceCatalogRepository.kt`、`help/readaloud/speech/SpeechVoiceGroupRepository.kt`（第三处生产点+分组 key）、`ui/book/read/config/SpeakEngineDialog.kt` + `SpeakEngineViewModel.kt`（模板导入+死代码清理）、`SpeechVoiceRoutePicker.kt`、`ReadAloudPlayerPanel.kt`（统一 upReadAloudClass+consumePendingSwitch）、`ui/book/read/config/ReadAloudConfigDialog.kt`（fromTtsEngineValue 消费适配）、`SpeechRouteSanitizer.kt`（legacy 波及适配+type=2 清理核实）、`ui/main/ai/AiChatSpeechPlayer.kt` / `help/ai/AiReadAloudRoleService.kt`（候选过滤 type==1）、`ui/book/read/config/HttpTtsEditDialog.kt`（script 编辑域）、`data/entities/HttpTTS.kt`、`data/AppDatabase.kt` + migration、`AppConfig.kt`（如需新 PreferKey） |
-| 新增 | `help/readaloud/script/TtsScriptEngineClient.kt`（+P0 沙箱接入）、`app/src/main/assets/defaultData/tts/*.js` 4 个模板、（可选）内置模板导入小弹窗 |
+| 新增 | `help/readaloud/script/TtsScriptEngineClient.kt`（+P0 沙箱接入）、`help/readaloud/casting/`（TtsCastingModel/CastingRuleSet/TtsCastingStore/TagSplitter/VoiceSource，AD-09 范式模板层），`data/entities/TtsCastingTemplate.kt`+Dao（Room 实体，v110 同版建表）、`assets/defaultData/tts/*.js` 4 个引擎模板+`castingTemplates.json` 内置选角模板、模板管理页+编辑表单（TtsCastingTemplateScreen）、（可选）内置模板导入小弹窗 |
 | 同步 | `app/src/main/assets/updateLog.md`、`docs/INDEX.md`、`docs/project-flow/task-navigation.md`（朗读模块锚点；AGENTS.md 不动） |
 | 不动 | `model/analyzeRule` 相关（脚本沙箱复用既有 BookSource 沙箱基建，不改动其实现） |
 
@@ -97,7 +98,7 @@
 1. **SpeechRoute**：本仓已有结构化路由模型（engineType/engineValue/扩展字段）与 SpeechVoiceCatalogRepository、SpeechRouteSanitizer 生态，只补齐"服务侧读协议闭环"即可修 Bug，无需新表新协议。
 2. **HttpTTS 实体**：直接加 `type`/`script` 两列即可承载脚本引擎，继承 concurrentRate / loginUrl / jsLib 等既有字段基建，避免另起炉灶。
 3. **HttpReadAloudService 并发缓存基建**：Channel 并发预下载、缓存目录、ExoPlayer 播放链全复用，脚本引擎只负责"产出合成请求"，不重建合成链（规避 NG 1971 行上帝文件模式）。
-4. **P0 沙箱**：复用既有 Rhino 沙箱基建（`RhinoClassShutter` 类白名单 + `SourceSandboxExtensions`/`BookSourceStorageScope` 文件沙箱），脚本引擎获得与书源同级的执行安全（规避 C 版无沙箱声明缺点）；注意 HttpTTS 非 BookSource，类策略须显式启用（见 design 1.3）。
+4. **P0 沙箱**：复用既有 Rhino 沙箱基建（`RhinoClassShutter` 类白名单 + `SourceSandboxExtensions`/`BookSourceStorageScope` 文件沙箱），脚本引擎获得与书源同级的执行安全（规避 C 版无沙箱声明缺点）；注意 HttpTTS 非 BookSource，类策略须显式启用（见 design §3.3）。
 
 ### 3.2 Alternatives Considered
 
@@ -217,6 +218,18 @@
   4. 引擎切换后 ReadAloud.httpTTS 单例无旧值残留；
   5. AI 聊天语音/多角色候选过滤（前置：库中已存在 type=2 记录）：type=2 引擎不出现在 AI 语音/多角色候选（type==1 过滤生效）；书级引擎覆盖回归（与 tasks 3.8 联动）。
 
+### R11 多角色 TTS 范式模板层（P1，2026-09-08 v1.2）
+
+- **描述**：按"基础服务层/适配层/范式模板配置层"分层构建多角色听书：适配层提供三类声源统一抽象（引擎级/provider 音色级/HTTP 参数级，音色枚举+按句换声统一接口）；范式模板配置层内置 4 模板默认启用（旁白对白双声-引号规则/男女对读/MultiTTS 对话透传/单声），支持自定义模板与 JSON 导入导出分享（类比高亮规则体系）；播放服务侧按段消费 tag→模板→声源映射（句级轮换）；L2 AI 多角色链复用同一模板层并修复服务侧路由消费缺失；模板支持全局默认+书级覆盖（与书级引擎覆盖同构）。
+- **验收要点**（期次标注：期1=模板层+系统声源+面板入口；期2=HTTP/script 声源+书级覆盖+AI 链接入，见 design §3.5.6）：
+  1. 【期1】零配置（无 AI 模型、无 httpTTS）下选内置"旁白/对白双声"模板→引号对白段与旁白段声源不同（听感+日志双证）；仅默认引擎单音色时明示后单声播放（零第二声源终态）；
+  2. 【期2】自定义模板：新建/编辑规则与声源映射→即时生效；JSON 导出→另一设备幂等导入→行为一致；
+  3. 【期1】MultiTTS 透传模板：MultiTTS 作系统引擎时整段透传，其 App 内对话配置生效（适配层不挡路）；
+  4. 【期1】声源失败段级回退 fallbackSource（AD-08 链），朗读不中断；国产引擎音色枚举不全→按引擎级降级并明示；
+  5. 【期2】L2 AI 链：配置模型后角色 tag 经模板层路由真实生效于播放（修复 routeForCue 零消费缺陷，type==1 过滤维持）；
+  6. 【期2】书级模板覆盖：某书选择与全局不同的模板→该书朗读用书级模板，其他书用全局默认；导入模板时校验声源可达性，缺失项标记"待绑定"不静默生效。
+  7. 【期2】音色试听：引擎/音色选择处可对单段文本试听（TtsVoiceSource.utterance 单段调用，防抖）。
+
 ---
 
 ## 5. Scenarios（场景）
@@ -320,6 +333,28 @@
 #### Scenario: RSS 朗读与 AI 聊天语音回归
 - **WHEN** 用户使用 RSS 朗读（ReadRssActivity）与 AI 聊天语音（AiChatSpeechPlayer）
 - **THEN** 两者沿既有 SpeechRoute 消费链路正常工作，不受本次路由重构影响（回归验证项）
+
+### R11 多角色 TTS 范式模板层
+
+#### Scenario: 零配置使用内置双声模板
+- **WHEN** 小白用户（未配 AI 模型、无 httpTTS 记录）在朗读菜单选择内置"旁白/对白双声"模板并开启多人听书
+- **THEN** 内置引号规则将引号内文本标记为对白段、引号外为旁白段，两段经适配层映射到不同声源播放（听感+日志双证），全程零额外配置
+
+#### Scenario: 自定义模板与 JSON 分享
+- **WHEN** 高级用户新建模板（regex 规则+声源映射+韵律）并导出 JSON，另一设备导入
+- **THEN** 导入幂等（重复导入不产生重复模板），两设备同一模板 ID 行为一致；编辑保存后朗读即时生效
+
+#### Scenario: MultiTTS 对话透传
+- **WHEN** 用户将 MultiTTS 设为系统引擎并在其 App 内配置"合成对话/角色管理"，选择内置"MultiTTS 对话透传"模板
+- **THEN** 适配层整段透传文本不拆段不强制音色，多角色由 MultiTTS 自行实现（适配层不挡路）
+
+#### Scenario: 声源失败段级回退
+- **WHEN** 某段按模板映射的声源合成失败（引擎 init 失败/HTTP 报错）
+- **THEN** 该段回退模板 fallbackSource 或默认引擎并 toast 明示，逐段推进不中断；连续失败按 AD-08 链暂停朗读并通知
+
+#### Scenario: L2 AI 多角色经模板层生效
+- **WHEN** 用户配置 AI 模型开启多角色（L2 链），书内角色 tag 与模板规则/绑定匹配
+- **THEN** 服务侧按段消费角色路由（routeForCue 接入播放链），角色按各自声源播放；未命中模板的角色走兜底链（角色绑定→性别→旁白→默认），修复"路由仅 UI 展示"的历史缺陷
 
 ---
 

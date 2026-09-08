@@ -26,21 +26,22 @@
 | 6 | init 超时降级明示 | initTts 增加超时看门狗（约 8s），超时/失败回退默认引擎并 toast 明示，禁止静默失效（含降级终止条件防死循环） |
 | 7 | 缓存键能力协商 | 缓存键含引擎类型+voice+speed+volume+pitch+capabilities 声明维度，未声明维度不进键；缓存写 .part+rename 原子发布 |
 | 8 | 存量数据兼容 | legacy SelectItem/纯数字 id 映射兼容，httpTTS 仅 ALTER TABLE 增列（type/script），不丢用户数据 |
+| 9 | 多角色 TTS 范式模板层（AD-09） | 四层架构（基础服务层/适配层/范式模板配置层/AI 多角色）；内置 4 模板默认启用（旁白对白双声/男女对读/MultiTTS 透传/单声）；自定义模板 JSON 导入导出分享；本期同通道约束（模板内声源引擎类型一致）+拆期（期1=模板层+单实例逐段 setVoice+面板入口；期2=HTTP/script 按段换源+书级覆盖+AI 链接入） |
 
 ## 文档索引
 
 | 文档 | 核心内容 |
 |------|----------|
 | [spec.md](./spec.md) | 需求规格：用户故事、功能需求与验收标准，含全局思考检查清单六维盘点 |
-| [design.md](./design.md) | 技术设计：AD-01~08 架构决策（ADR Y-Statement）、SpeechRoute 协议与脚本契约详设 |
+| [design.md](./design.md) | 技术设计：AD-01~09 架构决策（ADR Y-Statement）、SpeechRoute 协议与脚本契约详设、多角色 TTS 范式模板层实施蓝图 |
 | [tasks.md](./tasks.md) | 实施任务清单：分阶段任务拆解，含 L1/L2/L3 分级标注与真机验证点 |
 
 ## 影响范围
 
 | 层 | 变更内容 |
 |----|----------|
-| 模型层 | `model/ReadAloud.kt`（路由解析重构、去 runBlocking）、`data/entities/HttpTTS.kt`（type/script 两列）+ `AppDatabase` migration |
-| 服务层 | `TTSReadAloudService`（init 超时/降级/引擎参数）、`HttpReadAloudService`（script 接入/缓存键/原子写）、新增 `help/readaloud/script/TtsScriptEngineClient` |
+| 模型层 | `model/ReadAloud.kt`（路由解析重构、去 runBlocking）、`data/entities/HttpTTS.kt`（type/script 两列）+ `AppDatabase` migration、`help/readaloud/casting/`（AD-09 范式模板层：TtsCastingStore/TtsTagSplitter/TtsVoiceSource）+ `data/entities/TtsCastingTemplate.kt`+Dao |
+| 服务层 | `TTSReadAloudService`（init 超时/降级/引擎参数、多人模式单实例逐段 setVoice 消费）、`HttpReadAloudService`（script 接入/缓存键/原子写、按段声源装配·期2）、新增 `help/readaloud/script/TtsScriptEngineClient` |
 | UI 层 | `SpeakEngineDialog`/`SpeakEngineViewModel`（模板导入入口+死代码清理）、`ReadAloudPlayerPanel`（统一 upReadAloudClass）、`SpeechVoiceRoutePicker`、`HttpTtsEditDialog`（script 编辑域）、`AiChatSpeechPlayer`/多角色候选消费点过滤（type==1） |
 | assets | 新增 `app/src/main/assets/defaultData/tts/` 下 4 个内置模板 JS |
 
@@ -48,14 +49,15 @@
 
 | 日期 | 变更 | 作者 |
 |------|------|------|
+| 2026-09-08 | AD-09 v1.2 多角色分层架构（基础服务层/适配层/范式模板配置层/AI 复用层）+实现蓝图+学习融会贯通矩阵+五轮红队修复（2 P0：同通道约束/UtteranceResult sealed） | AI |
 | 2026-09-06 | 二轮三方交叉审查修复（3 P0+若干 P1/P2 落盘） | AI |
 | 2026-09-06 | 初版设计 | AI |
 
 ## 关键约束
 
 1. **无 DROP 迁移**：httpTTS 仅 ALTER TABLE 增列，数据库 version 递增，覆盖安装真机验证，存量数据零丢失
-2. **脚本沙箱**：脚本引擎强制走 P0 Rhino 沙箱（`RhinoClassShutter` 类访问白名单 + `SourceSandboxExtensions` 文件沙箱），文件访问收口 `BookSourceStorageScope`；注意 HttpTTS 非 BookSource，类策略须显式启用（见 design 1.3 沙箱接入）；脚本执行 10s 超时 + 体积限额（synthesized URL≤8KB、请求体≤256KB、脚本源码≤512KB）
-3. **模板默认停用**：内置模板全部默认停用，不硬编码任何第三方端点/IP，端点留空由用户填写并确认启用
+2. **脚本沙箱**：脚本引擎强制走 P0 Rhino 沙箱（`RhinoClassShutter` 类访问白名单 + `SourceSandboxExtensions` 文件沙箱），文件访问收口 `BookSourceStorageScope`；注意 HttpTTS 非 BookSource，类策略须显式启用（见 design §3.3 沙箱接入）；脚本执行 10s 超时 + 体积限额（synthesized URL≤8KB、请求体≤256KB、脚本源码≤512KB）
+3. **模板默认策略（两类区分，2026-09-08 AD-09）**：**引擎模板**（type=2 JS：MultiTTS 转发/CloneTTS/OpenAI/Edge）默认停用，不硬编码任何第三方端点/IP，端点留空由用户填写并确认启用；**范式选角模板**（AD-09 casting：旁白对白双声/男女对读/透传/单声）内置 4 个默认启用；多人模板内声源同通道约束（保存/导入校验）
 4. **项目惯例**：Coroutine.async{} 链式协程、kotlin.runCatching、NoStackTraceException、AppLog.put 日志、禁 Timber，遵循现有代码风格
 
 ## 参考

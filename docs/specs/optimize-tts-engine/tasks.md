@@ -7,7 +7,7 @@
 > - 设计简报（输入源，验收后删除）：`temp/tts-design-brief.md`
 > **测试包口径**：真机/模拟器统一使用 `io.legado.miss.app.debug`（`build-legado.bat` 产物）
 > **验证标准图例**：L1=编译（BUILD SUCCESSFUL / 单测全绿）｜L2=真机/模拟器功能验证｜L3=场景回归
-> **任务统计**：共 28 项，核心任务（★）13 项
+> **任务统计**：共 31 项，核心任务（★）15 项
 
 ---
 
@@ -66,7 +66,7 @@
   - `equal()` 比对补 type/script 字段；`fromJsonDoc` 补新列解析 + 缺字段逐条容错；legacy httpTTS JSON（无 type/script 字段）反序列化 type 默认 1 往返单测
   - AppDatabase version 递增 + ALTER TABLE 增列 migration（**禁止 DROP TABLE，规避 NG 丢数据缺点**；依赖 1.4 核实结论）；migration 语句以 `kotlin.runCatching` + `AppLog` 包裹（database-migration-safety R2 容错要求）
   - 确认 Dao 无需改动（实体增列带默认值，现有查询/插入兼容）
-  - 验证标准：L1——编译通过 + connectedAndroidTest migrateAll(109→110) 通过（androidTest，需模拟器）+ 3.3 覆盖安装 L2
+  - 验证标准：L1——编译通过 + connectedAndroidTest migrateAll 通过（migration version 以实施时 AppDatabase.kt 实际 version 为基准 +1，写作时点 109→110；androidTest，需模拟器）+ 3.3 覆盖安装 L2
 
 - [ ] 2.5 ★ TtsScriptEngineClient 新增（脚本引擎执行器，AD-04）
   - 新增 `help/readaloud/script/TtsScriptEngineClient.kt`：Rhino 执行三函数 `options()/voices()/synthesize(text,voice,params,options,ctx)`，**三函数执行统一包 `withTimeout(10s)`**（Rhino 指令观察器仅协作式取消，RhinoScriptEngine.kt:327,340-344，防不住 while(true)）
@@ -75,7 +75,7 @@
   - synthesize 返回值映射：URL 或请求对象 → AnalyzeUrl 请求链（本期支持 HTTP 轮询型；SSE/WS 流式登记后续，不阻塞）；**请求对象仅承接 url/method/headers/body 四字段（AnalyzeUrl.kt:244-298 原生支持），NG 多出的 transport/audioExtract/responseType 等越界字段拒绝导入并明示**
   - 体积限额：synthesized URL≤8KB、请求体≤256KB、脚本源码≤512KB、voices 目录超限截断并明示
   - **强制 P0 沙箱接入**：`RhinoClassShutter` 类白名单 + `SourceSandboxExtensions` 文件沙箱，文件访问走 `BookSourceStorageScope`（规避 C 版无沙箱缺点）
-  - **沙箱启用条件（已核实，必须落实）**：HttpTTS 非 BookSource，`BaseSource.withBookSourceClassPolicy` 包装（enabled = this is BookSource）对 HttpTTS 不生效——须显式调用 `RhinoClassShutter.withBookSourceClassPolicy(enabled = true, sourceLabel = <脱敏短码>)` 或扩展 BaseSourceExtensions 启用分支（见 design 1.3）
+  - **沙箱启用条件（已核实，必须落实）**：HttpTTS 非 BookSource，`BaseSource.withBookSourceClassPolicy` 包装（enabled = this is BookSource）对 HttpTTS 不生效——须显式调用 `RhinoClassShutter.withBookSourceClassPolicy(enabled = true, sourceLabel = <脱敏短码>)` 或扩展 BaseSourceExtensions 启用分支（见 design §3.3）
   - 验证标准：L1——编译通过 + 沙箱拦截单测全绿（脚本越权访问/反射逃逸用例被拦截，含 HttpTTS 上下文类策略确实启用断言）
 
 - [ ] 2.6 ★ HttpReadAloudService 接入脚本引擎（AD-07）
@@ -85,6 +85,7 @@
   - 缓存键扩展：引擎类型 + voice + speed + volume + pitch + capabilities 声明维度（未声明的参数维度不进缓存键，防能力协商污染）
   - 缓存写 .part 临时文件 + rename 原子发布
   - 引擎级并发上限（复用 concurrentRate 基建，脚本引擎默认 2）
+  - **缓存定型项（对照 design §3.6，防未来补预合成/缓存管理返工）**：缓存 key 纯函数化+KEY_VERSION 参与哈希并收敛单一入口；key 维度（engineKey/speedKey/voiceKey）与引擎实际生效参数同源解析（单点函数）；目录结构定型（书目录/章节 stem 同正文缓存主名/单元 hash 文件名+按章删除钩子）；写缓存提交收敛单一原子函数（未来租约门控唯一插桩点）；合成函数签名纯化进度无关；key 全输入可枚举可持久化
   - 验证标准：L1——编译通过
 
 - [ ] 2.7 内置模板 4 个 JS（AD-06）
@@ -118,6 +119,37 @@
   - strings 策略：`values/` 全量新增 + 其余 7 locale 缺省回退声明（不逐 locale 硬译）：模板导入 / 冲突策略 / 降级回退 toast / 引擎初始化失败 / 引擎配置无效已回退等
   - AppConfig 新 PreferKey（每引擎 speed/pitch/volume 存储，与 2.3/AD-05 联动）；**新键组必须登记 `allPreferenceKeys`（ReadAloudConfigDialog.kt:149-166），防备份/清理遗漏**
   - 验证标准：L1——编译通过，values/ 资源无缺 key（其余 locale 走缺省回退）
+
+- [ ] 2.11 ★ 范式模板层：模型+内置模板+分段规则（AD-09 v1.2，2026-09-08 增）
+  - **实施约束：逐条对照 design §3.7/§3.8 子系统定型项清单**（§3.7 roleType 枚举一套词汇+StoryboardSegment 最小核分段产物+分镜缓存 key 源标识 `template:<版本>` 占位；§3.8 引擎 JSON 双命名兼容+冲突 Resolver 复用+voiceParamsJson 键结构+@capabilities 透传）
+  - 新增 `help/readaloud/casting/`：`TtsCastingModel.kt`（声明式模板模型：tag narration/dialogue/角色名 × match{builtin_quote|regex|keyword} × source SpeechRoute × prosody；JSON 序列化/幂等导入导出）、`TtsCastingStore.kt`（内置 4 模板默认启用+用户模板 CRUD+备份链路登记）、`TtsTagSplitter.kt`（内置引号规则：引号内=对白/引号外=旁白；regex/keyword 规则执行）
+  - **模型类命名避让**：casting 包模型类**不用 `TtsCastingTemplate` 命名**（与 Room 实体 data/entities/TtsCastingTemplate 同名异包易混淆）——模板模型类=`TtsCastingModel`、规则集类=`CastingRuleSet`
+  - **存储落地**：Room 实体 `TtsCastingTemplate`（id/name/builtin/enabled/order/rulesJson/fallbackSourceJson/lastUpdateTime）+ `TtsCastingTemplateDao`；**v110 同版建表**（与 httpTTS 增列同一 migration，CREATE TABLE ttsCastingTemplates，runCatching+AppLog 包裹）；内置模板 `assets/defaultData/tts/castingTemplates.json` 经 DefaultData 链导入（幂等键 templateId，builtin 冲突跳过）；BackupController 增模板导出/恢复
+  - 内置模板：①旁白/对白双声（引号规则，系统声源）②男女对读（性别启发式）③MultiTTS 对话透传（系统引擎透传整段）④单声（关闭）
+  - regex 规则 Pattern **构造时预编译校验**（非法正则导入即拒，防用户正则卡 IO 主链）；rulesJson 含 `schemaVersion` 字段
+  - 验证标准 L1——JVM 单测全绿：引号分段（中英文引号集显式枚举/嵌套=外层优先/跨段未闭合=段内闭合）、规则匹配（数组顺序首命中/区间互斥先到先得）、模板 JSON 往返、schemaVersion、幂等导入、Pattern 预编译校验
+  - 验证标准 L1——androidTest `migrateAll`（与 2.4 合并执行，MigrationTest.kt:32-76 先例，需模拟器）：含 ttsCastingTemplates 同版建表断言
+- [ ] 2.12 ★ 适配层统一声源接口 + 服务侧路由消费（AD-09 v1.2；拆期边界按 design §3.5.6：期1=单实例逐段 setVoice 主链，期2=HTTP/script 按段换源+书级覆盖+AI 链接入）
+  - `TtsVoiceSource` 三类统一抽象（引擎级：getVoices 异步+缓存、国产枚举不全降级引擎级；provider/音色级：MultiTTS /voices；HTTP 参数级：CloneTTS voice UUID）；UtteranceResult sealed 三态（SpeakSubmitted/AudioFile/AudioStream，design §3.5.3）
+  - **逐段 onDone 驱动（期1）**：多人模式取消整章预入队，speak 循环逐段提交；**单实例逐段 setVoice**（speak 调用时刻生效；setVoice 支持判定=复用 getVoices 异步缓存快照预判（play 链不直连 getVoices，design §3.5.2③；快照空集或不含目标→直接降级）+运行期 onError 兜底）；**双实例（跨引擎）登记后续，本期不做**
+  - **分段契约五元组**：`(text, tag, paragraphIndex, offsetInParagraph, length)`——服务侧保持原 contentList 段落单元不变，tag 段为段内 sub-utterance，进度算术按段元数据折算（精确字符账，禁按比例折算）；pause 静音项仅 paragraphIndex 变更时插入
+  - **moveTo 死路径声明**：cue 定位存量链不消费 moveTo，tag 段映射不挂 moveTo（死路径不做适配，防实施时误挂）
+  - setVoice 不支持/零第二声源：降级引擎默认音+首次 toast 明示（dialogue=旁白同音时明示单声终态）；声源失败段级回退 fallbackSource（AD-08 链）
+  - HTTP 声源按段换源（期2，HttpReadAloudService 段级 HttpTTS/voice 装配+段级 try/catch 回退+预下载段元数据——**如实评级：中改约 3-4 天**，design §3.5.2③）
+  - L2 AI 链接入（期2）：AI 角色名 tag（`ai:` 前缀）走同一模板层（未命中→角色绑定→性别兜底→旁白→默认，NG/C 式兜底链）；routeForCue 接入播放链修复"路由仅 UI 展示"
+  - 书级模板覆盖（期2）：书级 config 存模板 id（与书级引擎覆盖 R9 同构），resolve 时书级优先全局
+  - 路由命中可观测性：每段 tag→source→结果 AppLog.putDebugWithTag 节流日志（统一 tag，多角色链问题定位）
+  - 对白段剥离引号字符（不读出，正文显示保留）+ 纯静默段跳过（对标 NG TtsSynthesisText）；prosody clamp（rate/pitch/volume coerceIn 限幅）；tag 段生产令牌 isCurrent 校验（防换书/跳转竞态，对标 NG generation）
+  - **基座硬护城河同批移植（§5.6，与逐段驱动重构同文件同批）**：playbackStateOwner 单实例仲裁（服务重建后旧实例回调不覆盖新实例）+actualPlaybackConfirmed 真实播放确认+tryReusePreparedPlayback/旧请求终止（NG BaseReadAloudService.kt:95/98-112/264-345 三项，一次改完防二次返工）
+  - **回归保护清单落实（§5.7）**：分段契约补 readAloudByPage 分页特判分支（C6）；ttsParagraphPauseMs 段间停顿+pause 静音项在逐段驱动循环的插入位置定义（C10）；响度学习 loudness key 输入不变性评估（C5）；tag 段与 Cue/Planner 坐标映射声明（C7）；IntentAction 全集外部广播兼容核对（C11）——C1 BGM/C3 token/C4 悬浮球归 3.8 回归
+  - 验证标准：L1——编译+单测（分段路由/句级轮换/失败回退/模板热切换/书级覆盖优先级/引号剥离/限幅） **进度算术回归（翻页 readAloudNumber/onRangeStart/续播 substring：按段元数据折算与段落级进度链零改动）+分页朗读分支回归**
+- [ ] 2.13 多人听书入口与模板管理 UI（AD-09 v1.2；拆期边界按 design §3.5.6：期1=播放面板内嵌模板选择列表（builtin_dual_voice/mono 先上）+入口，期2=管理页/编辑器/书级覆盖 UI）
+  - **UI 锚点钉死**：模板选择=播放面板内嵌列表（与高亮规则选择同构交互）；模板管理页=新 Activity（对齐 HighlightRuleActivity 先例 ReadBookActivity.kt:902，内置只读+自定义编辑+JSON 导入导出分享）；编辑器声源选择=跨仓聚合 system+httpTTS(type=1) groups（SpeakEngineViewModel 装配逻辑复用）；strings.xml 中英双语
+  - **Scene 闸位解耦（期1）**：播放面板场景模式闸位 DisplayMode.Scene 现被 `if (multiRoleEnabled)` 门控（ReadAloudPlayerPanel.kt:3598）——期1 改由激活 casting 模板驱动显示（解耦 aiReadAloudRoleEnabled，零 AI 配置也显示场景模式）
+  - 导入声源存在性校验：rules 内声源可达性检查，缺失项标记"待绑定"不静默生效（§5.3）；同通道校验（rules 内全部 source.engineType 一致，跨通道拒绝保存/导入并明示，design §3.5.6①）
+  - 音色试听（期2）：引擎/音色选择处对单段文本试听（design §3.8 定型项 6 签名：key(engine,voice,style)+debounce 防抖+token 防竞态+临时文件落盘）；L2 用例：试听可播放可取消，连续点击防抖不叠加播放
+  - 真机 L2 归 3.8 场景组（补用例：【期1】零配置内置模板双声听感+日志双证/MultiTTS 透传/声源不足降级/模板切换即时生效；【期2】书级覆盖/JSON 导入导出幂等）
+  - 验证标准：L1——编译
 
 ## 3. 验证测试
 
@@ -161,10 +193,13 @@
 - [ ] 3.8 L3 场景回归（Scope 兼容性强制项）
   - RSS 朗读（ReadRssActivity）
   - AI 聊天语音（AiChatSpeechPlayer）——**用例前置：库中已存在 type=2 记录（验证候选过滤后 type=2 不泄漏进 AI 语音候选）**
-  - 多角色朗读（AiReadAloudRoleService，仅回归不改链；同样验证 type=2 不进候选）
+  - 多角色朗读（AiReadAloudRoleService）——**AI 链经模板层真机用例（期2）+ JSON 跨设备幂等导入用例**（原"仅回归不改链"表述废止，L-d 服务侧路由消费修复已触及该链边界）；同样验证 type=2 不进候选
   - 书级引擎覆盖回归（若 2.9 可选项实施：设置书级引擎后该书朗读优先使用）
   - 备份→恢复往返：httpTTS 导出含 type/script 新字段，恢复后记录完整（Backup.kt httpTTS.json 自动覆盖）
   - legacy 数据兼容：纯数字 id 的存量 httpTTS 记录播放 + legacy SelectItem 配置用户升级兼容（含双嵌套 legacy）
+  - **BGM 播放回归（C1，§5.7）**：多人朗读开启 BGM 正常播放，BgmAssignmentCache 绑定不失效（缓存键改造不联动 BGM 键组）
+  - **token 统计页回归（C3）**：AI 朗读后 token 用量统计页计数正常（L-d 链接入不触碰 token 统计链）
+  - **悬浮球样式回归（C4）**：悬浮球样式三键设置在面板/Scene 闸位改造后不受影响（2.13 UI 改造避开悬浮球链路）
   - 验证标准：L3——各类场景回归无功能退化
 
 - [ ] 3.9 静态检查
