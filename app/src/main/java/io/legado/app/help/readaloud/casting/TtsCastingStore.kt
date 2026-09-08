@@ -176,6 +176,6 @@ object TtsCastingStore {
 object ReadAloudDelegate {
     fun currentTtsEngineRaw(): String {
         return io.legado.app.model.ReadBook.book?.getTtsEngine()
-            ?: io.legado.app.help.config.AppConfig.ttsEngine
+            ?: io.legado.app.help.config.AppConfig.ttsEngine.orEmpty()
     }
 }
