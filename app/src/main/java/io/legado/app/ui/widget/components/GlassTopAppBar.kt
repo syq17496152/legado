@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,9 +39,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.TopBarConfig
 import io.legado.app.lib.theme.elevation
@@ -117,12 +119,21 @@ fun GlassTopAppBar(
     val cornerRadius = if (isRegular) TopBarConfig.cornerRadius(context, config) else 0f
     // shadow 仅实色容器生效（W0 定稿）：半透明/透明顶栏画阴影会形成可见灰白框（真机实锤）
     val useCustomLayout = barHeight != null || secondRow != null
-    // W6.5：标题字体槽（管理族 titleFontFamily 跟随页面包），null=M3 基线
-    val titleStyle = if (titleFontFamily != null) {
-        MaterialTheme.typography.titleLarge.copy(fontFamily = titleFontFamily)
-    } else {
-        MaterialTheme.typography.titleLarge
+    // W6.5：标题字体槽（管理族 titleFontFamily 跟随页面包）最优先；
+    // bugfix-0908f 统一：无槽时回落主题"标题字体"设置（AppConfig.systemTypefaces 三态，
+    // 对齐 MainTopBarView.applyUiTitleTypeface 的 baseSystemTypeface 口径）；
+    // 字重对齐 View 侧 Regular（原 Medium 500 比主 Tab 标题视觉粗，用户实锤"文字粗一点"）
+    val systemTitleFamily = remember(themeVersion) {
+        when (AppConfig.systemTypefaces) {
+            1 -> FontFamily.Serif
+            2 -> FontFamily.Monospace
+            else -> FontFamily.SansSerif
+        }
     }
+    val titleStyle = MaterialTheme.typography.titleLarge.copy(
+        fontFamily = titleFontFamily ?: systemTitleFamily,
+        fontWeight = FontWeight.Normal
+    )
     Box(modifier = Modifier.shadow(if (barColor.alpha >= 0.99f) barElevation else 0.dp)) {
         if (wallpaper != null) {
             Image(
@@ -216,8 +227,9 @@ fun GlassTopAppBar(
                     Column {
                         Text(
                             text = title,
-                            // 对齐 View 体系 ToolbarTitle 20sp（LegadoTypography.titleLarge）
-                            style = MaterialTheme.typography.titleLarge,
+                            // bugfix-0908f：统一走 titleStyle（20sp+主题标题字体+Regular 字重，
+                            // 与自绘分支/主 Tab 对齐）
+                            style = titleStyle,
                             maxLines = 1
                         )
                         Text(
@@ -230,8 +242,8 @@ fun GlassTopAppBar(
                 } else {
                     Text(
                         text = title,
-                        // 对齐 View 体系 ToolbarTitle 20sp（LegadoTypography.titleLarge）
-                        style = MaterialTheme.typography.titleLarge,
+                        // bugfix-0908f：统一走 titleStyle（20sp+主题标题字体+Regular 字重）
+                        style = titleStyle,
                         maxLines = 1
                     )
                 }
@@ -242,8 +254,9 @@ fun GlassTopAppBar(
                         // 2.4（bookshelf-refresh-and-title-fix R4）：图标 20dp 档。
                         // 注：actions 为调用方传入的 Composable，M3 Icon 默认 24dp 无法在此中心化
                         // 缩放，action 图标维持 M3 默认（偏差登记 tasks.md AOAdapt/issue-list）
+                        // bugfix-0908f 统一：返回图标渲染固定用项目细线资产 ic_back（对齐主 Tab 风格）
                         Icon(
-                            navIcon,
+                            painter = painterResource(R.drawable.ic_back),
                             contentDescription = null,
                             modifier = Modifier.size(20.dp)
                         )

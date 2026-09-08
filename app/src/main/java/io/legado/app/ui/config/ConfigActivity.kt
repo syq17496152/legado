@@ -181,8 +181,9 @@ private fun RowScope.ConfigMenuActions(actions: List<MenuAction>) {
     if (overflowActions.isNotEmpty()) {
         Box {
             IconButton(onClick = { menuExpanded = true }) {
+                // bugfix-0908f 统一：溢出图标用主 Tab 同款细线资产 ic_more_vert
                 Icon(
-                    imageVector = Icons.Default.MoreVert,
+                    painter = androidx.compose.ui.res.painterResource(io.legado.app.R.drawable.ic_more_vert),
                     contentDescription = null,
                     modifier = Modifier.size(20.dp)
                 )

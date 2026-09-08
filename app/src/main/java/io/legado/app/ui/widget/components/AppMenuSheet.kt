@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -159,8 +158,9 @@ fun RowScope.TopBarActionRow(actions: List<MenuAction>) {
     if (overflowActions.isNotEmpty()) {
         Box {
             IconButton(onClick = { menuExpanded = true }) {
+                // bugfix-0908f 统一：溢出图标用主 Tab 同款细线资产 ic_more_vert（与 MainTopBarView 一致）
                 Icon(
-                    imageVector = Icons.Default.MoreVert,
+                    painter = androidx.compose.ui.res.painterResource(io.legado.app.R.drawable.ic_more_vert),
                     contentDescription = null,
                     modifier = Modifier.size(20.dp)
                 )
