@@ -7,23 +7,26 @@ import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Collections
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Subscriptions
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
+import io.legado.app.help.config.TopBarConfig
 import io.legado.app.databinding.FragmentMyConfigBinding
 import io.legado.app.service.WebService
 import io.legado.app.ui.main.MainFragmentInterface
@@ -122,16 +125,29 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
                     GlassTopAppBar(
                         title = getString(R.string.my),
                         actions = {
-                            IconButton(onClick = { SettingsSearchActivity.start(requireContext()) }) {
+                            // bugfix-0908f 尺寸单源：容器/图标经 TopBarConfig 唯一口径（细线资产，
+                            // 与全站顶栏同款），替换原裸 Material 填充图标（24dp 偏大偏粗）
+                            val context = LocalContext.current
+                            val container = TopBarConfig.actionContainerSize(context)
+                            val iconSize = TopBarConfig.actionIconSize(context)
+                            IconButton(
+                                onClick = { SettingsSearchActivity.start(requireContext()) },
+                                modifier = Modifier.size(container.dp)
+                            ) {
                                 Icon(
-                                    imageVector = Icons.Default.Search,
-                                    contentDescription = getString(R.string.search)
+                                    painter = painterResource(R.drawable.ic_search),
+                                    contentDescription = getString(R.string.search),
+                                    modifier = Modifier.size(iconSize.dp)
                                 )
                             }
-                            IconButton(onClick = { showHelp("appHelp") }) {
+                            IconButton(
+                                onClick = { showHelp("appHelp") },
+                                modifier = Modifier.size(container.dp)
+                            ) {
                                 Icon(
-                                    imageVector = Icons.Default.HelpOutline,
-                                    contentDescription = getString(R.string.help)
+                                    painter = painterResource(R.drawable.ic_help),
+                                    contentDescription = getString(R.string.help),
+                                    modifier = Modifier.size(iconSize.dp)
                                 )
                             }
                         }
