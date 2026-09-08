@@ -1,4 +1,4 @@
-package io.legado.app.ui.book.read.config
+﻿package io.legado.app.ui.book.read.config
 
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -87,6 +87,7 @@ import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import java.io.File
@@ -538,7 +539,7 @@ private fun ImportChoiceDialog(
     onDefault: () -> Unit,
     onLocal: () -> Unit,
     onOnline: () -> Unit,
-    onBuiltinScriptTemplates: () -> Unit = {},Unit
+    onBuiltinScriptTemplates: () -> Unit = {}
 ) {
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Surface(
