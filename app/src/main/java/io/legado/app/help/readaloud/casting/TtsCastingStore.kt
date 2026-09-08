@@ -1,4 +1,4 @@
-package io.legado.app.help.readaloud.casting
+﻿package io.legado.app.help.readaloud.casting
 
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
@@ -6,6 +6,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.TtsCastingTemplate
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.utils.GSON
+import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.putPrefString
 import kotlinx.coroutines.flow.Flow
