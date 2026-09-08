@@ -163,13 +163,18 @@ data class SpeechRoute(
                 )
             }
             val obj = runCatching { JSONObject(value) }.getOrNull()
-                // 非 JSON 裸串 → legacy 裸包名兼容（fromTtsEngineValue 同语义）
-                ?: return SpeechRoute(
+            if (obj == null) {
+                // 非 JSON：以 "{" 开头视为损坏 JSON → default；其余视为 legacy 裸包名兼容
+                if (value.startsWith("{")) {
+                    return SpeechRoute(engineType = ENGINE_DEFAULT)
+                }
+                return SpeechRoute(
                     engineType = ENGINE_SYSTEM,
                     engineValue = value,
                     speakerName = "系统默认",
                     source = SOURCE_MANUAL
                 )
+            }
             val route = when {
                 // ① 新 SpeechRoute JSON（含 engineType 键）
                 obj.has("engineType") -> fromJson(value)

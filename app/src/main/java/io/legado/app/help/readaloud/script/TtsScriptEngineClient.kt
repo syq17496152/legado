@@ -131,6 +131,31 @@ object TtsScriptEngineClient {
     }
 
     /**
+     * 音色目录拉取（含动态 URL 解析）：voices() 返回 {type:"url",url} 时由宿主 GET 拉取目录
+     * 返回原始目录 JSON（调用方写 speakersJson）
+     */
+    suspend fun fetchVoicesCatalog(httpTts: HttpTTS): String? {
+        val raw = fetchVoices(httpTts)
+        val obj = runCatching { JSONObject(raw) }.getOrNull()
+        val dynamicUrl = obj?.optString("voicesUrl")?.ifBlank { null }
+        if (dynamicUrl == null) {
+            return raw
+        }
+        return withContext(Dispatchers.IO) {
+            val connection = java.net.URL(dynamicUrl).openConnection() as java.net.HttpURLConnection
+            connection.connectTimeout = 5000
+            connection.readTimeout = 8000
+            runCatching {
+                connection.inputStream.bufferedReader().use { it.readText() }
+            }.getOrElse {
+                connection.disconnect()
+                AppLog.put("TTS 音色目录拉取失败：${it.message}")
+                null
+            }
+        }
+    }
+
+    /**
      * options()：返回引擎配置项 JSON（本期仅透出，参数化 UI 登记后续）
      */
     suspend fun fetchOptions(httpTts: HttpTTS): String {
