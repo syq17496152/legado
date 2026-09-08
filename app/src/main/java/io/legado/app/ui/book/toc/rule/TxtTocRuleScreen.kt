@@ -104,6 +104,9 @@ fun TxtTocRuleScreen(
                     AppManagementAction(
                         text = action.title,
                         icon = action.icon,
+                        // bugfix-0908f：必须同步透传 iconRes——漏传时 iconRes-only 动作（如 ic_add 新增）
+                        // 会在 Scaffold 内命中 ?: ic_more_vert 兜底被渲染成三点（真机实锤）
+                        iconRes = action.iconRes,
                         onClick = action.onClick
                     )
                 )

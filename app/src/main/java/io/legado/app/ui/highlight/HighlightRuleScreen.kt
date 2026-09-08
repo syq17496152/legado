@@ -129,7 +129,8 @@ fun HighlightRuleScreen(
         topActions = listOf(
             AppManagementAction(
                 text = stringResource(R.string.menu_add_highlight_rule),
-                icon = Icons.Default.Add,
+                // bugfix-0908f 资产统一：新增图标统一全站细线资产 ic_add（原引 Material 粗线 Icons.Default.Add）
+                iconRes = R.drawable.ic_add,
                 onClick = onAdd
             ),
             AppManagementAction(

@@ -103,6 +103,9 @@ fun DictRuleScreen(
                     AppManagementAction(
                         text = action.title,
                         icon = action.icon,
+                        // bugfix-0908f：同步透传 iconRes——漏传时 iconRes-only 动作（如 ic_add 新增）
+                        // 会在 Scaffold 内命中 ?: ic_more_vert 兜底被渲染成三点（同 TxtTocRuleScreen 实锤）
+                        iconRes = action.iconRes,
                         onClick = action.onClick
                     )
                 )
