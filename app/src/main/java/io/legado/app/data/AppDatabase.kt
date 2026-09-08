@@ -1,4 +1,4 @@
-package io.legado.app.data
+﻿package io.legado.app.data
 
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
@@ -55,6 +55,9 @@ import io.legado.app.data.entities.AiAgentJob
 import io.legado.app.data.entities.AiAgentSession
 import io.legado.app.data.entities.AiAgentTrace
 import io.legado.app.data.entities.TtsCastingTemplate
+import io.legado.app.data.entities.TtsTestEntity
+import io.legado.app.data.dao.TtsCastingTemplateDao
+import io.legado.app.data.dao.TtsTestDao
 import io.legado.app.data.entities.AiGeneratedImage
 import io.legado.app.data.entities.AiImageGroup
 import io.legado.app.data.entities.AiMemoryFragment
@@ -237,8 +240,11 @@ abstract class AppDatabase : RoomDatabase() {
     abstract val autoTaskRuleDao: AutoTaskRuleDao
     abstract val bookHighlightDao: BookHighlightDao
 
-    // AD-09 范式选角模板层
+    // AD-09 范式模板层
     abstract val ttsCastingTemplateDao: TtsCastingTemplateDao
+
+    // 二分排查对照
+    abstract val ttsTestDao: TtsTestDao
     abstract val playHistoryDao: PlayHistoryDao
     abstract val sourceRecycleBinDao: SourceRecycleBinDao
     abstract val urlRecordDao: UrlRecordDao
