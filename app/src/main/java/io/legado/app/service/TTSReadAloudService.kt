@@ -192,7 +192,6 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         kotlin.runCatching {
             if (params.speechRate != 1.0f) tts.setSpeechRate(params.speechRate)
             if (params.pitch != 1.0f) tts.setPitch(params.pitch)
-            if (params.volume != 1.0f) tts.setVolume(params.volume, params.volume)
         }
     }
 
