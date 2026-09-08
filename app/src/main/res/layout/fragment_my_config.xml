@@ -1,7 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- my-compose-full W2.4：View 壳纯化为 Compose 壳（原 MainTopBarView Mode.MY 顶栏 + preFragment 容器
-     合并为单 ComposeView 宿主，顶栏 GlassTopAppBar + 内容 MySettingsScreen 均由 Compose 渲染） -->
-<androidx.compose.ui.platform.ComposeView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/compose_host"
+<!-- 顶栏组件归一（用户裁决）："我的"页顶栏恢复 MainTopBarView（与书架/发现/订阅同一组件，Mode.MY），
+     内容区保持 Compose 宿主（MySettingsScreen） -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent" />
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <!-- 与书架/发现/订阅同一顶栏组件：样式受顶栏/主题设置全量管理 -->
+    <io.legado.app.ui.widget.MainTopBarView
+        android:id="@+id/top_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_host"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+</LinearLayout>

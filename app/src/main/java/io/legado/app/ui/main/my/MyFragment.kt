@@ -5,33 +5,26 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
+import androidx.core.view.isVisible
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Subscriptions
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
-import io.legado.app.help.config.TopBarConfig
 import io.legado.app.databinding.FragmentMyConfigBinding
 import io.legado.app.service.WebService
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.data.appDb
-import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.MainTopBarView
+import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.ui.widget.components.MetricItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -70,8 +63,25 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         requireContext().putPrefBoolean(PreferKey.webService, WebService.isRun)
+        initTopBar()
         installComposeContent()
         updateSettingsState()
+    }
+
+    // 顶栏组件归一（用户裁决）：与其他三大栏同一 MainTopBarView 组件（Mode.MY），替换 W2.4 的
+    // GlassTopAppBar Compose 顶栏——单源尺寸对齐只统一了观感参数，组件与行为（壁纸层/标题交互/
+    // 布局结构）仍双轨，现回同一组件彻底归一
+    private fun initTopBar() {
+        binding.topBar.applyStatusBarPadding(withInitialPadding = true)
+        binding.topBar.setMode(MainTopBarView.Mode.MY)
+        binding.topBar.setTitle(getString(R.string.my))
+        binding.topBar.setSearchEntryVisible(false)
+        binding.topBar.searchButton.setOnClickListener {
+            SettingsSearchActivity.start(requireContext())
+        }
+        // topbar-icon-semantics-fix 3.4：帮助为一级问号图标（走 actionsBar 插槽统一染色与风格）
+        binding.topBar.addActionButton(R.drawable.ic_help, R.string.help) { showHelp("appHelp") }
+        binding.topBar.moreButton.isVisible = false
     }
 
     override fun observeLiveBus() {
@@ -113,76 +123,39 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
         }
     }
 
-    // my-compose-full W2.4：Compose 壳——顶栏（GlassTopAppBar，透壁纸语义）+ 内容（MySettingsScreen）
-    // 同一 ComposeView 渲染，替代原 MainTopBarView Mode.MY + preFragment 动态插 ComposeView 双层结构。
-    // 路由逻辑零改动：onRowClick → handleSettingsRowClick，搜索入口 → SettingsSearchActivity，
-    // 帮助 → showHelp（原 topbar-icon-semantics-fix 3.4 语义：help 一级图标保留）
+    // my-compose-full W2.4 演进：顶栏已归还 MainTopBarView（与其他三大栏同组件），本宿主仅承载
+    // 内容区 MySettingsScreen；路由逻辑零改动：onRowClick → handleSettingsRowClick
     private fun installComposeContent() {
         binding.composeHost.setContent {
-            Column {
-                // GlassTopAppBar 无 modifier 槽，状态栏避让由外层 Box 承担（等价原 applyStatusBarPadding）
-                Box(modifier = Modifier.statusBarsPadding()) {
-                    GlassTopAppBar(
-                        title = getString(R.string.my),
-                        actions = {
-                            // bugfix-0908f 尺寸单源：容器/图标经 TopBarConfig 唯一口径（细线资产，
-                            // 与全站顶栏同款），替换原裸 Material 填充图标（24dp 偏大偏粗）
-                            val context = LocalContext.current
-                            val container = TopBarConfig.actionContainerSize(context)
-                            val iconSize = TopBarConfig.actionIconSize(context)
-                            IconButton(
-                                onClick = { SettingsSearchActivity.start(requireContext()) },
-                                modifier = Modifier.size(container.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_search),
-                                    contentDescription = getString(R.string.search),
-                                    modifier = Modifier.size(iconSize.dp)
-                                )
-                            }
-                            IconButton(
-                                onClick = { showHelp("appHelp") },
-                                modifier = Modifier.size(container.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_help),
-                                    contentDescription = getString(R.string.help),
-                                    modifier = Modifier.size(iconSize.dp)
-                                )
-                            }
-                        }
-                    )
-                }
-                MySettingsScreen(
-                    sections = sections,
-                    subSearchItems = subSearchItems,
-                    searchQuery = "",
-                    metrics = metricItemsState.value,
-                    themeModeLabel = currentThemeModeLabel(
-                        requireContext(),
+            MySettingsScreen(
+                sections = sections,
+                subSearchItems = subSearchItems,
+                searchQuery = "",
+                metrics = metricItemsState.value,
+                themeModeLabel = currentThemeModeLabel(
+                    requireContext(),
+                    themeOptions,
+                    themeModeState.value
+                ),
+                webServiceState = webServiceState.value,
+                onThemeModeClick = {
+                    (activity as? AppCompatActivity)?.showThemeModeActions(
                         themeOptions,
                         themeModeState.value
-                    ),
-                    webServiceState = webServiceState.value,
-                    onThemeModeClick = {
-                        (activity as? AppCompatActivity)?.showThemeModeActions(
-                            themeOptions,
-                            themeModeState.value
-                        ) { value ->
-                            (activity as? AppCompatActivity)?.applyThemeMode(value) { themeModeState.value = it }
-                        }
-                    },
-                    onWebServiceCheckedChange = {
-                        (activity as? AppCompatActivity)?.setWebServiceEnabled(it) { webServiceState.value = it }
-                    },
-                    onWebServiceClick = {
-                        (activity as? AppCompatActivity)?.handleWebServiceClick { webServiceState.value = it }
-                    },
-                    onRowClick = { key, searchTarget ->
-                        activity?.handleSettingsRowClick(key, searchTarget)
+                    ) { value ->
+                        (activity as? AppCompatActivity)?.applyThemeMode(value) { themeModeState.value = it }
                     }
-                )
-            }
+                },
+                onWebServiceCheckedChange = {
+                    (activity as? AppCompatActivity)?.setWebServiceEnabled(it) { webServiceState.value = it }
+                },
+                onWebServiceClick = {
+                    (activity as? AppCompatActivity)?.handleWebServiceClick { webServiceState.value = it }
+                },
+                onRowClick = { key, searchTarget ->
+                    activity?.handleSettingsRowClick(key, searchTarget)
+                }
+            )
         }
     }
 
