@@ -109,6 +109,8 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
             if (searchKey.isEmpty()) {
                 return@execute
             }
+            // PageDebug 临时日志（验证{{page}}分页失效问题，验证通过后移除）
+            AppLog.put("PageDebug SearchVM: search(searchId=$searchID, keyLen=${searchKey.length})")
             searchModel.search(searchID, searchKey)
         }
     }

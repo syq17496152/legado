@@ -75,6 +75,8 @@ class ExploreShowViewModel(application: Application) : BaseViewModel(application
     fun explore(page: Int) {
         val source = bookSource
         val url = exploreUrl
+        // PageDebug 临时日志（验证{{page}}分页失效问题，验证通过后移除）
+        AppLog.put("PageDebug ExploreVM: explore(page=$page), sourceNull=${source == null}, urlNull=${url == null}")
         if (source == null || url == null) return
         WebBook.exploreBook(viewModelScope, source, url, page)
             .timeout(if (BuildConfig.DEBUG) 0L else 60000L)
@@ -101,6 +103,8 @@ class ExploreShowViewModel(application: Application) : BaseViewModel(application
     fun explore() {
         val source = bookSource
         val url = exploreUrl
+        // PageDebug 临时日志（验证{{page}}分页失效问题，验证通过后移除）
+        AppLog.put("PageDebug ExploreVM: explore() page=$page, sourceNull=${source == null}, urlNull=${url == null}")
         if (source == null || url == null) return
         WebBook.exploreBook(viewModelScope, source, url, page)
             .timeout(if (BuildConfig.DEBUG) 0L else 60000L)

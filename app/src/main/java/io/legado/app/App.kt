@@ -117,12 +117,11 @@ class App : Application() {
         // 已设置过夜间主题名的用户不受影响，保留原配色。
         val firstInstallDarkPurple = getPrefString(PreferKey.dNThemeName).isNullOrBlank()
         if (firstInstallDarkPurple) {
-            // T12（theme-arch-gap）：字面量换 DARK_PURPLE_THEME_NAME 常量（注：下方 F-暗夜紫可回切块仍残留"暗夜紫"字面量比较，待收敛）
-            val purple = ThemeConfig.configList.firstOrNull {
-                it.themeName == AppearanceKitManager.DARK_PURPLE_THEME_NAME
-            }
+            // T12（theme-arch-gap）：字面量换 DARK_PURPLE_THEME_NAME 常量
+            // theme-fontscale-daynight AD-03：改读代码内置配置（历史 themeConfig.json 资产已移除）
+            val purple = AppearanceKitManager.darkPurpleNightConfig()
             val presetMode = getPrefString(PreferKey.themeMode).isNullOrBlank()
-            if (purple != null || presetMode) {
+            if (presetMode) {
                 // T11（theme-arch-gap）：首装预设合并单 editor 批量提交（原逐键多次 apply 非原子）
                 appCtx.defaultSharedPreferences.edit().apply {
                     purple?.let { c ->
@@ -213,11 +212,10 @@ class App : Application() {
             //F-P1-1 自动任务调度恢复
             AutoTask.refreshSchedule()
             // F-暗夜紫可回切：把内置暗夜紫主题注册进「主题包」体系，使其在主题列表(夜间)可见可选，避免切走后回不去
+            // theme-fontscale-daynight AD-03：改读代码内置配置（历史 themeConfig.json 资产已移除）
             runCatching {
-                val darkPurple = ThemeConfig.configList.firstOrNull {
-                    it.themeName == "暗夜紫" && it.isNightTheme
-                }
-                if (darkPurple != null && !ThemePackageManager.localThemeExists(true, "暗夜紫")) {
+                val darkPurple = AppearanceKitManager.darkPurpleNightConfig()
+                if (!ThemePackageManager.localThemeExists(true, AppearanceKitManager.DARK_PURPLE_THEME_NAME)) {
                     ThemePackageManager.addFromConfig(darkPurple)
                 }
             }.onFailure {
@@ -232,6 +230,12 @@ class App : Application() {
                 }
             }.onFailure {
                 AppLog.put("注册暗夜紫外观套件失败\n${it.localizedMessage}", it)
+            }
+            // theme-fontscale-daynight AD-04：磨砂玻璃晨昏套件首启幂等预置（仅注入列表，不自动套用）
+            runCatching {
+                AppearanceKitManager.ensureFrostedGlassKitSeeded()
+            }.onFailure {
+                AppLog.put("预置磨砂玻璃晨昏套件失败\n${it.localizedMessage}", it)
             }
         }
     }

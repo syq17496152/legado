@@ -311,7 +311,8 @@ object TopBarConfig {
      * 单源口径：GlassTopAppBar 两分支 / MainTopBarView / AppManagementScaffold 一律经本函数取因子。
      */
     fun iconScale(context: Context): Float {
-        return io.legado.app.base.AppContextWrapper.getFontScale(context).coerceIn(0.8f, 1.6f)
+        // theme-fontscale-daynight AD-01：日夜感知读取（夜间主题字号 fontScaleN 独立生效）
+        return io.legado.app.base.AppContextWrapper.getFontScaleForContext(context).coerceIn(0.8f, 1.6f)
     }
 
     /**

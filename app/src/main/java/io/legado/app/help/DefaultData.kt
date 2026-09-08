@@ -38,9 +38,6 @@ object DefaultData {
                 if (LocalConfig.needUpDictRule) {
                     importDefaultDictRules()
                 }
-                if (LocalConfig.needUpThemeConfig) {
-                    importDefaultThemeConfigs()
-                }
             }.onError {
                 it.printOnDebug()
             }
@@ -73,14 +70,6 @@ object DefaultData {
                 .readBytes()
         )
         GSON.fromJsonArray<TxtTocRule>(json).getOrNull() ?: emptyList()
-    }
-
-    val themeConfigs: List<ThemeConfig.Config> by lazy {
-        val json = String(
-            appCtx.assets.open("defaultData${File.separator}${ThemeConfig.configFileName}")
-                .readBytes()
-        )
-        GSON.fromJsonArray<ThemeConfig.Config>(json).getOrNull() ?: emptyList()
     }
 
     val rssSources: List<RssSource> by lazy {
@@ -140,10 +129,6 @@ object DefaultData {
         runBlocking(IO) {
             appDb.dictRuleDao.insert(*dictRules.toTypedArray())
         }
-    }
-
-    fun importDefaultThemeConfigs() {
-        ThemeConfig.addNewConfigs(themeConfigs)
     }
 
 }

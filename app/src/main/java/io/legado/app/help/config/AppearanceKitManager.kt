@@ -2,6 +2,7 @@ package io.legado.app.help.config
 
 import android.content.Context
 import androidx.annotation.Keep
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.model.BookCover
@@ -41,6 +42,10 @@ object AppearanceKitManager {
     const val DARK_PURPLE_KIT_ID = "kit_dark_purple"
     const val DARK_PURPLE_THEME_NAME = "暗夜紫"
     const val DARK_PURPLE_TOP_BAR_NAME = "暗夜紫顶栏"
+    // theme-fontscale-daynight AD-04：磨砂玻璃晨昏套件预置（assets 内 ASCII 文件名，避免 aapt 中文限制）
+    const val FROSTED_KIT_ID = "kit_frosted_glass_dawn_dusk"
+    private const val FROSTED_KIT_ASSET_PATH = "appearance_kits/frosted_dawn_dusk_kit.zip"
+    private const val FROSTED_KIT_SEEDED_KEY = "appearanceKitFrostedSeeded"
     private const val kitManifestName = "appearance_kit.json"
     private const val kitVersion = 1
     private const val maxKitManifestBytes = 1024L * 1024L
@@ -134,54 +139,150 @@ object AppearanceKitManager {
     }
 
     /**
-     * F-暗夜紫外观套件：确保「暗夜紫主题包 + 专属紫调顶栏包 + 外观套件索引」整套就绪（幂等）。
+     * theme-fontscale-daynight AD-03：暗夜紫配色代码内置（原历史资产 themeConfig.json 已移除）。
+     * 字段级设计见 docs/specs/theme-fontscale-daynight/design.md「暗夜紫日/夜主题字段级设计」。
+     * 夜间 = legacy 原值系（首装预设视觉零变化）；日间 = 同色系浅紫推导。
+     */
+    fun darkPurpleNightConfig(): ThemeConfig.Config = ThemeConfig.Config(
+        themeName = DARK_PURPLE_THEME_NAME,
+        isNightTheme = true,
+        primaryColor = "#8E24AA",
+        accentColor = "#CE93D8",
+        backgroundColor = "#201A2E",
+        bottomBackground = "#1B1626",
+        transparentNavBar = true,
+        backgroundImgPath = null,
+        backgroundImgBlur = 0,
+        cardColor = "#2A2138",
+        mutedColor = "#8A85A0",
+        searchFieldBackgroundColor = "#2E2540",
+        tabBackgroundColor = "#3A2E4E",
+        shelfColor = "#241C31",
+        cardShadow = 6,
+        cardBackgroundBlur = 0.3f,
+        fontScale = 9
+    )
+
+    fun darkPurpleDayConfig(): ThemeConfig.Config = ThemeConfig.Config(
+        themeName = DARK_PURPLE_THEME_NAME,
+        isNightTheme = false,
+        primaryColor = "#8E24AA",
+        accentColor = "#6A1B9A",
+        backgroundColor = "#F4EEFA",
+        bottomBackground = "#ECE4F4",
+        transparentNavBar = true,
+        backgroundImgPath = null,
+        backgroundImgBlur = 0,
+        cardColor = "#FBF8FE",
+        mutedColor = "#DCCFEA",
+        searchFieldBackgroundColor = "#E7DDF2",
+        tabBackgroundColor = "#DFD2EE",
+        shelfColor = "#F0E9F8",
+        cardShadow = 2,
+        cardBackgroundBlur = 0.25f,
+        fontScale = 9
+    )
+
+    /**
+     * F-暗夜紫外观套件：确保「暗夜紫日/夜主题包 + 专属紫调顶栏包 + 外观套件索引」整套就绪（幂等）。
+     * AD-03：配置改读代码内置常量，不再依赖历史 ThemeConfig.configList。
      * - 老用户升级：仅补齐缺失组件（主题包/顶栏包/套件索引），不改变当前选择，完全无感；
      * - 首次安装：调用方把返回的 kit 交给 [apply] 即自动套用整套（暗夜紫主题 + 紫调顶栏 + regular 布局）。
      */
     suspend fun ensureDarkPurpleKit(): StoredAppearanceKit? = withContext(IO) {
-        val darkPurple = ThemeConfig.configList.firstOrNull {
-            it.themeName == DARK_PURPLE_THEME_NAME && it.isNightTheme
-        } ?: return@withContext null
-        // 1) 暗夜紫主题包（进主题列表，切走后可回选）
-        val themeDir = if (ThemePackageManager.localThemeExists(true, DARK_PURPLE_THEME_NAME)) {
-            ThemePackageManager.loadLocalOnly(true)
-                .firstOrNull { it.packageInfo.name == DARK_PURPLE_THEME_NAME }?.dirName
-        } else {
-            ThemePackageManager.addFromConfig(darkPurple).dirName
-        } ?: DARK_PURPLE_THEME_NAME
-        // 2) 专属紫调顶栏包（幂等：已存在则按目标配置更新，保留原目录名）
-        val targetTopBar = TopBarConfig.Config(
-            name = DARK_PURPLE_TOP_BAR_NAME,
-            isNightMode = true,
-            style = TopBarConfig.STYLE_REGULAR,          // 胶囊搜索框+标签条
-            tagBarColor = 0xFF2A2138.toInt(),            // 深紫底（贴合暗夜紫卡片色）
-            tagBarAlpha = 100,
-            tagSelectedColor = 0xFFCE93D8.toInt(),       // 亮紫选中色（贴合主题 accent）
-            tagSelectedAlpha = 100,
-            cornerScale = 1f,                            // 贴卡片圆角
-            updatedAt = System.currentTimeMillis()
-        )
-        val existingTopBar = TopBarConfig.loadLocalOnlyForKit(true)
-            .firstOrNull { it.config.name == DARK_PURPLE_TOP_BAR_NAME }
-        val topBarDir = if (existingTopBar != null) {
-            TopBarConfig.addOrUpdate(targetTopBar, existingTopBar).dirName
-        } else {
-            TopBarConfig.addOrUpdate(targetTopBar).dirName
-        }
+        // 1) 暗夜紫主题包（夜+日，进对应主题列表，切走后可回选）
+        val nightDir = ensureDarkPurpleThemeDir(true)
+        val dayDir = ensureDarkPurpleThemeDir(false)
+        // 2) 专属紫调顶栏包（日/夜对称，幂等：已存在则按目标配置更新，保留原目录名）
+        val nightTopBar = darkPurpleTopBarConfig(isNightMode = true)
+        val dayTopBar = darkPurpleTopBarConfig(isNightMode = false)
+        val nightTopBarDir = ensureDarkPurpleTopBarDir(nightTopBar, true)
+        val dayTopBarDir = ensureDarkPurpleTopBarDir(dayTopBar, false)
         // 3) 外观套件索引（幂等：同 id 覆盖）
         val kit = StoredAppearanceKit(
             id = DARK_PURPLE_KIT_ID,
             name = DARK_PURPLE_THEME_NAME,
             binding = KitBinding(
                 preset = MainLayoutPresetConfig.PRESET_REGULAR,
-                nightTheme = ComponentRef(dirName = themeDir, name = DARK_PURPLE_THEME_NAME),
-                nightTopBar = ComponentRef(dirName = topBarDir, name = DARK_PURPLE_TOP_BAR_NAME)
+                dayTheme = ComponentRef(dirName = dayDir, name = DARK_PURPLE_THEME_NAME),
+                nightTheme = ComponentRef(dirName = nightDir, name = DARK_PURPLE_THEME_NAME),
+                dayTopBar = ComponentRef(dirName = dayTopBarDir, name = DARK_PURPLE_TOP_BAR_NAME),
+                nightTopBar = ComponentRef(dirName = nightTopBarDir, name = DARK_PURPLE_TOP_BAR_NAME)
             ),
             importedAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis()
         )
         saveOrReplaceKit(kit)
         kit
+    }
+
+    /** 暗夜紫主题包就绪（幂等）：已存在取现有目录名，缺失则从代码内置配置注册。 */
+    private suspend fun ensureDarkPurpleThemeDir(isNight: Boolean): String {
+        if (ThemePackageManager.localThemeExists(isNight, DARK_PURPLE_THEME_NAME)) {
+            return ThemePackageManager.loadLocalOnly(isNight)
+                .firstOrNull { it.packageInfo.name == DARK_PURPLE_THEME_NAME }?.dirName
+                ?: DARK_PURPLE_THEME_NAME
+        }
+        val config = if (isNight) darkPurpleNightConfig() else darkPurpleDayConfig()
+        return ThemePackageManager.addFromConfig(config).dirName
+    }
+
+    /** 暗夜紫顶栏包就绪（幂等）：同目录按名查找，存在则按目标配置更新（保留目录名）。 */
+    private suspend fun ensureDarkPurpleTopBarDir(target: TopBarConfig.Config, isNight: Boolean): String {
+        val existing = TopBarConfig.loadLocalOnlyForKit(isNight)
+            .firstOrNull { it.config.name == DARK_PURPLE_TOP_BAR_NAME }
+        return if (existing != null) {
+            TopBarConfig.addOrUpdate(target, existing).dirName
+        } else {
+            TopBarConfig.addOrUpdate(target).dirName
+        }
+    }
+
+    private fun darkPurpleTopBarConfig(isNightMode: Boolean): TopBarConfig.Config = TopBarConfig.Config(
+        name = DARK_PURPLE_TOP_BAR_NAME,
+        isNightMode = isNightMode,
+        style = TopBarConfig.STYLE_REGULAR,          // 胶囊搜索框+标签条
+        tagBarColor = if (isNightMode) 0xFF2A2138.toInt() else 0xFFDCCFEA.toInt(),  // 贴卡片弱化面（夜=深紫底/日=浅紫底）
+        tagBarAlpha = if (isNightMode) 100 else 92,
+        tagSelectedColor = if (isNightMode) 0xFFCE93D8.toInt() else 0xFF8E24AA.toInt(),  // 夜=亮紫选中/日=主紫选中（贴主题色）
+        tagSelectedAlpha = 100,
+        cornerScale = 1f,                            // 贴卡片圆角
+        updatedAt = System.currentTimeMillis()
+    )
+
+    /**
+     * theme-fontscale-daynight AD-04：磨砂玻璃晨昏套件首启幂等预置。
+     * - pref 标记 once-ever：用户删除后不重复注入；
+     * - kit 索引已存在（覆盖安装 prefs 保留）时仅补标记，不重复导入；
+     * - 仅注入主题列表，不自动套用（首装默认仍为暗夜紫套件）。
+     */
+    suspend fun ensureFrostedGlassKitSeeded(): StoredAppearanceKit? = withContext(IO) {
+        if (appCtx.getPrefString(FROSTED_KIT_SEEDED_KEY)?.isNotBlank() == true) {
+            return@withContext null
+        }
+        appCtx.putPrefString(FROSTED_KIT_SEEDED_KEY, System.currentTimeMillis().toString())
+        loadIndex().firstOrNull { it.id == FROSTED_KIT_ID }?.let {
+            AppLog.put("磨砂套件已存在索引，补种子标记跳过导入")
+            return@withContext it
+        }
+        val assetFile = tempDir.getFile("seed_frosted_${System.currentTimeMillis()}.zip")
+        try {
+            runCatching {
+                appCtx.assets.open(FROSTED_KIT_ASSET_PATH).use { input ->
+                    assetFile.outputStream().use { output -> input.copyTo(output) }
+                }
+            }.getOrElse {
+                AppLog.put("磨砂套件预置资产缺失：$FROSTED_KIT_ASSET_PATH\n${it.localizedMessage}", it)
+                return@withContext null
+            }
+            val result = importPackage(assetFile)
+            AppLog.put(
+                "磨砂套件预置完成: themes=${result.themeCount} topBars=${result.topBarCount} kits=${result.kitCount}"
+            )
+            loadIndex().firstOrNull { it.id == FROSTED_KIT_ID }
+        } finally {
+            if (assetFile.exists()) assetFile.delete()
+        }
     }
 
     fun currentKitId(): String {

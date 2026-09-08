@@ -43,6 +43,8 @@ class RssArticlesViewModel(application: Application) : BaseViewModel(application
         order = System.currentTimeMillis()
         nextPageUrl = null
         pageLiveData.postValue(page)
+        // PageDebug 临时日志（验证{{page}}分页失效问题，验证通过后移除）
+        AppLog.put("PageDebug RssVM: loadArticles(page=$page), sortUrlLen=${sortUrl.length}")
         Rss.getArticles(viewModelScope, sortName, sortUrl, rssSource, page, searchKey).onSuccess(IO) {
             nextPageUrl = it.second
             val articles = it.first
@@ -67,6 +69,8 @@ class RssArticlesViewModel(application: Application) : BaseViewModel(application
         isLoading = true
         page++
         val pageUrl = nextPageUrl
+        // PageDebug 临时日志（验证{{page}}分页失效问题，验证通过后移除）
+        AppLog.put("PageDebug RssVM: loadMore(page=$page), nextPageUrlNull=${pageUrl.isNullOrEmpty()}")
         if (pageUrl.isNullOrEmpty()) {
             loadFinallyLiveData.postValue(false)
             return

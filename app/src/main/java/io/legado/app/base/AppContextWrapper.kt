@@ -29,7 +29,6 @@ object AppContextWrapper {
             @Suppress("DEPRECATION")
             configuration.locale = targetLocale
         }
-        configuration.fontScale = getFontScale(context)
         // 修复主题模式：App 手动设置深/浅色（themeMode）时强制 uiMode 与 App 主题同步。
         // 根因：BaseActivity.setTheme(AppTheme_Dark/Light) 不修改系统 uiMode，
         // values-night/colors.xml 只随系统真实夜间模式生效，导致「App 深色+系统浅色」时
@@ -50,15 +49,34 @@ object AppContextWrapper {
         }
         configuration.uiMode =
             (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightBit
+        // 字号日夜感知（theme-fontscale-daynight AD-01）：跟随上方 nightBit 的渲染真值，
+        // 夜间读 fontScaleN 键、白天读 fontScale 键，主题包设置的日夜独立字号各自生效
+        configuration.fontScale = getFontScale(
+            context,
+            isNight = nightBit == Configuration.UI_MODE_NIGHT_YES
+        )
         return context.createConfigurationContext(configuration)
     }
 
-    fun getFontScale(context: Context): Float {
-        var fontScale = context.getPrefInt(PreferKey.fontScale) / 10f
+    fun getFontScale(context: Context, isNight: Boolean): Float {
+        // 键映射走 ThemeRuntimeKeys（纯常量，arg 显式传入时不触碰 AppConfig，attachBaseContext 阶段安全）
+        val key = io.legado.app.lib.theme.ThemeRuntimeKeys.fontScale(isNight)
+        var fontScale = context.getPrefInt(key) / 10f
         if (fontScale !in 0.8f..1.6f) {
             fontScale = sysConfiguration.fontScale
         }
         return fontScale
+    }
+
+    /**
+     * View 层字号入口：从已修正的 configuration.uiMode night bit 推导日夜态后委托
+     * [getFontScale]。所有 Activity context 均经 [wrap] 修正 night bit，与全局配置同源
+     * （MainTopBarView/TopBarConfig 顶栏尺寸联动消费点）。
+     */
+    fun getFontScaleForContext(context: Context): Float {
+        val isNight = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+        return getFontScale(context, isNight)
     }
 
     /**

@@ -14,7 +14,6 @@ import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.constant.Theme
-import io.legado.app.help.DefaultData
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.ThemeRuntimeKeys
 import io.legado.app.lib.theme.UiCorner
@@ -81,7 +80,7 @@ object ThemeConfig {
     private var configSnapshot: List<Config>? = null
     val configList: List<Config>
         get() = configSnapshot ?: synchronized(configMutationLock) {
-            configSnapshot ?: normalizeConfigList(getConfigs() ?: DefaultData.themeConfigs).also {
+            configSnapshot ?: normalizeConfigList(getConfigs() ?: emptyList()).also {
                 configSnapshot = it
             }
         }
@@ -224,7 +223,7 @@ object ThemeConfig {
 
     fun upConfig() {
         synchronized(configMutationLock) {
-            val refreshed = normalizeConfigList(getConfigs() ?: DefaultData.themeConfigs)
+            val refreshed = normalizeConfigList(getConfigs() ?: emptyList())
             configSnapshot = refreshed
         }
     }
@@ -294,31 +293,6 @@ object ThemeConfig {
                 }
             }
             commitConfigList(candidate)
-        }
-    }
-
-    /**
-     * 仅添加新主题，不覆盖用户已有的同名主题
-     * 用于版本升级时合并新增的默认主题（DefaultData.importDefaultThemeConfigs 调用）
-     */
-    fun addNewConfigs(newConfigs: List<Config>?) {
-        val newConfigs = newConfigs?.filter { validateConfig(it) }
-        if (newConfigs.isNullOrEmpty()) {
-            return
-        }
-        synchronized(configMutationLock) {
-            val candidate = configList.toMutableList()
-            var changed = false
-            newConfigs.forEach { newConfig ->
-                // 同名同日夜视为同一主题，仅当缺失时新增，不覆盖用户已有同名主题
-                if (candidate.none { it.themeName == newConfig.themeName && it.isNightTheme == newConfig.isNightTheme }) {
-                    candidate.add(newConfig)
-                    changed = true
-                }
-            }
-            if (changed) {
-                commitConfigList(candidate)
-            }
         }
     }
 

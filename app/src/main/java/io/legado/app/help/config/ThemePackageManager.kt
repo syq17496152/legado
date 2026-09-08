@@ -427,7 +427,9 @@ object ThemePackageManager {
             backgroundImgPath = null,
             backgroundImgBlur = 0,
             bookInfoBackgroundImgPath = null,
-            panelBackgroundImgPath = null
+            panelBackgroundImgPath = null,
+            // theme-fontscale-daynight AD-02（2A）：内置主题字号统一 9（0.9 倍），应用主题后生效
+            fontScale = 9
         )
         return Entry(
             Package(

@@ -92,6 +92,12 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     private fun startSearch() {
         val precision = appCtx.getPrefBoolean(PreferKey.precisionSearch)
         var hasMore = false
+        // PageDebug 临时日志（验证{{page}}分页失效问题，验证通过后移除）
+        AppLog.putDebugWithTag(
+            "PageDebug",
+            "SearchModel: searchPage=$searchPage, keyLen=${searchKey.length}, sourceCount=${bookSourceParts.size}",
+            level = AppLog.Level.INFO
+        )
         searchJob = scope.launch(interactionPolicy + searchPool!!) {
             flow {
                 for (bs in bookSourceParts) {

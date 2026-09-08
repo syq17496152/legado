@@ -214,6 +214,19 @@ class AnalyzeUrl(
                 }
             }
             if (url.isNotEmpty()) ruleUrl = url
+            // PageDebug 临时日志（验证{{page}}分页失效问题，验证通过后移除）
+            AppLog.putDebugWithTag(
+                "PageDebug",
+                "AnalyzeUrl: page=$page, hasBraceTemplate=true, ruleUrlAfter=${ruleUrl.take(120)}",
+                level = AppLog.Level.INFO
+            )
+        } else {
+            // PageDebug 临时日志：URL不含花括号模板时的page值（验证调用方是否传了page）
+            AppLog.putDebugWithTag(
+                "PageDebug",
+                "AnalyzeUrl: page=$page, hasBraceTemplate=false",
+                level = AppLog.Level.INFO
+            )
         }
         //page
         page?.let {
