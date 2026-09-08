@@ -303,6 +303,45 @@ object TopBarConfig {
         return Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
     }
 
+    /**
+     * 顶栏图标/容器尺寸缩放因子（bugfix-0908f 资产统一追加）：
+     * 跟随主题设置"字体大小"（fontScale，经 AppContextWrapper 写入 configuration，
+     * 取值 0.8~1.6）。顶栏按钮容器与图标绘制尺寸 = 基准 dp × 本因子，
+     * 使图标与标题（sp 已随 fontScale 缩放）同步联动主题设置。
+     * 单源口径：GlassTopAppBar 两分支 / MainTopBarView / AppManagementScaffold 一律经本函数取因子。
+     */
+    fun iconScale(context: Context): Float {
+        return io.legado.app.base.AppContextWrapper.getFontScale(context).coerceIn(0.8f, 1.6f)
+    }
+
+    /**
+     * 顶栏动作按钮容器基准（dp，bugfix-0908f 尺寸单源铁律）：
+     * 与 MainTopBarView 完全同源——regular 顶栏包 36dp（top_bar_regular_action_size）/
+     * default 34dp（bookshelf_action_button_size）。子页 Compose 顶栏禁止再写死第二套基准。
+     */
+    private const val ACTION_CONTAINER_REGULAR_DP = 36f
+    private const val ACTION_CONTAINER_DEFAULT_DP = 34f
+    /** 图标内边距基准（dp）：对齐 MainTopBarView 8dp padding（bookshelf_action_button_padding）。 */
+    private const val ACTION_ICON_PADDING_DP = 8f
+
+    /**
+     * 顶栏动作按钮容器尺寸（dp，×fontScale）：
+     * regular 顶栏包 36 / default 34。所有顶栏动作按钮唯一取值入口。
+     */
+    fun actionContainerSize(context: Context): Float {
+        val style = currentConfig(context, AppConfig.isNightTheme).style
+        val base = if (style == STYLE_REGULAR) ACTION_CONTAINER_REGULAR_DP else ACTION_CONTAINER_DEFAULT_DP
+        return base * iconScale(context)
+    }
+
+    /**
+     * 顶栏动作图标绘制尺寸（dp，×fontScale）：容器 − 2×8dp 内边距，
+     * 对齐 MainTopBarView CENTER_INSIDE 视觉口径（default 18 / regular 20）。
+     */
+    fun actionIconSize(context: Context): Float {
+        return actionContainerSize(context) - 2 * ACTION_ICON_PADDING_DP * iconScale(context)
+    }
+
     fun defaultBackgroundColor(isNight: Boolean): Int {
         return if (isNight) Color.BLACK else Color.WHITE
     }

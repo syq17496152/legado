@@ -127,7 +127,7 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
 
     private fun buildMenuActions(): List<MenuAction> = listOf(
         MenuAction(
-            icon = Icons.Default.FolderOpen,
+            iconRes = R.drawable.ic_folder_open,
             title = getString(R.string.select_folder),
             // topbar-icon-semantics-fix 3.3：选目录恢复一级图标（原版 import_book.xml menu_select_folder always）
             alwaysShow = true,

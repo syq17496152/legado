@@ -503,7 +503,8 @@ private fun TocTopBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             AppManagementIconAction(
-                iconRes = R.drawable.ic_arrow_back,
+                // bugfix-0908f 资产统一：返回键统一项目细线资产 ic_back（原引 Material 粗线 ic_arrow_back）
+                iconRes = R.drawable.ic_back,
                 contentDescription = null,
                 tint = palette.settings.primaryText,
                 onClick = onBack

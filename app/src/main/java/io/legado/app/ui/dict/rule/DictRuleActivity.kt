@@ -145,7 +145,7 @@ class DictRuleActivity : VMBaseActivity<ActivityDictRuleBinding, DictRuleViewMod
 
     private fun buildTopMenuActions(): List<MenuAction> = listOf(
         MenuAction(
-            icon = Icons.Default.Add,
+            iconRes = R.drawable.ic_add,
             title = getString(R.string.add),
             // topbar-icon-semantics-fix 3.3：新增恢复一级图标（原版 dict_rule.xml menu_add always）
             alwaysShow = true,

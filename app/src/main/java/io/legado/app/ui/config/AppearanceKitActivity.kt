@@ -143,22 +143,22 @@ class AppearanceKitActivity : BaseActivity<ActivityThemeManageBinding>() {
         topBarTitle = getString(R.string.appearance_kit_manage)
         topBarActions = listOf(
             MenuAction(
-                icon = Icons.Filled.Add,
+                iconRes = R.drawable.ic_add,
                 title = getString(R.string.appearance_kit_create),
                 alwaysShow = true
             ) { showCreateKitDialog() },
             MenuAction(
-                icon = Icons.Filled.Download,
+                iconRes = R.drawable.ic_download,
                 title = getString(R.string.appearance_kit_import),
                 alwaysShow = true
             ) { selectImportPackage() },
             MenuAction(
-                icon = Icons.Filled.Upload,
+                iconRes = R.drawable.ic_export,
                 title = getString(R.string.appearance_kit_export),
                 alwaysShow = true
             ) { exportCurrentKit() },
             MenuAction(
-                icon = Icons.Filled.History,
+                iconRes = R.drawable.ic_history,
                 title = getString(R.string.package_sync_task_title),
                 alwaysShow = true
             ) { showSyncTasks() }

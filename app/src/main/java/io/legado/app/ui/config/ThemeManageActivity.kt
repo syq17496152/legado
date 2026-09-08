@@ -333,7 +333,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             if (showS3) {
                 add(
                     MenuAction(
-                        icon = Icons.Filled.Cloud,
+                        iconRes = R.drawable.ic_outline_cloud_24,
                         title = getString(R.string.theme_s3_container_switch),
                         alwaysShow = true
                     ) { showContainerSelector() }
@@ -341,7 +341,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             }
             add(
                 MenuAction(
-                    icon = Icons.Filled.History,
+                    iconRes = R.drawable.ic_history,
                     title = getString(R.string.package_sync_task_menu),
                     alwaysShow = true
                 ) { showThemeSyncTasks() }

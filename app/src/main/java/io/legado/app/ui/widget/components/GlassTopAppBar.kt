@@ -2,6 +2,8 @@ package io.legado.app.ui.widget.components
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.text.TextUtils
+import android.widget.TextView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -17,7 +19,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -44,9 +46,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.TopBarConfig
+import io.legado.app.lib.theme.applyUiTitleTypeface
 import io.legado.app.lib.theme.elevation
 import io.legado.app.lib.theme.titleTextColor
 import io.legado.app.ui.theme.ThemeSync
@@ -91,6 +95,10 @@ fun GlassTopAppBar(
     val context = LocalContext.current
     // 订阅全局主题信号：ThemeSync.bump() 后本组件重组，重读 primaryColor/elevation 最新值
     val themeVersion = ThemeSync.version
+    // bugfix-0908f 尺寸单源：按钮容器/图标尺寸经 TopBarConfig 唯一口径取值
+    // （regular 36/20，default 34/18，×fontScale），与 MainTopBarView 完全同源，禁止写死
+    val actionContainer = TopBarConfig.actionContainerSize(context)
+    val actionIcon = TopBarConfig.actionIconSize(context)
     val config = remember(themeVersion) {
         TopBarConfig.currentConfig(context, AppConfig.isNightTheme)
     }
@@ -120,18 +128,10 @@ fun GlassTopAppBar(
     // shadow 仅实色容器生效（W0 定稿）：半透明/透明顶栏画阴影会形成可见灰白框（真机实锤）
     val useCustomLayout = barHeight != null || secondRow != null
     // W6.5：标题字体槽（管理族 titleFontFamily 跟随页面包）最优先；
-    // bugfix-0908f 统一：无槽时回落主题"标题字体"设置（AppConfig.systemTypefaces 三态，
-    // 对齐 MainTopBarView.applyUiTitleTypeface 的 baseSystemTypeface 口径）；
-    // 字重对齐 View 侧 Regular（原 Medium 500 比主 Tab 标题视觉粗，用户实锤"文字粗一点"）
-    val systemTitleFamily = remember(themeVersion) {
-        when (AppConfig.systemTypefaces) {
-            1 -> FontFamily.Serif
-            2 -> FontFamily.Monospace
-            else -> FontFamily.SansSerif
-        }
-    }
+    // bugfix-0908f 铁律：无槽时标题走 TopBarTitleText（AndroidView 桥，主 Tab 同码路径
+    // applyUiTitleTypeface——含主题自定义标题字体文件），禁止 systemTypefaces 三态近似折中
     val titleStyle = MaterialTheme.typography.titleLarge.copy(
-        fontFamily = titleFontFamily ?: systemTitleFamily,
+        fontFamily = titleFontFamily,
         fontWeight = FontWeight.Normal
     )
     Box(modifier = Modifier.shadow(if (barColor.alpha >= 0.99f) barElevation else 0.dp)) {
@@ -174,11 +174,12 @@ fun GlassTopAppBar(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (navIcon != null && onNavClick != null) {
-                            IconButton(onClick = onNavClick) {
+                            // 容器/图标尺寸走 TopBarConfig 单源（与主 Tab 完全同口径）
+                            IconButton(onClick = onNavClick, modifier = Modifier.size(actionContainer.dp)) {
                                 Icon(
-                                    navIcon,
+                                    painter = painterResource(R.drawable.ic_back),
                                     contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(actionIcon.dp)
                                 )
                             }
                         }
@@ -188,7 +189,12 @@ fun GlassTopAppBar(
                                     .weight(1f)
                                     .padding(horizontal = 12.dp)
                             ) {
-                                Text(text = title, style = titleStyle, maxLines = 1, color = contentColor)
+                                // bugfix-0908f：标题走同码桥（主题标题字体精确跟随）
+                                TopBarTitleText(
+                                    text = title,
+                                    contentColor = contentColor,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                                 Text(
                                     text = subtitle,
                                     style = MaterialTheme.typography.labelMedium,
@@ -197,11 +203,9 @@ fun GlassTopAppBar(
                                 )
                             }
                         } else {
-                            Text(
+                            TopBarTitleText(
                                 text = title,
-                                style = titleStyle,
-                                maxLines = 1,
-                                color = contentColor,
+                                contentColor = contentColor,
                                 modifier = Modifier
                                     .weight(1f)
                                     .padding(horizontal = 12.dp)
@@ -223,42 +227,44 @@ fun GlassTopAppBar(
                 actionIconContentColor = contentColor
             ),
             title = {
-                if (subtitle != null) {
-                    Column {
+                if (titleFontFamily == null) {
+                    // bugfix-0908f：无主题包字体槽时走同码桥（主题标题字体精确跟随）
+                    TopBarTitleText(text = title, contentColor = contentColor)
+                } else {
+                    if (subtitle != null) {
+                        Column {
+                            Text(
+                                text = title,
+                                style = titleStyle,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = subtitle,
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                color = contentColor.copy(alpha = 0.8f)
+                            )
+                        }
+                    } else {
                         Text(
                             text = title,
-                            // bugfix-0908f：统一走 titleStyle（20sp+主题标题字体+Regular 字重，
-                            // 与自绘分支/主 Tab 对齐）
                             style = titleStyle,
                             maxLines = 1
                         )
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.labelMedium,
-                            maxLines = 1,
-                            color = contentColor.copy(alpha = 0.8f)
-                        )
                     }
-                } else {
-                    Text(
-                        text = title,
-                        // bugfix-0908f：统一走 titleStyle（20sp+主题标题字体+Regular 字重）
-                        style = titleStyle,
-                        maxLines = 1
-                    )
                 }
             },
             navigationIcon = {
                 if (navIcon != null && onNavClick != null) {
-                    IconButton(onClick = onNavClick) {
-                        // 2.4（bookshelf-refresh-and-title-fix R4）：图标 20dp 档。
-                        // 注：actions 为调用方传入的 Composable，M3 Icon 默认 24dp 无法在此中心化
-                        // 缩放，action 图标维持 M3 默认（偏差登记 tasks.md AOAdapt/issue-list）
-                        // bugfix-0908f 统一：返回图标渲染固定用项目细线资产 ic_back（对齐主 Tab 风格）
+                    // 容器/图标尺寸走 TopBarConfig 单源（与主 Tab 完全同口径）
+                    IconButton(
+                        onClick = onNavClick,
+                        modifier = Modifier.size(actionContainer.dp)
+                    ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_back),
                             contentDescription = null,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(actionIcon.dp)
                         )
                     }
                 }
@@ -267,6 +273,37 @@ fun GlassTopAppBar(
         )
         }
     }
+}
+
+/**
+ * 顶栏标题精确跟随组件（bugfix-0908f 资产统一铁律）：
+ * 无 titleFontFamily 槽时的标题渲染走主 Tab 同码路径——[applyUiTitleTypeface]
+ * （含主题"标题字体"自定义字体文件），禁止 systemTypefaces 三态近似折中。
+ * 主题变更经 ThemeSync.version 订阅触发重组重应用。
+ */
+@Composable
+private fun TopBarTitleText(
+    text: String,
+    contentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    ThemeSync.version
+    AndroidView(
+        modifier = modifier,
+        factory = { ctx ->
+            TextView(ctx).apply {
+                textSize = 20f
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+            }
+        },
+        update = { tv ->
+            tv.text = text
+            tv.setTextColor(contentColor.toArgb())
+            tv.applyUiTitleTypeface(context)
+        }
+    )
 }
 
 /** 顶栏壁纸有界解码（防大图 OOM），与 ConfigActivity 顶栏同策略。 */

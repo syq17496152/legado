@@ -143,7 +143,7 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     if (containerActionVisible) {
                         add(
                             MenuAction(
-                                icon = Icons.Filled.Cloud,
+                                iconRes = R.drawable.ic_outline_cloud_24,
                                 title = getString(R.string.s3_bucket),
                                 alwaysShow = true
                             ) { showContainerSelector() }
@@ -151,7 +151,7 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     }
                     add(
                         MenuAction(
-                            icon = Icons.Filled.HelpOutline,
+                            iconRes = R.drawable.ic_help,
                             title = getString(R.string.help),
                             alwaysShow = true
                         ) { showBubbleHelp() }

@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LibraryBooks
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -35,8 +34,10 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import io.legado.app.R
+import io.legado.app.help.config.TopBarConfig
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,6 +83,10 @@ fun ImportBookScreen(
     modifier: Modifier = Modifier
 ) {
     var moreMenuVisible by remember { mutableStateOf(false) }
+    // bugfix-0908f 尺寸单源：容器/图标经 TopBarConfig 唯一口径（与主 Tab 同源）
+    val context = LocalContext.current
+    val container = TopBarConfig.actionContainerSize(context)
+    val iconSize = TopBarConfig.actionIconSize(context)
     Column(modifier = modifier.fillMaxSize()) {
         GlassTopAppBar(
             title = title,
@@ -91,15 +96,20 @@ fun ImportBookScreen(
                 // topbar-icon-semantics-fix 3.3：alwaysShow 项直出一级图标
                 //（对齐原版 book_remote.xml/import_book.xml always：刷新/排序/选目录）
                 menuActions.filter { it.alwaysShow }.forEach { action ->
-                    IconButton(onClick = action.onClick) {
-                        MenuActionIcon(action = action)
+                    IconButton(onClick = action.onClick, modifier = Modifier.size(container.dp)) {
+                        MenuActionIcon(action = action, modifier = Modifier.size(iconSize.dp))
                     }
                 }
                 val overflowActions = menuActions.filter { !it.alwaysShow }
                 if (overflowActions.isNotEmpty()) {
                     Box {
-                        IconButton(onClick = { moreMenuVisible = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = null)
+                        IconButton(onClick = { moreMenuVisible = true }, modifier = Modifier.size(container.dp)) {
+                            // 主 Tab 同款细线资产 ic_more_vert
+                            Icon(
+                                painter = androidx.compose.ui.res.painterResource(io.legado.app.R.drawable.ic_more_vert),
+                                contentDescription = null,
+                                modifier = Modifier.size(iconSize.dp)
+                            )
                         }
                         AppDropdownMenu(
                             expanded = moreMenuVisible,

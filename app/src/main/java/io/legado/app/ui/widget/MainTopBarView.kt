@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.Observer
+import io.legado.app.base.AppContextWrapper
 import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.help.config.AppConfig
@@ -439,12 +440,14 @@ class MainTopBarView @JvmOverloads constructor(
         titleSelect.background = ContextCompat.getDrawable(context, R.drawable.bg_discover_embedded_action)
         listOf(moreButton, searchButton, filterButton, starButton, refreshButton, loginButton, filterToggleButton).forEach {
             it.background = ContextCompat.getDrawable(context, R.drawable.bg_discover_embedded_action)
+            // bugfix-0908f 尺寸单源：容器/内边距×fontScale，与子页 Compose 顶栏（TopBarConfig 单源）同联动
+            val fs = AppContextWrapper.getFontScale(context)
             it.layoutParams = (it.layoutParams as LayoutParams).apply {
-                width = resources.getDimensionPixelSize(R.dimen.bookshelf_action_button_size)
-                height = resources.getDimensionPixelSize(R.dimen.bookshelf_action_button_size)
-                marginStart = 8.dp
+                width = (resources.getDimensionPixelSize(R.dimen.bookshelf_action_button_size) * fs).toInt()
+                height = (resources.getDimensionPixelSize(R.dimen.bookshelf_action_button_size) * fs).toInt()
+                marginStart = (8 * fs).toInt().dp
             }
-            val padding = resources.getDimensionPixelSize(R.dimen.bookshelf_action_button_padding)
+            val padding = (resources.getDimensionPixelSize(R.dimen.bookshelf_action_button_padding) * fs).toInt()
             it.setPadding(padding, padding, padding, padding)
         }
         titleText.gravity = Gravity.CENTER_VERTICAL
@@ -491,12 +494,14 @@ class MainTopBarView @JvmOverloads constructor(
         titleSelect.setPadding(12.dp, 0, 8.dp, 0)
         listOf(moreButton, searchButton, filterButton, starButton, refreshButton, loginButton, filterToggleButton).forEach {
             it.background = null
+            // bugfix-0908f 尺寸单源：容器/内边距×fontScale，与子页 Compose 顶栏（TopBarConfig 单源）同联动
+            val fs = AppContextWrapper.getFontScale(context)
             it.layoutParams = (it.layoutParams as LayoutParams).apply {
-                width = resources.getDimensionPixelSize(R.dimen.top_bar_regular_action_size)
-                height = resources.getDimensionPixelSize(R.dimen.top_bar_regular_action_size)
-                marginStart = 6.dp
+                width = (resources.getDimensionPixelSize(R.dimen.top_bar_regular_action_size) * fs).toInt()
+                height = (resources.getDimensionPixelSize(R.dimen.top_bar_regular_action_size) * fs).toInt()
+                marginStart = (6 * fs).toInt().dp
             }
-            val padding = 8.dp
+            val padding = (8 * fs).toInt()
             it.setPadding(padding, padding, padding, padding)
         }
         titleText.gravity = Gravity.CENTER_VERTICAL
@@ -518,16 +523,18 @@ class MainTopBarView @JvmOverloads constructor(
     /** subpage-topbar-unify: 统一配置 action 插槽按钮在 default/regular 两种顶栏风格下的尺寸/背景/间距。 */
     private fun styleActionSlotButtons(regular: Boolean) {
         if (actionsBar.childCount == 0) return
-        val size = resources.getDimensionPixelSize(
+        // bugfix-0908f：按钮容器/内边距跟随主题"字体大小"（fontScale），与标题 sp 缩放联动
+        val fs = AppContextWrapper.getFontScale(context)
+        val size = (resources.getDimensionPixelSize(
             if (regular) R.dimen.top_bar_regular_action_size else R.dimen.bookshelf_action_button_size
-        )
+        ) * fs).toInt()
         val bg = if (regular) {
             null
         } else {
             ContextCompat.getDrawable(context, R.drawable.bg_discover_embedded_action)
         }
-        val padding = if (regular) 8.dp else resources.getDimensionPixelSize(R.dimen.bookshelf_action_button_padding)
-        val margin = if (regular) 6.dp else 8.dp
+        val padding = ((if (regular) 8 else 8) * fs).toInt().dp
+        val margin = ((if (regular) 6 else 8) * fs).toInt().dp
         for (i in 0 until actionsBar.childCount) {
             val btn = actionsBar.getChildAt(i)
             btn.background = bg

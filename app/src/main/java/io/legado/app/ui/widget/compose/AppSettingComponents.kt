@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.TopBarConfig
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.backgroundColor
@@ -566,12 +567,18 @@ fun AppManagementMoreActionButton(
             popupHandle = null
         }
     }
+    // bugfix-0908f 尺寸单源：容器走 TopBarConfig 唯一口径（与主 Tab 同源）；
+    // padding = (容器 − 图标)/2，使图标视觉尺寸 = actionIconSize（与 IconButton+Icon 同口径）
+    val context = LocalContext.current
+    val container = TopBarConfig.actionContainerSize(context)
+    val iconSize = TopBarConfig.actionIconSize(context)
     AndroidView(
-        factory = { context ->
-            ImageButton(context).apply {
-                val padding = (8 * resources.displayMetrics.density).toInt()
+        factory = { ctx ->
+            ImageButton(ctx).apply {
+                val padDp = (container - iconSize) / 2f
+                val padding = (padDp * ctx.resources.displayMetrics.density).toInt()
                 background = null
-                scaleType = ImageView.ScaleType.CENTER
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
                 setPadding(padding, padding, padding, padding)
             }
         },
@@ -596,7 +603,7 @@ fun AppManagementMoreActionButton(
                 )
             }
         },
-        modifier = modifier.size(36.dp)
+        modifier = modifier.size(container.dp)
     )
 }
 
@@ -608,15 +615,20 @@ fun AppManagementIconAction(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // bugfix-0908f 尺寸单源：容器/图标经 TopBarConfig 唯一口径（与主 Tab MainTopBarView 同源），
+    // regular 顶栏包 36/20、default 34/18，×fontScale，禁止写死第二套基准
+    val context = LocalContext.current
+    val container = TopBarConfig.actionContainerSize(context)
+    val iconSize = TopBarConfig.actionIconSize(context)
     IconButton(
         onClick = onClick,
-        modifier = modifier.size(36.dp)
+        modifier = modifier.size(container.dp)
     ) {
         Icon(
             painter = painterResource(id = iconRes),
             contentDescription = contentDescription,
             tint = tint,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(iconSize.dp)
         )
     }
 }

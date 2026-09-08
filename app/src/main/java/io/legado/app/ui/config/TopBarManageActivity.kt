@@ -199,7 +199,7 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     if (containerActionVisible) {
                         add(
                             MenuAction(
-                                icon = Icons.Filled.Cloud,
+                                iconRes = R.drawable.ic_outline_cloud_24,
                                 title = getString(R.string.s3_bucket),
                                 alwaysShow = true
                             ) { showContainerSelector() }
@@ -207,7 +207,7 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     }
                     add(
                         MenuAction(
-                            icon = Icons.Filled.History,
+                            iconRes = R.drawable.ic_history,
                             title = getString(R.string.package_sync_task_menu),
                             alwaysShow = true
                         ) { showTopBarSyncTasks() }

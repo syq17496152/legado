@@ -55,12 +55,12 @@ class AboutActivity : BaseActivity<ActivityAboutBinding>() {
             actionsProvider = {
                 listOf(
                     MenuAction(
-                        icon = Icons.Filled.StarRate,
+                        iconRes = R.drawable.ic_star,
                         title = getString(R.string.scoring),
                         alwaysShow = true
                     ) { openUrl("market://details?id=$packageName") },
                     MenuAction(
-                        icon = Icons.Filled.Share,
+                        iconRes = R.drawable.ic_share,
                         title = getString(R.string.share),
                         alwaysShow = true
                     ) {

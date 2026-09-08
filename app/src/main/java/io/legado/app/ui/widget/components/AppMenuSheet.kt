@@ -32,11 +32,13 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.activity.ComponentActivity
 import androidx.viewbinding.ViewBinding
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import io.legado.app.help.config.TopBarConfig
 
 /**
  * 菜单动作项，由 [AppMenuSheet] / [AppDropdownMenu] 数据驱动渲染
@@ -149,20 +151,27 @@ fun RowScope.TopBarActionRow(actions: List<MenuAction>) {
     val primaryActions = actions.filter { it.alwaysShow && !it.header }
     val overflowActions = actions.filter { !it.alwaysShow || it.header }
     var menuExpanded by remember { mutableStateOf(false) }
+    // bugfix-0908f 尺寸单源：容器/图标经 TopBarConfig 唯一口径（与主 Tab MainTopBarView 同源）
+    val context = LocalContext.current
+    val container = TopBarConfig.actionContainerSize(context)
+    val icon = TopBarConfig.actionIconSize(context)
     primaryActions.forEach { action ->
-        IconButton(onClick = action.onClick, enabled = action.enabled) {
-            // bugfix-0908f T2：一级图标统一 20dp 档（对齐 nav/MoreVert，消同栏 20/24 混排）
-            MenuActionIcon(action = action, modifier = Modifier.size(20.dp))
+        IconButton(
+            onClick = action.onClick,
+            enabled = action.enabled,
+            modifier = Modifier.size(container.dp)
+        ) {
+            MenuActionIcon(action = action, modifier = Modifier.size(icon.dp))
         }
     }
     if (overflowActions.isNotEmpty()) {
         Box {
-            IconButton(onClick = { menuExpanded = true }) {
+            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(container.dp)) {
                 // bugfix-0908f 统一：溢出图标用主 Tab 同款细线资产 ic_more_vert（与 MainTopBarView 一致）
                 Icon(
                     painter = androidx.compose.ui.res.painterResource(io.legado.app.R.drawable.ic_more_vert),
                     contentDescription = null,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(icon.dp)
                 )
             }
             AppDropdownMenu(

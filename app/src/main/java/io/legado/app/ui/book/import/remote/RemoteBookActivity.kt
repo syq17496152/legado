@@ -127,7 +127,7 @@ class RemoteBookActivity : BaseImportBookActivity<RemoteBookViewModel>(),
 
     private fun buildMenuActions(): List<MenuAction> = listOf(
         MenuAction(
-            icon = Icons.Default.Refresh,
+            iconRes = R.drawable.ic_refresh_black_24dp,
             title = getString(R.string.refresh),
             // topbar-icon-semantics-fix 3.3：刷新恢复一级图标（原版 book_remote.xml menu_refresh always）
             alwaysShow = true,

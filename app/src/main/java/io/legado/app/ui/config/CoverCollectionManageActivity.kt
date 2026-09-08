@@ -68,7 +68,7 @@ class CoverCollectionManageActivity : BaseActivity<ActivityCoverCollectionManage
                 if (containerActionVisible) {
                     listOf(
                         MenuAction(
-                            icon = Icons.Filled.Cloud,
+                            iconRes = R.drawable.ic_outline_cloud_24,
                             title = getString(R.string.s3_bucket),
                             alwaysShow = true
                         ) { showContainerSelector() }

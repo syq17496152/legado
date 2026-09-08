@@ -197,15 +197,19 @@ private fun AppManagementVectorIconAction(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // bugfix-0908f 尺寸单源：容器/图标经 TopBarConfig 唯一口径（与主 Tab 同源，regular 36/20、default 34/18）
+    val context = LocalContext.current
+    val container = TopBarConfig.actionContainerSize(context)
+    val iconSize = TopBarConfig.actionIconSize(context)
     IconButton(
         onClick = onClick,
-        modifier = modifier.size(36.dp)
+        modifier = modifier.size(container.dp)
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = tint,
-            modifier = Modifier.size(20.dp)
+            modifier = Modifier.size(iconSize.dp)
         )
     }
 }
@@ -218,6 +222,9 @@ private fun AppManagementSearchField(
     onQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // bugfix-0908f 尺寸单源：搜索框内图标经 TopBarConfig 唯一口径，禁止写死
+    val context = LocalContext.current
+    val iconSize = TopBarConfig.actionIconSize(context)
     LegadoMiuixCard(
         modifier = modifier.fillMaxWidth(),
         color = Color(palette.settings.row),
@@ -233,7 +240,7 @@ private fun AppManagementSearchField(
                 painter = painterResource(id = R.drawable.ic_search),
                 contentDescription = null,
                 tint = palette.settings.secondaryText,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(iconSize.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             BasicTextField(
@@ -264,12 +271,12 @@ private fun AppManagementSearchField(
                 }
             )
             if (query.isNotEmpty()) {
+                // 清除按钮尺寸走 AppManagementIconAction 内部单源口径，不覆盖
                 AppManagementIconAction(
                     iconRes = R.drawable.ic_baseline_close,
                     contentDescription = null,
                     tint = palette.settings.secondaryText,
-                    onClick = { onQueryChange("") },
-                    modifier = Modifier.size(32.dp)
+                    onClick = { onQueryChange("") }
                 )
             }
         }
