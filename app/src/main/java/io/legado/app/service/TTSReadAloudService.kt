@@ -1,4 +1,4 @@
-﻿package io.legado.app.service
+package io.legado.app.service
 
 import android.app.PendingIntent
 import android.os.Handler
@@ -144,6 +144,12 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     }
 
     override fun onInit(status: Int) {
+        // TtsTrace 真机联调：init 回调结果（成功才走 play，失败走降级链）
+        AppLog.putDebugWithTag(
+            AppLog.TAG_TTS_TRACE,
+            "onInit status=$status label=${currentEngineLabel()} fallbackInit=$fallbackInit",
+            level = AppLog.Level.INFO
+        )
         if (status == TextToSpeech.SUCCESS) {
             textToSpeech?.let {
                 it.setOnUtteranceProgressListener(ttsUtteranceListener)
@@ -223,6 +229,12 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
             val ruleSet = runCatching {
                 TtsCastingStore.resolveActiveRuleSet(bookKey)
             }.getOrNull()
+            // TtsTrace 真机联调：multi/legacy 路径判定关键证据（模板激活状态+规则数）
+            AppLog.putDebugWithTag(
+                AppLog.TAG_TTS_TRACE,
+                "play 路径判定 bookKey=${bookKey.takeLast(24)} ruleSet=${ruleSet != null} rules=${ruleSet?.rules?.size ?: 0} → ${if (ruleSet != null && ruleSet.rules.isNotEmpty()) "multiRole" else "legacy"}",
+                level = AppLog.Level.INFO
+            )
             if (ruleSet != null && ruleSet.rules.isNotEmpty()) {
                 speakMultiRole(ruleSet)
             } else {
@@ -237,6 +249,12 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     private suspend fun speakLegacyLoop() {
         LogUtils.d(TAG, "朗读列表大小 ${contentList.size}")
         LogUtils.d(TAG, "朗读页数 ${textChapter?.pageSize}")
+        // TtsTrace 真机联调：legacy 路径入口（整章预入队）
+        AppLog.putDebugWithTag(
+            AppLog.TAG_TTS_TRACE,
+            "legacy 入队 单元=${contentList.size} nowSpeak=$nowSpeak 引擎=${ReadAloud.currentRoute.engineValue.ifBlank { "系统默认" }}",
+            level = AppLog.Level.INFO
+        )
         val tts = textToSpeech ?: throw NoStackTraceException("tts is null")
         val contentList = contentList
         var isAddedText = false
@@ -308,6 +326,12 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         )
         val textChapter = textChapter ?: return
         val contentList = contentList
+        // TtsTrace 真机联调：多角色章开始（章索引/段落数/规则数/当前引擎）
+        AppLog.putDebugWithTag(
+            AppLog.TAG_TTS_TRACE,
+            "multiRole 章开始 ch=${textChapter.chapter.index} 段落=${contentList.size} 规则=${ruleSet.rules.size} 引擎=${ReadAloud.currentRoute.engineValue.ifBlank { "系统默认" }} nowSpeak=$nowSpeak",
+            level = AppLog.Level.INFO
+        )
         for (p in nowSpeak until contentList.size) {
             currentCoroutineContext().ensureActive()
             val paragraphStart = if (p == nowSpeak) paragraphStartPos else 0
@@ -350,6 +374,12 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                     null
                 }
                 val utteranceId = "${AppConst.APP_TAG}mr_${p}_${segment.offsetInParagraph}"
+                // TtsTrace 真机联调：逐段合成证据（分段来源 tag/声源/文本长度）
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_TTS_TRACE,
+                    "multiRole 段 p=$p off=${segment.offsetInParagraph} len=${segment.length} tag=${segment.tag} 声源=${sourceRoute.engineType}:${sourceRoute.engineValue}:${voiceRef?.displayName ?: "-"} utteranceId=$utteranceId",
+                    level = AppLog.Level.INFO
+                )
                 val completed = source.utterance(
                     speechText,
                     voiceRef,
@@ -358,6 +388,11 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                 )
                 if (!completed) {
                     // onStop（pause/stop/seek 已接管状态），静默退出循环
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_TTS_TRACE,
+                        "multiRole 段中断（onStop） utteranceId=$utteranceId p=$p",
+                        level = AppLog.Level.INFO
+                    )
                     return
                 }
                 readAloudNumber += text.length
@@ -382,6 +417,11 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
             }
         }
         // 章末
+        AppLog.putDebugWithTag(
+            AppLog.TAG_TTS_TRACE,
+            "multiRole 章末 ch=${textChapter.chapter.index} timerMode=${AppConfig.ttsTimerMode}",
+            level = AppLog.Level.INFO
+        )
         delay(500)
         if (!checkTimerAtChapterEnd()) {
             nextChapter()

@@ -44,6 +44,8 @@ object AppLog {
     const val TAG_SOURCE_DIALOG = "SourceDialog"        // P0-S3 书源弹窗拦截记录
     const val TAG_SOURCE_CACHE = "SourceCache"          // P0-S2 书源脚本缓存命名空间（清理失败记录）
     const val TAG_SOURCE_GUARD = "SourceGuard"          // P0-S4 类导入策略观察/实拦记录
+    // TTS 朗读引擎全链埋点（optimize-tts-engine-phase2 真机联调）：路由切换/init/多角色分段/选角 resolve/预合成/缓存键
+    const val TAG_TTS_TRACE = "TtsTrace"
 
     enum class Level { ERROR, WARN, INFO, DEBUG }
 

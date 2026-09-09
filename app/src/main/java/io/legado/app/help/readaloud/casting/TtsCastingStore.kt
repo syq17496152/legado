@@ -1,4 +1,4 @@
-﻿package io.legado.app.help.readaloud.casting
+package io.legado.app.help.readaloud.casting
 
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
@@ -90,7 +90,16 @@ object TtsCastingStore {
      * 快照缓存键控=(书级覆盖 id, 模板 id) 二元组：同书同模板命中缓存，跨书/覆盖变更重读 Room
      */
     suspend fun resolveActiveRuleSet(bookKey: String): CastingRuleSet? {
-        val templateId = resolveActiveTemplateId(bookKey) ?: return null
+        val templateId = resolveActiveTemplateId(bookKey)
+        if (templateId == null) {
+            // TtsTrace 真机联调：未激活模板=多角色关闭的第一嫌疑点
+            AppLog.putDebugWithTag(
+                AppLog.TAG_TTS_TRACE,
+                "resolve 未激活模板（multi 关闭）bookKey=${bookKey.takeLast(24)}",
+                level = AppLog.Level.INFO
+            )
+            return null
+        }
         val overrideId = appCtx.getPrefString(PreferKey.ttsCastingBookOverridePrefix + bookKey)
             ?.ifBlank { null }
         val cacheKey = "override:$overrideId|template:$templateId"
@@ -98,8 +107,23 @@ object TtsCastingStore {
         if (cached != null && activeRuleSetCacheKey == cacheKey) {
             return cached
         }
-        val entity = appDb.ttsCastingTemplateDao.get(templateId) ?: return null
-        val ruleSet = CastingRuleSet.fromEntity(entity) ?: return null
+        val entity = appDb.ttsCastingTemplateDao.get(templateId)
+        if (entity == null) {
+            // TtsTrace 真机联调：模板 id 存在但 Room 无记录（导入缺失/库异常）
+            AppLog.putWarn("TtsTrace resolve 模板不存在 templateId=$templateId")
+            return null
+        }
+        val ruleSet = CastingRuleSet.fromEntity(entity)
+        if (ruleSet == null) {
+            // TtsTrace 真机联调：rulesJson 解析失败（schemaVersion/结构异常）
+            AppLog.putWarn("TtsTrace resolve 规则集解析失败 templateId=$templateId")
+            return null
+        }
+        AppLog.putDebugWithTag(
+            AppLog.TAG_TTS_TRACE,
+            "resolve 载入规则集 templateId=$templateId override=${overrideId ?: "无"} 规则=${ruleSet.rules.size}",
+            level = AppLog.Level.INFO
+        )
         activeRuleSet = ruleSet
         activeRuleSetCacheKey = cacheKey
         return ruleSet
@@ -149,17 +173,31 @@ object TtsCastingStore {
         val rule = ruleSet.rules.firstOrNull { it.tag == tag }
         if (rule != null) {
             val source = substituteCurrentSentinel(rule.source)
-            if (source != null) return source
-            AppLog.put("选角模板规则声源无效（tag=$tag），回退 fallbackSource")
+            if (source != null) {
+                // TtsTrace 真机联调：规则首命中（tag→声源映射核心证据）
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_TTS_TRACE,
+                    "resolveSource tag=$tag 命中规则 → ${source.engineType}:${source.engineValue}:${source.speakerName}",
+                    level = AppLog.Level.INFO
+                )
+                return source
+            }
+            AppLog.putWarn("TtsTrace resolveSource tag=$tag 规则声源无效，回退 fallbackSource")
         }
         // fallbackSource 兜底
         if (ruleSet.fallbackSourceJson.isNotBlank()) {
             val fallback = SpeechRoute.fromJson(ruleSet.fallbackSourceJson)
             if (fallback.engineValue.isNotBlank() || fallback.engineType == SpeechRoute.ENGINE_DEFAULT) {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_TTS_TRACE,
+                    "resolveSource tag=$tag 未命中规则 → fallbackSource ${fallback.engineType}:${fallback.engineValue}",
+                    level = AppLog.Level.INFO
+                )
                 return fallback
             }
         }
         // 最终兜底：default 路由（当前引擎默认音）
+        AppLog.putWarn("TtsTrace resolveSource tag=$tag → 引擎默认音兜底（无规则无有效fallback）")
         return SpeechRoute(engineType = SpeechRoute.ENGINE_DEFAULT)
     }
 

@@ -517,8 +517,23 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun md5SpeakFileName(content: String, textChapter: TextChapter? = this.textChapter): String {
-        return MD5Utils.md5Encode16(textChapter?.title ?: "") + "_" +
-                MD5Utils.md5Encode16("${currentHttpTts?.url.orEmpty()}-|-$speechRate-|-$content")
+        // 键单源收敛修复（§3.7.1 契约 1/2/8，任务 2.10）：播放端改走 TtsCacheKeys 单源，
+        // 与批量端同函数（修复缺陷：播放端残留旧 v1 内联键，导致预合成产物播放端命中不了）
+        val fileName = TtsCacheKeys.ttsSpeakFileName(
+            engineKey = currentHttpTts?.id?.toString().orEmpty(),
+            speedKey = speechRate.toString(),
+            voiceKey = ReadAloud.currentRoute.toneID,
+            chapterIndex = textChapter?.chapter?.index ?: -1,
+            chapterTitle = textChapter?.title ?: "",
+            unitText = content
+        )
+        // TtsTrace 真机联调：键单源证据（engineKey/chapterIndex 维度参与哈希）
+        AppLog.putDebugWithTag(
+            AppLog.TAG_TTS_TRACE,
+            "cacheKey 生成 engineKey=${currentHttpTts?.id} ch=${textChapter?.chapter?.index ?: -1} len=${content.length} file=${fileName.takeLast(16)}",
+            level = AppLog.Level.INFO
+        )
+        return fileName
     }
 
     private fun createSilentSound(fileName: String) {
@@ -599,6 +614,12 @@ class HttpReadAloudService : BaseReadAloudService(),
             val isReserved = io.legado.app.help.readaloud.prebuild.TtsPrebuildManager.reservedKeys
                 .containsKey(it.name.removeSuffix(".mp3"))
             if (isReserved) {
+                // TtsTrace 真机联调：保留名单驱逐防护证据
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_TTS_TRACE,
+                    "保留名单防护 file=${it.name.takeLast(20)} 跳过清理",
+                    level = AppLog.Level.INFO
+                )
                 return@forEach
             }
             val isSilentSound = it.length() == 2160L

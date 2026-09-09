@@ -1,4 +1,4 @@
-﻿package io.legado.app.service
+package io.legado.app.service
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -120,6 +120,7 @@ class TtsPrebuildService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_CANCEL) {
+            AppLog.putDebugWithTag(AppLog.TAG_TTS_TRACE, "prebuildService 通知取消按钮触发", level = AppLog.Level.INFO)
             TtsPrebuildManager.cancelCurrent()
         }
         return START_NOT_STICKY

@@ -58,6 +58,12 @@ object ReadAloud {
         val oldClass = aloudClass
         val newRoute = SpeechRoute.resolveSpeechRoute(ttsEngine)
         val newClass = routeToClass(newRoute)
+        // TtsTrace 真机联调：引擎切换路由判定关键证据（raw 配置 → 解析结果 → 分支走向）
+        AppLog.putDebugWithTag(
+            AppLog.TAG_TTS_TRACE,
+            "upReadAloudClass raw=${ttsEngine?.take(120) ?: "null"} → type=${newRoute.engineType} value=${newRoute.engineValue} sameService=${newClass == oldClass} isRun=${BaseReadAloudService.isRun}",
+            level = AppLog.Level.INFO
+        )
         if (BaseReadAloudService.isRun) {
             if (newClass == oldClass) {
                 // 同服务类型：引擎内重建（reInitTts），不整服务重启（AD-02）
