@@ -25,8 +25,8 @@ object DatabaseMigrations {
             migration_93_94, migration_94_95, migration_95_96, migration_96_97,
             migration_97_98, migration_98_99, migration_99_100, migration_100_101,
             migration_101_102, migration_102_103, migration_103_104, migration_104_105,
-            migration_105_106, migration_106_107, migration_107_108, migration_108_109
-            // 二分排查：migration_109_110 暂摘
+            migration_105_106, migration_106_107, migration_107_108, migration_108_109,
+            migration_109_110
         )
     }
 
