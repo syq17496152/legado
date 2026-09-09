@@ -1131,6 +1131,8 @@ class BookInfoActivity :
                         if (checkBox != null) {
                             LocalConfig.deleteBookOriginal = checkBox.isChecked
                         }
+                        // 删书联动（§3.7.4 红队 R5-3）：取消该书预合成任务+清空名单，防幽灵 bookKey 空转
+                        io.legado.app.help.readaloud.prebuild.TtsPrebuildManager.cancelByBook(book.bookUrl)
                         SourceCallBack.callBackBook(SourceCallBack.DEL_BOOK_SHELF, viewModel.bookSource, book) //确认后删除书架
                         viewModel.delBook(LocalConfig.deleteBookOriginal) {
                             setResult(RESULT_OK)

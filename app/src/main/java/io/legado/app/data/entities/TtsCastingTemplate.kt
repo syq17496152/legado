@@ -21,7 +21,8 @@ data class TtsCastingTemplate(
     var enabled: Boolean = true,
     @ColumnInfo(name = "sortOrder", defaultValue = "0")
     var sortOrder: Int = 0,
-    // 规则数组 JSON：[{tag, match:{type: builtin_quote|regex|keyword, pattern}, sourceJson, prosody:{rate,pitch,volume}}]
+    // 规则数组 JSON（CastingRulesWrapper 扁平结构，与 CastingRule 序列化一致）：
+    // {"schemaVersion":1,"rules":[{tag, matchType: builtin_quote|regex|keyword, pattern, sourceJson, prosody:{rate,pitch,volume}}]}
     @ColumnInfo(defaultValue = "")
     var rulesJson: String = "",
     // 兜底声源（SpeechRoute JSON）：声源失败段级回退目标

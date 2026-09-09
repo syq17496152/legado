@@ -1,0 +1,383 @@
+﻿package io.legado.app.help.readaloud.prebuild
+
+import android.content.Context
+import io.legado.app.constant.AppLog
+import io.legado.app.data.appDb
+import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.HttpTTS
+import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.ContentProcessor
+import io.legado.app.help.readaloud.casting.TtsCastingStore
+import io.legado.app.help.config.AppConfig
+import io.legado.app.model.ReadBook
+import io.legado.app.utils.getPrefBoolean
+import splitties.init.appCtx
+
+import io.legado.app.ui.book.read.page.provider.ChapterProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * 批量预合成状态（StateFlow 载体）
+ * generation=任务代际 id（服务实例轮询按代际过滤，防旧实例误渲染）
+ */
+data class TtsPrebuildState(
+    val generation: Long = 0,
+    val bookKey: String = "",
+    val bookName: String = "",
+    val phase: Phase = Phase.IDLE,
+    val currentUnit: Int = 0,
+    val totalUnit: Int = 0,
+    val failedCount: Int = 0,
+    val message: String = ""
+) {
+    enum class Phase { IDLE, SCANNING, RUNNING, DONE, FAILED, CANCELLED }
+}
+
+/**
+ * 批量预合成队列单例（P2-7，AD-15，§3.7.2）：
+ * - 内存态不持久化（Room v110 冻结；任务可重建，音频产物才是资产）
+ * - 全局单队列 FIFO：多本书发起=排队追加
+ * - 参数快照：入队锁定键参数全集，任务期内切引擎/改模板/调语速不影响进行中任务
+ * - 失败语义：网络/引擎错误单单元重试 1 次后跳过计入失败明细；IO/磁盘满类连续 3 单元失败→任务级中止；
+ *   AD-08 降级链不适用于批量链（失败即跳过）
+ * - 播放优先租约+原子提交+键单源+保留名单=并发防护四件套（§3.7.3）
+ * - 单写者状态机：终态仅由 worker 感知 cancelFlag 后落笔，终态展示后定时复位 IDLE
+ * - 可测性：租约判定/账目计算抽纯函数（leaseDecision/buildAccount），object 仅装配
+ */
+object TtsPrebuildManager {
+
+    /** 预合成保留名单：已落盘预合成文件名集合（removeCacheFile/清理跳过；按 rename 成功事实登记） */
+    val reservedKeys = ConcurrentHashMap<String, Long>()
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val _state = MutableStateFlow(TtsPrebuildState())
+    val state: StateFlow<TtsPrebuildState> = _state
+
+    /** 进行中/排队任务簿：bookKey→任务（重复发起去重依据） */
+    private val activeTasks = LinkedHashMap<String, PrebuildTask>()
+    private val cancelFlags = ConcurrentHashMap<String, AtomicBoolean>()
+    private var workerJob: Job? = null
+    private var generation = 0L
+
+    /** 单批章数上限（兼顾 Android 15 dataSync 6h 时限与内存） */
+    const val MAX_BATCH_CHAPTERS = 200
+
+    /** 内部任务（参数快照全集） */
+    private data class PrebuildTask(
+        val generation: Long,
+        val book: Book,
+        val bookKey: String,
+        val start: Int,
+        val end: Int,
+        val engineKey: String,
+        val httpTts: HttpTTS?,
+        val voiceKey: String,
+        val speechRate: Int,
+        val readAloudByPage: Boolean
+    )
+
+    /**
+     * 入队（发起链）：预检去重+参数快照+FIFO 排队
+     * @return null=成功入队；非 null=拒绝原因
+     */
+    fun enqueue(
+        context: Context,
+        book: Book,
+        start: Int,
+        end: Int,
+        httpTts: HttpTTS
+    ): String? {
+        val endC = end.coerceAtMost(start + MAX_BATCH_CHAPTERS - 1)
+        if (end - start + 1 > MAX_BATCH_CHAPTERS) {
+            return context.getString(io.legado.app.R.string.tts_casting_prebuild_too_many)
+        }
+        val bookKey = book.bookUrl
+        synchronized(activeTasks) {
+            // 重复发起去重：同书任务进行中/排队→拒绝
+            if (activeTasks.containsKey(bookKey)) {
+                return context.getString(io.legado.app.R.string.tts_casting_prebuild_duplicate)
+            }
+            generation++
+            val task = PrebuildTask(
+                generation = generation,
+                book = book,
+                bookKey = bookKey,
+                start = start,
+                end = endC,
+                engineKey = httpTts.id.toString(),
+                httpTts = httpTts,
+                voiceKey = readVoiceKey(),
+                speechRate = AppConfig.ttsSpeechRate,
+                readAloudByPage = appCtx.getPrefBoolean(io.legado.app.constant.PreferKey.readAloudByPage)
+            )
+            activeTasks[bookKey] = task
+            cancelFlags[bookKey] = AtomicBoolean(false)
+        }
+        ensureWorker()
+        return null
+    }
+
+    /** 当前声源 voiceKey（toneID，哨兵解析后维度；与键单源同口径） */
+    private fun readVoiceKey(): String {
+        return runCatching {
+            io.legado.app.help.readaloud.speech.SpeechRoute
+                .resolveSpeechRoute(io.legado.app.help.readaloud.casting.ReadAloudDelegate.currentTtsEngineRaw())
+                .toneID
+        }.getOrDefault("")
+    }
+
+    /** 按书取消（缓存清理/删书联动）：置 cancelFlag，worker 感知后落终态 */
+    fun cancelByBook(bookKey: String) {
+        cancelFlags[bookKey]?.set(true)
+    }
+
+    /** 取消当前进行中任务（通知/页面取消按钮） */
+    fun cancelCurrent() {
+        synchronized(activeTasks) {
+            activeTasks.keys.firstOrNull()?.let { cancelFlags[it]?.set(true) }
+        }
+    }
+
+    /** 清空全部任务与保留名单（缓存管理页整目录清理联动） */
+    fun cancelAllAndClearReserved() {
+        cancelFlags.values.forEach { it.set(true) }
+        reservedKeys.clear()
+    }
+
+    /** 从保留名单移除指定键（清理后未完成单元可重新合成） */
+    fun removeReserved(key: String) {
+        reservedKeys.remove(key)
+    }
+
+    /**
+     * 租约判定纯函数（§3.7.3-1，可 JVM 单测）：
+     * @param curChapterIndex 当前朗读章索引（null=未在朗读该书/章节未知）
+     * @param nextChapterIndex 正在预下载的下一章索引（null=无）
+     * @param taskChapterIndex 任务当前推进章索引
+     * @param deferredRounds 已延后轮数
+     * @return Pair(是否延后, 新延后轮数)：延后 3 轮上限后强制执行（防任务永不完成）
+     */
+    fun leaseDecision(
+        curChapterIndex: Int?,
+        nextChapterIndex: Int?,
+        taskChapterIndex: Int,
+        deferredRounds: Int
+    ): Pair<Boolean, Int> {
+        val leased = curChapterIndex == taskChapterIndex ||
+            nextChapterIndex == taskChapterIndex
+        if (!leased) return false to deferredRounds
+        return if (deferredRounds < DEFER_MAX_ROUNDS) {
+            true to deferredRounds + 1
+        } else {
+            false to deferredRounds
+        }
+    }
+
+    /** 账目纯函数：剩余待合成/总单元（入队预扫描口径） */
+    fun buildAccount(totalUnit: Int, doneUnit: Int, failedUnit: Int): Pair<Int, Int> {
+        val remaining = (totalUnit - doneUnit - failedUnit).coerceAtLeast(0)
+        return remaining to totalUnit
+    }
+
+    private const val DEFER_MAX_ROUNDS = 3
+
+    /** 串行 worker：FIFO 消费任务簿（单写者：终态仅 worker 落笔） */
+    private fun ensureWorker() {
+        if (workerJob?.isActive == true) return
+        workerJob = scope.launch {
+            while (true) {
+                val task = synchronized(activeTasks) {
+                    activeTasks.entries.firstOrNull()?.value
+                } ?: break
+                runTask(task)
+                synchronized(activeTasks) { activeTasks.remove(task.bookKey) }
+                cancelFlags.remove(task.bookKey)
+            }
+        }
+    }
+
+    /** 执行单个预合成任务（S9-1 主链） */
+    private suspend fun runTask(task: PrebuildTask) {
+        val flag = cancelFlags[task.bookKey] ?: return
+        val gen = task.generation
+        fun setState(phase: TtsPrebuildState.Phase, current: Int = 0, total: Int = 0, failed: Int = 0, msg: String = "") {
+            _state.value = TtsPrebuildState(gen, task.bookKey, task.book.name, phase, current, total, failed, msg)
+        }
+        setState(TtsPrebuildState.Phase.SCANNING)
+        val processor = ContentProcessor.get(task.book.name, task.book.origin)
+        var totalUnit = 0
+        val unitList = mutableListOf<Pair<Int, String>>() // chapterIndex to unitText
+        try {
+            // 懒切分+预扫描（worker 内异步执行，发起链零阻塞；扫描期进度="统计中"）
+            for (index in task.start..task.end) {
+                currentCoroutineContext().ensureActive()
+                if (flag.get()) {
+                    finishTask(task, TtsPrebuildState.Phase.CANCELLED, totalUnit, 0, "已取消")
+                    return
+                }
+                val bookChapter = appDb.bookChapterDao.getChapter(task.book.bookUrl, index) ?: continue
+                val content = BookHelp.getContent(task.book, bookChapter) ?: continue
+                val bookContent = processor.getContent(task.book, bookChapter, content, reSegment = false)
+                val textChapter = ChapterProvider.getTextChapterAsync(
+                    scope, task.book, bookChapter, bookChapter.title, bookContent,
+                    appDb.bookChapterDao.getChapterCount(task.book.bookUrl)
+                )
+                val contentList = textChapter.getNeedReadAloud(0, task.readAloudByPage, 0)
+                    .splitToSequence("\n")
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                contentList.forEachIndexed { unitIndex, text ->
+                    val fileName = TtsCacheKeys.ttsSpeakFileName(
+                        engineKey = task.engineKey,
+                        speedKey = task.speechRate.toString(),
+                        voiceKey = task.voiceKey,
+                        chapterIndex = index,
+                        chapterTitle = bookChapter.title,
+                        unitText = text
+                    )
+                    unitList.add(index to text)
+                    unitFileNames.add(fileName)
+                }
+            }
+            if (unitList.isEmpty()) {
+                finishTask(task, TtsPrebuildState.Phase.DONE, 0, 0, "无可合成内容（正文未缓存或全部已命中）")
+                return
+            }
+            // 逐单元合成
+            var done = 0
+            var failed = 0
+            var consecutiveIoFail = 0
+            val deferredRounds = mutableMapOf<Int, Int>()
+            setState(TtsPrebuildState.Phase.RUNNING, 0, unitList.size)
+            unitList.forEachIndexed { unitIdx, (chapterIndex, unitText) ->
+                currentCoroutineContext().ensureActive()
+                if (flag.get()) {
+                    finishTask(task, TtsPrebuildState.Phase.CANCELLED, unitIdx, unitList.size, "已取消")
+                    return
+                }
+                // 播放优先租约（当前章+下一章；3 轮延后上限后强制跳过）
+                val (defer, rounds) = leaseDecision(
+                    currentChapterIndex(), nextChapterIndex(), chapterIndex,
+                    deferredRounds[chapterIndex] ?: 0
+                )
+                if (defer) {
+                    deferredRounds[chapterIndex] = rounds
+                    done++
+                    updateProgress(task, gen, unitIdx + 1, unitList.size, failed)
+                    return@forEachIndexed
+                }
+                val fileName = unitFileNames[unitIdx]
+                if (reservedKeys.containsKey(fileName) || hasTargetFile(task, fileName)) {
+                    // 幂等跳过（播放端实时产物互认）
+                    done++
+                    updateProgress(task, gen, unitIdx + 1, unitList.size, failed)
+                    return@forEachIndexed
+                }
+                val target = targetFile(task, fileName)
+                val result = TtsSynthesizer.synthesizeToFile(
+                    task.httpTts ?: return@forEachIndexed,
+                    unitText, task.voiceKey, task.speechRate, target
+                )
+                when (result) {
+                    is TtsSynthesizer.Result.Success -> {
+                        reservedKeys[fileName] = System.currentTimeMillis()
+                        consecutiveIoFail = 0
+                    }
+                    is TtsSynthesizer.Result.Failure -> {
+                        failed++
+                        AppLog.put("TTS 预合成失败（章 $chapterIndex）：${result.reason}")
+                        if (!result.retryable && ++consecutiveIoFail >= 3) {
+                            // IO/磁盘满类系统性故障：任务级中止（防逐单元空转）
+                            finishTask(task, TtsPrebuildState.Phase.FAILED, unitIdx + 1, unitList.size, "连续 IO 失败：${result.reason}")
+                            return
+                        }
+                    }
+                }
+                updateProgress(task, gen, unitIdx + 1, unitList.size, failed)
+            }
+            finishTask(task, TtsPrebuildState.Phase.DONE, unitList.size, unitList.size, "")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            finishTask(task, TtsPrebuildState.Phase.CANCELLED, 0, 0, "已取消")
+            throw e
+        } catch (e: Exception) {
+            AppLog.put("TTS 预合成任务异常：${e.message}")
+            finishTask(task, TtsPrebuildState.Phase.FAILED, totalUnit, 0, e.message ?: "未知异常")
+        } finally {
+            unitFileNames.clear()
+        }
+    }
+
+    /** 单元文件名暂存（预扫描产物，与 unitList 同序） */
+    private val unitFileNames = mutableListOf<String>()
+
+    private fun updateProgress(task: PrebuildTask, gen: Long, current: Int, total: Int, failed: Int) {
+        _state.value = TtsPrebuildState(gen, task.bookKey, task.book.name, TtsPrebuildState.Phase.RUNNING, current, total, failed)
+    }
+
+    /** 终态落笔（单写者）+定时复位 IDLE */
+    private fun finishTask(task: PrebuildTask, phase: TtsPrebuildState.Phase, current: Int, total: Int, msg: String) {
+        _state.value = TtsPrebuildState(task.generation, task.bookKey, task.book.name, phase, current, total, 0, msg)
+        scope.launch {
+            delay(10_000L)
+            if (_state.value.generation == task.generation &&
+                _state.value.phase != TtsPrebuildState.Phase.IDLE &&
+                _state.value.phase != TtsPrebuildState.Phase.RUNNING
+            ) {
+                _state.value = TtsPrebuildState()
+            }
+        }
+    }
+
+    /** 租约数据源：当前朗读章/预下载下一章（跨书任务无租约） */
+    private fun currentChapterIndex(): Int? {
+        val bookUrl = ReadBook.book?.bookUrl ?: return null
+        val taskBookKey = _state.value.bookKey
+        if (bookUrl != taskBookKey) return null
+        return ReadBook.curTextChapter?.chapter?.index
+    }
+
+    private fun nextChapterIndex(): Int? {
+        val bookUrl = ReadBook.book?.bookUrl ?: return null
+        val taskBookKey = _state.value.bookKey
+        if (bookUrl != taskBookKey) return null
+        return ReadBook.nextTextChapter?.chapter?.index
+    }
+
+    private fun hasTargetFile(task: PrebuildTask, fileName: String): Boolean {
+        return File(ttsFolderPath(task), "$fileName.mp3").exists()
+    }
+
+    private fun targetFile(task: PrebuildTask, fileName: String): File {
+        return File(ttsFolderPath(task), "$fileName.mp3")
+    }
+
+    /** TTS 缓存目录（与 HttpReadAloudService.ttsFolderPath 同口径：cacheDir/httpTTS） */
+    private fun ttsFolderPath(task: PrebuildTask): String {
+        val path = "${appCtx.cacheDir.absolutePath}/httpTTS/"
+        val dir = File(path)
+        if (!dir.exists()) dir.mkdirs()
+        return path
+    }
+
+    /** 任务是否运行中（外部查询：能力门控/管理页） */
+    fun isRunning(bookKey: String? = null): Boolean {
+        val s = _state.value
+        val phaseMatched = s.phase == TtsPrebuildState.Phase.RUNNING || s.phase == TtsPrebuildState.Phase.SCANNING
+        return phaseMatched && (bookKey == null || s.bookKey == bookKey)
+    }
+
+    private const val HTTP_TTS_DIR = "httpTTS"
+}

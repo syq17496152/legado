@@ -57,7 +57,7 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
     }
 
     /**
-     * 删除分项缓存。视频目录在播放中时加锁拒绝删除
+     * 删除分项缓存。视频目录在播放中时加锁拒绝删除；音频目录在朗读中时同样拒绝（红队 B12 对齐视频保护）
      */
     fun deleteStorageTarget(detail: CacheStorageDetail): Coroutine<Boolean> {
         return execute(context = IO) {
@@ -65,6 +65,15 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
                 if (isVideoPlaying()) {
                     return@execute false
                 }
+            }
+            val isAudioTarget = detail.deletePaths.any { it.contains("httpTTS") }
+            if (isAudioTarget) {
+                // 音频维度保护：朗读中拒绝清理（清理动作触发播放侧文件删除会打断合成回放链）
+                if (isReadAloudRunning()) {
+                    return@execute false
+                }
+                // 清理联动（§3.7.4）：取消全部预合成任务+清空保留名单，防幽灵文件与误判 has()
+                io.legado.app.help.readaloud.prebuild.TtsPrebuildManager.cancelAllAndClearReserved()
             }
             val before = detail.deletePaths.sumOf { directorySize(File(it)) }
             detail.deletePaths.forEach { path ->
@@ -93,6 +102,13 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
     private fun isVideoPlaying(): Boolean {
         return kotlin.runCatching {
             com.shuyu.gsyvideoplayer.GSYVideoManager.instance()?.isPlaying() == true
+        }.getOrDefault(false)
+    }
+
+    /** 朗读运行标志（音频维度播放中保护）：服务存续即视为运行中（含暂停态，文件被删会打断恢复链） */
+    private fun isReadAloudRunning(): Boolean {
+        return kotlin.runCatching {
+            io.legado.app.service.BaseReadAloudService.isRun
         }.getOrDefault(false)
     }
 }

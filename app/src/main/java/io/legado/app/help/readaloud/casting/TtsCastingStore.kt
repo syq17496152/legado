@@ -5,6 +5,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.TtsCastingTemplate
 import io.legado.app.help.readaloud.speech.SpeechRoute
+import io.legado.app.help.readaloud.speech.SpeechRouteSanitizer
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getPrefString
@@ -27,21 +28,30 @@ object TtsCastingStore {
     @Volatile
     private var activeRuleSet: CastingRuleSet? = null
 
+    /** 快照缓存键（期2 修复：含书级覆盖维度，防 A 书覆盖串到 B 书） */
+    @Volatile
+    private var activeRuleSetCacheKey: String? = null
+
     suspend fun all(): List<TtsCastingTemplate> = appDb.ttsCastingTemplateDao.all()
 
     suspend fun get(id: String): TtsCastingTemplate? = appDb.ttsCastingTemplateDao.get(id)
 
     suspend fun save(template: TtsCastingTemplate) {
         appDb.ttsCastingTemplateDao.insert(template)
+        // 编辑器保存热生效：写入口统一收敛失效（四路写入口联动链口径）
+        invalidateSnapshot()
     }
 
     suspend fun deleteById(id: String) {
         if (activeTemplateId == id) {
             activeTemplateId = null
             activeRuleSet = null
+            activeRuleSetCacheKey = null
             appCtx.putPrefString(PreferKey.ttsCastingActiveId, "")
         }
         appDb.ttsCastingTemplateDao.deleteById(id)
+        // 删除模板后书级覆盖引用由 resolve 侧空安全兜底回退（AD-13），快照必须失效
+        invalidateSnapshot()
     }
 
     /** 激活模板（全局默认）：空=单声（builtin_mono 语义） */
@@ -70,35 +80,71 @@ object TtsCastingStore {
             PreferKey.ttsCastingBookOverridePrefix + bookKey,
             templateId ?: ""
         )
+        // 书级覆盖写入口收敛失效（四路写入口联动链口径：书级覆盖切换立即生效）
+        invalidateSnapshot()
     }
 
     /**
      * 解析当前生效模板的规则集（含 current 哨兵替换，§3.5.1）
      * 返回 null=多人模式未启用（未激活模板）
+     * 快照缓存键控=(书级覆盖 id, 模板 id) 二元组：同书同模板命中缓存，跨书/覆盖变更重读 Room
      */
     suspend fun resolveActiveRuleSet(bookKey: String): CastingRuleSet? {
-        activeRuleSet?.let { return it }
         val templateId = resolveActiveTemplateId(bookKey) ?: return null
+        val overrideId = appCtx.getPrefString(PreferKey.ttsCastingBookOverridePrefix + bookKey)
+            ?.ifBlank { null }
+        val cacheKey = "override:$overrideId|template:$templateId"
+        val cached = activeRuleSet
+        if (cached != null && activeRuleSetCacheKey == cacheKey) {
+            return cached
+        }
         val entity = appDb.ttsCastingTemplateDao.get(templateId) ?: return null
         val ruleSet = CastingRuleSet.fromEntity(entity) ?: return null
         activeRuleSet = ruleSet
+        activeRuleSetCacheKey = cacheKey
         return ruleSet
     }
 
-    /** 使快照失效（模板编辑/导入/切换后调用，下一次 resolve 重读） */
+    /** 使快照失效（模板编辑/导入/切换/书级覆盖变更后调用，下一次 resolve 重读） */
     fun invalidateSnapshot() {
         activeRuleSet = null
+        activeRuleSetCacheKey = null
     }
 
     /**
      * tag → 声源解析（§3.5.5 六级链）：AI 角色绑定 > cast_role > 选角模板规则 > 性别兜底 > narrator > 默认
-     * 本期（期1）实现：模板规则首命中 → current 哨兵替换 → fallbackSource；L-d AI 链期2 接入角色绑定级
+     * 期2：前两级仅在 tag 带 ai: 前缀时激活（characterId 由 AI 分镜段传入，既有调用方默认 0 零改动）
      */
     suspend fun resolveSourceForTag(
         bookKey: String,
         tag: String,
-        ruleSet: CastingRuleSet
+        ruleSet: CastingRuleSet,
+        characterId: Long = 0L
     ): SpeechRoute? {
+        // 前两级激活闸：ai: 命名空间 + characterId>0（AI 分镜段才携带）
+        if (characterId > 0L && tag.startsWith(CastingTag.AI_PREFIX)) {
+            // ① BookCharacter 显式绑定：角色 speechRouteJson 经校验后命中
+            runCatching {
+                appDb.bookCharacterDao.getCharacter(characterId)?.let { character ->
+                    SpeechRouteSanitizer.validOrNull(SpeechRoute.fromJson(character.speechRouteJson))
+                        ?.takeIf { it.isConfigured }
+                        ?.let { return it }
+                }
+            }.onFailure {
+                AppLog.put("TTS 选角角色绑定解析失败：${it.message}")
+            }
+            // ② cast_role 每书角色绑定：按角色名查询本书绑定（写入经 AI 链既有 AUTO 收编路径）
+            val roleName = tag.removePrefix(CastingTag.AI_PREFIX)
+            runCatching {
+                appDb.bookCharacterDao.getCharacter(bookKey, roleName)?.let { character ->
+                    SpeechRouteSanitizer.validOrNull(SpeechRoute.fromJson(character.speechRouteJson))
+                        ?.takeIf { it.isConfigured }
+                        ?.let { return it }
+                }
+            }.onFailure {
+                AppLog.put("TTS cast_role 绑定解析失败：${it.message}")
+            }
+        }
         // 模板规则：数组顺序首命中（§3.5.1 优先级语义）
         val rule = ruleSet.rules.firstOrNull { it.tag == tag }
         if (rule != null) {
@@ -169,6 +215,91 @@ object TtsCastingStore {
         if (imported > 0) invalidateSnapshot()
         return imported to skipped
     }
+
+    /**
+     * 导出模板为分享 JSON（文件/剪贴板双通道由宿主承接）
+     * 结构=CastingRulesWrapper（schemaVersion+rules），对齐 tts-server 分享习惯
+     */
+    fun exportToJson(ruleSet: CastingRuleSet): String {
+        val wrapper = CastingRuleSet.CastingRulesWrapper(
+            schemaVersion = CastingRuleSet.SCHEMA_VERSION,
+            rules = ruleSet.rules
+        )
+        return GSON.toJson(wrapper)
+    }
+
+    /** 导入结果（编辑器 IMPORT 态呈现依据） */
+    data class ImportResult(
+        val imported: Int = 0,
+        val keptBoth: Int = 0,
+        val pendingBinding: Int = 0,
+        val error: String? = null
+    )
+
+    /**
+     * 导入校验链（顺序固定，§3.2-14/15）：
+     * ignoreUnknownKeys 容错解析 → schemaVersion 超前拒绝 → 同通道/保留字/regex 预编译/pattern 限长校验
+     * → 声源可达性校验（缺声源规则标记"待绑定"而非静默生效）→ 幂等写入（builtin 跳过+计数 / 自定义冲突 KEEP_BOTH）
+     * → invalidateSnapshot()
+     */
+    suspend fun importFromJson(json: String, name: String): ImportResult {
+        val wrapper = runCatching {
+            GSON.fromJsonObject<CastingRuleSet.CastingRulesWrapper>(json).getOrThrow()
+        }.getOrElse {
+            return ImportResult(error = "JSON 解析失败：${it.message}")
+        }
+        val schemaVersion = wrapper.schemaVersion
+        if (schemaVersion > CastingRuleSet.SCHEMA_VERSION) {
+            return ImportResult(error = "模板版本（schema $schemaVersion）高于当前版本，请升级 App 后导入")
+        }
+        val rules = wrapper.rules
+        if (rules.isEmpty()) {
+            return ImportResult(error = "模板无有效规则行")
+        }
+        // ReDoS 防护：pattern 限长 + regex 预编译
+        for (rule in rules) {
+            if (rule.pattern.length > MAX_PATTERN_LENGTH) {
+                return ImportResult(error = "规则 pattern 超过 ${MAX_PATTERN_LENGTH} 字符限长（tag=${rule.tag}）")
+            }
+            if (rule.matchType == CastingMatchType.REGEX) {
+                runCatching { Regex(rule.pattern) }.getOrElse {
+                    return ImportResult(error = "非法正则（tag=${rule.tag}）：${it.message}")
+                }
+            }
+        }
+        // 同通道校验（跨通道组合拒绝导入）
+        if (!CastingRuleSet(rules = rules, name = name).sameChannel()) {
+            return ImportResult(error = "同通道约束：规则内全部声源须为同一引擎类型（跨通道组合拒绝导入）")
+        }
+        // 声源可达性校验：缺声源规则标记"待绑定"（sourceJson 保留，UI 呈现待绑定态）
+        var pendingBinding = 0
+        for (rule in rules) {
+            if (!rule.sourceValid) pendingBinding++
+        }
+        // 幂等写入：新模板 id（导入即新建，冲突 KEEP_BOTH）
+        val templateId = "import_${System.currentTimeMillis()}"
+        val entity = TtsCastingTemplate(
+            id = templateId,
+            name = name.ifBlank { "导入模板" },
+            builtin = false,
+            enabled = true,
+            sortOrder = 0,
+            rulesJson = GSON.toJson(
+                CastingRuleSet.CastingRulesWrapper(
+                    schemaVersion = CastingRuleSet.SCHEMA_VERSION,
+                    rules = rules
+                )
+            ),
+            fallbackSourceJson = "",
+            lastUpdateTime = System.currentTimeMillis()
+        )
+        appDb.ttsCastingTemplateDao.insert(entity)
+        invalidateSnapshot()
+        return ImportResult(imported = 1, pendingBinding = pendingBinding)
+    }
+
+    /** pattern 限长（ReDoS 防护第一道，§3.2-15） */
+    const val MAX_PATTERN_LENGTH = 256
 }
 
 /**

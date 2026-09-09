@@ -35,6 +35,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.exoplayer.InputStreamDataSource
 import io.legado.app.help.http.okHttpClient
+import io.legado.app.help.readaloud.prebuild.TtsCacheKeys
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.model.analyzeRule.AnalyzeUrl
@@ -569,10 +570,22 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun createSpeakFile(name: String, inputStream: InputStream) {
-        FileUtils.createFileIfNotExist("${ttsFolderPath}$name.mp3").outputStream().use { out ->
-            inputStream.use {
-                it.copyTo(out)
+        // 单一原子提交（§3.7.1-4 契约 5）：temp+rename，防半成品被播放读取
+        val target = FileUtils.createFileIfNotExist("${ttsFolderPath}$name.mp3")
+        val temp = File("${ttsFolderPath}$name.mp3.part")
+        kotlin.runCatching {
+            temp.outputStream().use { out ->
+                inputStream.use {
+                    it.copyTo(out)
+                }
             }
+            if (!temp.renameTo(target)) {
+                temp.copyTo(target, overwrite = true)
+                temp.delete()
+            }
+        }.onFailure {
+            temp.delete()
+            throw it
         }
     }
 
@@ -582,6 +595,12 @@ class HttpReadAloudService : BaseReadAloudService(),
     private fun removeCacheFile() {
         val titleMd5 = MD5Utils.md5Encode16(textChapter?.title ?: "")
         FileUtils.listDirsAndFiles(ttsFolderPath)?.forEach {
+            // 预合成保留名单（§3.7.1-7）：名单内产物任何情况不被清理驱逐（用户主动生成的资产）
+            val isReserved = io.legado.app.help.readaloud.prebuild.TtsPrebuildManager.reservedKeys
+                .containsKey(it.name.removeSuffix(".mp3"))
+            if (isReserved) {
+                return@forEach
+            }
             val isSilentSound = it.length() == 2160L
             if ((!it.name.startsWith(titleMd5)
                         && System.currentTimeMillis() - it.lastModified() > 600000)

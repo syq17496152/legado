@@ -1,4 +1,4 @@
-package io.legado.app.ui.book.read
+﻿package io.legado.app.ui.book.read
 
 import android.annotation.SuppressLint
 import android.content.ClipData
@@ -129,6 +129,7 @@ import io.legado.app.ui.book.character.BookCharacterManageActivity
 import io.legado.app.ui.book.info.BookInfoStartActivityContract
 import io.legado.app.ui.highlight.HighlightRuleActivity
 import io.legado.app.ui.book.read.config.AutoReadDialog
+import io.legado.app.ui.book.read.config.TtsPrebuildDialog
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.BG_COLOR
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.TEXT_ACCENT_COLOR
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.TEXT_COLOR
@@ -898,6 +899,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
 
             R.id.menu_download -> showDownloadDialog()
+            R.id.menu_tts_prebuild -> showTtsPrebuildDialog()
             R.id.menu_add_bookmark -> addBookmark()
             R.id.menu_highlight_rule -> startActivity<HighlightRuleActivity>()
             R.id.menu_simulated_reading -> showSimulatedReading()
@@ -4562,6 +4564,11 @@ class ReadBookActivity : BaseReadBookActivity(),
             binding.readView.isTextSelected = true
             isSelectingSearchResult = false
         }
+    }
+
+    /** 批量预合成发起（P2-7）：门控三条件预检在 Dialog 内执行 */
+    private fun showTtsPrebuildDialog() {
+        showDialogFragment(TtsPrebuildDialog.newInstance())
     }
 
     override fun addBookmark() {
