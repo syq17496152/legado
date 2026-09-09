@@ -11,6 +11,21 @@
 
 ## 核心规则
 
+### R0: 迁移摘除三查铁律（2026-09-09 新增，铁证：109→110 覆盖安装闪退）
+
+**背景**：migration_109_110 曾在排查期被临时从 `DatabaseMigrations.migrations` 数组摘除（注释"二分排查：暂摘"），随后被正式提交带进主干——AppDatabase version=110 但迁移链断链，**所有 v109 老库用户覆盖安装即闪退**（"A migration from 109 to 110 was required but not found"），且编译/单测/模拟器全新安装全绿无法发现（全新安装不触发 migration）。
+
+**三查铁律（任何任务结束时逐条过）**：
+1. **摘必挂**：因排查/调试临时摘除 migration 数组条目时，必须在**同一会话内**回挂；禁止跨提交携带"暂摘"状态（`git log -S "暂摘\|二分"` 可审计）
+2. **版本=链长**：`AppDatabase.version` 每次递增 N，`migrations` 数组必须存在对应 `migration_(version-1)_version`；提交前 Grep 校验：
+   ```bash
+   # version=110 时应命中 migration_109_110（两处：定义 + 数组引用）
+   rg "migration_109_110" app/src/main/java/io/legado/app/data/DatabaseMigrations.kt  # 期望 ≥2 处
+   ```
+3. **旧库实测**：覆盖安装验证必须用**老版本包装机后再装新包**（或 adb 注入 vN-1 的库），全新安装永远验证不了 migration 缺失；模拟器覆盖安装流程见 ai_e2e_testing_workflow
+
+**自查口诀**：改了 version 却没跑通老库升级 = 必闪退；"编译绿+新装绿"不等于"覆盖安装绿"。
+
 ### R1: DatabaseView 修改必须 DROP+CREATE 重建
 
 修改 `@DatabaseView` 注解的 SQL 后，必须在对应的 migration 中执行：
