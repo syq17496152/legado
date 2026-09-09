@@ -425,15 +425,14 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
         }
     }
 
-    /** 多人听书模板循环切换（期1 极简入口：点击在 内置4模板→关闭 间循环） */
+    /** 多人听书模板循环切换（兼容入口：点击在 可用模板→关闭 间循环，过滤 enabled=false 项） */
     private fun cycleTtsCastingTemplate() {
-        val order = listOf(
-            CastingRuleSet.BUILTIN_DUAL_VOICE,
-            CastingRuleSet.BUILTIN_MALE_FEMALE,
-            CastingRuleSet.BUILTIN_MULTITTS_PASSTHROUGH,
-            CastingRuleSet.BUILTIN_MONO,
-            null
-        )
+        val enabledTemplates = runCatching {
+            kotlinx.coroutines.runBlocking { TtsCastingStore.all() }
+        }.getOrDefault(emptyList())
+            .filter { it.enabled }
+            .map { it.id }
+        val order = enabledTemplates + listOf<String?>(null)
         val current = TtsCastingStore.activeTemplateId()
         val index = order.indexOf(current)
         val next = order[(index + 1).mod(order.size)]
@@ -455,9 +454,23 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
         val loudnessCount = ReadAloudSpeakerLoudnessManager.learnedSpeakerCount()
         return listOf(
             action(
+                key = "ttsCastingPickerEntry",
+                title = "模板选择与管理",
+                summary = ttsCastingSummary(),
+                onClick = {
+                    // P2-1 主入口：列表选择器（书级覆盖/管理入口内聚）
+                    showDialogFragment(
+                        TtsCastingPickerDialog.newInstance(
+                            io.legado.app.model.ReadBook.book?.bookUrl,
+                            io.legado.app.model.ReadBook.book?.name
+                        )
+                    )
+                }
+            ),
+            action(
                 key = KEY_TTS_CASTING_TEMPLATE,
                 title = "多人听书模板",
-                summary = ttsCastingSummary(),
+                summary = "点击循环切换（兼容期 1 操作习惯，与选择器双向同步）",
                 onClick = ::cycleTtsCastingTemplate
             ),
             switch(

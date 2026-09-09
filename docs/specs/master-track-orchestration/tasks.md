@@ -77,7 +77,6 @@
 - [x] 2.14 subpage-topbar-unify × compose B4 待迁页互斥声明（X2）✅ 2026-09-01
   - [x] 2.14.1 对照 B4 待迁页名单（B5/B14/B15/D2/D3/D5/D7）与顶栏 spec 页名单求交集 —— 交集={B14 ExploreShowActivity}（唯一命中：顶栏批次 C 4.2 `activity_explore_show`；易混淆项已核验排除——顶栏 4.6 `activity_source_debug`=BookSourceDebugActivity ≠ D3 RssSourceDebug，顶栏 2.2 `activity_rss_source`=管理列表页 ≠ D2 编辑页）
   - [x] 2.14.2 交集中的页面登记"禁止先换 View 顶栏再整页 Compose"，写入两 spec 门禁 —— B14 门禁声明已写入两 spec.md §X2 + 两 tasks.md 对应行加注（含实况注记：顶栏 4.2 替换已先期完成，收敛口径=B14 整页迁移时顶栏一次性收敛为 Compose，禁回退双栈）
-  - [x] 2.14.3 subpage-topbar-unify v1.2 实施回执挂接（2026-09-07）：TopBarConfig.resolvePageBarColor 顶栏语义色单源落地（AD-01/AD-05，对标 NG topBarContainer）+ConfigTopBar 消灭（AD-04）+MainTopBarView SUB 取色单源化——**B 波次迁移收益**：Mode.SUB 22 页随页面 Compose 化逐页消亡时顶栏颜色零迁移成本（消费同一单源函数即可），B14 ExploreShowActivity 门禁声明继续有效
 
 ## 3. W2 地基与样板
 

@@ -23,6 +23,12 @@
             android:title="@string/offline_cache"
             app:showAsAction="always" />
 
+        <item
+            android:id="@+id/menu_tts_prebuild"
+            android:icon="@drawable/ic_volume_up"
+            android:title="@string/tts_casting_prebuild_menu"
+            app:showAsAction="never" />
+
     </group>
 
     <group android:id="@+id/menu_group_text">

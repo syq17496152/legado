@@ -727,3 +727,42 @@ sequenceDiagram
 | `docs/INDEX.md` / `docs/project-flow/task-navigation.md` | 修改 | 朗读模块文档锚点同步（朗读引擎路由/脚本引擎/模板库） |
 
 > 数据库迁移约束（database-migration-safety.md）：仅 ALTER TABLE 增列、带默认值、version 递增一档；实施前已核实无 `@DatabaseView` 引用 httpTTS；覆盖安装场景必须真机验证旧数据可读、schema 导出更新。
+
+---
+
+## 8. 实施进度登记（2026-09-09，/goal 6aa03ac1 交付）
+
+> 本节为 §3 蓝图与 §7 File Changes 的**实施事实登记**，作为续篇设计（optimize-tts-engine-phase2）的基线输入。
+
+### 8.1 已交付（分支 feat/optimize-tts-engine @07ffe7a，已推 origin）
+
+| 模块 | 状态 | 实施差异说明（相对本文契约） |
+|------|------|------------------------------|
+| §3.1 resolveSpeechRoute 四态解析 | ✅ 完成 | 增量：坏 JSON（以 { 开头解析失败）→ default；裸包名串 → system 兼容（fromTtsEngineValue 同语义）；JVM 单测 8 用例全绿 |
+| §3.2 系统 TTS 服务（init/看门狗/降级/reInitTts/PendingSwitch） | ✅ 完成 | 每引擎参数经 TtsEngineParamsStore（单 PreferKey 承载，规避动态键游离）；onStop 三路推进闸已实装 |
+| §3.3 脚本引擎协议（TtsScriptEngineClient） | ✅ 完成 | 沙箱经 RhinoClassShutter.withBookSourceClassPolicy(enabled=true) 显式启用；getRuntimeScope(buildScriptBindings)；10s 超时+四字段边界+体积限额 |
+| §3.4 内置引擎模板库（4 个 JS） | ✅ 完成 | 经 SpeakEngineDialog 导入入口（导入后默认未启用） |
+| §3.5 多角色分层与选角模板层 | ✅ 期1 范围 | casting 四类（TtsCastingModel/TagSplitter/Store/VoiceSource）+speakMultiRole 逐段驱动+精确字符账+内置 4 选角模板幂等导入；**期2 简化项见 8.2** |
+| §3.6 并发与缓存键定型项 | ✅ 基础落位 | 缓存键含引擎/voice/speed；批量预合成预留结构未实装（§1.8-D-1 登记后续） |
+| §3.7/3.8 AI 分镜与引擎管理预留契约 | 📋 登记后续 | 本期未实装（见 8.2） |
+| 数据库 v110（httpTTS 增列+ttsCastingTemplates 建表） | ✅ 完成 | 覆盖安装真机验证通过（Migration 109→110 执行日志铁证） |
+| UI 入口 | ✅ 期1 简化版 | 朗读设置"多人听书模板"循环切换 + Scene 闸位解耦；**期2 简化项见 8.2** |
+
+### 8.2 期2 简化项与登记后续（续篇设计 optimize-tts-engine-phase2 输入）
+
+| # | 简化项 | 期2 简化形态 | 完整形态缺口 |
+|---|--------|--------------|--------------|
+| S1 | 模板选择入口 | 朗读设置内循环切换（点一下换下一个模板） | 列表选择器（模板名+摘要+单选）+ Scene 闸位联动摘要 |
+| S2 | 选角模板管理页/编辑器 | 无（仅内置 4 模板，不可编辑） | 管理页（内置只读+复制为自定义+删除）+编辑器（规则行/声源选择/韵律滑条）+JSON 导入导出 |
+| S3 | 音色选择 | 声源仅到引擎级（toneID 空缺省） | 选角模板声源接 SpeechVoiceRoutePicker（音色级）+voices 目录映射 |
+| S4 | 书级模板覆盖 | Store.setBookOverrideTemplateId 能力就绪，无 UI | 书级覆盖 UI+当前书上下文 |
+| S5 | 试听 | 无 | TtsVoicePreviewController 模式移植（600ms 防抖+双 token+临时文件） |
+| S6 | AI 链 routeForCue 服务侧消费 | 未接入（AI 链保持既有行为） | AI 分镜 tag → 选角模板层消费（L-d 完整） |
+| S7 | 批量预合成/缓存管理 | 未实装（§1.8-D-1 已定型） | 任务队列/前台服务/选章 UI/缓存管理页（**期2 v1.1 检查点扩围已纳入 P2-7**，见 optimize-tts-engine-phase2 §3.7/AD-15） |
+
+### 8.3 验证记录
+
+- compileAppDebugKotlin / assembleAppDebug：BUILD SUCCESSFUL（worktree 纯净环境）
+- JVM 单测 262 项：新增 16 用例（SpeechRouteResolveTest 8+TtsTagSplitterTest 8）全绿；RhinoClassShutterTest 3 项限流用例全量运行 flaky（单独运行 PASS，预存特性非本次引入）
+- MEmu 装机 L2 冒烟：覆盖安装 migration 109→110 执行成功（AppLog 铁证）、启动无 FATAL、主界面正常
+- 深度听感 L2（真实书本多人听声）：待用户真机走查

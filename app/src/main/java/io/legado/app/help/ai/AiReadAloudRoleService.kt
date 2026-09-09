@@ -913,7 +913,7 @@ object AiReadAloudRoleService {
         return EnsureResult(AiReadAloudRoleState.STATUS_FAILED, error = "等待多角色分配超时", cacheKey = cacheKey)
     }
 
-    fun routeForCue(
+    suspend fun routeForCue(
         bookUrl: String?,
         chapterIndex: Int,
         cueIndex: Int,
@@ -928,7 +928,30 @@ object AiReadAloudRoleService {
         return routeForSegment(bookUrl, best)
     }
 
-    fun routeForSegment(
+    /**
+     * 分镜段路由（AD-14 收敛）：①前两级=角色绑定（期1 既有链：characterId/name→BookCharacter
+     * speechRouteJson+情绪覆盖）②未命中→tag 规范化 ai: 前缀喂 TtsCastingStore.resolveSourceForTag
+     * 统一链（模板规则首命中→current 哨兵替换→fallback→default），消除平行解析双权威源
+     * 既有调用方零改动（原实现零调用方，升级为 suspend 无回归面）
+     */
+    suspend fun routeForSegment(
+        bookUrl: String?,
+        segment: Segment
+    ): SpeechRoute? {
+        if (bookUrl.isNullOrBlank()) return null
+        // ① 前两级：角色绑定链（期1 既有）
+        characterRoute(bookUrl, segment)?.let { return it }
+        // ② 统一链：tag 规范化后喂模板层（未激活模板时 resolveActiveRuleSet=null→单声兜底）
+        val ruleSet = io.legado.app.help.readaloud.casting.TtsCastingStore.resolveActiveRuleSet(bookUrl)
+            ?: return null
+        val tag = normalizedSegmentTag(segment)
+        return io.legado.app.help.readaloud.casting.TtsCastingStore.resolveSourceForTag(
+            bookUrl, tag, ruleSet, segment.characterId
+        )
+    }
+
+    /** 角色绑定级解析（期1 既有逻辑抽取）：characterId/name→BookCharacter→speechRouteJson+情绪覆盖 */
+    private fun characterRoute(
         bookUrl: String?,
         segment: Segment
     ): SpeechRoute? {
@@ -951,6 +974,20 @@ object AiReadAloudRoleService {
             route.copy(emotionName = emotionName, emotionTag = emotionTag)
         } else {
             route
+        }
+    }
+
+    /** 分镜段 tag 规范化（编辑器与 AI 链共用口径）：角色段挂 ai: 前缀，旁白/对白用保留字 */
+    private fun normalizedSegmentTag(segment: Segment): String {
+        return if (segment.roleType == "character" || segment.roleType == "thought") {
+            val name = segment.characterName.trim()
+            if (name.startsWith(io.legado.app.help.readaloud.casting.CastingTag.AI_PREFIX)) {
+                name
+            } else {
+                io.legado.app.help.readaloud.casting.CastingTag.AI_PREFIX + name
+            }
+        } else {
+            segment.roleType.ifBlank { io.legado.app.help.readaloud.casting.CastingTag.NARRATION }
         }
     }
 

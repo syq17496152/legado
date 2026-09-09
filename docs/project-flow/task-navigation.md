@@ -111,6 +111,12 @@
 | Service 层架构 | [modules/android-services.md](./modules/android-services.md) | - |
 | 朗读服务基类 | `service/BaseReadAloudService.kt` | L72-783 |
 | TTS 朗读 | `service/TTSReadAloudService.kt` | - |
+| TTS 选角模板（数据层） | `help/readaloud/casting/TtsCastingStore.kt` `TtsCastingModel.kt` `TtsTagSplitter.kt` `TtsVoiceSource.kt` | - |
+| TTS 选角管理页/编辑器（UI） | `ui/book/read/config/casting/TtsCastingManageFragment.kt` `TtsCastingEditorScreen.kt` `TtsCastingEditorWidgets.kt` | - |
+| TTS 模板选择器/书级覆盖 | `ui/book/read/config/TtsCastingPickerDialog.kt` | - |
+| TTS 试听控制器 | `ui/book/read/config/casting/TtsVoicePreviewController.kt` | - |
+| TTS 批量预合成 | `help/readaloud/prebuild/TtsPrebuildManager.kt` `TtsSynthesizer.kt` + `service/TtsPrebuildService.kt` + `ui/book/read/config/TtsPrebuildDialog.kt` | - |
+| TTS 缓存键单源 | `help/readaloud/prebuild/TtsCacheKeys.kt` | - |
 | HTTP 朗读 | `service/HttpReadAloudService.kt` | - |
 | 音频播放 | `service/AudioPlayService.kt` | - |
 | 书籍缓存 | `service/CacheBookService.kt` | - |

@@ -1,5 +1,6 @@
 package io.legado.app.help.readaloud.casting
 
+import io.legado.app.constant.AppLog
 import java.util.regex.Pattern
 
 /**
@@ -116,14 +117,48 @@ object TtsTagSplitter {
         bounds: MutableList<Triple<Int, Int, String>>
     ) {
         val pattern = compiledPattern(rule.pattern) ?: return
-        val matcher = pattern.matcher(paragraph)
-        while (matcher.find()) {
-            val start = matcher.start()
-            val end = matcher.end()
-            if (end <= start) continue
-            if ((start until end).any { used[it] }) continue
-            for (j in start until end) used[j] = true
-            bounds.add(Triple(start, end, rule.tag))
+        // ReDoS 读预算熔断：灾难性回溯（如 (a+)+$）在读超预算时抛出，该规则跳过落旁白兜底
+        val matcher = pattern.matcher(BoundedCharSequence(paragraph))
+        runCatching {
+            while (matcher.find()) {
+                val start = matcher.start()
+                val end = matcher.end()
+                if (end <= start) continue
+                if ((start until end).any { used[it] }) continue
+                for (j in start until end) used[j] = true
+                bounds.add(Triple(start, end, rule.tag))
+            }
+        }.onFailure {
+            AppLog.put("TTS 规则正则执行超读预算，跳过该规则（tag=${rule.tag}）：${it.message}")
+        }
+    }
+
+    /**
+     * ReDoS 读预算包装（§3.2-15）：matcher 读取字符计数超阈值即抛出打断回溯
+     * （JVM Matcher 不响应线程中断，读预算是确定性熔断手段；阈值覆盖正常段落匹配的数百倍余量）
+     */
+    private class BoundedCharSequence(
+        private val inner: CharSequence,
+        private var budget: Int = READ_BUDGET
+    ) : CharSequence {
+
+        override val length: Int get() = inner.length
+
+        override fun get(index: Int): Char {
+            if (--budget < 0) {
+                throw io.legado.app.exception.NoStackTraceException("正则匹配超读预算")
+            }
+            return inner[index]
+        }
+
+        override fun subSequence(startIndex: Int, endIndex: Int): CharSequence {
+            return BoundedCharSequence(inner.subSequence(startIndex, endIndex), budget)
+        }
+
+        override fun toString(): String = inner.toString()
+
+        companion object {
+            private const val READ_BUDGET = 200_000
         }
     }
 
