@@ -135,6 +135,12 @@ class TtsVoicePreviewController(
     private fun executeResolved(target: TtsPreviewTarget) {
         beforePreview?.invoke()
         resumedByPreview = true
+        // TtsTrace 真机联调：试听请求入口（通道判定证据）
+        AppLog.putDebugWithTag(
+            AppLog.TAG_TTS_TRACE,
+            "preview 请求 key=${target.previewKey} type=${target.engineType} voice=${target.voiceId ?: "默认"}",
+            level = AppLog.Level.INFO
+        )
         when (target.engineType) {
             SpeechRoute.ENGINE_SYSTEM -> executeSystemSpeak(target)
             else -> executeSynthesizeToFile(target)
@@ -352,6 +358,12 @@ class TtsVoicePreviewController(
      * 双 token++、cancel 执行 Job、release 播放器、shutdown 临时 TTS、删临时文件、恢复朗读、回 IDLE
      */
     fun stopActivePreview() {
+        // TtsTrace 真机联调：试听停止+资源释放证据（防泄漏核对）
+        AppLog.putDebugWithTag(
+            AppLog.TAG_TTS_TRACE,
+            "preview 停止+释放 释放前 player=${player != null} sysTts=${sysTts != null} tempFile=${tempFile != null}",
+            level = AppLog.Level.INFO
+        )
         requestToken++
         systemPreviewToken++
         debounceJob?.cancel()

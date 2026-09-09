@@ -250,3 +250,5 @@
 | 3 | 2026-09-09 | 2.11 单测 | TtsPrebuildLeaseTest 租约 3 轮上限用例失败（测试参数 curChapterIndex 与任务章不匹配） | 修正测试参数使 curChapterIndex=taskChapterIndex；无需回写 design |
 | 4 | 2026-09-09 | 3.x 真机验证 | 模拟器无 TTS 引擎包且 MEmu NAT DNS 故障无法下载 RHVoice 语音数据（E1/E2） | 装开源 RHVoice 引擎验证 init/绑定/路由链；真实人声/试听真声/预合成 E2E 留真机；无需回写 design |
 | 5 | 2026-09-09 | 3.8 静态检查 | TtsCastingEditorScreen.kt 520 行超 500 行红线 | 拆出 TtsCastingEditorWidgets.kt（ProsodySlider，77 行）→ 464 行；无需回写 design |
+| 6 | 2026-09-09 | 2.10 键单源契约复查 | HttpReadAloudService.md5SpeakFileName 残留旧 v1 内联键（url-speed-content），未走 TtsCacheKeys → 预合成产物播放端命中不了（S9-5 必失败） | 第二十一批修复：播放端改走 TtsCacheKeys 同函数（TtsTrace cacheKey 证据同步埋入）；旧缓存经 KEY_VERSION 有意失配一次性重合成；需回写 design §3.7.1 实施确认（4.1 统一落回） |
+| 7 | 2026-09-09 | 3.9 E2E 执行 | F-P0-6/F-P0-5 用例步骤 1 找不到"我的"Tab（两轮复现）：主界面底部 Tab 仅暴露 content-desc 无 text，runner text 检索必失败 | 判定=既有自动化缺口与本变更无关（底部导航零触碰）；登记 ai_tests 框架改进项（scroll_find content-desc 回退）；无需回写 design |

@@ -54,3 +54,11 @@
 
 - R1：多角色逐段驱动（AD-09 onDone 链）只验证到"路径命中+无异常"，逐段推进节奏与翻页判定需真机带语音数据验证
 - R2：预合成全链（TtsPrebuildManager→TtsPrebuildService 通知→HTTP 采集→原子提交）单测覆盖租约/账目纯函数，端到端需真机
+- R3：**播放端缓存键收敛缺陷（已修复，c85d2f6 后发现）**：HttpReadAloudService.md5SpeakFileName 残留旧 v1 内联键（url-speed-content），未走 TtsCacheKeys 单源 → 预合成产物播放端命中不了（S9-5 必失败）。第二十一批已修复为同函数（engineKey=id/voiceKey=toneID/chapterIndex 参与），旧缓存经 KEY_VERSION 有意失配一次性重合成
+
+## 3.9 AI E2E 影响分析结论（2026-09-09 16:0x）
+
+- `run_e2e.py --diff HEAD~1` 分析链正常：受影响 TC-ID 59 个，实际执行 F-P0-6 书源管理 10 例 + F-P0-5 书架 8 例等
+- **既有自动化缺口（与本次 TTS 改动无关）**：主界面底部 Tab（书架/发现/订阅/我的）在 uiautomator dump 中仅暴露 `content-desc` 无 `text`，runner 按 text 检索必失败（两轮运行同样失败，P0-6-05 曾 pass 属偶然路径）→ 大量 verdict=manual confidence=50
+- 证据：主界面 dump（content-desc="我的" 存在、text="我的" 不存在）；底部导航本变更零触碰
+- 处置：登记为 ai_tests 框架改进项（scroll_find 增加 content-desc 回退），不阻塞本期交付

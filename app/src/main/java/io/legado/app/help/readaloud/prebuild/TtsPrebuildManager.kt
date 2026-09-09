@@ -1,4 +1,4 @@
-﻿package io.legado.app.help.readaloud.prebuild
+package io.legado.app.help.readaloud.prebuild
 
 import android.content.Context
 import io.legado.app.constant.AppLog
@@ -125,6 +125,12 @@ object TtsPrebuildManager {
             )
             activeTasks[bookKey] = task
             cancelFlags[bookKey] = AtomicBoolean(false)
+            // TtsTrace 真机联调：预合成入队（参数快照证据；synchronized 内捕获快照值）
+            AppLog.putDebugWithTag(
+                AppLog.TAG_TTS_TRACE,
+                "prebuild 入队 book=${book.name.takeLast(16)} ch=$start..$endC engineKey=${task.engineKey} voiceKey=${task.voiceKey.takeLast(12)} rate=${task.speechRate}",
+                level = AppLog.Level.INFO
+            )
         }
         ensureWorker()
         return null
@@ -276,12 +282,24 @@ object TtsPrebuildManager {
                 if (defer) {
                     deferredRounds[chapterIndex] = rounds
                     done++
+                    // TtsTrace 真机联调：播放优先租约延后（3 轮上限强制执行）
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_TTS_TRACE,
+                        "prebuild 租约延后 ch=$chapterIndex rounds=$rounds cur=${currentChapterIndex()} next=${nextChapterIndex()}",
+                        level = AppLog.Level.INFO
+                    )
                     updateProgress(task, gen, unitIdx + 1, unitList.size, failed)
                     return@forEachIndexed
                 }
                 val fileName = unitFileNames[unitIdx]
                 if (reservedKeys.containsKey(fileName) || hasTargetFile(task, fileName)) {
                     // 幂等跳过（播放端实时产物互认）
+                    // TtsTrace 真机联调：幂等跳过（命中复用证据）
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_TTS_TRACE,
+                        "prebuild 幂等跳过 ch=$chapterIndex file=${fileName.takeLast(16)} unit=${unitIdx + 1}/${unitList.size}",
+                        level = AppLog.Level.INFO
+                    )
                     done++
                     updateProgress(task, gen, unitIdx + 1, unitList.size, failed)
                     return@forEachIndexed
@@ -295,6 +313,12 @@ object TtsPrebuildManager {
                     is TtsSynthesizer.Result.Success -> {
                         reservedKeys[fileName] = System.currentTimeMillis()
                         consecutiveIoFail = 0
+                        // TtsTrace 真机联调：单元合成成功（保留名单登记证据）
+                        AppLog.putDebugWithTag(
+                            AppLog.TAG_TTS_TRACE,
+                            "prebuild 合成完成 ch=$chapterIndex file=${fileName.takeLast(16)} unit=${unitIdx + 1}/${unitList.size}",
+                            level = AppLog.Level.INFO
+                        )
                     }
                     is TtsSynthesizer.Result.Failure -> {
                         failed++
@@ -329,6 +353,12 @@ object TtsPrebuildManager {
 
     /** 终态落笔（单写者）+定时复位 IDLE */
     private fun finishTask(task: PrebuildTask, phase: TtsPrebuildState.Phase, current: Int, total: Int, msg: String) {
+        // TtsTrace 真机联调：任务终态（取消/完成/失败判定证据）
+        AppLog.putDebugWithTag(
+            AppLog.TAG_TTS_TRACE,
+            "prebuild 终态 phase=$phase book=${task.book.name.takeLast(16)} unit=$current/$total msg=$msg",
+            level = AppLog.Level.INFO
+        )
         _state.value = TtsPrebuildState(task.generation, task.bookKey, task.book.name, phase, current, total, 0, msg)
         scope.launch {
             delay(10_000L)

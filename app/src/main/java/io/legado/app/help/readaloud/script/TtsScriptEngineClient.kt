@@ -198,6 +198,12 @@ object TtsScriptEngineClient {
         }
         val resultJson = withContext(Dispatchers.IO) {
             withTimeout(EXEC_TIMEOUT_MS) {
+                // TtsTrace 真机联调：脚本引擎 synthesize 调用（MultiTTS/CloneTTS 适配联调核心证据）
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_TTS_TRACE,
+                    "script synthesize 引擎=${httpTts.id} type=${httpTts.type} textLen=${text.length} voice=${voiceId ?: "null"}",
+                    level = AppLog.Level.INFO
+                )
                 evalFunction(httpTts, "synthesize", argsJson)
             }
         }
