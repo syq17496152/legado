@@ -472,6 +472,9 @@ object Backup {
         if (selectedFiles.contains("httpTTS.json")) {
             writeListToJson(appDb.httpTTSDao.all, "httpTTS.json", backupPath)
         }
+        if (selectedFiles.contains("ttsCastingTemplates.json")) {
+            writeListToJson(appDb.ttsCastingTemplateDao.all(), "ttsCastingTemplates.json", backupPath)
+        }
         if (selectedFiles.contains("keyboardAssists.json")) {
             writeListToJson(appDb.keyboardAssistsDao.all, "keyboardAssists.json", backupPath)
         }

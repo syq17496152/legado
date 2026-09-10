@@ -41,8 +41,11 @@ data class TtsScriptRequest(
 
 /**
  * 脚本引擎执行器（AD-04）：Rhino 执行 options()/voices()/synthesize() 三函数
- * - 强制 P0 沙箱：RhinoClassShutter 类策略显式启用（HttpTTS 非 BookSource，包装默认不生效）
- * - 三函数统一 withTimeout(10s)（Rhino 指令观察器仅协作式取消，不能防 while(true)）
+ * - 独立 TTS 脚本档（E6/方向⑤）：RhinoClassShutter.withTtsScriptClassPolicy——宿主 App 类
+ *   （io.legado.app.*）实拦（书源档的"观察放行"对第三方脚本不适用）；非 app 前缀 Java 类维持放行
+ * - ⚠️ 契约：禁止向 bindings 注入 Java 对象（RhinoWrapFactory 的 visibleToScripts(Object) 重载
+ *   不经类名档位判定链，注入即绕过沙箱）；当前仅暴露 sourceLabel 字符串，保持
+ * - 三函数统一 withTimeout(10s)（eval 传协程上下文，Rhino 指令观察器可打断阻塞执行）
  * - 体积限额：脚本源码≤512KB、synthesized URL≤8KB、请求体≤256KB
  * - 作用域暴露面：不暴露 HttpTTS 对象，仅脱敏 sourceLabel
  */
@@ -110,9 +113,9 @@ object TtsScriptEngineClient {
             append(argsJson)
             append("))")
         }
-        // 协程上下文须在 withBookSourceClassPolicy（非 inline）块外捕获，块内调用挂起函数无法编译
+        // 协程上下文须在 withTtsScriptClassPolicy（非 inline）块外捕获，块内调用挂起函数无法编译
         val coroutineCtx = currentCoroutineContext()
-        return RhinoClassShutter.withBookSourceClassPolicy(enabled = true, sourceLabel = sourceLabel) {
+        return RhinoClassShutter.withTtsScriptClassPolicy(sourceLabel = sourceLabel) {
             val bindings = buildScriptBindings { bindings ->
                 bindings["sourceLabel"] = sourceLabel
             }

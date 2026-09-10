@@ -8,6 +8,7 @@ import io.legado.app.BuildConfig
 import io.legado.app.R
 import io.legado.app.constant.AppConst.androidId
 import io.legado.app.constant.AppLog
+import kotlinx.coroutines.CancellationException
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
@@ -162,6 +163,18 @@ object Restore {
         }
         fileToListT<HttpTTS>(path, "httpTTS.json")?.let {
             withContext(IO) { appDb.httpTTSDao.insert(*it.toTypedArray()) }
+        }
+        // E3/F-1：选角模板恢复（Dao insert=REPLACE 追加式幂等）；异常隔离防单文件损坏中断 restoreLocked
+        fileToListT<io.legado.app.data.entities.TtsCastingTemplate>(path, "ttsCastingTemplates.json")?.let {
+            try {
+                withContext(IO) { appDb.ttsCastingTemplateDao.insert(*it.toTypedArray()) }
+                // 恢复后失效激活快照（热生效，无需重启）
+                io.legado.app.help.readaloud.casting.TtsCastingStore.invalidateSnapshot()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLog.put("选角模板恢复失败，已跳过：${e.message}")
+            }
         }
         fileToListT<DictRule>(path, "dictRule.json")?.let {
             withContext(IO) { appDb.dictRuleDao.insert(*it.toTypedArray()) }

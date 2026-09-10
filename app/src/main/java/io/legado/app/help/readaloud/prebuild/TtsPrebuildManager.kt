@@ -60,12 +60,69 @@ data class TtsPrebuildState(
  */
 object TtsPrebuildManager {
 
-    /** 预合成保留名单：已落盘预合成文件名集合（removeCacheFile/清理跳过；按 rename 成功事实登记） */
+    /** 预合成保留名单：已落盘预合成文件名集合（removeCacheFile/清理跳过；按 rename 成功事实登记）
+     *  E2/P1-3：持久化副本 cacheDir/tts_prebuild/reserved_keys.json，进程重启后回装（防产物被清理误删） */
     val reservedKeys = ConcurrentHashMap<String, Long>()
+
+    /** 保留名单落盘文件（独立子目录，避开 removeCacheFile 对 cacheDir/httpTTS 的清扫循环） */
+    private val reservedFile: File by lazy {
+        val dir = File(appCtx.cacheDir, "tts_prebuild")
+        if (!dir.exists()) dir.mkdirs()
+        File(dir, "reserved_keys.json")
+    }
+    private val reservedSaveLock = Any()
+    private val gson = com.google.gson.Gson()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow(TtsPrebuildState())
     val state: StateFlow<TtsPrebuildState> = _state
+
+    init {
+        // E2：异步回装（首访主线程不读盘；回装完成前内存名单为空=与历史行为一致）
+        scope.launch { loadReservedKeys() }
+    }
+
+    /** 回装持久化名单：损坏容错（解析失败静默重建空名单）+30 天 prune（过期条目不再保护清理） */
+    private fun loadReservedKeys() {
+        runCatching {
+            if (!reservedFile.exists()) return
+            val json = reservedFile.readText()
+            if (json.isBlank()) return
+            val type = object : com.google.gson.reflect.TypeToken<Map<String, Long>>() {}.type
+            val loaded: Map<String, Long> = gson.fromJson(json, type) ?: return
+            val pruneBefore = System.currentTimeMillis() - RESERVED_TTL_MS
+            loaded.forEach { (k, ts) ->
+                if (ts > pruneBefore) reservedKeys[k] = ts
+            }
+        }.onFailure {
+            // 损坏/半成品文件：静默重建空名单（旧完整版由 temp+rename 保障，正常不会走到）
+            AppLog.put("TTS 预合成保留名单回装失败，已重建空名单：${it.message}")
+            reservedKeys.clear()
+        }
+    }
+
+    /** 名单落盘（synchronized 快照+temp+rename 原子写；调用方须在 IO 线程） */
+    private fun writeReservedKeys() {
+        synchronized(reservedSaveLock) {
+            runCatching {
+                val snapshot = reservedKeys.toMap()
+                val json = gson.toJson(snapshot)
+                val temp = File(reservedFile.parentFile, reservedFile.name + ".part")
+                temp.writeText(json)
+                if (!temp.renameTo(reservedFile)) {
+                    temp.copyTo(reservedFile, overwrite = true)
+                    temp.delete()
+                }
+            }.onFailure {
+                AppLog.put("TTS 预合成保留名单落盘失败：${it.message}")
+            }
+        }
+    }
+
+    /** 名单变更后立即派发 IO 直写（取消防抖：防"内存已更新文件未落盘"脱节面，红队 R3-1） */
+    private fun persistReservedKeysAsync() {
+        scope.launch { writeReservedKeys() }
+    }
 
     /** 进行中/排队任务簿：bookKey→任务（重复发起去重依据） */
     private val activeTasks = LinkedHashMap<String, PrebuildTask>()
@@ -76,14 +133,13 @@ object TtsPrebuildManager {
     /** 单批章数上限（兼顾 Android 15 dataSync 6h 时限与内存） */
     const val MAX_BATCH_CHAPTERS = 200
 
-    /** 内部任务（参数快照全集） */
+    /** 内部任务（参数快照全集；engineKey 快照已删除：E5 门面改传 task.httpTts?.id，快照零消费） */
     private data class PrebuildTask(
         val generation: Long,
         val book: Book,
         val bookKey: String,
         val start: Int,
         val end: Int,
-        val engineKey: String,
         val httpTts: HttpTTS?,
         val voiceKey: String,
         val speechRate: Int,
@@ -118,7 +174,6 @@ object TtsPrebuildManager {
                 bookKey = bookKey,
                 start = start,
                 end = endC,
-                engineKey = httpTts.id.toString(),
                 httpTts = httpTts,
                 voiceKey = readVoiceKey(),
                 // P0-4 修复：speedKey 单向对齐播放端口径（speechRatePlay+5，含 ttsFlowSys 分支）。
@@ -131,7 +186,7 @@ object TtsPrebuildManager {
             // TtsTrace 真机联调：预合成入队（参数快照证据；synchronized 内捕获快照值）
             AppLog.putDebugWithTag(
                 AppLog.TAG_TTS_TRACE,
-                "prebuild 入队 book=${book.name.takeLast(16)} ch=$start..$endC engineKey=${task.engineKey} voiceKey=${task.voiceKey.takeLast(12)} rate=${task.speechRate}",
+                "prebuild 入队 book=${book.name.takeLast(16)} ch=$start..$endC engineKey=${httpTts.id} voiceKey=${task.voiceKey.takeLast(12)} rate=${task.speechRate}",
                 level = AppLog.Level.INFO
             )
         }
@@ -169,11 +224,13 @@ object TtsPrebuildManager {
     fun cancelAllAndClearReserved() {
         cancelFlags.values.forEach { it.set(true) }
         reservedKeys.clear()
+        persistReservedKeysAsync()
     }
 
-    /** 从保留名单移除指定键（清理后未完成单元可重新合成） */
+    /** 从保留名单移除指定键（清理后未完成单元可重新合成；现零调用点，防御性接线） */
     fun removeReserved(key: String) {
         reservedKeys.remove(key)
+        persistReservedKeysAsync()
     }
 
     /**
@@ -261,11 +318,7 @@ object TtsPrebuildManager {
                 val bookContent = processor.getContent(task.book, bookChapter, content, reSegment = false)
                 // P1-2 修复：chapterTitle 键因子与播放端同源解析（getDisplayTitle：去换行/简繁转换/替换规则），
                 // 播放端 textChapter.title 即此口径（ReadBook.kt:1331），标题原始值直接入键会失配
-                val displayTitle = bookChapter.getDisplayTitle(
-                    processor.getTitleReplaceRules(),
-                    task.book.getUseReplaceRule(),
-                    replaceBook = task.book.toReplaceBook()
-                )
+                val displayTitle = resolveChapterTitle(task.book, bookChapter, processor)
                 val textChapter = ChapterProvider.getTextChapterAsync(
                     workerScope, task.book, bookChapter, displayTitle, bookContent,
                     appDb.bookChapterDao.getChapterCount(task.book.bookUrl)
@@ -293,10 +346,10 @@ object TtsPrebuildManager {
                     .split("\n")
                     .filter { it.isNotEmpty() }
                 for (text in contentList) {
-                    val fileName = TtsCacheKeys.ttsSpeakFileName(
-                        engineKey = task.engineKey,
-                        speedKey = task.speechRate.toString(),
-                        voiceKey = task.voiceKey,
+                    val fileName = TtsCacheKeys.speakFileName(
+                        engineId = task.httpTts?.id,
+                        speechRate = task.speechRate,
+                        voiceId = task.voiceKey,
                         chapterIndex = index,
                         chapterTitle = displayTitle,
                         unitText = text
@@ -338,8 +391,11 @@ object TtsPrebuildManager {
                     // 延后不计 done（P1-7 修复：防终态谎报整本完成）
                     continue
                 }
-                if (reservedKeys.containsKey(unit.fileName) || hasTargetFile(task, unit.fileName)) {
-                    // 幂等跳过（播放端实时产物互认）
+                if (hasTargetFile(task, unit.fileName)) {
+                    // E2/P1-3：以文件存在为唯一幂等判据（0 字节不算，见 hasTargetFile）——
+                    // 修复名单在但文件被外部删除时 containsKey 单独判定的假阳性 DONE 虚报（红队 R3-1/R5-1）；
+                    // 文件存在即跳过同时保留"播放端实时产物互认"（名单未命中的既有产物不重复合成，
+                    // 比 design v1.1 的 contains&&has 联合判定更正确：后者会丢失互认导致重复合成）
                     // TtsTrace 真机联调：幂等跳过（命中复用证据）
                     AppLog.putDebugWithTag(
                         AppLog.TAG_TTS_TRACE,
@@ -363,6 +419,7 @@ object TtsPrebuildManager {
                 when (result) {
                     is TtsSynthesizer.Result.Success -> {
                         reservedKeys[unit.fileName] = System.currentTimeMillis()
+                        persistReservedKeysAsync()
                         consecutiveIoFail = 0
                         done++
                         // TtsTrace 真机联调：单元合成成功（保留名单登记证据）
@@ -403,6 +460,25 @@ object TtsPrebuildManager {
 
     /** 排版完成等待超时（P0-3）：防异常章无限挂起 */
     private const val LAYOUT_TIMEOUT_MS = 60_000L
+
+    /** 保留名单条目 TTL（E2：超过 30 天不再保护清理，防名单无限膨胀） */
+    private const val RESERVED_TTL_MS = 30L * 24 * 60 * 60 * 1000
+
+    /**
+     * E5：chapterTitle 键因子同源解析帮助函数（与播放端 textChapter.title 口径一致：
+     * ReadBook.kt:1331 同款 getDisplayTitle 调用——去换行/简繁转换/替换规则）
+     */
+    private fun resolveChapterTitle(
+        book: Book,
+        bookChapter: io.legado.app.data.entities.BookChapter,
+        processor: ContentProcessor
+    ): String {
+        return bookChapter.getDisplayTitle(
+            processor.getTitleReplaceRules(),
+            book.getUseReplaceRule(),
+            replaceBook = book.toReplaceBook()
+        )
+    }
 
     private fun updateProgress(task: PrebuildTask, gen: Long, current: Int, total: Int, failed: Int) {
         _state.value = TtsPrebuildState(gen, task.bookKey, task.book.name, TtsPrebuildState.Phase.RUNNING, current, total, failed)

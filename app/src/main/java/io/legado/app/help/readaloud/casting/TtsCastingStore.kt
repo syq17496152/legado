@@ -242,7 +242,13 @@ object TtsCastingStore {
                 }
                 val existing = appDb.ttsCastingTemplateDao.get(template.id)
                 if (existing != null) {
-                    skipped++
+                    // E4b 升级刷新：仅 builtin 记录且全字段有差异才 REPLACE（用户自定义 builtin=false 撞 id 永不覆盖）
+                    if (isSameBuiltinContent(existing, template)) {
+                        skipped++
+                    } else {
+                        appDb.ttsCastingTemplateDao.insert(template)
+                        imported++
+                    }
                     continue
                 }
                 appDb.ttsCastingTemplateDao.insert(template)
@@ -253,6 +259,15 @@ object TtsCastingStore {
         }
         if (imported > 0) invalidateSnapshot()
         return imported to skipped
+    }
+
+    /** builtin 模板内容全字段比对（E4b：rules/fallback/name/enabled/sortOrder 任一漂移即刷新） */
+    private fun isSameBuiltinContent(existing: TtsCastingTemplate, incoming: TtsCastingTemplate): Boolean {
+        return existing.rulesJson == incoming.rulesJson &&
+            existing.fallbackSourceJson == incoming.fallbackSourceJson &&
+            existing.name == incoming.name &&
+            existing.enabled == incoming.enabled &&
+            existing.sortOrder == incoming.sortOrder
     }
 
     /**

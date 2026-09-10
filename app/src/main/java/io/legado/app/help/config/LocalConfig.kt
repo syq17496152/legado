@@ -71,6 +71,10 @@ by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
     val needUpDictRule: Boolean
         get() = !isLastVersion(2, "needUpDictRule")
 
+    /** E4/F-2：选角模板内置导入旗标（per-key 独立计数器，新键从 1 起语义） */
+    val needUpTtsCastingTemplates: Boolean
+        get() = !isLastVersion(1, "ttsCastingTemplatesVersion")
+
     var versionCode
         get() = getLong(versionCodeKey, 0)
         set(value) {

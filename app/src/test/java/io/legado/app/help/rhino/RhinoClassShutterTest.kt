@@ -284,4 +284,38 @@ class RhinoClassShutterTest {
         assertTrue(observed.isEmpty())
         assertTrue(blocked.isEmpty())
     }
+
+    // ============ E6/方向⑤ TTS 脚本档四象限（tasks 2.18） ============
+
+    @Test
+    fun visibleToScripts_ttsPolicy_fourQuadrants() {
+        // ① TTS 档：宿主 App 前缀=实拦（观察放行升级为拒绝，红队 R5 前提）
+        RhinoClassShutter.withTtsScriptClassPolicy("tts:1") {
+            assertFalse(RhinoClassShutter.visibleToScripts("io.legado.app.help.config.AppConfig"))
+            assertFalse(RhinoClassShutter.visibleToScripts("io.legado.app.model.ReadBook"))
+        }
+        // ② 书源档：宿主 App 前缀=观察放行（书源档行为逐字节零变化）
+        RhinoClassShutter.withBookSourceClassPolicy(true, "ns") {
+            assertTrue(RhinoClassShutter.visibleToScripts("io.legado.app.help.config.AppConfig"))
+        }
+        // ③ D11 实拦集两档均拒（Cookie 隔离语义在 TTS 档同样收紧）
+        RhinoClassShutter.withTtsScriptClassPolicy("tts:1") {
+            assertFalse(RhinoClassShutter.visibleToScripts("android.webkit.CookieManager"))
+        }
+        RhinoClassShutter.withBookSourceClassPolicy(true, "ns") {
+            assertFalse(RhinoClassShutter.visibleToScripts("android.webkit.CookieManager"))
+        }
+        // ④ 无档：非 matcher 命中的普通类放行（行为不变）
+        assertTrue(RhinoClassShutter.visibleToScripts("com.example.Anything"))
+        // TTS 档非 app 前缀 Java 类维持放行现状（措辞收敛：仅宿主 app 类实拦，红队 R2-6）
+        RhinoClassShutter.withTtsScriptClassPolicy("tts:1") {
+            assertTrue(RhinoClassShutter.visibleToScripts("org.json.JSONObject"))
+        }
+        // finally 恢复：出档后 app 前缀回到无档放行（无档位残留）
+        assertTrue(RhinoClassShutter.visibleToScripts("io.legado.app.help.config.AppConfig"))
+        // 拦截回调账目：TTS 档 app 前缀×2 + TTS 档 CookieManager×1 + 书源档 CookieManager×1 = 4；
+        // 书源档 app 前缀观察放行走 observed
+        assertEquals(4, blocked.size)
+        assertTrue(observed.isNotEmpty())
+    }
 }

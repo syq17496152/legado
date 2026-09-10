@@ -50,6 +50,9 @@ data class AiReadAloudRoleState(
         const val STAGE_CURRENT = "current"
         const val STAGE_NEXT = "next"
 
+        /** E1/P0-5 预热专属档：起播链 fire-and-forget 预生成，keepAlive 分档抑制前台保活 */
+        const val STAGE_PREHEAT = "preheat"
+
         const val STATUS_IDLE = "idle"
         const val STATUS_RUNNING = "running"
         const val STATUS_SUCCESS = "success"

@@ -8,6 +8,7 @@
 
 - [主题字号日夜生效与预置主题体系](./specs/theme-fontscale-daynight/README.md) - 夜间字号 fontScaleN 死键修复（AppContextWrapper 日夜感知+顶栏5消费点同源）+内置主题字号统一9（2A）+历史17主题资产移除+暗夜紫配置代码内置（日夜变体）+磨砂玻璃晨昏套件压缩入库幂等seeding（AD-01~04，红队2轮闭环） 🔄 设计中
 - [TTS朗读引擎统一优化](./specs/optimize-tts-engine/README.md) - 朗读引擎切换不生效修复（UI写SpeechRoute/服务层读SelectItem分裂）+引擎路由单源化+脚本引擎协议（Rhino沙箱）+MultiTTS/CloneTTS深度适配+在线TTS内置模板库（默认停用） ✅ 期1 实施+期2 扩展实施（模板列表器/管理页编辑器/音色级声源/书级覆盖/试听/AI链/批量预合成，L1+模拟器L2通过，听感留真机，见 specs/optimize-tts-engine-phase2/）
+- [TTS 批次E 加固](./specs/tts-batch-e-hardening/README.md) - 全量审查批次E 六项收尾：AI 预热接线（起播点 fire-and-forget）/保留名单落盘（进程重启防驱逐）/选角模板备份恢复/内置模板首装链+升级刷新/键因子三件套收编（KEY_VERSION v3 冻结）/Rhino 沙箱 TTS 脚本档收紧（app 前缀实拦，书源档零变化） ✅ 已实施（2026-09-10，包 3.26.091014，单测 42 绿）
 
 - [UI 设置体验修复包](./specs/archive/2026-09-06-ui-settings-fix-pack/README.md) - 三项 UI 体验修复：主界面底栏搜索框显隐入口补齐（设置页快捷开关+两层配置防回滚）+ fontScale 放大组件文字截断逐点修复（12 处 height→heightIn(min)）+ 恢复被误删调用链的优化版取色器 ColorPickerSheet（扩展跟随默认）✅ 已完成并归档（2026-09-06 验收通过，commit 13574ae41）
 - [主界面头部透明对齐Archive](./specs/main-topbar-transparent-align/README.md) - 四Tab头部透明失效根因修复：恢复 MaterialValueHelper backgroundColor 透明原语（背景图→TRANSPARENT 分支被删）+BaseActivity decorView 着色策略对齐（P0/P1 diff 实证，overlay/blur 排除）🔄 设计中

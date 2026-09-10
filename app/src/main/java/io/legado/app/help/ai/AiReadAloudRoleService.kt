@@ -408,6 +408,29 @@ object AiReadAloudRoleService {
         appDb.aiReadAloudRoleCacheDao.deleteByChapter(bookUrl, chapterIndex)
     }
 
+    /**
+     * E1/2.21：清理该书"孤儿 RUNNING 行"（owner 已消亡：内存 runningCacheKeys 无对应键），
+     * 防预热/分配被取消后 DB 残留 RUNNING 行污染后续分配状态判断；存活中任务不受影响
+     */
+    fun cancelStaleRunningCacheRows(bookUrl: String?) {
+        if (bookUrl.isNullOrBlank()) return
+        runCatching {
+            appDb.aiReadAloudRoleCacheDao.listByBook(bookUrl)
+                .filter { it.status == AiReadAloudRoleCache.STATUS_RUNNING && it.cacheKey !in runningCacheKeys }
+                .forEach { stale ->
+                    appDb.aiReadAloudRoleCacheDao.upsert(
+                        stale.copy(
+                            status = AiReadAloudRoleCache.STATUS_CANCELLED,
+                            lastError = "预热取消",
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                }
+        }.onFailure {
+            AppLog.put("AI 预热孤儿行清理失败：${it.message}")
+        }
+    }
+
     suspend fun ensureCache(
         book: Book?,
         textChapter: TextChapter?,
@@ -655,11 +678,15 @@ object AiReadAloudRoleService {
             return EnsureResult(AiReadAloudRoleState.STATUS_RUNNING, message = "分配角色中", cacheKey = cacheKey)
         }
         val now = System.currentTimeMillis()
-        keepAliveId = AiTaskKeepAlive.retain(
-            title = stageMessage(stage, "分配角色中"),
-            content = "${currentBook.name} · ${currentChapter.chapter.title}",
-            kind = AiTaskKeepAlive.KIND_ROLE_ASSIGN
-        )
+        // E1/2.22：预热档抑制前台保活（fire-and-forget 静默契约——预热拉起前台服务/通知会惊扰用户；
+        // 朗读消费路径 retain 行为不变）
+        if (stage != AiReadAloudRoleState.STAGE_PREHEAT) {
+            keepAliveId = AiTaskKeepAlive.retain(
+                title = stageMessage(stage, "分配角色中"),
+                content = "${currentBook.name} · ${currentChapter.chapter.title}",
+                kind = AiTaskKeepAlive.KIND_ROLE_ASSIGN
+            )
+        }
         postState(currentBook, currentChapter, stage, AiReadAloudRoleState.STATUS_RUNNING, stageMessage(stage, "分配角色中"), cleanParagraphs.size)
         updateRoleKeepAlive(
             taskId = keepAliveId,

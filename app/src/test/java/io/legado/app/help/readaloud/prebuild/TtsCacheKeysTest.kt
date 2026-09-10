@@ -61,4 +61,31 @@ class TtsCacheKeysTest {
         assertTrue("键应为两段：$key", parts.size >= 2)
         assertEquals(16, parts[0].length)
     }
+
+    /** E5/方向①：门面与底座逐字节等价（同输入双端键一致，存量缓存零失配） */
+    @Test
+    fun `门面与底座等价（同输入逐字节一致）`() {
+        assertEquals(
+            TtsCacheKeys.ttsSpeakFileName("1", "10", "female_01", 3, "第三章", "你好世界"),
+            TtsCacheKeys.speakFileName(1L, 10, "female_01", 3, "第三章", "你好世界")
+        )
+    }
+
+    /** E5：engineId=null → engineKey 空串（与底座空串入参等价） */
+    @Test
+    fun `门面 engineId 为 null 等价底座空引擎键`() {
+        assertEquals(
+            TtsCacheKeys.ttsSpeakFileName("", "10", "", 3, "t", "x"),
+            TtsCacheKeys.speakFileName(null, 10, "", 3, "t", "x")
+        )
+    }
+
+    /** E5：门面保持键维度敏感性（语速/音色/章节 index 变化即键变） */
+    @Test
+    fun `门面维度敏感性保持`() {
+        val base = TtsCacheKeys.speakFileName(1L, 10, "v", 3, "t", "x")
+        assertNotEquals(base, TtsCacheKeys.speakFileName(1L, 20, "v", 3, "t", "x"))
+        assertNotEquals(base, TtsCacheKeys.speakFileName(1L, 10, "v2", 3, "t", "x"))
+        assertNotEquals(base, TtsCacheKeys.speakFileName(1L, 10, "v", 7, "t", "x"))
+    }
 }
