@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--App-->
     <string name="app_name">阅读M</string>
@@ -3247,6 +3247,7 @@ function login() {
     <string name="tts_casting_delete_confirm">确认删除该模板？删除后引用它的书将回退全局模板。</string>
     <string name="tts_casting_deleted">已删除</string>
     <string name="tts_casting_saved">已保存</string>
+    <string name="tts_casting_save">保存</string>
     <string name="tts_casting_copied">已复制</string>
     <string name="tts_casting_empty_hint">暂无可用模板</string>
     <string name="tts_casting_empty_action">新增模板</string>
@@ -3259,7 +3260,9 @@ function login() {
     <string name="tts_casting_keyword_hint">关键词（命中即切换该角色）</string>
     <string name="tts_casting_rule_source">声源</string>
     <string name="tts_casting_fallback_source">兜底声源</string>
-    <string name="tts_casting_pick_source">选择声源（规则 {0}）</string>
+    <string name="tts_casting_pick_source">选择声源（规则 %1$d）</string>
+    <string name="tts_casting_discard_confirm">放弃当前修改？</string>
+    <string name="tts_casting_discard_confirm_desc">模板内容已修改，返回将丢失未保存的更改</string>
     <string name="tts_casting_source_default">跟随当前引擎</string>
     <string name="tts_casting_prosody_rate">语速</string>
     <string name="tts_casting_prosody_pitch">音调</string>
@@ -3276,7 +3279,7 @@ function login() {
     <string name="tts_casting_prebuild_flow_hint">按章节范围后台合成音频，播放时命中缓存零等待；将消耗网络流量</string>
     <string name="tts_casting_prebuild_start_chapter">起始章节号</string>
     <string name="tts_casting_prebuild_end_chapter">结束章节号</string>
-    <string name="tts_casting_prebuild_chapter_count">本书共 %1 章</string>
+    <string name="tts_casting_prebuild_chapter_count">本书共 %1$d 章</string>
     <string name="tts_casting_prebuild_chapter_invalid">章节范围无效，请检查起止章节号</string>
     <string name="tts_casting_prebuild_chapter_hint">起止章节号（如 1-10）</string>
     <string name="tts_casting_prebuild_no_net">当前无网络连接，请检查网络后重试</string>

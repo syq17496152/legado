@@ -1,4 +1,4 @@
-﻿package io.legado.app.help.readaloud.prebuild
+package io.legado.app.help.readaloud.prebuild
 
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.help.readaloud.script.TtsScriptEngineClient
@@ -35,13 +35,16 @@ object TtsSynthesizer {
         speechRate: Int,
         targetFile: File
     ): Result {
-        return try {
-            val stream = if (httpTts.type == 2) {
+        var temp: File? = null
+        try {
+            val response: okhttp3.Response
+            val stream: java.io.InputStream = if (httpTts.type == 2) {
                 val request = TtsScriptEngineClient.synthesize(
                     httpTts,
                     unitText,
                     voiceKey.ifBlank { null },
-                    null, null, null
+                    // P1-14 修复：全局语速送达脚本引擎（倍率=speechRate/10，与播放链同口径）
+                    speechRate / 10f, null, null
                 )
                 if (request.url.isBlank()) {
                     return Result.Failure("脚本 synthesize 返回空 url", retryable = false)
@@ -53,46 +56,61 @@ object TtsSynthesizer {
                     }
                     request.body?.let { put("body", it) }
                 }.toString()
-                AnalyzeUrl(
+                response = AnalyzeUrl(
                     request.url + "," + optionJson,
                     speakText = unitText,
                     speakSpeed = speechRate,
                     source = httpTts,
                     readTimeout = 120_000L,
                     coroutineContext = currentCoroutineContext()
-                ).getResponseAwait().body.byteStream()
+                ).getResponseAwait()
+                response.body.byteStream()
             } else {
-                AnalyzeUrl(
+                response = AnalyzeUrl(
                     httpTts.url,
                     speakText = unitText,
                     speakSpeed = speechRate,
                     source = httpTts,
                     readTimeout = 120_000L,
                     coroutineContext = currentCoroutineContext()
-                ).getResponseAwait().body.byteStream()
+                ).getResponseAwait()
+                response.body.byteStream()
             }
-            // 单一原子提交：temp + rename（防播放端读到半成品，契约 5）
-            val temp = File(targetFile.parentFile, targetFile.name + ".part")
-            temp.outputStream().use { out ->
+            // P1-4 修复：响应校验（对齐播放端 getSpeakStream）——JSON/text 错误页不得当音频落盘
+            //（否则错误内容固化进保留名单形成缓存毒化）；脚本引擎 loginCheckJs 恢复链登记后续
+            val contentType = response.headers["Content-Type"]?.substringBefore(";")?.trim()
+            if (contentType == "application/json" || contentType?.startsWith("text/") == true) {
+                runCatching { response.body.close() }
+                return Result.Failure("合成返回错误页（$contentType）", retryable = true)
+            }
+            // 单一原子提交：temp + rename（防播放端读到半成品，契约 5）；失败/取消路径统一清理 .part（P2-15）
+            val t = File(targetFile.parentFile, targetFile.name + ".part")
+            temp = t
+            t.outputStream().use { out ->
                 stream.use { it.copyTo(out) }
             }
-            if (temp.length() <= 0L) {
-                temp.delete()
+            if (t.length() <= 0L) {
+                t.delete()
                 return Result.Failure("合成产物为空", retryable = true)
             }
-            if (!temp.renameTo(targetFile)) {
-                temp.copyTo(targetFile, overwrite = true)
-                temp.delete()
+            if (!t.renameTo(targetFile)) {
+                t.copyTo(targetFile, overwrite = true)
+                t.delete()
             }
-            Result.Success(targetFile)
+            temp = null
+            return Result.Success(targetFile)
         } catch (e: kotlinx.coroutines.CancellationException) {
+            temp?.let { runCatching { it.delete() } }
             throw e
         } catch (e: java.net.SocketTimeoutException) {
-            Result.Failure("合成超时：${e.message}", retryable = true)
+            temp?.let { runCatching { it.delete() } }
+            return Result.Failure("合成超时：${e.message}", retryable = true)
         } catch (e: java.io.IOException) {
-            Result.Failure("IO 错误：${e.message}", retryable = false)
+            temp?.let { runCatching { it.delete() } }
+            return Result.Failure("IO 错误：${e.message}", retryable = false)
         } catch (e: Exception) {
-            Result.Failure("合成失败：${e.message}", retryable = true)
+            temp?.let { runCatching { it.delete() } }
+            return Result.Failure("合成失败：${e.message}", retryable = true)
         }
     }
 }

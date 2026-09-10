@@ -8,6 +8,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
@@ -87,7 +90,7 @@ class TtsVoicePreviewController(
     private var tempFile: File? = null
     private var sysTts: TextToSpeech? = null
     private var sysTtsInitJob: Job? = null
-    private var currentState = TtsPreviewState()
+    private var currentState by mutableStateOf(TtsPreviewState())
     private var resumedByPreview = false
 
     private fun setState(state: TtsPreviewState) {
@@ -95,6 +98,7 @@ class TtsVoicePreviewController(
         onStateChanged(state)
     }
 
+    /** 试听状态（Compose snapshot state：宿主组合期读取即可获得重组失效，无需手动桥接） */
     val state: TtsPreviewState get() = currentState
 
     /**

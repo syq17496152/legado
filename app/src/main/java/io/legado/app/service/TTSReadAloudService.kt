@@ -20,6 +20,7 @@ import io.legado.app.help.readaloud.casting.SystemEngineSource
 import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.help.readaloud.casting.TtsTagSplitter
 import io.legado.app.help.readaloud.casting.TtsVoiceRef
+import io.legado.app.help.readaloud.casting.UtteranceProgressSink
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.TtsEngineParamsStore
 import io.legado.app.model.ReadAloud
@@ -27,18 +28,20 @@ import io.legado.app.model.ReadBook
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.resume
 
 /**
  * 本地朗读（AD-03/AD-05/AD-09）
  * init 按路由包名构造 + 8s 超时看门狗 + 失败降级默认引擎明示 + 每引擎独立参数
  * 多人模式（AD-09 期1）：选角模板分段 → 逐段 onDone 驱动（suspend utterance）
  */
-class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener {
+class TTSReadAloudService : BaseReadAloudService() {
 
     companion object {
         private const val WATCHDOG_TIMEOUT_MS = 8000L
@@ -49,6 +52,9 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     private val ttsUtteranceListener = TTSUtteranceListener()
     private var speakJob: Coroutine<*>? = null
     private val TAG = "TTSReadAloudService"
+
+    /** 多角色 utterance 完成信号分发表（P1-9 监听器归一）：key=utteranceId，服务级唯一监听器按 id 回收 */
+    private val utteranceSink = UtteranceSink()
 
     // init 代际（AD-03）：每次 initTts 递增，迟到回调/看门狗按代际判定失效
     @Volatile
@@ -67,6 +73,15 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         AppLog.put("TTS 引擎初始化超时（8s）：$engineLabel")
         toastOnUi("引擎 $engineLabel 初始化失败已回退默认")
         handleInitFailure()
+    }
+
+    // 看门狗包装 Runnable 持有（修复：postDelayed 挂的是捕获代际的包装 lambda，
+    // removeCallbacks(initWatchdog) 移除的是裸对象永远移不掉 → 销毁后 8s 仍触发重建引擎）
+    private var initWatchdogRunnable: Runnable? = null
+
+    private fun removeWatchdog() {
+        initWatchdogRunnable?.let { mainHandler.removeCallbacks(it) }
+        initWatchdogRunnable = null
     }
 
     override fun onCreate() {
@@ -90,7 +105,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
 
     override fun onDestroy() {
         super.onDestroy()
-        mainHandler.removeCallbacks(initWatchdog)
+        removeWatchdog()
         clearTTS()
     }
 
@@ -105,7 +120,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         ttsInitFinish = false
         initGeneration++
         // 清理迟到看门狗，本轮重新判定
-        mainHandler.removeCallbacks(initWatchdog)
+        removeWatchdog()
         val route = SpeechRoute.resolveSpeechRoute(ReadAloud.ttsEngine)
         // AD-03：回退初始化（单次）强制默认引擎，不挂看门狗
         val engine = if (forceDefault || fallbackInit) {
@@ -114,27 +129,36 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
             route.engineValue
         }
         LogUtils.d(TAG, "initTts engine:$engine generation:$initGeneration forceDefault:$forceDefault")
+        // P1-10 修复：onInit 携带发起本轮 init 的代际，迟到回调按代际失效
+        // （否则旧引擎迟到的 SUCCESS 会把新引擎 ttsInitFinish 置 true，看门狗条件恒假永不降级）
+        val generation = initGeneration
+        val initListener = TextToSpeech.OnInitListener { status -> onInit(status, generation) }
         val created = if (engine.isBlank()) {
-            TextToSpeech(this, this)
+            TextToSpeech(this, initListener)
         } else {
-            TextToSpeech(this, this, engine)
+            TextToSpeech(this, initListener, engine)
         }
         textToSpeech = created
         if (!forceDefault && !fallbackInit) {
-            // 看门狗持 init 代际，迟到触发按代际失效（onDestroy/重入防护）
-            val generation = initGeneration
-            mainHandler.postDelayed({
-                if (generation == initGeneration && !ttsInitFinish && !fallbackInit) {
+            // 看门狗持 init 代际，迟到触发按代际失效（onDestroy/重入防护）；
+            // 包装 Runnable 存引用，removeWatchdog 才移除得掉（P1-11）
+            val watchdogGeneration = generation
+            val watchdogRunnable = Runnable {
+                if (watchdogGeneration == initGeneration && !ttsInitFinish && !fallbackInit) {
                     initWatchdog.run()
                 }
-            }, WATCHDOG_TIMEOUT_MS)
+            }
+            initWatchdogRunnable = watchdogRunnable
+            mainHandler.postDelayed(watchdogRunnable, WATCHDOG_TIMEOUT_MS)
         }
         upSpeechRate()
     }
 
     @Synchronized
     fun clearTTS() {
-        mainHandler.removeCallbacks(initWatchdog)
+        removeWatchdog()
+        // 引擎重建/清理：多角色挂起续体全部回收（防丢回调挂死，句级超时外第二道闸）
+        utteranceSink.clearAll()
         textToSpeech?.runCatching {
             stop()
             shutdown()
@@ -143,7 +167,12 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         ttsInitFinish = false
     }
 
-    override fun onInit(status: Int) {
+    private fun onInit(status: Int, generation: Int) {
+        // P1-10：非本轮代际的迟到回调直接失效（防旧引擎回调污染新引擎初始化状态）
+        if (generation != initGeneration) {
+            LogUtils.d(TAG, "onInit 迟到回调失效 generation:$generation current:$initGeneration")
+            return
+        }
         // TtsTrace 真机联调：init 回调结果（成功才走 play，失败走降级链）
         AppLog.putDebugWithTag(
             AppLog.TAG_TTS_TRACE,
@@ -155,7 +184,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                 it.setOnUtteranceProgressListener(ttsUtteranceListener)
                 ttsInitFinish = true
                 // init 成功：撤看门狗，应用每引擎独立参数（AD-05）
-                mainHandler.removeCallbacks(initWatchdog)
+                removeWatchdog()
                 applyEngineParams(it)
                 play()
             }
@@ -171,7 +200,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
      * ②否则 clearTTS 后回退默认引擎重建（单次不挂看门狗）。
      */
     private fun handleInitFailure() {
-        mainHandler.removeCallbacks(initWatchdog)
+        removeWatchdog()
         if (fallbackInit) {
             // 终止条件：回退目标已是默认引擎仍失败→暂停+通知（不无限循环）
             toastOnUi("TTS 引擎初始化失败，已暂停朗读")
@@ -318,11 +347,13 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
      */
     private suspend fun speakMultiRole(ruleSet: CastingRuleSet) {
         val bookKey = ReadBook.book?.bookUrl.orEmpty()
+        // 监听器所有权归一（P1-9）：utterance 完成信号经 sink 分发表回收，不再逐句覆盖服务级监听器
         val source = SystemEngineSource(
             this,
             { textToSpeech },
             { ttsInitFinish },
-            ReadAloud.currentRoute.engineValue
+            ReadAloud.currentRoute.engineValue,
+            utteranceSink
         )
         val textChapter = textChapter ?: return
         val contentList = contentList
@@ -359,12 +390,21 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                     text
                 }
                 if (speechText.replace(AppPattern.notReadAloudRegex, "").isBlank()) {
+                    // 纯静默段跳过但须计账（P2：与空白段路径口径一致，防进度账少计）
+                    readAloudNumber += text.length
                     continue
                 }
                 val sourceRoute = runCatching {
                     TtsCastingStore.resolveSourceForTag(bookKey, segment.tag, ruleSet)
                 }.getOrNull() ?: SpeechRoute(engineType = SpeechRoute.ENGINE_DEFAULT)
-                val voiceRef = if (sourceRoute.speakerName.isNotBlank()) {
+                // 通道门禁（P1-15 门禁版）：模板声源指向 HTTP/脚本通道时本服务无法合成，
+                // 明示降级为引擎默认音（静默降级会表现为"角色不生效"，须留痕可排查）
+                val voiceRef = if (sourceRoute.engineType != SpeechRoute.ENGINE_SYSTEM &&
+                    sourceRoute.engineType != SpeechRoute.ENGINE_DEFAULT
+                ) {
+                    AppLog.put("多人听书：模板声源指向非系统通道（${sourceRoute.engineType}），该角色降级为引擎默认音")
+                    null
+                } else if (sourceRoute.speakerName.isNotBlank()) {
                     TtsVoiceRef(
                         voiceId = sourceRoute.toneID,
                         displayName = sourceRoute.speakerName,
@@ -373,17 +413,20 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                 } else {
                     null
                 }
+                // 韵律送达（P1-14）：取命中规则配置的韵律（0=跟随全局），不再恒传默认全零
+                val ruleProsody = ruleSet.rules.firstOrNull { it.tag == segment.tag }?.prosody
+                    ?: CastingProsody()
                 val utteranceId = "${AppConst.APP_TAG}mr_${p}_${segment.offsetInParagraph}"
                 // TtsTrace 真机联调：逐段合成证据（分段来源 tag/声源/文本长度）
                 AppLog.putDebugWithTag(
                     AppLog.TAG_TTS_TRACE,
-                    "multiRole 段 p=$p off=${segment.offsetInParagraph} len=${segment.length} tag=${segment.tag} 声源=${sourceRoute.engineType}:${sourceRoute.engineValue}:${voiceRef?.displayName ?: "-"} utteranceId=$utteranceId",
+                    "multiRole 段 p=$p off=${segment.offsetInParagraph} len=${segment.length} tag=${segment.tag} 声源=${sourceRoute.engineType}:${sourceRoute.engineValue}:${voiceRef?.displayName ?: "-"} prosody=${ruleProsody.rate}/${ruleProsody.pitch}/${ruleProsody.volume} utteranceId=$utteranceId",
                     level = AppLog.Level.INFO
                 )
                 val completed = source.utterance(
                     speechText,
                     voiceRef,
-                    CastingProsody(),
+                    ruleProsody,
                     utteranceId
                 )
                 if (!completed) {
@@ -469,14 +512,48 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     }
 
     /**
-     * 朗读监听
+     * 多角色 utterance 分发表实现：
+     * register/unregister 由 SystemEngineSource 调用；dispatch 由 TTSUtteranceListener 按回调路由，
+     * 分发命中=多角色段（continuation 推进），未命中=legacy utterance（走 legacy 游标推进）
+     */
+    private inner class UtteranceSink : UtteranceProgressSink {
+        private val pending = ConcurrentHashMap<String, CancellableContinuation<Boolean>>()
+
+        override fun registerUtterance(utteranceId: String, cont: CancellableContinuation<Boolean>) {
+            pending[utteranceId] = cont
+        }
+
+        override fun unregisterUtterance(utteranceId: String) {
+            pending.remove(utteranceId)
+        }
+
+        fun contains(utteranceId: String): Boolean = pending.containsKey(utteranceId)
+
+        /** 分发完成信号；返回 false=非多角色 utterance */
+        fun dispatch(utteranceId: String, completed: Boolean): Boolean {
+            val cont = pending.remove(utteranceId) ?: return false
+            if (cont.isActive) cont.resume(completed)
+            return true
+        }
+
+        /** 引擎重建/服务清理：全部挂起续体按未完成回收（防 clearTTS 后丢回调挂死，超时兜底外第二道闸） */
+        fun clearAll() {
+            pending.keys.toList().forEach { id -> dispatch(id, false) }
+        }
+    }
+
+    /**
+     * 朗读监听（服务级唯一监听器，全生命周期仅 onInit 注册一次）
      * 段游标推进闸：仅 onDone/onError 推进；onStop 不推进（pause/stop/seek 流程已处理状态，防双推进）
+     * 多角色 utterance（mr_ 前缀，经 sink 注册）按 id 分发回收，不走 legacy 游标
      */
     private inner class TTSUtteranceListener : UtteranceProgressListener() {
 
         private val TAG = "TTSUtteranceListener"
 
         override fun onStart(s: String) {
+            // 多角色段：翻页判定由 speakMultiRole 循环内处理，legacy onStart 逻辑不适用
+            if (utteranceSink.contains(s)) return
             LogUtils.d(TAG, "onStart nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$s")
             textChapter?.let {
                 if (contentList[nowSpeak].matches(AppPattern.notReadAloudRegex)) {
@@ -494,6 +571,8 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
 
         override fun onDone(s: String) {
             LogUtils.d(TAG, "onDone utteranceId:$s")
+            // 多角色段：信号经分发表回收（完成=true 推进到下一段）
+            if (utteranceSink.dispatch(s, true)) return
             // 段落停顿静音项不推进段落 (R7.1)
             if (s.contains("pause")) {
                 return
@@ -504,10 +583,13 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         override fun onStop(utteranceId: String?, interrupted: Boolean) {
             // 三路推进闸（AD-09）：onStop 不推进游标——pause/stop/seek 流程已处理状态
             LogUtils.d(TAG, "onStop utteranceId:$utteranceId interrupted:$interrupted")
+            // 多角色段：回收挂起续体（completed=false → speakMultiRole 静默退出循环）
+            utteranceId?.let { utteranceSink.dispatch(it, false) }
         }
 
         override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
             super.onRangeStart(utteranceId, start, end, frame)
+            if (utteranceId != null && utteranceSink.contains(utteranceId)) return
             val msg =
                 "onRangeStart nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$utteranceId start:$start end:$end frame:$frame"
             LogUtils.d(TAG, msg)
@@ -527,6 +609,8 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                 TAG,
                 "onError nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$utteranceId errorCode:$errorCode"
             )
+            // 多角色段：引擎错误按完成推进（与 legacy 推进口径一致，防单段错误卡死整章）
+            if (utteranceId != null && utteranceSink.dispatch(utteranceId, true)) return
             nextParagraph()
         }
 
@@ -546,6 +630,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         @Deprecated("Deprecated in Java")
         override fun onError(s: String) {
             LogUtils.d(TAG, "onError nowSpeak:$nowSpeak pageIndex:$pageIndex s:$s")
+            if (utteranceSink.dispatch(s, true)) return
             nextParagraph()
         }
 

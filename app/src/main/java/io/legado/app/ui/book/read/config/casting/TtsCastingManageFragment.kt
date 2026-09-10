@@ -96,8 +96,12 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
     /** 导出内容（剪贴板/文件双通道承接） */
     private var exportText by mutableStateOf<String?>(null)
 
-    /** 试听控制器（编辑器唯一试听入口；宿主 dismiss/onDestroyView 调 release） */
-    private var previewController: TtsVoicePreviewController? = null
+    /** 试听控制器（编辑器唯一试听入口；宿主 dismiss/onDestroyView 调 release）
+     *  snapshot state：编辑器组合读取 controller.state 获得重组失效（修复试听状态三重断链） */
+    private var previewController: TtsVoicePreviewController? by mutableStateOf(null)
+
+    /** 编辑器进入时内容快照（未保存拦截脏比对基准） */
+    private var editorSnapshot: String? = null
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -131,7 +135,7 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
                                 onRulesChange = { editor = ed.copy(rules = it) },
                                 onFallbackChange = { editor = ed.copy(fallbackSourceJson = it) },
                                 onSave = { saveEditor(ed) },
-                                onBack = { route = Route.LIST },
+                                onBack = { backFromEditor(ed) },
                                 onPreview = { preview(ed, it) },
                                 onStopPreview = { previewController?.stopActivePreview() }
                             )
@@ -167,7 +171,8 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
         }
     }
 
-    /** 试听控制器惰性创建（编辑器态进入时接线 beforePreview/恢复回调） */
+    /** 试听控制器惰性创建（编辑器态进入时接线 beforePreview/恢复回调）
+     *  onStateChanged 留空：控制器 state 已是 snapshot state，Compose 组合期直读即可失效重组 */
     private fun preview(ed: EditorState, route: SpeechRoute) {
         val controller = previewController ?: TtsVoicePreviewController(
             context = requireContext().applicationContext,
@@ -188,9 +193,9 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
         controller.preview(target)
     }
 
-    /** LIST→EDITOR：template=null 新建（默认双规则起步） */
+    /** LIST→EDITOR：template=null 新建（默认双规则起步）；进入时快照用于未保存拦截 */
     private fun openEditor(template: TtsCastingTemplate?) {
-        editor = when (template) {
+        val state = when (template) {
             null -> EditorState(
                 templateId = "custom_${System.currentTimeMillis()}",
                 name = "",
@@ -199,26 +204,45 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
             )
             else -> EditorState(template, readOnly = template.builtin)
         }
+        editor = state
+        editorSnapshot = GSON.toJson(state)
         editorError = null
         route = Route.EDITOR
     }
 
+    /** 编辑器返回：脏比对进入时快照，有未保存修改先确认（防静默丢失） */
+    private fun backFromEditor(ed: EditorState) {
+        if (GSON.toJson(ed) != editorSnapshot) {
+            showComposeConfirmDialog(
+                title = getString(R.string.tts_casting_discard_confirm),
+                message = getString(R.string.tts_casting_discard_confirm_desc),
+                positiveText = getString(R.string.yes),
+                negativeText = getString(R.string.no),
+                onPositive = { route = Route.LIST }
+            )
+        } else {
+            route = Route.LIST
+        }
+    }
+
     /** 复制为自定义：新 templateId+名称"副本"后缀+builtin=false，复制后即可编辑 */
     private fun copyToCustom(template: TtsCastingTemplate) {
+        val appContext = requireContext().applicationContext
         lifecycleScope.launch(Dispatchers.IO) {
             val copy = template.copy(
                 id = "custom_${System.currentTimeMillis()}",
-                name = template.name + getString(R.string.tts_casting_copy_suffix),
+                name = template.name + appContext.getString(R.string.tts_casting_copy_suffix),
                 builtin = false,
                 enabled = true,
                 lastUpdateTime = System.currentTimeMillis()
             )
             TtsCastingStore.save(copy)
-            lifecycleScope.launch { requireContext().toastOnUi(R.string.tts_casting_copy_done) }
+            lifecycleScope.launch { appContext.toastOnUi(R.string.tts_casting_copy_done) }
         }
     }
 
     private fun confirmDelete(template: TtsCastingTemplate) {
+        val appContext = requireContext().applicationContext
         showComposeConfirmDialog(
             title = getString(R.string.draw),
             message = getString(R.string.tts_casting_delete_confirm) + "\n" + template.name,
@@ -227,7 +251,7 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
             onPositive = {
                 lifecycleScope.launch(Dispatchers.IO) {
                     TtsCastingStore.deleteById(template.id)
-                    lifecycleScope.launch { requireContext().toastOnUi(R.string.tts_casting_deleted) }
+                    lifecycleScope.launch { appContext.toastOnUi(R.string.tts_casting_deleted) }
                 }
             }
         )
@@ -235,12 +259,13 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
 
     /** 启停切换：即改即存+失败回滚明示（乐观更新模式） */
     private fun toggleEnabled(template: TtsCastingTemplate) {
+        val appContext = requireContext().applicationContext
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching {
                 TtsCastingStore.save(template.copy(enabled = !template.enabled))
             }.onFailure {
                 AppLog.put("选角模板启停失败：${it.message}")
-                lifecycleScope.launch { requireContext().toastOnUi("启停失败：${it.message}") }
+                lifecycleScope.launch { appContext.toastOnUi("启停失败：${it.message}") }
             }
         }
     }
@@ -250,32 +275,42 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
      * 校验链固定：同通道→保留字→regex 预编译/pattern 限长→schemaVersion 写入
      */
     private fun saveEditor(ed: EditorState) {
+        val appContext = requireContext().applicationContext
         lifecycleScope.launch(Dispatchers.IO) {
             val myRevision = ++revision
             saveMutex.withLock {
                 if (myRevision != revision) return@withLock
                 // 校验链
+                if (ed.rules.isEmpty()) {
+                    postEditorError(appContext, -1, "至少需要一条分段规则")
+                    return@withLock
+                }
                 for ((index, rule) in ed.rules.withIndex()) {
+                    // 非引号规则 pattern 必填（空 pattern=永不命中，保存即失效）
+                    if (rule.matchType != CastingMatchType.BUILTIN_QUOTE && rule.pattern.isBlank()) {
+                        postEditorError(appContext, index, "匹配内容不能为空")
+                        return@withLock
+                    }
                     if (rule.pattern.length > TtsCastingStore.MAX_PATTERN_LENGTH) {
-                        postEditorError(index, "pattern 超 ${TtsCastingStore.MAX_PATTERN_LENGTH} 字符限长")
+                        postEditorError(appContext, index, "pattern 超 ${TtsCastingStore.MAX_PATTERN_LENGTH} 字符限长")
                         return@withLock
                     }
                     if (rule.matchType == CastingMatchType.REGEX) {
                         runCatching { Regex(rule.pattern) }.getOrElse {
-                            postEditorError(index, "非法正则：${it.message}")
+                            postEditorError(appContext, index, "非法正则：${it.message}")
                             return@withLock
                         }
                     }
                 }
                 val ruleSet = CastingRuleSet(
                     templateId = ed.templateId,
-                    name = ed.name.ifBlank { getString(R.string.tts_casting_default_name) },
+                    name = ed.name.ifBlank { appContext.getString(R.string.tts_casting_default_name) },
                     builtin = ed.builtin,
                     rules = ed.rules,
                     fallbackSourceJson = ed.fallbackSourceJson
                 )
                 if (!ruleSet.sameChannel()) {
-                    postEditorError(-1, getString(R.string.tts_casting_same_channel_error))
+                    postEditorError(appContext, -1, getString(R.string.tts_casting_same_channel_error))
                     return@withLock
                 }
                 val entity = TtsCastingTemplate(
@@ -291,17 +326,19 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
                 TtsCastingStore.save(entity)
                 lifecycleScope.launch {
                     editorError = null
+                    // 保存成功后同步快照，避免返回时误触未保存拦截
+                    editorSnapshot = GSON.toJson(ed.copy(name = ruleSet.name))
                     route = Route.LIST
-                    requireContext().toastOnUi(R.string.tts_casting_saved)
+                    appContext.toastOnUi(R.string.tts_casting_saved)
                 }
             }
         }
     }
 
-    private fun postEditorError(ruleIndex: Int, message: String) {
+    private fun postEditorError(appContext: android.content.Context, ruleIndex: Int, message: String) {
         lifecycleScope.launch {
             editorError = if (ruleIndex >= 0) {
-                getString(R.string.tts_casting_rule_error_prefix, ruleIndex + 1) + message
+                appContext.getString(R.string.tts_casting_rule_error_prefix, ruleIndex + 1) + message
             } else {
                 message
             }

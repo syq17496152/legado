@@ -65,6 +65,7 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlinx.coroutines.CoroutineScope
 
 /**
  * 在线朗读
@@ -185,59 +186,64 @@ class HttpReadAloudService : BaseReadAloudService(),
             downloadTaskActiveLock.withLock {
                 ensureActive()
                 val httpTts = resolveCurrentHttpTts()
-                contentList.forEachIndexed { index, content ->
-                    ensureActive()
-                    if (index < nowSpeak) return@forEachIndexed
-                    var text = content
-                    if (paragraphStartPos > 0 && index == nowSpeak) {
-                        text = text.substring(paragraphStartPos)
-                    }
-                    val fileName = md5SpeakFileName(text)
-                    val speakText = text.replace(AppPattern.notReadAloudRegex, "")
-                    if (speakText.isEmpty()) {
-                        AppLog.put("阅读段落内容为空，使用无声音频代替。\n朗读文本：$text")
-                        createSilentSound(fileName)
-                    } else if (!hasSpeakFile(fileName)) {
-                        runCatching {
-                            val inputStream = if (httpTts.type == 2) {
-                                getEngineSpeakStream(httpTts, speakText)
-                            } else {
-                                getSpeakStream(httpTts, speakText)
-                            }
-                            if (inputStream != null) {
-                                createSpeakFile(fileName, inputStream)
-                            } else {
-                                createSilentSound(fileName)
-                            }
-                        }.onFailure {
-                            when (it) {
-                                is CancellationException -> Unit
-                                else -> pauseReadAloud()
-                            }
-                            return@execute
-                        }
-                    }
-                    val file = getSpeakFileAsMd5(fileName)
-                    val mediaItem = MediaItem.fromUri(Uri.fromFile(file))
-                    launch(Main) {
-                        exoPlayer.addMediaItem(mediaItem)
-                    }
-                    // 段落间停顿: 在非末段后插入静音项 (R7.1)
-                    val pauseMs = AppConfig.ttsParagraphPauseMs
-                    if (pauseMs > 0 && index < contentList.lastIndex) {
-                        val pauseItem = MediaItem.fromUri(
-                            Uri.fromFile(createParagraphPauseFile(pauseMs))
-                        )
-                        launch(Main) {
-                            exoPlayer.addMediaItem(pauseItem)
-                        }
-                    }
-                }
-                preDownloadAudios(httpTts)
+                playDownloadQueue(httpTts)
             }
         }.onError {
             AppLog.put("朗读下载出错\n${it.localizedMessage}", it, true)
         }
+    }
+
+    /** 按段下载队列装配（downloadAndPlayAudios/流式 type=2 降级共用；execute 块（CoroutineScope）内调用） */
+    private suspend fun CoroutineScope.playDownloadQueue(httpTts: HttpTTS) {
+        for (index in contentList.indices) {
+            ensureActive()
+            if (index < nowSpeak) continue
+            var text = contentList[index]
+            if (paragraphStartPos > 0 && index == nowSpeak) {
+                text = text.substring(paragraphStartPos)
+            }
+            val fileName = md5SpeakFileName(text)
+            val speakText = text.replace(AppPattern.notReadAloudRegex, "")
+            if (speakText.isEmpty()) {
+                AppLog.put("阅读段落内容为空，使用无声音频代替。\n朗读文本：$text")
+                createSilentSound(fileName)
+            } else if (!hasSpeakFile(fileName)) {
+                try {
+                    val inputStream = if (httpTts.type == 2) {
+                        getEngineSpeakStream(httpTts, speakText)
+                    } else {
+                        getSpeakStream(httpTts, speakText)
+                    }
+                    if (inputStream != null) {
+                        createSpeakFile(fileName, inputStream)
+                    } else {
+                        createSilentSound(fileName)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    // 语义对齐原实现：单段失败暂停朗读并退出装配（不抛错到 onError）
+                    pauseReadAloud()
+                    return
+                }
+            }
+            val file = getSpeakFileAsMd5(fileName)
+            val mediaItem = MediaItem.fromUri(Uri.fromFile(file))
+            launch(Main) {
+                exoPlayer.addMediaItem(mediaItem)
+            }
+            // 段落间停顿: 在非末段后插入静音项 (R7.1)
+            val pauseMs = AppConfig.ttsParagraphPauseMs
+            if (pauseMs > 0 && index < contentList.lastIndex) {
+                val pauseItem = MediaItem.fromUri(
+                    Uri.fromFile(createParagraphPauseFile(pauseMs))
+                )
+                launch(Main) {
+                    exoPlayer.addMediaItem(pauseItem)
+                }
+            }
+        }
+        preDownloadAudios(httpTts)
     }
 
     private suspend fun preDownloadAudios(httpTts: HttpTTS) {
@@ -255,11 +261,16 @@ class HttpReadAloudService : BaseReadAloudService(),
                 createSilentSound(fileName)
             } else if (!hasSpeakFile(fileName)) {
                 runCatching {
-                    val inputStream = getSpeakStream(httpTts, speakText)
+                    // P2-13 修复：预取按引擎类型分流（脚本引擎走 getEngineSpeakStream，防静默失效）
+                    val inputStream = getEngineSpeakStream(httpTts, speakText)
                     if (inputStream != null) {
                         createSpeakFile(fileName, inputStream)
                     } else {
                         createSilentSound(fileName)
+                    }
+                }.onFailure {
+                    if (it !is CancellationException) {
+                        AppLog.put("下章预下载失败：${it.message}")
                     }
                 }
             }
@@ -267,11 +278,6 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun downloadAndPlayAudiosStream() {
-        // AD-04：脚本引擎走按段下载缓存路径（流式 DataSourceFactory 不适用脚本请求对象）
-        if (currentHttpTts?.type == 2) {
-            downloadAndPlayAudios()
-            return
-        }
         exoPlayer.clearMediaItems()
         downloadTask?.cancel()
         resetCurrentHttpTts()
@@ -279,6 +285,12 @@ class HttpReadAloudService : BaseReadAloudService(),
             downloadTaskActiveLock.withLock {
                 ensureActive()
                 val httpTts = resolveCurrentHttpTts()
+                // P1-13 修复：type=2 分流判定移到 resolve 之后（首播时缓存字段尚未装配，
+                // 旧判定 currentHttpTts==null 恒走错通道 → 脚本引擎+流式首播必现失败）
+                if (httpTts.type == 2) {
+                    playDownloadQueue(httpTts)
+                    return@withLock
+                }
                 val downloaderChannel = Channel<Downloader>()
                 launch {
                     for (downloader in downloaderChannel) {
@@ -396,7 +408,10 @@ class HttpReadAloudService : BaseReadAloudService(),
                 httpTts,
                 speakText,
                 ReadAloud.currentRoute.toneID.ifBlank { null },
-                null, null, null
+                // P1-14 修复：全局语速送达脚本引擎（倍率=speechRate/10，与系统引擎同口径，默认 1.0；
+                // 旧实现恒传 null → JS 端 rate||1 回退，全局语速滑杆对脚本引擎无效）
+                speechRate / 10f,
+                null, null
             )
             // 请求对象映射：url + "," + 选项JSON（method/headers/body，AnalyzeUrl 选项串解析）
             val optionJson = org.json.JSONObject().apply {
@@ -573,7 +588,9 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun hasSpeakFile(name: String): Boolean {
-        return FileUtils.exist("${ttsFolderPath}$name.mp3")
+        // P1-5：0 字节目标文件（上次写流失败的残留）不算命中，防播放空文件/批量端误判幂等
+        val f = File("${ttsFolderPath}$name.mp3")
+        return f.exists() && f.length() > 0
     }
 
     private fun getSpeakFileAsMd5(name: String): File {
@@ -585,10 +602,11 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun createSpeakFile(name: String, inputStream: InputStream) {
-        // 单一原子提交（§3.7.1-4 契约 5）：temp+rename，防半成品被播放读取
-        val target = FileUtils.createFileIfNotExist("${ttsFolderPath}$name.mp3")
+        // 单一原子提交（§3.7.1-4 契约 5）：temp+rename，防半成品被播放读取；
+        // P1-5 修复：目标文件延后到 rename 时才存在（旧实现先建空目标，写流失败遗留 0 字节文件毒化幂等判断）
+        val target = File("${ttsFolderPath}$name.mp3")
         val temp = File("${ttsFolderPath}$name.mp3.part")
-        kotlin.runCatching {
+        try {
             temp.outputStream().use { out ->
                 inputStream.use {
                     it.copyTo(out)
@@ -598,9 +616,9 @@ class HttpReadAloudService : BaseReadAloudService(),
                 temp.copyTo(target, overwrite = true)
                 temp.delete()
             }
-        }.onFailure {
+        } catch (e: Throwable) {
             temp.delete()
-            throw it
+            throw e
         }
     }
 
@@ -623,9 +641,13 @@ class HttpReadAloudService : BaseReadAloudService(),
                 return@forEach
             }
             val isSilentSound = it.length() == 2160L
+            // P2-15：残留 .part 半成品清理（超 10min 的陈旧临时文件；活跃写入中的 .part 因 lastModified 持续更新不受影响）
+            val isStalePart = it.name.endsWith(".part")
+                && System.currentTimeMillis() - it.lastModified() > 600000
             if ((!it.name.startsWith(titleMd5)
                         && System.currentTimeMillis() - it.lastModified() > 600000)
                 || isSilentSound
+                || isStalePart
             ) {
                 FileUtils.delete(it.absolutePath)
             }

@@ -69,8 +69,9 @@ object TtsCastingStore {
         appCtx.putPrefString(PreferKey.ttsCastingActiveId, id ?: "")
     }
 
-    /** 书级模板覆盖（§1.8-D-2/R11 验收 6）：书级优先全局；bookKey=书唯一键 */
-    suspend fun resolveActiveTemplateId(bookKey: String): String? {
+    /** 书级模板覆盖（§1.8-D-2/R11 验收 6）：书级优先全局；bookKey=书唯一键。
+     *  仅读 SharedPreferences 无挂起点（P1-23）：去 suspend 供门禁/面板同步调用，杜绝 runBlocking 回潮 */
+    fun resolveActiveTemplateId(bookKey: String): String? {
         val bookOverride = appCtx.getPrefString(PreferKey.ttsCastingBookOverridePrefix + bookKey)
         return bookOverride?.ifBlank { null } ?: activeTemplateId()
     }

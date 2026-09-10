@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.book.read.config
+package io.legado.app.ui.book.read.config
 
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -113,7 +113,8 @@ class TtsCastingPickerDialog : ComposeDialogFragment() {
         globalActiveId = TtsCastingStore.activeTemplateId()
         bookOverrideId = bookUrl?.let { url ->
             runCatching {
-                kotlinx.coroutines.runBlocking { TtsCastingStore.resolveActiveTemplateId(url) }
+                // resolveActiveTemplateId 已去 suspend（仅 prefs 读），消除 runBlocking（P1-24）
+                TtsCastingStore.resolveActiveTemplateId(url)
             }.getOrNull()
         }
     }

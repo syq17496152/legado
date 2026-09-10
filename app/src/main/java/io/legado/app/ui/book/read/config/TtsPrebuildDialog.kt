@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.book.read.config
+package io.legado.app.ui.book.read.config
 
 import android.content.Context
 import android.net.ConnectivityManager
@@ -117,7 +117,9 @@ class TtsPrebuildDialog : ComposeDialogFragment() {
         if (AppConfig.streamReadAloudAudio) {
             return getString(R.string.tts_casting_prebuild_gate_stream)
         }
-        if (TtsCastingStore.activeTemplateId() != null) {
+        // P1-23 修复：门禁走书级生效口径（resolveActiveTemplateId 含书级覆盖），
+        // 旧实现只查全局激活——本书覆盖激活多人时门禁误放行
+        if (TtsCastingStore.resolveActiveTemplateId(ReadBook.book?.bookUrl.orEmpty()) != null) {
             return getString(R.string.tts_casting_prebuild_gate_multi_role)
         }
         return null
@@ -211,24 +213,36 @@ class TtsPrebuildDialog : ComposeDialogFragment() {
 
     /** 发起：网络预检→章界校验→enqueue（去重/上限判定在 Manager）→前台服务 */
     private fun onStartPrebuild() {
+        if (submitting) return
         val book = ReadBook.book ?: run {
             context?.toastOnUi("无当前书籍")
             return
         }
         if (!isNetworkAvailable()) {
             context?.toastOnUi(R.string.tts_casting_prebuild_no_net)
-            submitting = false
             return
         }
         val start = startInput.toIntOrNull()?.minus(1)
         val end = endInput.toIntOrNull()?.minus(1)
-        val s = start ?: return
-        val e = end ?: return
-        if (s < 0 || e < s || s >= chapterCount) {
+        if (start == null || end == null) {
+            // 起止输入为空：明示而非静默 return（P2 修复）
             context?.toastOnUi(R.string.tts_casting_prebuild_chapter_invalid)
-            submitting = false
             return
         }
+        val s = start
+        val e = end
+        // P2 修复：结束章对 chapterCount 上界校验（Manager 侧 clamp 到 200 章，此处校验书籍边界）
+        if (s < 0 || e < s || s >= chapterCount || e >= chapterCount) {
+            context?.toastOnUi(R.string.tts_casting_prebuild_chapter_invalid)
+            return
+        }
+        // P2 修复：200 章上限 Dialog 预提示（设计 §3.7.2：超出提示分批发起）
+        if (e - s + 1 > TtsPrebuildManager.MAX_BATCH_CHAPTERS) {
+            context?.toastOnUi(R.string.tts_casting_prebuild_too_many)
+            return
+        }
+        submitting = true
+        val appContext = requireContext().applicationContext
         val route = ReadAloud.currentRoute
         val httpTts = route.engineValue.toLongOrNull()?.let { appDb.httpTTSDao.get(it) }
         if (httpTts == null) {
@@ -238,7 +252,7 @@ class TtsPrebuildDialog : ComposeDialogFragment() {
         }
         lifecycleScope.launch(Dispatchers.IO) {
             val reject = TtsPrebuildManager.enqueue(
-                requireContext().applicationContext,
+                appContext,
                 book, s, e, httpTts
             )
             lifecycleScope.launch {
@@ -247,7 +261,7 @@ class TtsPrebuildDialog : ComposeDialogFragment() {
                     submitting = false
                 } else {
                     AppLog.put("TTS 预合成已发起：${book.bookUrl} [$s-$e]")
-                    TtsPrebuildService.start(requireContext())
+                    TtsPrebuildService.start(appContext)
                     dismissAllowingStateLoss()
                 }
             }

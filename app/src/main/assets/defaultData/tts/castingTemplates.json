@@ -1,10 +1,10 @@
-[
+﻿[
   {
     "id": "builtin_dual_voice",
     "name": "旁白/对白双声",
     "builtin": true,
     "enabled": true,
-    "order": 0,
+    "sortOrder": 0,
     "rulesJson": "{\"schemaVersion\":1,\"rules\":[{\"tag\":\"dialogue\",\"matchType\":\"builtin_quote\",\"pattern\":\"\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"对白\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":0,\"volume\":0}},{\"tag\":\"narration\",\"matchType\":\"keyword\",\"pattern\":\"\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"旁白\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":0,\"volume\":0}}]}",
     "fallbackSourceJson": "",
     "lastUpdateTime": 0
@@ -14,7 +14,7 @@
     "name": "男女对读",
     "builtin": true,
     "enabled": false,
-    "order": 1,
+    "sortOrder": 1,
     "rulesJson": "{\"schemaVersion\":1,\"rules\":[{\"tag\":\"dialogue\",\"matchType\":\"builtin_quote\",\"pattern\":\"\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"对白\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":1.2,\"volume\":0}},{\"tag\":\"narration\",\"matchType\":\"keyword\",\"pattern\":\"\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"旁白\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":0.9,\"volume\":0}}]}",
     "fallbackSourceJson": "",
     "lastUpdateTime": 0
@@ -24,7 +24,7 @@
     "name": "MultiTTS 对话透传",
     "builtin": true,
     "enabled": false,
-    "order": 2,
+    "sortOrder": 2,
     "rulesJson": "{\"schemaVersion\":1,\"rules\":[{\"tag\":\"narration\",\"matchType\":\"keyword\",\"pattern\":\"\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"系统引擎\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":0,\"volume\":0}}]}",
     "fallbackSourceJson": "",
     "lastUpdateTime": 0
@@ -34,7 +34,7 @@
     "name": "单声（关闭多人）",
     "builtin": true,
     "enabled": false,
-    "order": 3,
+    "sortOrder": 3,
     "rulesJson": "{\"schemaVersion\":1,\"rules\":[]}",
     "fallbackSourceJson": "",
     "lastUpdateTime": 0

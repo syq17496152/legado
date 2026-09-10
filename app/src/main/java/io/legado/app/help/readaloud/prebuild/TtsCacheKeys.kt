@@ -12,8 +12,9 @@ import io.legado.app.utils.MD5Utils
  */
 object TtsCacheKeys {
 
-    /** 缓存键代际（参与哈希）：升级键算法/维度时 +1，旧代缓存整体失配 */
-    const val KEY_VERSION = "v2"
+    /** 缓存键代际（参与哈希）：升级键算法/维度时 +1，旧代缓存整体失配。
+     *  v3：speedKey 对齐播放端 speechRatePlay+5（P0-4）/切分口径去 trim（P1-1）/标题因子走 getDisplayTitle（P1-2） */
+    const val KEY_VERSION = "v3"
 
     fun ttsSpeakFileName(
         engineKey: String,

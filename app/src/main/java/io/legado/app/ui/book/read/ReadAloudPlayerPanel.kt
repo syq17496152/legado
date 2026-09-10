@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.book.read
+package io.legado.app.ui.book.read
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -1086,8 +1086,9 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
 
     private fun setMode(mode: DisplayMode) {
         // AD-09 期1：Scene 闸位解耦——选角模板激活（多人听书）或 AI 多角色开启 均可进入 Scene
+        // P1-23 修复：走书级生效口径（含书级覆盖），本书覆盖激活时不再误判为不可用强制回 Immersive
         val multiRoleAvailable = AppConfig.aiReadAloudRoleEnabled ||
-            TtsCastingStore.activeTemplateId() != null
+            TtsCastingStore.resolveActiveTemplateId(io.legado.app.model.ReadBook.book?.bookUrl.orEmpty()) != null
         val targetMode = if (!multiRoleAvailable && mode == DisplayMode.Scene) {
             DisplayMode.Immersive
         } else {

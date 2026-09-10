@@ -70,10 +70,13 @@ object TtsTagSplitter {
         val segments = mutableListOf<CastingSegment>()
         var cursor = 0
         for ((start, end, tag) in bounds) {
-            if (start > cursor) {
-                segments.add(CastingSegment(paragraphIndex, cursor, start - cursor, CastingTag.NARRATION))
+            // 防御性截断：装配层兜底互斥不变量（collect 层已互斥标记，此处防规则边界异常导致重叠）
+            val s = maxOf(start, cursor)
+            if (end <= s) continue
+            if (s > cursor) {
+                segments.add(CastingSegment(paragraphIndex, cursor, s - cursor, CastingTag.NARRATION))
             }
-            segments.add(CastingSegment(paragraphIndex, start, end - start, tag))
+            segments.add(CastingSegment(paragraphIndex, s, end - s, tag))
             cursor = end
         }
         if (cursor < paragraph.length) {
@@ -82,7 +85,7 @@ object TtsTagSplitter {
         return segments
     }
 
-    /** 引号规则：区间互斥（已被高优先级规则占用的字符不再纳入） */
+    /** 引号规则：区间互斥（已被高优先级规则占用的字符不再纳入；端点与区间内部均校验，防与 regex 命中区重叠） */
     private fun collectQuotes(
         paragraph: String,
         used: BooleanArray,
@@ -100,7 +103,14 @@ object TtsTagSplitter {
                     openIndex = i
                 }
             } else if (c == openChar && !used[i]) {
-                // 跨段未闭合=段内闭合语义：openIndex 有值且找到配对才成段
+                // 跨段未闭合=段内闭合语义：openIndex 有值且找到配对才成段。
+                // 互斥校验含区间内部：regex/keyword 已占用引号内部字符时，引号段整体放弃（防分段重叠破坏并集不变量）
+                val interiorUsed = (openIndex..i).any { used[it] }
+                if (interiorUsed) {
+                    openChar = null
+                    openIndex = -1
+                    continue
+                }
                 for (j in openIndex..i) used[j] = true
                 bounds.add(Triple(openIndex, i + 1, tag))
                 openChar = null

@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.book.read.config
+package io.legado.app.ui.book.read.config
 
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -299,7 +299,7 @@ class SpeakEngineDialog() : ComposeDialogFragment(), SpeakEngineDialogActions {
      * 读取 assets/defaultData/tts/ 四个模板 JS → 创建 type=2 引擎记录（默认未启用，
      * 用户在列表中选用即确认启用）；幂等=同名"模板·"记录跳过。
      */
-    private fun importBuiltinScriptTemplates() {
+    override fun importBuiltinScriptTemplates() {
         val templates = listOf(
             "MultiTTS 转发器" to "multitts_forwarder.js",
             "CloneTTS" to "clonetts.js",
@@ -398,6 +398,7 @@ private interface SpeakEngineDialogActions {
     fun importDefault()
     fun importLocal()
     fun importOnline()
+    fun importBuiltinScriptTemplates()
     fun exportAll()
     fun exportSelected()
     fun exportHttpTts(httpTTS: HttpTTS)
@@ -493,6 +494,10 @@ private fun SpeakEngineScreen(
                 onOnline = {
                     importDialogVisible = false
                     actions.importOnline()
+                },
+                onBuiltinScriptTemplates = {
+                    importDialogVisible = false
+                    actions.importBuiltinScriptTemplates()
                 }
             )
         }
