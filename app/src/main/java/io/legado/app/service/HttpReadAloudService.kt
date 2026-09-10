@@ -534,11 +534,14 @@ class HttpReadAloudService : BaseReadAloudService(),
     private fun md5SpeakFileName(content: String, textChapter: TextChapter? = this.textChapter): String {
         // 键单源收敛修复（§3.7.1 契约 1/2/8，任务 2.10）：播放端改走 TtsCacheKeys 单源，
         // 与批量端同函数（修复缺陷：播放端残留旧 v1 内联键，导致预合成产物播放端命中不了）
-        val fileName = TtsCacheKeys.ttsSpeakFileName(
-            engineKey = currentHttpTts?.id?.toString().orEmpty(),
-            speedKey = speechRate.toString(),
-            voiceKey = ReadAloud.currentRoute.toneID,
+        // E5/方向①：改走键因子三件套门面（engineKey/speedKey/voiceKey 字符串化收进单源）
+        val fileName = TtsCacheKeys.speakFileName(
+            engineId = currentHttpTts?.id,
+            speechRate = speechRate,
+            voiceId = ReadAloud.currentRoute.toneID,
             chapterIndex = textChapter?.chapter?.index ?: -1,
+            // textChapter.title 已是 displayTitle 口径（ReadBook.kt:1331 getDisplayTitle 同源解析），
+            // 与批量端 resolveChapterTitle 一致，禁改回 chapter.title 原始值（键失配）
             chapterTitle = textChapter?.title ?: "",
             unitText = content
         )

@@ -35,7 +35,11 @@ import io.legado.app.constant.NotificationId
 import io.legado.app.constant.PreferKey
 import io.legado.app.constant.Status
 import io.legado.app.help.MediaHelp
+import io.legado.app.help.ai.AiReadAloudRoleService
+import io.legado.app.help.ai.AiReadAloudRoleState
 import io.legado.app.help.config.AppConfig
+import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.lib.permission.Permissions
@@ -53,6 +57,7 @@ import io.legado.app.utils.observeEvent
 import io.legado.app.utils.observeSharedPreferences
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
@@ -285,6 +290,58 @@ abstract class BaseReadAloudService : BaseService(),
     open fun onReInitTts() {
     }
 
+    /** E1/P0-5 AI 预热任务句柄（新预热/取消时代替，防 LLM 请求堆积） */
+    private var preheatJob: Coroutine<*>? = null
+
+    /**
+     * E1/P0-5 AI 分镜预生成缓存预热（fire-and-forget）：
+     * 起播装配完成后后台**直调 ensureCache**（STAGE_PREHEAT 档：无 keepAlive 前台保活），
+     * 命中 DB 缓存/AI 关闭/无模型配置时内部短路零开销；失败仅留痕不阻断朗读。
+     * 取消安全：Coroutine 封装守卫放行 CancellationException（Coroutine.kt:182-183），
+     * 取消路径先清理孤儿 RUNNING 行（2.21），禁止 runCatching 包裹整体（项目取消传播铁律）
+     */
+    private fun preheatAiRoleCache(book: Book?, textChapter: TextChapter?, paragraphs: List<String>) {
+        if (book == null || textChapter == null || paragraphs.isEmpty()) return
+        if (!AppConfig.aiReadAloudRoleEnabled) return
+        preheatJob?.cancel()
+        preheatJob = execute {
+            try {
+                val result = AiReadAloudRoleService.ensureCache(
+                    book,
+                    textChapter,
+                    paragraphs,
+                    AiReadAloudRoleState.STAGE_PREHEAT
+                )
+                // 预热结果按 status 留痕（真机日志分析证据链：INFO 完成/短路、WARN 失败）
+                when (result.status) {
+                    AiReadAloudRoleState.STATUS_SKIPPED -> AppLog.putDebugWithTag(
+                        AppLog.TAG_TTS_TRACE,
+                        "AI 预热跳过：${result.message}",
+                        level = AppLog.Level.INFO
+                    )
+
+                    AiReadAloudRoleState.STATUS_FAILED -> AppLog.putDebugWithTag(
+                        AppLog.TAG_TTS_TRACE,
+                        "AI 预热失败：${result.error}",
+                        level = AppLog.Level.WARN
+                    )
+
+                    else -> AppLog.putDebugWithTag(
+                        AppLog.TAG_TTS_TRACE,
+                        "AI 预热完成 status=${result.status}",
+                        level = AppLog.Level.INFO
+                    )
+                }
+            } catch (e: CancellationException) {
+                // 取消清理：防 RUNNING 行残留污染后续分配判断（2.21）
+                AiReadAloudRoleService.cancelStaleRunningCacheRows(book.bookUrl)
+                throw e
+            }
+        }.onError {
+            AppLog.put("AI 预热异常：${it.localizedMessage}")
+        }
+    }
+
     /**
      * 章级跳转（P1-12/selectChapter 兜底）：跳章后按 play 续播/暂停；同章仅切换播放态。
      * 加载完成后经 newReadAloud 重新装配（对齐 IntentAction.play 语义）
@@ -395,6 +452,8 @@ abstract class BaseReadAloudService : BaseService(),
                 }
             }
             paragraphStartPos = pos
+            // E1/P0-5：AI 分镜预生成缓存预热（fire-and-forget，不阻塞起播；AI 关闭/缓存命中时内部短路）
+            preheatAiRoleCache(ReadBook.book, textChapter, contentList)
             launch(Main) {
                 if (play) play() else pageChanged = true
             }

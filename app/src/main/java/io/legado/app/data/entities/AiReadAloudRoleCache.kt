@@ -54,5 +54,7 @@ data class AiReadAloudRoleCache(
         const val STATUS_SUCCESS = "success"
         const val STATUS_FALLBACK = "fallback"
         const val STATUS_FAILED = "failed"
+        /** E1：预热/分配取消终态（孤儿 RUNNING 行清理写入；消费查询只认 success/fallback，零影响） */
+        const val STATUS_CANCELLED = "cancelled"
     }
 }

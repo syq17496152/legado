@@ -58,6 +58,9 @@ object RhinoClassShutter : ClassShutter {
     private val bookSourcePolicyDepth = ThreadLocal<Int>()
     private val bookSourceLabel = ThreadLocal<String?>()
 
+    // E6/方向⑤ TTS 脚本档独立深度（与书源档互斥分档；Rhino 求值同线程，finally 恢复防残留）
+    private val ttsScriptPolicyDepth = ThreadLocal<Int>()
+
     /**
      * D13 类访问观察者：modules 层不可依赖 app 模块 AppLog，由 app 模块启动时注册实现回写日志
      */
@@ -71,7 +74,36 @@ object RhinoClassShutter : ClassShutter {
 
     private fun policyDepth(): Int = bookSourcePolicyDepth.get() ?: 0
 
+    private fun ttsPolicyDepth(): Int = ttsScriptPolicyDepth.get() ?: 0
+
     fun currentBookSourceLabel(): String? = bookSourceLabel.get()
+
+    /**
+     * E6/方向⑤ TTS 脚本档包裹：第三方 TTS 脚本（HttpTTS type=2，非 BookSource 来源）独立分档，
+     * 宿主 App 类（io.legado.app.*）从"观察放行"升级为"实拦"——第三方脚本协议仅需 JS 基础能力
+     * +JSON，网络由宿主代理（synthesize 返回请求对象），无需任何宿主类访问面。
+     * depth+1（可重入）；finally 恢复（同线程求值无挂起点，无跨协程残留）；书源档行为零变化。
+     * ⚠️ 禁改 RhinoScriptEngine.evalSuspend（:128 ThreadLocal 跨挂起恢复残留为已知问题，
+     * 书源档泄漏只会令 deny 并集更严，不放大放行面）。
+     */
+    fun <T> withTtsScriptClassPolicy(sourceLabel: String?, block: () -> T): T {
+        val depth = ttsPolicyDepth() + 1
+        ttsScriptPolicyDepth.set(depth)
+        val previousLabel = bookSourceLabel.get()
+        if (!sourceLabel.isNullOrEmpty()) {
+            bookSourceLabel.set(sourceLabel)
+        }
+        try {
+            return block()
+        } finally {
+            if (depth <= 1) {
+                ttsScriptPolicyDepth.remove()
+            } else {
+                ttsScriptPolicyDepth.set(depth - 1)
+            }
+            bookSourceLabel.set(previousLabel)
+        }
+    }
 
     /**
      * P0-S4 书源类策略包裹：enabled=false 直接执行（非书源上下文零行为变化）；
@@ -241,6 +273,15 @@ object RhinoClassShutter : ClassShutter {
         // 前置 matcher 段不变：全局防护行为不变
         if (protectedClassNamesMatcher.match(fullClassName)) {
             return false
+        }
+        // E6 TTS 脚本档（独立于书源档）：宿主 App 类实拦（第三方 TTS 脚本无需宿主类访问面）
+        if (ttsPolicyDepth() > 0) {
+            if (fullClassName.startsWith(APP_CLASS_PREFIX) || fullClassName in bookSourceProtectedClassNames) {
+                classAccessObserver?.onBlockClass(fullClassName, currentBookSourceLabel())
+                return false
+            }
+            // 非 app 前缀 Java 类（URLEncoder/org.json 等 matcher 外）维持放行现状
+            return true
         }
         // P0-S4 书源模式段（depth>0）：
         // ① D11 实拦：CookieManager/CookieSyncManager 命中即拒（观察者回写限流采样日志）

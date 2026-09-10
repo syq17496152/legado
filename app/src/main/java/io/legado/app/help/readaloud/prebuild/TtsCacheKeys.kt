@@ -31,4 +31,25 @@ object TtsCacheKeys {
         // 双段结构保持与旧格式同构（stem_unit），stem 与正文缓存主名同源
         return "${stem}_${unit}"
     }
+
+    /**
+     * E5/方向① 键因子三件套门面：统一 engineKey/speedKey/voiceKey 的字符串化与键组装，
+     * 播放端/批量端调用点只传原始参数（禁再各自内联拼接）；
+     * 底座 ttsSpeakFileName 与 KEY_VERSION 冻结不动（纯收编零算法变化，存量缓存零失配）
+     */
+    fun speakFileName(
+        engineId: Long?,
+        speechRate: Int,
+        voiceId: String?,
+        chapterIndex: Int,
+        chapterTitle: String,
+        unitText: String
+    ): String = ttsSpeakFileName(
+        engineKey = engineId?.toString().orEmpty(),
+        speedKey = speechRate.toString(),
+        voiceKey = voiceId.orEmpty(),
+        chapterIndex = chapterIndex,
+        chapterTitle = chapterTitle,
+        unitText = unitText
+    )
 }

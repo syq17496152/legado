@@ -1,6 +1,7 @@
 package io.legado.app.help
 
 import io.legado.app.constant.AppConst
+import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.DictRule
 import io.legado.app.data.entities.HttpTTS
@@ -37,6 +38,10 @@ object DefaultData {
                 }
                 if (LocalConfig.needUpDictRule) {
                     importDefaultDictRules()
+                }
+                // E4/F-2：选角模板首装/升级导入（importBuiltinTemplates 自带 id 幂等，无需 delete）
+                if (LocalConfig.needUpTtsCastingTemplates) {
+                    importDefaultTtsCastingTemplates()
                 }
             }.onError {
                 it.printOnDebug()
@@ -108,6 +113,19 @@ object DefaultData {
         runBlocking(IO) {
             appDb.httpTTSDao.deleteDefault()
             appDb.httpTTSDao.insert(*httpTTS.toTypedArray())
+        }
+    }
+
+    /** E4/F-2：选角模板首装导入（importBuiltinTemplates 自带 id 幂等+builtin 全字段升级刷新，无需 delete） */
+    fun importDefaultTtsCastingTemplates() {
+        runBlocking(IO) {
+            val json = String(
+                appCtx.assets.open("defaultData${File.separator}tts${File.separator}castingTemplates.json")
+                    .readBytes()
+            )
+            val (imported, _) = io.legado.app.help.readaloud.casting.TtsCastingStore
+                .importBuiltinTemplates(json)
+            AppLog.put("内置选角模板导入完成：$imported 条")
         }
     }
 

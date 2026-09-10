@@ -39,6 +39,7 @@ object BackupSelectorConfig {
         BackupItem("sourceSub", "sourceSub.json", "订阅源订阅", "数据库"),
         BackupItem("txtTocRule", "txtTocRule.json", "TXT目录规则", "数据库"),
         BackupItem("httpTTS", "httpTTS.json", "TTS配置", "数据库"),
+        BackupItem("ttsCastingTemplates", "ttsCastingTemplates.json", "选角模板", "数据库"),
         BackupItem("keyboardAssists", "keyboardAssists.json", "键盘辅助", "数据库"),
         BackupItem("dictRule", "dictRule.json", "词典规则", "数据库"),
         BackupItem("servers", "servers.json", "服务器配置", "数据库"),
