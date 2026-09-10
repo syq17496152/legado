@@ -25,6 +25,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -120,7 +121,9 @@ object TtsPrebuildManager {
                 engineKey = httpTts.id.toString(),
                 httpTts = httpTts,
                 voiceKey = readVoiceKey(),
-                speechRate = AppConfig.ttsSpeechRate,
+                // P0-4 修复：speedKey 单向对齐播放端口径（speechRatePlay+5，含 ttsFlowSys 分支）。
+                // 播放端该值同时是发引擎的 speakSpeed 请求参数域（历史口径），禁反向修改播放端
+                speechRate = AppConfig.speechRatePlay + 5,
                 readAloudByPage = appCtx.getPrefBoolean(io.legado.app.constant.PreferKey.readAloudByPage)
             )
             activeTasks[bookKey] = task
@@ -155,6 +158,11 @@ object TtsPrebuildManager {
         synchronized(activeTasks) {
             activeTasks.keys.firstOrNull()?.let { cancelFlags[it]?.set(true) }
         }
+    }
+
+    /** 取消全部任务（服务 onTaskRemoved/onDestroy 联动；保留名单不动，防预合成资产失去清理保护） */
+    fun cancelAll() {
+        cancelFlags.values.forEach { it.set(true) }
     }
 
     /** 清空全部任务与保留名单（缓存管理页整目录清理联动） */
@@ -200,19 +208,31 @@ object TtsPrebuildManager {
 
     private const val DEFER_MAX_ROUNDS = 3
 
-    /** 串行 worker：FIFO 消费任务簿（单写者：终态仅 worker 落笔） */
+    /** 串行 worker：FIFO 消费任务簿（单写者：终态仅 worker 落笔）；检查+赋值同步防并发双 worker（P2-18） */
     private fun ensureWorker() {
-        if (workerJob?.isActive == true) return
-        workerJob = scope.launch {
-            while (true) {
-                val task = synchronized(activeTasks) {
-                    activeTasks.entries.firstOrNull()?.value
-                } ?: break
-                runTask(task)
-                synchronized(activeTasks) { activeTasks.remove(task.bookKey) }
-                cancelFlags.remove(task.bookKey)
+        synchronized(this) {
+            if (workerJob?.isActive == true) return
+            workerJob = scope.launch {
+                while (true) {
+                    val task = synchronized(activeTasks) {
+                        activeTasks.entries.firstOrNull()?.value
+                    } ?: break
+                    runTask(task)
+                    synchronized(activeTasks) { activeTasks.remove(task.bookKey) }
+                    cancelFlags.remove(task.bookKey)
+                }
             }
         }
+    }
+
+    /** 待合成单元（fileName 内联随单元走，消除索引暂存错位雷 P1-7/P2-18） */
+    private class PendingUnit(
+        val chapterIndex: Int,
+        val unitText: String,
+        val fileName: String
+    ) {
+        var deferRounds = 0
+        var retried = false
     }
 
     /** 执行单个预合成任务（S9-1 主链） */
@@ -225,141 +245,178 @@ object TtsPrebuildManager {
         setState(TtsPrebuildState.Phase.SCANNING)
         val processor = ContentProcessor.get(task.book.name, task.book.origin)
         var totalUnit = 0
-        val unitList = mutableListOf<Pair<Int, String>>() // chapterIndex to unitText
+        val unitList = mutableListOf<PendingUnit>()
+        // 排版随 worker 协程树（P2-19：任务取消时 LAZY 排版 job 级联取消，不再空耗 CPU）
+        val workerScope = CoroutineScope(currentCoroutineContext())
         try {
             // 懒切分+预扫描（worker 内异步执行，发起链零阻塞；扫描期进度="统计中"）
             for (index in task.start..task.end) {
                 currentCoroutineContext().ensureActive()
                 if (flag.get()) {
-                    finishTask(task, TtsPrebuildState.Phase.CANCELLED, totalUnit, 0, "已取消")
+                    finishTask(task, TtsPrebuildState.Phase.CANCELLED, totalUnit, totalUnit, 0, "已取消")
                     return
                 }
                 val bookChapter = appDb.bookChapterDao.getChapter(task.book.bookUrl, index) ?: continue
                 val content = BookHelp.getContent(task.book, bookChapter) ?: continue
                 val bookContent = processor.getContent(task.book, bookChapter, content, reSegment = false)
+                // P1-2 修复：chapterTitle 键因子与播放端同源解析（getDisplayTitle：去换行/简繁转换/替换规则），
+                // 播放端 textChapter.title 即此口径（ReadBook.kt:1331），标题原始值直接入键会失配
+                val displayTitle = bookChapter.getDisplayTitle(
+                    processor.getTitleReplaceRules(),
+                    task.book.getUseReplaceRule(),
+                    replaceBook = task.book.toReplaceBook()
+                )
                 val textChapter = ChapterProvider.getTextChapterAsync(
-                    scope, task.book, bookChapter, bookChapter.title, bookContent,
+                    workerScope, task.book, bookChapter, displayTitle, bookContent,
                     appDb.bookChapterDao.getChapterCount(task.book.bookUrl)
                 )
+                // P0-3 修复：排版是 LAZY 异步，必须等待完成再取分段（播放端有 isCompleted 守卫，批量端原缺失
+                // → 每章几乎必然读到空分页）。60s 超时防异常章挂死；空页=排版异常章，判失败跳过
+                try {
+                    withTimeout(LAYOUT_TIMEOUT_MS) {
+                        while (!textChapter.isCompleted) {
+                            currentCoroutineContext().ensureActive()
+                            delay(50)
+                        }
+                    }
+                } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                    AppLog.put("TTS 预合成：章节排版超时（${LAYOUT_TIMEOUT_MS / 1000}s），跳过章 $index")
+                    continue
+                }
+                if (textChapter.pages.isEmpty()) {
+                    AppLog.put("TTS 预合成：章节排版异常（空页），跳过章 $index")
+                    continue
+                }
+                // P1-1 修复：切分口径与播放端逐字一致（split("\n")+isNotEmpty，不 trim——
+                // 排版注入的段首缩进参与播放端键，批量端 trim 掉即失配；反向修改播放端会错位进度账，禁选）
                 val contentList = textChapter.getNeedReadAloud(0, task.readAloudByPage, 0)
-                    .splitToSequence("\n")
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() }
-                contentList.forEachIndexed { unitIndex, text ->
+                    .split("\n")
+                    .filter { it.isNotEmpty() }
+                for (text in contentList) {
                     val fileName = TtsCacheKeys.ttsSpeakFileName(
                         engineKey = task.engineKey,
                         speedKey = task.speechRate.toString(),
                         voiceKey = task.voiceKey,
                         chapterIndex = index,
-                        chapterTitle = bookChapter.title,
+                        chapterTitle = displayTitle,
                         unitText = text
                     )
-                    unitList.add(index to text)
-                    unitFileNames.add(fileName)
+                    unitList.add(PendingUnit(index, text, fileName))
                 }
             }
+            totalUnit = unitList.size
             if (unitList.isEmpty()) {
-                finishTask(task, TtsPrebuildState.Phase.DONE, 0, 0, "无可合成内容（正文未缓存或全部已命中）")
+                finishTask(task, TtsPrebuildState.Phase.DONE, 0, 0, 0, "无可合成内容（正文未缓存或全部已命中）")
                 return
             }
-            // 逐单元合成
+            // 逐单元合成（while 队列：租约延后单元重排队尾不谎报完成（P1-7）；失败可重试 1 次（P1-6））
             var done = 0
             var failed = 0
             var consecutiveIoFail = 0
-            val deferredRounds = mutableMapOf<Int, Int>()
+            val queue = ArrayDeque(unitList)
             setState(TtsPrebuildState.Phase.RUNNING, 0, unitList.size)
-            unitList.forEachIndexed { unitIdx, (chapterIndex, unitText) ->
+            while (queue.isNotEmpty()) {
                 currentCoroutineContext().ensureActive()
                 if (flag.get()) {
-                    finishTask(task, TtsPrebuildState.Phase.CANCELLED, unitIdx, unitList.size, "已取消")
+                    finishTask(task, TtsPrebuildState.Phase.CANCELLED, done, unitList.size, failed, "已取消")
                     return
                 }
-                // 播放优先租约（当前章+下一章；3 轮延后上限后强制跳过）
+                val unit = queue.removeFirst()
+                // 播放优先租约（当前章+下一章；3 轮延后上限后强制执行）
                 val (defer, rounds) = leaseDecision(
-                    currentChapterIndex(), nextChapterIndex(), chapterIndex,
-                    deferredRounds[chapterIndex] ?: 0
+                    currentChapterIndex(), nextChapterIndex(), unit.chapterIndex, unit.deferRounds
                 )
                 if (defer) {
-                    deferredRounds[chapterIndex] = rounds
-                    done++
+                    unit.deferRounds = rounds
+                    queue.addLast(unit)
                     // TtsTrace 真机联调：播放优先租约延后（3 轮上限强制执行）
                     AppLog.putDebugWithTag(
                         AppLog.TAG_TTS_TRACE,
-                        "prebuild 租约延后 ch=$chapterIndex rounds=$rounds cur=${currentChapterIndex()} next=${nextChapterIndex()}",
+                        "prebuild 租约延后 ch=${unit.chapterIndex} rounds=$rounds cur=${currentChapterIndex()} next=${nextChapterIndex()}",
                         level = AppLog.Level.INFO
                     )
-                    updateProgress(task, gen, unitIdx + 1, unitList.size, failed)
-                    return@forEachIndexed
+                    // 延后不计 done（P1-7 修复：防终态谎报整本完成）
+                    continue
                 }
-                val fileName = unitFileNames[unitIdx]
-                if (reservedKeys.containsKey(fileName) || hasTargetFile(task, fileName)) {
+                if (reservedKeys.containsKey(unit.fileName) || hasTargetFile(task, unit.fileName)) {
                     // 幂等跳过（播放端实时产物互认）
                     // TtsTrace 真机联调：幂等跳过（命中复用证据）
                     AppLog.putDebugWithTag(
                         AppLog.TAG_TTS_TRACE,
-                        "prebuild 幂等跳过 ch=$chapterIndex file=${fileName.takeLast(16)} unit=${unitIdx + 1}/${unitList.size}",
+                        "prebuild 幂等跳过 ch=${unit.chapterIndex} file=${unit.fileName.takeLast(16)} unit=${done + failed + 1}/${unitList.size}",
                         level = AppLog.Level.INFO
                     )
                     done++
-                    updateProgress(task, gen, unitIdx + 1, unitList.size, failed)
-                    return@forEachIndexed
+                    updateProgress(task, gen, done + failed, unitList.size, failed)
+                    continue
                 }
-                val target = targetFile(task, fileName)
+                val target = targetFile(task, unit.fileName)
+                val httpTts = task.httpTts
+                if (httpTts == null) {
+                    failed++
+                    updateProgress(task, gen, done + failed, unitList.size, failed)
+                    continue
+                }
                 val result = TtsSynthesizer.synthesizeToFile(
-                    task.httpTts ?: return@forEachIndexed,
-                    unitText, task.voiceKey, task.speechRate, target
+                    httpTts, unit.unitText, task.voiceKey, task.speechRate, target
                 )
                 when (result) {
                     is TtsSynthesizer.Result.Success -> {
-                        reservedKeys[fileName] = System.currentTimeMillis()
+                        reservedKeys[unit.fileName] = System.currentTimeMillis()
                         consecutiveIoFail = 0
+                        done++
                         // TtsTrace 真机联调：单元合成成功（保留名单登记证据）
                         AppLog.putDebugWithTag(
                             AppLog.TAG_TTS_TRACE,
-                            "prebuild 合成完成 ch=$chapterIndex file=${fileName.takeLast(16)} unit=${unitIdx + 1}/${unitList.size}",
+                            "prebuild 合成完成 ch=${unit.chapterIndex} file=${unit.fileName.takeLast(16)} unit=${done + failed}/${unitList.size}",
                             level = AppLog.Level.INFO
                         )
                     }
                     is TtsSynthesizer.Result.Failure -> {
-                        failed++
-                        AppLog.put("TTS 预合成失败（章 $chapterIndex）：${result.reason}")
-                        if (!result.retryable && ++consecutiveIoFail >= 3) {
-                            // IO/磁盘满类系统性故障：任务级中止（防逐单元空转）
-                            finishTask(task, TtsPrebuildState.Phase.FAILED, unitIdx + 1, unitList.size, "连续 IO 失败：${result.reason}")
-                            return
+                        if (result.retryable && !unit.retried) {
+                            // P1-6 修复：网络/引擎类失败原地重试 1 次（设计 §3.7.2 失败语义）
+                            unit.retried = true
+                            queue.addLast(unit)
+                            AppLog.put("TTS 预合成重试（章 ${unit.chapterIndex}）：${result.reason}")
+                        } else {
+                            failed++
+                            AppLog.put("TTS 预合成失败（章 ${unit.chapterIndex}）：${result.reason}")
+                            if (!result.retryable && ++consecutiveIoFail >= 3) {
+                                // IO/磁盘满类系统性故障：任务级中止（防逐单元空转）
+                                finishTask(task, TtsPrebuildState.Phase.FAILED, done + failed, unitList.size, failed, "连续 IO 失败：${result.reason}")
+                                return
+                            }
                         }
                     }
                 }
-                updateProgress(task, gen, unitIdx + 1, unitList.size, failed)
+                updateProgress(task, gen, done + failed, unitList.size, failed)
             }
-            finishTask(task, TtsPrebuildState.Phase.DONE, unitList.size, unitList.size, "")
+            finishTask(task, TtsPrebuildState.Phase.DONE, unitList.size, unitList.size, failed, "")
         } catch (e: kotlinx.coroutines.CancellationException) {
-            finishTask(task, TtsPrebuildState.Phase.CANCELLED, 0, 0, "已取消")
+            finishTask(task, TtsPrebuildState.Phase.CANCELLED, totalUnit, totalUnit, 0, "已取消")
             throw e
         } catch (e: Exception) {
             AppLog.put("TTS 预合成任务异常：${e.message}")
-            finishTask(task, TtsPrebuildState.Phase.FAILED, totalUnit, 0, e.message ?: "未知异常")
-        } finally {
-            unitFileNames.clear()
+            finishTask(task, TtsPrebuildState.Phase.FAILED, totalUnit, totalUnit, 0, e.message ?: "未知异常")
         }
     }
 
-    /** 单元文件名暂存（预扫描产物，与 unitList 同序） */
-    private val unitFileNames = mutableListOf<String>()
+    /** 排版完成等待超时（P0-3）：防异常章无限挂起 */
+    private const val LAYOUT_TIMEOUT_MS = 60_000L
 
     private fun updateProgress(task: PrebuildTask, gen: Long, current: Int, total: Int, failed: Int) {
         _state.value = TtsPrebuildState(gen, task.bookKey, task.book.name, TtsPrebuildState.Phase.RUNNING, current, total, failed)
     }
 
-    /** 终态落笔（单写者）+定时复位 IDLE */
-    private fun finishTask(task: PrebuildTask, phase: TtsPrebuildState.Phase, current: Int, total: Int, msg: String) {
+    /** 终态落笔（单写者）+定时复位 IDLE；failedCount 透传真实失败数（P2-16：原硬编码 0 终态丢失统计） */
+    private fun finishTask(task: PrebuildTask, phase: TtsPrebuildState.Phase, current: Int, total: Int, failedCount: Int, msg: String) {
         // TtsTrace 真机联调：任务终态（取消/完成/失败判定证据）
         AppLog.putDebugWithTag(
             AppLog.TAG_TTS_TRACE,
-            "prebuild 终态 phase=$phase book=${task.book.name.takeLast(16)} unit=$current/$total msg=$msg",
+            "prebuild 终态 phase=$phase book=${task.book.name.takeLast(16)} unit=$current/$total failed=$failedCount msg=$msg",
             level = AppLog.Level.INFO
         )
-        _state.value = TtsPrebuildState(task.generation, task.bookKey, task.book.name, phase, current, total, 0, msg)
+        _state.value = TtsPrebuildState(task.generation, task.bookKey, task.book.name, phase, current, total, failedCount, msg)
         scope.launch {
             delay(10_000L)
             if (_state.value.generation == task.generation &&
@@ -387,7 +444,9 @@ object TtsPrebuildManager {
     }
 
     private fun hasTargetFile(task: PrebuildTask, fileName: String): Boolean {
-        return File(ttsFolderPath(task), "$fileName.mp3").exists()
+        // P1-5：0 字节文件（播放端写流失败残留）不算命中，防幂等误跳过计 done
+        val f = File(ttsFolderPath(task), "$fileName.mp3")
+        return f.exists() && f.length() > 0
     }
 
     private fun targetFile(task: PrebuildTask, fileName: String): File {

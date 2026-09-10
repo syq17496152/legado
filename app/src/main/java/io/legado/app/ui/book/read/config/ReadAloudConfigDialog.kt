@@ -28,6 +28,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
@@ -180,6 +182,21 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
 
     private val refreshTick = mutableIntStateOf(0)
     private var selectedGroup by mutableStateOf(ReadAloudConfigGroup.Base)
+
+    /** 选角模板快照（P1-24 修复：observeAll Flow 异步加载，替代组合期/点击回调 runBlocking 同步等 DB） */
+    private var castingTemplates by mutableStateOf<List<io.legado.app.data.entities.TtsCastingTemplate>>(emptyList())
+    private var castingTemplatesLoaded by mutableStateOf(false)
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            // observeAll Flow：模板变更自动推送，无需手动失效
+            appDb.ttsCastingTemplateDao.observeAll().collect { templates ->
+                castingTemplates = templates
+                castingTemplatesLoaded = true
+            }
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -411,13 +428,16 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
         )
     }
 
-    /** 多人听书模板摘要（AD-09 期1 入口） */
+    /** 多人听书模板摘要（AD-09 期1 入口）：
+     *  P1-24 修复：读 observeAll 快照（castingTemplates），不再 runBlocking 同步等 DB；
+     *  首帧未加载完成前不显示"共 0 个"误导文案 */
     private fun ttsCastingSummary(): String {
         val activeId = TtsCastingStore.activeTemplateId()
-        val templates = runCatching {
-            kotlinx.coroutines.runBlocking { TtsCastingStore.all() }
-        }.getOrDefault(emptyList())
+        val templates = castingTemplates
         val active = templates.firstOrNull { it.id == activeId }
+        if (!castingTemplatesLoaded) {
+            return if (activeId != null) "当前模板已激活" else "未启用（单声）"
+        }
         return if (active != null) {
             "当前：${active.name}（共 ${templates.size} 个模板）"
         } else {
@@ -425,13 +445,16 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
         }
     }
 
-    /** 多人听书模板循环切换（兼容入口：点击在 可用模板→关闭 间循环，过滤 enabled=false 项） */
+    /** 多人听书模板循环切换（兼容入口：点击在 可用模板→关闭 间循环，过滤 enabled=false 项）
+     *  P1-24 修复：读 observeAll 快照，不 runBlocking；切换后 observeAll 自动推送刷新摘要 */
     private fun cycleTtsCastingTemplate() {
-        val enabledTemplates = runCatching {
-            kotlinx.coroutines.runBlocking { TtsCastingStore.all() }
-        }.getOrDefault(emptyList())
+        val enabledTemplates = castingTemplates
             .filter { it.enabled }
             .map { it.id }
+        if (enabledTemplates.isEmpty()) {
+            context?.toastOnUi("暂无已启用的模板")
+            return
+        }
         val order = enabledTemplates + listOf<String?>(null)
         val current = TtsCastingStore.activeTemplateId()
         val index = order.indexOf(current)

@@ -2,10 +2,23 @@ package io.legado.app.help.readaloud.casting
 
 import android.content.Context
 import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
+import io.legado.app.constant.AppLog
 import io.legado.app.help.readaloud.speech.TtsEngineParamsStore
+import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.resume
+
+/**
+ * utterance 进度回收接口（P1-9 监听器所有权归一）：
+ * 服务级唯一 UtteranceProgressListener 按 utteranceId 查分发表回收完成信号，
+ * 声源实现不再逐句 setOnUtteranceProgressListener 覆盖服务监听器（覆盖不恢复=legacy 推进失效卡死）
+ */
+interface UtteranceProgressSink {
+    fun registerUtterance(utteranceId: String, cont: CancellableContinuation<Boolean>)
+    fun unregisterUtterance(utteranceId: String)
+}
 
 /**
  * 适配层统一声源接口（§3.5.3/AD-09 L-b）
@@ -58,14 +71,22 @@ interface TtsVoiceSource {
  * 系统引擎声源实现：包裹 TextToSpeech 实例，逐句 setVoice/韵律（§3.5.2②）
  * - per-utterance voice 无官方 Bundle 支持（§1.8-G-4）→ setVoice 实例级+逐句调用（官方主路线）
  * - getVoices 预判（缓存快照）：空集/不含目标 → 降级引擎默认音+首次明示
+ * - 完成信号经 UtteranceProgressSink 分发表回收（P1-9 归一），不覆盖服务级监听器
+ * - 句级超时兜底（P2-8）：引擎丢回调时挂起防永久卡死
  * - 多实例登记后续（官方未背书）
  */
 class SystemEngineSource(
     private val context: Context,
     private val ttsProvider: () -> TextToSpeech?,
     private val isInitFinish: () -> Boolean,
-    private val engineValue: String
+    private val engineValue: String,
+    private val sink: UtteranceProgressSink
 ) : TtsVoiceSource {
+
+    companion object {
+        /** 句级超时兜底（P2-8）：正常句朗读远小于该上限，超时视为引擎丢回调 */
+        private const val UTTERANCE_TIMEOUT_MS = 120_000L
+    }
 
     private var degradedNotified = false
 
@@ -91,49 +112,42 @@ class SystemEngineSource(
     ): Boolean {
         val tts = ttsProvider() ?: return false
         if (!isInitFinish()) return false
-        return suspendCancellableCoroutine { cont ->
-            val listener = object : UtteranceProgressListener() {
-                override fun onStart(s: String?) {}
-
-                override fun onDone(s: String?) {
-                    if (cont.isActive) cont.resume(true)
-                }
-
-                override fun onStop(utteranceId: String?, interrupted: Boolean) {
-                    // 推进闸：onStop 交由服务状态机处理（pause/stop 已接管），本句视为未完成
-                    if (cont.isActive) cont.resume(false)
-                }
-
-                @Deprecated("Deprecated in Java")
-                override fun onError(s: String?) {
-                    if (cont.isActive) cont.resume(false)
-                }
-
-                override fun onError(utteranceId: String?, errorCode: Int) {
-                    if (cont.isActive) cont.resume(false)
-                }
-            }
-            tts.setOnUtteranceProgressListener(listener)
-            runCatching {
-                applyProsody(tts, prosody)
-                applyVoice(tts, voice)
-                // TextToSpeech 无 setVolume API：volume 走 per-utterance Bundle（官方 KEY_PARAM_VOLUME）
-                val bundle = android.os.Bundle().apply {
-                    if (prosody.volume > 0f) {
-                        putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, prosody.volume.coerceIn(0f, 2.0f))
+        return try {
+            withTimeout(UTTERANCE_TIMEOUT_MS) {
+                suspendCancellableCoroutine { cont ->
+                    // P1-9 归一：完成信号由服务级监听器按 utteranceId 分发到 sink，不再自挂监听器
+                    sink.registerUtterance(utteranceId, cont)
+                    runCatching {
+                        applyProsody(tts, prosody)
+                        applyVoice(tts, voice)
+                        // TextToSpeech 无 setVolume API：volume 走 per-utterance Bundle（官方 KEY_PARAM_VOLUME）
+                        val bundle = android.os.Bundle().apply {
+                            if (prosody.volume > 0f) {
+                                putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, prosody.volume.coerceIn(0f, 1.0f))
+                            }
+                        }
+                        val result = tts.speak(text, TextToSpeech.QUEUE_FLUSH, bundle, utteranceId)
+                        if (result == TextToSpeech.ERROR) {
+                            sink.unregisterUtterance(utteranceId)
+                            if (cont.isActive) cont.resume(false)
+                        }
+                    }.onFailure {
+                        sink.unregisterUtterance(utteranceId)
+                        if (cont.isActive) cont.resume(false)
+                    }
+                    cont.invokeOnCancellation {
+                        sink.unregisterUtterance(utteranceId)
+                        runCatching { tts.stop() }
                     }
                 }
-                val result = tts.speak(text, TextToSpeech.QUEUE_FLUSH, bundle, utteranceId)
-                if (result == TextToSpeech.ERROR) {
-                    if (cont.isActive) cont.resume(false)
-                }
-            }.onFailure {
-                if (cont.isActive) cont.resume(false)
             }
-            cont.invokeOnCancellation {
-                runCatching { tts.stop() }
-            }
+        } catch (e: TimeoutCancellationException) {
+            // P2-8 句级超时兜底：引擎丢回调，stop 当前播报并按完成推进（防整链卡死）
+            AppLog.put("TTS 句级朗读超时（120s），跳过该段继续：len=${text.length}")
+            runCatching { tts.stop() }
+            true
         }
+        // 外层协程取消（用户停止/换章）原样抛出，不吞 CancellationException
     }
 
     private fun applyProsody(tts: TextToSpeech, prosody: CastingProsody) {

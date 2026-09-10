@@ -61,15 +61,25 @@ class TtsPrebuildService : Service() {
         startForeground(NOTIFICATION_ID, notification)
     }
 
-    /** 每秒轮询 StateFlow 刷新通知进度（对齐 CacheBookService 通知节奏） */
+    /** 每秒轮询 StateFlow 刷新通知进度（对齐 CacheBookService 通知节奏）
+     *  P1-8 修复：首轮先宽限 5s——enqueue→ensureWorker(SCANNING) 落地存在异步窗口，
+     *  立即判 IDLE 会 stopSelf 自杀（任务裸奔，Android 15 后台易被杀）；
+     *  且 IDLE 判定需连续 2 次成立（3s 间隔），防单帧抖动误退 */
     private fun observeState() {
         pollJob = scope.launch {
+            delay(GRACE_BEFORE_IDLE_CHECK_MS)
+            var idleStrikes = 0
             while (isActive) {
                 val state = TtsPrebuildManager.state.value
                 if (state.phase == TtsPrebuildState.Phase.IDLE) {
-                    // 无任务：退出前台并停止（全队列空转无意义）
-                    stopSelf()
-                    break
+                    idleStrikes++
+                    // 无任务：退出前台并停止（全队列空转无意义）；连续确认防竞态误杀
+                    if (idleStrikes >= 2) {
+                        stopSelf()
+                        break
+                    }
+                } else {
+                    idleStrikes = 0
                 }
                 val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 manager.notify(NOTIFICATION_ID, buildNotification(progressText(state)))
@@ -128,13 +138,16 @@ class TtsPrebuildService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         // 用户移除任务（划掉 App）：任务中止（仅进程死亡才允许重发重建语义）
-        AppLog.put("TTS 预合成服务 onTaskRemoved，取消任务")
-        TtsPrebuildManager.cancelCurrent()
+        // P2-17 修复：取消全部任务（原仅取消首个，排队任务继续无前台壳裸奔）
+        AppLog.put("TTS 预合成服务 onTaskRemoved，取消全部任务")
+        TtsPrebuildManager.cancelAll()
         stopSelf()
         super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
+        // 对齐设计 §3.7.2（onDestroy→Manager.cancel）：服务壳销毁即取消全部任务
+        TtsPrebuildManager.cancelAll()
         scope.cancel()
         super.onDestroy()
     }
@@ -143,6 +156,9 @@ class TtsPrebuildService : Service() {
         /** 独立 NotificationId（防与 CacheBookService 并发互踩） */
         private const val NOTIFICATION_ID = 10086
         private const val ACTION_CANCEL = "io.legado.app.tts.prebuild.CANCEL"
+
+        /** IDLE 判定前宽限窗（P1-8）：覆盖 enqueue→SCANNING 异步落地窗口 */
+        private const val GRACE_BEFORE_IDLE_CHECK_MS = 5_000L
 
         fun start(context: Context) {
             val intent = Intent(context, TtsPrebuildService::class.java)

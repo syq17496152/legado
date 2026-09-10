@@ -37,10 +37,27 @@ import io.legado.app.help.readaloud.casting.CastingMatchType
 import io.legado.app.help.readaloud.casting.CastingProsody
 import io.legado.app.help.readaloud.casting.CastingRule
 import io.legado.app.help.readaloud.casting.CastingTag
+import io.legado.app.help.readaloud.casting.ReadAloudDelegate
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.SpeechVoiceCatalogRepository
 import io.legado.app.ui.book.read.config.SpeechVoiceRoutePickerDialog
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+
+/**
+ * 行级试听键推导（与 TtsVoicePreviewController.previewKey 口径一致）：
+ * default/current 哨兵解析为当前实际生效路由，供声源行精确比对"本行是否试听中"
+ */
+internal fun previewKeyFor(route: SpeechRoute): String {
+    val effective = if (route.engineType == SpeechRoute.ENGINE_DEFAULT) {
+        SpeechRoute.resolveSpeechRoute(ReadAloudDelegate.currentTtsEngineRaw())
+    } else {
+        route
+    }
+    return when (effective.engineType) {
+        SpeechRoute.ENGINE_SYSTEM -> "system|${effective.toneID}"
+        else -> "${effective.engineValue}|${effective.toneID}"
+    }
+}
 
 /**
  * 选角模板编辑器（EDITOR 态，AD-11）：
@@ -95,7 +112,7 @@ fun TtsCastingEditorScreen(
                 textStyle = MaterialTheme.typography.bodyLarge
             )
             TextButton(onClick = onSave, enabled = !state.readOnly) {
-                Text(stringResource(R.string.tts_casting_saved), color = style.accent)
+                Text(stringResource(R.string.tts_casting_save), color = style.accent)
             }
         }
         error?.let {
@@ -115,7 +132,7 @@ fun TtsCastingEditorScreen(
             )
         }
         LazyColumn(Modifier.fillMaxWidth()) {
-            itemsIndexed(state.rules, key = { index, _ -> index }) { index, rule ->
+            itemsIndexed(state.rules, key = { index, rule -> "${rule.matchType}_${rule.tag}_$index" }) { index, rule ->
                 TtsCastingRuleRow(
                     index = index,
                     rule = rule,
@@ -408,7 +425,10 @@ private fun TtsCastingSourceRow(
     val summary = io.legado.app.ui.book.read.config.speechRouteSummary(
         route, groups, stringResource(R.string.tts_casting_source_default)
     )
-    val previewing = previewState?.phase != TtsPreviewState.Phase.IDLE
+    // 行级精确比对：仅本行声源试听中才显示停止按钮（防所有声源行同时显示"停止"）
+    val rowPreviewing = previewState != null &&
+        previewState.phase != TtsPreviewState.Phase.IDLE &&
+        previewState.key == previewKeyFor(route)
     Row(
         Modifier
             .fillMaxWidth()
@@ -431,7 +451,7 @@ private fun TtsCastingSourceRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        if (previewing && previewState?.key != null) {
+        if (rowPreviewing && previewState?.key != null) {
             TextButton(onClick = onStopPreview) {
                 Text(
                     if (previewState.phase == TtsPreviewState.Phase.LOADING) {

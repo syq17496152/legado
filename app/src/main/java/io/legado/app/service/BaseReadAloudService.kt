@@ -254,14 +254,108 @@ abstract class BaseReadAloudService : BaseService(),
             )
             IntentAction.stop -> stopSelf()
             IntentAction.reInitTts -> onReInitTts()
+
+            IntentAction.moveTo -> {
+                // P1-12 兜底：播放面板拖进度/点 cue（原 action 无处理分支被静默丢弃）
+                // 闭环为"定位到 cue 所在章节位置起播"；cue 级精确段落 seek 登记后续
+                val expectedChapter = intent.getIntExtra("expectedChapterIndex", ReadBook.durChapterIndex)
+                val chapterPosition = intent.getIntExtra("chapterPosition", 0)
+                val play = intent.getBooleanExtra("play", BaseReadAloudService.isPlay())
+                moveToCueExt(expectedChapter, chapterPosition, play)
+            }
+
+            IntentAction.selectChapter -> {
+                // 兜底：播放面板选章（原 action 无处理分支被静默丢弃，朗读中选章完全无效）
+                val chapterIndex = intent.getIntExtra("chapterIndex", ReadBook.durChapterIndex)
+                val continuePlayback = intent.getBooleanExtra("continuePlayback", BaseReadAloudService.isPlay())
+                moveToChapterExt(chapterIndex, continuePlayback)
+            }
+
+            IntentAction.playFromPosition -> {
+                // 兜底：选句朗读（原 action 无处理分支被静默丢弃）：跳章后从 chapterPosition 起播
+                val chapterIndex = intent.getIntExtra("chapterIndex", ReadBook.durChapterIndex)
+                val chapterPosition = intent.getIntExtra("chapterPosition", 0)
+                playFromPositionExt(chapterIndex, chapterPosition)
+            }
         }
         return super.onStartCommand(intent, flags, startId)
     }
 
-    /**
-     * 引擎内重建（AD-02）：同服务类型切换时不下发 STOP，由子类重建引擎（系统 TTS=clearTTS+initTts）
-     */
+    /** 引擎内重建（AD-02）：同服务类型切换时不下发 STOP，由子类重建引擎（系统 TTS=clearTTS+initTts） */
     open fun onReInitTts() {
+    }
+
+    /**
+     * 章级跳转（P1-12/selectChapter 兜底）：跳章后按 play 续播/暂停；同章仅切换播放态。
+     * 加载完成后经 newReadAloud 重新装配（对齐 IntentAction.play 语义）
+     */
+    private fun moveToChapterExt(targetIndex: Int, play: Boolean) {
+        if (targetIndex == ReadBook.durChapterIndex) {
+            if (play) resumeReadAloud() else pauseReadAloud()
+            return
+        }
+        playStop()
+        if (play) resumeReadAloudInternal()
+        ReadBook.openChapter(targetIndex.coerceAtLeast(0)) {
+            if (play) {
+                ReadBook.readAloud(true)
+            } else {
+                // 暂停态跳章：仅置装配标记，resume 时重装配新章
+                pageChanged = true
+            }
+        }
+    }
+
+    /**
+     * cue 定位兜底（P1-12）：同章按 chapterPosition 精确装配；跨章 openChapter 后按位装配
+     */
+    private fun moveToCueExt(targetChapter: Int, chapterPosition: Int, play: Boolean) {
+        playStop()
+        if (targetChapter == ReadBook.durChapterIndex) {
+            val chapter = ReadBook.curTextChapter
+            if (play && chapter != null && chapter.isCompleted && chapterPosition > 0) {
+                resumeReadAloudInternal()
+                newReadAloudAtChapterPosition(chapterPosition)
+            } else {
+                if (play) resumeReadAloud() else pauseReadAloud()
+            }
+            return
+        }
+        if (play) resumeReadAloudInternal()
+        ReadBook.openChapter(targetChapter.coerceAtLeast(0), durChapterPos = chapterPosition) {
+            if (play) {
+                newReadAloudAtChapterPosition(chapterPosition)
+            } else {
+                pageChanged = true
+            }
+        }
+    }
+
+    /**
+     * 选句朗读兜底：跨章先 openChapter（durChapterPos 定位），完成后从 chapterPosition 起播
+     */
+    private fun playFromPositionExt(chapterIndex: Int, chapterPosition: Int) {
+        playStop()
+        resumeReadAloudInternal()
+        if (chapterIndex != ReadBook.durChapterIndex) {
+            ReadBook.openChapter(chapterIndex, durChapterPos = chapterPosition) {
+                newReadAloudAtChapterPosition(chapterPosition)
+            }
+        } else {
+            newReadAloudAtChapterPosition(chapterPosition)
+        }
+    }
+
+    /** 按"章内字符位置"装配并起播：换算页号与页内偏移（对齐 newReadAloud 的 startPos 语义） */
+    private fun newReadAloudAtChapterPosition(chapterPosition: Int) {
+        val chapter = ReadBook.curTextChapter
+        if (chapter == null || !chapter.isCompleted) {
+            // 章未就绪：退化为整章起播
+            ReadBook.readAloud(true)
+            return
+        }
+        val pageIndex = chapter.getPageIndexByCharIndex(chapterPosition).coerceAtLeast(0)
+        newReadAloud(true, pageIndex, (chapterPosition - chapter.getReadLength(pageIndex)).coerceAtLeast(0))
     }
 
     private fun newReadAloud(play: Boolean, pageIndex: Int, startPos: Int) {

@@ -7,6 +7,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.source.withBookSourceClassPolicy
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
@@ -89,10 +90,11 @@ object TtsScriptEngineClient {
     /**
      * 执行脚本内指定函数（options/voices/synthesize）
      * - 沙箱：显式启用类策略（HttpTTS 非 BookSource，包装默认不生效，见 design §3.3）
-     * - 超时：withTimeout(EXEC_TIMEOUT_MS)（防脚本死循环）
+     * - 超时：withTimeout(EXEC_TIMEOUT_MS)（防脚本死循环）；eval 传入当前协程上下文，
+     *   使 Rhino 指令观察器能在超时取消时打断无挂起点的阻塞执行（否则 10s 超时形同虚设）
      * - 返回：JSON 序列化字符串（ Rhino 内 JSON.stringify 归一化）
      */
-    private fun evalFunction(
+    private suspend fun evalFunction(
         httpTts: HttpTTS,
         function: String,
         argsJson: String
@@ -108,12 +110,14 @@ object TtsScriptEngineClient {
             append(argsJson)
             append("))")
         }
+        // 协程上下文须在 withBookSourceClassPolicy（非 inline）块外捕获，块内调用挂起函数无法编译
+        val coroutineCtx = currentCoroutineContext()
         return RhinoClassShutter.withBookSourceClassPolicy(enabled = true, sourceLabel = sourceLabel) {
             val bindings = buildScriptBindings { bindings ->
                 bindings["sourceLabel"] = sourceLabel
             }
             val scope = RhinoScriptEngine.getRuntimeScope(bindings)
-            RhinoScriptEngine.eval(callJs, scope, null)
+            RhinoScriptEngine.eval(callJs, scope, coroutineCtx)
                 ?.toString()
                 ?: throw NoStackTraceException("TTS 脚本函数 $function 返回空")
         }
@@ -131,13 +135,15 @@ object TtsScriptEngineClient {
     }
 
     /**
-     * 音色目录拉取（含动态 URL 解析）：voices() 返回 {type:"url",url} 时由宿主 GET 拉取目录
+     * 音色目录拉取（含动态 URL 解析）：voices() 返回 {type:"url",url} 或 {voicesUrl} 时由宿主 GET 拉取目录
      * 返回原始目录 JSON（调用方写 speakersJson）
      */
     suspend fun fetchVoicesCatalog(httpTts: HttpTTS): String? {
         val raw = fetchVoices(httpTts)
         val obj = runCatching { JSONObject(raw) }.getOrNull()
+        // 兼容两种动态目录键：voicesUrl（宿主约定）与 url（内置模板 multitts/clonetts 实际返回键）
         val dynamicUrl = obj?.optString("voicesUrl")?.ifBlank { null }
+            ?: obj?.optString("url")?.ifBlank { null }
         if (dynamicUrl == null) {
             return raw
         }
@@ -145,12 +151,35 @@ object TtsScriptEngineClient {
             val connection = java.net.URL(dynamicUrl).openConnection() as java.net.HttpURLConnection
             connection.connectTimeout = 5000
             connection.readTimeout = 8000
-            runCatching {
-                connection.inputStream.bufferedReader().use { it.readText() }
-            }.getOrElse {
-                connection.disconnect()
-                AppLog.put("TTS 音色目录拉取失败：${it.message}")
+            try {
+                if (connection.responseCode !in 200..299) {
+                    AppLog.put("TTS 音色目录拉取失败：HTTP ${connection.responseCode}")
+                    return@withContext null
+                }
+                // 体积限额 2MB：防异常目录撑爆内存
+                val bytes = connection.inputStream.use { input ->
+                    val buffer = java.io.ByteArrayOutputStream()
+                    val chunk = ByteArray(8192)
+                    var total = 0
+                    while (true) {
+                        val n = input.read(chunk)
+                        if (n < 0) break
+                        total += n
+                        if (total > 2 * 1024 * 1024) {
+                            throw NoStackTraceException("TTS 音色目录超过 2MB 限额")
+                        }
+                        buffer.write(chunk, 0, n)
+                    }
+                    buffer.toByteArray()
+                }
+                String(bytes, Charsets.UTF_8)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLog.put("TTS 音色目录拉取失败：${e.message}")
                 null
+            } finally {
+                connection.disconnect()
             }
         }
     }
@@ -226,9 +255,12 @@ object TtsScriptEngineClient {
             body?.let { checkSize("body", it.length, MAX_BODY_LENGTH) }
             return TtsScriptRequest(url, method, headers, body)
         }
-        // 纯 URL 返回
-        checkSize("url", resultJson.length, MAX_URL_LENGTH)
-        return TtsScriptRequest(url = resultJson)
+        // 纯 URL 返回：JSON.stringify 会给字符串包一层引号转义，先解包再校验（防 URL 携带字面引号）
+        val pureUrl = runCatching {
+            org.json.JSONTokener(resultJson).nextValue() as? String
+        }.getOrNull() ?: resultJson
+        checkSize("url", pureUrl.length, MAX_URL_LENGTH)
+        return TtsScriptRequest(url = pureUrl)
     }
 
     private fun checkSize(field: String, length: Int, max: Int) {
