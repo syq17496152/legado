@@ -291,7 +291,7 @@ JSON源自动检测：
 
 ### 3.5 JS 执行 — RhinoScriptEngine
 
-[RhinoScriptEngine.kt](file:///f:/myself/github/WeAgentChat/temp/legado/modules/rhino/src/main/java/io/legado/app/model/analyzeRule/RhinoScriptEngine.kt)
+[RhinoScriptEngine.kt](file:///f:/myself/github/WeAgentChat/temp/legado/modules/rhino/src/main/java/com/script/rhino/RhinoScriptEngine.kt)
 
 使用 **Mozilla Rhino 1.8.1**：
 
@@ -670,7 +670,7 @@ RuleAnalyzer.splitRule(ruleStr)  → 按 &&/||/%% 拆分为 List<SourceRule>
 | CSS选择器解析 | [AnalyzeByJSoup.kt](file:///f:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/analyzeRule/AnalyzeByJSoup.kt) | L72-123 |
 | JSONPath解析 | [AnalyzeByJSonPath.kt](file:///f:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/analyzeRule/AnalyzeByJSonPath.kt) | L31-71 |
 | XPath解析 | [AnalyzeByXPath.kt](file:///f:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/analyzeRule/AnalyzeByXPath.kt) | L52-133 |
-| JS引擎入口 | [RhinoScriptEngine.kt](file:///f:/myself/github/WeAgentChat/temp/legado/modules/rhino/src/main/java/io/legado/app/model/analyzeRule/RhinoScriptEngine.kt) | L88-125 |
+| JS引擎入口 | [RhinoScriptEngine.kt](file:///f:/myself/github/WeAgentChat/temp/legado/modules/rhino/src/main/java/com/script/rhino/RhinoScriptEngine.kt) | L88-125 |
 | URL模板解析 | [AnalyzeUrl.kt](file:///f:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/analyzeRule/AnalyzeUrl.kt) | L81 |
 | URL属性分离 | [CustomUrl.kt](file:///f:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/analyzeRule/CustomUrl.kt) | L7-L49 |
 | paramPattern 共享正则 | [AnalyzeUrl.kt](file:///f:/myself/github/WeAgentChat/temp/legado/app/src/main/java/io/legado/app/model/analyzeRule/AnalyzeUrl.kt) | L768 |

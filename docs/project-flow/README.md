@@ -86,7 +86,7 @@ docs/project-flow/
 │   └── tables.md                      ← 表结构DDL（核心21表DDL+新增表速览+索引+约束，当前v108）
 ├── modules/
     ├── webbook-search.md              ← WebBook双版本+搜索调度+四分类去重
-    ├── content-pipeline.md            ← ContentProcessor七步管线+替换规则引擎
+    ├── content-pipeline.md            ← ContentProcessor八步管线+替换规则引擎
     ├── reading-engine.md              ← ReadBook状态机+三章缓存+预下载
     ├── reading-engine-media.md        ← 阅读引擎媒体层（BookType位标志+ReadManga+AudioPlay）
     ├── reading-engine-pagination.md   ← 阅读引擎排版层（durChapterPos+TextChapter+翻页动画）

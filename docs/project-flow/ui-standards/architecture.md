@@ -104,7 +104,8 @@
 | `AppManagementCard`/`AppManagementListRow`（palette.settings.row + panelImageDrawable） | 21 管理页 | **基线 B**（列表管理页） |
 | `ListCard` 及 Dict/Highlight/Download 内联列表项（M3 surface） | H10 | **已完成（2026-08-27）**：归位 `palette.settings.row` |
 
-**根背景规则**：页面根容器一律 `palette.settings.page`（或 View 层 ThemeStore backgroundColor）；列表项/卡片一律 `palette.settings.row`。**禁止** `colorScheme.surface/surfaceVariant` 做根背景或列表项卡片取色。**实施状态（2026-08-27 实况核查）**：PreciseManage 根背景已归 page ✅；6 页列表项卡片已归位 5/6 ✅（仅剩 TxtTocRuleScreen）——权威源 = `docs/specs/ui-style-unify-deep-fix/issue-list.md`/`tasks.md`。
+**根背景规则**：页面根容器一律 `palette.settings.page`（或 View 层 ThemeStore backgroundColor）；列表项/卡片一律 `palette.settings.row`。**禁止** `colorScheme.surface/surfaceVariant` 做根背景或列表项卡片取色。**实施状态（2026-09-11 源码核实）**：PreciseManage 根背景已归 page ✅；6 页列表项卡片已归位 **6/6 ✅**（`TxtTocRuleScreen.kt` 实测 `colorScheme.surface` **零残留**）——权威源 = `docs/specs/ui-style-unify-deep-fix/tasks.md` §2.2.0e。
+> ⚠️ 原表述"5/6，仅剩 TxtTocRuleScreen"是 **2026-08-27 的过时快照**，已被 08-28 收口（6/6）推翻，2026-09-11 源码核实后确认。
 
 ## 四、新组件 / 新页面开发门禁（Checklist）
 

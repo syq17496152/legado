@@ -88,7 +88,8 @@
 |------|------|------|------|
 | `MainTopBarView` | `ui/widget/MainTopBarView.kt` | 🟢 **View 顶栏基线**（消费 TopBarConfig） | 保留 |
 | `GlassTopAppBar` | `ui/widget/components/GlassTopAppBar.kt` | 🟢 **Compose 顶栏基线** | 保留；**H13 已完成（2026-08-27）接入 TopBarConfig**（STYLE_REGULAR 消费壁纸/圆角/背景色） |
-| `AppManagementScaffold/AppManagementTopBar` | `ui/widget/compose/AppManagementScaffold.kt` | 🟢 **管理页顶栏基线** | 保留 |
+| `AppManagementScaffold`（顶栏委托 Glass 族） | `ui/widget/compose/AppManagementScaffold.kt` | 🟢 **管理页实体壳基线** | 保留 |
+| ~~`AppManagementTopBar`~~ | — | ❌ **定义已删除**（2026-09-08 W6.5/W6.6 顶栏归一口径，见 architecture.md §三.1 与 migration-registry H 表） | 禁止再引用，新/改页面一律用 `GlassTopAppBar` |
 | `ConfigTopBar` | `ui/config/ConfigActivity.kt` | 🟢 **已纳管（H6 完成 2026-08-27）** | ConfigTopBar 已带背景（TopBarConfig/壁纸/透明度），菜单已改 AppDropdownMenu |
 | `TitleBar` | `ui/widget/TitleBar.kt` | 🟠 残留 ~20 | H4 迁移双基线 |
 | `AppDropdownMenu`（M3 DropdownMenu） | `ui/widget/components/AppDropdownMenu.kt` | 🟢 **渲染层已对齐基线（H8 完成 2026-08-27，实测使用 44 文件）** | 条目 → 自绘 Surface+点击行（调用点零改动） |

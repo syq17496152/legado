@@ -9,7 +9,7 @@
 - [主题字号日夜生效与预置主题体系](./specs/theme-fontscale-daynight/README.md) - 夜间字号 fontScaleN 死键修复（AppContextWrapper 日夜感知+顶栏5消费点同源）+内置主题字号统一9（2A）+历史17主题资产移除+暗夜紫配置代码内置（日夜变体）+磨砂玻璃晨昏套件压缩入库幂等seeding（AD-01~04，红队2轮闭环） 🔄 设计中
 - [TTS朗读引擎统一优化](./specs/optimize-tts-engine/README.md) - 朗读引擎切换不生效修复（UI写SpeechRoute/服务层读SelectItem分裂）+引擎路由单源化+脚本引擎协议（Rhino沙箱）+MultiTTS/CloneTTS深度适配+在线TTS内置模板库（默认停用） ✅ 期1 实施+期2 扩展实施（模板列表器/管理页编辑器/音色级声源/书级覆盖/试听/AI链/批量预合成，L1+模拟器L2通过，听感留真机，见 specs/optimize-tts-engine-phase2/）
 - [TTS 批次E 加固](./specs/tts-batch-e-hardening/README.md) - 全量审查批次E 六项收尾：AI 预热接线（起播点 fire-and-forget）/保留名单落盘（进程重启防驱逐）/选角模板备份恢复/内置模板首装链+升级刷新/键因子三件套收编（KEY_VERSION v3 冻结）/Rhino 沙箱 TTS 脚本档收紧（app 前缀实拦，书源档零变化） ✅ 已实施（2026-09-10，包 3.26.091014，单测 42 绿）
-- [批次F 八项真机问题全量修复](./specs/real-device-bugfix-0911/README.md) - 用户真机反馈八项：视频下载后缀（命名补全+probe MIME 纠正+PTS 钳制防 MPEG4Writer abort）/管理列表底部全选条收口顶栏（范围收窄两页）/高亮对话 120→400+演进覆盖+isRegex 提示/HostAccessStrategy 网络稳定性阶段1（host 健康表+坏 IP 黑名单+fail-open）/日志治理（AppLog 频控双机制+级别语义+噪音源处置）/缓存清理整合（WebView 迁缓存管理第 4 分项）/规则扩充（高亮 24+净化 12+TXT 30，insertIfAbsent 只追加）/TTS 多角色可用性（系统引擎音色枚举 getVoices+对话切分诊断+入口正名+AD-09 克隆）+F10 TTS 联调脚本 🔄 实施中（批次A+B 代码落地，单测回归中，2026-09-11）
+- [订阅源「自由」布局（智能相册网格）](./specs/rss-free-layout/README.md) - articleStyle 新增第 6 种「自由」样式：等行高流式自由网格（同行图片区等高、宽度按原图比例分配、整行精确撑满）+ 自定义 LayoutManager（预计算 Rect 表）+ origin@link 三级 ratio 缓存供给层 + 首屏 gating/脏标记抗抖动；保留图下标题与时间（文字块 46sp 常量，不破坏行高统一）；零 DB 迁移、position 语义不变（否决行合并与 greedo 依赖，9 条 ADR，红队 6 轮 22 项闭环）✅ L1 完成（编译通过 + 单测 13/13 绿 + 测试包 legado_miss_app_3.26.091117.apk 已产出），⏸ L2/L3 真机验证待补（无设备）
 
 - [UI 设置体验修复包](./specs/archive/2026-09-06-ui-settings-fix-pack/README.md) - 三项 UI 体验修复：主界面底栏搜索框显隐入口补齐（设置页快捷开关+两层配置防回滚）+ fontScale 放大组件文字截断逐点修复（12 处 height→heightIn(min)）+ 恢复被误删调用链的优化版取色器 ColorPickerSheet（扩展跟随默认）✅ 已完成并归档（2026-09-06 验收通过，commit 13574ae41）
 - [主界面头部透明对齐Archive](./specs/main-topbar-transparent-align/README.md) - 四Tab头部透明失效根因修复：恢复 MaterialValueHelper backgroundColor 透明原语（背景图→TRANSPARENT 分支被删）+BaseActivity decorView 着色策略对齐（P0/P1 diff 实证，overlay/blur 排除）🔄 设计中
@@ -108,7 +108,7 @@
 | 文档 | 核心内容 |
 |------|----------|
 | [modules/webbook-search.md](./project-flow/modules/webbook-search.md) | WebBook 搜索与网络书模块：双版本+并发搜索调度+四分类聚合去重+发现/详情/目录/正文全链路 |
-| [modules/content-pipeline.md](./project-flow/modules/content-pipeline.md) | 内容处理管线：ContentProcessor 七步管线+替换规则引擎+分段/简繁+样式适配 |
+| [modules/content-pipeline.md](./project-flow/modules/content-pipeline.md) | 内容处理管线：ContentProcessor 八步管线+替换规则引擎+分段/简繁+样式适配 |
 | [modules/reading-engine.md](./project-flow/modules/reading-engine.md) | 阅读引擎模块：ReadBook 状态机+三章缓存+预下载+翻页跳章+漫画+音频 |
 | [modules/reading-engine-pagination.md](./project-flow/modules/reading-engine-pagination.md) | 阅读引擎分页算法详解：durChapterPos 字符偏移分页机制+TextChapter 数据结构+页面计算算法+6 种翻页动画 |
 | [modules/reading-engine-media.md](./project-flow/modules/reading-engine-media.md) | 多媒体阅读（漫画+音频）：ReadManga 漫画阅读+AudioPlay 音频播放+BookType 位标记 |
@@ -149,7 +149,7 @@
 |------|----------|
 | [database/overview.md](./project-flow/database/overview.md) | 数据库概览（架构总览） |
 | [database/entities.md](./project-flow/database/entities.md) | 核心实体字段详解 |
-| [database/tables.md](./project-flow/database/tables.md) | 核心 21 表 DDL+新增表速览+索引（版本以 AppDatabase.kt 为准，当前 v108） |
+| [database/tables.md](./project-flow/database/tables.md) | 核心 21 表 DDL+新增表速览+索引（版本号以 `AppDatabase.kt` 的 `version` 字段为准，文档禁止硬编码快照） |
 | [database/entities-extensions.md](./project-flow/database/entities-extensions.md) | 扩展实体清单（v90-v108 新增 35 实体）：AI 能力/朗读 BGM/阅读增强/系统管理四组 |
 
 ### Python 重构参考（project-flow/python-ref/）
@@ -181,8 +181,7 @@
 | [ui-standards/migration-registry.md](./project-flow/ui-standards/migration-registry.md) | §9.6 迁移登记表（Archive 对齐迁移） |
 | [ui-standards/page-skeleton.md](./project-flow/ui-standards/page-skeleton.md) | §9.4 页面骨架（Scaffold） |
 | [ui-standards/spacing-corner-typography.md](./project-flow/ui-standards/spacing-corner-typography.md) | §9.3 间距/圆角/字体规范 |
-| [ui-standards/theme-architecture.md](./project-flow/ui-standards/theme-architecture.md) | §9.7 主题体系架构总纲：三大体系+红线禁令 |
-| [ui-standards/theme-token-bridge.md](./project-flow/ui-standards/theme-token-bridge.md) | §9.8 主题语义 Token 与双栈桥接（View/Compose 统一取色角色表+Compose 全面化迁移守则+colorScheme 桥接演进） |
+| [ui-standards/theme-architecture.md](./project-flow/ui-standards/theme-architecture.md) | §9.7 主题体系架构总纲：三大体系+红线禁令；§二.6 双栈统一出口（原 §9.8「主题语义 Token 与双栈桥接」职能并入此处与 [color.md](./project-flow/ui-standards/color.md) §四，原 theme-token-bridge.md 文件并不存在） |
 
 ---
 
@@ -249,6 +248,7 @@
 | [rss-folder-cover-dialog-align](./specs/rss-folder-cover-dialog-align/README.md) | ✅ | 订阅文件夹封面弹框对齐书架（标准弹框+预览+恢复默认） |
 | [rss-folder-subtag-fix](./specs/rss-folder-subtag-fix/README.md) | ✅ | 订阅文件夹样式点进文件夹头部误显标签/箭头修复（isTagMode 守卫；2026-09-02 真机走查 3.2/3.3/3.4 三项全 PASS 收口） |
 | [rss-image-load-optimization](./specs/rss-image-load-optimization/README.md) | 🔄 | 图片订阅源加载优化（参考书源：URL 缓存+采样解码+并发预下载） |
+| [rss-free-layout](./specs/rss-free-layout/README.md) | 🟡 | 订阅源新增「自由」布局：等行高流式自由网格（智能相册网格），自定义 LM + ratio 供给层，保留图下标题时间，零 DB 迁移；L1 完成（单测 13/13），L2/L3 待真机 |
 | [rss-video-player-enhancement](./specs/rss-video-player-enhancement/README.md) | 🔄 | 订阅源视频播放器增强（多集选择/调试日志/自动抓取 R1-R5） |
 | [sniff-migration-booksource](./specs/sniff-migration-booksource/README.md) | ✅ | 嗅探与滑动切换能力迁移至书源（图片/视频嗅探+上下滑动切换） |
 | [sniff-regression-rss-image-crash](./specs/sniff-regression-rss-image-crash/README.md) | ✅ | 嗅探回归与图片订阅源崩溃取证修复（① WebView 池全局互斥修复嗅探回归 ② 图片订阅源崩溃根因模拟器复现实锤：appendItems 后台线程更新 vs 主线程 notify 竞态 → RecyclerView Inconsistency FATAL，修复后 3 轮全绿；Phase B 定向防御 H4/H6/H1/H3；真实崩溃栈回灌闭环） |

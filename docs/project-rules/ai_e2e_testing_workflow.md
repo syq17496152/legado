@@ -94,7 +94,7 @@ python ai_tests/run_e2e.py --apk auto
 
 **执行逻辑**（M6 rule_analyzer）：
 1. 检查 `config.CRASH_PATTERNS`（FATAL/ANR/OOM/ClassNotFound/Other）
-2. 匹配预期类型（8 种：display/no_crash/result_contains/rule_match/db_state/prefs_state/activity_state/web_api/process_state）
+2. 匹配预期类型（8 种：`no_crash`/`log_clean`/`db_state`/`prefs_state`/`web_api`/`page_jump`/`element_visible`/`manual`，**权威源 = `ai_tests/lib/case_parser.py` 的 `EXPECT_TYPE_KEYWORDS` 映射表**；`no_crash` 最优先匹配，无关键词命中则落 `manual`。原文档此处列的 display/result_contains/rule_match/activity_state/process_state 均不存在，2026-09-11 已修正）
 3. 输出 verdict：`pass` / `fail` / `manual` / `warning`
 4. manual/fail 时输出 `feedback_signal`（含 failure_pattern/suggested_rule/suggested_prompt）
 

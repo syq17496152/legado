@@ -17,6 +17,7 @@
 
 - `VideoPlay` 新增 `layoutMode` 持久化配置（0=沉浸式默认，1=传统布局，含异常值容错）
 - `VideoPlayerActivity` 布局分发的**四个分发点全覆盖**：onCreate 初始化、`initFromIntent` 新会话分支、悬浮窗/通知恢复分支、`onNewIntent` 单实例复用分支（含 legacy 拆卸与 GSY 全屏窗口复位）
+  - ⚠️ **实况校准（2026-09-11 源码核实）**：本条为**设计要求**。当前实际走统一入口 `dispatchLayoutMode()` 的仅 **2 处**（initFromIntent / 悬浮窗恢复），`onNewIntent` 仍走 `if(useViewPagerMode)` 直判、未接入统一入口。差距已同步修正至 `VideoPlay.kt` 注释与 `docs/project-flow/modules/video.md` §12.1，**勿据本条认定四分发点已全部落地**。
 - 传统布局骨架**复活与补全**（红队 R1/R2 确认当前为死代码路径）：
   - `setupPlayerView()`（当前零调用点）复活接线：16:9 宽高比、全屏按钮、返回监听、起播触发
   - `composeTopBar` 从 `viewPagerContainer` 内**提升到根布局**（结构级改动），保证传统布局下返回/菜单/设置入口可达

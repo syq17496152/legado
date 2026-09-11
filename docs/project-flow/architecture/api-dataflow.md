@@ -139,7 +139,7 @@ class ReturnData {
     │    ↓ GET /getBookContent?url=xxx&index=N
     │    ↓ HttpServer → BookController.getBookContent()
     │    ↓ ReadBook.loadContent() → 三章缓存 → contentLoadFinish()
-    │    ↓ ContentProcessor.getContent() 七步管线
+    │    ↓ ContentProcessor.getContent() 八步管线
     │    ↓ 返回处理后正文字符串
     │    ← { isSuccess:true, data: "<p>正文内容...</p>" }
     │

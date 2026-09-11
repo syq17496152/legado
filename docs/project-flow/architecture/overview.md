@@ -154,7 +154,7 @@ UI 输入关键词
   → ReadBook.resetData(book)
     → loadContent(三章)
       → WebBook.getContentAwait() / LocalBook.getContent()
-        → ContentProcessor.getContent() 七步管线
+        → ContentProcessor.getContent() 八步管线
     → TextChapter 创建 → UI 渲染
 ```
 
@@ -181,7 +181,7 @@ UI 输入关键词
 | **状态机** | SourceRule (规则预处理), SearchModel (搜索调度) |
 | **位标志 (Bit Flags)** | Book.type, Book.group |
 | **模板引擎** | AnalyzeUrl ({{key}}/{{page}} 变量替换) |
-| **管线模式** | ContentProcessor 七步处理管线 |
+| **管线模式** | ContentProcessor 八步处理管线 |
 | **REPLACE 策略** | Room Entity 持久化（OnConflictStrategy.REPLACE） |
 
 ---
@@ -223,7 +223,7 @@ UI 输入关键词
 | 文档 | 一句话说明 |
 |------|-----------|
 | [modules/webbook-search.md](../modules/webbook-search.md) | WebBook 双版本+并发搜索+四分类去重 |
-| [modules/content-pipeline.md](../modules/content-pipeline.md) | ContentProcessor 七步管线+替换规则引擎 |
+| [modules/content-pipeline.md](../modules/content-pipeline.md) | ContentProcessor 八步管线+替换规则引擎 |
 | [modules/reading-engine.md](../modules/reading-engine.md) | ReadBook 状态机+三章缓存+预下载+漫画+音频 |
 | [modules/data-layer.md](../modules/data-layer.md) | Room 实体/DAO/AutoMigration+位标志+TypeConverter |
 | [modules/web-service.md](../modules/web-service.md) | NanoHTTPD 路由+控制器+WebSocket+静态服务 |

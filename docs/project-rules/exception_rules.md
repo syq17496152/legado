@@ -23,7 +23,8 @@
 
 **新增异常规则**：必须继承 `NoStackTraceException`，覆写 `fillInStackTrace()`。
 
-> **注意**：WebDavException 直接继承 Exception 而非 NoStackTraceException，这是已知例外。
+> **注意（历史遗留，2026-09-11 补充闭环）**：`WebDavException` 直接继承 `Exception` 而非 `NoStackTraceException`，这是**已知的历史例外**，原因是它位于独立 lib 模块 `lib/webdav/`。
+> ❌ **新代码禁止以此为效仿先例** —— 凡在 `app` 主模块内新增业务异常，一律继承 `NoStackTraceException` 并覆写 `fillInStackTrace()`。`lib/` 下的独立模块是否统一收编，待专项评估，在此之前不得新增同类例外。
 
 ## 四种异常捕获模式
 

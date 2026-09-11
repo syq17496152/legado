@@ -23,8 +23,9 @@
 
 ## 测试环境
 
-- **ADB 路径**：`D:/Program Files/Microvirt/MEmu/adb.exe`
-- **设备序列号**：`127.0.0.1:21503`
+- **ADB 路径**：优先使用 `PATH` 中的 `adb`；本机示例为 MEmu 自带 `D:/Program Files/Microvirt/MEmu/adb.exe`（**环境相关，换机/换模拟器需自行替换，勿照抄**）
+- **设备序列号**：`127.0.0.1:21503`（MEmu 默认端口；**换环境后必须先用 `adb devices` 查询实际值再替换**）
+- 下文命令中的 `-s 127.0.0.1:21503` 同理，均为本机示例值；若已封装进 `ai_tests/scripts/` 脚本，优先走脚本而非手敲命令
 - **包名**：`io.legado.miss.app.debug`
 - **Python 环境**：`ai_tests/venv/Scripts/python.exe`（禁止公共 Python）
 - **venv 激活**：`ai_tests\venv\Scripts\activate`

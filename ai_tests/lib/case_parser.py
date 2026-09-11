@@ -67,7 +67,7 @@ class Step:
 @dataclass
 class Expect:
     """预期结果"""
-    expect_type: str = "manual"  # 8 种：page_jump/element_visible/text_match/no_crash/log_clean/db_state/prefs_state/web_api/manual
+    expect_type: str = "manual"  # 8 种：page_jump/element_visible/no_crash/log_clean/db_state/prefs_state/web_api/manual
     description: str = ""
     raw: str = ""
 

@@ -35,8 +35,14 @@ androidTest/ 下有 6 个测试文件：ExampleInstrumentedTest.kt, AndroidJsTes
 ### 运行测试
 
 ```bash
+# 推荐：指定变体（flavor 仅 app，任务名需带 App 前缀，与 assembleAppDebug 同理）
+./gradlew testAppDebugUnitTest
+
+# 跑全部变体（较慢，含 release）
 ./gradlew test
 ```
+
+> ⚠️ 原文档只给 `./gradlew test`。按 AGENTS.md「productFlavors 仅 `app`，Gradle 任务必须带 App 前缀」的口径，单测应优先用 `testAppDebugUnitTest`（2026-09-11 补充）。
 
 ### 注意事项
 

@@ -34,6 +34,10 @@ View 世界的圆角统一走 `io.legado.app.lib.theme.UiCorner`（`panelRadius`
 
 #### 1.3.1 页面级 spacing token（`AppPageSpacing`，B2 冻结 2026-08-30 设计/2026-09-01 落地）
 
+> ⚠️ **未落地警示（2026-09-11 核实）**：`AppPageSpacing` 目前在 `app/src/main/java` 下 **grep 零命中**，`AppUiTokens.kt` 中实际只存在 `AppListSpacing` 与 `AppDialogSize`。
+> 本节为**设计冻结的规范**而非已实现代码：新页面**暂不得引用** `AppPageSpacing`（会编译失败）。当前可用替代 = `AppListSpacing`（Compact 6 / Normal 8 / Section 12dp）+ `AppDialogSize`。
+> 落地前引用本节取值属于违规；落地后需回填本节并移除本警示。
+
 - 定义位置：`io.legado.app.ui.widget.compose.AppUiTokens.kt#AppPageSpacing`，全部取值落在 **4dp grid 整格**。
 - 存量 `AppListSpacing`（6/8/12）保留不动：6dp 为**登记豁免半格，仅限列表场景继续使用，禁止新代码扩散**。
 - Token 清单（取值冻结，修改需走检查点审查，治理级别等同 `AppShapes`）：

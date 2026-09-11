@@ -212,7 +212,7 @@
 | GlideImageGetter HTML图片 | [modules/help-layer.md](./modules/help-layer.md) | 4.2 GlideImageGetter |
 | GSY Video 视频播放 | [modules/remote-third-party.md](./modules/remote-third-party.md) | 3 GSY Video |
 | getContent 正文获取 | [modules/webbook-search.md](./modules/webbook-search.md) | 6.4 正文获取 |
-| getContent 七步管线 | [modules/content-pipeline.md](./modules/content-pipeline.md) | 2 七步管线 |
+| getContent 八步管线 | [modules/content-pipeline.md](./modules/content-pipeline.md) | 2 八步管线 |
 | Glide图片加载+视频+WebView | [modules/glide-video-webview.md](./modules/glide-video-webview.md) | 索引页（详情分见 glide/video/webview-pool 三册） |
 | Glide 模块（ModelLoader+Fetcher） | [modules/glide.md](./modules/glide.md) | 1 ModelLoader+Fetcher 继承体系 |
 | GroupEditDialog 分组编辑 | [architecture/android-ui-pages.md](./architecture/android-ui-pages.md) | 7.3 分组编辑三层对话框 |

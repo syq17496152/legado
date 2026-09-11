@@ -207,7 +207,7 @@ BaseReadAloudService 状态:
 
 ## 6. RSS 子系统
 
-参见本文档对应章节
+> 本节为索引入口（原文为占位空壳，2026-09-11 修正）。完整内容见 **[rss-subsystem.md](rss-subsystem.md)**：Rss 调度 + `RssParserByRule` 规则解析 + `RssParserDefault` 标准解析 + 文章流 UI。
 
 ### 6.1 架构概览
 
@@ -252,7 +252,7 @@ Debug 单例管理调试会话:
 
 ## 7. JS 扩展函数清单
 
-参见本文档对应章节
+> 本节为索引入口（原文为占位空壳，2026-09-11 修正）。完整内容见 **[js-extensions.md](js-extensions.md)**：30+ 个 JS 可调用方法（ajax/ajaxAll/connect/webView/cache/file/encode/python 等）。
 
 书源 JS 可通过 `java` 对象调用 70+ 个 Java 方法：
 

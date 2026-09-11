@@ -75,7 +75,7 @@ flowchart TD
     CACHE --> |"在缓存"| QUICK["立即显示<br/>(数据已在内存)"]
     CACHE --> |"不在缓存"| FETCH["fetchContent()<br/>AnalyzeUrl→HTTP→解析"]
 
-    FETCH --> PROCESS["ContentProcessor<br/>七步管线处理"]
+    FETCH --> PROCESS["ContentProcessor<br/>八步管线处理"]
     PROCESS --> QUICK
 
     QUICK --> PREDOWNLOAD["异步预下载<br/>后续章节"]

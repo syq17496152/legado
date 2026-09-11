@@ -32,7 +32,7 @@
 | 规则引擎 | `app/src/main/java/io/legado/app/model/analyzeRule/AnalyzeRule.kt` |
 | 网络书核心 | `app/src/main/java/io/legado/app/model/webBook/WebBook.kt` |
 | 阅读核心 | `app/src/main/java/io/legado/app/model/ReadBook.kt` |
-| Web 服务 | `app/src/main/java/io/legado/app/web/controller/` |
+| Web 服务 | `app/src/main/java/io/legado/app/api/controller/` |
 | 书源实体 | `app/src/main/java/io/legado/app/data/entities/BookSource.kt` |
 | 数据库定义 | `app/src/main/java/io/legado/app/data/AppDatabase.kt` |
 | ProGuard | `app/proguard-rules.pro` |

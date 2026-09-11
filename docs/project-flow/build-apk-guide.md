@@ -204,9 +204,9 @@ gradlew --version     # 应显示 Gradle 8.x
 
 | 变体 | applicationId | 桌面显示名 | 用途 |
 |------|--------------|----------|------|
-| **appDebug** | `io.legado.miss.app.debug` | 阅读M.D | 开发调试，不混淆 |
+| **appDebug** | `io.legado.miss.app.debug` | 阅读M | 开发调试，不混淆 |
 | **appRelease** | `io.legado.miss.app.release` | 阅读M | 正式发布，混淆+收缩 |
-| **共存包** | `io.legado.app.debug` | 阅读M·共存 | 与原版legado-E共存 |
+| **共存包** | `io.legado.app.debug` | 阅读M | 与原版legado-E共存 |
 
 > **注意**：debug 和 release 的 applicationId 不同（后缀不同），可以在同一设备上同时安装。
 
@@ -736,9 +736,9 @@ npm run build
 
 | 构建类型 | applicationId | 桌面显示名 | 说明 |
 |---------|--------------|----------|------|
-| Debug（默认） | `io.legado.miss.app.debug` | 阅读M.D | 开发调试，默认包名 |
+| Debug（默认） | `io.legado.miss.app.debug` | 阅读M | 开发调试，默认包名 |
 | Release（默认） | `io.legado.miss.app.release` | 阅读M | 正式发布，默认包名 |
-| 共存包（自定义） | `io.legado.app.debug` | 阅读M·共存 | 与原版legado-E共存 |
+| 共存包（自定义） | `io.legado.app.debug` | 阅读M | 与原版legado-E共存 |
 
 > **注意**：debug 和 release 的 applicationId 不同（后缀不同），可以在同一设备上同时安装。详见 [包名规范](../project-rules/package-naming.md)。
 

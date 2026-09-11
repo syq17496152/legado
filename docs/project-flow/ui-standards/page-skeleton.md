@@ -32,7 +32,7 @@ AppManagementScaffold(
 
 ### 内部结构
 - 外包 `LegadoComposeTheme`，实施主题统一。
-- 顶栏 `AppManagementTopBar`：返回 + 标题（19sp/半粗）+ 动作（`AppManagementAction`，可为「更多」菜单 `menuActions`）；顶栏色随 `AppConfig.immersiveManageBar` 在 `backgroundColor`/`primaryColor` 间切换；`statusBars` insets。
+- 顶栏 `GlassTopAppBar`（管理族由 `AppManagementScaffold` 委托；~~`AppManagementTopBar`~~ 定义已于 2026-09-08 删除，见 architecture.md §三.1）：返回 + 标题（**20sp / Medium(500)**，全 App 统一 `titleLarge`；原 19sp/半粗口径已废）+ 动作（`AppManagementAction`，可为「更多」菜单 `menuActions`）；顶栏取色以 architecture.md 单源 `resolvePageBarColorWithAlpha` + `contrastOn(barColor)` 为准（本文旧的 `backgroundColor`/`primaryColor` 切换表述已过时）；`statusBars` insets。
 - 内容区 `Box(weight=1f)` 交给调用方。
 - 底部 `AppManagementSelectionBottomBar`：`selectedCount > 0` 时 `AnimatedVisibility` 出现；含「已选 X/Y」、反选、主危险动作（`danger` 优先）+ 更多菜单；`navigationBars` insets。
 

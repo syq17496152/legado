@@ -354,7 +354,9 @@ object VideoPlay : CoroutineScope by MainScope(){
      * video-player-dual-layout AD-02：播放页布局模式
      * 语义：0=抖音沉浸式（默认，ViewPager2 竖滑），1=传统布局（上播放器+下部信息区）
      * - getter 异常值容错（备份导入/手改 prefs 出现非法值时回落 0，参照 playerType 先例）
-     * - 与沉浸式/传统布局分发的四个分发点（onCreate/initFromIntent/悬浮窗恢复/onNewIntent）共用本单源
+     * - 布局分发：本字段是唯一数据源（单源）。实际走统一入口 `dispatchLayoutMode()` 的调用点为 **2 处**
+     *   （VideoPlayerActivity 新会话 initFromIntent / 悬浮窗恢复）；onNewIntent 场景直接 `if(useViewPagerMode)`
+     *   分支处理，未走该统一入口。原注释所称"四个分发点"与源码实况不符，2026-09-11 按注释铁律修正。
      */
     var layoutMode: Int
         get() {

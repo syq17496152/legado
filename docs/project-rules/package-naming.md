@@ -7,17 +7,18 @@
 
 | 包类型 | 基础包名 | 后缀 | 最终包名 | 桌面显示名 | 用途 |
 |--------|---------|------|---------|----------|------|
-| **测试包** | `io.legado.miss.app` | `.debug` | `io.legado.miss.app.debug` | **阅读M.D** | 开发调试、快速验证（默认） |
-| **共存包** | `io.legado.app` | `.debug` | `io.legado.app.debug` | **阅读M·共存** | 与原版legado-E共存 |
+| **测试包** | `io.legado.miss.app` | `.debug` | `io.legado.miss.app.debug` | **阅读M** | 开发调试、快速验证（默认） |
+| **共存包** | `io.legado.app` | `.debug` | `io.legado.app.debug` | **阅读M** | 与原版legado-E共存 |
 | **正式包** | `io.legado.miss.app` | `.release` | `io.legado.miss.app.release` | **阅读M** | 正式发布、生产环境 |
 
-> **显示名规则**：通过 `manifestPlaceholders` 在 `app/build.gradle` 中按构建类型动态设置。共存包传入 `-PcustomAppId` 时自动切换为 `阅读M·共存`。
+> **显示名规则（权威源 = `app/build.gradle` 的 `manifestPlaceholders`）**：debug 分支固定 `@string/app_name`（**阅读M**）；release 分支默认同为 `@string/app_name`，仅当 suffix 为 `.releaseA` / `.releaseS` 时才分别取 `@string/app_name_a`（阅读M·A）/ `@string/app_name_s`（阅读Plus）。
+> ⚠️ `-PcustomAppId` **只改 `applicationId`、不改 `app_name`**，因此共存包显示名仍是「阅读M」，不存在「阅读M·共存」「阅读M.D」这两种显示名（2026-09-11 核实修正）。
 
 ## 配置差异
 
 | 配置项 | 测试包 | 共存包 | 正式包 |
 |--------|--------|--------|--------|
-| 桌面显示名 | 阅读M.D | 阅读M·共存 | 阅读M |
+| 桌面显示名 | 阅读M | 阅读M | 阅读M（`.releaseA`/`.releaseS` 变体为 阅读M·A / 阅读Plus） |
 | `manifestPlaceholders.app_name` | `@string/app_name` | `@string/app_name` | `@string/app_name`（默认）/ `@string/app_name_a`（releaseA）/ `@string/app_name_s`（releaseS） |
 | `minifyEnabled` | `false` | 由构建类型决定 | `true` |
 | `shrinkResources` | `false` | 由构建类型决定 | `true` |

@@ -371,7 +371,7 @@ _merge_items(newItems, precision):
   2. loginCheckJs 登录检测
   3. checkRedirect 重定向检测
   4. ruleContent 规则解析 HTML → 正文字符串
-  5. ContentProcessor.getContent() → 七步管线处理
+  5. ContentProcessor.getContent() → 八步管线处理
   6. 返回 BookContent(textList, ...)
 
 分页支持:

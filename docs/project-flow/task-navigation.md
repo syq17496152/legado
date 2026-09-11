@@ -263,7 +263,7 @@
 | 步骤 | 读取文件 | 行号 |
 |------|----------|------|
 | 源辅助与扩展架构 | [modules/source-management.md](./modules/source-management.md)（§7/§11/§12 源扩展体系） | - |
-| SourceHelp 门面 | model/source/SourceHelp.kt | - |
+| SourceHelp 门面 | `help/source/SourceHelp.kt` | - |
 | BookSourceExtensions 扩展 | model/source/BookSourceExtensions.kt | - |
 | RssSourceExtensions 扩展 | model/source/RssSourceExtensions.kt | - |
 | exploreKinds 三级缓存 | model/source/BookSourceExtensions.kt | - |

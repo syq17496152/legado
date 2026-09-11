@@ -1,6 +1,6 @@
 # 数据库表结构 DDL
 
-> Legado 数据库 v108（以 AppDatabase.kt version 字段为准）。本文为**核心 21 张表**的完整 CREATE TABLE 语句、索引定义和约束说明（2026-08 前既有表）。
+> Legado 数据库（版本号以 `AppDatabase.kt` 的 `version` 字段为准，**文档禁止硬编码快照**）。本文为**核心 21 张表**的完整 CREATE TABLE 语句、索引定义和约束说明（2026-08 前既有表）。
 >
 > **全量 56 张表**（v90-v108 扩展期新增 35 表）的权威 DDL 见 `app/schemas/io.legado.app.data.AppDatabase/108.json`；新增表速览与代表性 DDL 摘要见本文 §5，实体说明见 [entities-extensions.md](entities-extensions.md)。
 

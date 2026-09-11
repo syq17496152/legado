@@ -26,7 +26,7 @@
 | DEBUG | 过程细节 | recordLog 门控下的过程埋点 |
 
 - **禁止**用 ERROR 级别输出成功/过程信息（真机教训：预连接成功打 ERROR 级=级别语义违规+噪音）。
-- 正式诊断日志 tag（TtsTrace/PageDebug 等白名单，见 AGENTS.md 诊断日志保留铁律）**只降频不删除**。
+- 正式诊断日志 tag（TtsTrace 等白名单，见 AGENTS.md 诊断日志保留铁律）**只降频不删除**。（⚠️ `PageDebug` **不在**此白名单，见下方"一次性临时排查 tag"条目——本条曾误列 PageDebug，与其矛盾，2026-09-11 已修正）
 
 ### 条款三：putThrottled/putSampled 使用指南
 
@@ -49,12 +49,25 @@
 
 - 文件：`constant/AppLog.kt`
 - 单例对象，维护内存日志列表（上限 500 条，`MAX_LOG_SIZE` 常量；最新在前，超限移除最旧）
-- 方法：
-  - `put(message, throwable?, toast?)` — 记录日志 + 写文件 + Debug Logcat
-  - `putNotSave(message, throwable?)` — 仅内存 + Logcat
-  - `putDebug(message, throwable?)` — 仅 `AppConfig.recordLog` 开启时记录
-  - `logs` — @Synchronized 快照（UI 侧读取安全，规避并发 CME）
-  - `removeLogs(entries)` — 多选删除（按对象引用 `===` 匹配，规避 data class equals 误删重复项与索引漂移）
+- 方法（**清单以 `constant/AppLog.kt` 源码为准**，2026-09-11 全量核对）：
+  - **级别族**：
+    - `put(message, throwable?, toast?)` — ERROR 级（默认）+ 写文件 + Logcat
+    - `putError(message, throwable?, toast?)` — 显式 ERROR
+    - `putWarn(message, throwable?, toast?)` — WARN（降级/兜底）
+    - `putInfo(message, throwable?, toast?)` — INFO（**仅状态迁移**）
+  - **频控族**（高频路径必用，禁止自建去重轮子）：
+    - `putThrottled(key, message, throwable?, level?, tag?)` — 失败路径，同 key 60s 首条 + 合并"前一窗口累计 N 条"
+    - `putSampled(key, message, n, level?, tag?)` — 成功路径，每 n 条汇总 1 条
+  - **Debug 族**：
+    - `putDebug(message, throwable?)` — 仅 `AppConfig.recordLog` 开启时记录
+    - `putDebugWithTag(tag, message, throwable?, level?)` — 模块化打点（Tag 常量见下表）
+  - **其他**：
+    - `putNotSave(message, throwable?, toast?)` — 仅内存 + Logcat，不落文件
+    - `logs` — @Synchronized 快照（UI 侧读取安全，规避并发 CME）
+    - `removeLogs(entries)` — 多选删除（按对象引用 `===` 匹配，规避 data class equals 误删重复项与索引漂移）
+    - `clear()` — 清空内存日志
+    - `truncateSafely(msg, maxLen = 2000)` — 超长消息截断（脱敏前置处理）
+    - `syncEventBusLogger()` — EventBus 日志桥接注册
 - `toast = true` 时直接 Toast 提示用户
 - 日志可在 App 内通过 `AppLogDialog`（轻量弹框，约 20 处入口）或「日志管理」全屏页查看
 
@@ -108,7 +121,7 @@ AppLog.put("保存成功", toast = true)
 
 ## 模块 Tag 规范
 
-> 登记规则（总线 X6，2026-09-01 快照）：本表按 `constant/AppLog.kt` TAG 常量**实际全集**登记（30 个），不锚定历史 26 TAG 基线；ng P1/P2 等分期新增 Tag 按落地顺序顺延，**新增/修改 TAG 时必须同步更新本表与下节 fromTag 映射**（对照流程：Grep `TAG_` 常量定义 + `putDebugWithTag` 调用点全集 + 字面量 tag）。
+> 登记规则（总线 X6）：本表按 `constant/AppLog.kt` TAG 常量**实际全集**登记，**2026-09-11 源码实测 31 个**（本表原记 30 个，缺 `TAG_TTS_TRACE`，已按 Grep `const val TAG_` 补全）；不锚定历史 26 TAG 基线；ng P1/P2 等分期新增 Tag 按落地顺序顺延，**新增/修改 TAG 时必须同步更新本表与下节 fromTag 映射**（对照流程：Grep `TAG_` 常量定义 + `putDebugWithTag` 调用点全集 + 字面量 tag）。
 
 | Tag 常量 | 值 | 归属模块（C5 预登记） | 调用点状态 |
 |---------|-----|---------|------|
@@ -143,7 +156,7 @@ AppLog.put("保存成功", toast = true)
 | `TAG_SOURCE_CACHE` | `"SourceCache"` | SOURCE_NETWORK | 在用（SourceHelp/BookSourceCacheStore P0-S2） |
 | `TAG_SOURCE_GUARD` | `"SourceGuard"` | SOURCE_NETWORK | 在用（BookSourceGuardLog P0-S4） |
 
-统计：30 常量 = SOURCE_NETWORK 14 / READING 5 / IMAGE 4 / PERFORMANCE 3 / GENERAL 3 / RSS 1；死常量 3（TAG_WEB_VIEW / TAG_SHELF_PROGRESS / TAG_SOURCE_SANDBOX，保留待后续分期接线，不删除）。
+统计：**31 常量** = 本表登记 30 + `TAG_TTS_TRACE`（TtsTrace 正式诊断日志，后增，分组归属待定）；原分布快照（30）= SOURCE_NETWORK 14 / READING 5 / IMAGE 4 / PERFORMANCE 3 / GENERAL 3 / RSS 1；死常量 3（TAG_WEB_VIEW / TAG_SHELF_PROGRESS / TAG_SOURCE_SANDBOX，保留待后续分期接线，不删除）。
 
 ai_tests 可通过 `adb logcat -s WebBook:E AnalyzeRule:E` 精确过滤模块日志；文件日志可按 Tag grep 定位模块。
 
