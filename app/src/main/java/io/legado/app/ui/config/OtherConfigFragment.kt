@@ -9,6 +9,7 @@ import com.jeremyliao.liveeventbus.LiveEventBus
 import io.legado.app.BuildConfig
 import io.legado.app.R
 import io.legado.app.constant.EventBus
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.AppFreezeMonitor
 import io.legado.app.help.DebugFloatBallManager
@@ -200,7 +201,8 @@ class OtherConfigFragment : ComposeSettingFragment() {
                 AppConfig.recordLog = booleanSetting(PreferKey.recordLog, false)
                 LogUtils.upLevel()
                 LogUtils.logDeviceInfo()
-                LiveEventBus.config().enableLogger(AppConfig.recordLog)
+                // F9/2.18：enableLogger 开关收编 AppLog.syncEventBusLogger 单源（与 App 启动链同源防覆盖）
+                AppLog.syncEventBusLogger()
                 AppFreezeMonitor.init(appCtx)
                 DispatchersMonitor.init()
             }
@@ -445,18 +447,6 @@ class OtherConfigFragment : ComposeSettingFragment() {
                 onSelected = { AppConfig.webPort = it }
             ),
             SettingActionSpec(
-                key = PreferKey.cleanCache,
-                title = getString(R.string.clear_cache),
-                summary = getString(R.string.clear_cache_summary),
-                onClick = ::clearCache
-            ),
-            SettingActionSpec(
-                key = PreferKey.clearWebViewData,
-                title = getString(R.string.clear_webview_data),
-                summary = getString(R.string.clear_webview_data_summary),
-                onClick = ::clearWebViewData
-            ),
-            SettingActionSpec(
                 key = PreferKey.shrinkDatabase,
                 title = getString(R.string.shrink_database),
                 summary = getString(R.string.shrink_database_summary),
@@ -698,15 +688,8 @@ class OtherConfigFragment : ComposeSettingFragment() {
         )
     }
 
-    private fun clearCache() {
-        showComposeConfirmDialog(
-            title = getString(R.string.clear_cache),
-            message = getString(R.string.sure_del),
-            positiveText = getString(android.R.string.ok),
-            negativeText = getString(R.string.no),
-            onPositive = { viewModel.clearCache() }
-        )
-    }
+    // F6/4.7：清除缓存/清除 WebView 数据两入口已删除（与精准管理-缓存管理重复，且全量删 cacheDir
+    // 无播放中保护；WebView 清理迁移为缓存管理第 4 分项——见 CacheManageViewModel）
 
     private fun shrinkDatabase() {
         showComposeConfirmDialog(
@@ -715,16 +698,6 @@ class OtherConfigFragment : ComposeSettingFragment() {
             positiveText = getString(android.R.string.ok),
             negativeText = getString(R.string.no),
             onPositive = { viewModel.shrinkDatabase() }
-        )
-    }
-
-    private fun clearWebViewData() {
-        showComposeConfirmDialog(
-            title = getString(R.string.clear_webview_data),
-            message = getString(R.string.sure_del),
-            positiveText = getString(android.R.string.ok),
-            negativeText = getString(R.string.no),
-            onPositive = { viewModel.clearWebViewData() }
         )
     }
 

@@ -63,7 +63,7 @@ by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
         get() = !isLastVersion(6, "httpTtsVersion")
 
     val needUpTxtTocRule: Boolean
-        get() = !isLastVersion(3, "txtTocRuleVersion")
+        get() = !isLastVersion(4, "txtTocRuleVersion")
 
     val needUpRssSources: Boolean
         get() = !isLastVersion(7, "rssSourceVersion")
@@ -74,6 +74,14 @@ by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
     /** E4/F-2：选角模板内置导入旗标（per-key 独立计数器，新键从 1 起语义） */
     val needUpTtsCastingTemplates: Boolean
         get() = !isLastVersion(1, "ttsCastingTemplatesVersion")
+
+    /** F4/4.4：内置高亮规则版本旗标（高亮为 SP 存储无 Room 旗标链；新增内置规则时 bump 推送老用户） */
+    val needUpHighlightRules: Boolean
+        get() = !isLastVersion(1, "highlightRuleVersion")
+
+    /** F7/4.10：替换净化内置规则旗标（0→12 条首装/升级推送，只追加缺失 id） */
+    val needUpReplaceRules: Boolean
+        get() = !isLastVersion(1, "replaceRuleVersion")
 
     var versionCode
         get() = getLong(versionCodeKey, 0)

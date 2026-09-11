@@ -180,8 +180,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         val container = binding.recyclerView.parent as? ViewGroup ?: return
         val index = container.indexOfChild(binding.recyclerView)
         container.removeView(binding.recyclerView)
-        // 批D：View 选择栏节点摘除（原 GONE 隐藏，对齐 ReplaceRule 迁移模式）
-        container.removeView(binding.selectActionBar)
+        // F2/4.3：旧 View SelectActionBar 已从布局摘除（XML 死声明同步删除），多选操作收口顶栏
         val cv = ComposeView(this).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             layoutParams = ViewGroup.LayoutParams(
@@ -190,7 +189,12 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             )
             setContent {
                 AppManagementScaffold(
-                    title = getString(R.string.book_source_manage),
+                    // F2/4.2：多选态标题并入选择计数（底部条停用后计数入口迁顶栏）
+                    title = if (selectedUrls.value.isNotEmpty()) {
+                        getString(R.string.select_all_count, selectedUrls.value.size, sourcesState.size)
+                    } else {
+                        getString(R.string.book_source_manage)
+                    },
                     selectedCount = selectedUrls.value.size,
                     totalCount = sourcesState.size,
                     searchQuery = searchQueryState.value,
@@ -215,67 +219,14 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                         AppManagementAction(
                             text = getString(R.string.more_menu),
                             iconRes = R.drawable.ic_more_vert,
-                            menuActions = ::pageMenuActions
+                            // F2/4.2：多选态顶栏溢出菜单=全选/反选+批量操作（底部条收口迁移）
+                            menuActions = {
+                                if (selectedUrls.value.isNotEmpty()) selectionMenuActions()
+                                else pageMenuActions()
+                            }
                         )
                     ),
-                    bottomActions = listOf(
-                        AppManagementAction(
-                            text = getString(R.string.enable_selection),
-                            onClick = ::enableSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.disable_selection),
-                            onClick = ::disableSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.enable_explore),
-                            onClick = ::enableExploreSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.disable_explore),
-                            onClick = ::disableExploreSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.add_group),
-                            onClick = ::selectionAddToGroups
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.remove_group),
-                            onClick = ::selectionRemoveFromGroups
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.selection_to_top),
-                            onClick = ::topSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.selection_to_bottom),
-                            onClick = ::bottomSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.check_select_source),
-                            onClick = ::checkSource
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.export_selection),
-                            onClick = ::exportSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.share_selected_source),
-                            onClick = ::shareSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.check_selected_interval),
-                            onClick = ::checkSelectedInterval
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.delete),
-                            danger = true,
-                            onClick = ::onClickSelectBarMainAction
-                        )
-                    ),
-                    onBack = { finish() },
-                    onSelectAll = { selectAll(true) },
-                    onInvertSelection = { revertSelection() }
+                    onBack = { finish() }
                 ) {
                     BookSourceScreen(
                         sources = sourcesState,
@@ -398,6 +349,27 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             SourceGroupFilterDialog.create(groups.toList()) { group ->
                 updateSearchQuery("group:$group")
             }
+        )
+    }
+
+    /** F2/4.2：多选态顶栏批量菜单（自底部条迁移，13 项操作+全选/反选全量保留） */
+    private fun selectionMenuActions(): List<AppManagementMenuAction> {
+        return listOf(
+            AppManagementMenuAction(getString(R.string.select_all)) { selectAll(true) },
+            AppManagementMenuAction(getString(R.string.revert_selection)) { revertSelection() },
+            AppManagementMenuAction(getString(R.string.enable_selection)) { enableSelected() },
+            AppManagementMenuAction(getString(R.string.disable_selection)) { disableSelected() },
+            AppManagementMenuAction(getString(R.string.enable_explore)) { enableExploreSelected() },
+            AppManagementMenuAction(getString(R.string.disable_explore)) { disableExploreSelected() },
+            AppManagementMenuAction(getString(R.string.add_group)) { selectionAddToGroups() },
+            AppManagementMenuAction(getString(R.string.remove_group)) { selectionRemoveFromGroups() },
+            AppManagementMenuAction(getString(R.string.selection_to_top)) { topSelected() },
+            AppManagementMenuAction(getString(R.string.selection_to_bottom)) { bottomSelected() },
+            AppManagementMenuAction(getString(R.string.check_select_source)) { checkSource() },
+            AppManagementMenuAction(getString(R.string.export_selection)) { exportSelected() },
+            AppManagementMenuAction(getString(R.string.share_selected_source)) { shareSelected() },
+            AppManagementMenuAction(getString(R.string.check_selected_interval)) { checkSelectedInterval() },
+            AppManagementMenuAction(getString(R.string.delete), danger = true) { onClickSelectBarMainAction() }
         )
     }
 

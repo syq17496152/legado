@@ -17,14 +17,16 @@ import kotlin.math.max
 data class CacheStorageDetail(
     val nameRes: Int,
     val bytes: Long,
-    val deletePaths: List<String>
+    val deletePaths: List<String>,
+    /** F6/4.8：WebView 数据删除后需重启应用才能完全生效（webview 进程运行中会重建目录） */
+    val needRestart: Boolean = false
 )
 
 class CacheManageViewModel(application: Application) : BaseViewModel(application) {
 
     /**
      * 构建存储分项统计（目录级），B11 缓存分项
-     * 维度：书籍文本(book_cache)/视频(exoplayer)/音频(httpTTS)
+     * 维度：书籍文本(book_cache)/视频(exoplayer)/音频(httpTTS)/WebView 数据（F6/4.8 置底）
      */
     fun buildStorageBreakdown(): Coroutine<List<CacheStorageDetail>> {
         return execute(context = IO) {
@@ -43,16 +45,27 @@ class CacheManageViewModel(application: Application) : BaseViewModel(application
                 directorySize(File(appCtx.cacheDir, "httpTTS")),
                 listOf(File(appCtx.cacheDir, "httpTTS").absolutePath)
             )
-            val total = books.bytes + video.bytes + audio.bytes
+            // F6/4.8：WebView 数据第 4 分项（原"其它设置→清除 WebView 数据"迁移；置底排序）
+            val webviewDirs = listOf(
+                appCtx.getDir("webview", android.content.Context.MODE_PRIVATE),
+                appCtx.getDir("hws_webview", android.content.Context.MODE_PRIVATE)
+            )
+            val webview = CacheStorageDetail(
+                R.string.cache_stats_webview,
+                webviewDirs.sumOf { directorySize(it) },
+                webviewDirs.map { it.absolutePath },
+                needRestart = true
+            )
+            val total = books.bytes + video.bytes + audio.bytes + webview.bytes
             kotlin.runCatching {
                 AppLog.putDebugWithTag(
                     AppLog.TAG_CACHE_STATS,
                     "分项统计: 书籍=${formatBytes(books.bytes)} 音频=${formatBytes(audio.bytes)} " +
-                        "视频=${formatBytes(video.bytes)} 总计=${formatBytes(total)}",
+                        "视频=${formatBytes(video.bytes)} WebView=${formatBytes(webview.bytes)} 总计=${formatBytes(total)}",
                     level = AppLog.Level.INFO
                 )
             }
-            listOf(books, video, audio)
+            listOf(books, video, audio, webview)
         }
     }
 

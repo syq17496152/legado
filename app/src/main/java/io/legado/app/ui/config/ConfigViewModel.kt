@@ -1,18 +1,12 @@
 package io.legado.app.ui.config
 
 import android.app.Application
-import android.content.Context
 import io.legado.app.R
 import io.legado.app.base.BaseViewModel
 import io.legado.app.data.appDb
 import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.AppWebDav
-import io.legado.app.help.book.BookHelp
-import io.legado.app.utils.FileUtils
-import io.legado.app.utils.restart
 import io.legado.app.utils.toastOnUi
-import kotlinx.coroutines.delay
-import splitties.init.appCtx
 
 class ConfigViewModel(application: Application) : BaseViewModel(application) {
 
@@ -28,24 +22,8 @@ class ConfigViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    fun clearCache() {
-        execute {
-            BookHelp.clearCache()
-            FileUtils.delete(context.cacheDir.absolutePath)
-        }.onSuccess {
-            context.toastOnUi(R.string.clear_cache_success)
-        }
-    }
-
-    fun clearWebViewData() {
-        execute {
-            FileUtils.delete(context.getDir("webview", Context.MODE_PRIVATE))
-            FileUtils.delete(context.getDir("hws_webview", Context.MODE_PRIVATE), true)
-            context.toastOnUi(R.string.clear_webview_data_success)
-            delay(3000)
-            appCtx.restart()
-        }
-    }
+    // F6/4.7：clearCache/clearWebViewData 已删除——清除缓存与精准管理-缓存管理重复且全量删 cacheDir
+    // 无播放中保护；WebView 清理迁移为缓存管理第 4 分项（CacheManageViewModel）
 
     fun shrinkDatabase() {
         execute {
