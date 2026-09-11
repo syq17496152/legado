@@ -8,7 +8,6 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.databinding.ItemRssArticleFreeBinding
 import io.legado.app.utils.getCompatColor
-import io.legado.app.utils.visible
 
 /**
  * 订阅源「自由」布局（articleStyle=5）的 Adapter。
@@ -21,9 +20,9 @@ import io.legado.app.utils.visible
  * 2. 已读态用次要文字色表达；
  * 3. 点击回调统一走 [CallBack.readRss]，不引入自由布局专属路由。
  *
- * 自由布局特有的两点：
- * 1. 图片区占满整格，因此**额外用图片透明度**表达已读（仅靠文字次要色辨识度不足）；
- * 2. 视频类文章（type=2）在右上角加角标，否则纯图墙无法区分视频与图片。
+ * 自由布局特有的一点：
+ * 图片区占满整格，因此**额外用图片透明度**表达已读（仅靠文字次要色辨识度不足）。
+ * 视频角标已移除（2026-09-11 用户裁决：其余 5 种样式均无角标，加角标破坏一致性）。
  */
 class RssArticlesAdapter5(context: Context, callBack: CallBack) :
     BaseRssArticlesAdapter<ItemRssArticleFreeBinding>(context, callBack) {
@@ -52,8 +51,6 @@ class RssArticlesAdapter5(context: Context, callBack: CallBack) :
             tvTitle.text = item.title
             tvPubDate.text = item.pubDate
             applyReadState(this, item)
-            // 视频类文章角标：type 0=网页 1=图片 2=视频
-            ivVideoBadge.visible(item.type == VIDEO_TYPE)
             // hideWhenBlank=false：自由布局格位由矩形表固定，缺图必须显示占位图，
             // 否则 ImageView 被隐藏后格子会露出空白，破坏整行观感
             loadArticleImage(
@@ -88,9 +85,6 @@ class RssArticlesAdapter5(context: Context, callBack: CallBack) :
     }
 
     companion object {
-        /** RssArticle.type 中表示视频的值 */
-        private const val VIDEO_TYPE = 2
-
         /** 已读文章的图片透明度（0.55 在浅色与深色主题下均可辨识） */
         private const val READ_IMAGE_ALPHA = 0.55f
     }

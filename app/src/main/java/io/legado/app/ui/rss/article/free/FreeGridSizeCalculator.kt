@@ -1,6 +1,5 @@
 package io.legado.app.ui.rss.article.free
 
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -59,6 +58,15 @@ class FreeGridSizeCalculator {
     private var viewTypeArray: IntArray? = null
     private var geometry: FreeGridGeometry = FreeGridGeometry(0, 0, 1, 1, 0, 0)
 
+    /**
+     * 整表统一的每行图片张数（v1.2 行数均衡方案）。
+     *
+     * 由当前比例表的自平均值反推（见 [computeItemsPerRow]）：横图为主 → 2 张/行、
+     * 竖图封面为主 → 3-4 张/行。比例表更新（图片尺寸流式回填）时随 build/recalc 重算，
+     * 整表行组成因此保持一致，消除旧行数跳变。
+     */
+    private var itemsPerRow = 2
+
     /** 当前 item 总数（含 footer 等非图片项） */
     val itemCount: Int get() = ratioArray.size
 
@@ -99,6 +107,7 @@ class FreeGridSizeCalculator {
         // 行数必然 <= itemCount（每行至少 1 项，独占行亦各占 1 行）
         this.rowStarts = IntArray(ratios.size)
         this.rowCount = 0
+        itemsPerRow = computeItemsPerRow()
         layoutFrom(0, 0)
     }
 
@@ -129,6 +138,8 @@ class FreeGridSizeCalculator {
         val startY = rects[startPosition * 4 + 1]
         // 从该行起覆盖写入：rowCount 回退到 rowIndex，layoutFrom 会从该槽位重新记录行起点
         rowCount = rowIndex
+        // 比例表已更新，每行张数随之重算（自均值漂移时后续行组成自动跟随）
+        itemsPerRow = computeItemsPerRow()
         layoutFrom(startPosition, startY)
         return startPosition
     }
@@ -173,19 +184,14 @@ class FreeGridSizeCalculator {
             var sumRatio = 0f
             var count = 0
 
-            // ---- 贪心装填：装到「再加一张会偏离目标行高更远」为止 ----
-            while (index < itemCount) {
+            // ---- 每行张数统一切片（2026-09-11 v1.2 用户反馈重构）----
+            // 旧贪心按「行高最接近目标」动态收行，横图行 2 张、窄竖图行 4 张交替跳变
+            //（用户铁证："第一排只有两个，第二排就来四个"）。v1.1 收紧比例钳制强改行数
+            // 被用户否决（裁图违背自由样式初衷）。现改为整表统一每行 [itemsPerRow] 张：
+            // 行数稳定，行内宽度仍按原图比例分配、图片不裁剪。
+            while (index < itemCount && count < itemsPerRow) {
                 if (isBlockItem(index)) break
-                val ratio = sanitizeRatio(ratioArray[index])
-                val heightIfStop = usableWidth(sumRatio, count)
-                val heightIfTake = usableWidth(sumRatio + ratio, count + 1)
-                // 已达目标行高：收行
-                if (count > 0 && heightIfStop <= geometry.targetRowHeight) break
-                // 再装一张会过矮：收行（避免一行挤入过多窄图）
-                if (heightIfTake < geometry.targetRowHeight * SHRINK_TOLERANCE) break
-                // 张数封顶
-                if (count + 1 > geometry.maxItemsPerRow) break
-                sumRatio += ratio
+                sumRatio += sanitizeRatio(ratioArray[index])
                 count++
                 index++
             }
@@ -194,20 +200,6 @@ class FreeGridSizeCalculator {
             if (count == 0) {
                 index++
                 continue
-            }
-
-            // ---- 回退修正：若「少装一张」比「当前张数」更接近目标行高，则退回一张 ----
-            if (count >= 2) {
-                val lastRatio = sanitizeRatio(ratioArray[rowStart + count - 1])
-                val heightWith = usableWidth(sumRatio, count)
-                val heightWithout = usableWidth(sumRatio - lastRatio, count - 1)
-                if (abs(heightWithout - geometry.targetRowHeight) <
-                    abs(heightWith - geometry.targetRowHeight)
-                ) {
-                    sumRatio -= lastRatio
-                    count--
-                    index--
-                }
             }
 
             // ---- 行高：图片区高度（+ 文字块）----
@@ -276,20 +268,40 @@ class FreeGridSizeCalculator {
         return type < 0 || type >= geometry.blockItemThreshold
     }
 
-    companion object {
-        // ---- 比例钳制区间（AD-09 策略 X：钳制 + CENTER_CROP 裁边）----
-        /**
-         * 行分配用最小宽高比 0.9。用户反馈铁证（2026-09-11）：旧下限 0.4 时窄竖图一行可挤 4 张，
-         * 与宽横图的 2 张/行形成强烈跳变（"第一排 2 个第二排 4 个"），观感差。
-         * 收紧到 0.9 后每行收敛到 2-3 张；1:1 以下图片裁掉少量上下边（CENTER_CROP）。
-         */
-        const val MIN_RATIO = 0.9f
+    /**
+     * 由比例表自均值反推整表统一的每行张数。
+     *
+     * 推导：行高 = `usable / (k × avgRatio)`，令行高 ≈ 目标行高，得
+     * `k = availableWidth / (targetRowHeight × avgRatio)`（忽略间距的近似，误差 ≤ 半张）。
+     * 实测（360px / 目标行高 151px）：avg 1.78（16:9 横图）→ 2 张/行、avg 1.0（方图）→ 2、
+     * avg 0.75（3:4 竖图）→ 3、avg 0.67（2:3 封面）→ 4。
+     */
+    private fun computeItemsPerRow(): Int {
+        var sum = 0f
+        var n = 0
+        for (i in ratioArray.indices) {
+            if (isBlockItem(i)) continue
+            sum += sanitizeRatio(ratioArray[i])
+            n++
+        }
+        if (n == 0 || sum <= 0f) return 2
+        val avg = sum / n
+        val k = geometry.availableWidth.toFloat() /
+            (geometry.targetRowHeight * avg).coerceAtLeast(1f)
+        return kotlin.math.round(k).toInt().coerceIn(2, geometry.maxItemsPerRow)
+    }
 
+    companion object {
+        // ---- 比例钳制区间（AD-09 策略 X：钳制 + CENTER_CROP 裁边，仅拦极端值）----
         /**
-         * 行分配用最大宽高比 2.2。旧上限 3.0 时全景图独占行高过矮；收紧后裁掉左右多余部分
-         * （CENTER_CROP），行高更统一。若实测裁切过激可放宽至 2.5。
+         * 最小宽高比 0.4 ≈ 1:2.5 长图；低于此值按 0.4 裁掉上下多余部分。
+         * 2026-09-11 v1.1 曾收紧到 0.9 以治行数跳变，用户否决（裁图违背自由样式初衷），
+         * v1.2 恢复 0.4——行数跳变改由「每行张数统一」（见 [itemsPerRow]）解决，不再牺牲裁图。
          */
-        const val MAX_RATIO = 2.2f
+        const val MIN_RATIO = 0.4f
+
+        /** 最大宽高比 3.0 ≈ 3:1 全景；高于此值按 3.0 裁掉左右多余部分。若实测裁切过激可放宽至 4.0 */
+        const val MAX_RATIO = 3.0f
 
         /** 全局兜底比例 4:3；用于 ratio 未知（首次加载）或解码失败时估算布局 */
         const val DEFAULT_RATIO = 1.33f
@@ -298,21 +310,21 @@ class FreeGridSizeCalculator {
         /**
          * 目标图片区行高占屏幕宽的比例。
          *
-         * 取值 0.42 经算法实测（360px 宽 / 间距 4px / 文字块 46px / 比例钳制 [0.9, 2.2]）：
+         * 取值 0.42 经算法实测（360px 宽 / 间距 4px / 文字块 46px）。
+         * v1.2 起行组成由「整表统一每行张数」决定（张数 = 该值与比例自均值反推），
+         * 同类源整表行数一致；下表为对应源类型的实测行高：
+         *
          * | 源图片比例 | 每行张数 | 图片区行高 |
          * |-----------|---------|-----------|
          * | 4:3 全横图 | 2 | 134px |
          * | 16:9 全宽图 | 2 | 100px |
          * | 1:1 全方图 | 2 | 178px |
-         * | 3:4 竖图（钳到 0.9） | 3 | 130px |
-         * | 混合比例 | 2（偶有 3） | 100–178px |
+         * | 3:4 全竖图 | 3 | 156px |
          *
          * 不取更小的 0.33 是为避免行高过矮 —— 实测 0.33 时混合行高仅约 98px，缩略图辨识度明显下降。
+         * v1.2 起该值仅用于反推「每行张数」（见 [computeItemsPerRow]），不再直接做收行阈值。
          */
         const val TARGET_ROW_HEIGHT_RATIO = 0.42f
-
-        /** 再加一张后行高低于「目标 × 该系数」即收行，避免一行挤入过多窄图 */
-        const val SHRINK_TOLERANCE = 0.55f
 
         /** 单行图片张数上限（竖屏）。4 张时单图约屏宽 22%，再小则缩略图无辨识度 */
         const val MAX_ITEMS_PORTRAIT = 4
