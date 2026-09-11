@@ -1,0 +1,26 @@
+[
+  {
+    "sourceUrl": "http://127.0.0.1:18093",
+    "sourceName": "free-layout-paging",
+    "sourceIcon": "",
+    "sourceGroup": "测试",
+    "sourceComment": "自由布局分页 E2E 本地源（配 free_layout_paging_srv/server.py + adb reverse 18093）",
+    "enabled": true,
+    "singleUrl": false,
+    "articleStyle": 5,
+    "enabledJs": false,
+    "loadWithBaseUrl": false,
+    "showWebLog": false,
+    "lastUpdateTime": 0,
+    "customOrder": 0,
+    "type": 0,
+    "preload": false,
+    "sortUrl": "最新::http://127.0.0.1:18093/list?page=1",
+    "ruleArticles": "class.item",
+    "ruleTitle": "class.title@text",
+    "ruleLink": "class.link@text",
+    "rulePubDate": "class.pubdate@text",
+    "ruleDescription": "class.description@text",
+    "ruleNextPage": "class.next-page@href"
+  }
+]
