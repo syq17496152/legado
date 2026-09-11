@@ -2,9 +2,16 @@ package io.legado.app.help.readaloud.speech
 
 import android.content.Context
 import android.speech.tts.TextToSpeech
+import android.speech.tts.Voice
+import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.utils.GSON
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 data class SpeechVoiceOption(
     val key: String,
@@ -146,6 +153,150 @@ object SpeechVoiceCatalogRepository {
                     options = listOf(option)
                 )
             }
+    }
+
+    // ---------------- F8/2.23：系统引擎音色枚举（本仓独有能力，打通 CloneTTS 等多音色引擎绑定） ----------------
+
+    /** 音色目录结果（三态可观测：notReady/emptyVoiceEngines 计数供 UI 明示，禁止静默回落） */
+    data class SystemCatalogResult(
+        val groups: List<SpeechVoiceEngineGroup>,
+        val notReadyEngines: Int,
+        val emptyVoiceEngines: Int
+    )
+
+    private data class CachedVoices(val names: List<String>, val at: Long)
+
+    /** 音色枚举结果缓存（临时 TTS 实例 init 秒级开销，缓存后二次打开编辑器零等待） */
+    private val voiceCache = ConcurrentHashMap<String, CachedVoices>()
+    private val VOICE_CACHE_TTL_MS = 10 * 60_000L
+
+    /**
+     * 系统引擎组（异步详版）：每引擎接 getVoices() 枚举真实音色，toneID=voice.name（命中链
+     * TtsVoiceRef→SystemEngineSource.applyVoice 按 tts.voices.name 匹配 setVoice，CloneTTS 等注册系统
+     * voices 的引擎即可被绑定为角色声源）。三态：未就绪→warning"请稍后重试"；空集→warning"无可枚举
+     * 音色"；正常→多 option（引擎级默认 option 保留置首位）。
+     * 调用方必须 produceState 消费（禁主线程同步等待 init，ANR 风险——增量红队 P1）。
+     */
+    suspend fun systemGroupsDetailed(context: Context): SystemCatalogResult {
+        val engines = runCatching {
+            withContext(Dispatchers.IO) {
+                val tts = TextToSpeech(context.applicationContext, null)
+                try {
+                    tts.engines.map { it.label.toString() to it.name }
+                } finally {
+                    tts.shutdown()
+                }
+            }
+        }.getOrDefault(emptyList())
+        var notReady = 0
+        var emptyCount = 0
+        val groups = (listOf("系统默认" to "") + engines)
+            .distinctBy { it.second }
+            .map { (title, value) ->
+                val engineValue = GSON.toJson(SelectItem(title, value))
+                val baseOption = SpeechVoiceOption(
+                    key = "system:$value",
+                    engineType = SpeechRoute.ENGINE_SYSTEM,
+                    engineValue = engineValue,
+                    engineName = title,
+                    speakerName = title,
+                    explicitSpeaker = false
+                )
+                val baseGroup = SpeechVoiceEngineGroup(
+                    key = "system:$value",
+                    title = title,
+                    subtitle = if (value.isBlank()) "系统默认" else "系统 TTS",
+                    engineType = SpeechRoute.ENGINE_SYSTEM,
+                    engineValue = engineValue,
+                    options = listOf(baseOption)
+                )
+                if (value.isBlank()) return@map baseGroup
+                val voices = getVoicesForEngine(context.applicationContext, value)
+                when {
+                    voices == null -> {
+                        notReady++
+                        baseGroup.copy(
+                            subtitle = "引擎未就绪，请稍后重试",
+                            warning = "引擎未就绪，请重试"
+                        )
+                    }
+                    voices.isEmpty() -> {
+                        emptyCount++
+                        baseGroup.copy(
+                            subtitle = "该引擎无可枚举音色",
+                            warning = "该引擎无可枚举音色"
+                        )
+                    }
+                    else -> baseGroup.copy(
+                        subtitle = "系统 TTS · ${voices.size} 个音色",
+                        options = listOf(baseOption) + voices.map { voiceName ->
+                            SpeechVoiceOption(
+                                key = "system:$value:$voiceName",
+                                engineType = SpeechRoute.ENGINE_SYSTEM,
+                                engineValue = engineValue,
+                                engineName = title,
+                                speakerName = voiceName,
+                                toneID = voiceName,
+                                explicitSpeaker = true
+                            )
+                        }
+                    )
+                }
+            }
+        return SystemCatalogResult(groups, notReady, emptyCount)
+    }
+
+    /**
+     * 单引擎 voices 枚举：临时 TextToSpeech 显式绑定引擎 + OnInitListener 等待（3s 超时=未就绪 null），
+     * 成功后 getVoices 取 voice.name 列表（缓存 10min）。失败不逃逸（fail-soft 返回 null/空集）。
+     */
+    private suspend fun getVoicesForEngine(context: Context, engine: String): List<String>? {
+        voiceCache[engine]?.let { cached ->
+            if (System.currentTimeMillis() - cached.at <= VOICE_CACHE_TTL_MS) {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_TTS_TRACE,
+                    "音色枚举缓存命中 engine=${engine.take(30)} voices=${cached.names.size}",
+                    level = AppLog.Level.INFO
+                )
+                return cached.names
+            }
+        }
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val latch = CountDownLatch(1)
+                var initOk = false
+                val tts = TextToSpeech(
+                    context,
+                    { status ->
+                        initOk = status == TextToSpeech.SUCCESS
+                        latch.countDown()
+                    },
+                    engine
+                )
+                try {
+                    val inited = latch.await(3, TimeUnit.SECONDS)
+                    if (!inited || !initOk) {
+                        AppLog.putDebugWithTag(
+                            AppLog.TAG_TTS_TRACE,
+                            "音色枚举引擎未就绪 engine=${engine.take(30)} inited=$inited initOk=$initOk",
+                            level = AppLog.Level.WARN
+                        )
+                        return@runCatching null
+                    }
+                    val names = tts.voices?.mapNotNull { v: Voice -> v.name }.orEmpty()
+                    voiceCache[engine] = CachedVoices(names, System.currentTimeMillis())
+                    // F8/2.23 埋点：l2_verify_tts_engine.py 断言依据（枚举路径 TtsTrace）
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_TTS_TRACE,
+                        "音色枚举 engine=${engine.take(30)} voices=${names.size} names=${names.take(5)}",
+                        level = AppLog.Level.INFO
+                    )
+                    names
+                } finally {
+                    tts.shutdown()
+                }
+            }.getOrNull()
+        }
     }
 
     fun assignableRoutes(httpTtsList: List<HttpTTS>): List<SpeechRoute> {

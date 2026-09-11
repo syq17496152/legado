@@ -53,15 +53,12 @@ object MemoryPressure {
     private fun now(): Long = currentTimeProvider?.invoke() ?: System.currentTimeMillis()
 
     fun throttleTrim(block: (Int) -> Unit) {
-        if (!shouldTrimNow()) {
-            logDebug("throttle skip reason=avail")
-            return
-        }
+        // F9/2.18：高频周期打点删除（原每 3 秒 skip 日志 = 真机日志 5521 条/15% 洪水），
+        // 改为压力级别跃迁时输出单条（normal/low/critical 迁移才打，<10 条/会话）
+        logPressureTransition()
+        if (!shouldTrimNow()) return
         val current = now()
-        if (current - lastTrimTime < 1500L) {
-            logDebug("throttle skip reason=interval")
-            return
-        }
+        if (current - lastTrimTime < 1500L) return
         lastTrimTime = current
         block(trimLevelForCurrentState())
     }
@@ -84,6 +81,45 @@ object MemoryPressure {
     // 测试辅助：仅 JVM 单测 MemoryPressureTest 使用
     internal fun resetForTest() {
         lastTrimTime = 0L
+        lastPressureLevel = -1
+    }
+
+    // ---------------- F9/2.18：压力级别跃迁打点 ----------------
+
+    private const val PRESSURE_NORMAL = 0
+    private const val PRESSURE_LOW = 1
+    private const val PRESSURE_CRITICAL = 2
+
+    @Volatile private var lastPressureLevel = -1
+
+    private fun currentPressureLevel(): Int {
+        val available = availableMemory()
+        return when {
+            available < 8L * M -> PRESSURE_CRITICAL
+            available < 24L * M -> PRESSURE_LOW
+            else -> PRESSURE_NORMAL
+        }
+    }
+
+    private fun levelName(level: Int): String = when (level) {
+        PRESSURE_LOW -> "low"
+        PRESSURE_CRITICAL -> "critical"
+        else -> "normal"
+    }
+
+    /** 仅级别迁移时输出一条（可用内存 8MB/24MB 两档阈值），替代原周期 skip 洪水 */
+    private fun logPressureTransition() {
+        val level = currentPressureLevel()
+        if (level == lastPressureLevel) return
+        val from = if (lastPressureLevel == -1) "init" else levelName(lastPressureLevel)
+        lastPressureLevel = level
+        kotlin.runCatching {
+            AppLog.putDebugWithTag(
+                AppLog.TAG_MEMORY_PRESSURE,
+                "内存压力级别迁移: $from → ${levelName(level)} (avail=${availableMemory() / M}MB)",
+                level = AppLog.Level.INFO
+            )
+        }
     }
 
     private fun dispatchTrim(level: Int, waitForCompletion: Boolean) {
@@ -105,11 +141,5 @@ object MemoryPressure {
             }
         }
         latch.await(500L, TimeUnit.MILLISECONDS)
-    }
-
-    private fun logDebug(message: String) {
-        kotlin.runCatching {
-            AppLog.putDebugWithTag(AppLog.TAG_MEMORY_PRESSURE, message, level = AppLog.Level.DEBUG)
-        }
     }
 }

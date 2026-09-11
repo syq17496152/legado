@@ -35,11 +35,7 @@ object SourcePreconnectHelper {
                 urls.take(n).mapIndexed { index, url ->
                     async(Dispatchers.IO) {
                         if (url.isNotBlank()) {
-                            AppLog.putDebugWithTag(
-                                AppLog.TAG_SOURCE_MECHANISM,
-                                "预连接: 第${index + 1}个",
-                                level = AppLog.Level.INFO
-                            )
+                            // F9/2.19：逐条 INFO 打点删除（warmUpConnection 内部已有 1/20 采样汇总，预连接成功与否以 HttpHelper Tag 为准）
                             warmUpConnection(url)
                         }
                     }

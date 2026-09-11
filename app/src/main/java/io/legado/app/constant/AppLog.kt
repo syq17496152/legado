@@ -9,6 +9,17 @@ import splitties.init.appCtx
 
 object AppLog {
 
+    /**
+     * F9/2.18：LiveEventBus 事件日志开关单源（DEBUG 构建或 recordLog 开启时启用）。
+     * App 启动链与其它设置 recordLog 变更回调统一走本方法，消除双开关互相覆盖。
+     */
+    fun syncEventBusLogger() {
+        runCatching {
+            com.jeremyliao.liveeventbus.LiveEventBus.config()
+                .enableLogger(BuildConfig.DEBUG || recordLogOrOff())
+        }
+    }
+
     // 模块 Tag 常量：统一命名规范，便于 ai_tests 按模块过滤日志（logcat -s WebBook:E）
     const val TAG_WEB_BOOK = "WebBook"
     const val TAG_ANALYZE = "AnalyzeRule"
@@ -105,6 +116,88 @@ object AppLog {
     fun putInfo(message: String?, throwable: Throwable? = null, toast: Boolean = false) {
         putEntry(message, throwable, toast, Level.INFO)
     }
+
+    // ---------------- F9/2.17：频控日志（收编各处自建 60s 去重/采样轮子，单点实现） ----------------
+
+    /** 节流窗口时长 */
+    private const val THROTTLE_WINDOW_MS = 60_000L
+
+    /** 节流/采样 key 上限（有界防 key 无界增长；全 AppLog 写路径 @Synchronized，LinkedHashMap 线程安全） */
+    private const val MAX_FREQ_KEYS = 200
+
+    private data class ThrottleState(val windowStart: Long, val count: Int)
+    private val throttleStates = LinkedHashMap<String, ThrottleState>(64)
+    private val sampleCounters = LinkedHashMap<String, Long>(64)
+
+    private fun recordFreqKey(map: LinkedHashMap<String, *>, key: String) {
+        if (map.size >= MAX_FREQ_KEYS) {
+            val it = map.entries.iterator()
+            if (it.hasNext()) { it.next(); it.remove() }
+        }
+    }
+
+    /**
+     * 节流日志：同 key 60s 窗口内仅输出首条，下一条合并"（前一窗口累计 N 条）"。
+     * 适用：周期性/高频失败路径（网络错误、探测循环等）。
+     * 级别语义（logging_rules F9 条款）：默认 WARN=降级/兜底发生；诊断 tag 白名单场景勿用本方法。
+     * tag 非空时走 putDebugWithTag（模块化 logcat 采集），否则走普通 putEntry。
+     */
+    @Synchronized
+    fun putThrottled(
+        key: String,
+        message: String?,
+        throwable: Throwable? = null,
+        level: Level = Level.WARN,
+        tag: String? = null
+    ) {
+        message ?: return
+        val now = System.currentTimeMillis()
+        val prev = throttleStates[key]
+        val inWindow = prev != null && now - prev.windowStart < THROTTLE_WINDOW_MS
+        val count = if (inWindow) prev.count + 1 else 1
+        if (inWindow) throttleStates[key] = ThrottleState(prev.windowStart, count)
+        else {
+            recordFreqKey(throttleStates, key)
+            throttleStates[key] = ThrottleState(now, count)
+        }
+        if (inWindow) return // 窗口内非首条抑制（首条已输出）
+        val merged = if (prev != null && prev.count > 1) "$message（前一窗口累计${prev.count}条）" else message
+        if (tag != null) putDebugWithTag(tag, merged, throwable, level)
+        else putEntry(merged, throwable, false, level)
+    }
+
+    /**
+     * 采样日志：同 key 每 n 条输出 1 条汇总（附累计计数）。
+     * 适用：cache hit 等高频成功路径（如 CryptoScope 解密缓存命中 1/50 采样）。
+     */
+    @Synchronized
+    fun putSampled(
+        key: String,
+        message: String?,
+        n: Int = 50,
+        level: Level = Level.DEBUG,
+        tag: String? = null
+    ) {
+        message ?: return
+        if (n <= 1) {
+            if (tag != null) putDebugWithTag(tag, message, null, level)
+            else putEntry(message, null, false, level)
+            return
+        }
+        val count = (sampleCounters[key] ?: 0L) + 1L
+        recordFreqKey(sampleCounters, key)
+        sampleCounters[key] = count
+        if (count % n != 0L) return
+        val merged = "$message（累计 $count 条，采样 1/$n）"
+        if (tag != null) putDebugWithTag(tag, merged, null, level)
+        else putEntry(merged, null, false, level)
+    }
+
+    /** 测试钩子（F9/2.17 单测）：节流状态快照（key → 窗口内累计条数） */
+    internal fun throttleSnapshot(): Map<String, Int> = throttleStates.mapValues { it.value.count }
+
+    /** 测试钩子（F9/2.17 单测）：采样计数快照（key → 累计条数） */
+    internal fun sampleSnapshot(): Map<String, Long> = sampleCounters.toMap()
 
     @Synchronized
     fun putNotSave(message: String?, throwable: Throwable? = null, toast: Boolean = false) {

@@ -16,9 +16,11 @@ import io.legado.app.constant.IntentAction
 import io.legado.app.constant.NotificationId
 import io.legado.app.data.appDb
 import io.legado.app.help.download.ChunkDownloader
+import io.legado.app.help.download.DOWNLOAD_VIDEO_EXTS
 import io.legado.app.help.download.DownloadError
 import io.legado.app.help.download.HlsDownloader
 import io.legado.app.help.download.HlsResult
+import io.legado.app.help.download.MIME_VIDEO_EXT
 import io.legado.app.help.video.engine.HeaderResolver
 import io.legado.app.utils.IntentType
 import io.legado.app.utils.getPrefString
@@ -405,7 +407,30 @@ class DownloadService : BaseService() {
         if (size <= 0) {
             return DownloadAttempt(success = false, error = DownloadError.INCOMPLETE)
         }
-        return DownloadAttempt(true, localFile.path, size)
+        // F1：按 probe Content-Type 纠正产物扩展名（mime 唯一可靠取点=probe 响应头）；
+        // 纠正后三处同步：DB localPath/fileName（updateTask 透传）、内存 downloadInfos、返回路径（通知/播放 IntentType 同源）
+        val finalFile = correctVideoExtension(id, localFile, result.mime, info)
+        return DownloadAttempt(true, finalFile.path, finalFile.length())
+    }
+
+    /**
+     * F1：DIRECT 产物扩展名纠正——mime 为已知视频类型且当前扩展名不符时 rename（uniqueFile 防覆盖）。
+     * 纠正失败（IO 拒绝）不阻断下载成功语义，保留原名仅记日志。
+     */
+    private fun correctVideoExtension(id: Long, file: File, mime: String?, info: DownloadInfo): File {
+        val mimeExt = mime?.let { MIME_VIDEO_EXT[it] } ?: return file
+        val name = file.name
+        if (name.substringAfterLast('.', "").lowercase() == mimeExt) return file
+        val base = name.substringBeforeLast('.', name)
+        val target = uniqueFile(file.parentFile ?: return file, "$base.$mimeExt")
+        if (!file.renameTo(target)) {
+            AppLog.put("F1 扩展名纠正 rename 失败，保留原名 ${info.fileName}")
+            return file
+        }
+        downloadInfos[id] = info.copy(localFile = target.path, fileName = target.name)
+        DownloadState.updateTask(id, localPath = target.path, fileName = target.name)
+        AppLog.put("F1 下载产物扩展名按 Content-Type 纠正：${info.fileName} → ${target.name}")
+        return target
     }
 
     private suspend fun executeHls(
@@ -468,6 +493,8 @@ class DownloadService : BaseService() {
                 )
             }
             is HlsResult.TsFallback -> {
+                // F1/2.4：回退 ts 时清掉本任务目标名下的半成品 mp4（remux 中途失败残留，防孤儿累积）
+                runCatching { mp4File.delete() }
                 // onMerged 已把 ts 落位目标目录并落库完成，这里直接复用；兜底自行复制
                 val targetTs = mergedTsPath ?: run {
                     val ts = File(tempDir, mp4File.nameWithoutExtension + ".ts")
@@ -655,21 +682,10 @@ class DownloadService : BaseService() {
         }
     }
 
-    private fun sanitizeFileName(name: String): String =
-        name.replace(Regex("""[\\/:*?"<>|\n\r\t]"""), "_").trim()
+    private fun sanitizeFileName(name: String): String = sanitizeDownloadName(name)
 
-    private fun resolveFileName(raw: String?, url: String, taskType: DownloadTaskType): String {
-        val rawName = raw?.takeIf { it.isNotBlank() } ?: ""
-        if (rawName.isNotBlank()) {
-            return sanitizeFileName(rawName)
-        }
-        // URL 推断文件名
-        val path = url.substringBefore('?').substringBefore('#')
-        var last = path.substringAfterLast('/')
-        if (last.isBlank() || last.startsWith("#") || last.startsWith("http")) last = "video"
-        if (!last.contains('.')) last += ".mp4"
-        return sanitizeFileName(last)
-    }
+    private fun resolveFileName(raw: String?, url: String, taskType: DownloadTaskType): String =
+        resolveVideoFileName(raw, url, DOWNLOAD_VIDEO_EXTS)
 
     private fun uniqueFile(dir: File, name: String): File {
         dir.mkdirs()
@@ -739,4 +755,27 @@ class DownloadService : BaseService() {
         val localFile: String? = null,
         val maxRetry: Int = MAX_AUTO_RETRY
     )
+}
+
+/** 下载产物文件名非法字符清洗（F1 提取纯函数，Service 与 JVM 单测共用） */
+internal fun sanitizeDownloadName(name: String): String =
+    name.replace(Regex("""[\\/:*?"<>|\n\r\t]"""), "_").trim()
+
+/**
+ * F1：下载产物文件名解析纯函数（resolveFileName 委托，JVM 可测）。
+ * 标题天然无扩展名（源自章节/影片标题），点后段不在视频扩展白名单（"xx.4K""第1.5集"伪后缀）时补默认 .mp4；
+ * 标题为空时从 URL 路径推断，无扩展名仍补 .mp4。
+ */
+internal fun resolveVideoFileName(raw: String?, url: String, videoExts: Set<String>): String {
+    val rawName = raw?.takeIf { it.isNotBlank() } ?: ""
+    if (rawName.isNotBlank()) {
+        val safe = sanitizeDownloadName(rawName)
+        val ext = safe.substringAfterLast('.', "").lowercase()
+        return if (ext in videoExts) safe else "$safe.mp4"
+    }
+    val path = url.substringBefore('?').substringBefore('#')
+    var last = path.substringAfterLast('/')
+    if (last.isBlank() || last.startsWith("#") || last.startsWith("http")) last = "video"
+    if (!last.contains('.')) last += ".mp4"
+    return sanitizeDownloadName(last)
 }

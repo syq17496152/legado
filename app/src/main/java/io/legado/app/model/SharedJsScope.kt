@@ -67,10 +67,13 @@ object SharedJsScope {
     fun getCryptoScope(coroutineContext: CoroutineContext?): Scriptable? {
         val cached = cryptoScope?.get()
         if (cached != null) {
-            AppLog.putDebugWithTag(
-                AppLog.TAG_CRYPTO_SCOPE,
+            // F9/2.19：高频命中路径 1/50 采样（原逐次 INFO=真机日志 1211 条噪音源）
+            AppLog.putSampled(
+                "CryptoScope_cache_hit",
                 "cache hit: scope=${cached::class.simpleName}",
-                level = Level.INFO
+                n = 50,
+                level = Level.DEBUG,
+                tag = AppLog.TAG_CRYPTO_SCOPE
             )
             return cached
         }

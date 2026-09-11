@@ -368,6 +368,11 @@ class HighlightRuleEditDialog : ComposeDialogFragment(),
             requireActivity().toastOnUi(getString(R.string.highlight_rule_invalid, r.pattern))
             return
         }
+        // F3/2.6：isRegex=false 且内容含正则元字符 → 高概率是"写了正则没开开关"，
+        // 保存时一次性明示（匹配链路另有一次性日志留痕），杜绝静默字面量匹配
+        if (!r.isRegex && r.pattern.any { it in "\\{}[]|()*+?^$" }) {
+            requireActivity().toastOnUi(getString(R.string.highlight_rule_literal_match_hint))
+        }
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
                 val rules = HighlightRuleStore.load(requireContext())

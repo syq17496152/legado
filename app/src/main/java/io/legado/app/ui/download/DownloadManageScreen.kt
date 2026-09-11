@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.R
+import io.legado.app.help.download.DOWNLOAD_VIDEO_EXTS
 import io.legado.app.service.DownloadStatus
 import io.legado.app.service.DownloadTaskType
 import io.legado.app.ui.book.cache.formatBytes
@@ -76,11 +77,7 @@ enum class DownloadTab(val labelRes: Int) {
     FAILED(R.string.download_tab_failed)
 }
 
-/** C6 单源：本地视频扩展名（Activity 播放判定与 Screen 菜单判定共用） */
-val DOWNLOAD_VIDEO_EXTS = setOf(
-    "mp4", "mkv", "webm", "avi", "mov", "flv", "wmv",
-    "3gp", "m4v", "m2ts", "ts", "rmvb", "rm", "f4v"
-)
+/** C6/F1 单源迁移：视频扩展白名单已收编至 help/download（ChunkDownloader.kt，Service 命名纠正与 UI 判定共用） */
 
 data class DownloadDisplayItem(
     val id: Long,

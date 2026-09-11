@@ -139,6 +139,7 @@ import io.legado.app.help.character.BookCharacterIdentityMigrator
 import io.legado.app.help.CoverDisplayResolver
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.readaloud.casting.TtsCastingStore
+import io.legado.app.help.readaloud.casting.TtsMultiRoleDiagnostics
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
 import io.legado.app.help.readaloud.ReadAloudSpeakerLoudnessManager
@@ -173,7 +174,11 @@ import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import kotlin.math.roundToInt
 import androidx.compose.material3.MaterialTheme
 import io.legado.app.ui.theme.labelXSmall
@@ -432,6 +437,21 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
     fun attach(lifecycleOwner: LifecycleOwner, callBack: CallBack) {
         this.callBack = callBack
         composeView.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        // F8/2.26+2.27：多角色切分诊断收集→roleStatus 横幅（复用既有提示条 UI，区分无对话/未命中）
+        lifecycleOwner.lifecycleScope.launch {
+            lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                TtsMultiRoleDiagnostics.state.collect { diag ->
+                    val text = diag.hintText ?: return@collect
+                    if (roleStatusText != text) {
+                        roleStatusText = text
+                        roleStatusRunning = false
+                        roleStatusError = false
+                        roleStatusUntil = Long.MAX_VALUE
+                        refresh()
+                    }
+                }
+            }
+        }
     }
 
     fun open(force: Boolean = true) {
@@ -614,6 +634,8 @@ class ReadAloudPlayerPanel @JvmOverloads constructor(
 
     private fun dismissRoleStatus() {
         if (roleStatusRunning) return
+        // F8/2.26：用户关闭多角色诊断提示时同步置 dismissed（本会话不再弹）
+        TtsMultiRoleDiagnostics.dismiss()
         roleStatusText = ""
         roleStatusError = false
         roleStatusUntil = 0L

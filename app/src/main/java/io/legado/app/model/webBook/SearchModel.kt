@@ -92,12 +92,8 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     private fun startSearch() {
         val precision = appCtx.getPrefBoolean(PreferKey.precisionSearch)
         var hasMore = false
-        // PageDebug 临时日志（验证{{page}}分页失效问题，验证通过后移除）
-        AppLog.putDebugWithTag(
-            "PageDebug",
-            "SearchModel: searchPage=$searchPage, keyLen=${searchKey.length}, sourceCount=${bookSourceParts.size}",
-            level = AppLog.Level.INFO
-        )
+        // F9/2.19：PageDebug 临时排查日志移除（注释自述"验证通过后移除"，真机日志 2110 条/5.7% 噪音；
+        // {{page}} 分页问题早已验证闭环，符合 AGENTS.md 一次性临时 tag 清理铁律）
         searchJob = scope.launch(interactionPolicy + searchPool!!) {
             flow {
                 for (bs in bookSourceParts) {

@@ -57,8 +57,36 @@ class OkHttpStreamFetcher(
 
     companion object {
         private const val TAG = "ImgDecrypt"
-        // F-P1-C4 修复无界 HashSet 内存泄漏 | 已知上限：200 条失败 URL | 升级路径：无
-        private val failUrl = android.util.LruCache<String, Boolean>(200)
+
+        /**
+         * F-P1-C4：失败 URL 短路缓存（上限 200 条不变）。
+         * F5/2.9d：值改为 FailEntry（重试允许时间+连续失败次数），TTL 指数退避 5→10→20min 封顶，
+         * 过期自动可重试——消除"一次瞬时失败→同 URL 永久秒失败直到 LRU 淘汰"的时好时坏放大器
+         */
+        private class FailEntry(val retryAt: Long, val consecutive: Int)
+
+        private val failUrl = android.util.LruCache<String, FailEntry>(200)
+
+        internal fun failTtlMs(consecutive: Int): Long = when {
+            consecutive <= 1 -> 5 * 60_000L
+            consecutive == 2 -> 10 * 60_000L
+            else -> 20 * 60_000L
+        }
+
+        internal fun markFailed(urlStr: String) {
+            val prev = failUrl.get(urlStr)
+            val consecutive = (prev?.consecutive ?: 0) + 1
+            val now = System.currentTimeMillis()
+            val base = if (prev != null && prev.retryAt > now) prev.retryAt else now
+            failUrl.put(urlStr, FailEntry(base + failTtlMs(consecutive), consecutive))
+        }
+
+        internal fun isBlocked(urlStr: String): Boolean {
+            val entry = failUrl.get(urlStr) ?: return false
+            if (entry.retryAt > System.currentTimeMillis()) return true
+            failUrl.remove(urlStr) // TTL 过期允许重试
+            return false
+        }
 
         /** H3(sniff-regression-rss-image-crash): 小内存设备超过该大小的图片跳过解密透传（10MB） */
         internal const val SKIP_DECODE_SIZE_BYTES = 10L * 1024 * 1024
@@ -91,7 +119,7 @@ class OkHttpStreamFetcher(
         // I-P0-2: 降级链主动重试（bypassFailCacheOption=true）时绕过失败缓存短路，
         // 否则同 URL 重试永不发请求（86 张 403 仅 1 张真实降级的根因）
         val bypassFailCache = options.get(OkHttpModelLoader.bypassFailCacheOption) == true
-        if (!bypassFailCache && failUrl.get(url.toStringUrl()) != null) {
+        if (!bypassFailCache && isBlocked(url.toStringUrl())) {
             callback.onLoadFailed(NoStackTraceException("跳过加载失败的图片"))
             return
         }
@@ -173,7 +201,7 @@ class OkHttpStreamFetcher(
         responseBody = response.body
         if (!response.isSuccessful) {
             if (!manga) {
-                failUrl.put(url.toStringUrl(), true)
+                markFailed(url.toStringUrl())
             }
             callback?.onLoadFailed(HttpException(response.message, response.code))
             return
@@ -244,7 +272,7 @@ class OkHttpStreamFetcher(
     private fun onStreamReady(inputStream: InputStream?) {
         if (inputStream == null) {
             if (!manga) {
-                failUrl.put(url.toStringUrl(), true)
+                markFailed(url.toStringUrl())
             }
             callback?.onLoadFailed(NoStackTraceException("封面二次解密失败"))
         } else {

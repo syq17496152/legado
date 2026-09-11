@@ -97,6 +97,9 @@ class HttpReadAloudService : BaseReadAloudService(),
     private var downloadTask: Coroutine<*>? = null
     private var playIndexJob: Job? = null
     private var downloadErrorNo: Int = 0
+
+    /** F5/2.14：静音替代提示去重（服务会话级，一次朗读会话至多提示一次） */
+    private var silentFallbackToasted: Boolean = false
     private var playErrorNo = 0
     private val downloadTaskActiveLock = Mutex()
 
@@ -491,6 +494,8 @@ class HttpReadAloudService : BaseReadAloudService(),
                 currentCoroutineContext().ensureActive()
                 response.body.byteStream().let { stream ->
                     downloadErrorNo = 0
+                    // F5/2.14：下载成功重置静音提示去重（新会话再次失败时可再提示）
+                    silentFallbackToasted = false
                     return stream
                 }
             } catch (e: Exception) {
@@ -522,6 +527,12 @@ class HttpReadAloudService : BaseReadAloudService(),
                             throw e
                         } else {
                             AppLog.put("TTS下载音频出错，使用无声音频代替。\n朗读文本：$speakText")
+                            // F5/2.14：静默替代不再无感——每次服务会话仅提示一次（防逐句刷 toast），
+                            // 告知用户当前段落以静音代替，正向修复日志实锤的 11 次"静默吞错误"
+                            if (!silentFallbackToasted) {
+                                silentFallbackToasted = true
+                                toastOnUi("TTS 音频下载出错，本段将以静音代替（详情见日志）")
+                            }
                             break
                         }
                     }

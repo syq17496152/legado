@@ -23,6 +23,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -83,10 +84,21 @@ fun TtsCastingEditorScreen(
     var pickerRuleIndex by remember { mutableStateOf<Int?>(null) }
     var pickerFallback by remember { mutableStateOf(false) }
 
-    // 音色分组目录：系统引擎组+http(type=2) voices 目录组（复用既有归一化链，禁重写）
-    val groups = remember(httpTtsList) {
-        SpeechVoiceCatalogRepository.systemGroups(context) +
-            SpeechVoiceCatalogRepository.httpGroups(httpTtsList)
+    // 音色分组目录：系统引擎组（F8/2.24 改异步枚举 produceState——getVoices 需等引擎 init，
+    // 禁主线程同步等待 ANR 风险）+http(type=2) voices 目录组（复用既有归一化链，禁重写）
+    val httpOnlyGroups = remember(httpTtsList) {
+        SpeechVoiceCatalogRepository.httpGroups(httpTtsList)
+    }
+    val groups by produceState(
+        initialValue = httpOnlyGroups,
+        key1 = httpTtsList
+    ) {
+        val detailed = runCatching {
+            SpeechVoiceCatalogRepository.systemGroupsDetailed(context)
+        }.getOrNull()
+        if (detailed != null) {
+            value = detailed.groups + httpOnlyGroups
+        }
     }
 
     Column(
@@ -131,6 +143,13 @@ fun TtsCastingEditorScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
             )
         }
+        // F8/2.29：绑定引导（CloneTTS 等系统引擎音色直选路径 + 脚本/HTTP 声源限制明示）
+        Text(
+            text = stringResource(R.string.tts_casting_voice_bind_guide),
+            style = MaterialTheme.typography.bodySmall,
+            color = style.secondaryText,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+        )
         LazyColumn(Modifier.fillMaxWidth()) {
             itemsIndexed(state.rules, key = { index, rule -> "${rule.matchType}_${rule.tag}_$index" }) { index, rule ->
                 TtsCastingRuleRow(

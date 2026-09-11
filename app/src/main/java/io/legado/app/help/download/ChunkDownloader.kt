@@ -18,12 +18,31 @@ import java.io.IOException
 import java.io.RandomAccessFile
 import kotlin.coroutines.coroutineContext
 
-/** 直链下载结果（ok=false 时 error 非空） */
-data class ChunkResult(val ok: Boolean, val error: DownloadError? = null) {
+/** 直链下载结果（ok=false 时 error 非空；mime=probe 响应 Content-Type，供扩展名纠正） */
+data class ChunkResult(val ok: Boolean, val error: DownloadError? = null, val mime: String? = null) {
     companion object {
         val SUCCESS = ChunkResult(true, null)
     }
 }
+
+/** C6/F1 单源：本地视频扩展名白名单（Service 命名补全/MIME 纠正与 UI 播放判定共用，download 域非 UI 层） */
+val DOWNLOAD_VIDEO_EXTS = setOf(
+    "mp4", "mkv", "webm", "avi", "mov", "flv", "wmv",
+    "3gp", "m4v", "m2ts", "ts", "rmvb", "rm", "f4v"
+)
+
+/** F1：响应 Content-Type → 标准视频扩展名映射（仅收录视频类 mime；缺省类型不纠正） */
+val MIME_VIDEO_EXT = mapOf(
+    "video/mp4" to "mp4",
+    "video/webm" to "webm",
+    "video/x-matroska" to "mkv",
+    "video/quicktime" to "mov",
+    "video/x-msvideo" to "avi",
+    "video/x-flv" to "flv",
+    "video/mpeg" to "mpeg",
+    "video/3gpp" to "3gp",
+    "video/mp2t" to "ts"
+)
 
 /**
  * 直链下载引擎（IDM 动态文件分段 / DFS，download-manager-optimize 批次E）
@@ -87,17 +106,18 @@ object ChunkDownloader {
         if (target.exists() && target.length() > 0) {
             return ChunkResult.SUCCESS
         }
-        val (total, range) = probe(url, headers)
+        val (total, range, mime) = probe(url, headers)
         // A3 续传一致性：DB totalSize 与 probe total 不一致 → CDN 内容已变，清空产物重下
         if (range && total > 0) {
             if (expectedTotal > 0 && expectedTotal != total) {
                 cleanupArtifacts(target)
             }
-            return downloadDynamic(url, target, headers, total, onProgress)
+            // F1：mime 透传给调用方（产物扩展名纠正）
+            return downloadDynamic(url, target, headers, total, onProgress).copy(mime = mime)
         }
         // E6 门禁：不支持 Range 或 total 未知 → 单流回退
         cleanupArtifacts(target)
-        return downloadSingle(url, target, headers, onProgress)
+        return downloadSingle(url, target, headers, onProgress).copy(mime = mime)
     }
 
     private fun classify(e: Throwable, fallbackIo: Boolean): DownloadError = when (e) {
@@ -108,7 +128,8 @@ object ChunkDownloader {
         else -> DownloadError.NETWORK
     }
 
-    private suspend fun probe(url: String, headers: Map<String, String>): Pair<Long, Boolean> =
+    /** F1：probe 返回值扩展 mime（响应 Content-Type，扩展名纠正唯一可靠取点） */
+    private suspend fun probe(url: String, headers: Map<String, String>): Triple<Long, Boolean, String?> =
         withContext(Dispatchers.IO) {
             val request = Request.Builder().url(url)
                 .apply { headers.forEach { (k, v) -> header(k, v) } }
@@ -119,9 +140,10 @@ object ChunkDownloader {
                 videoStreamClient.newCall(request).execute().use { resp ->
                     val total = resp.header("Content-Range")
                         ?.substringAfterLast('/')?.toLongOrNull() ?: 0L
-                    total to (resp.code == 206 && total > 0)
+                    val mime = resp.header("Content-Type")?.substringBefore(';')?.trim()
+                    Triple(total, resp.code == 206 && total > 0, mime)
                 }
-            }.getOrDefault(0L to false)
+            }.getOrDefault(Triple(0L, false, null))
         }
 
     /** 清理全部临时产物：新引擎 .part/.seg + 存量 .partN */
