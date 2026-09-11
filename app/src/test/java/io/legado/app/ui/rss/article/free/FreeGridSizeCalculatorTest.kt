@@ -204,16 +204,17 @@ class FreeGridSizeCalculatorTest {
 
     @Test
     fun ratioClamping_appliedToExtremeValues() {
-        // ratio 10.0 应被钳制到 2.2；ratio 0.1 应被钳制到 0.9（2026-09-11 收紧区间消除行数跳变）
+        // ratio 10.0 应被钳制到 3.0；ratio 0.1 应被钳制到 0.4
+        //（v1.2：钳制仅拦极端长图/全景，常规图不裁——行数均衡由整表统一每行张数保证）
         val clampHigh = FreeGridSizeCalculator().apply { build(geometry(), floatArrayOf(10f)) }
-        val clampHighRef = FreeGridSizeCalculator().apply { build(geometry(), floatArrayOf(2.2f)) }
+        val clampHighRef = FreeGridSizeCalculator().apply { build(geometry(), floatArrayOf(3f)) }
         assertEquals(
             "超大 ratio 必须钳制到 MAX_RATIO",
             clampHighRef.getWidth(0), clampHigh.getWidth(0)
         )
 
         val clampLow = FreeGridSizeCalculator().apply { build(geometry(), floatArrayOf(0.1f)) }
-        val clampLowRef = FreeGridSizeCalculator().apply { build(geometry(), floatArrayOf(0.9f)) }
+        val clampLowRef = FreeGridSizeCalculator().apply { build(geometry(), floatArrayOf(0.4f)) }
         assertEquals(
             "超小 ratio 必须钳制到 MIN_RATIO",
             clampLowRef.getWidth(0), clampLow.getWidth(0)
@@ -282,10 +283,11 @@ class FreeGridSizeCalculatorTest {
     fun typicalSources_rowCompositionMatchesDesignDoc() {
         val cases = listOf(
             // 源图片比例 -> 期望每行张数 / 期望图片区行高
+            // v1.2 行数均衡：张数 = availableWidth/(targetRowHeight×avgRatio) 反推，整表统一
             Triple("4:3 横图", List(8) { 1.33f }, Pair(2, 134)),
             Triple("16:9 宽图", List(8) { 1.78f }, Pair(2, 100)),
             Triple("1:1 方图", List(8) { 1.0f }, Pair(2, 178)),
-            Triple("3:4 竖图（钳到 0.9）", List(8) { 0.75f }, Pair(3, 130))
+            Triple("3:4 竖图", List(8) { 0.75f }, Pair(3, 156))
         )
         for ((label, ratios, expected) in cases) {
             val calc = FreeGridSizeCalculator().apply { build(geometry(), ratios.toFloatArray()) }
@@ -297,6 +299,32 @@ class FreeGridSizeCalculatorTest {
                 assertEquals("$label 每行张数", expected.first, row.size)
                 assertEquals("$label 图片区行高", expected.second, imageHeightOf(calc, row.first()))
             }
+        }
+    }
+
+    @Test
+    fun mixedRatios_rowCountConsistentAcrossRows() {
+        // 用户铁证回归（2026-09-11）："第一排只有两个，第二排就来四个"
+        // v1.2 行数均衡：混合比例源整表每行张数必须一致，且行内宽度仍按原图比例分配（不裁图）
+        val ratios = listOf(1.78f, 0.75f, 1.33f, 1.0f, 1.78f, 0.67f, 1.5f, 0.8f, 1.2f, 1.9f, 0.9f, 1.1f)
+        val calc = FreeGridSizeCalculator().apply { build(geometry(), ratios.toFloatArray()) }
+        val fullRows = rowsOf(calc).dropLast(1)
+        assertTrue("应产生完整行", fullRows.isNotEmpty())
+        val counts = fullRows.map { it.size }.toSet()
+        assertTrue(
+            "完整行每行张数必须一致，实际 $counts",
+            counts.size == 1
+        )
+        val k = counts.first()
+        assertTrue("每行张数应在 2-4 内，实际 $k", k in 2..4)
+        // 行内宽度仍按原图比例分配：同行内宽图（ratio 大）必须更宽
+        for (row in fullRows) {
+            val sortedByRatio = row.sortedByDescending { ratios[it] }
+            assertEquals(
+                "同行内比例最大的图必须最宽",
+                calc.getWidth(sortedByRatio.first()),
+                row.maxOf { calc.getWidth(it) }
+            )
         }
     }
 

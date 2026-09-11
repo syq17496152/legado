@@ -76,16 +76,4 @@
 
     </LinearLayout>
 
-    <ImageView
-        android:id="@+id/iv_video_badge"
-        android:layout_width="28dp"
-        android:layout_height="28dp"
-        android:layout_gravity="end"
-        android:layout_marginTop="6dp"
-        android:layout_marginEnd="6dp"
-        android:contentDescription="@string/video_play"
-        android:src="@drawable/ic_rss_free_video_badge"
-        android:visibility="gone"
-        tools:visibility="visible" />
-
 </androidx.cardview.widget.CardView>
