@@ -7,6 +7,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.help.http.CookieManager
 import io.legado.app.help.http.CookieManager.cookieJarHeader
 import io.legado.app.help.http.DohDns
+import io.legado.app.help.http.HostAccessStrategy
 import io.legado.app.utils.printOnDebug
 import okhttp3.Call
 import okhttp3.CookieJar
@@ -347,6 +348,13 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
             // P1-2: 连接拒绝错误不累计降级计数（DoH 失败导致，降级 OkHttp 也会因相同 DNS 失败）
             if (isConnectionRefused) {
                 AppLog.putDebug("Cronet 连接拒绝(可能是DoH失败), 不累计降级: error=${errMsg.take(80)}")
+                // F5/AD-10 阶段1：坏 IP 嫌疑上报（CONN_REFUSED=DoH 候选 IP 不可达，标记进短 TTL 黑名单
+                // + per-host 退避，下次 lookup 过滤/走系统 DNS，消除 60s 超时循环浪费）
+                HostAccessStrategy.reportBadIpSuspect(original.url.host)
+            } else if (errMsg.contains("ERR_CONNECTION_TIMED_OUT", true)) {
+                // F5/AD-10 阶段1：连接超时同为坏 IP 嫌疑（DoH 返回不可达公网 IP 的典型表现）
+                AppLog.putDebug("Cronet 连接超时(可能是DoH坏IP), 上报健康表: error=${errMsg.take(80)}")
+                HostAccessStrategy.reportBadIpSuspect(original.url.host)
             } else if (isProtocolError) {
                 val now = System.currentTimeMillis()
                 // BUG6-V2: 记录失败 host 提示，恢复探测时优先放行该 host 的请求

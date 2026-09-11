@@ -180,14 +180,31 @@ object DohDns : Dns {
             AppLog.putDebug("DohDns: IDN bypass, host=${maskHost(hostname)}")
             return Dns.SYSTEM.lookup(hostname)
         }
+        // F5/AD-10 阶段1：注册探测执行器（直连 DoH parallelLookup，旁路 lookup 选路，防探测自证环）
+        if (HostAccessStrategy.probeExecutor == null) {
+            HostAccessStrategy.probeExecutor = { host ->
+                val clients = kotlin.runCatching { dohClients }.getOrNull()
+                clients != null && parallelLookup(clients, host) != null
+            }
+        }
+        // 0.5 F5/AD-10 阶段1：健康表退避期内直走系统 DNS（per-host 自适应选路）
+        if (HostAccessStrategy.isSystemDnsPreferred(hostname)) {
+            AppLog.putDebug("DohDns: health-table system DNS preferred, host=${maskHost(hostname)}")
+            return Dns.SYSTEM.lookup(hostname)
+        }
         val key = cacheKey(hostname)
         val now = System.currentTimeMillis()
-        // 1. 成功缓存命中直接返回（0 延迟）
+        // 1. 成功缓存命中直接返回（0 延迟）；坏 IP 黑名单命中则丢弃缓存走后续选路
         dnsCache[key]?.let { entry ->
             if (now - entry.timestamp <= CACHE_TTL_MS) {
-                return entry.addresses
+                val filtered = entry.addresses.filter { a ->
+                    !HostAccessStrategy.isBadIp(hostname, a.hostAddress.orEmpty())
+                }
+                if (filtered.isNotEmpty()) return filtered
+                dnsCache.remove(key)
+            } else {
+                dnsCache.remove(key)
             }
-            dnsCache.remove(key)
         }
         // 2. N-P1-2: 负缓存命中直接走系统 DNS（30s 内不为该域名重复尝试 DoH）
         // BUG7-V2: 校验 TTL 上限——过期时间距今超过 NEGATIVE_CACHE_TTL_MS 视为异常，清除并走 DoH
@@ -212,14 +229,17 @@ object DohDns : Dns {
         val result = parallelLookup(clients, hostname)
         if (result != null) {
             // BUG9-V2: 过滤回环/保留地址（0.0.0.0/[::]/127.x），这些地址无意义且可能导致连接失败
+            // F5/AD-10：坏 IP 黑名单同样在此过滤（DoH 新解析结果复检）
             val validAddresses = result.addresses.filter { addr ->
                 val hostAddr = addr.hostAddress ?: return@filter false
-                !(hostAddr == "0.0.0.0" || hostAddr == "::" || hostAddr.startsWith("127.") || hostAddr == "::1")
+                !(hostAddr == "0.0.0.0" || hostAddr == "::" || hostAddr.startsWith("127.") || hostAddr == "::1") &&
+                    !HostAccessStrategy.isBadIp(hostname, hostAddr)
             }
             if (validAddresses.isEmpty()) {
-                AppLog.put("DohDns: DoH returned only loopback/reserved addresses, fallback system DNS, host=${maskHost(hostname)}")
-                // 视为 DoH 解析失败，走负缓存 + 系统DNS
+                AppLog.put("DohDns: DoH returned only loopback/reserved/blacklisted addresses, fallback system DNS, host=${maskHost(hostname)}")
+                // 视为 DoH 解析失败，走负缓存 + 系统DNS + 健康表 per-host 退避
                 negativeCachePut(key)
+                HostAccessStrategy.reportDohQueryFail(hostname)
                 return Dns.SYSTEM.lookup(hostname)
             }
             globalFailCount.set(0)
@@ -231,6 +251,8 @@ object DohDns : Dns {
             lastSuccessServer.set(result.serverIndex)
             negativeCache.remove(key)
             cachePut(key, validAddresses)
+            // F5/AD-10：DoH 解析成功上报健康表（重置 per-host 失败计数+登记候选 IP 供坏 IP 嫌疑标记）
+            HostAccessStrategy.reportDohOk(hostname, validAddresses.mapNotNull { it.hostAddress })
             AppLog.putDebug(
                 "DohDns: parallel success server#${result.serverIndex + 1}, " +
                     "elapsed=${result.elapsedMs}ms, host=${maskHost(hostname)}, ips=${validAddresses.size}"
@@ -239,6 +261,8 @@ object DohDns : Dns {
         }
         // 5. 全服务器失败：写负缓存 30s + 累计熔断计数，达阈值暂停 DoH 5 分钟
         negativeCachePut(key)
+        // F5/AD-10 阶段1：per-host 失败上报（与全局熔断计数独立记账）
+        HostAccessStrategy.reportDohQueryFail(hostname)
         if (isColdStart) {
             // V-004-P0-1: 冷启动场景——首次失败立即熔断 30s（非 5min），异步预热 DoH
             // 根因：004 日志 DoH 3 次失败累计 6-9s 首帧延迟，用户感知"第一个视频失败"
@@ -466,6 +490,8 @@ object DohDns : Dns {
         val key = cacheKey(hostname)
         negativeCache.remove(key)
         dohDisabledUntil = 0L  // 解决熔断期间清理无效问题
+        // F5/AD-10：联动清理健康表该 host 记录与坏 IP 标记（NAME_NOT_RESOLVED 属 DNS 层故障的主动重置）
+        HostAccessStrategy.clearHost(hostname)
         AppLog.putDebug("DohDns: negative cache cleared for host=${maskHost(hostname)}")
     }
 
