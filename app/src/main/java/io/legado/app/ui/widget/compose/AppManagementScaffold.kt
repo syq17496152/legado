@@ -140,14 +140,18 @@ fun AppManagementScaffold(
         Box(modifier = Modifier.weight(1f)) {
             content(palette)
         }
-        AppManagementSelectionBottomBar(
-            selectedCount = selectedCount,
-            totalCount = totalCount,
-            palette = palette,
-            actions = bottomActions,
-            onSelectAll = onSelectAll,
-            onInvertSelection = onInvertSelection
-        )
+        // F2/4.1：底栏渲染条件——batchActions 空且无全选回调时不渲染（书源/订阅源两页收口顶栏后停用底栏；
+        // 字典/TXT目录/替换净化等其余管理页 bottomActions 照常渲染，行为不变）
+        if (bottomActions.isNotEmpty() || onSelectAll != null) {
+            AppManagementSelectionBottomBar(
+                selectedCount = selectedCount,
+                totalCount = totalCount,
+                palette = palette,
+                actions = bottomActions,
+                onSelectAll = onSelectAll,
+                onInvertSelection = onInvertSelection
+            )
+        }
     }
     }
 }

@@ -63,7 +63,18 @@ object HighlightRuleStore {
                 AppLog.put("高亮规则：检测到全部规则为空数据，已自动恢复内置规则")
                 return reset(context)
             }
-            val normalized = normalizeRules(rules, context)
+            // F4/4.4：版本旗标 MERGE——新增内置规则推送老用户（只追加缺失 id 的 delta，
+            // 不触碰用户已有项；SP 链无删除墓碑，禁全量 defaults 重置）
+            var merged: List<HighlightRule> = rules
+            if (runCatching { io.legado.app.help.config.LocalConfig.needUpHighlightRules }.getOrDefault(false)) {
+                val existingIds = merged.map { it.id }.toSet()
+                val toAdd = createDefaultRules(context).filter { it.id !in existingIds }
+                if (toAdd.isNotEmpty()) {
+                    merged = merged + toAdd
+                    AppLog.put("高亮规则：版本升级推送新内置规则 ${toAdd.size} 条（仅追加缺失 id）")
+                }
+            }
+            val normalized = normalizeRules(merged, context)
             save(context, normalized)
             cachedRules = normalized
             return normalized.toMutableList()
@@ -169,7 +180,7 @@ object HighlightRuleStore {
             HighlightRule(
                 id = "dialog_default",
                 name = "对话高亮",
-                pattern = "“[^”\n]{1,120}”|\"[^\"\n]{1,120}\"|「[^」\n]{1,120}」|『[^』\n]{1,120}』",
+                pattern = "“[^”\n]{1,400}”|\"[^\"\n]{1,400}\"|「[^」\n]{1,400}」|『[^』\n]{1,400}』",
                 sampleText = "她轻声说：“今晚就出发。”",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
                 isRegex = true,
@@ -301,6 +312,127 @@ object HighlightRuleStore {
                 isRegex = true,
                 enabled = false,
                 textColor = 0xFF20B2AA.toInt()
+            ),
+            // ---------------- F4/4.5：v2 新增 12 条内置规则（默认开关策略：确定性开/泛化关） ----------------
+            HighlightRule(
+                id = "dialogue_speaker_default",
+                name = "说话人标签对话",
+                pattern = "[一-龥]{1,12}[说道问答喊骂叫叹喝笑]道?[：:][“][^”\\n]{1,200}[”]",
+                sampleText = "她沉声道：“退下。”",
+                group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
+                enabled = true,
+                textColor = 0xFFFFA726.toInt()
+            ),
+            HighlightRule(
+                id = "dialogue_para_default",
+                name = "段首长对白（跨段变体）",
+                pattern = "(?m)^[ 　\\t]{0,4}[“][^”\\n]{1,200}$",
+                sampleText = "“这段对白没有后引号，\n一直延续到段末。",
+                group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
+                enabled = false,
+                textColor = 0xFFFFB74D.toInt()
+            ),
+            HighlightRule(
+                id = "dash_dialogue_default",
+                name = "破折号对白行",
+                pattern = "(?m)^[ 　\\t]{0,4}——[^\\n]{1,80}$",
+                sampleText = "——我们走吧。",
+                group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
+                enabled = false,
+                textColor = 0xFFFFCC80.toInt()
+            ),
+            HighlightRule(
+                id = "system_panel_default",
+                name = "系统面板文本",
+                pattern = "\\[[^\\]\\n]{1,40}\\]",
+                sampleText = "[叮！检测到宿主情绪波动]",
+                group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
+                enabled = false,
+                textColor = 0xFF4DD0E1.toInt()
+            ),
+            HighlightRule(
+                id = "chapter_en_default",
+                name = "英文章节行",
+                pattern = "(?m)^[ 　\\t]{0,4}[Cc]hapter\\s+\\d+.{0,40}$",
+                sampleText = "Chapter 1 The Beginning",
+                group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
+                enabled = false,
+                textColor = 0xFF90A4AE.toInt()
+            ),
+            HighlightRule(
+                id = "onomatopoeia_default",
+                name = "拟声词",
+                pattern = "(?:轰|哗|砰|咔|嗖|嗡|咻|咚){1,3}(?:——|—|~){1,2}",
+                sampleText = "轰——一声巨响传来。",
+                group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
+                enabled = false,
+                textColor = 0xFFFF8A65.toInt()
+            ),
+            HighlightRule(
+                id = "markdown_bold_default",
+                name = "Markdown 强调",
+                pattern = "\\*\\*[^\\n*]{1,40}\\*\\*",
+                sampleText = "这里有一段**重点内容**需要强调。",
+                group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
+                enabled = false,
+                textColor = 0xFFBA68C8.toInt()
+            ),
+            HighlightRule(
+                id = "url_muted_default",
+                name = "网址/邮箱弱化",
+                pattern = "https?://\\S+|[\\w.+-]+@[\\w-]+\\.\\w+",
+                sampleText = "详情见 https://example.com 或邮件联系。",
+                group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
+                enabled = false,
+                textColor = 0xFF78909C.toInt()
+            ),
+            HighlightRule(
+                id = "thought_wide_default",
+                name = "心理活动（宽版）",
+                pattern = "（[^）\\n]{0,60}(?:想道|暗道|心道|心里|思量|思忖|盘算)[^）\\n]{0,60}）",
+                sampleText = "（他心里盘算着接下来的计划。）",
+                group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
+                enabled = false,
+                textColor = 0xFF9575CD.toInt()
+            ),
+            HighlightRule(
+                id = "narrator_wide_default",
+                name = "旁白说明（宽版）",
+                pattern = "（(?:以下[^\\n]{0,20}省略|注[:：])[^\\n]{0,40}）|[^\\n]{0,20}(?:不再赘述|不再多说)",
+                sampleText = "（以下内容省略）",
+                group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
+                enabled = false,
+                textColor = 0xFFA1887F.toInt()
+            ),
+            HighlightRule(
+                id = "number_wide_default",
+                name = "数字金额（宽版）",
+                pattern = "[0-9零一二三四五六七八九十百千万亿]+(?:元|块|美元|英镑)|[0-9]+[%％]",
+                sampleText = "这件东西价值三千元，涨价了 15%。",
+                group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
+                enabled = false,
+                textColor = 0xFFFFD54F.toInt()
+            ),
+            HighlightRule(
+                id = "poetry_wide_default",
+                name = "诗词题头",
+                pattern = "[\\n]([七五言绝句律诗词牌曲牌][^\\n]{0,60}[^\\n]{10,50}[^\\n]{0,20}[，。！？])",
+                sampleText = "\n七言绝句·咏梅\n墙角数枝梅，凌寒独自开。\n",
+                group = HighlightRuleGroupStore.DEFAULT_GROUP,
+                isRegex = true,
+                enabled = false,
+                textColor = 0xFF80CBC4.toInt()
             )
         )
     }
@@ -315,11 +447,18 @@ object HighlightRuleStore {
             val normalizedGroup = safeRule.group
             val builtin = builtins[safeRule.id]
             val base = if (builtin != null && shouldRefreshBuiltin(safeRule, builtin)) {
+                // F3/2.5 演进覆盖：用户 pattern 命中历史版本登记值（未做个性化修改）→ 升级到新版内置 pattern
+                val patternIsLegacy =
+                    legacyBuiltinPatterns[safeRule.id]?.contains(safeRule.pattern) == true
                 builtin.copy(
                     enabled = safeRule.enabled,
                     group = normalizedGroup,
                     // R-1 修复：保留用户改过的 pattern/sampleText/name（仅当用户改过时）
-                    pattern = safeRule.pattern.takeIf { it != builtin.pattern } ?: builtin.pattern,
+                    pattern = if (patternIsLegacy) {
+                        builtin.pattern
+                    } else {
+                        safeRule.pattern.takeIf { it != builtin.pattern } ?: builtin.pattern
+                    },
                     sampleText = safeRule.sampleText.takeIf { it.isNotBlank() } ?: builtin.sampleText,
                     name = safeRule.name.takeIf { it.isNotBlank() } ?: builtin.name,
                     targetScope = normalizeTargetScope(safeRule.targetScope, builtin.targetScope),
@@ -336,6 +475,16 @@ object HighlightRuleStore {
                     isDotAll = safeRule.isDotAll || builtin.isDotAll
                 )
             } else {
+                // F3/2.8：愈合跳过留痕——用户修改被保留时输出诊断（真机排查"改了内置正则却被还原"疑云）
+                if (builtin != null && safeRule.pattern != builtin.pattern) {
+                    runCatching {
+                        AppLog.putDebugWithTag(
+                            AppLog.TAG_HIGHLIGHT_STYLE,
+                            "内置规则${safeRule.id} 用户修改保留（pattern 未命中历史登记值，不愈合）",
+                            level = AppLog.Level.INFO
+                        )
+                    }
+                }
                 safeRule.copy(
                     targetScope = normalizeTargetScope(safeRule.targetScope)
                 )
@@ -439,7 +588,8 @@ object HighlightRuleStore {
             append(rule.sampleText)
         }
         return garbledMarkers.any { inspectText.contains(it) } ||
-            legacyBuiltinPatterns[rule.id] == rule.pattern
+            // F3/2.5 演进覆盖：pattern 命中历史版本登记值（未做个性化修改）→ 允许升级
+            legacyBuiltinPatterns[rule.id]?.contains(rule.pattern) == true
     }
 
     private val builtinIds = setOf(
@@ -454,22 +604,45 @@ object HighlightRuleStore {
         "ellipsis_default",
         "number_default",
         "english_default",
-        "date_time_default"
+        "date_time_default",
+        // F4/4.5：v2 新增 12 条（同步扩 builtinIds 享受愈合保护）
+        "dialogue_speaker_default",
+        "dialogue_para_default",
+        "dash_dialogue_default",
+        "system_panel_default",
+        "chapter_en_default",
+        "onomatopoeia_default",
+        "markdown_bold_default",
+        "url_muted_default",
+        "thought_wide_default",
+        "narrator_wide_default",
+        "number_wide_default",
+        "poetry_wide_default"
     )
 
-    private val legacyBuiltinPatterns = mapOf(
-        "dialog_default" to "[“\"]([^”\"\n]{1,120})[”\"]|「[^」\n]{1,120}」|『[^』\n]{1,120}』",
-        "book_title_default" to "《[^》\n]{1,80}》",
-        "bracket_note_default" to "（[^）\n]{1,80}）|\\([^\\)\n]{1,80}\\)|【[^】\n]{1,80}】",
-        "title_emphasis_default" to "(?m)^(第[0-9零一二三四五六七八九十百千两0123456789IVXLCDMivxlcdm]{1,12}[章节回卷部篇集幕]|序章|楔子|引子|终章|尾声|后记|番外)[^\n]{0,40}$",
-        "thought_default" to "（[^）]*?(想道|暗道|心道|心里|想着|思量|思忖|盘算|盘算着)[^）]*?）",
-        "narrator_default" to "（以下\\S{0,20}省略|省略\\S{0,20}内容|[^\n]{0,20}的情景不再赘述|[^\n]{0,20}的情况不再多说）",
-        "emphasis_default" to "[*！]{1,2}[^*\n]{1,50}[*！]{1,2}",
-        "poetry_default" to "[\n]([七五言绝句律诗词牌曲牌][^\n]{0,60}[^\n]{10,50}[^\n]{0,20}[，。！？])\n",
-        "ellipsis_default" to "x{2,}|\\*{2,}|\\.{2,}",
-        "number_default" to "[0-9零一二三四五六七八九十百千万亿]+[元块美元英镑]|[0-9]+[%％]",
-        "english_default" to "[a-zA-Z]{2,}[a-zA-Z0-9'-]*",
-        "date_time_default" to "[0-9零一二三四五六七八九十]+年[0-9零一二三四五六七八九十]+月[0-9零一二三四五六七八九十]*日?|[0-9]+点[0-9零一二三四五六七八九十]*分?"
+    /**
+     * 历史内置正则登记表（F3/2.5 演进覆盖）：value 为该 id 全部历史版本 pattern 集合。
+     * 用户 pattern 命中集合（=未做个性化修改，仅持有旧版本值）时允许内置新版覆盖升级；
+     * 用户真改过（不在集合）则保留——SP 链无删除墓碑，此表即"版本演进 vs 用户修改"的判定边界。
+     */
+    private val legacyBuiltinPatterns: Map<String, Set<String>> = mapOf(
+        "dialog_default" to setOf(
+            // v0 捕获组版
+            "[“\"]([^”\"\n]{1,120})[”\"]|「[^」\n]{1,120}」|『[^』\n]{1,120}』",
+            // v1 限长 120 版（v2 放宽至 400，存量 120 用户升级后应得 400）
+            "“[^”\n]{1,120}”|\"[^\"\n]{1,120}\"|「[^」\n]{1,120}」|『[^』\n]{1,120}』"
+        ),
+        "book_title_default" to setOf("《[^》\n]{1,80}》"),
+        "bracket_note_default" to setOf("（[^）\n]{1,80}）|\\([^\\)\n]{1,80}\\)|【[^】\n]{1,80}】"),
+        "title_emphasis_default" to setOf("(?m)^(第[0-9零一二三四五六七八九十百千两0123456789IVXLCDMivxlcdm]{1,12}[章节回卷部篇集幕]|序章|楔子|引子|终章|尾声|后记|番外)[^\n]{0,40}$"),
+        "thought_default" to setOf("（[^）]*?(想道|暗道|心道|心里|想着|思量|思忖|盘算|盘算着)[^）]*?）"),
+        "narrator_default" to setOf("（以下\\S{0,20}省略|省略\\S{0,20}内容|[^\n]{0,20}的情景不再赘述|[^\n]{0,20}的情况不再多说）"),
+        "emphasis_default" to setOf("[*！]{1,2}[^*\n]{1,50}[*！]{1,2}"),
+        "poetry_default" to setOf("[\n]([七五言绝句律诗词牌曲牌][^\n]{0,60}[^\n]{10,50}[^\n]{0,20}[，。！？])\n"),
+        "ellipsis_default" to setOf("x{2,}|\\*{2,}|\\.{2,}"),
+        "number_default" to setOf("[0-9零一二三四五六七八九十百千万亿]+[元块美元英镑]|[0-9]+[%％]"),
+        "english_default" to setOf("[a-zA-Z]{2,}[a-zA-Z0-9'-]*"),
+        "date_time_default" to setOf("[0-9零一二三四五六七八九十]+年[0-9零一二三四五六七八九十]+月[0-9零一二三四五六七八九十]*日?|[0-9]+点[0-9零一二三四五六七八九十]*分?")
     )
 
     private val garbledMarkers = listOf("锛", "銆", "鈥", "瀵", "涔", "鏍", "鐪", "鏈", "绗")

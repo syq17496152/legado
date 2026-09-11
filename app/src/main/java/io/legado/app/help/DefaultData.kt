@@ -39,6 +39,10 @@ object DefaultData {
                 if (LocalConfig.needUpDictRule) {
                     importDefaultDictRules()
                 }
+                // F7/4.10：替换净化内置规则首装/升级导入（只追加缺失 id）
+                if (LocalConfig.needUpReplaceRules) {
+                    importDefaultReplaceRules()
+                }
                 // E4/F-2：选角模板首装/升级导入（importBuiltinTemplates 自带 id 幂等，无需 delete）
                 if (LocalConfig.needUpTtsCastingTemplates) {
                     importDefaultTtsCastingTemplates()
@@ -101,6 +105,15 @@ object DefaultData {
         GSON.fromJsonArray<DictRule>(json).getOrThrow()
     }
 
+    /** F7/4.10：内置替换净化规则资产（0→12 条） */
+    val replaceRules: List<io.legado.app.data.entities.ReplaceRule> by lazy {
+        val json = String(
+            appCtx.assets.open("defaultData${File.separator}replaceRules.json")
+                .readBytes()
+        )
+        GSON.fromJsonArray<io.legado.app.data.entities.ReplaceRule>(json).getOrDefault(emptyList())
+    }
+
     val keyboardAssists: List<KeyboardAssist> by lazy {
         val json = String(
             appCtx.assets.open("defaultData${File.separator}keyboardAssists.json")
@@ -131,8 +144,11 @@ object DefaultData {
 
     fun importDefaultTocRules() {
         runBlocking(IO) {
-            appDb.txtTocRuleDao.deleteDefault()
-            appDb.txtTocRuleDao.insert(*txtTocRules.toTypedArray())
+            // F7/4.9：deleteDefault+全量重插改为 insertIfAbsent 追加模式——
+            // 不重置用户对既有内置规则的修改/开关状态，新增规则以缺失 id delta 追加
+            val inserted = appDb.txtTocRuleDao.insertIfAbsent(*txtTocRules.toTypedArray())
+            val added = inserted.count { it == -1L }
+            AppLog.put("内置 TXT 目录规则同步：新增 $added 条（共 ${txtTocRules.size} 条内置）")
         }
     }
 
@@ -149,4 +165,12 @@ object DefaultData {
         }
     }
 
+    /** F7/4.10：替换净化内置规则导入（0→12 条，只追加缺失 id，insertIfAbsent IGNORE） */
+    fun importDefaultReplaceRules() {
+        runBlocking(IO) {
+            val inserted = appDb.replaceRuleDao.insertIfAbsent(*replaceRules.toTypedArray())
+            val added = inserted.count { it == -1L }
+            AppLog.put("内置替换净化规则导入：新增 $added 条（共 ${replaceRules.size} 条内置）")
+        }
+    }
 }

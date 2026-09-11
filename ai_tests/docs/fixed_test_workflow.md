@@ -139,6 +139,23 @@ python ai_tests/scripts/xxx.py
 >
 > **验证修复点请使用 `error_patterns` 场景**：通过 logcat 直接分析 4 种错误模式（Malformed URL/destroy failed/ClassCastException/IllegalBlockSizeException）是否为 0，永久有效。
 
+### TTS 功能级联调测试（批次F F10，2026-09-11 新增）
+
+脚本：`ai_tests/scripts/l2_verify_tts_engine.py`（L2-a 引擎/音色枚举+模板绑定）、`ai_tests/scripts/l2_verify_tts_read.py`（L2-b 朗读推进）。
+
+覆盖度矩阵：
+
+| 层 | 覆盖项 | 断言依据 | 备注 |
+|----|--------|---------|------|
+| 单测（JVM） | HostAccessStrategy 退避/黑名单、AppLog 频控、下载命名、高亮长对话+ReDoS | app/src/test 对应用例 | 已实施 |
+| 模拟器 L1 | 装机启动零 FATAL | quick_build_install.py | |
+| 模拟器 L2-a | 引擎枚举（dumpsys texttospeech）/音色枚举（TtsTrace"音色枚举 engine=... voices=N"）/模板绑定 UI | l2_verify_tts_engine.py | CloneTTS 需先 adb install+首启初始化 |
+| 模拟器 L2-b | 朗读启动（play 路径判定）/multiRole 分段（tag=narration|dialogue）/推进/无 Error | l2_verify_tts_read.py | 本地书免网络；未激活模板时 multiRole=skip |
+| 真机 L3 | 听感/音色自然度/后台保活/功耗/CloneTTS benchmark | 仅用户验收 | 模拟器 x86 RTF 可能>1 |
+| 边界 | CloneTTS 未注册系统 voices → 走 HTTP 通道 L2-c（HttpReadAloudService 路径） | TtsTrace 请求行 | 降级预案 |
+
+模拟器可覆盖约 80% 功能面；下载 CloneTTS APK 渠道=官方 GitHub Releases（sipeter/CloneTTS）；MultiTTS 无官方渠道默认不装。
+
 ## SwipeTest 临时日志规范
 
 > **P0 规则23（用户表扬）**：复杂功能实施必须添加临时日志验证

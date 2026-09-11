@@ -92,6 +92,10 @@ interface ReplaceRuleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(vararg replaceRule: ReplaceRule): List<Long>
 
+    /** F7/4.10：只追加缺失 id（IGNORE），不重置用户对已有内置规则的修改/开关状态 */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insertIfAbsent(vararg replaceRule: ReplaceRule): List<Long>
+
     @Update
     fun update(vararg replaceRules: ReplaceRule)
 

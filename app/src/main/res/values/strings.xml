@@ -1216,6 +1216,7 @@
     <string name="cache_stats_books">Book cache</string>
     <string name="cache_stats_video">Video cache</string>
     <string name="cache_stats_audio">Audio cache</string>
+    <string name="cache_stats_webview">WebView 数据（清理后需重启）</string>
     <string name="cache_stats_total">Total</string>
     <string name="cache_stats_delete_msg">Delete %s? The cache files will be permanently removed.</string>
     <string name="cache_stats_delete_success">Cache deleted</string>
@@ -1263,7 +1264,7 @@
     <string name="download_book_fail">Download Fail</string>
     <string name="upload_to_remote">Upload</string>
     <string name="add_remote_book">RemoteBook</string>
-    <string name="bitmap_cache_size_summary">Current cache max size %1$s MB</string>
+    <string name="bitmap_cache_size_summary">当前缓存上限 %1$s MB（仅作用于正文/漫画页位图缓存，不影响封面加载与网络）</string>
     <string name="bitmap_cache_size">bitmap cache size</string>
     <string name="image_retain_number_summary">Keep the number of chapters read %s</string>
     <string name="image_retain_number">Number of manga reservations</string>
@@ -1943,6 +1944,9 @@
     <string name="highlight_rule_edit_title">编辑高亮规则</string>
     <string name="highlight_rule_not_found">规则不存在</string>
     <string name="highlight_rule_invalid">规则无效: %1$s</string>
+    <string name="highlight_rule_literal_match_hint">提示：当前为字面量匹配（正则开关未开启），规则中的正则符号不会生效</string>
+    <string name="tts_casting_builtin_readonly_error">内置模板不可直接编辑，请先"复制为自定义"后修改</string>
+    <string name="tts_casting_voice_bind_guide">绑定音色：系统引擎（含 CloneTTS 等多音色引擎）展开后可选具体音色；HTTP/脚本声源暂不支持逐段多人朗读，将自动降级为引擎默认音</string>
     <string name="highlight_rule_pattern">匹配模式</string>
     <string name="highlight_rule_replacement">替换模板（可选，为捕获组套用样式标签，如 &lt;b&gt;&lt;font color=\"red\"&gt;$1&lt;/font&gt;&lt;/b&gt;&lt;i&gt;$2&lt;/i&gt;）</string>
     <string name="highlight_rule_dot_all">点号匹配换行</string>

@@ -206,5 +206,37 @@
     "rule": "",
     "example": "兜底规则，请勿改动此内容",
     "serialNumber": 99
+  },
+  {
+    "id": -26,
+    "enable": false,
+    "name": "中文顶格标题",
+    "rule": "^[一-龥]{1,20}$",
+    "example": "纯中文标题（比通用顶格标题误命中低）",
+    "serialNumber": 25
+  },
+  {
+    "id": -27,
+    "enable": true,
+    "name": "数字 可选分隔符",
+    "rule": "^[ 　\\t]{0,4}\\d{1,5}[:：,.， 、_—\\-]?.{1,30}$",
+    "example": "02美好的明天（数字后无分隔符也命中）",
+    "serialNumber": 26
+  },
+  {
+    "id": -28,
+    "enable": false,
+    "name": "双编号轻小说",
+    "rule": "^[ 　\\t]{0,4}\\d{1,3}-\\d{1,3}[ 　\\t].{0,30}$",
+    "example": "1-1 序章的开始",
+    "serialNumber": 27
+  },
+  {
+    "id": -29,
+    "enable": false,
+    "name": "英文序词扩展",
+    "rule": "^[ 　\\t]{0,4}(?:Prologue|Interlude|Epilogue|Afterword)\\b.{0,30}$",
+    "example": "Prologue The Promise",
+    "serialNumber": 28
   }
 ]

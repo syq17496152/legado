@@ -707,7 +707,12 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             onPositive = {
                 cacheManageViewModel.deleteStorageTarget(detail).onSuccess { success ->
                     if (success) {
-                        toastOnUi(R.string.cache_stats_delete_success)
+                        // F6/4.8：WebView 数据删除后需重启才能完全生效（提示前置）
+                        if (detail.needRestart) {
+                            toastOnUi(getString(R.string.cache_stats_delete_success) + "，重启应用后完全生效")
+                        } else {
+                            toastOnUi(R.string.cache_stats_delete_success)
+                        }
                     } else {
                         toastOnUi(R.string.cache_stats_video_playing)
                     }

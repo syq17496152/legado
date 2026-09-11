@@ -34,6 +34,10 @@ interface TxtTocRuleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(vararg rule: TxtTocRule)
 
+    /** F7/4.9：只追加缺失 id（IGNORE），不重置用户对已有内置规则的修改/开关状态 */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insertIfAbsent(vararg rule: TxtTocRule): List<Long>
+
     @Update(onConflict = OnConflictStrategy.REPLACE)
     fun update(vararg rule: TxtTocRule)
 
