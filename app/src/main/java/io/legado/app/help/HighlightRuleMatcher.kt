@@ -42,7 +42,18 @@ object HighlightRuleMatcher {
         val out = ArrayList<RuleMatch>()
         for (rule in rules) {
             if (rule.pattern.isEmpty()) continue
+            val before = out.size
             if (rule.isRegex) matchRegex(text, rule, out) else matchLiteral(text, rule, out)
+            // F3/2.7 诊断：仅零命中规则单条输出（防逐规则刷屏），供"编辑正则不生效"排查
+            if (out.size == before) {
+                runCatching {
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_HIGHLIGHT_STYLE,
+                        "规则${rule.id} isRegex=${rule.isRegex} 零命中 patternLen=${rule.pattern.length}",
+                        level = AppLog.Level.DEBUG
+                    )
+                }
+            }
         }
         return out
     }
@@ -61,8 +72,26 @@ object HighlightRuleMatcher {
         return out
     }
 
+    /** F3/2.6：字面量模式含正则元字符的一次性提醒登记（进程内每规则至多一次，防刷屏） */
+    private val literalMetaWarned = mutableSetOf<String>()
+
     private fun matchLiteral(text: String, rule: Rule, out: MutableList<RuleMatch>) {
         val p = rule.pattern
+        // F3/2.6：isRegex=false 时按字面量整串匹配——内容含正则元字符多半是用户写了正则但没开开关，
+        // 这是"编辑正则不生效"的高频根因，进程内对每规则提示一次
+        if (rule.id !in literalMetaWarned &&
+            p.any { it in "\\{}[]|()*+?^$" } &&
+            text.contains(p)
+        ) {
+            literalMetaWarned.add(rule.id)
+            runCatching {
+                AppLog.putDebugWithTag(
+                        AppLog.TAG_HIGHLIGHT_STYLE,
+                        "规则${rule.id} 为字面量匹配（isRegex=false）且内容含正则元字符——若意图为正则请在编辑器开启正则开关",
+                        level = AppLog.Level.DEBUG
+                    )
+            }
+        }
         var from = 0
         while (from <= text.length) {
             val i = text.indexOf(p, from)
@@ -81,7 +110,15 @@ object HighlightRuleMatcher {
         val regex = try {
             if (rule.isDotAll) Regex(rule.pattern, RegexOption.DOT_MATCHES_ALL) else Regex(rule.pattern)
         } catch (_: Exception) {
-            return // 非法正则直接跳过该规则
+            // F3/2.7：非法正则静默跳过改为 WARN 留痕（真机诊断"写了正则却不生效"）
+            runCatching {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_HIGHLIGHT_STYLE,
+                    "规则${rule.id} 非法正则已跳过 patternLen=${rule.pattern.length}",
+                    level = AppLog.Level.WARN
+                )
+            }
+            return
         }
         val groupStyles = if (withTemplate && rule.replacement.isNotBlank()) {
             CssStyleParser.extractGroupStyles(rule.replacement)

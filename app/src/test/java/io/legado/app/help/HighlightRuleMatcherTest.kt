@@ -38,6 +38,42 @@ class HighlightRuleMatcherTest {
     }
 
     @Test
+    fun dialogueLimit400_longDialogueMatches() {
+        // F3/2.5：内置对话正则放宽 120→400——长对话（150 字引号内容）应整段命中
+        val longQuote = "“" + "很长的对话内容".repeat(25) + "”"
+        assertTrue("构造应超 120 字", longQuote.length > 120)
+        val text = "他说：$longQuote 然后离开。"
+        val rule = HighlightRuleMatcher.Rule(
+            id = "dialog_default",
+            pattern = "“[^”\n]{1,400}”|\"[^\"\n]{1,400}\"|「[^」\n]{1,400}」|『[^』\n]{1,400}』",
+            isRegex = true,
+            style = style
+        )
+        val matches = HighlightRuleMatcher.match(text, listOf(rule))
+        assertEquals("放宽后长对话应命中", 1, matches.size)
+        assertEquals(longQuote, text.substring(matches[0].start, matches[0].end))
+    }
+
+    @Test
+    fun dialogueLimit400_overLongStillBounded_noReDoS() {
+        // F3/2.5+3.2：超 400 字引号整段不命中（限长防 ReDoS，优雅降级为不高亮，登记后续"长度上限配置"），
+        // 且匹配耗时受控不挂死
+        val hugeQuote = "“" + "超".repeat(1500) + "”"
+        val text = "开始：$hugeQuote 结束。"
+        val rule = HighlightRuleMatcher.Rule(
+            id = "dialog_default",
+            pattern = "“[^”\n]{1,400}”|\"[^\"\n]{1,400}\"|「[^」\n]{1,400}」|『[^』\n]{1,400}』",
+            isRegex = true,
+            style = style
+        )
+        val start = System.currentTimeMillis()
+        val matches = HighlightRuleMatcher.match(text, listOf(rule))
+        val elapsed = System.currentTimeMillis() - start
+        assertTrue("超限引号应优雅不命中（非崩溃）", matches.isEmpty())
+        assertTrue("匹配耗时受控 (${elapsed}ms)", elapsed < 3000)
+    }
+
+    @Test
     fun literalMatch_doesNotOverlap() {
         // 边界用例：字面量匹配不重叠
         val text = "aaa aaa aaa"

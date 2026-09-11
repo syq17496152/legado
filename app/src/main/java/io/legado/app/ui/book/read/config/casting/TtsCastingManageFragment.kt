@@ -280,6 +280,11 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
             val myRevision = ++revision
             saveMutex.withLock {
                 if (myRevision != revision) return@withLock
+                // AD-09 防线：内置模板禁改（UI readOnly 已禁保存按钮，此处兜底拦截防绕过路径洗掉 builtin 绑定）
+                if (ed.builtin) {
+                    postEditorError(appContext, -1, appContext.getString(R.string.tts_casting_builtin_readonly_error))
+                    return@withLock
+                }
                 // 校验链
                 if (ed.rules.isEmpty()) {
                     postEditorError(appContext, -1, "至少需要一条分段规则")

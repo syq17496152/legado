@@ -158,7 +158,8 @@ object DownloadState {
         localPath: String? = null,
         errorCode: String? = null,
         clearError: Boolean = false,
-        targetDir: String? = null
+        targetDir: String? = null,
+        fileName: String? = null
     ) {
         val base = effective(id) ?: rebuildFromEntity(id)?.also { rebuilt ->
             // B6：内存缺失，先把 DB 态补回内存再继续更新
@@ -195,7 +196,9 @@ object DownloadState {
             localPath = localPath ?: base.localPath,
             // B3：clearError 优先；否则沿用合并语义
             errorCode = if (clearError) null else (errorCode ?: base.errorCode),
-            targetDir = targetDir ?: base.targetDir
+            targetDir = targetDir ?: base.targetDir,
+            // F1：MIME 扩展名纠正联动改名（DB/通知/播放判定同源）
+            fileName = fileName ?: base.fileName
         )
         val isStatusChange = status != null && status != base.status
         val last = lastFlushTime[id] ?: 0L

@@ -2,6 +2,44 @@
 
 > 基于 Legado 项目源码深度分析提取的项目特有日志约定。
 > 2026-09-06 同步 log-system-upgrade：recordLog 默认值按包类型区分 + DEBUG 级完整记录 + 内存容量 500 + 日志管理中心（ui/log/LogActivity）。
+> 2026-09-11 批次F F9 增补：周期日志禁令 + 级别语义表 + putThrottled/putSampled 频控机制（真机日志 5521 条 MemoryPressure 洪水教训驱动）。
+
+---
+
+## F9 频控与级别纪律（2026-09-11 增补，强制）
+
+### 条款一：周期性日志禁令
+
+- **禁止**在固定间隔轮询/定时器/高频调用路径中直接打点（无论级别）——每个周期 tick 都是一条日志。
+- 监控类/内存类周期路径只允许**状态迁移打点**：仅在档位跃迁时输出一条（如 MemoryPressure 压力级别 normal/low/critical 迁移）。
+- 高频失败路径用 `AppLog.putThrottled(key, msg, throwable, level, tag?)`：同 key 60s 窗口仅输出首条，下一条合并"（前一窗口累计 N 条）"。
+- 高频成功路径（cache hit 等）用 `AppLog.putSampled(key, msg, n, level, tag?)`：每 n 条输出 1 条汇总（附累计计数）。
+- 新增周期日志需在 TaskList 说明豁免理由，否则视为违规。
+
+### 条款二：级别语义表（AppLog.Level 使用纪律）
+
+| 级别 | 语义 | 典型场景 |
+|------|------|---------|
+| ERROR（put 默认） | 用户可感知的失败 | 功能报错、任务失败、异常捕获 |
+| WARN | 降级/兜底发生（功能仍可用） | 探测恢复、回退通道、重试后成功 |
+| INFO | **仅状态迁移** | 引擎路由切换、压力级别跃迁、阶段翻转 |
+| DEBUG | 过程细节 | recordLog 门控下的过程埋点 |
+
+- **禁止**用 ERROR 级别输出成功/过程信息（真机教训：预连接成功打 ERROR 级=级别语义违规+噪音）。
+- 正式诊断日志 tag（TtsTrace/PageDebug 等白名单，见 AGENTS.md 诊断日志保留铁律）**只降频不删除**。
+
+### 条款三：putThrottled/putSampled 使用指南
+
+- 单点收编：新代码禁止自建"60s 去重/采样计数"轮子（如 CronetInterceptor 的 lastLoggedError 模式），统一走 AppLog 双机制。
+- key 命名：`{模块}_{场景}`（如 `HttpHelper_preconnect_ok`）；key 空间有界（200，FIFO 淘汰）。
+- tag 透传：`putThrottled/putSampled` 的 `tag` 参数走 `putDebugWithTag` 链路（模块化 logcat 采集 `adb logcat -s <Tag>:I` 可过滤）。
+- 节流/采样不适用于：用户可见错误（应 toast+put）、崩溃链路、状态迁移打点。
+
+### 条款四：诊断 tag 白名单（F9/2.21）
+
+- **白名单权威源 = `constant/AppLog.kt` 的 TAG 常量区**（TAG_TTS_TRACE/TAG_HIGHLIGHT_STYLE/TAG_SOURCE_MECHANISM 等正式登记 tag），白名单 tag 对应"重大功能升级内置的正式诊断日志"，**只降频不删除**（AGENTS.md 诊断日志保留铁律 2026-09-10）。
+- 一次性临时排查 tag（如 SwipeTest/VbsDiag/PageDebug）**不入白名单**，验证闭环后必须清理（铁证：PageDebug 临时日志遗留致 2110 条噪音）。
+- 新增正式诊断 tag 必须登记进 AppLog TAG 常量区并在此条款记录用途与事件全集。
 
 ---
 

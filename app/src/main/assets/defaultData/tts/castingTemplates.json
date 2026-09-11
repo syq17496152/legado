@@ -1,11 +1,11 @@
-﻿[
+[
   {
     "id": "builtin_dual_voice",
     "name": "旁白/对白双声",
     "builtin": true,
     "enabled": true,
     "sortOrder": 0,
-    "rulesJson": "{\"schemaVersion\":1,\"rules\":[{\"tag\":\"dialogue\",\"matchType\":\"builtin_quote\",\"pattern\":\"\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"对白\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":0,\"volume\":0}},{\"tag\":\"narration\",\"matchType\":\"keyword\",\"pattern\":\"\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"旁白\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":0,\"volume\":0}}]}",
+    "rulesJson": "{\"schemaVersion\":1,\"rules\":[{\"tag\":\"dialogue\",\"matchType\":\"regex\",\"pattern\":\"[一-龥]{1,12}[说道问答喊骂叫叹喝笑]道?[：:][“][^”\\\\n]{1,200}[”]\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"对白\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":0,\"volume\":0}},{\"tag\":\"dialogue\",\"matchType\":\"builtin_quote\",\"pattern\":\"\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"对白\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":0,\"volume\":0}},{\"tag\":\"narration\",\"matchType\":\"keyword\",\"pattern\":\"\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"旁白\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":0,\"volume\":0}}]}",
     "fallbackSourceJson": "",
     "lastUpdateTime": 0
   },
@@ -15,7 +15,7 @@
     "builtin": true,
     "enabled": false,
     "sortOrder": 1,
-    "rulesJson": "{\"schemaVersion\":1,\"rules\":[{\"tag\":\"dialogue\",\"matchType\":\"builtin_quote\",\"pattern\":\"\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"对白\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":1.2,\"volume\":0}},{\"tag\":\"narration\",\"matchType\":\"keyword\",\"pattern\":\"\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"旁白\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":0.9,\"volume\":0}}]}",
+    "rulesJson": "{\"schemaVersion\":1,\"rules\":[{\"tag\":\"dialogue\",\"matchType\":\"regex\",\"pattern\":\"[一-龥]{1,12}[说道问答喊骂叫叹喝笑]道?[：:][“][^”\\\\n]{1,200}[”]\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"对白\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":1.2,\"volume\":0}},{\"tag\":\"dialogue\",\"matchType\":\"builtin_quote\",\"pattern\":\"\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"对白\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":1.2,\"volume\":0}},{\"tag\":\"narration\",\"matchType\":\"keyword\",\"pattern\":\"\",\"sourceJson\":\"{\\\"engineType\\\":\\\"system\\\",\\\"engineValue\\\":\\\"current\\\",\\\"speakerName\\\":\\\"旁白\\\",\\\"source\\\":\\\"manual\\\"}\",\"prosody\":{\"rate\":0,\"pitch\":0.9,\"volume\":0}}]}",
     "fallbackSourceJson": "",
     "lastUpdateTime": 0
   },

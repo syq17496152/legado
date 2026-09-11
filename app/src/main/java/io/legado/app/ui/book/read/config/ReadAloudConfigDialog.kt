@@ -498,8 +498,14 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
             ),
             switch(
                 key = PreferKey.aiReadAloudRoleEnabled,
-                title = "多角色",
-                summary = if (hasModel) "后台分析当前章节的旁白和角色片段，并缓存结果" else "请先选择多角色模型",
+                title = "AI 分镜选角",
+                // F8/2.28 入口正名：该开关=AI 分镜链，与选角模板路由完全解耦（TTSReadAloudService 只看模板 ruleSet），
+                // 原名"多角色"误导用户以为开了就有多声音
+                summary = if (hasModel) {
+                    "AI 分析章节旁白与角色片段并缓存（注意：与选角模板相互独立，多声音需激活选角模板并绑定音色）"
+                } else {
+                    "请先选择多角色模型"
+                },
                 checked = enabled,
                 enabled = hasModel,
                 onCheckedChange = { AppConfig.aiReadAloudRoleEnabled = it }

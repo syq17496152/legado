@@ -368,6 +368,13 @@ object HlsDownloader {
         /** mp4 实际时长低于清单声明总时长的此比例时判定重封装不完整（MediaExtractor 单轨模型截断） */
         private const val DURATION_COVER_RATIO = 0.9
 
+        /**
+         * F1/2.4：样本 PTS 上限（25h，µs）。TS 流 PTS 异常（负值/巨大值/shift 累积越界）喂给平台
+         * MPEG4Writer 会触发其内部 32 位时长乘法溢出 UBSan abort（native 崩溃无法 try-catch 捕获，
+         * 进程直接死亡——真机铁证 2026-09-10）。写入前钳制，越界即停轨回退 ts。
+         */
+        private const val MAX_SAMPLE_PTS_US = 90_000_000_000L
+
         fun remux(tsFile: File, mp4File: File, expectedDurationMs: Long = 0): Boolean {
             return runCatching {
                 mp4File.delete()
@@ -467,10 +474,19 @@ object HlsDownloader {
                             val size = extractor.readSampleData(buffer, 0)
                             if (size < 0) break
                             var pts = extractor.sampleTime
+                            // F1/2.4：PTS 钳制——原始样本越界或 shift 累积后越界均停本轨回退 ts（防 MPEG4Writer native abort）
+                            if (pts < 0L || pts > MAX_SAMPLE_PTS_US) {
+                                Log.d("HlsRemux", "abnormal sample pts=$pts, fallback ts")
+                                return@runCatching false
+                            }
                             if (lastTime != Long.MIN_VALUE && pts < lastTime) {
                                 shift += lastTime - pts
                             }
                             pts += shift
+                            if (pts > MAX_SAMPLE_PTS_US) {
+                                Log.d("HlsRemux", "shift overflow pts=$pts shift=$shift, fallback ts")
+                                return@runCatching false
+                            }
                             lastTime = pts
                             val key = if (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0)
                                 MediaCodec.BUFFER_FLAG_KEY_FRAME else 0

@@ -173,8 +173,9 @@ class App : Application() {
             LiveEventBus.config()
                 .lifecycleObserverAlwaysActive(true)
                 .autoClear(false)
-                .enableLogger(BuildConfig.DEBUG || AppConfig.recordLog)
+                // F9/2.18：enableLogger 开关收编 AppLog.syncEventBusLogger 单源（与其它设置回调同源防覆盖）
                 .setLogger(EventLogger())
+            AppLog.syncEventBusLogger()
             DefaultData.upVersion()
             AppFreezeMonitor.init(this@App)
             DispatchersMonitor.init()
@@ -480,12 +481,17 @@ class App : Application() {
 
         override fun log(level: Level, msg: String) {
             super.log(level, msg)
-            LogUtils.d(TAG, msg)
+            // F9/2.19：事件总线日志降为 DEBUG 构建专属（真机日志 3039 条/8% 噪音源，事件流非诊断对象）
+            if (BuildConfig.DEBUG) {
+                LogUtils.d(TAG, msg)
+            }
         }
 
         override fun log(level: Level, msg: String, th: Throwable?) {
             super.log(level, msg, th)
-            LogUtils.d(TAG, "$msg\n${th?.stackTraceToString()}")
+            if (BuildConfig.DEBUG) {
+                LogUtils.d(TAG, "$msg\n${th?.stackTraceToString()}")
+            }
         }
 
         companion object {

@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.download
+package io.legado.app.ui.download
 
 import android.content.Intent
 import android.net.Uri
@@ -14,6 +14,7 @@ import io.legado.app.base.BaseActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.IntentAction
 import io.legado.app.databinding.ActivityDownloadManageBinding
+import io.legado.app.help.download.DOWNLOAD_VIDEO_EXTS
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.service.DownloadService
@@ -239,9 +240,13 @@ class DownloadManageActivity : BaseActivity<ActivityDownloadManageBinding>() {
         }
     }
 
-    /** C6 单源：视频扩展名与 Screen 共用 DOWNLOAD_VIDEO_EXTS */
-    private fun isVideoFile(fileName: String): Boolean =
-        fileName.substringAfterLast(".", "").lowercase() in DOWNLOAD_VIDEO_EXTS
+    /** C6 单源：视频扩展名与 Screen 共用 DOWNLOAD_VIDEO_EXTS；
+     *  F1 兼容：历史无后缀产物（旧版本下载）按视频处理走内置播放器容器自识别，不再依赖后缀门禁 */
+    private fun isVideoFile(fileName: String): Boolean {
+        val ext = fileName.substringAfterLast(".", "")
+        if (ext.isBlank()) return true
+        return ext.lowercase() in DOWNLOAD_VIDEO_EXTS
+    }
 
     /** 软件内调用内置视频播放器播放下载产物（mp4/ts 等，ExoPlayer 按容器自识别） */
     private fun openWithPlayer(item: DownloadDisplayItem) {

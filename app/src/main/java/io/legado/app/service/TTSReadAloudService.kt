@@ -18,6 +18,7 @@ import io.legado.app.help.readaloud.casting.CastingTag
 import io.legado.app.help.readaloud.casting.CastingRuleSet
 import io.legado.app.help.readaloud.casting.SystemEngineSource
 import io.legado.app.help.readaloud.casting.TtsCastingStore
+import io.legado.app.help.readaloud.casting.TtsMultiRoleDiagnostics
 import io.legado.app.help.readaloud.casting.TtsTagSplitter
 import io.legado.app.help.readaloud.casting.TtsVoiceRef
 import io.legado.app.help.readaloud.casting.UtteranceProgressSink
@@ -278,6 +279,8 @@ class TTSReadAloudService : BaseReadAloudService() {
     private suspend fun speakLegacyLoop() {
         LogUtils.d(TAG, "朗读列表大小 ${contentList.size}")
         LogUtils.d(TAG, "朗读页数 ${textChapter?.pageSize}")
+        // F8/2.26：legacy 路径=多人诊断态退出（防残留提示条）
+        TtsMultiRoleDiagnostics.stop()
         // TtsTrace 真机联调：legacy 路径入口（整章预入队）
         AppLog.putDebugWithTag(
             AppLog.TAG_TTS_TRACE,
@@ -363,6 +366,11 @@ class TTSReadAloudService : BaseReadAloudService() {
             "multiRole 章开始 ch=${textChapter.chapter.index} 段落=${contentList.size} 规则=${ruleSet.rules.size} 引擎=${ReadAloud.currentRoute.engineValue.ifBlank { "系统默认" }} nowSpeak=$nowSpeak",
             level = AppLog.Level.INFO
         )
+        // F8/2.26+2.27：切分诊断上抛面板（章开始重置；引号字符扫描区分"无对话/未命中"）
+        val chapterHasQuotes = contentList.any { paragraph ->
+            paragraph.any { it == '“' || it == '”' || it == '"' || it == '「' || it == '」' || it == '『' || it == '』' }
+        }
+        TtsMultiRoleDiagnostics.reset(textChapter.chapter.index, chapterHasQuotes)
         for (p in nowSpeak until contentList.size) {
             currentCoroutineContext().ensureActive()
             val paragraphStart = if (p == nowSpeak) paragraphStartPos else 0
@@ -417,6 +425,11 @@ class TTSReadAloudService : BaseReadAloudService() {
                 val ruleProsody = ruleSet.rules.firstOrNull { it.tag == segment.tag }?.prosody
                     ?: CastingProsody()
                 val utteranceId = "${AppConst.APP_TAG}mr_${p}_${segment.offsetInParagraph}"
+                // F8/2.26+2.27：逐段诊断计数（voiceMiss=该段将用引擎默认音）
+                TtsMultiRoleDiagnostics.countSegment(
+                    isNarration = segment.tag == CastingTag.NARRATION,
+                    voiceMiss = voiceRef == null || voiceRef.voiceId.isBlank()
+                )
                 // TtsTrace 真机联调：逐段合成证据（分段来源 tag/声源/文本长度）
                 AppLog.putDebugWithTag(
                     AppLog.TAG_TTS_TRACE,
