@@ -219,6 +219,14 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
                             lastVisible >= adapter.getActualItemCount() - PRELOAD_THRESHOLD
                         ) {
                             scrollToBottom()
+                        } else if (!isPreload && lastVisible >= layoutManager.itemCount - 2) {
+                            // 非预加载源：footer 进入可视区即翻页。
+                            // 不能沿用底边判定（!canScrollVertically(1)）：自由布局 LM 的
+                            // maxScrollOffset 口径比 range-extent 小一个上下 padding，
+                            // 真机带导航栏 padding 时到底后仍判"能滚"，永不触发翻页
+                            //（铁证 2026-09-11 用户真机：上滑到底不加载下一页；
+                            //   模拟器日志 viewportBottom 5299 > contentH 5070 仍 itemCount=21）
+                            scrollToBottom()
                         }
                         // 尺寸预取：可见下沿 + 前瞻超过已预取上界时再取一批
                         if (lastVisible + PREFETCH_AHEAD > prefetchHorizon) {
