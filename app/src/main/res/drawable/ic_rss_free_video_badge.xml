@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  订阅源「自由」布局（articleStyle=5）的视频角标。
+  自绘为单个矢量资源（半透明黑圆底 + 白色播放三角），避免为此新增颜色资源：
+  半透明中性遮罩属于 docs/project-flow/ui-standards/color.md §五「主题体系外」豁免类别
+  （媒体画布上的内容标识，不参与页面/卡片取色体系）。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="28.0"
+    android:viewportHeight="28.0">
+    <path
+        android:fillColor="#66000000"
+        android:pathData="M1,14a13,13 0 1,0 26,0a13,13 0 1,0 -26,0z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M11.5,8.5v11l9,-5.5z" />
+</vector>

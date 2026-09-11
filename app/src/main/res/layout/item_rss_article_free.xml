@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  订阅源「自由」布局（articleStyle=5）的 item：图片 + 图下固定文字块。
+
+  尺寸约定（与 RssFreeGridLayoutManager / FreeGridSizeCalculator 严格对应）：
+  - 整格高度由 LayoutManager 按矩形表精确赋值 = 图片区高 + rss_free_text_block_height
+  - 图片区用 layout_weight=1 吃掉「整格高 - 文字块高」的全部剩余空间，故图片区高度恒等于算法值
+  - 文字块高度取自 @dimen/rss_free_text_block_height（46sp），**必须与算法读取的是同一资源**
+    （Kotlin 侧同样读取该 dimen），保证「行高统一」不变式不会因两处数值漂移而破坏
+
+  圆角方案沿用瀑布流（item_rss_article_3）：CardView + clipToOutline，
+  因为格子高度动态，FilletImageView 需要固定尺寸，无法胜任。
+-->
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:clipToOutline="true"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="0dp"
+    app:cardPreventCornerOverlap="false"
+    app:cardUseCompatPadding="false">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/card_border_background"
+        android:orientation="vertical">
+
+        <ImageView
+            android:id="@+id/image_view"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/img_cover"
+            android:scaleType="centerCrop"
+            tools:ignore="RtlHardcoded,RtlSymmetry"
+            tools:srcCompat="@drawable/image_rss_article" />
+
+        <LinearLayout
+            android:id="@+id/text_block"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/rss_free_text_block_height"
+            android:orientation="vertical"
+            android:paddingStart="6dp"
+            android:paddingTop="5dp"
+            android:paddingEnd="6dp"
+            android:paddingBottom="6dp">
+
+            <TextView
+                android:id="@+id/tv_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/app_name"
+                android:textColor="@color/primaryText"
+                android:textSize="@dimen/text_13sp"
+                android:textStyle="bold"
+                tools:ignore="RtlHardcoded,RtlSymmetry" />
+
+            <TextView
+                android:id="@+id/tv_pub_date"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="@string/app_name"
+                android:textColor="@color/tv_text_summary"
+                android:textSize="@dimen/text_11sp"
+                tools:ignore="SmallSp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/iv_video_badge"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_gravity="end"
+        android:layout_marginTop="6dp"
+        android:layout_marginEnd="6dp"
+        android:contentDescription="@string/video_play"
+        android:src="@drawable/ic_rss_free_video_badge"
+        android:visibility="gone"
+        tools:visibility="visible" />
+
+</androidx.cardview.widget.CardView>

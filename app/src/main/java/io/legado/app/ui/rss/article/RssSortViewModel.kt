@@ -38,7 +38,8 @@ class RssSortViewModel(application: Application) : BaseViewModel(application) {
 
     fun switchLayout() {
         rssSource?.let {
-            if (it.articleStyle < 4) {
+            // 上限 5 = values/arrays.xml 中 layout_type 的末位（自由布局）
+            if (it.articleStyle < 5) {
                 it.articleStyle += 1
             } else {
                 it.articleStyle = 0
