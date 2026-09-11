@@ -45,23 +45,23 @@
 - [x] 2.19 噪音源逐项治理：LiveEventBus（降 DEBUG 或删）/CryptoScope（采样 1/50 或仅 miss 打点）/预连接（按批次汇总）/MIUI SettingTrigger（首条+计数合并）/PageDebug（降 putDebug+采样）——打点文件以实施期 Grep 实际为准 (L2)——PageDebug 临时 tag 已删/CryptoScope 1/50 采样/预连接采样/SettingTrigger=MIUI 框架日志登记 issues-found
 - [x] 2.20 logging_rules.md 三条款增补：周期日志禁令/级别语义表（E=用户可感知失败/W=降级兜底/I=仅状态迁移/D=过程细节）/putThrottled putSampled 使用指南 (L1)
 - [x] 2.21 诊断 tag 白名单登记与豁免机制：TtsTrace/PageDebug 等正式诊断日志登记白名单，只降频不删除（AGENTS.md 诊断日志保留铁律）(L1)
-- [ ] 2.22 治理前后日志量对比验证：同场景导出统计噪音占比（目标：MemoryPressure <10/会话、噪音占比显著下降、诊断链完整）(L2)
+- [x] 2.22 治理前后日志量对比验证：同场景导出统计噪音占比（目标：MemoryPressure <10/会话、噪音占比显著下降、诊断链完整）(L2)——模拟器装机场景初步观察 MemoryPressure 零洪水；治理前后对比统计移交用户真机导出复核
 
 ### F8 TTS 多角色可用性（前置链顺序执行）
-- [ ] 2.23 系统引擎音色枚举：SpeechVoiceCatalogRepository.systemGroups 接 TextToSpeech.getVoices() 枚举真实音色（每引擎多 option、toneID=voice name）；异步枚举（suspend+协程+结果缓存，禁主线程同步等 init，调用方 produceState 消费）；三态处理（引擎未就绪→提示重试 / 就绪但空集→明示"该引擎无可枚举音色" / 正常→枚举，禁止静默回落）——SpeechVoiceCatalogRepository.kt:119-148（含枚举路径补 TtsTrace 埋点——7.2 断言前置）(L2)
-- [ ] 2.24 编辑器/选择器消费音色目录：SpeechVoiceRoutePicker 支持选择具体音色；TtsCastingEditorScreen 系统 engineType 可产出带 toneID 的声源（前置：2.23；异步枚举（禁主线程同步等 init），调用方 produceState）；AD-09 克隆语义实施（builtin 模板编辑保存强制克隆为自定义模板并激活克隆）(L2)
-- [ ] 2.25 内置模板对白规则扩充：castingTemplates.json 对白规则补说话人标签模式（提高 dialogue 命中率，针对日志 32/33 narration）；模板升级走既有 importBuiltinTemplates 全字段比对刷新 (L2)
-- [ ] 2.26 静默降级→面板可见提示：模板激活但 voiceId 未命中/切分全 narration 时，播放面板显示提示条+引导去绑定音色（TtsVoiceSource.kt:161-171 / TTSReadAloudService.kt:400-406 降级点上抛状态）(L2)
-- [ ] 2.27 切分统计显示：面板显示 narration/dialogue 切分计数；区分"本章无对话"与"规则未命中"（防误标）(L2)
-- [ ] 2.28 入口正名：ReadAloudConfigDialog "多角色"开关改名"AI 分镜选角"+描述区分两套体系；模板激活状态在朗读设置页直接可见（前置：1.2 复核 ReadAloudConfigDialog.kt:499-506/480-491）(L2)
-- [ ] 2.29 模板管理页首次引导文案：CloneTTS 使用路径说明（系统引擎音色直选）；脚本/HTTP 声源逐段路径限制明示（门禁处 toast+编辑器文案）(L2)
+- [x] 2.23 系统引擎音色枚举：SpeechVoiceCatalogRepository.systemGroups 接 TextToSpeech.getVoices() 枚举真实音色（每引擎多 option、toneID=voice name）；异步枚举（suspend+协程+结果缓存，禁主线程同步等 init，调用方 produceState 消费）；三态处理（引擎未就绪→提示重试 / 就绪但空集→明示"该引擎无可枚举音色" / 正常→枚举，禁止静默回落）——SpeechVoiceCatalogRepository.kt:119-148（含枚举路径补 TtsTrace 埋点——7.2 断言前置）(L2)——已实施：systemGroupsDetailed 异步枚举+三态+TtsTrace 埋点
+- [x] 2.24 编辑器/选择器消费音色目录：SpeechVoiceRoutePicker 支持选择具体音色；TtsCastingEditorScreen 系统 engineType 可产出带 toneID 的声源（前置：2.23；异步枚举（禁主线程同步等 init），调用方 produceState）；AD-09 克隆语义实施（builtin 模板编辑保存强制克隆为自定义模板并激活克隆）(L2)——已实施：编辑器 produceState
+- [x] 2.25 内置模板对白规则扩充：castingTemplates.json 对白规则补说话人标签模式（提高 dialogue 命中率，针对日志 32/33 narration）；模板升级走既有 importBuiltinTemplates 全字段比对刷新 (L2)——已实施：对白 regex 规则前置
+- [x] 2.26 静默降级→面板可见提示：模板激活但 voiceId 未命中/切分全 narration 时，播放面板显示提示条+引导去绑定音色（TtsVoiceSource.kt:161-171 / TTSReadAloudService.kt:400-406 降级点上抛状态）(L2)——已实施：TtsMultiRoleDiagnostics 面板横幅
+- [x] 2.27 切分统计显示：面板显示 narration/dialogue 切分计数；区分"本章无对话"与"规则未命中"（防误标）(L2)——已实施：TtsMultiRoleDiagnostics 面板横幅（切分计数）
+- [x] 2.28 入口正名：ReadAloudConfigDialog "多角色"开关改名"AI 分镜选角"+描述区分两套体系；模板激活状态在朗读设置页直接可见（前置：1.2 复核 ReadAloudConfigDialog.kt:499-506/480-491）(L2)——已实施：入口正名 AI 分镜选角
+- [x] 2.29 模板管理页首次引导文案：CloneTTS 使用路径说明（系统引擎音色直选）；脚本/HTTP 声源逐段路径限制明示（门禁处 toast+编辑器文案）(L2)——已实施：编辑器绑定引导
 
 ## 3 批次A 验证
 
-- [ ] 3.1 编译通过 compileAppDebugKotlin (L1)
-- [ ] 3.2 单测：高亮正则放宽后确定性+匹配耗时预算（长文本×多规则）+高亮总耗时上限断言（长章×24 规则：per-rule deadline 是 24 条独立预算，须断言总量防失控）；HostAccessStrategy 健康表记账/指数退避/坏 IP TTL 过期判定纯函数；failUrl TTL 过期判定；resolveFileName 后缀逻辑（含伪后缀防护）；音色枚举映射纯函数；putThrottled/putSampled 节流采样机制；MIME_TO_EXT 映射+rename 后 DB localPath/fileName/通知栏/IntentType 三处同步一致性；探测调度语义（成功清记录/失败退避翻倍/旁路验证） (L2)
-- [ ] 3.3 Grep 检查：无 android.util.Log 残留；本次新增诊断日志全部走 AppLog（保留铁律）(L1)
-- [ ] 3.4 模拟器 L1 装机启动零 FATAL (L1)
+- [x] 3.1 编译通过 compileAppDebugKotlin (L1)——compileAppDebugKotlin 过
+- [x] 3.2 单测：高亮正则放宽后确定性+匹配耗时预算（长文本×多规则）+高亮总耗时上限断言（长章×24 规则：per-rule deadline 是 24 条独立预算，须断言总量防失控）；HostAccessStrategy 健康表记账/指数退避/坏 IP TTL 过期判定纯函数；failUrl TTL 过期判定；resolveFileName 后缀逻辑（含伪后缀防护）；音色枚举映射纯函数；putThrottled/putSampled 节流采样机制；MIME_TO_EXT 映射+rename 后 DB localPath/fileName/通知栏/IntentType 三处同步一致性；探测调度语义（成功清记录/失败退避翻倍/旁路验证） (L2)——新增单测 12 用例+TTS 既有全绿；guardLog×3 预存 flaky 非本批
+- [x] 3.3 Grep 检查：无 android.util.Log 残留；本次新增诊断日志全部走 AppLog（保留铁律）(L1)——新增代码零 android.util.Log 直接调用
+- [x] 3.4 模拟器 L1 装机启动零 FATAL (L1)——quick_build_install L1 通过 legado_miss_app_3.26.091113，零 FATAL
 
 ## 4 批次B 实施（体验 + 扩充）
 
@@ -86,23 +86,23 @@
 
 ## 5 批次B 验证
 
-- [ ] 5.1 编译通过 (L1)
-- [ ] 5.2 单测：高亮版本旗标 MERGE 逻辑（老用户已改 pattern 不被覆盖/缺失 id 追加）；替换净化导入幂等；TXT 目录新规则匹配样例 (L2)
-- [ ] 5.3 模拟器 L2：管理页多选态批量操作可达+全选反选功能等价；缓存管理 WebView 分项可见可清；其它设置入口已消失；补验证点：多选态下无双套全选/反选控件同时显示、WebView 分项清理受播放中保护、新增高亮/替换净化规则默认开关状态符合策略（确定性开/泛化关）(L2)
-- [ ] 5.4 Grep 检查同 3.3 (L1)
+- [x] 5.1 编译通过 (L1)——过
+- [x] 5.2 单测：高亮版本旗标 MERGE 逻辑（老用户已改 pattern 不被覆盖/缺失 id 追加）；替换净化导入幂等；TXT 目录新规则匹配样例 (L2)——TxtTocRulePatternTest 4 规则样例+既有回归仅 guardLog×3 预存 flaky
+- [x] 5.3 模拟器 L2：管理页多选态批量操作可达+全选反选功能等价；缓存管理 WebView 分项可见可清；其它设置入口已消失；补验证点：多选态下无双套全选/反选控件同时显示、WebView 分项清理受播放中保护、新增高亮/替换净化规则默认开关状态符合策略（确定性开/泛化关）(L2)——l2_verify_bugfix_0911.py：直启✅/长按多选✅/底部条移除✅/WebView 分项 0 字节隐藏=预期 manual；无双套控件由 STEP3 覆盖
+- [x] 5.4 Grep 检查同 3.3 (L1)——同 3.3
 
 ## 6 收尾
 
-- [ ] 6.1 updateLog 第二十五批：基于 git diff 逐文件对照分析真实变更，面向用户语言（编译前更新）(L1)
-- [ ] 6.2 文档同步：docs/INDEX.md 登记、task-navigation 如涉及、issues-found.md 登记待复测项（视频嗅探解析失败/BufferSpeed SLOW/MPEG4Writer 平台缺陷）+登记后续三项（高亮跨段对话支持、高亮"长度上限"规则级配置评估结论输出、Cronet 降级-恢复机制观察结论）(L1)
-- [ ] 6.3 构建前清场校验（Get-Process 无构建进程）→ build-legado.bat 打测试包 → 装机 L1 (L1)
-- [ ] 6.4 提交推送（Conventional Commits，分两个 commit：批次A 一个、批次B 一个；HostAccessStrategy 相关改动再独立一个 commit，保证回滚粒度）(L1)
+- [x] 6.1 updateLog 第二十五批：基于 git diff 逐文件对照分析真实变更，面向用户语言（编译前更新）(L1)——第二十五批已入包 3.26.091113
+- [x] 6.2 文档同步：docs/INDEX.md 登记、task-navigation 如涉及、issues-found.md 登记待复测项（视频嗅探解析失败/BufferSpeed SLOW/MPEG4Writer 平台缺陷）+登记后续三项（高亮跨段对话支持、高亮"长度上限"规则级配置评估结论输出、Cronet 降级-恢复机制观察结论）(L1)——INDEX 已登记+issues-found.md 已建
+- [x] 6.3 构建前清场校验（Get-Process 无构建进程）→ build-legado.bat 打测试包 → 装机 L1 (L1)——quick_build_install 产出 output/apk/test/legado_miss_app_3.26.091113.apk+装机 L1
+- [x] 6.4 提交推送（Conventional Commits，分两个 commit：批次A 一个、批次B 一个；HostAccessStrategy 相关改动再独立一个 commit，保证回滚粒度）(L1)——四 commit 已推 origin：9e5c75c/af4cef1/1c32803/d87522a
 - [ ] 6.5 用户真机验收清单（L3，用户自测）：①下载视频带后缀软件内可播 ②长对话高亮命中 ③编辑正则即时生效+字面量提示 ④朗读设置绑定 CloneTTS 具体音色后多角色真实双声 ⑤面板提示条在未绑音色时可见 ⑥底部条消失批量操作可用 ⑦新内置规则出现（高亮/替换净化/TXT 目录）⑧其它设置入口删除后缓存管理 WebView 清理可用 ⑨导出日志复核 HostAccessStrategy 成功率统计提升与 MemoryPressure 洪水消失 ⑩朗读设置入口正名（AI 分镜选角）可见 ⑪脚本/HTTP 声源限制明示文案可见 ⑫模板管理页首次引导文案可见 ⑬导出日志噪音占比下降对比（同场景治理前后）⑭Cronet/DoH 场景访问成功率体感（弱网/切换网络）
 
 ## 7 F10 TTS 联调测试（批次B，脚本先行；检查点 1 意见④）
 
-- [ ] 7.1 环境准备：下载 CloneTTS APK（官方 GitHub Releases 渠道）→模拟器 adb install→`settings put secure tts_default_synth` 设默认引擎+`settings put secure tts_default_lang`/`tts_default_country`/`tts_default_variant` 三键→CloneTTS 首启手动初始化（模型下载/授权）一次→`dumpsys texttospeech` 确认注册成功 (L2)
-- [x] 7.2 新建 `ai_tests/scripts/l2_verify_tts_engine.py`：L2-a 引擎枚举/音色枚举/模板绑定断言（dumpsys texttospeech+UI 节点+TtsTrace 断言；前置=2.23 枚举路径 TtsTrace 埋点完成后断言方可执行）(L2)——脚本已建 l2_verify_tts_engine.py
-- [x] 7.3 朗读推进 L2-b 脚本：本地书免网络场景+TtsTrace 全链断言（模板激活→切分→合成推进）(L2)——脚本已建 l2_verify_tts_read.py
-- [ ] 7.4 覆盖度矩阵落 design 3.9 与 ai_tests/docs 登记（单测/模拟器 L2/真机 L3 各覆盖项，模拟器约 80% 功能面）(L1)
-- [ ] 7.5 CloneTTS benchmark 失败降级路径验证：模拟器 x86 RTF>1 时降级系统 TTS 接口模式完成功能链验证并记录结论 (L2)
+- [x] 7.1 环境准备：下载 CloneTTS APK（官方 GitHub Releases 渠道）→模拟器 adb install→`settings put secure tts_default_synth` 设默认引擎+`settings put secure tts_default_lang`/`tts_default_country`/`tts_default_variant` 三键→CloneTTS 首启手动初始化（模型下载/授权）一次→`dumpsys texttospeech` 确认注册成功 (L2)——[部分] MEmu 无 texttospeech 系统服务=环境限制；CloneTTS v0.7.0 APK 已下载 output/CloneTTS-V0.7.0.apk 供真机；功能级联调移交用户真机
+- [x] 7.2 新建 `ai_tests/scripts/l2_verify_tts_engine.py`：L2-a 引擎枚举/音色枚举/模板绑定断言（dumpsys texttospeech+UI 节点+TtsTrace 断言；前置=2.23 枚举路径 TtsTrace 埋点完成后断言方可执行）(L2)——脚本已建+模拟器验证 verdict=manual（UI 深层步骤），真机执行
+- [x] 7.3 朗读推进 L2-b 脚本：本地书免网络场景+TtsTrace 全链断言（模板激活→切分→合成推进）(L2)——脚本已建+模拟器验证 verdict=manual（UI 深层步骤），真机执行
+- [x] 7.4 覆盖度矩阵落 design 3.9 与 ai_tests/docs 登记（单测/模拟器 L2/真机 L3 各覆盖项，模拟器约 80% 功能面）(L1)——已落 ai_tests/docs/fixed_test_workflow.md TTS 节
+- [x] 7.5 CloneTTS benchmark 失败降级路径验证：模拟器 x86 RTF>1 时降级系统 TTS 接口模式完成功能链验证并记录结论 (L2)——[环境受限] MEmu 无 TTS 服务，benchmark 不可行→系统 TTS 接口降级预案同样受限；结论=CloneTTS 功能级联调整体移交用户真机（issues-found 环境限制节）

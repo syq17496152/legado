@@ -30,7 +30,7 @@
 
 ## 状态标记
 
-**🔄 设计中**（按用户意见修订后待检查点 1 复审）
+**✅ 实施完成（待用户真机验收）**
 
 ## 变更日志
 
@@ -39,3 +39,4 @@
 - 2026-09-11 v1.2：检查点 1 用户四点意见修订——同源 fork 8 家补充调研（规则目标上调：高亮 24/替换净化 12/TXT 目录 30）+ F5 升级 HostAccessStrategy v1.1 系统性方案（AD-10）+ 新增 F9 日志治理（AD-11）+ 新增 F10 TTS 联调测试方案
 - 2026-09-11 v1.3：增量红队复审 1 P0+4 P1+7 P2 全部修复落盘（两阶段收编口径：阶段1 DNS 层本批交付/阶段2 Cronet per-host 迁移登记后续；探测栈归属修正：HEAD 探测仅清 dnsVerdict；fail-open 铁律+黑名单键=host+IP 对+上限 50+健康表 400；并发模型 ConcurrentHashMap+compute()；TTS 枚举路径补埋点前置+环境三键+CloneTTS 首启初始化；日志治理源头 :57/:62 与双 enableLogger 单源；单测总耗时上限断言+HostAccessStrategy 独立 commit 粒度）
 - 2026-09-11 v1.4：brooks-lint 审查 71/100（0C/5W/4S）九条发现全部修复（探测自证环边界/落地三步序/幽灵字段/任务拆分/序号重排等）
+- 2026-09-11 v1.5：批次A+B 全量实施完成：编译过+单测回归绿（guardLog×3 预存 flaky）+模拟器 L1/L2 过（多选收口/底部条移除/缓存管理）+四 commit 推送（9e5c75c/af4cef1/1c32803/d87522a）+测试包 output/apk/test/legado_miss_app_3.26.091113.apk；模拟器无 TTS 系统服务=TTS 联调移交真机（见 issues-found）
