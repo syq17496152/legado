@@ -18,6 +18,10 @@ object OkHttpExceptionInterceptor : Interceptor {
             if (e is java.net.UnknownHostException) {
                 val host = chain.request().url.host
                 AppLog.put("DNS 解析失败: host=${host.take(50)}, path=${chain.request().url.encodedPath.take(50)}")
+            } else if (e is java.net.ConnectException) {
+                // F5/AD-10 阶段1：OkHttp 侧连接失败全景记账（连接拒绝=DoH 候选 IP 不可达嫌疑，
+                // 标记进短 TTL 黑名单+per-host 退避；只记 ConnectException，读超时属服务端慢不误报）
+                runCatching { HostAccessStrategy.reportBadIpSuspect(chain.request().url.host) }
             }
             throw e
         } catch (e: CancellationException) {
