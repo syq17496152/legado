@@ -37,7 +37,7 @@ def main():
         sys.exit(1)
 
     d = u2.connect(HOST)
-    # 清栈：force-stop 后冷启，避免残栈干扰
+    # 清栈：force-stop 后 am start 直启 RssSortActivity（确定性入口，不依赖主界面导航路径）
     adb("am", "force-stop", PKG)
     time.sleep(2)
     d.app_start(PKG)
@@ -51,38 +51,20 @@ def main():
                 time.sleep(1)
             except Exception:
                 pass
-    # 主界面 → 订阅 tab → 频道页找源入口
-    tab = d(description="订阅")
-    if not tab.exists:
-        print("[FAIL] 未找到订阅 tab")
-        sys.exit(1)
-    tab.click()
-    time.sleep(4)
-    # 频道页内点击含"影视"的源入口（标题文本节点）
-    entry = d(textContains="影视")
-    if not entry.exists:
-        # 可能源 hub 折叠，尝试滚动
-        d.swipe(0.5, 0.6, 0.5, 0.3)
-        time.sleep(2)
-        entry = d(textContains="影视")
-    if not entry.exists:
-        xml0 = d.dump_hierarchy()
-        texts0 = sorted(set(re.findall(r'text="([^"]{1,30})"', xml0)))[:20]
-        print(f"[MANUAL] 频道页未找到影视源入口 texts={texts0}")
-        sys.exit(0)
-    entry.click()
-    time.sleep(8)
+    # am start 直启：initData 读 --es sourceUrl 从 rssSourceDao 取源（RssSortViewModel.kt:23）
+    r = adb("am", "start", "-n",
+            f"{PKG}/io.legado.app.ui.rss.article.RssSortActivity",
+            "--es", "sourceUrl", source_url)
+    print("am start:", (r.stdout or r.stderr).strip().splitlines()[-1] if (r.stdout or r.stderr) else "?")
+    time.sleep(10)
     cur = d.app_current()
     cur_name = cur.get("activity", "") if isinstance(cur, dict) else str(cur)
     print("activity:", cur_name)
     if "RssSort" not in cur_name:
-        # 可能落在源 hub/分类页，点第一个分类区
-        w, h = d.window_size()
-        d.click(w // 2, int(h * 0.22))
-        time.sleep(5)
-        cur = d.app_current()
-        cur_name = cur.get("activity", "") if isinstance(cur, dict) else str(cur)
-        print("activity2:", cur_name)
+        print("[FAIL] 直启未进入 RssSortActivity")
+        sys.exit(1)
+    # 等文章列表首屏数据（网络拉取分类+文章）
+    time.sleep(8)
 
     # 溢出菜单 Switch Layout 循环 5 次（0→1→2→3→4→5）
     for i in range(5):
@@ -95,10 +77,14 @@ def main():
         time.sleep(1.2)
         item = d(text="Switch Layout")
         if not item.exists:
-            item = d(textContains="布局")
+            item = d(text="切换布局")
         if item.exists:
             item.click()
+        else:
+            print(f"[WARN] 第 {i + 1} 次未找到切换布局菜单项")
+            d.press("back")
         time.sleep(2.5)
+        time.sleep(4)  # 每次切换后等 fragment 重建+列表加载
 
     xml = d.dump_hierarchy()
     texts = set(re.findall(r'text="([^"]{1,50})"', xml))
@@ -111,6 +97,32 @@ def main():
     print(f"截图: {SHOT}")
     verdict = "PASS" if (clickable_items >= 2 or has_desc_items >= 3) else "FAIL(疑似仍白屏)"
     print(f"[{verdict}] 自由布局列表非白屏")
+
+    # ---- 滚动压测（crash-19-54-47 场景：滑动触发加载更多 → notifyDataSetChanged → 全量布局）----
+    # 真机闪退路径：scrollVerticallyBy→fill→getViewForPosition(footer)→createViewHolder(单实例)
+    # 断言：连续滑动 10 屏后前台存活 + logcat 无 FATAL + app crash 目录无新文件
+    adb("logcat", "-c")
+    crash_dir_before = set(crash_logs())
+    for i in range(10):
+        d.swipe(0.5, 0.75, 0.5, 0.15, duration=0.25)
+        time.sleep(1.2)
+    time.sleep(4)  # 等加载更多 + 全量布局完成
+    cur = d.app_current()
+    alive = PKG in (cur.get("package", "") if isinstance(cur, dict) else str(cur))
+    fatal = adb("logcat", "-d", "-s", "AndroidRuntime:E", timeout=60).stdout
+    fatal_lines = [ln for ln in fatal.splitlines() if "FATAL" in ln or "IllegalStateException" in ln]
+    new_crash = crash_logs() - crash_dir_before
+    d.screenshot(SHOT.replace(".png", "_scroll.png"))
+    print(f"alive={alive} fatal_lines={fatal_lines[:3]} new_crash={sorted(new_crash)}")
+    scroll_verdict = "PASS" if (alive and not fatal_lines and not new_crash) else "FAIL(滚动闪退复现)"
+    print(f"[{scroll_verdict}] 自由布局滚动压测（10 屏含加载更多）")
+
+
+def crash_logs():
+    """列出应用 externalCache/crash 目录（CrashHandler 兜底落盘处），返回文件名集合"""
+    r = adb("su", "-c",
+            f"ls /storage/emulated/0/Android/data/{PKG}/cache/crash 2>/dev/null", timeout=30)
+    return set(r.stdout.split())
 
 
 if __name__ == "__main__":

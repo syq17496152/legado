@@ -204,16 +204,16 @@ class FreeGridSizeCalculatorTest {
 
     @Test
     fun ratioClamping_appliedToExtremeValues() {
-        // ratio 10.0 应被钳制到 3.0；ratio 0.1 应被钳制到 0.4
+        // ratio 10.0 应被钳制到 2.2；ratio 0.1 应被钳制到 0.9（2026-09-11 收紧区间消除行数跳变）
         val clampHigh = FreeGridSizeCalculator().apply { build(geometry(), floatArrayOf(10f)) }
-        val clampHighRef = FreeGridSizeCalculator().apply { build(geometry(), floatArrayOf(3f)) }
+        val clampHighRef = FreeGridSizeCalculator().apply { build(geometry(), floatArrayOf(2.2f)) }
         assertEquals(
             "超大 ratio 必须钳制到 MAX_RATIO",
             clampHighRef.getWidth(0), clampHigh.getWidth(0)
         )
 
         val clampLow = FreeGridSizeCalculator().apply { build(geometry(), floatArrayOf(0.1f)) }
-        val clampLowRef = FreeGridSizeCalculator().apply { build(geometry(), floatArrayOf(0.4f)) }
+        val clampLowRef = FreeGridSizeCalculator().apply { build(geometry(), floatArrayOf(0.9f)) }
         assertEquals(
             "超小 ratio 必须钳制到 MIN_RATIO",
             clampLowRef.getWidth(0), clampLow.getWidth(0)
@@ -285,7 +285,7 @@ class FreeGridSizeCalculatorTest {
             Triple("4:3 横图", List(8) { 1.33f }, Pair(2, 134)),
             Triple("16:9 宽图", List(8) { 1.78f }, Pair(2, 100)),
             Triple("1:1 方图", List(8) { 1.0f }, Pair(2, 178)),
-            Triple("3:4 竖图", List(8) { 0.75f }, Pair(3, 156))
+            Triple("3:4 竖图（钳到 0.9）", List(8) { 0.75f }, Pair(3, 130))
         )
         for ((label, ratios, expected) in cases) {
             val calc = FreeGridSizeCalculator().apply { build(geometry(), ratios.toFloatArray()) }

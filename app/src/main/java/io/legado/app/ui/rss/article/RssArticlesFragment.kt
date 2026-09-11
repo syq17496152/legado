@@ -4,6 +4,7 @@ import android.content.res.Configuration
 import android.graphics.Rect
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
@@ -184,6 +185,10 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
         recyclerView.adapter = adapter
         applyTopOverlaySpace()
         adapter.addFooterView {
+            // loadMoreView 是跨 6 种布局 adapter 共用的单实例；若上个布局周期/adapter 仍持有
+            // parent（如布局切换瞬间），先摘除再复用，否则 createViewHolder 会因
+            // "ViewHolder views must not be attached when created" 抛 IllegalStateException
+            (loadMoreView.parent as? ViewGroup)?.removeView(loadMoreView)
             ViewLoadMoreBinding.bind(loadMoreView)
         }
         refreshLayout.setOnRefreshListener {

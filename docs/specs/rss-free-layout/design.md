@@ -110,13 +110,13 @@ fun buildRects(ratios, availableWidth, spacing, targetRowHeight): IntArray
 
 | 常量 | 值 | 定义位置 | 含义 / 取值依据 |
 |------|-----|---------|----------------|
-| `MIN_RATIO` / `MAX_RATIO` | 0.4f / 3.0f | Calculator | 极端比例钳制区间（AD-09 已裁决策略 X）。依据：`0.4` ≈ 1:2.5 长图、`3.0` ≈ 3:1 全景；超出即裁边（B4）。**回退路径**：若实测裁切过激可放宽至 `4.0`，或改走策略 Y |
+| `MIN_RATIO` / `MAX_RATIO` | 0.9f / 2.2f | Calculator | 极端比例钳制区间（AD-09 已裁决策略 X）。**2026-09-11 收紧**（真机用户反馈"第一排 2 个第二排 4 个"行数跳变观感差）：旧值 `[0.4, 3.0]` 允许窄竖图 4 张/行与横图 2 张/行并存，收紧到 `[0.9, 2.2]` 后每行收敛到 2-3 张；窄竖图/全景图由 `CENTER_CROP` 裁边（B4）。**回退路径**：若实测裁切过激可放宽上限至 `2.5`，或改走策略 Y |
 | `TEXT_BLOCK_HEIGHT` | 46sp | **dimens.xml** | 文字块固定高（AD-08 已裁决方案 B）。权威定义在 `res/values/dimens.xml` 的 `rss_free_text_block_height`，XML 与 Kotlin 共用同一资源；**必须为常量，禁止随内容变化**（见术语表兼容性结论）。实测构成：标题 13sp ×1 行 + 时间 11sp ×1 行 + 内边距 11dp |
 | `MIN_ROW_HEIGHT` / `MAX_ROW_HEIGHT` | 120dp / 260dp | Calculator | **保留但当前不启用**：仅策略 Y 生效。策略 Y 已评估未采用（AD-09），分支说明保留以便回退 |
 | `DEFAULT_RATIO` | 1.33f | Calculator | 全局兜底比例（4:3）。依据：RSS 文章配图最常见的横构图比例 |
 | `MAX_ITEMS_PORTRAIT` / `MAX_ITEMS_LANDSCAPE` | 4 / 6 | Calculator | 单行张数上限（R3）。依据：竖屏 4 张时单图 ≈ 屏宽 22%，再小则缩略图无辨识度 |
 | `SHRINK_TOLERANCE` | 0.55f | Calculator | 再加一张后行高低于 `目标 × 0.55` 即收行（R3） |
-| `TARGET_ROW_HEIGHT_RATIO` | 0.42f | Calculator | 目标行高 = 该比例 × 屏幕宽。**实测校准值**（360px 宽 / 间距 4px / 文字块 46px）：4:3 横图 2 张/行 134px、16:9 宽图 2 张/行 100px、1:1 方图 2 张/行 178px、3:4 竖图 3 张/行 156px、混合 2 张/行 115–171px。不取 0.33 是因实测该值下混合行高仅约 98px，缩略图辨识度不足 |
+| `TARGET_ROW_HEIGHT_RATIO` | 0.42f | Calculator | 目标行高 = 该比例 × 屏幕宽。**实测校准值**（360px 宽 / 间距 4px / 文字块 46px / 比例钳制 [0.9, 2.2]，2026-09-11 随钳制收紧同步）：4:3 横图 2 张/行 134px、16:9 宽图 2 张/行 100px、1:1 方图 2 张/行 178px、3:4 竖图（钳到 0.9）3 张/行 130px、混合 2 张/行（偶有 3）100–178px。不取 0.33 是因实测该值下混合行高仅约 98px，缩略图辨识度不足 |
 | `SPACING_DP` | 4dp | LayoutManager | 间距。依据：与 `articleStyle=4`（三列）`setPadding(4,0,4,0)` 的视觉口径保持一致 |
 | `PREFETCH_FIRST_SCREEN` | 24 | Fragment | 首屏 gating 预取条数（AD-05） |
 | `FIRST_SCREEN_TIMEOUT_MS` | 800L | Fragment | 首屏 gating 等待上限（AD-05） |
@@ -314,7 +314,7 @@ adapter.setItems(list, diffCallback, true)
 - **Concern**: 该主张建立在「布局框比例 = 图片真实比例」的理想假设上。实际存在两类偏差：① ratio 来自缓存或钳制，与真实值有差；② 整数像素取整导致 `layoutWidth / layoutHeight` 与 `ratio_j` 不完全相等。此时 `FIT_CENTER` 会在布局框内留出**空白边**，而「不留无效空白」是本需求的明确目标。
 - **Decision**: `CENTER_CROP`。偏差通常 1–2px，裁边不可感知；而 `FIT_CENTER` 的空白即使只有 1px，在密集网格中会形成可见的白色网格线。
 - **Goal**: 视觉无留白、无变形感（偏差 < 0.5%）。
-- **Tradeoff**: 极端比例图（被钳制到 3.0/0.4 的）会裁掉较多边角内容。已由 R2 Scenario 显式定义为期望行为；点击进入图库可看完整原图。
+- **Tradeoff**: 极端比例图（被钳制到 2.2/0.9 的，2026-09-11 收紧后普通竖图/全景图也会轻微裁边）会裁掉较多边角内容。已由 R2 Scenario 显式定义为期望行为；点击进入图库可看完整原图。
 - **Status**: Accepted
 - **Superseded-by**: 无
 - **ChangeLog**: v1.0 初版（对用户原始方案的**技术修正**）
@@ -390,7 +390,7 @@ adapter.setItems(list, diffCallback, true)
 - **兜底预案**: `MIN_RATIO` / `MAX_RATIO` 为单点常量，若实测裁切过于激进，可放宽上限至 `4.0` 或改走策略 Y（计算器两处分支，切换成本极低）。**该回退路径已保留在设计中，不删除策略 Y 的分支说明。**
 - **Status**: Accepted（2026-09-11 用户裁决：策略 X）
 - **Superseded-by**: 无
-- **ChangeLog**: v1.0 初版（自曝初稿取舍缺陷）→ 同日用户裁决定为策略 X
+- **ChangeLog**: v1.0 初版（自曝初稿取舍缺陷）→ 同日用户裁决定为策略 X → **同日 v1.1 收紧钳制区间 `[0.4, 3.0]` → `[0.9, 2.2]`**（用户真机反馈"第一排 2 个第二排 4 个"行数跳变观感差：旧区间允许窄竖图 4 张/行与横图 2 张/行并存，收紧后每行收敛 2-3 张，窄图/全景由 CENTER_CROP 轻微裁边；单测 typicalSources/ratioClamping 已同步）
 
 ## Data Flow
 

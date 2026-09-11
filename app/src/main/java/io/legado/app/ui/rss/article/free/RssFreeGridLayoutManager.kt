@@ -262,11 +262,21 @@ class RssFreeGridLayoutManager(
             calculator.itemCount > 0 &&
             availableWidth != lastBuiltWidth
         val anchor = if (widthChanged) firstAttachedPosition() else NO_POSITION
-        if (!rectsValid || widthChanged) {
+        // 数据变化（onItemsChanged/Added/Removed/Moved 置 rectsValid=false）后的全量布局，
+        // 必须先 detach+scrap：notifyDataSetChanged 后**已挂载 holder 的 mPosition 停留旧值**
+        //（真机铁证 crash-19-54-47：footer 停在旧位 → findViewByPosition(新位) 落空 →
+        // createViewHolder 重建仍挂 parent 的单实例 footer → IllegalStateException）。
+        // 走 scrap 通道后 RecyclerView 会重解析位置（invalid holder 重新 bind 到新 position），
+        // 且 detach 后单实例 footer 的 parent == null，即使极端路径重建也安全。
+        val dataChanged = !rectsValid
+        if (dataChanged || widthChanged) {
             rebuild()
             if (anchor != NO_POSITION) {
                 scrollOffset = calculator.getTop(anchor).coerceAtLeast(0)
             }
+        }
+        if (dataChanged && childCount > 0) {
+            detachAndScrapAttachedViews(recycler)
         }
         scrollOffset = scrollOffset.coerceIn(0, maxScrollOffset)
         fill(recycler, state)
@@ -305,10 +315,10 @@ class RssFreeGridLayoutManager(
                 "viewportTop=$viewportTop viewportBottom=$viewportBottom"
         )
         // 1) 回收越界 child；其余按最新矩形表重新贴位
-        //    真机闪退修复（2026-09-11 铁证 crash-18-57-23）：footer 视图是
-        //    ViewLoadMoreBinding.bind(loadMoreView) 的**单例**（5 布局公共注册模式），
-        //    createViewHolder 再次被调用时会返回 parent != null 的旧视图直接崩
-        //    IllegalStateException。故 header/footer 单实例块永不回收，仅重新贴位。
+        //    数据变化后的全量布局由 onLayoutChildren 先 detach+scrap（holder 位置在 scrap 通道
+        //    重解析），本差量路径只在数据未变的滚动/重贴位时执行，child 位置可信。
+        //    header/footer 单实例块（footer 为 ViewLoadMoreBinding.bind(loadMoreView) 单例，
+        //    5 布局公共注册）永不回收仅重新贴位，避免 createViewHolder 复用仍挂 parent 的旧视图。
         for (i in childCount - 1 downTo 0) {
             val child = getChildAt(i) ?: continue
             val position = getPosition(child)
