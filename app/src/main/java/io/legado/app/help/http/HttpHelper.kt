@@ -386,9 +386,16 @@ suspend fun warmUpConnection(url: String) = withContext(Dispatchers.IO) {
             .build()
         okHttpClient.newCall(request).execute().use { response ->
             // 仅触发连接建立，不关心响应内容
-            AppLog.put("HttpHelper 预连接完成: code=${response.code}")
+            // F9/2.19：成功路径 1/20 采样（原逐次 ERROR 级=真机日志 740 条噪音源之一，且级别语义违规）
+            AppLog.putSampled(
+                "HttpHelper_preconnect_ok",
+                "HttpHelper 预连接完成: code=${response.code}",
+                n = 20,
+                level = AppLog.Level.DEBUG,
+                tag = AppLog.TAG_HTTP
+            )
         }
     }.onFailure {
-        AppLog.put("HttpHelper 预连接失败: ${it.message?.take(100)}")
+        AppLog.putWarn("HttpHelper 预连接失败: ${it.message?.take(100)}")
     }
 }
