@@ -158,6 +158,14 @@
     <dimen name="ui_panel_radius">10dp</dimen>
     <dimen name="ui_action_radius">9dp</dimen>
 
+    <!--
+      订阅源「自由」布局（articleStyle=5）图下文字块高度。
+      单位刻意用 sp 而非 dp：该高度必须随系统字号缩放，否则大字号下标题会被裁切；
+      同时它又是布局算法的**常量**（同一配置下恒定），故不能随内容变化。
+      Kotlin 侧通过 R.dimen.rss_free_text_block_height 读取，保证 XML 与算法同一数据源。
+    -->
+    <dimen name="rss_free_text_block_height">46sp</dimen>
+
     <!-- Manga reader floating chapter control -->
     <dimen name="manga_control_outer_margin_horizontal">16dp</dimen>
     <dimen name="manga_control_outer_margin_vertical">14dp</dimen>
