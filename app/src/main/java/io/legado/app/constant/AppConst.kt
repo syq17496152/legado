@@ -69,6 +69,9 @@ object AppConst {
                 appInfo.appVariant = when {
                     it.packageName.contains("releaseA") -> AppVariant.BETA_RELEASEA
                     it.packageName.contains("releaseS") -> AppVariant.BETA_RELEASES
+                    // 共存包（customAppId=io.legado.app.debug）同为 debug 构建但必须按共存包
+                    // 变体取更新，否则会被误判为测试包变体、下载到测试包 APK（app-update-variant-fix）
+                    it.packageName == "io.legado.app.debug" -> AppVariant.BETA_RELEASEA
                     isBeta -> AppVariant.BETA_RELEASE
                     isOfficial -> AppVariant.OFFICIAL
                     else -> AppVariant.UNKNOWN

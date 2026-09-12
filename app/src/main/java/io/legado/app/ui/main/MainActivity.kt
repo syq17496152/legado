@@ -2249,7 +2249,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                     while (start < crashLog.length) {
                         val end = minOf(start + chunkSize, crashLog.length)
                         AppLog.putDebugWithTag(
-                            "CrashReport",
+                            AppLog.TAG_CRASH_REPORT,
                             "上次会话崩溃栈回灌($index)：\n${crashLog.substring(start, end)}"
                         )
                         start = end

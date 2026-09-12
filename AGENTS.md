@@ -86,7 +86,7 @@ OpenSpec 步骤 5→6 之间必须真机/模拟器验证，禁止只改代码不
 
 ### 4. 任务完成前检查清单
 1. 工具输出第一动作扫描敏感词，替换为代号（output-safety.md）
-2. Grep `android.util.Log.d|android.util.Log.e` 确认无残留**临时排查类**调试日志（logging-during-refactoring.md）；⚠️ **诊断日志保留铁律（2026-09-10 用户裁决）**：重大功能升级内置的正式诊断日志（`AppLog.put`/`AppLog.putDebugWithTag` 如 TtsTrace 全链日志）**必须保留，禁止清理**——测试包日志是 AI 获取真机异常分析的生命线；日志清理仅限一次性临时排查 tag（如 SwipeTest/VbsDiag），且清理前必须确认该功能已稳定交付
+2. Grep `android.util.Log.d|android.util.Log.e` 确认无残留**临时排查类**调试日志（logging-during-refactoring.md）；⚠️ **诊断日志保留铁律（2026-09-10 用户裁决）**：重大功能升级内置的正式诊断日志（`AppLog.put`/`AppLog.putDebugWithTag` 如 TtsTrace 全链日志）**必须保留，禁止清理**——测试包日志是 AI 获取真机异常分析的生命线；日志清理仅限一次性临时排查 tag（如 SwipeTest/VbsDiag），且清理前必须确认该功能已稳定交付；**完成声称 Grep 证据（2026-09-11，logging_rules 条款六）**：凡勾选"已删除/已清零/已同步"类任务必须附 Grep 校验证据（模式+命中数），审计定性用 `^import android\.util\.Log$` 防 DebugLog 子串误报
 3. updateLog 已更新（编译前）
 4. 文档同步已检查：issues-found/tasks/INDEX/ai_memory_main 是否最新（version-delivery-sync.md）
 5. 大型任务结束自觉沉淀（spec-sedimentation-mechanism.md）

@@ -32,7 +32,7 @@ object DeviceInfoHelper {
             val cpuCores = getCpuCores()
             val freeDiskMB = getFreeDiskMB()
             AppLog.putDebugWithTag(
-                "DeviceInfo",
+                AppLog.TAG_DEVICE_INFO,
                 "device info: totalMem=${totalMemMB}MB, cpuCores=$cpuCores, freeDisk=${freeDiskMB}MB",
                 level = AppLog.Level.INFO
             )
@@ -43,7 +43,7 @@ object DeviceInfoHelper {
             }
         }.getOrElse {
             AppLog.putDebugWithTag(
-                "DeviceInfo",
+                AppLog.TAG_DEVICE_INFO,
                 "detection failed, fallback to HIGH",
                 it,
                 AppLog.Level.WARN

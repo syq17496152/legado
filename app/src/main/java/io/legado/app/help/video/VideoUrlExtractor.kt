@@ -498,9 +498,54 @@ object VideoUrlExtractor {
      * 场景2：/player/?playUrl=https%3A%2F%2Fv.example.com%2Fvideo%2F...%2Findex.m3u8
      * 播放器页面 URL 包含 url/playUrl 参数，参数值是实际视频流 URL（URL 编码）
      *
-     * @return 实际视频流 URL（已解码），若不是播放器页面 URL 则返回 null
+     * video-proxy-m3u8-403 守卫（2026-09-12）：鉴权代理壳（路径末段为媒体类型，或外层 query
+     * 持有 token/sign/exp 等签名参数）不解包 —— 解包会丢弃壳签名，裸内层 URL 必 403。
+     * 详见 docs/specs/video-proxy-m3u8-403/
+     *
+     * @return 实际视频流 URL（已解码），若不是播放器页面 URL 或命中不解包守卫则返回 null
      */
+    // video-proxy-m3u8-403 守卫 B：外层鉴权参数检测。
+    // URL_PARAM_CAPTURE_REGEX 与 extractPlayerPageUrl 的解包捕获正则一致，先剥离捕获片段再检测，
+    // 避免内层编码 URL 自带的 %26exp%3D 等字面量被误判为外层鉴权参数。
+    private val URL_PARAM_CAPTURE_REGEX = Regex("""[?&](?:url|playUrl)=([^&]+)""", RegexOption.IGNORE_CASE)
+    private val OUTER_AUTH_PARAM_REGEX = Regex("""[?&](?:token|sign|auth_key|exp|expires|deadline)=""")
+
+    /**
+     * video-proxy-m3u8-403 守卫 A：判断外层 URL 是否自身为媒体清单/媒体端点
+     *
+     * 判定：剥离 query/fragment 及尾斜杠后，路径最后一段与 m3u8/mpd/mp4 全等（忽略大小写）。
+     * 全等而非 contains：避免误伤 /m3u8player/ 等路径恰好含关键字的 HTML 播放器页。
+     *
+     * 场景：https://站点A/media/m3u8?url=<编码内层>&exp&token —— 壳即鉴权清单端点，
+     * 壳每次被请求时现签子资源 auth_key，解包丢弃壳签名后裸内层 URL 必 403（实测 2026-09-12）。
+     */
+    private fun isMediaEndpointPath(url: String): Boolean {
+        return runCatching {
+            val path = url.substringBefore("?").substringBefore("#").trimEnd('/')
+            val lastSegment = path.substringAfterLast('/').lowercase()
+            lastSegment == "m3u8" || lastSegment == "mpd" || lastSegment == "mp4"
+        }.getOrDefault(false)
+    }
+
+    /**
+     * video-proxy-m3u8-403 守卫 B：判断外层 query 是否持有鉴权签名参数
+     *
+     * 先移除与解包逻辑相同的 url/playUrl 捕获片段（内层 URL 参数已编码，不会泄漏到外层），
+     * 再对剩余外层部分匹配鉴权参数。守卫要求参数以 ?/& 起始且紧跟 =，
+     * 因此 expires= 不会被 exp= 分支误匹配（exp 后需紧跟 =，expires= 的 exp 后是 i）。
+     */
+    private fun hasOuterAuthParam(url: String): Boolean {
+        return runCatching {
+            val outerPart = URL_PARAM_CAPTURE_REGEX.replace(url, "")
+            OUTER_AUTH_PARAM_REGEX.containsMatchIn(outerPart)
+        }.getOrDefault(false)
+    }
+
     private fun extractPlayerPageUrl(url: String): String? {
+        // video-proxy-m3u8-403 守卫 A：外层自身即媒体清单端点 → 不解包，壳 URL 原样交给播放器
+        if (isMediaEndpointPath(url)) return null
+        // video-proxy-m3u8-403 守卫 B：外层持有鉴权签名（壳路径无媒体段的代理形态）→ 不解包
+        if (hasOuterAuthParam(url)) return null
         // 检测 ?url= / &url= / ?playUrl= / &playUrl= 参数
         val urlPattern = Regex("""[?&](?:url|playUrl)=([^&]+)""", RegexOption.IGNORE_CASE)
         val match = urlPattern.find(url) ?: return null

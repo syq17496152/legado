@@ -16,6 +16,9 @@ import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.stackTraceStr
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -27,9 +30,52 @@ object Debug {
     private val debugTimeMap = HashMap<String, Long>()
     var isChecking: Boolean = false
 
+    /**
+     * log-compliance-cleanup 批次E：调试会话缓冲（业务侧第四通道，不并入 AppLog——用户裁决口径）。
+     * 痛点：调试日志此前仅存于 UI 内存列表，Activity 关闭即丢、release 包 logcat 也被 DEBUG 守卫拦截，
+     * 用户真机调试书源失败后无法提供日志给 AI/他人分析（只能截图）。
+     * 方案：Debug.log 单点同步写入环形缓冲（上限 500 行，超限淘汰最旧），供调试页一键复制/分享。
+     */
+    private const val MAX_SESSION_LINES = 500
+    private val sessionLines = ArrayDeque<String>(64)
+
     @SuppressLint("ConstantLocale")
     private val debugTimeFormat = SimpleDateFormat("[mm:ss.SSS]", Locale.getDefault())
     private var startTime: Long = System.currentTimeMillis()
+
+    /** 取当前会话调试日志全文（含时间戳，最旧在前；会话结束/新会话开始时清空）。
+     *  @Synchronized 与 log()/cancelDebug() 同锁（this）：ArrayDeque 遍历中并发 addLast/clear 会 CME */
+    @Synchronized
+    fun getSessionLogs(): String = sessionLines.joinToString("\n")
+
+    /** 「清空日志」：仅清文本缓冲，不影响进行中的调试任务（与 clearEvents 配套） */
+    @Synchronized
+    fun clearSessionLogs() {
+        sessionLines.clear()
+    }
+
+    /**
+     * debug-page-redesign AD-01：结构化事件流（对标 MD3阅读）。
+     * kind 复用既有 state 码：1 过程 / -1 错误 / 1000 完成 / 10 搜索(列表)响应 / 20 详情(内容)响应 /
+     * 30 目录响应 / 40 正文响应——产生点：BookList/BookInfo/BookChapterList/BookContent/RssParserByRule/Rss。
+     * UI 侧 collectAsState 消费；callback/isChecking 校验链保持原语义不动（AD-01 决策：不全量 Session 化）。
+     */
+    data class DebugEvent(
+        val kind: Int,
+        val message: String,
+        val timestamp: Long = System.currentTimeMillis(),
+        val elapsedMillis: Long = timestamp - startTime,
+    )
+
+    private const val MAX_EVENT_ENTRIES = 1000
+    private val _events = MutableStateFlow<List<DebugEvent>>(emptyList())
+    val events: StateFlow<List<DebugEvent>> = _events.asStateFlow()
+
+    /** 新调试会话开始前清空事件流（UI 侧调用；@Synchronized 防与 log() 并发丢条目/竞态） */
+    @Synchronized
+    fun clearEvents() {
+        _events.value = emptyList()
+    }
 
     @Synchronized
     fun log(
@@ -42,9 +88,26 @@ object Debug {
     ) {
         // P0 截断保护：单点截断覆盖下游 Log.d + callback + isChecking 分支（复用 AppLog.truncateSafely 避免循环依赖）
         val safeMsg = AppLog.truncateSafely(msg)
-        if (BuildConfig.DEBUG) {
+        // 批次E：logcat 守卫放宽——recordLog 开启时 release 包也输出（调试是用户主动行为，
+        // 会话短暂不构成噪音；AI 可 adb logcat -s sourceDebug 从用户真机采集）
+        if (BuildConfig.DEBUG || AppLog.recordLogEnabled()) {
             Log.d("sourceDebug", safeMsg)
         }
+        // 批次E：会话缓冲同步写入（不受 callback 过滤影响，全量留痕）
+        var bufferMsg = if (isHtml) HtmlFormatter.format(safeMsg) else safeMsg
+        if (showTime) {
+            val time = debugTimeFormat.format(Date(System.currentTimeMillis() - startTime))
+            bufferMsg = "$time $bufferMsg"
+        }
+        sessionLines.addLast(bufferMsg)
+        while (sessionLines.size > MAX_SESSION_LINES) {
+            sessionLines.removeFirst()
+        }
+        // debug-page-redesign AD-01：同步发射结构化事件（log() 已 @Synchronized，追加无竞态）
+        _events.value = (_events.value + DebugEvent(
+            kind = state,
+            message = bufferMsg,
+        )).takeLast(MAX_EVENT_ENTRIES)
         //调试信息始终要执行
         callback?.let {
             if ((debugSource != sourceUrl || !print)) return
@@ -78,8 +141,11 @@ object Debug {
         log(debugSource, msg ?: "", true)
     }
 
+    @Synchronized
     fun cancelDebug(destroy: Boolean = false) {
         tasks.clear()
+        // 批次E：会话结束（新调试开始或页面销毁）时清空缓冲，避免跨会话串日志（同锁防与 log()/getSessionLogs 并发）
+        sessionLines.clear()
 
         if (destroy) {
             debugSource = null

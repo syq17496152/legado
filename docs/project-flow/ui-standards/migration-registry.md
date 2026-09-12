@@ -171,6 +171,16 @@
 | F3 | `ui/main/explore/ExploreFragment.kt` showDiscoverKindsDialog（发现 Kind 选择） | **登记保留**：非「标题+动态 Kind 列表+点击回调」简单结构——5 种 Kind 控件（url/button/toggle/select/text）均经 SourceLoginJsExtensions 执行源 JS 并以 reUiView 回调直接引用 ItemFindBookBinding 重渲染 flexbox，叠加 SwipeRefreshLayout/RotateLoading/自定义窗口尺寸与 View 强耦合；等价迁移需整体重写源 JS 交互协议，风险大于收益 | [ ] 保留（专项重写需连 SourceLogin JS 扩展交互契约一并设计，建议单开专项） |
 | F4 | `ui/book/read/SelectionWebSearchDialog.kt`（626 行，划词搜索） | **登记保留**：BottomSheet 主体为 WebView 承载——WebViewPool 池化复用 + hideCss 注入（JS/HTML 双通道）+ shouldInterceptRequest 重写主文档 + BottomSheetBehavior.isDraggable 与 WebView canScrollVertically/触摸事件联动 + 返回键 WebView 历史栈；引擎 chip 列表仅一排小件，部分迁移收益极低且 AndroidView 桥接引入新风险 | [ ] 保留（专项重写建议：整体重设计为 Compose 壳 + AndroidView 包 WebView，先固化「sheet 拖拽 ↔ WebView 滚动」联动契约再动壳；编辑入口 SelectionSearchEngineManageDialog 已是 ComposeDialogFragment 无需再动） |
 
+## 六.5 遗留弹窗底色源切换登记（dialog-transparent-bg-fix，2026-09-11）
+
+> 背景：背景图模式下 `Context.backgroundColor` 返回 TRANSPARENT（主界面沉浸原语），遗留 View 弹窗经 `filletBackground` 误消费导致整窗透明穿帮（典型：订阅源页码 NumberPickerDialog）。修复 = 弹窗窗口底色统一切 `Context.dialogSurfaceBackground`（themeCardColor → `R.color.dialog_surface` 日 #FFF/夜 #1C1C1E 兜底，`UiCorner.opaqueRounded`+`panelRadius` 不透明），与 ComposeDialogFragment 弹框族取色口径对齐。**豁免口径**：遗留弹窗（alert{} DSL 25 豁免文件 / NumberPickerDialog 9 调用方 / ColorPreference / prefs 三兄弟）暂不迁移 Compose 基线，其底色视同已按基线来源管理；新增弹窗仍一律走 9 大工厂。
+
+| 处 | 文件 | 处置 | 状态 |
+|----|------|------|------|
+| D1 | `utils/DialogExtensions.kt` `AlertDialog.applyTint()` | filletBackground→dialogSurfaceBackground（公共入口，覆盖 alert{} DSL、NumberPickerDialog 全部调用方、ColorPreference） | [x] ✅ compileAppDebugKotlin 通过（2026-09-11） |
+| D2 | `utils/DialogExtensions.kt` `Dialog.applyModernWindowStyle()`（死代码，零调用） | 同步换源，防启用时复活 bug | [x] ✅ 同上 |
+| D3 | `lib/prefs/ListPreferenceDialog.kt` / `MultiSelectListPreferenceDialog.kt` / `EditTextPreferenceDialog.kt` | 手动 setBackgroundDrawable 同步换源 | [x] ✅ 同上 |
+
 ## 七、compose-migration-status-audit 基线校准登记（B1/B2 批次，2026-08-30）
 
 > 权威源 = `docs/specs/compose-migration-status-audit/design.md` 页级总表（AD-01：进度以本表为唯一权威，本块为 B1 校准+B2 冻结的登记落点）。

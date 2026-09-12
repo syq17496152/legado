@@ -1029,7 +1029,12 @@ object ExoPlayerHelper {
         // cronet 用户开关（AppConfig.isCronet，PreferKey.cronet 默认 false）仅控制 OkHttp builder
         // 是否装配 Cronet interceptor（爬取链路），与视频链路此处 cronetDataFactory 无条件装配
         // （cronetEngine 非空即优先 Cronet、失败回退 OkHttp）是两条独立逻辑，互不联动。
-        val upstreamFactory = cronetDataFactory ?: okhttpDataFactory
+        // video-proxy-m3u8-403 AD-04（2026-09-12）：Cronet TLS 握手被部分 CDN 拒绝（ERR_SSL_VERSION_OR_CIPHER_MISMATCH，
+        // 实测：壳域名可过、站点B 密钥域名被拒），与既有铁证（部分 CDN 拒 OkHttp 仅 Cronet 能过）方向相反——
+        // 两类 CDN 各拒一种 TLS 栈。Cronet 优先 + TLS 失败自动回退 OkHttp，单请求粒度、无状态
+        val upstreamFactory: DataSource.Factory = cronetDataFactory?.let { cronet ->
+            TlsFallbackDataSourceFactory(cronet, okhttpDataFactory)
+        } ?: okhttpDataFactory
         // P0-3-cache-play 接线：视频缓存总开关（VideoPlay.videoCache，默认开启）
         // 开启：走 CacheDataSource + SimpleCache 边下边缓存（回看重播零流量、可秒拖缓存区间）
         // 关闭：仅直连播放，不写磁盘缓存（省存储）

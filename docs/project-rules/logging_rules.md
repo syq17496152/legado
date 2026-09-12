@@ -43,7 +43,7 @@
 
 ---
 
-## 三层日志体系
+## 日志体系（三系统 + 业务侧第四通道）
 
 ### 第一层：AppLog（核心日志，面向用户/调试）
 
@@ -90,6 +90,26 @@ AppLog.put("保存成功", toast = true)
 - 仅在 `BuildConfig.DEBUG` 时输出到 Logcat
 - 提供 e/d/i/w 四个级别
 
+### 第四通道：Debug（业务侧调试源日志，独立于 AppLog——用户裁决不并入）
+
+- 文件：`model/Debug.kt`（object 单例）
+- **定位**：书源/订阅源「调试源」功能的业务日志（`BookSourceDebugActivity` / `RssSourceDebugActivity`），面向**用户排障自己的规则**，与 AppLog（系统/模块日志）职责不同，**不并入 AppLog**（2026-09-11 用户裁决：不期望一套）
+- 数据流：`Debug.log()` → ①logcat（tag=`sourceDebug`，守卫=`BuildConfig.DEBUG || AppLog.recordLogEnabled()`，recordLog 开启时 release 也可 `adb logcat -s sourceDebug` 采集）→ ②**会话环形缓冲**（上限 500 行，`Debug.getSessionLogs()` 全文读取，新会话/页面销毁时清空）→ ③UI 实时列表（callback）→ ④校验摘要（`debugMessageMap`，isChecking 场景）
+- **结构化事件流（debug-page-redesign AD-01，2026-09-11）**：`Debug.events: StateFlow<List<DebugEvent>>`（上限 1000，takeLast），每条含 kind/message/timestamp/elapsedMillis；kind 复用 state 码（1 过程/-1 错误/1000 完成/10 搜索(列表)响应/20 详情(内容)响应/30 目录响应/40 正文响应）。调试页 UI 消费事件流（过滤 Chips + 着色卡片），callback 保留供校验链，**新增调试消费方一律优先订阅 events，不要再挂 callback**
+- **导出**：两个调试页顶栏菜单「导出日志」= 复制到剪贴板（`sendToClip`）/ 分享 txt 文件（cacheDir + FileProvider）
+- 守卫语义：单条消息经 `AppLog.truncateSafely` 截断（2000 字符）；缓冲环形淘汰防内存膨胀；调试会话有限时长，无需节流
+- **脱敏豁免说明**：调试日志面向用户自己的源数据（含完整 URL/规则），不强制走 AI 层脱敏铁律；但 AI 分析用户提供的调试日志导出文件时，**输出侧仍按 `.trae/rules/output-safety.md` 代号化**
+- 使用规则：书源/订阅源调试链路内的过程日志用 `Debug.log(debugSource, msg)`；**禁止**在调试链路混用 `AppLog.put*`（用户日志列表会被业务调试过程污染），也禁止反向把系统日志塞给 Debug
+
+## 四通道总表（2026-09-11 增补）
+
+| 通道 | 载体 | 守卫 | 去向 | 适用 |
+|------|------|------|------|------|
+| AppLog | `constant/AppLog.kt` | recordLog 门控 DEBUG 级 | 内存 500 + 文件 + logcat | 系统/模块日志（用户可感知错误、状态迁移、诊断埋点） |
+| LogUtils | `utils/LogUtils.kt` | recordLog | 文件（7 天轮转） | AppLog 的落盘底层，不直接调用 |
+| DebugLog | `utils/DebugLog.kt` | BuildConfig.DEBUG | 仅 logcat | 开发期调试 + **验证期临时日志唯一合法载体**（见下方条款五） |
+| Debug | `model/Debug.kt` | DEBUG 守卫（logcat 部分放宽至 recordLog） | UI 实时 + 会话缓冲（500 行）+ logcat | 书源/订阅源调试源业务日志，独立不并入 |
+
 ## recordLog 开关语义（log-system-upgrade AD-01/AD-02）
 
 - **默认值按包类型区分**：无用户偏好值时，debug 测试包默认 `true`、release 正式包默认 `false`（`AppConfig.recordLog` getter 按 `BuildConfig.DEBUG` 取默认）；用户显式设置后以设置为准（两类包行为一致）
@@ -119,9 +139,19 @@ AppLog.put("保存成功", toast = true)
 4. **禁止**直接使用 `android.util.Log`（release 构建会被 ProGuard 移除）。例外：改造验证期允许临时使用 Log.d/Log.e 打验证日志（统一自定义 tag），验证通过后必须 Grep 确认 0 残留并移除（见 logging-during-refactoring.md 双轨制）
 5. **禁止**使用 Timber（项目未引入）
 
+## 条款五：验证期临时日志强制 DebugLog（2026-09-11 增补，机制化）
+
+- 改造验证期需要打临时验证日志时，**统一用 `DebugLog`**（自带 `BuildConfig.DEBUG` 守卫 + 统一功能性 tag），**禁止用裸 `android.util.Log` 作为临时日志载体**——裸 Log 忘清理的后果是 release 包噪音（铁证：PageDebug 2110 条），DebugLog 忘清理 release 也零输出，机制上消除后果
+- 验证闭环后的清理要求不变：Grep tag 确认 0 残留并移除（logging-during-refactoring.md 双轨制）
+
+## 条款六：完成声称 Grep 证据门禁（2026-09-11 增补，机制化）
+
+- 任务勾选 `[x]` 涉及"已删除/已清零/已同步"类声称时，**必须附 Grep 校验证据**（模式 + 命中数），禁止口头声称——铁证：real-device-bugfix-0911 tasks 2.19 声称"PageDebug 已删"，实际 5 文件 7 处残留
+- 审计 Grep 模式注意：`Log\.(d|e|w|i|v)\(` 会把 `DebugLog.x(` / `LogUtils.x(` **子串误报**为裸 Log 违规，正确模式为 `^import android\.util\.Log$`（import 定性）或加负向排除（AD-03 v1.1，log-compliance-cleanup 实施期实证）
+
 ## 模块 Tag 规范
 
-> 登记规则（总线 X6）：本表按 `constant/AppLog.kt` TAG 常量**实际全集**登记，**2026-09-11 源码实测 31 个**（本表原记 30 个，缺 `TAG_TTS_TRACE`，已按 Grep `const val TAG_` 补全）；不锚定历史 26 TAG 基线；ng P1/P2 等分期新增 Tag 按落地顺序顺延，**新增/修改 TAG 时必须同步更新本表与下节 fromTag 映射**（对照流程：Grep `TAG_` 常量定义 + `putDebugWithTag` 调用点全集 + 字面量 tag）。
+> 登记规则（总线 X6）：本表按 `constant/AppLog.kt` TAG 常量**实际全集**登记，**2026-09-11 log-compliance-cleanup 后实测 36 个**；不锚定历史 26 TAG 基线；ng P1/P2 等分期新增 Tag 按落地顺序顺延，**新增/修改 TAG 时必须同步更新本表与下节 fromTag 映射**（对照流程：Grep `TAG_` 常量定义 + `putDebugWithTag` 调用点全集 + 字面量 tag）。
 
 | Tag 常量 | 值 | 归属模块（C5 预登记） | 调用点状态 |
 |---------|-----|---------|------|
@@ -155,8 +185,13 @@ AppLog.put("保存成功", toast = true)
 | `TAG_SOURCE_DIALOG` | `"SourceDialog"` | SOURCE_NETWORK | 在用（JsExtensions P0-S3） |
 | `TAG_SOURCE_CACHE` | `"SourceCache"` | SOURCE_NETWORK | 在用（SourceHelp/BookSourceCacheStore P0-S2） |
 | `TAG_SOURCE_GUARD` | `"SourceGuard"` | SOURCE_NETWORK | 在用（BookSourceGuardLog P0-S4） |
+| `TAG_IMG_DECRYPT` | `"ImgDecrypt"` | IMAGE | 在用（OkHttpStreamFetcher 图片加载/解密链路；log-compliance-cleanup 收编，**值沿用既有采集 tag 不变**） |
+| `TAG_HLS_REMUX` | `"HlsRemux"` | VIDEO | 在用（HlsDownloader HLS 转封装诊断，正式诊断链只降频不删除） |
+| `TAG_RSS_SOURCE_EDIT` | `"RssSourceEdit"` | RSS | 在用（RssSourceEditViewModel clearCookie） |
+| `TAG_CRASH_REPORT` | `"CrashReport"` | GENERAL | 在用（MainActivity 崩溃栈回灌） |
+| `TAG_DEVICE_INFO` | `"DeviceInfo"` | VIDEO | 在用（ExoPlayer DeviceInfoHelper 播放域设备信息） |
 
-统计：**31 常量** = 本表登记 30 + `TAG_TTS_TRACE`（TtsTrace 正式诊断日志，后增，分组归属待定）；原分布快照（30）= SOURCE_NETWORK 14 / READING 5 / IMAGE 4 / PERFORMANCE 3 / GENERAL 3 / RSS 1；死常量 3（TAG_WEB_VIEW / TAG_SHELF_PROGRESS / TAG_SOURCE_SANDBOX，保留待后续分期接线，不删除）。
+统计：**36 常量**（2026-09-11 log-compliance-cleanup 后：原 31 + 收编新增 5）；分布快照 = SOURCE_NETWORK 14 / READING 5 / IMAGE 5 / PERFORMANCE 3 / GENERAL 4 / RSS 2 / VIDEO 2 / TtsTrace 1；死常量 3（TAG_WEB_VIEW / TAG_SHELF_PROGRESS / TAG_SOURCE_SANDBOX，保留待后续分期接线，不删除）。
 
 ai_tests 可通过 `adb logcat -s WebBook:E AnalyzeRule:E` 精确过滤模块日志；文件日志可按 Tag grep 定位模块。
 
@@ -246,13 +281,14 @@ AppLog.putDebugWithTag(AppLog.TAG_HTTP, "请求路径=/path/{id} code=${response
 - 新增/修改 TAG（ng P1/P2 等）按落地顺序顺延，同一次提交内同步：AppLog 常量 → 本文档两表 → fromTag 代码分支 → LogModuleFromTagTest 断言。
 - 死常量（TAG_WEB_VIEW/TAG_SHELF_PROGRESS/TAG_SOURCE_SANDBOX）保留登记不删除，接线时直接按本表归属模块实现。
 
-### 字面量 tag 调用点现状（实施时收编清单）
+### 字面量 tag 调用点现状（~~实施时收编清单~~ ✅ 2026-09-11 已全部收编，log-compliance-cleanup 批次D）
 
-| 字面量值 | 调用点 | 与常量关系 | 实施建议 |
-|---------|--------|-----------|---------|
-| `"WebDavBackup"` | AppWebDav.kt（3 处） | = `TAG_WEBDAV_BACKUP` 值 | 收编为常量引用 |
-| `"DeviceInfo"` | DeviceInfoHelper.kt（2 处，ExoPlayer 播放域） | 无常量 | 新增 TAG 常量并归 VIDEO（顺延登记本表） |
-| `"RssSourceEdit"` | RssSourceEditViewModel.kt（1 处） | 无常量 | 新增 TAG 常量并归 RSS（顺延登记本表） |
-| `"CrashReport"` | MainActivity.kt（1 处，崩溃上报） | 无常量 | 新增 TAG 常量并归 GENERAL（顺延登记本表） |
+| 字面量值 | 调用点 | 收编结果 |
+|---------|--------|---------|
+| `"WebDavBackup"` | AppWebDav.kt（3 处） | ✅ → `TAG_WEBDAV_BACKUP` 常量引用 |
+| `"DeviceInfo"` | DeviceInfoHelper.kt（2 处，ExoPlayer 播放域） | ✅ → 新增 `TAG_DEVICE_INFO` 归 VIDEO |
+| `"RssSourceEdit"` | RssSourceEditViewModel.kt（1 处） | ✅ → 新增 `TAG_RSS_SOURCE_EDIT` 归 RSS |
+| `"CrashReport"` | MainActivity.kt（1 处，崩溃上报） | ✅ → 新增 `TAG_CRASH_REPORT` 归 GENERAL |
+| `"ImgDecrypt"` | OkHttpStreamFetcher.kt（companion TAG，5 处裸 Log.e 同步收编） | ✅ → 新增 `TAG_IMG_DECRYPT` 归 IMAGE（值不变） |
 
-> 未收编前这些字面量在 fromTag 中 miss → `callerModule()` 兜底，行为可接受；C5 实施批次按上表顺延收编。
+> 实施时新增的收编注意：OkHttpStreamFetcher 原裸 `Log.e` 中 `url.take(80)` 属完整 URL 泄露，收编时同步改为长度化脱敏（`urlLen=`）。fromTag（C5）实施时按本表归属模块登记即可。

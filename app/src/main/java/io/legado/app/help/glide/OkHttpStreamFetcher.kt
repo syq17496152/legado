@@ -1,6 +1,5 @@
 package io.legado.app.help.glide
 
-import android.util.Log
 import com.bumptech.glide.Priority
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.HttpException
@@ -56,7 +55,7 @@ class OkHttpStreamFetcher(
     private var call: Call? = null
 
     companion object {
-        private const val TAG = "ImgDecrypt"
+        // log-compliance-cleanup 2.6: 原 TAG="ImgDecrypt" 字面量收编为 AppLog.TAG_IMG_DECRYPT（值不变）
 
         /**
          * F-P1-C4：失败 URL 短路缓存（上限 200 条不变）。
@@ -133,8 +132,13 @@ class OkHttpStreamFetcher(
         if (sourceUrl != null) {
             source = SourceHelp.getSource(sourceUrl)
         }
-        // 使用 Log.e 直接输出到 logcat（不依赖 AppLog），确保诊断信息必定可见
-        Log.e(TAG, "loadData: source=${source?.getKey()}, manga=$manga")
+        // log-compliance-cleanup 2.6: 裸 Log.e 收编 AppLog（沿用既有采集 tag 值 ImgDecrypt；
+        // putDebugWithTag 在 recordLog 关闭时 ERROR/WARN/INFO 仍输出 logcat，诊断可见性不降级）
+        AppLog.putDebugWithTag(
+            AppLog.TAG_IMG_DECRYPT,
+            "loadData: source=${source?.getKey()}, manga=$manga",
+            level = AppLog.Level.INFO
+        )
 
         analyzedUrl = AnalyzeUrl(
             url.toString(),
@@ -151,7 +155,11 @@ class OkHttpStreamFetcher(
             && analyzedUrl.headers["referer"] == null
         ) {
             requestBuilder.addHeader("Referer", referer)
-            Log.e(TAG, "inject Referer from refererOption: refererLen=${referer.length}")
+            AppLog.putDebugWithTag(
+                AppLog.TAG_IMG_DECRYPT,
+                "inject Referer from refererOption: refererLen=${referer.length}",
+                level = AppLog.Level.INFO
+            )
         }
         val request: Request = requestBuilder.build()
         this.callback = callback
@@ -186,7 +194,13 @@ class OkHttpStreamFetcher(
     }
 
     override fun onFailure(call: Call, e: IOException) {
-        Log.e(TAG, "onFailure: url=${url.toStringUrl().take(80)}, error=${e.message}")
+        // log-compliance-cleanup 2.6: 脱敏修正——URL 只记长度，禁止完整 URL 进日志（logging_rules 脱敏铁律）
+        AppLog.putDebugWithTag(
+            AppLog.TAG_IMG_DECRYPT,
+            "onFailure: urlLen=${url.toStringUrl().length}, error=${e.message}",
+            e,
+            level = AppLog.Level.ERROR
+        )
         // sniff-result-pipeline-fix FR-3: StreamResetException 不写入 failUrl
         // 根因：StreamReset 是 HTTP/2 流重置，连接池连接未淘汰，下次复用仍失败
         // 方案：StreamResetException 不写入 failUrl，允许后续请求重试（配合 StreamResetRetryInterceptor）
@@ -237,13 +251,22 @@ class OkHttpStreamFetcher(
                     val contentLength = responseBody?.contentLength() ?: -1
                     when {
                         MemoryPressure.isSmallHeap && contentLength > SKIP_DECODE_SIZE_BYTES -> {
-                            Log.e(TAG, "small-heap skip decode: len=$contentLength url=${analyzedUrl.toStringUrl().take(60)}")
+                            // log-compliance-cleanup 2.6: 收编 + 脱敏（URL 只记长度）
+                            AppLog.putDebugWithTag(
+                                AppLog.TAG_IMG_DECRYPT,
+                                "small-heap skip decode: len=$contentLength urlLen=${analyzedUrl.toStringUrl().length}",
+                                level = AppLog.Level.WARN
+                            )
                             responseBody!!.byteStream()
                         }
                         MemoryPressure.isSmallHeap && contentLength < 0 -> {
                             val bounded = readBounded(responseBody!!, SKIP_DECODE_SIZE_BYTES)
                             if (bounded.exceeded) {
-                                Log.e(TAG, "small-heap skip decode: len=unknown(>limit) url=${analyzedUrl.toStringUrl().take(60)}")
+                                AppLog.putDebugWithTag(
+                                    AppLog.TAG_IMG_DECRYPT,
+                                    "small-heap skip decode: len=unknown(>limit) urlLen=${analyzedUrl.toStringUrl().length}",
+                                    level = AppLog.Level.WARN
+                                )
                                 SequenceInputStream(
                                     ByteArrayInputStream(bounded.bytes),
                                     responseBody!!.byteStream()

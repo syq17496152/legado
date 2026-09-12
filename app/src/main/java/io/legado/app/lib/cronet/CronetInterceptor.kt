@@ -61,10 +61,8 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
         // 方案：HTTP/2 协议错误降级时长从 5 分钟缩短到 1 分钟，其他协议错误保持 5 分钟
         private const val HTTP2_PROTOCOL_ERROR_DEGRADE_INTERVAL_MS = 60 * 1000L // 1 分钟
 
-        // 日志去重：相同错误消息 60 秒内只记一次，避免高频失败刷屏
-        @Volatile private var lastLoggedError: String? = null
-        @Volatile private var lastLoggedErrorTime = 0L
-        private const val LOG_DEDUP_INTERVAL_MS = 60_000L
+        // log-compliance-cleanup 2.10: 原 lastLoggedError/lastCertError 手写 60s 日志去重轮子
+        // 已收编 AppLog.putThrottled（F9 条款三单点收编），状态字段与 LOG_DEDUP_INTERVAL_MS 删除
 
         // V3-FR-6: 独立常量，仅用于恢复探测触发检查（L96 currentIntervalMs 计算）
         // 原因：RECOVERY_PROBE_INTERVAL_MS 被 L96/L239/L261/L277 共4处使用
@@ -72,10 +70,8 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
         // 方案：新增独立常量仅用于恢复探测触发检查，保持 RECOVERY_PROBE_INTERVAL_MS 不变
         private const val RECOVERY_PROBE_CHECK_INTERVAL_MS = 3 * 60 * 1000L  // 3分钟
 
-        // V3-FR-2: 证书错误单独去重状态（不与协议错误共享 lastLoggedError）
-        // 原因：证书错误降级 OkHttp 后不累计降级计数，日志频率可能与协议错误不同
-        @Volatile private var lastCertError: String? = null
-        @Volatile private var lastCertErrorTime = 0L
+        // V3-FR-2: 证书错误与协议错误的节流窗口已由 putThrottled 的 key 前缀天然隔离
+        // （key="CERT:..."），无需独立状态字段
 
         // BUG6-V2 fix: 记录最近一次协议错误对应的 host（路径模式化存储，仅保留域名哈希前缀）
         // 恢复探测时优先放行该 host 的请求，避免可达 host 探测成功但失败 host 仍不可达导致震荡
@@ -122,35 +118,29 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
             errorMsg.contains("ERR_NAME_NOT_RESOLVED", true)
 
         /**
-         * V3-FR-2: 证书错误日志去重（60s 内相同错误只记一次）
-         *
-         * 使用 lastCertError/lastCertErrorTime（不与协议错误共享 lastLoggedError）
+         * V3-FR-2: 证书错误日志节流（log-compliance-cleanup 2.10：手写 60s 去重收编
+         * AppLog.putThrottled，key 前缀 CERT 区分窗口；降级/兜底=WARN，F9 级别语义表）
          * 日志明确标识"证书错误降级 OkHttp（复用 SSLHelper 信任所有证书），不累计降级计数"
          */
         private fun logCertError(errMsg: String) {
-            val now = System.currentTimeMillis()
-            val errorKey = "CERT:${errMsg.take(50)}"
-            if (errorKey != lastCertError || now - lastCertErrorTime > LOG_DEDUP_INTERVAL_MS) {
-                AppLog.put("Cronet 证书错误, 降级 OkHttp (复用 SSLHelper 信任所有证书), 不累计降级计数: error=${errMsg.take(80)}")
-                lastCertError = errorKey
-                lastCertErrorTime = now
-            }
+            AppLog.putThrottled(
+                "CERT:${errMsg.take(50)}",
+                "Cronet 证书错误, 降级 OkHttp (复用 SSLHelper 信任所有证书), 不累计降级计数: error=${errMsg.take(80)}",
+                level = AppLog.Level.WARN
+            )
         }
 
         /**
-         * V3-FR-3: NAME_NOT_RESOLVED 日志去重（60s 内相同 host 只记一次）
-         *
-         * 复用 lastLoggedError/lastLoggedErrorTime（与协议错误共享，因为 NAME_NOT_RESOLVED 不累计降级计数）
+         * V3-FR-3: NAME_NOT_RESOLVED 日志节流（log-compliance-cleanup 2.10：收编
+         * AppLog.putThrottled，key 前缀 NAME_NOT_RESOLVED:host 区分窗口）
          * 日志明确标识"DoH failure, not Cronet issue"
          */
         private fun logNameNotResolved(errMsg: String, host: String) {
-            val now = System.currentTimeMillis()
-            val errorKey = "NAME_NOT_RESOLVED:$host"
-            if (errorKey != lastLoggedError || now - lastLoggedErrorTime > LOG_DEDUP_INTERVAL_MS) {
-                AppLog.put("Cronet NAME_NOT_RESOLVED (DoH failure, not Cronet issue), 降级 OkHttp, 不累计降级计数: host=${host.take(3)}***, error=${errMsg.take(60)}")
-                lastLoggedError = errorKey
-                lastLoggedErrorTime = now
-            }
+            AppLog.putThrottled(
+                "NAME_NOT_RESOLVED:$host",
+                "Cronet NAME_NOT_RESOLVED (DoH failure, not Cronet issue), 降级 OkHttp, 不累计降级计数: host=${host.take(3)}***, error=${errMsg.take(60)}",
+                level = AppLog.Level.WARN
+            )
         }
 
         /**
@@ -370,12 +360,14 @@ class CronetInterceptor(private val cookieJar: CookieJar) : Interceptor {
                     AppLog.put("Cronet 启动宽限期内协议错误, 不累计: error=${errMsg.take(80)}")
                 } else {
                     protocolErrorCount++
-                    // 日志去重：相同错误 60 秒内只记一次，避免高频失败刷屏
-                    if (errMsg != lastLoggedError || now - lastLoggedErrorTime > LOG_DEDUP_INTERVAL_MS) {
-                        AppLog.put("Cronet 协议错误，回退到 OkHttp: error=${errMsg.take(80)} (累计 $protocolErrorCount 次)")
-                        lastLoggedError = errMsg
-                        lastLoggedErrorTime = now
-                    }
+                    // log-compliance-cleanup 2.10: 日志节流收编 AppLog.putThrottled（原手写去重
+                    // if 块只包日志输出，protocolErrorCount++ 在块外、计数频率不受影响——红队 R5 实证）；
+                    // 降级/兜底=WARN（F9 级别语义表，原 ERROR 属级别违规）
+                    AppLog.putThrottled(
+                        errMsg,
+                        "Cronet 协议错误，回退到 OkHttp: error=${errMsg.take(80)} (累计 $protocolErrorCount 次)",
+                        level = AppLog.Level.WARN
+                    )
                     if (degradedForSession) {
                         // T4.3: 恢复探测失败——刷新降级计时，下一个 5 分钟再探测（half-open → open）
                         // N-P1-1: 失败即清零连续成功计数（重新累计 2 次才切回）

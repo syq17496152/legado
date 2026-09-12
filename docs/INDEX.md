@@ -6,6 +6,11 @@
 
 ## 🔴 进行中的工作 → 设计中
 
+- [应用内检查更新逻辑修复](./specs/app-update-variant-fix/README.md) - 测试包"更新失败"根因修复：PreferredAppUpdate 吞"已是最新"强制降级 GitHub（tags/beta 404）+ 资产文件名解析未对齐发布命名（三包全解析为 OFFICIAL/versionName="a"，正式包会误更新成测试包）+ 共存包运行时误判测试包变体；AppReleaseInfo/AppUpdate/AppUpdateGitHub/AppConst 四处修正 ✅ 已完成（2026-09-12：单测 8 绿 + 真机 L2 T1/T2 PASS，⏳ 全量 E2E 待补）
+- [updateLog 面向用户重写](./specs/update-log-cleanup/README.md) - 125 个批次条目（0.3MB/1647 行）按天合并为 65 条用户视角日志（58KB/687 行）：去黑话/去重/删纯开发事务，`**YYYY/MM/DD**` 标题保留（publish_release.py 提取依赖）；同日多批改为合并进当天唯一条目，修复"同日多批 Release body 丢条目"缺陷；version-delivery-sync.md 格式章节已同步 ✅ 已完成（2026-09-12）
+- [~~合成壳 ViewBinding 自递归崩溃修复~~](./specs/archive/2026-09-12-compose-shell-binding-fix/README.md) - 真机日志排查驱动：匿名 ViewBinding 壳内 `getRoot()=root` 命中 Java 接口合成属性自递归（dexdump 字节码实锤）致统一搜索详情页必崩 + 同型潜伏雷 2 处（AI 图库/AI 供应商编辑）；`base/ComposeBindingShells.kt` 工厂结构防雷 + 3 雷区迁移 + RssFree 诊断日志 2s 窗口节流（5 调用点白名单制）；附带排查铁证：HlsDownloader MediaMuxer native SIGABRT ×2（立项 hls-download-muxer-overflow）+ 嗅探 5s 超时被阻塞 execute 架空 60s（立项 sniff-timeout-ineffective）+ 自由布局 style=5 空白新复现路径（首屏门控无超时，091200 同样白屏非回归）（扩展路径，红蓝对抗 5 轮 + 用户质询补强）✅ **已完成并归档**（2026-09-12 验收通过：L1 编译过 + L2 详情页/AI 两页真机无崩溃 + Grep 审计零残留；⏳ 场景三占比验证待自由布局空白修复后补 + 全量 E2E 待提权）
+- [鉴权代理视频链接播放修复](./specs/archive/2026-09-12-video-proxy-m3u8-403/README.md) - 「壳即鉴权清单端点」型代理 m3u8（/media/m3u8?url=<编码>&exp&token）被 extractPlayerPageUrl 误解包致裸内层 403（浏览器播壳正常，实测根因闭环）：解包入口加双守卫（路径末段全等 m3u8/mpd/mp4 + 外层鉴权参数 token/sign/auth_key/exp/expires/deadline），8 调用点零改动；开发期真机实测发现第二层故障（站点B CDN 拒 Cronet TLS 握手，与既有 OkHttp 被拒铁证方向相反）→ AD-04 新增 TlsFallbackDataSourceFactory 自动回退 OkHttp（扩展路径，红队 5 轮 + AD-04 迭代回流）✅ 已完成并归档（2026-09-12 验收通过：L2 真机播放成功 首帧 3094ms/READY/30s 零错误，JVM 单测 22 绿；⏳ 全量 E2E 待提权补跑）
+- [内置替换净化规则 id 修复](./specs/archive/2026-09-12-builtin-replace-id-fix/README.md) - 内置净化规则负 id（-1~-12）与编辑页新建哨兵/`id>0` 查库判断冲突致编辑空数据：内置 id 迁移正数 1~12（JSON 写死禁序号推导）+ 存量保数据换 id 迁移（用户修改保留）+ 每次启动无旗标幂等同步（红队 5 轮，AD-03 v1.0→v1.2 双证伪迭代）✅ 已完成并归档（2026-09-12 用户真机验收，commit ce00474）
 - [主题字号日夜生效与预置主题体系](./specs/theme-fontscale-daynight/README.md) - 夜间字号 fontScaleN 死键修复（AppContextWrapper 日夜感知+顶栏5消费点同源）+内置主题字号统一9（2A）+历史17主题资产移除+暗夜紫配置代码内置（日夜变体）+磨砂玻璃晨昏套件压缩入库幂等seeding（AD-01~04，红队2轮闭环） 🔄 设计中
 - [TTS朗读引擎统一优化](./specs/optimize-tts-engine/README.md) - 朗读引擎切换不生效修复（UI写SpeechRoute/服务层读SelectItem分裂）+引擎路由单源化+脚本引擎协议（Rhino沙箱）+MultiTTS/CloneTTS深度适配+在线TTS内置模板库（默认停用） ✅ 期1 实施+期2 扩展实施（模板列表器/管理页编辑器/音色级声源/书级覆盖/试听/AI链/批量预合成，L1+模拟器L2通过，听感留真机，见 specs/optimize-tts-engine-phase2/）
 - [TTS 批次E 加固](./specs/tts-batch-e-hardening/README.md) - 全量审查批次E 六项收尾：AI 预热接线（起播点 fire-and-forget）/保留名单落盘（进程重启防驱逐）/选角模板备份恢复/内置模板首装链+升级刷新/键因子三件套收编（KEY_VERSION v3 冻结）/Rhino 沙箱 TTS 脚本档收紧（app 前缀实拦，书源档零变化） ✅ 已实施（2026-09-10，包 3.26.091014，单测 42 绿）
@@ -26,6 +31,9 @@
 - [批量 UI 修复 0905](./specs/ui-batch-fix-0905/README.md) - 4 项用户反馈：崩溃弹框误弹回归+视频书源沉浸式左下角线路/集数+发现页分组弹窗 Bug 与全前端死菜单清理+经典订阅头部收口（搜索留外/六项收三点/删分组信息列举）✅ 开发完成（T1-T8 L2 真机验证，待用户验收）
 - [真机回归修复 0906](./specs/video-regression-fix-0906/README.md) - 4 项真机反馈：嗅探播放下滑（ExoPlayer 4003 解码竞态重建重试+DoH 死节点熔断+token 竞态观测）+书源切布局死窗（短路重采集）+书源上滑失效（队列兜底注入+集内降级，AD-01 边界增补）+分类列表页三点死按钮接线（45 文件日志脱敏分析+3 路源码探索）✅ 开发完成（S1-S3+T1-T8 L2 真机回归，待用户验收）
 - [日志系统升级改造](./specs/log-system-upgrade/README.md) - 测试包默认详细日志（recordLog 按包类型默认值+DEBUG 级完整落盘+内存 100→500）+ 全屏日志管理中心（应用/崩溃/文件/堆转储 4 Tab：搜索、多选删除、详情、分享、一键清除、导出；右上角三点收口+精准管理三件套菜单收口至统一入口）✅ 开发完成（L1 全勾+编译通过+S3 L2 抽样四 Tab 可达，待用户打包验收）
+- [日志合规清理与规范机制化](./specs/log-compliance-cleanup/README.md) - 2026-09-11 审计驱动：PageDebug 残留清零（5 文件 7 处）+ 核心模块裸 Log 收编（5 文件 21 处，含 OkHttpStreamFetcher URL 脱敏）+ CronetInterceptor 手写去重轮子收编 putThrottled（降级计数耦合已实证解耦）+ HttpHelper DNS 级别修正 + 字面量 tag 收编（TAG 31→36）+ 规范机制化（临时日志强制 DebugLog / Grep 证据门禁 / DebugLog 子串审计纪律）+ 调试源日志第四通道入规范与导出能力 🔄 开发完成待验收
+- [调试源页与调试日志重构](./specs/debug-page-redesign/README.md) - 对标 MD3阅读：Debug 结构化事件流（StateFlow 1000 条）+ 书源/订阅源调试页 Compose 重构（目标 Chips 替代魔法前缀/过滤 Chips/类型着色卡片/耗时+时间戳/点击全文/FAB 启停/清空/导出/示例快捷项/自动滚动）✅ L1 完成（编译+单测），L2 真机/用户验收待做
+- [遗留弹窗背景图模式透明穿帮修复](./specs/archive/2026-09-11-dialog-transparent-bg-fix/README.md) - 背景图模式下 backgroundColor 返回透明被弹窗误消费：applyTint/prefs 三兄弟/applyModernWindowStyle 共 5 处 filletBackground→dialogSurfaceBackground（覆盖 alert{} DSL 25 豁免文件+NumberPickerDialog 9 调用方+ColorPreference），E-Ink 覆写时序不受影响（快速路径，红队 2 轮）✅ 已完成并归档（2026-09-11 验收，包 3.26.091123）
 
 ---
 
