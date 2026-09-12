@@ -40,6 +40,8 @@
 
 ## 4. 收尾
 
-- [ ] 4.1 检查清单七项（敏感词/Grep 临时日志/updateLog/文档同步/沉淀/issues-found/AskUserQuestion）
-- [ ] 4.2 文档同步：`docs/INDEX.md`、`ai_memory_main.md`
-- [ ] 4.3 归档
+- [x] 4.1 检查清单：敏感词扫描✓（内置功能名非业务敏感数据）；Grep `android.util.Log.[de]` help 目录零命中✓；updateLog 第二十九批已更新（文件混并行会话改动，随该会话提交）；文档同步✓（SOP 16u/INDEX/ai_memory_main/工作区记忆）；沉淀✓（十项陷阱入 .workbuddy/memory）；AskUserQuestion✓
+- [x] 4.2 文档同步：INDEX 条目已置完成（工作区）；ai_memory_main 已更新 v1.2 终态
+- [x] 4.3 归档：docs/specs/archive/2026-09-12-builtin-replace-id-fix/（commit ce00474 已推送）
+- 验收记录：2026-09-12 用户真机覆盖安装 091214 v1.2 包，确认编辑回显正常（AskUserQuestion「已装包，编辑正常了」）
+- 遗留：全量 E2E 完整重跑顺延（UAC 提权已跑 51 用例零 fail）；INDEX/updateLog/LocalConfig 混并行会话改动，由该会话随其提交入库
