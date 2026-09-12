@@ -39,10 +39,6 @@ object DefaultData {
                 if (LocalConfig.needUpDictRule) {
                     importDefaultDictRules()
                 }
-                // F7/4.10：替换净化内置规则首装/升级导入（只追加缺失 id）
-                if (LocalConfig.needUpReplaceRules) {
-                    importDefaultReplaceRules()
-                }
                 // E4/F-2：选角模板首装/升级导入（importBuiltinTemplates 自带 id 幂等，无需 delete）
                 if (LocalConfig.needUpTtsCastingTemplates) {
                     importDefaultTtsCastingTemplates()
@@ -50,6 +46,16 @@ object DefaultData {
             }.onError {
                 it.printOnDebug()
             }
+        }
+        // F7/4.10 + builtin-replace-id-fix：替换净化内置同步每次启动幂等执行（AD-03 v1.2 修订）。
+        // 不用 per-key 旗标的原因：isLastVersion「读后即写回」——评估与执行非原子，执行被打断后
+        // 机会永久丢失（实测：启动 18s 内 force-stop，旗标已写 2 但迁移未跑，之后永不触发）。
+        // 本操作幂等：负行迁移 + insertIfAbsent(IGNORE) 缺失追加，无变化时零写盘、静默不打日志；
+        // 开销仅每次启动 12 次 findById + 12 次 IGNORE 检查，微秒级，可忽略。
+        Coroutine.async {
+            importDefaultReplaceRules()
+        }.onError {
+            it.printOnDebug()
         }
     }
 
@@ -105,7 +111,7 @@ object DefaultData {
         GSON.fromJsonArray<DictRule>(json).getOrThrow()
     }
 
-    /** F7/4.10：内置替换净化规则资产（0→12 条） */
+    /** 替换净化内置规则资产（12 条，id 为正数 1~12；历史版本曾用负 id -1~-12，已迁移） */
     val replaceRules: List<io.legado.app.data.entities.ReplaceRule> by lazy {
         val json = String(
             appCtx.assets.open("defaultData${File.separator}replaceRules.json")
@@ -165,12 +171,39 @@ object DefaultData {
         }
     }
 
-    /** F7/4.10：替换净化内置规则导入（0→12 条，只追加缺失 id，insertIfAbsent IGNORE） */
+    /**
+     * F7/4.10 + builtin-replace-id-fix：替换净化内置规则同步（共 12 条内置，id 为 JSON 写死的 1~12 正数）。
+     * 每次启动由 upVersion() 幂等调用（无旗标），三分支逻辑：
+     * 1) 存在旧负 id 行（-N，F7/4.10 首版写入）→ 保数据换 id：旧行内容原样 copy 到新 id（保留用户修改），
+     *    再删负行。新 id 槽位已被占（撞 id）时用户数据优先：跳过写入，负行修改丢弃（概率极低）。
+     * 2) 无旧负行 → insertIfAbsent 幂等追加（首装/新增内置规则推送语义，不重置用户对已有规则的修改）。
+     * 全程无变化时零写盘、不打日志（migrated/added 均为 0 时静默）。
+     * 注意：新 id 必须取 JSON 写死的 builtin.id，禁止用遍历序号推导——避免未来 JSON 插删规则导致存量 id 映射漂移。
+     */
     fun importDefaultReplaceRules() {
         runBlocking(IO) {
-            val inserted = appDb.replaceRuleDao.insertIfAbsent(*replaceRules.toTypedArray())
-            val added = inserted.count { it == -1L }
-            AppLog.put("内置替换净化规则导入：新增 $added 条（共 ${replaceRules.size} 条内置）")
+            val dao = appDb.replaceRuleDao
+            var migrated = 0
+            var added = 0
+            replaceRules.forEach { builtin ->
+                val old = dao.findById(-builtin.id)
+                if (old != null) {
+                    // 保数据换 id：保留用户对内置规则的修改（pattern/isEnabled 等）
+                    // 新 id 槽位被占（撞 id）时用户数据优先：跳过写入，负行修改丢弃（AD-01 tradeoff）
+                    if (dao.findById(builtin.id) == null) {
+                        dao.insert(old.copy(id = builtin.id))
+                    }
+                    dao.delete(old)
+                    migrated++
+                } else {
+                    if (dao.insertIfAbsent(builtin).firstOrNull() != -1L) {
+                        added++
+                    }
+                }
+            }
+            if (migrated > 0 || added > 0) {
+                AppLog.put("内置替换净化规则同步：迁移 $migrated 条、新增 $added 条（共 ${replaceRules.size} 条内置）")
+            }
         }
     }
 }
