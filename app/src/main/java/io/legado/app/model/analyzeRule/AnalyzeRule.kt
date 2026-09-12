@@ -1,7 +1,6 @@
 package io.legado.app.model.analyzeRule
 
 import android.text.TextUtils
-import android.util.Log
 import androidx.annotation.Keep
 import com.google.gson.internal.LinkedTreeMap
 import com.script.CompiledScript
@@ -441,11 +440,20 @@ class AnalyzeRule(
             return when (it) {
                 is List<*> -> it as List<Any>
                 is String -> {
-                    Log.d("AnalyzeRule", "getElements type wrap: String -> List (len=${it.length})")
+                    // log-compliance-cleanup 2.4: 裸 Log.d 收编 AppLog（类型包装过程细节=DEBUG，仅 recordLog 开时记录）
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_ANALYZE,
+                        "getElements type wrap: String -> List (len=${it.length})",
+                        level = AppLog.Level.DEBUG
+                    )
                     listOf(it)
                 }
                 else -> {
-                    Log.d("AnalyzeRule", "getElements type wrap: ${it.javaClass.simpleName} -> List")
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_ANALYZE,
+                        "getElements type wrap: ${it.javaClass.simpleName} -> List",
+                        level = AppLog.Level.DEBUG
+                    )
                     listOf(it)
                 }
             }

@@ -1,195 +1,114 @@
 package io.legado.app.ui.rss.source.debug
 
-import android.annotation.SuppressLint
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
-import android.view.View
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.lifecycle.lifecycleScope
+import androidx.core.content.FileProvider
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.databinding.ActivityRssSourceDebugBinding
-import io.legado.app.help.source.sortUrls
-import io.legado.app.lib.dialogs.selector
-import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
-import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.primaryColor
+import io.legado.app.model.Debug
 import io.legado.app.ui.theme.LegadoTheme
-import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
-import io.legado.app.ui.widget.components.SettingsSearchBar
+import io.legado.app.ui.widget.components.TopBarActionRow
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.dialog.TextDialog
-import io.legado.app.utils.applyNavigationBarPadding
-import io.legado.app.utils.setEdgeEffectColor
+import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
-import kotlinx.coroutines.launch
-import splitties.views.onClick
-import splitties.views.onLongClick
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-
+/**
+ * debug-page-redesign：订阅源调试页宿主（UI 全量 Compose；原 AD-20 内核桥接撤销）。
+ * 保留能力：intent 传源 key、弹框全文（TextDialog TEXT）、导出日志（批次E）。
+ */
 class RssSourceDebugActivity : VMBaseActivity<ActivityRssSourceDebugBinding, RssSourceDebugModel>() {
 
     override val binding by viewBinding(ActivityRssSourceDebugBinding::inflate)
     override val viewModel by viewModels<RssSourceDebugModel>()
 
-    private val adapter by lazy { RssSourceDebugAdapter(this) }
-    private var composeSearchQuery by mutableStateOf("")
-    private var menuExpanded by mutableStateOf(false)
-
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initComposeTopBar()
-        initRecyclerView()
-        openOrCloseHelp(true)
-        viewModel.initData(intent.getStringExtra("key")) {
-            initHelpView()
-        }
-        viewModel.observe { state, msg ->
-            lifecycleScope.launch {
-                adapter.addItem(msg)
-                if (state == -1 || state == 1000) {
-                    binding.rotateLoading.gone()
-                }
-            }
-        }
+        initTopBar()
+        initComposeHost()
+        viewModel.initData(intent.getStringExtra("key")) {}
     }
 
-    private fun initComposeTopBar() {
+    private fun initTopBar() {
         binding.composeTopBar.setContent {
             LegadoTheme {
-                Column {
-                    GlassTopAppBar(
-                        title = getString(R.string.debug_source),
-                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                        onNavClick = { finish() },
-                        actions = {
-                            // 更多菜单
-                            Box {
-                                IconButton(onClick = { menuExpanded = true }) {
-                                    Icon(Icons.Default.MoreVert, contentDescription = null)
-                                }
-                                AppDropdownMenu(
-                                    expanded = menuExpanded,
-                                    onDismiss = { menuExpanded = false },
-                                    actions = buildMenuActions()
-                                )
-                            }
-                        }
-                    )
-                    SettingsSearchBar(
-                        query = composeSearchQuery,
-                        onQueryChange = { composeSearchQuery = it },
-                        placeholder = getString(R.string.rss_debug_search_hint),
-                        onSearch = { startSearch(composeSearchQuery) }
-                    )
-                }
+                GlassTopAppBar(
+                    title = getString(R.string.debug_source),
+                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onNavClick = { finish() },
+                    actions = {
+                        TopBarActionRow(
+                            listOf(
+                                MenuAction(title = "清空日志") { viewModel.clearLogs() },
+                                MenuAction(title = getString(R.string.log_export_logs)) { exportDebugLog() },
+                            )
+                        )
+                    },
+                )
             }
         }
     }
 
-    private fun buildMenuActions(): List<MenuAction> {
-        return listOf(
-            MenuAction(
-                Icons.Default.Code,
-                getString(R.string.list_src),
-                onClick = { showDialogFragment(TextDialog("Html", viewModel.listSrc)) }
-            ),
-            MenuAction(
-                Icons.Default.Code,
-                getString(R.string.content_src),
-                onClick = { showDialogFragment(TextDialog("Html", viewModel.contentSrc)) }
-            )
-        )
-    }
-
-    private fun initRecyclerView() {
-        binding.recyclerView.setEdgeEffectColor(primaryColor)
-        binding.recyclerView.adapter = adapter
-        binding.recyclerView.applyNavigationBarPadding()
-        binding.rotateLoading.loadingColor = accentColor
-    }
-
-    @SuppressLint("SetTextI18n")
-    private fun initHelpView() {
-        binding.textMy.onClick {
-            composeSearchQuery = binding.textMy.text.toString()
-            startSearch(composeSearchQuery)
-        }
-        binding.textXt.onClick {
-            composeSearchQuery = binding.textXt.text.toString()
-            startSearch(composeSearchQuery)
-        }
-        binding.textFl.onClick {
-            if (!binding.textFl.text.startsWith("ERROR:")) {
-                composeSearchQuery = binding.textFl.text.toString()
-                startSearch(composeSearchQuery)
-            }
-        }
-        binding.textContent.onClick {
-            if (!composeSearchQuery.isNullOrBlank()) {
-                startSearch(composeSearchQuery)
-            }
-        }
-        initSortKinds()
-    }
-
-    private fun initSortKinds() {
-        lifecycleScope.launch {
-            val sortKinds = viewModel.rssSource?.sortUrls()?.filter {
-                it.second.isNotBlank()
-            }
-            sortKinds?.firstOrNull()?.let {
-                binding.textFl.text = "${it.first}::${it.second}"
-                if (it.first.startsWith("ERROR:")) {
-                    adapter.addItem("${getString(R.string.get_explore_error)}\n${it.second}")
-                    openOrCloseHelp(false)
-                    return@launch
-                }
-            }
-            @Suppress("USELESS_ELVIS")
-            sortKinds?.map { it.first ?: "" }?.let { sortKindTitles ->
-                binding.textFl.onLongClick {
-                    this@RssSourceDebugActivity.showComposeChoiceListDialog(
-                        title = getString(R.string.select_kind),
-                        labels = sortKindTitles
-                    ) { index ->
-                        val sort = sortKinds[index]
-                        binding.textFl.text = "${sort.first}::${sort.second}"
-                        composeSearchQuery = binding.textFl.text.toString()
-                        startSearch(composeSearchQuery)
-                    }
-                }
+    private fun initComposeHost() {
+        binding.composeHost.setContent {
+            LegadoTheme {
+                RssSourceDebugScreen(
+                    sourceName = viewModel.sourceName,
+                    examples = viewModel.examples,
+                    onStart = { key -> viewModel.startDebug(key) { toastOnUi("未获取到订阅源") } },
+                    onCancel = { viewModel.stopDebug() },
+                    onShowFull = { title, content ->
+                        showDialogFragment(TextDialog(title, content, TextDialog.Mode.TEXT))
+                    },
+                )
             }
         }
     }
 
-    /**
-     * 打开关闭辅助面板
-     */
-    private fun openOrCloseHelp(open: Boolean) {
-        binding.help.visibility = if (open) View.VISIBLE else View.GONE
+    /** 导出当前调试会话日志（批次E）：复制全文 / 分享 txt 文件（FileProvider） */
+    private fun exportDebugLog() {
+        val logs = Debug.getSessionLogs()
+        if (logs.isBlank()) {
+            toastOnUi("暂无调试日志")
+            return
+        }
+        showComposeChoiceListDialog(
+            title = getString(R.string.log_export_logs),
+            labels = listOf("复制到剪贴板", "分享 txt 文件")
+        ) { index ->
+            when (index) {
+                0 -> sendToClip(logs)
+                1 -> shareDebugLog(logs)
+            }
+        }
     }
 
-    private fun startSearch(key: String) {
-        openOrCloseHelp(false)
-        adapter.clearItems()
-        val searchKey = key.ifBlank { getString(R.string.rss_debug_my) }
-        viewModel.startDebug(searchKey, {
-            binding.rotateLoading.visible()
-        }, {
-            toastOnUi(getString(R.string.no_rss_source))
-        })
+    private fun shareDebugLog(content: String) {
+        kotlin.runCatching {
+            val fileName = "sourceDebug_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.txt"
+            val file = File(cacheDir, fileName)
+            file.writeText(content)
+            val uri = FileProvider.getUriForFile(this, "${packageName}.fileProvider", file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, getString(R.string.log_export_logs)))
+        }.onFailure {
+            toastOnUi(it.localizedMessage)
+        }
     }
 }

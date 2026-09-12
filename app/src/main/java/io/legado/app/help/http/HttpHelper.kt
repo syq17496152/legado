@@ -330,7 +330,8 @@ private object RetryableDns : Dns {
         // 负缓存检查：失败过的域名 60 秒内直接抛异常，避免反复 DNS 查询
         val expireAt = negativeCache[hostname]
         if (expireAt != null && System.currentTimeMillis() < expireAt) {
-            AppLog.put("DNS negative cache hit: host=${hostname.take(50)}")
+            // log-compliance-cleanup 2.11: 负缓存命中=降级/兜底发生，WARN（F9 级别语义表，原 ERROR 违规）
+            AppLog.putWarn("DNS negative cache hit: host=${hostname.take(50)}")
             throw UnknownHostException("Negative cached: $hostname")
         }
 
@@ -355,11 +356,18 @@ private object RetryableDns : Dns {
                     return filtered
                 }
                 // 全部被过滤，视为 DNS 污染，快速失败避免 15 秒连接超时
-                AppLog.put("DNS 解析到本地/无效地址，已过滤: host=${hostname.take(50)}, originalCount=${addresses.size}")
+                // log-compliance-cleanup 2.11: 污染过滤=降级兜底，WARN（原 ERROR 违规）
+                AppLog.putWarn("DNS 解析到本地/无效地址，已过滤: host=${hostname.take(50)}, originalCount=${addresses.size}")
                 throw UnknownHostException("Filtered local/invalid addresses: $hostname")
             } catch (e: UnknownHostException) {
                 lastException = e
-                AppLog.put("DNS retry: host=${hostname.take(50)}, attempt=$attempt/$MAX_RETRY")
+                // log-compliance-cleanup 2.11: 重试循环路径节流（F9 条款一，原每轮 ERROR 违规）；
+                // 过程细节=DEBUG 级，60s 窗口仅首条
+                AppLog.putThrottled(
+                    "HttpHelper_dns_retry",
+                    "DNS retry: host=${hostname.take(50)}, attempt=$attempt/$MAX_RETRY",
+                    level = AppLog.Level.DEBUG
+                )
             }
         }
 

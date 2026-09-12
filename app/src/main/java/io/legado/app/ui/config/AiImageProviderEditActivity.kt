@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,6 +14,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.composeShell
 import io.legado.app.constant.EventBus
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.code.CodeEditActivity
@@ -26,14 +26,9 @@ import io.legado.app.utils.toastOnUi
 class AiImageProviderEditActivity : BaseActivity<ViewBinding>() {
 
     // W5.2：原 activity_ai_image_provider_edit.xml 为死布局（运行时 removeAllViews 全丢弃）已删除，
-    // 改合成 ViewBinding 空壳（对齐 RelaySettingsActivity 模式），Compose 全权接管
-    override val binding: ViewBinding by lazy {
-        object : ViewBinding {
-            override fun getRoot(): android.view.View = root
-        }
-    }
-
-    private val root: FrameLayout by lazy { FrameLayout(this) }
+    // 改 composeShell 工厂创建合成 ViewBinding 空壳（compose-shell-binding-fix：原手写匿名壳
+    // 内 `= root` 命中接口合成属性自递归，同型铁证 crash-2026-09-12-11-34-19），Compose 全权接管
+    override val binding: ViewBinding by lazy { composeShell(this) }
     private var providerId: String? = null
 
     // Compose state

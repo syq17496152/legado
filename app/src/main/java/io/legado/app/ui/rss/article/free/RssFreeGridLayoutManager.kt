@@ -4,11 +4,13 @@ import android.content.Context
 import android.content.res.Configuration
 import android.os.Bundle
 import android.os.Parcelable
+import android.os.SystemClock
 import android.view.View
 import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.base.adapter.RecyclerAdapter
+import io.legado.app.help.config.LocalConfig
 import io.legado.app.utils.dpToPx
 import kotlin.math.abs
 
@@ -78,6 +80,55 @@ class RssFreeGridLayoutManager(
 
     /** 本帧是否需要在布局结束后再请求一次布局（footer 实测高度变化） */
     private var needRelayout = false
+
+    // ---------------------------------------------------------------- 诊断日志节流（compose-shell-binding-fix）
+
+    /**
+     * 全量日志开关的**实例级缓存**。
+     * ⚠️ 不可在布局路径每帧读 [LocalConfig.rssFreeFullLog]——其底层 CacheManager
+     * 为 runBlocking(IO)，主线程每帧调用必 ANR。onAttachedToWindow 读取一次。
+     */
+    private var fullLogEnabled = false
+
+    /** 节流窗口起始时刻（elapsedRealtime，ms） */
+    private var throttleWindowStart = 0L
+
+    /** 当前窗口内被抑制的日志条数 */
+    private var suppressedInWindow = 0
+
+    /** 当前窗口被抑制的最后一条内容（合并行回显用） */
+    private var lastSuppressed = ""
+
+    /**
+     * 常规逐帧诊断日志节流输出：2000ms 窗口内仅输出首条真实值，
+     * 窗口到期后的下一次调用先补发上窗口合并摘要（suppressed 计数 + 最后一条）。
+     * 关键事件（提前返回/回填/footer 校准）不走本函数，始终全量。
+     */
+    private fun putThrottledLog(message: String) {
+        if (fullLogEnabled) {
+            AppLog.put(message)
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (now - throttleWindowStart < THROTTLE_WINDOW_MS) {
+            if (suppressedInWindow == 0) throttleWindowStart = now
+            suppressedInWindow++
+            lastSuppressed = message
+            return
+        }
+        if (suppressedInWindow > 0) {
+            AppLog.put("RssFree[节流] 上窗口合并 suppressed=$suppressedInWindow last=[$lastSuppressed]")
+            suppressedInWindow = 0
+        }
+        throttleWindowStart = now
+        AppLog.put(message)
+    }
+
+    override fun onAttachedToWindow(view: RecyclerView?) {
+        super.onAttachedToWindow(view)
+        // 开关只在此读取一次（实例级缓存），布局路径零阻塞
+        fullLogEnabled = LocalConfig.rssFreeFullLog
+    }
 
     // ---------------------------------------------------------------- 基础能力
 
@@ -280,8 +331,8 @@ class RssFreeGridLayoutManager(
         }
         scrollOffset = scrollOffset.coerceIn(0, maxScrollOffset)
         fill(recycler, state)
-        // 调试：每次布局后汇报关键状态，用于定位"自由样式空白"问题
-        AppLog.put(
+        // 调试：每次布局后汇报关键状态（节流输出，全量开关见 LocalConfig.rssFreeFullLog）
+        putThrottledLog(
             "RssFree[布局] itemCount(state)=${state.itemCount} rectsValid=$rectsValid " +
                 "calcItem=${calculator.itemCount} contentH=${calculator.contentHeight} " +
                 "childCount=$childCount availW=${currentAvailableWidth()} targetH=${currentTargetRowHeight()}"
@@ -302,7 +353,9 @@ class RssFreeGridLayoutManager(
         if (!rectsValid) rebuild()
         val limit = calculator.itemCount
         if (limit == 0 || state.itemCount == 0) {
-            AppLog.put("RssFree[填充] 提前返回 limit=$limit stateItem=${state.itemCount} rectsValid=$rectsValid")
+            AppLog.put(
+                "RssFree[填充] 提前返回 limit=$limit stateItem=${state.itemCount} rectsValid=$rectsValid"
+            )
             return
         }
         val viewportTop = scrollOffset
@@ -310,7 +363,7 @@ class RssFreeGridLayoutManager(
         // 上下各多铺一屏，避免滑动露白与 consume 不足导致的卡顿
         val buffer = viewportHeight
 
-        AppLog.put(
+        putThrottledLog(
             "RssFree[填充] limit=$limit stateItem=${state.itemCount} " +
                 "viewportTop=$viewportTop viewportBottom=$viewportBottom"
         )
@@ -338,7 +391,7 @@ class RssFreeGridLayoutManager(
         // 2) 补齐区间内缺失的 child
         val first = positionAtOrAfter(viewportTop - buffer)
         val last = positionAtOrBefore(viewportBottom + buffer)
-        AppLog.put("RssFree[区间] first=$first last=$last buffer=$buffer limit=$limit")
+        putThrottledLog("RssFree[区间] first=$first last=$last buffer=$buffer limit=$limit")
         if (first != NO_POSITION && last != NO_POSITION) {
             val end = last.coerceAtMost(limit - 1)
             for (position in first..end) {
@@ -391,6 +444,10 @@ class RssFreeGridLayoutManager(
         if (isBlockItem(position)) {
             val measuredHeight = getDecoratedMeasuredHeight(child)
             if (measuredHeight > 0 && measuredHeight != calculator.getHeight(position)) {
+                // 一次性校准事件，全量输出（compose-shell-binding-fix 新增诊断点）
+                AppLog.put(
+                    "RssFree[校准] 非图片项实测高 measured=$measuredHeight 预估=${calculator.getHeight(position)} position=$position"
+                )
                 blockItemHeightPx = measuredHeight
                 rectsValid = false
                 needRelayout = true
@@ -611,5 +668,8 @@ class RssFreeGridLayoutManager(
 
         /** 比例变化判定阈值：差异小于该值视为同一比例，不触发重排 */
         private const val RATIO_EPSILON = 1e-4f
+
+        /** 常规诊断日志节流窗口（compose-shell-binding-fix） */
+        private const val THROTTLE_WINDOW_MS = 2000L
     }
 }

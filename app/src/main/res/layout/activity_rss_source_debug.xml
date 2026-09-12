@@ -1,150 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- debug-page-redesign AD-03：订阅源调试页 UI 全量迁移 Compose（原 AD-20 内核桥接撤销），
+     布局瘦身为顶栏 + compose_host（原 help/recycler_view/rotate_loading 由 Screen 承接） -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/ll_content"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
 
-    <!-- L-D3 订阅源调试页：顶栏 Compose 化（GlassTopAppBar + 搜索 SettingsSearchBar + 更多菜单 AppDropdownMenu），
-         结果列表 + 辅助面板 View 内核保留（AD-20 内核桥接） -->
     <androidx.compose.ui.platform.ComposeView
         android:id="@+id/compose_top_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recycler_view"
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/compose_host"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:clipToPadding="false"
-        app:layoutManager="io.legado.app.ui.widget.recycler.NoChildScrollLinearLayoutManager"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/compose_top_bar" />
-
-    <io.legado.app.ui.widget.anima.RotateLoading
-        android:id="@+id/rotate_loading"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:layout_margin="6dp"
-        android:visibility="gone"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/compose_top_bar"
-        app:loading_width="2dp" />
-
-    <io.legado.app.ui.widget.NoChildScrollNestedScrollView
-        android:id="@+id/help"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:visibility="gone"
-        app:layout_constraintTop_toBottomOf="@+id/compose_top_bar"
-        tools:visibility="visible">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@color/background"
-            android:orientation="vertical"
-            android:padding="16dp">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/debug_search_tip"
-                android:textColor="@color/secondaryText" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/text_my"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_margin="3dp"
-                    android:background="@drawable/selector_fillet_btn_bg"
-                    android:ellipsize="end"
-                    android:gravity="center"
-                    android:maxLines="1"
-                    android:paddingLeft="12dp"
-                    android:paddingTop="4dp"
-                    android:paddingRight="12dp"
-                    android:paddingBottom="4dp"
-                    android:text="@string/rss_debug_my"
-                    android:textColor="@color/primaryText"
-                    android:textSize="@dimen/text_14sp" />
-
-                <TextView
-                    android:id="@+id/text_xt"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_margin="3dp"
-                    android:background="@drawable/selector_fillet_btn_bg"
-                    android:ellipsize="end"
-                    android:gravity="center"
-                    android:maxLines="1"
-                    android:paddingLeft="12dp"
-                    android:paddingTop="4dp"
-                    android:paddingRight="12dp"
-                    android:paddingBottom="4dp"
-                    android:text="@string/rss_debug_system"
-                    android:textColor="@color/primaryText"
-                    android:textSize="@dimen/text_14sp" />
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/text_fl_title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/debug_kind_tip"
-                android:textColor="@color/secondaryText" />
-
-            <TextView
-                android:id="@+id/text_fl"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="3dp"
-                android:background="@drawable/selector_fillet_btn_bg"
-                android:ellipsize="end"
-                android:gravity="center"
-                android:maxLines="1"
-                android:paddingLeft="12dp"
-                android:paddingTop="4dp"
-                android:paddingRight="12dp"
-                android:paddingBottom="4dp"
-                android:text="@string/rss_debug_kind_default"
-                android:textColor="@color/primaryText"
-                android:textSize="@dimen/text_14sp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/debug_content_tip"
-                android:textColor="@color/secondaryText" />
-
-            <TextView
-                android:id="@+id/text_content"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_margin="3dp"
-                android:background="@drawable/selector_fillet_btn_bg"
-                android:ellipsize="end"
-                android:gravity="center"
-                android:maxLines="1"
-                android:paddingLeft="12dp"
-                android:paddingTop="4dp"
-                android:paddingRight="12dp"
-                android:paddingBottom="4dp"
-                android:text="@string/rss_debug_content_default"
-                android:textColor="@color/primaryText"
-                android:textSize="@dimen/text_14sp" />
-
-        </LinearLayout>
-
-    </io.legado.app.ui.widget.NoChildScrollNestedScrollView>
+        app:layout_constraintTop_toBottomOf="@id/compose_top_bar" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

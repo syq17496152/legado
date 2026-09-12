@@ -10,7 +10,7 @@ import androidx.preference.PreferenceDialogFragmentCompat
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.filletBackground
+import io.legado.app.lib.theme.dialogSurfaceBackground
 import io.legado.app.utils.dpToPx
 
 class EditTextPreferenceDialog : EditTextPreferenceDialogFragmentCompat() {
@@ -29,7 +29,7 @@ class EditTextPreferenceDialog : EditTextPreferenceDialogFragmentCompat() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val dialog = super.onCreateDialog(savedInstanceState)
-        dialog.window?.setBackgroundDrawable(requireContext().filletBackground)
+        dialog.window?.setBackgroundDrawable(requireContext().dialogSurfaceBackground)
         dialog.window?.decorView?.post {
             (dialog as AlertDialog).run {
                 getButton(AlertDialog.BUTTON_NEGATIVE)?.setTextColor(accentColor)

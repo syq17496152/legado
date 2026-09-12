@@ -27,11 +27,10 @@ object AppUpdateGitHub : AppUpdate.AppUpdateInterface {
 
     private suspend fun getLatestRelease(): List<AppReleaseInfo> {
         // 更新源指向本 fork 发布仓（修复硬编码上游原版仓导致应用内更新对 fork 发版失效）
-        val lastReleaseUrl = if (checkVariant.isBeta()) {
-            "https://api.github.com/repos/syq17496152/legado/releases/tags/beta"
-        } else {
-            "https://api.github.com/repos/syq17496152/legado/releases/latest"
-        }
+        // beta 与正式统一走 /releases/latest（app-update-variant-fix）：三包 asset 同处一个
+        // release，变体靠文件名区分（AppReleaseInfo.resolveAppVariant）；旧 tags/beta 滚动
+        // 发布从未创建过（实测 404），导致 beta 包 GitHub 兜底必报"获取新版本出错(404)"
+        val lastReleaseUrl = "https://api.github.com/repos/syq17496152/legado/releases/latest"
         val res = okHttpClient.newCallResponse {
             url(lastReleaseUrl)
         }

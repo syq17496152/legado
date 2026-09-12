@@ -6,7 +6,6 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.media.MediaMuxer
-import android.util.Log
 import io.legado.app.constant.AppLog
 import io.legado.app.help.http.videoStreamClient
 import io.legado.app.help.video.engine.M3u8Parser
@@ -49,6 +48,20 @@ sealed class HlsResult {
 object HlsDownloader {
 
     private const val SEG_CONCURRENCY = 4
+
+    /**
+     * log-compliance-cleanup 2.8: 转封装诊断日志单点收编（原 9 处裸 Log.d("HlsRemux")）。
+     * 过程细节=DEBUG 级（仅 recordLog 开启时记录），异常走 ERROR；tag 登记于 AppLog.TAG_HLS_REMUX，
+     * 属重大功能正式诊断链（只降频不删除，AGENTS.md 诊断日志保留铁律）。
+     */
+    private fun remuxLog(message: String, tr: Throwable? = null) {
+        AppLog.putDebugWithTag(
+            AppLog.TAG_HLS_REMUX,
+            message,
+            tr,
+            level = if (tr != null) AppLog.Level.ERROR else AppLog.Level.DEBUG
+        )
+    }
 
     /**
      * 下载 m3u8 并尝试转 mp4
@@ -383,7 +396,7 @@ object HlsDownloader {
                 var started = false
                 try {
                     extractor.setDataSource(tsFile.path)
-                    Log.d("HlsRemux", "ts=${tsFile.length()} tracks=${extractor.trackCount}")
+                    remuxLog("ts=${tsFile.length()} tracks=${extractor.trackCount}")
                     muxer = MediaMuxer(mp4File.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
 
                     // —— csd 预热：推进视频轨样本，让 TS 解析器注入完整 SPS/PPS，并【保存】完整 csd ——
@@ -425,7 +438,7 @@ object HlsDownloader {
                             }
                         }
                         extractor.unselectTrack(i)
-                        Log.d("HlsRemux", "warmup track=$i mime=$mime probe=$probe warmed=$warmed csd=${savedVideoCsd?.remaining()}B")
+                        remuxLog("warmup track=$i mime=$mime probe=$probe warmed=$warmed csd=${savedVideoCsd?.remaining()}B")
                         break
                     }
 
@@ -451,14 +464,14 @@ object HlsDownloader {
                                 if (!csdOk) return@runCatching false
                             }
                         } else {
-                            Log.d("HlsRemux", "other track=$i mime=$mime $csdDbg")
+                            remuxLog("other track=$i mime=$mime $csdDbg")
                         }
                         if (mime.startsWith("video/") || mime.startsWith("audio/")) {
                             muxTrack[i] = muxer.addTrack(trackFormat)
                         }
                     }
                     if (muxTrack.isEmpty()) throw IOException("无可用音视频轨道")
-                    Log.d("HlsRemux", "mux tracks=$muxTrack")
+                    remuxLog("mux tracks=$muxTrack")
 
                     for ((src, dst) in muxTrack) {
                         extractor.selectTrack(src)
@@ -476,7 +489,7 @@ object HlsDownloader {
                             var pts = extractor.sampleTime
                             // F1/2.4：PTS 钳制——原始样本越界或 shift 累积后越界均停本轨回退 ts（防 MPEG4Writer native abort）
                             if (pts < 0L || pts > MAX_SAMPLE_PTS_US) {
-                                Log.d("HlsRemux", "abnormal sample pts=$pts, fallback ts")
+                                remuxLog("abnormal sample pts=$pts, fallback ts")
                                 return@runCatching false
                             }
                             if (lastTime != Long.MIN_VALUE && pts < lastTime) {
@@ -484,7 +497,7 @@ object HlsDownloader {
                             }
                             pts += shift
                             if (pts > MAX_SAMPLE_PTS_US) {
-                                Log.d("HlsRemux", "shift overflow pts=$pts shift=$shift, fallback ts")
+                                remuxLog("shift overflow pts=$pts shift=$shift, fallback ts")
                                 return@runCatching false
                             }
                             lastTime = pts
@@ -507,14 +520,12 @@ object HlsDownloader {
                     if (expectedDurationMs > 0) {
                         val actual = mp4DurationMs(mp4File)
                         if (actual > 0 && actual < expectedDurationMs * DURATION_COVER_RATIO) {
-                            Log.d(
-                                "HlsRemux",
+                            remuxLog(
                                 "mp4 duration too short: actual=${actual}ms expected=${expectedDurationMs}ms, fallback ts"
                             )
                             return@runCatching false
                         }
-                        Log.d(
-                            "HlsRemux",
+                        remuxLog(
                             "mp4 duration ok: actual=${actual}ms expected=${expectedDurationMs}ms"
                         )
                     }
@@ -524,7 +535,7 @@ object HlsDownloader {
                     if (started) runCatching { muxer?.stop() }
                     muxer?.release()
                 }
-            }.onFailure { Log.d("HlsRemux", "remux exception: ${it.message}", it) }
+            }.onFailure { remuxLog("remux exception: ${it.message}", it) }
                 .getOrDefault(false)
         }
 

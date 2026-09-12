@@ -25,8 +25,10 @@ object AppUpdate {
 
     private object PreferredAppUpdate : AppUpdateInterface {
         // 多源择优：Gitee 为主源（国内网络稳定，指向本 fork 发布仓），
-        // Gitee 请求失败或未检出更新（发布滞后）时降级 GitHub 源兜底，
-        // 两源均无更新时透传"已是最新版本"；CancellationException 必须透传防吞取消
+        // Gitee 请求失败时降级 GitHub 源兜底；
+        // Gitee 判定"已是最新版本"是终态结论，必须直接上抛（isLatestVersionError 静默处理），
+        // 不能当普通错误吞掉后强制降级——否则 GitHub 兜底通道异常（如 tags/beta 404）会把
+        // "无更新"误报成"获取新版本出错"弹框；CancellationException 必须透传防吞取消
         override fun check(scope: CoroutineScope): Coroutine<AppUpdate.UpdateInfo> {
             return Coroutine.async(scope) {
                 val gitee = try {
@@ -34,6 +36,7 @@ object AppUpdate {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
+                    if (AppUpdate.isLatestVersionError(e)) throw e
                     null
                 }
                 gitee ?: AppUpdateGitHub.checkAwait()

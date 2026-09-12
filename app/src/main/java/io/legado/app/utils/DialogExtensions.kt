@@ -18,11 +18,13 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.Selector
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.filletBackground
+import io.legado.app.lib.theme.dialogSurfaceBackground
 import splitties.systemservices.windowManager
 
 fun AlertDialog.applyTint(): AlertDialog {
-    window?.setBackgroundDrawable(context.filletBackground)
+    // 弹窗底色用独立来源 dialogSurfaceBackground（themeCardColor → dialog_surface 兜底），
+    // 不能消费 backgroundColor：背景图模式下 backgroundColor 返回透明，会导致弹窗整体透明穿帮
+    window?.setBackgroundDrawable(context.dialogSurfaceBackground)
     val colorStateList = Selector.colorBuild()
         .setDefaultColor(ThemeStore.accentColor(context))
         .setPressedColor(ColorUtils.darkenColor(ThemeStore.accentColor(context)))
@@ -98,7 +100,7 @@ fun Dialog.applyModernWindowStyle() {
         val attr = window.attributes
         attr.windowAnimations = R.style.AnimDialogCenter
         window.attributes = attr
-        window.setBackgroundDrawable(context.filletBackground)
+        window.setBackgroundDrawable(context.dialogSurfaceBackground)
     }
 }
 

@@ -126,7 +126,7 @@ class RssSourceEditViewModel(application: Application) : BaseViewModel(applicati
                 io.legado.app.utils.ACache.get().remove(url)
             }
             io.legado.app.constant.AppLog.putDebugWithTag(
-                "RssSourceEdit",
+                io.legado.app.constant.AppLog.TAG_RSS_SOURCE_EDIT,
                 "clearCookie: removed cookie+cache for url=/path/${url.hashCode()}",
                 level = io.legado.app.constant.AppLog.Level.INFO
             )

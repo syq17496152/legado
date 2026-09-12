@@ -2,12 +2,12 @@
 
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
-import android.util.Log
 import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import io.legado.app.constant.AppLog
 import io.legado.app.data.dao.AiAgentDao
 import io.legado.app.data.dao.AiGeneratedImageDao
 import io.legado.app.data.dao.AiImageGroupDao
@@ -275,9 +275,20 @@ abstract class AppDatabase : RoomDatabase() {
             override fun onCreate(db: SupportSQLiteDatabase) {
                 try {
                     db.setLocale(Locale.CHINESE)
-                    Log.d("AppDatabaseCallback", "成功 设置 locale.")
+                    // log-compliance-cleanup 2.7: 裸 Log 收编 AppLog（成功=INFO 状态迁移）
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_DATA,
+                        "成功 设置 locale.",
+                        level = AppLog.Level.INFO
+                    )
                 } catch (e: Exception) {
-                    Log.e("AppDatabaseCallback", "错误 设置 locale in onCreate", e)
+                    // log-compliance-cleanup 2.7: 裸 Log.e 收编 AppLog（失败=ERROR）
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_DATA,
+                        "错误 设置 locale in onCreate",
+                        e,
+                        level = AppLog.Level.ERROR
+                    )
                 }
             }
 

@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.composeShell
 import io.legado.app.data.entities.AiGeneratedImage
 import io.legado.app.data.entities.AiImageGroup
 import io.legado.app.help.ai.AiImageGalleryManager
@@ -33,15 +34,10 @@ import kotlinx.coroutines.withContext
  */
 class AiImageGalleryActivity : BaseActivity<ViewBinding>() {
 
-    // W6.2：原 activity_ai_image_gallery.xml 已删除，改合成 ViewBinding 空壳
-    // （对齐 AiImageProviderEditActivity 模式），Compose 全权接管
-    override val binding: ViewBinding by lazy {
-        object : ViewBinding {
-            override fun getRoot(): android.view.View = root
-        }
-    }
-
-    private val root: android.widget.FrameLayout by lazy { android.widget.FrameLayout(this) }
+    // W6.2：原 activity_ai_image_gallery.xml 已删除，改 composeShell 工厂创建合成 ViewBinding
+    // 空壳（compose-shell-binding-fix：原手写匿名壳内 `= root` 命中接口合成属性自递归，
+    // 同型铁证 crash-2026-09-12-11-34-19），Compose 全权接管
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private val selectedIds = mutableStateOf<Set<String>>(emptySet())
     private var currentFilter: GalleryFilter = GalleryFilter.ALL

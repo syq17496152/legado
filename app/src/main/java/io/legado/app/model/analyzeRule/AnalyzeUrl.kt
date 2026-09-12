@@ -2,7 +2,6 @@ package io.legado.app.model.analyzeRule
 
 import android.annotation.SuppressLint
 import android.util.Base64
-import android.util.Log
 import androidx.annotation.Keep
 import androidx.media3.common.MediaItem
 import cn.hutool.core.codec.PercentCodec
@@ -214,19 +213,6 @@ class AnalyzeUrl(
                 }
             }
             if (url.isNotEmpty()) ruleUrl = url
-            // PageDebug 临时日志（验证{{page}}分页失效问题，验证通过后移除）
-            AppLog.putDebugWithTag(
-                "PageDebug",
-                "AnalyzeUrl: page=$page, hasBraceTemplate=true, ruleUrlAfter=${ruleUrl.take(120)}",
-                level = AppLog.Level.INFO
-            )
-        } else {
-            // PageDebug 临时日志：URL不含花括号模板时的page值（验证调用方是否传了page）
-            AppLog.putDebugWithTag(
-                "PageDebug",
-                "AnalyzeUrl: page=$page, hasBraceTemplate=false",
-                level = AppLog.Level.INFO
-            )
         }
         //page
         page?.let {
@@ -270,7 +256,12 @@ class AnalyzeUrl(
                     log("链接参数 JSON 格式不规范，请改为规范格式")
                 } else {
                     // P2-3.2: 两种模式都解析失败，记录警告不阻塞播放
-                    Log.d("AnalyzeUrl", "链接参数解析失败: optionLen=${urlOptionStr.length}, path=${url.take(50)}")
+                    // log-compliance-cleanup 2.3: 裸 Log.d 收编 AppLog（recordLog 关时 ERROR 仍输出 logcat）
+                    AppLog.putDebugWithTag(
+                        AppLog.TAG_ANALYZE,
+                        "链接参数解析失败: optionLen=${urlOptionStr.length}, path=${url.take(50)}",
+                        level = AppLog.Level.ERROR
+                    )
                 }
             }
             urlOption?.let { option ->
@@ -579,12 +570,22 @@ class AnalyzeUrl(
                 || (e.message?.contains("Connection reset", true) == true)
             if (isNetworkError && networkRetryCount < 1) {
                 networkRetryCount++
-                Log.d("AnalyzeUrl", "network retry: path=${url.take(50)}, exception=${e.javaClass.simpleName}, retry=$networkRetryCount")
+                // log-compliance-cleanup 2.3: 裸 Log.d 收编 AppLog（重试=状态迁移 INFO；永久路径禁用 Log.d，见 logging_rules 反模式）
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_ANALYZE,
+                    "network retry: path=${url.take(50)}, exception=${e.javaClass.simpleName}, retry=$networkRetryCount",
+                    level = AppLog.Level.INFO
+                )
                 kotlinx.coroutines.delay(1000)
                 return executeStrRequest(jsStr, sourceRegex, useWebView, isTest)
             }
             if (isNetworkError) {
-                Log.d("AnalyzeUrl", "network retry exhausted: path=${url.take(50)}, exception=${e.javaClass.simpleName}")
+                // log-compliance-cleanup 2.3: 裸 Log.d 收编 AppLog（重试耗尽=用户可感知失败 ERROR）
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_ANALYZE,
+                    "network retry exhausted: path=${url.take(50)}, exception=${e.javaClass.simpleName}",
+                    level = AppLog.Level.ERROR
+                )
             }
             if (!isTest) {
                 throw e

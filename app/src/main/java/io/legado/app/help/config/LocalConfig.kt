@@ -79,9 +79,9 @@ by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
     val needUpHighlightRules: Boolean
         get() = !isLastVersion(1, "highlightRuleVersion")
 
-    /** F7/4.10：替换净化内置规则旗标（0→12 条首装/升级推送，只追加缺失 id） */
-    val needUpReplaceRules: Boolean
-        get() = !isLastVersion(1, "replaceRuleVersion")
+    // builtin-replace-id-fix：替换净化内置规则旗标已删除——isLastVersion「读后即写回」语义存在
+    // 评估与执行非原子的机会丢失窗口（实测踩坑），改为 DefaultData.upVersion 每次启动无旗标幂等同步。
+    // 遗留 SP 键 replaceRuleVersion 不再读取，无需清理（Room 无关，仅 SP 冗余）。
 
     var versionCode
         get() = getLong(versionCodeKey, 0)
@@ -138,6 +138,19 @@ by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
         get() = getBoolean("appCrash")
         set(value) {
             putBoolean("appCrash", value)
+        }
+
+    /**
+     * RssFree 自由布局诊断日志全量开关（compose-shell-binding-fix，默认关）。
+     * 默认下 [RssFreeGridLayoutManager] 常规逐帧状态走 2000ms 窗口节流；
+     * 专项排查自由布局时打开恢复全量。
+     * ⚠️ 该开关供 LayoutManager 布局路径消费，读取方必须实例级缓存，
+     * 禁止每帧调用 getter（底层 CacheManager 为 runBlocking(IO)）。
+     */
+    var rssFreeFullLog: Boolean
+        get() = getBoolean("rssFreeFullLog")
+        set(value) {
+            putBoolean("rssFreeFullLog", value)
         }
 
 }

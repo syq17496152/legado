@@ -148,11 +148,11 @@ object AppWebDav {
             val success = webDav.delete()
             if (success) {
                 kotlin.runCatching {
-                    AppLog.putDebugWithTag("WebDavBackup", "删除备份成功 $name")
+                    AppLog.putDebugWithTag(AppLog.TAG_WEBDAV_BACKUP, "删除备份成功 $name")
                 }
             } else {
                 kotlin.runCatching {
-                    AppLog.putDebugWithTag("WebDavBackup", "删除备份失败 $name", level = AppLog.Level.ERROR)
+                    AppLog.putDebugWithTag(AppLog.TAG_WEBDAV_BACKUP, "删除备份失败 $name", level = AppLog.Level.ERROR)
                 }
             }
             return success
@@ -172,7 +172,7 @@ object AppWebDav {
             val success = WebDav(oldUrl, it).move(newUrl)
             if (success) {
                 kotlin.runCatching {
-                    AppLog.putDebugWithTag("WebDavBackup", "重命名备份成功 $oldName -> $newName")
+                    AppLog.putDebugWithTag(AppLog.TAG_WEBDAV_BACKUP, "重命名备份成功 $oldName -> $newName")
                 }
             }
             return success
