@@ -19,6 +19,8 @@ object NotificationId {
     const val AutoTaskService = 109
     const val AiTaskService = 112
     const val PublicWebRelayService = 113
+    // add-dlna-cast：投屏会话前台服务通知
+    const val DlnaCastService = 114
     const val WebDavTask = 111
     const val AutoTaskBookUpdateBase = 20000
     const val AutoTaskNotifyBase = 21000

@@ -20,6 +20,8 @@ object AppConst {
     const val channelIdReadAloud = "channel_read_aloud"
     const val channelIdWeb = "channel_web"
     const val channelIdAiTask = "channel_ai_task"
+    // add-dlna-cast：投屏会话通知渠道（前台服务保活）
+    const val channelIdCast = "channel_cast"
 
     const val UA_NAME = "User-Agent"
 

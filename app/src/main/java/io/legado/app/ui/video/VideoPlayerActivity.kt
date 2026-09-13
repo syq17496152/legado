@@ -26,6 +26,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
@@ -76,6 +77,10 @@ import io.legado.app.help.TextViewTagHandler
 import io.legado.app.help.WebCacheManager
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
+// add-dlna-cast：DLNA/UPnP 投屏（菜单入口 + 本地播放器控制通道 + 会话状态）
+import io.legado.app.help.dlna.CastPhase
+import io.legado.app.help.dlna.DlnaCastManager
+import io.legado.app.help.dlna.PlayerControl
 import io.legado.app.help.exoplayer.FirstFramePreloader
 import io.legado.app.help.gsyVideo.VideoPlayer
 import io.legado.app.help.player.ErrorMapper
@@ -92,6 +97,8 @@ import io.legado.app.model.VideoPlay
 import io.legado.app.model.VideoPlaybackQueue
 import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.service.VideoPlayService
+import io.legado.app.service.DlnaCastService
+import io.legado.app.ui.video.cast.DlnaCastDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.model.SourceCallBack
@@ -502,8 +509,30 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      * 场景：用户快速切 Activity 时，initSource 协程可能在 onPause 后仍在运行（如等待网络请求），
      * 导致资源泄漏 + 状态污染。onPause 时主动取消。
      */
+    /**
+     * add-dlna-cast AD-14：向投屏会话暴露**本地播放器控制通道**。
+     *
+     * 故意不缓存播放器引用：每次调用都经 [currentFragment] 现取句柄，
+     * 这样布局切换/Activity 重建后不会指向已销毁的旧实例（避免内存泄漏与空指针）。
+     * 全程 runCatching —— 通道是"尽力而为"，失败不该影响投屏主流程。
+     */
+    private val castPlayerControl = object : PlayerControl {
+        override fun pauseLocal() {
+            kotlin.runCatching { currentFragment?.playerView?.currentPlayer?.onVideoPause() }
+        }
+
+        override fun resumeLocal() {
+            kotlin.runCatching { currentFragment?.playerView?.currentPlayer?.onVideoResume() }
+        }
+
+        override fun currentPositionMs(): Long =
+            kotlin.runCatching { VideoPlay.videoManager.currentPosition }.getOrDefault(0L)
+    }
+
     override fun onPause() {
         super.onPause()
+        // add-dlna-cast AD-14：Activity 离开前台即注销通道，防止单例持有 Activity
+        DlnaCastManager.playerControl = null
         if (initSourceJob?.isActive == true) {
             initSourceJob?.cancel()
             AppLog.put("VideoPlayerActivity onPause: initSourceJob cancelled")
@@ -523,6 +552,12 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     override fun onResume() {
         super.onResume()
         FirstFramePreloader.cancelDelayedClear()
+        // add-dlna-cast：注册本地播放器控制通道（与 onPause 的注销成对）
+        DlnaCastManager.playerControl = castPlayerControl
+        // AD-05 兜底：通知曾被系统清理时重建，保证"会话在跑就一定能看到入口"
+        if (DlnaCastManager.isCastingActive()) {
+            DlnaCastService.start(this)
+        }
         // AD-04: 启动定时保存播放进度（每10s）
         historySaveJob = lifecycleScope.launch {
             while (true) {
@@ -675,6 +710,19 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         binding.actionFloat.setOnClickListener { startFloatingWindow() }
         // 设置：BottomSheet 面板（与沉浸式同一组件，host=PLAYER_PAGE）
         binding.actionSettings.setOnClickListener { showLegacySettingsPanel() }
+        // add-dlna-cast AD-05 兜底②：投屏中状态条 —— 面板被关/通知被清后用户仍能看到并回到面板
+        lifecycleScope.launch {
+            DlnaCastManager.state.collect { st ->
+                if (st.phase == CastPhase.CASTING) {
+                    binding.dlnaCastBanner.text =
+                        getString(R.string.dlna_casting_banner, st.currentDevice?.friendlyName ?: "")
+                    binding.dlnaCastBanner.visible()
+                } else {
+                    binding.dlnaCastBanner.gone()
+                }
+            }
+        }
+        binding.dlnaCastBanner.setOnClickListener { openCastPanel() }
     }
 
     /** W2-B2：打开设置面板（镜像 VideoFragment.showSettingsPanel 的 Activity 版） */
@@ -914,6 +962,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      *        ③订阅源集数模式（rssArticles 空）→ 无跨文章上下文，按钮已隐藏
      */
     private fun switchLegacyFilm(offset: Int) {
+        // add-dlna-cast REQ-08：投屏中切"上一部/下一部"先终止会话再放行
+        endCastForLocalSwitch()
         val current = VideoPlay.book?.bookUrl
         val articles = VideoPlay.rssArticles
         if (current != null && VideoPlaylistHolder.containsBookUrl(current)
@@ -995,6 +1045,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      * 数据集崩缩导致 ViewPager 页面被强拽、标题与内容错乱。
      */
     private fun handlePageSelected(position: Int) {
+        // add-dlna-cast REQ-08：投屏中滑动切文章/切集先终止会话再放行
+        endCastForLocalSwitch()
         // 旧 Fragment 暂停
         currentFragment?.deactivatePlayer()
         // video-booksource-align-rss AD-01：书源占位页/集数索引映射分支删除（单页化后
@@ -1081,6 +1133,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     fun onBookVerticalFling(velocityY: Float) {
         if (!useViewPagerMode) return
         if (VideoPlay.book == null) return
+        // add-dlna-cast REQ-08：投屏中竖滑切影片先终止会话再放行
+        endCastForLocalSwitch()
         // video-regression-fix-0906 AD-04：播放器未就绪时 toast 明示，不再静默无反应
         val player = currentFragment?.playerView?.currentPlayer ?: run {
             splitties.init.appCtx.toastOnUi("播放器尚未就绪，请稍候再滑动")
@@ -1197,6 +1251,14 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             title = getString(R.string.float_window),
             onClick = { startFloatingWindow() }
         )
+        // 投屏（add-dlna-cast REQ-01）：受「启用投屏功能」与"有播放地址"双重门控
+        if (DlnaCastManager.isEntryAvailable()) {
+            actions += MenuAction(
+                icon = Icons.Filled.Cast,
+                title = getString(R.string.dlna_cast),
+                onClick = { openCastPanel() }
+            )
+        }
         // 配置设置
         actions += MenuAction(
             icon = Icons.Filled.Settings,
@@ -1207,8 +1269,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                     onLayoutModeSelected = { target -> switchLayoutMode(target) }
                 })
             }
-        )
-        // 登录（源配置了登录地址才显示）
+        )        // 登录（源配置了登录地址才显示）
         if (showLogin) {
             actions += MenuAction(
                 icon = Icons.Filled.Login,
@@ -1286,6 +1347,38 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 }
             }
         }
+    }
+
+    /**
+     * add-dlna-cast REQ-01 / REQ-03：打开投屏面板。
+     *
+     * 顺序：先拉起投屏前台服务（承载发现 / 代理 / 轮询的保活），再展示设备面板。
+     * 若已有会话在跑，面板因"状态唯一来源"（[DlnaCastManager.state]）会直接落到控制态，
+     * 而不是重新发现设备（REQ-03 Scenario「投屏中重新打开面板」）。
+     */
+    private fun openCastPanel() {
+        if (VideoPlay.videoUrl.isNullOrBlank()) {
+            toastOnUi(getString(R.string.video_no_play_url))
+            return
+        }
+        DlnaCastService.start(this)
+        showDialogFragment(DlnaCastDialog())
+    }
+
+    /**
+     * add-dlna-cast REQ-08 / AD-07：切集/换线路/换文章等本地切换的前置拦截。
+     *
+     * 投屏会话存活（CASTING 或 CONNECTING）时：先终止会话（Stop 下发 + 代理注销 +
+     * 服务停止），再放行本地切换，并回到投屏面板供用户重新点投屏（不做静默续投）。
+     *
+     * @return true 表示终止了一个投屏会话
+     */
+    private fun endCastForLocalSwitch(): Boolean {
+        if (!DlnaCastManager.isSessionBusy()) return false
+        DlnaCastManager.stopByUser()
+        toastOnUi(getString(R.string.dlna_stopped_local_paused))
+        openCastPanel()
+        return true
     }
 
     private fun copyVideoUrl() {
@@ -1512,6 +1605,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         recyclerView.layoutManager = layoutManager
         val adapter = ChapterAdapter(toc,VideoPlay.chapterInVolumeIndex, false) { chapter, index ->
             if (index != VideoPlay.chapterInVolumeIndex) {
+                // add-dlna-cast REQ-08：投屏中选集先终止会话再放行
+                endCastForLocalSwitch()
                 VideoPlay.chapterInVolumeIndex = index
                 VideoPlay.saveRead(0)
                 upEpisodesView()
@@ -1538,6 +1633,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             val routeNames = routes.map { it.name }
             val adapter = RssRouteAdapter(routeNames, VideoPlay.rssRouteIndex) { _, index ->
                 if (index != VideoPlay.rssRouteIndex) {
+                    // add-dlna-cast REQ-08：投屏中换线路先终止会话再放行
+                    endCastForLocalSwitch()
                     if (VideoPlay.isNewRoutesMode()) {
                         // 新模式：异步按需采集（switchToRoute 内部处理播放+UI更新）
                         VideoPlay.switchToRoute(index, playerView)
@@ -1598,6 +1695,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         recyclerView.layoutManager = layoutManager
         val adapter = RssEpisodeAdapter(episodes, VideoPlay.rssEpisodeIndex) { episode, index ->
             if (index != VideoPlay.rssEpisodeIndex) {
+                // add-dlna-cast REQ-08：投屏中选集先终止会话再放行
+                endCastForLocalSwitch()
                 VideoPlay.rssEpisodeIndex = index
                 VideoPlay.playRssEpisode(playerView, episode)
                 upRssEpisodesView()
@@ -1626,6 +1725,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         recyclerView.layoutManager = layoutManager
         val adapter = ChapterAdapter(volumes,VideoPlay.durVolumeIndex, true) { chapter, index ->
             if (index != VideoPlay.durVolumeIndex) {
+                // add-dlna-cast REQ-08：投屏中切线路（卷）先终止会话再放行
+                endCastForLocalSwitch()
                 VideoPlay.durVolumeIndex = index
                 VideoPlay.chapterInVolumeIndex = 0
                 VideoPlay.upEpisodes()
@@ -1909,6 +2010,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     private fun startFloatingWindow() {
+        // add-dlna-cast REQ-08 / AD-07：**禁止第二路播放**。
+        // 悬浮窗会让本地播放恢复，与正在投屏的那一路叠加 → 流量翻倍 + 声音重叠。
+        // 因此先终止投屏会话（含向设备下发 Stop 与代理注销），再走本地播放。
+        if (DlnaCastManager.isCastingActive()) {
+            DlnaCastManager.stopByUser()
+            toastOnUi(getString(R.string.dlna_stopped_local_paused))
+        }
         val activePlayer = if (useViewPagerMode) {
             currentFragment?.playerView ?: return
         } else {

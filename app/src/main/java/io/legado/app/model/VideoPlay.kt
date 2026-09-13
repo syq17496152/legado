@@ -69,6 +69,7 @@ import splitties.init.appCtx
 import splitties.systemservices.connectivityManager
 import org.json.JSONArray
 import io.legado.app.data.PlayHistoryStore
+import io.legado.app.help.dlna.DlnaConstants
 import java.io.File
 
 object VideoPlay : CoroutineScope by MainScope(){
@@ -107,6 +108,70 @@ object VideoPlay : CoroutineScope by MainScope(){
         set(value) {
             videoPrefs.edit { putInt("seekSensitivity", value) }
         }
+
+    // ==================== add-dlna-cast：DLNA/UPnP 投屏偏好（AD-10） ====================
+    // 全部落 video_config，零 DB 迁移；读取不到键即取默认值，覆盖安装天然兼容。
+
+    /** 启用投屏功能（默认开）：关闭后播放器菜单不显示「投屏」 */
+    var dlnaCastEnabled: Boolean
+        get() = videoPrefs.getBoolean(DlnaConstants.PREF_CAST_ENABLED, true)
+        set(value) {
+            videoPrefs.edit { putBoolean(DlnaConstants.PREF_CAST_ENABLED, value) }
+        }
+
+    /** 强制走代理（默认关）：所有流经手机转发，仅用于直投失败排查 */
+    var dlnaForceProxy: Boolean
+        get() = videoPrefs.getBoolean(DlnaConstants.PREF_FORCE_PROXY, false)
+        set(value) {
+            videoPrefs.edit { putBoolean(DlnaConstants.PREF_FORCE_PROXY, value) }
+        }
+
+    /** 上次成功投屏的设备 UDN */
+    var dlnaLastDeviceUdn: String?
+        get() = videoPrefs.getString(DlnaConstants.PREF_LAST_DEVICE_UDN, null)
+        set(value) {
+            videoPrefs.edit { putString(DlnaConstants.PREF_LAST_DEVICE_UDN, value) }
+        }
+
+    /** 上次成功投屏的设备显示名 */
+    var dlnaLastDeviceName: String?
+        get() = videoPrefs.getString(DlnaConstants.PREF_LAST_DEVICE_NAME, null)
+        set(value) {
+            videoPrefs.edit { putString(DlnaConstants.PREF_LAST_DEVICE_NAME, value) }
+        }
+
+    /**
+     * 已知「拒收 DIDL 元数据」的设备 UDN 列表（逗号分隔）。
+     *
+     * 用途见 AD-11 降级链：首次投递带元数据失败后记下该设备，后续直接跳过元数据，
+     * 避免每次都要先失败一次。**带 LRU 上限**（红队第 2 轮）：只保留最近
+     * [DlnaConstants.NO_META_DEVICES_MAX] 条，防止字符串无限增长。
+     */
+    var dlnaNoMetaDevices: String?
+        get() = videoPrefs.getString(DlnaConstants.PREF_NO_META_DEVICES, null)
+        set(value) {
+            videoPrefs.edit { putString(DlnaConstants.PREF_NO_META_DEVICES, value) }
+        }
+
+    /** 该设备是否已知"无元数据兼容" */
+    fun isNoMetaDevice(udn: String?): Boolean {
+        if (udn.isNullOrBlank()) return false
+        return dlnaNoMetaDevices
+            ?.split(',')
+            ?.any { it.trim() == udn } == true
+    }
+
+    /** 记录"该设备拒收元数据"，并按 LRU 上限裁剪（最近使用排前） */
+    fun markNoMetaDevice(udn: String?) {
+        if (udn.isNullOrBlank()) return
+        val current = dlnaNoMetaDevices
+            ?.split(',')
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() && it != udn }
+            .orEmpty()
+        val updated = (listOf(udn) + current).take(DlnaConstants.NO_META_DEVICES_MAX)
+        dlnaNoMetaDevices = updated.joinToString(",")
+    }
 
     // ==================== 画质增强（video-player-image-enhance A 期） ====================
     // 存储模式（AD-04）：Int 十倍值。亮度/对比度/色温 -500~500（实际 -50.0~50.0），饱和度 -1000~1000（实际 -100.0~100.0）

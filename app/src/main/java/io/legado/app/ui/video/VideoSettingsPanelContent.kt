@@ -92,6 +92,9 @@ fun VideoSettingsPanelContent(
     var startFull by remember { mutableStateOf(VideoPlay.startFull) }
     var fullBottomProgress by remember { mutableStateOf(VideoPlay.fullBottomProgressBar) }
     var muteOnStart by remember { mutableStateOf(VideoPlay.muteOnStart) }
+    // add-dlna-cast：投屏设置（初值读自 VideoPlay，变更即写回）
+    var dlnaCastEnabled by remember { mutableStateOf(VideoPlay.dlnaCastEnabled) }
+    var dlnaForceProxy by remember { mutableStateOf(VideoPlay.dlnaForceProxy) }
     var skipTime by remember { mutableStateOf(VideoPlay.videoSkipTime) }
     var cacheSize by remember { mutableStateOf(VideoPlay.videoCacheSize) }
     var cachePlay by remember { mutableStateOf(VideoPlay.videoCache) }
@@ -270,6 +273,32 @@ fun VideoSettingsPanelContent(
         } // end PLAYER_PAGE sections
 
         if (host == PanelHost.GLOBAL) {
+        // ====== 投屏（add-dlna-cast REQ-12）======
+        SettingsCard(title = stringResource(R.string.dlna_settings_group)) {
+            SettingsToggleRow(
+                icon = null,
+                title = stringResource(R.string.dlna_settings_enabled),
+                subtitle = stringResource(R.string.dlna_settings_enabled_summary),
+                checked = dlnaCastEnabled,
+                onCheckedChange = {
+                    dlnaCastEnabled = it
+                    VideoPlay.dlnaCastEnabled = it
+                }
+            )
+            RowDivider(palette.divider)
+            // 「强制走代理」只在启用投屏时有意义
+            SettingsToggleRow(
+                icon = null,
+                title = stringResource(R.string.dlna_settings_force_proxy),
+                subtitle = stringResource(R.string.dlna_settings_force_proxy_summary),
+                checked = dlnaForceProxy,
+                enabled = dlnaCastEnabled,
+                onCheckedChange = {
+                    dlnaForceProxy = it
+                    VideoPlay.dlnaForceProxy = it
+                }
+            )
+        }
         // ====== 播放设置 ======
         SettingsCard(title = stringResource(R.string.video_play_setting)) {
             SettingsToggleRow(
