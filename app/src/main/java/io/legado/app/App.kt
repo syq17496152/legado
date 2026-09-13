@@ -25,6 +25,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppConst.channelIdReadAloud
 import io.legado.app.constant.AppConst.channelIdWeb
 import io.legado.app.constant.AppConst.channelIdAiTask
+import io.legado.app.constant.AppConst.channelIdCast
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
@@ -409,13 +410,26 @@ class App : Application() {
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
 
+        // add-dlna-cast：投屏会话渠道（低打扰，前台服务保活）
+        val castChannel = NotificationChannel(
+            channelIdCast,
+            getString(R.string.dlna_cast_channel_name),
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            enableLights(false)
+            enableVibration(false)
+            setSound(null, null)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+
         //向notification manager 提交channel
         notificationManager.createNotificationChannels(
             listOf(
                 downloadChannel,
                 readAloudChannel,
                 webChannel,
-                aiTaskChannel
+                aiTaskChannel,
+                castChannel
             )
         )
     }

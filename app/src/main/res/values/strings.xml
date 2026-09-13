@@ -3299,4 +3299,51 @@ function login() {
     <string name="tts_casting_active_none">未启用（单声朗读）</string>
     <string name="tts_casting_active_book_format">实际生效：本书覆盖（%1$s · %2$s）</string>
     <string name="tts_casting_active_global_format">实际生效：全局模板（%1$s）</string>
+
+    <!-- ==================== add-dlna-cast：DLNA/UPnP 投屏 ==================== -->
+    <string name="dlna_cast">投屏</string>
+    <string name="dlna_cast_channel_name">投屏</string>
+    <string name="dlna_cast_title">投屏到设备</string>
+    <!-- 设备发现 -->
+    <string name="dlna_searching_devices">正在搜索设备…</string>
+    <string name="dlna_devices_found_count">发现 %1$d 台设备</string>
+    <string name="dlna_no_device_found">未发现可投屏设备</string>
+    <string name="dlna_no_device_hint">请确认电视/盒子已开机并开启投屏（DLNA）功能，且与本机连接同一 Wi-Fi</string>
+    <string name="dlna_retry_search">重新搜索</string>
+    <string name="dlna_last_device">上次：%1$s</string>
+    <string name="dlna_last_device_offline">未在线</string>
+    <string name="dlna_switch_device">切换设备</string>
+    <!-- 控制面板 -->
+    <string name="dlna_casting_to">正在投屏：%1$s</string>
+    <string name="dlna_pause">暂停</string>
+    <string name="dlna_resume">继续</string>
+    <string name="dlna_stop_cast">结束投屏</string>
+    <string name="dlna_volume">音量</string>
+    <string name="dlna_proxy_relaying">代理转发中</string>
+    <string name="dlna_direct_cast">直连投递</string>
+    <string name="dlna_seek_unsupported">该设备不支持进度控制</string>
+    <string name="dlna_volume_unsupported">该设备不支持音量控制</string>
+    <string name="dlna_stopped_local_paused">已在手机暂停，可继续播放</string>
+    <string name="dlna_return_to_phone">回到手机播放</string>
+    <!-- 投屏态提示条 -->
+    <string name="dlna_casting_banner">正在投屏：%1$s</string>
+    <!-- 错误与降级 -->
+    <string name="dlna_error_no_wifi">请先连接 Wi-Fi</string>
+    <string name="dlna_error_no_ip">未获取到局域网 IP，请检查 Wi-Fi 或网络设置</string>
+    <string name="dlna_error_multi_ip">检测到多个网络接口，使用的是 %1$s；若电视连接失败请检查网络</string>
+    <string name="dlna_error_maybe_different_subnet">手机与电视可能不在同一网络</string>
+    <string name="dlna_error_connect_failed">无法连接到该设备，请确认电视投屏功能已开启</string>
+    <string name="dlna_error_device_rejected">电视无法访问该播放地址</string>
+    <string name="dlna_error_device_lost">投屏已断开，设备可能已关闭</string>
+    <string name="dlna_error_network_changed">网络已切换，投屏已中断</string>
+    <string name="dlna_error_local_file_missing">本地文件不可用，可能已被删除或移动</string>
+    <string name="dlna_hint_hls_maybe_unsupported">部分电视不支持 HLS 直播流，如无画面请改用其他方式</string>
+    <string name="dlna_error_start_failed">投屏启动失败，请重试</string>
+    <string name="dlna_action_open_in_browser">用浏览器打开</string>
+    <!-- 设置项 -->
+    <string name="dlna_settings_group">投屏</string>
+    <string name="dlna_settings_enabled">启用投屏功能</string>
+    <string name="dlna_settings_enabled_summary">关闭后播放器菜单不再显示「投屏」</string>
+    <string name="dlna_settings_force_proxy">强制走代理</string>
+    <string name="dlna_settings_force_proxy_summary">所有视频流经手机转发。仅在直连投屏失败时用于排查，会增加手机流量与耗电</string>
 </resources>

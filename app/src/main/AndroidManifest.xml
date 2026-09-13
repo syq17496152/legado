@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- add-dlna-cast：SSDP 组播发现需要持有 MulticastLock（仅在发现窗口内持锁） -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
@@ -725,6 +727,11 @@
             android:foregroundServiceType="mediaPlayback" />
         <service
             android:name=".service.VideoPlayService"
+            android:foregroundServiceType="mediaPlayback" />
+        <!-- add-dlna-cast：投屏会话前台服务（承载 SSDP 发现、拉流代理与轮询保活）
+             注：用 mediaPlayback 而非 dataSync —— Android 15 对 dataSync 有每 24h 累计 6h 上限 -->
+        <service
+            android:name=".service.DlnaCastService"
             android:foregroundServiceType="mediaPlayback" />
         <service
             android:name=".service.DownloadService"
