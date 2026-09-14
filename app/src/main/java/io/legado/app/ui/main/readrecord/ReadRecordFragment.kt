@@ -169,6 +169,12 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
         binding.topBar.moreButton.setOnClickListener {
             showComponentConfigDialog()
         }
+        // main-bottom-nav-simplify AD-01：standalone（独立子页）模式追加返回按钮
+        if (arguments?.getBoolean(ARG_STANDALONE, false) == true) {
+            binding.topBar.addActionButton(R.drawable.ic_back, R.string.back) {
+                requireActivity().finish()
+            }
+        }
         binding.topBar.primaryBar.setOnTagClickListener { index ->
             selectMonth(index + 1)
         }
@@ -842,6 +848,7 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
 
 private const val DATA_STALE_MS = 60_000L
 private const val requestGoalAvatar = 501
+internal const val ARG_STANDALONE = "standalone"
 
 private data class ReadRecordDashboard(
     val today: LocalDate,

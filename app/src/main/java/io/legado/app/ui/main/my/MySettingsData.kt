@@ -9,7 +9,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.service.WebService
 import io.legado.app.ui.about.AboutActivity
-import io.legado.app.ui.about.ReadRecordActivity
+import io.legado.app.ui.about.ReadRecordStatsActivity
 import io.legado.app.ui.autoTask.AutoTaskActivity
 import io.legado.app.ui.book.bookmark.AllBookmarkActivity
 import io.legado.app.ui.book.source.manage.BookSourceActivity
@@ -21,7 +21,6 @@ import io.legado.app.ui.config.RelaySettingsActivity
 import io.legado.app.ui.dict.rule.DictRuleActivity
 import io.legado.app.ui.highlight.HighlightRuleActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
-import io.legado.app.ui.rss.search.RssSearchActivity
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.utils.openUrl
@@ -113,7 +112,6 @@ internal fun buildSettingsSections(context: Context): List<MySettingsSectionMode
                 actionRow("autoTask", R.string.auto_task_manage, R.string.auto_task_manage_desc),
                 // video-player-dual-layout R11：视频播放器全局设置入口（布局模式/播放器类型/缓存等中心化配置）
                 actionRow("videoPlayerSetting", R.string.video_setting, R.string.video_setting_summary),
-                actionRow("rssSearch", R.string.rss_search, R.string.rss_search_summary),
                 // bugfix-0908 T3：书架媒体页与书架页视频书点击（播放队列注入）功能重复，入口与页面删除
                 actionRow("bookmark", R.string.bookmark, R.string.all_bookmark),
                 actionRow("readRecord", R.string.read_record, R.string.read_record_summary),
@@ -331,10 +329,9 @@ internal fun Activity.handleSettingsRowClick(key: String, searchTarget: MySettin
 
         // W3.5 孤儿治理：fileManage 死分支删除（我的页无该入口行，FileManageActivity 活入口在精准管理/AI 设置页）
 
-        "readRecord" -> startActivity<ReadRecordActivity>()
+        "readRecord" -> startActivity<ReadRecordStatsActivity>()
         // bugfix-0908 T3：featureBooks 分支删除（书架媒体入口移除）
         "highlightRule" -> startActivity<HighlightRuleActivity>()
-        "rssSearch" -> RssSearchActivity.start(this, null)
         "about" -> startActivity<AboutActivity>()
         "exit" -> finish()
     }

@@ -137,7 +137,7 @@ class OtherConfigFragment : ComposeSettingFragment() {
                             key = PreferKey.floatingBottomBarHideSearch,
                             title = getString(R.string.bottom_bar_hide_search),
                             summary = getString(R.string.bottom_bar_hide_search_summary),
-                            defaultValue = false,
+                            defaultValue = true,
                             visible = isDefaultNavBarPackage()
                         ),
                         choice(

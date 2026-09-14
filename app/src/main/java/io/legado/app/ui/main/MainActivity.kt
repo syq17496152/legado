@@ -99,7 +99,6 @@ import io.legado.app.ui.main.bookshelf.style2.BookshelfFragment2
 import io.legado.app.ui.main.ai.AiChatActivity
 import io.legado.app.ui.main.explore.ExploreFragment
 import io.legado.app.ui.main.my.MyFragment
-import io.legado.app.ui.main.readrecord.ReadRecordFragment
 import io.legado.app.ui.main.rss.RssFragment
 import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.TitleBar
@@ -158,8 +157,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     private val idBookshelf2 = 12
     private val idExplore = 1
     private val idRss = 2
-    private val idReadRecord = 3
-    private val idMy = 4
+    private val idMy = 3
     private var exitTime: Long = 0
     private var clipboardImportEnabled = false
     private var rejectedShibbolethHash: Int? = null
@@ -192,7 +190,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     private val fragmentMap = hashMapOf<Int, Fragment>()
     private var bottomMenuCount = MainBottomNavConfig.visibleItems().size
     private val EXIT_INTERVAL = 2000L
-    private val realPositions = arrayOf(idBookshelf, idExplore, idRss, idReadRecord, idMy)
+    private val realPositions = arrayOf(idBookshelf, idExplore, idRss, idMy)
     private val adapter by lazy {
         TabFragmentPageAdapter(supportFragmentManager)
     }
@@ -456,9 +454,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
             R.id.menu_rss ->
                 selectFragmentId(idRss, false)
-
-            R.id.menu_read_record ->
-                selectFragmentId(idReadRecord, false)
 
             R.id.menu_my_config ->
                 selectFragmentId(idMy, false)
@@ -1095,7 +1090,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             R.id.menu_bookshelf to sideNavBookshelf,
             R.id.menu_discovery to sideNavDiscovery,
             R.id.menu_rss to sideNavRss,
-            R.id.menu_read_record to sideNavReadRecord,
             R.id.menu_my_config to sideNavMyConfig
         )
     }
@@ -1105,7 +1099,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             R.id.menu_bookshelf to sideNavBookshelfRow,
             R.id.menu_discovery to sideNavDiscoveryRow,
             R.id.menu_rss to sideNavRssRow,
-            R.id.menu_read_record to sideNavReadRecordRow,
             R.id.menu_my_config to sideNavMyConfigRow
         )
     }
@@ -1115,7 +1108,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             R.id.menu_bookshelf to sideNavBookshelfText,
             R.id.menu_discovery to sideNavDiscoveryText,
             R.id.menu_rss to sideNavRssText,
-            R.id.menu_read_record to sideNavReadRecordText,
             R.id.menu_my_config to sideNavMyConfigText
         )
     }
@@ -1150,10 +1142,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     private fun sideNavigationTitle(itemId: Int, fallback: CharSequence?): CharSequence {
-        return when (itemId) {
-            R.id.menu_read_record -> getString(R.string.side_nav_stats)
-            else -> fallback ?: ""
-        }
+        return fallback ?: ""
     }
 
     private fun renderSideBookshelfGroups() {
@@ -2092,7 +2081,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             } else {
                 R.id.menu_rss
             }
-            idReadRecord -> R.id.menu_read_record
             else -> R.id.menu_my_config
         }
     }
@@ -2490,7 +2478,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 || (fragmentId == idBookshelf2 && any is BookshelfFragment2)
                 || (fragmentId == idExplore && any is ExploreFragment)
                 || (fragmentId == idRss && any is RssFragment)
-                || (fragmentId == idReadRecord && any is ReadRecordFragment)
                 || (fragmentId == idMy && any is MyFragment)
             ) {
                 return POSITION_UNCHANGED
@@ -2504,7 +2491,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 idBookshelf2 -> BookshelfFragment2(position)
                 idExplore -> ExploreFragment(position)
                 idRss -> RssFragment(position)
-                idReadRecord -> ReadRecordFragment(position)
                 else -> MyFragment(position)
             }
         }

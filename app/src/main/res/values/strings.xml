@@ -2208,7 +2208,6 @@
     <string name="rss_page_mode_modern">Modern subscription</string>
     <string name="rss_page_mode_legacy">Classic subscription</string>
     <string name="side_nav_assistant">Assistant</string>
-    <string name="side_nav_stats">Stats</string>
     <string name="theme_manage_title">Theme Manager</string>
     <string name="image_crop_title">Crop image</string>
     <string name="image_crop_failed">Image crop failed: %1$s</string>

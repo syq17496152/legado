@@ -494,9 +494,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val showRSS: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showRss, false)
 
-    val showReadRecord: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.showReadRecord, true)
-
     var bookshelfHiddenTags: Map<Long, Set<String>>
         get() {
             val rawMap = GSON.fromJsonObject<Map<String, List<String>>>(
@@ -2253,7 +2250,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         set(value) = appCtx.putPrefBoolean(PreferKey.defaultTopBarShowSearch, value)
 
     var floatingBottomBarHideSearch: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.floatingBottomBarHideSearch, false)
+        get() = appCtx.getPrefBoolean(PreferKey.floatingBottomBarHideSearch, true)
         set(value) = appCtx.putPrefBoolean(PreferKey.floatingBottomBarHideSearch, value)
 
     var readUrlInBrowser: Boolean

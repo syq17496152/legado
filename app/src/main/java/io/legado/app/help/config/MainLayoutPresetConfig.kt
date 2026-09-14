@@ -46,7 +46,7 @@ object MainLayoutPresetConfig {
     }
 
     fun floatingBottomBarHideSearch(): Boolean {
-        return appCtx.getPrefBoolean(PreferKey.floatingBottomBarHideSearch, false)
+        return appCtx.getPrefBoolean(PreferKey.floatingBottomBarHideSearch, true)
     }
 
     fun apply(context: Context, preset: String, notify: Boolean = true) {
@@ -67,7 +67,7 @@ object MainLayoutPresetConfig {
         context.putPrefString(PreferKey.topBarPackageDay, TopBarConfig.DEFAULT_DIR_NAME)
         context.putPrefString(PreferKey.topBarPackageNight, TopBarConfig.DEFAULT_DIR_NAME)
         context.putPrefBoolean(PreferKey.defaultTopBarShowSearch, false)
-        context.putPrefBoolean(PreferKey.floatingBottomBarHideSearch, false)
+        context.putPrefBoolean(PreferKey.floatingBottomBarHideSearch, true)
         AppConfig.bottomBarLayoutMode = bottomLayoutMode
         AppConfig.bottomBarSidebarGravity = "start"
         AppConfig.bottomBarEffectMode = if (bottomLayoutMode == "standard") "solid" else "glass"

@@ -55,7 +55,6 @@ object PreferKey {
     const val showDiscovery = "showDiscovery"
     const val enableReview = "enableReview"
     const val mergeDiscoveryRss = "mergeDiscoveryRss"
-    const val showReadRecord = "showReadRecord"
     const val mainBottomNavItems = "mainBottomNavItems"
     const val showRss = "showRss"
     const val bookshelfLayout = "bookshelfLayout"

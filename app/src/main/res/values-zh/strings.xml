@@ -1802,7 +1802,6 @@
     <string name="rss_page_mode_modern">新版订阅</string>
     <string name="rss_page_mode_legacy">经典订阅</string>
     <string name="side_nav_assistant">助手</string>
-    <string name="side_nav_stats">统计</string>
     <string name="theme_manage_title">界面管理</string>
     <string name="image_crop_title">裁剪图片</string>
     <string name="image_crop_failed">图片裁剪失败：%1$s</string>

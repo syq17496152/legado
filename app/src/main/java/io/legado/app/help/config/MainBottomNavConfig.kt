@@ -19,7 +19,6 @@ object MainBottomNavConfig {
     const val KEY_BOOKSHELF = "bookshelf"
     const val KEY_DISCOVERY = "discovery"
     const val KEY_RSS = "rss"
-    const val KEY_READ_RECORD = "readRecord"
     const val KEY_MY = "my"
 
     @Keep
@@ -41,8 +40,7 @@ object MainBottomNavConfig {
         ItemSpec(KEY_BOOKSHELF, R.string.bookshelf, R.id.menu_bookshelf, R.drawable.ic_bottom_books, 0, true),
         ItemSpec(KEY_DISCOVERY, R.string.discovery, R.id.menu_discovery, R.drawable.ic_bottom_explore, 1),
         ItemSpec(KEY_RSS, R.string.rss, R.id.menu_rss, R.drawable.ic_bottom_rss_feed, 2),
-        ItemSpec(KEY_READ_RECORD, R.string.side_nav_stats, R.id.menu_read_record, R.drawable.ic_bottom_read_record, 3),
-        ItemSpec(KEY_MY, R.string.my, R.id.menu_my_config, R.drawable.ic_bottom_person, 4, true)
+        ItemSpec(KEY_MY, R.string.my, R.id.menu_my_config, R.drawable.ic_bottom_person, 3, true)
     )
 
     val defaultItems: List<ItemState>
@@ -130,7 +128,6 @@ object MainBottomNavConfig {
             ItemState(KEY_BOOKSHELF, true),
             ItemState(KEY_DISCOVERY, legacyVisible(PreferKey.showDiscovery, true)),
             ItemState(KEY_RSS, legacyVisible(PreferKey.showRss, true)),
-            ItemState(KEY_READ_RECORD, legacyVisible(PreferKey.showReadRecord, true)),
             ItemState(KEY_MY, true)
         )
     }

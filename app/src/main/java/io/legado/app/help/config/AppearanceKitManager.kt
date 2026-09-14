@@ -76,7 +76,7 @@ object AppearanceKitManager {
                 type = AppearanceKitType.BUILTIN,
                 binding = KitBinding(
                     preset = MainLayoutPresetConfig.PRESET_DEFAULT,
-                    floatingBottomBarHideSearch = false
+                    floatingBottomBarHideSearch = true
                 )
             ),
             AppearanceKit(

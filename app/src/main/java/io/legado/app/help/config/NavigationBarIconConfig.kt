@@ -112,7 +112,7 @@ object NavigationBarIconConfig {
         var wallpaperPath: String? = null,
         var borderColor: Int? = null,
         var borderAlpha: Int = 100,
-        var hideSearchInFloatingStyle: Boolean = false,
+        var hideSearchInFloatingStyle: Boolean = true,
         var icons: MutableMap<String, String> = linkedMapOf()
     )
 
@@ -144,7 +144,6 @@ object NavigationBarIconConfig {
         NavItem("bookshelf", R.string.bookshelf, R.id.menu_bookshelf, R.drawable.ic_bottom_books),
         NavItem("discovery", R.string.discovery, R.id.menu_discovery, R.drawable.ic_bottom_explore),
         NavItem("rss", R.string.rss, R.id.menu_rss, R.drawable.ic_bottom_rss_feed),
-        NavItem("readRecord", R.string.side_nav_stats, R.id.menu_read_record, R.drawable.ic_bottom_read_record),
         NavItem("my", R.string.my, R.id.menu_my_config, R.drawable.ic_bottom_person),
         NavItem("ai", R.string.side_nav_assistant, R.id.menu_ai, R.drawable.ic_bottom_ai_assistant)
     )

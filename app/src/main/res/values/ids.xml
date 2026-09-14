@@ -14,7 +14,6 @@
     <item name="menu_rss" type="id" />
     <item name="menu_ai" type="id" />
     <item name="menu_discovery" type="id" />
-    <item name="menu_read_record" type="id" />
     <item name="menu_my_config" type="id" />
 
     <!-- 阶段11.4 问题3 新增：订阅源搜索结果类型筛选菜单项 -->
