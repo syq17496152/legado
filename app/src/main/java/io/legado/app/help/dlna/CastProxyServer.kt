@@ -4,7 +4,6 @@ import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoHTTPD.Response
 import fi.iki.elonen.NanoHTTPD.Response.Status
 import io.legado.app.constant.AppLog
-import io.legado.app.utils.LogUtils
 import okhttp3.Request
 import okhttp3.ResponseBody
 import java.io.File
@@ -59,7 +58,11 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
             super.start(DlnaConstants.PROXY_SOCKET_READ_TIMEOUT_MS, false)
             running.set(true)
             val actual = listeningPort
-            LogUtils.d(DlnaConstants.TAG) { "代理已启动，端口 $actual" }
+            AppLog.putDebugWithTag(
+                DlnaConstants.TAG,
+                "代理已启动，端口 $actual",
+                level = AppLog.Level.INFO
+            )
             actual
         }.getOrElse { error ->
             AppLog.put("DlnaCast 代理启动失败: ${error.message}", error)
@@ -81,10 +84,22 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
         val uri = session.uri.orEmpty()
         val method = session.method
         if (method != Method.GET && method != Method.HEAD) {
+            AppLog.putDebugWithTag(DlnaConstants.TAG, "代理拒绝方法: $method $uri", level = AppLog.Level.WARN)
             return plain(Status.METHOD_NOT_ALLOWED, "method not allowed")
         }
         val resolved = resolveSource(uri)
-            ?: return plain(Status.NOT_FOUND, "not found")
+        if (resolved == null) {
+            // token 失效/路径错误 → 设备必然取不到流（首帧 STOPPED 的常见根因），必须留痕
+            AppLog.putDebugWithTag(DlnaConstants.TAG, "代理 404: $method $uri", level = AppLog.Level.WARN)
+            return plain(Status.NOT_FOUND, "not found")
+        }
+        // 设备取流确认（60s 节流防 HLS 分片刷屏）：完全无此日志=电视根本没来取流（网络不通）
+        AppLog.putThrottled(
+            "DlnaCast.proxyReq",
+            "代理收到设备请求: $method $uri",
+            level = AppLog.Level.INFO,
+            tag = DlnaConstants.TAG
+        )
         activeRequests.incrementAndGet()
         return try {
             serveSource(resolved, session, method == Method.HEAD)
@@ -211,12 +226,23 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
 
             // 上游错误原样透传（不吞、不重试），便于定位
             if (!upstream.isSuccessful) {
+                // 防盗链 403/404 是"设备拉流失败"的高频根因，必须留痕（会话头缺失/过期时典型）
+                AppLog.putDebugWithTag(
+                    DlnaConstants.TAG,
+                    "上游取流返回 ${upstream.code}: url=${upstream.request.url}",
+                    level = AppLog.Level.WARN
+                )
                 body?.close()
                 return plain(Status.lookup(upstream.code), "upstream ${upstream.code}")
             }
 
             // m3u8：重写清单后整体回传
             if (HlsPlaylistRewriter.isPlaylist(upstreamMime, source.url)) {
+                AppLog.putDebugWithTag(
+                    DlnaConstants.TAG,
+                    "HLS 清单重写: code=${upstream.code} mime=$upstreamMime",
+                    level = AppLog.Level.INFO
+                )
                 val text = runCatching { body?.string() }.getOrNull()
                 body?.close()
                 if (text == null) return plain(Status.lookup(504), "playlist empty")
@@ -442,7 +468,11 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
             kotlin.runCatching { executor.execute(code) }
                 .onFailure {
                     // 队列满/线程满：立即关闭该连接，服务端不崩
-                    LogUtils.d(DlnaConstants.TAG) { "代理并发已满，拒绝连接" }
+                    AppLog.putDebugWithTag(
+                        DlnaConstants.TAG,
+                        "代理并发已满，拒绝连接",
+                        level = AppLog.Level.WARN
+                    )
                     kotlin.runCatching { code.close() }
                 }
         }

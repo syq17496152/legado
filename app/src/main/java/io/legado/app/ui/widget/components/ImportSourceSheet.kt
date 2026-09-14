@@ -18,15 +18,14 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,12 +40,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
+import io.legado.app.ui.widget.compose.AppSettingPalette
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
+import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 
 /**
- * 导入项的状态：新增 / 更新 / 已有。
+ * 导入项的状态：新增 / 更新 / 已有 / 已过滤（导入校验未通过，import-source-quality-filter）。
  */
 enum class ImportState {
-    NEW, UPDATE, EXIST
+    NEW, UPDATE, EXIST, FILTERED
 }
 
 /**
@@ -54,12 +56,14 @@ enum class ImportState {
  *
  * @param name 源名称
  * @param comment 备注（可空，为空或未开启显示时隐藏）
- * @param state 新增/更新/已有 状态
+ * @param state 新增/更新/已有/已过滤 状态
+ * @param stateDetail FILTERED 态的白话原因（"网址打不开"等，S5 注释类字段截断 50 字符）
  */
 data class ImportItem(
     val name: String,
     val comment: String?,
-    val state: ImportState
+    val state: ImportState,
+    val stateDetail: String? = null
 )
 
 /**
@@ -71,7 +75,7 @@ data class ImportItem(
  *  - 中部：列表项（勾选/名称/可展开备注/新增-更新-已有状态徽标/编辑按钮）
  *  - 底部：全选-取消/取消/导入 操作栏（12dp 圆角、48dp 高）
  *
- * 全部文案走 stringResource，颜色走 MaterialTheme.colorScheme，禁止硬编码中文与 Color(0x)。
+ * 全部文案走 stringResource，颜色走 AppSettingPalette 直色（取色唯一基线），禁止硬编码中文与 Color(0x)。
  *
  * @param title 标题（调用方传 stringResource）
  * @param items 列表数据（[ImportItem]，state 用于展示新增/更新/已有）
@@ -105,6 +109,11 @@ fun ImportSourceSheet(
     errorMsg: String?
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    // UI 规范归位（2026-09-13 用户批评：暗色下文字黑色看不清）：
+    // 取色走 AppSettingPalette 直色（ThemeStore 链），禁止 MaterialTheme.colorScheme（H9/H11 铁律）
+    // 注：miuix 子调色板供 LegadoMiuixActionButton 消费
+    val managementPalette = rememberAppManagementPalette()
+    val settings = managementPalette.settings
 
     AppModalBottomSheet(onDismiss = onDismiss) {
         // ---------- 顶部：标题 + 菜单 ----------
@@ -119,7 +128,7 @@ fun ImportSourceSheet(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = settings.primaryText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
@@ -129,7 +138,7 @@ fun ImportSourceSheet(
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = settings.secondaryText
                     )
                 }
                 val wrappedActions = menuActions.map { action ->
@@ -146,7 +155,7 @@ fun ImportSourceSheet(
             }
         }
         HorizontalDivider(
-            color = MaterialTheme.colorScheme.outlineVariant,
+            color = settings.divider,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
 
@@ -159,7 +168,7 @@ fun ImportSourceSheet(
                         .fillMaxWidth()
                         .height(180.dp)
                 ) {
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(color = settings.accent)
                 }
             }
 
@@ -167,7 +176,7 @@ fun ImportSourceSheet(
                 Text(
                     text = errorMsg,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
+                    color = settings.danger,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -179,7 +188,9 @@ fun ImportSourceSheet(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 440.dp)
+                        // 小屏适配（900px/450dp 实证）：440dp 上限会把底部操作栏推出屏外，
+                        // 大集合导入时"导入"按钮不可见不可点（import-source-quality-filter 真机 E2E 铁证）
+                        .heightIn(max = 300.dp)
                 ) {
                     itemsIndexed(items) { index, item ->
                         ImportItemRow(
@@ -187,12 +198,13 @@ fun ImportSourceSheet(
                             item = item,
                             isChecked = selected.getOrElse(index) { false },
                             showComment = showComment,
+                            settings = settings,
                             onToggle = onToggleSelect,
                             onEdit = onEditItem
                         )
                         if (index < items.lastIndex) {
                             HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant,
+                                color = settings.divider,
                                 modifier = Modifier.padding(start = 52.dp)
                             )
                         }
@@ -211,40 +223,35 @@ fun ImportSourceSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            OutlinedButton(
+            // 底栏按钮归位管理族基线 LegadoMiuixActionButton（M3 OutlinedButton/Button 裸色弃用）
+            LegadoMiuixActionButton(
+                text = if (isSelectAll) {
+                    stringResource(R.string.select_cancel_count, selectCount, items.size)
+                } else {
+                    stringResource(R.string.select_all_count, selectCount, items.size)
+                },
+                palette = managementPalette.miuix,
                 onClick = onToggleSelectAll,
-                shape = AppShapes.Button,
-                modifier = Modifier
-                    .height(48.dp)
-                    .weight(1f)
-            ) {
-                Text(
-                    text = if (isSelectAll) {
-                        stringResource(R.string.select_cancel_count, selectCount, items.size)
-                    } else {
-                        stringResource(R.string.select_all_count, selectCount, items.size)
-                    }
-                )
-            }
+                minWidth = 0.dp,
+                minHeight = 48.dp,
+                modifier = Modifier.weight(1f)
+            )
             Spacer(modifier = Modifier.width(4.dp))
-            OutlinedButton(
+            LegadoMiuixActionButton(
+                text = stringResource(R.string.cancel),
+                palette = managementPalette.miuix,
                 onClick = onDismiss,
-                shape = AppShapes.Button,
-                modifier = Modifier
-                    .heightIn(min = 48.dp)
-                    .width(96.dp)
-            ) {
-                Text(text = stringResource(R.string.cancel))
-            }
-            Button(
+                minWidth = 96.dp,
+                minHeight = 48.dp
+            )
+            LegadoMiuixActionButton(
+                text = stringResource(R.string.import_str),
+                palette = managementPalette.miuix,
                 onClick = onImport,
-                shape = AppShapes.Button,
-                modifier = Modifier
-                    .heightIn(min = 48.dp)
-                    .width(96.dp)
-            ) {
-                Text(text = stringResource(R.string.import_str))
-            }
+                primary = true,
+                minWidth = 96.dp,
+                minHeight = 48.dp
+            )
         }
     }
 }
@@ -258,6 +265,7 @@ private fun ImportItemRow(
     item: ImportItem,
     isChecked: Boolean,
     showComment: Boolean,
+    settings: AppSettingPalette,
     onToggle: (Int) -> Unit,
     onEdit: (Int) -> Unit
 ) {
@@ -275,24 +283,29 @@ private fun ImportItemRow(
         ) {
             Checkbox(
                 checked = isChecked,
-                onCheckedChange = { onToggle(index) }
+                onCheckedChange = { onToggle(index) },
+                colors = CheckboxDefaults.colors(
+                    checkedColor = settings.accent,
+                    uncheckedColor = settings.disabledText,
+                    checkmarkColor = settings.onAccent
+                )
             )
             Text(
                 text = item.name,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = settings.primaryText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
-            ImportStateBadge(item.state)
+            ImportStateBadge(item.state, settings)
             IconButton(
                 onClick = { onEdit(index) }
             ) {
                 Icon(
                     imageVector = Icons.Default.Edit,
                     contentDescription = stringResource(R.string.edit),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = settings.secondaryText,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -301,8 +314,19 @@ private fun ImportItemRow(
             Text(
                 text = item.comment,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = settings.secondaryText,
                 maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 52.dp, end = 16.dp, bottom = 6.dp)
+            )
+        }
+        // FILTERED 态：白话原因展示（S5：截断 50 字符）
+        if (item.state == ImportState.FILTERED && !item.stateDetail.isNullOrBlank()) {
+            Text(
+                text = item.stateDetail!!.take(50),
+                style = MaterialTheme.typography.bodySmall,
+                color = settings.danger,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 52.dp, end = 16.dp, bottom = 6.dp)
             )
@@ -311,26 +335,41 @@ private fun ImportItemRow(
 }
 
 /**
- * 新增/更新/已有 状态徽标。
+ * 新增/更新/已有/已过滤 状态徽标。
+ * 取色基线归位：accent/danger/row 直色（原 M3 container 派生色弃用）。
  */
 @Composable
-private fun ImportStateBadge(state: ImportState) {
-    val (text, color) = when (state) {
-        ImportState.NEW -> stringResource(R.string.import_status_new) to
-            MaterialTheme.colorScheme.primaryContainer
-        ImportState.UPDATE -> stringResource(R.string.import_status_update) to
-            MaterialTheme.colorScheme.tertiaryContainer
-        ImportState.EXIST -> stringResource(R.string.import_status_exist) to
-            MaterialTheme.colorScheme.secondaryContainer
+private fun ImportStateBadge(state: ImportState, settings: AppSettingPalette) {
+    val (text, bg, fg) = when (state) {
+        ImportState.NEW -> Triple(
+            stringResource(R.string.import_status_new),
+            settings.accent.copy(alpha = 0.16f),
+            settings.accent
+        )
+        ImportState.UPDATE -> Triple(
+            stringResource(R.string.import_status_update),
+            settings.accent.copy(alpha = 0.16f),
+            settings.accent
+        )
+        ImportState.EXIST -> Triple(
+            stringResource(R.string.import_status_exist),
+            androidx.compose.ui.graphics.Color(settings.row),
+            settings.secondaryText
+        )
+        ImportState.FILTERED -> Triple(
+            stringResource(R.string.import_status_filtered),
+            settings.danger.copy(alpha = 0.16f),
+            settings.danger
+        )
     }
     Surface(
         shape = AppShapes.Chip,
-        color = color
+        color = bg
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = fg,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
         )
     }

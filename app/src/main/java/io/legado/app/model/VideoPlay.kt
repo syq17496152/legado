@@ -1175,6 +1175,15 @@ object VideoPlay : CoroutineScope by MainScope(){
         isLoading = true
         // A2 修复：新源加载视为首次播放（CDN 冷启动场景，BUFFERING 超时 25s）
         hasPlayedSuccessfully = false
+        // 多线路多集状态初始化：initSource 是所有 isNew=true 新会话的必经入口
+        // （Activity 首次进入 / onNewIntent / Service 新播放），此处统一重置线路/集数状态，
+        // 防止上一会话残留导致左下角选择器显示旧视频数据（主动退出后重新进入场景）。
+        // 悬浮窗恢复（isNew=false）不经过本函数，当前会话状态不受影响；
+        // 多线路多集数据由后续解析链路重建（startPlay 多线路分支 / 书源卷章映射 / R5 多 URL）。
+        rssRoutes = null
+        rssEpisodes = null
+        rssRouteIndex = 0
+        rssEpisodeIndex = 0
         source = sourceKey?.let {
             when (sourceType) {
                 SourceType.book -> appDb.bookSourceDao.getBookSource(it)

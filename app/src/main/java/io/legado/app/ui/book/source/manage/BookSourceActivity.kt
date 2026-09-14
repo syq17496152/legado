@@ -49,6 +49,8 @@ import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.model.CheckSource
 import io.legado.app.model.Debug
+import io.legado.app.model.ImportCheck
+import io.legado.app.model.QualityCheckSession
 import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.association.showShibbolethDialog
 import io.legado.app.ui.book.search.SearchActivity
@@ -56,6 +58,7 @@ import io.legado.app.ui.book.search.SearchScope
 import io.legado.app.ui.book.source.debug.BookSourceDebugActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.config.CheckSourceConfig
+import io.legado.app.ui.config.ImportCheckConfigDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
@@ -89,6 +92,9 @@ import io.legado.app.utils.share
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
+import io.legado.app.constant.PreferKey
+import io.legado.app.utils.getPrefBoolean
+import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -414,6 +420,12 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             AppManagementMenuAction(getString(R.string.import_by_qr_code)) {
                 qrResult.launch()
             },
+            AppManagementMenuAction(getString(R.string.import_check_config)) {
+                showDialogFragment(ImportCheckConfigDialog())
+            },
+            AppManagementMenuAction(getString(R.string.quality_report_title)) {
+                showQualityReportScopeDialog()
+            },
             AppManagementMenuAction(getString(R.string.group_sources_by_domain)) {
                 setGroupSourcesByDomain(!groupSourcesByDomain)
             },
@@ -421,6 +433,59 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 showHelp("SourceMBookHelp")
             }
         )
+    }
+
+    /**
+     * 质量体检范围选择（spec：选中源/当前分组/全部；体检只读不写库）
+     */
+    private fun showQualityReportScopeDialog() {
+        val options = arrayOf(
+            getString(R.string.quality_report_scope_all),
+            getString(R.string.quality_report_scope_group),
+            getString(R.string.quality_report_scope_selected)
+        )
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.quality_report_title)
+            .setItems(options) { _, which ->
+                lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    val sources = when (which) {
+                        1 -> {
+                            val query = searchQueryState.value
+                            val group = if (query.startsWith("group:")) query.removePrefix("group:") else ""
+                            if (group.isBlank()) {
+                                appDb.bookSourceDao.search("")
+                            } else {
+                                appDb.bookSourceDao.groupSearch(group)
+                            }
+                        }
+                        2 -> selectedUrls.value.mapNotNull { appDb.bookSourceDao.getBookSource(it) }
+                        else -> appDb.bookSourceDao.search("")
+                    }
+                    if (sources.isEmpty()) {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            toastOnUi(getString(R.string.empty))
+                        }
+                        return@launch
+                    }
+                    QualityCheckSession.startBookCheck(this@BookSourceActivity, sources, ImportCheck.toProbeOptions())
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        // 体检首启一句话分工说明（P7：体检=只读评分+批量清理；校验=标注分组+权重）
+                        if (!getPrefBoolean(PreferKey.qualityReportFirstHint)) {
+                            putPrefBoolean(PreferKey.qualityReportFirstHint, true)
+                            androidx.appcompat.app.AlertDialog.Builder(this@BookSourceActivity)
+                                .setTitle(R.string.quality_report_title)
+                                .setMessage(R.string.quality_report_first_hint)
+                                .setPositiveButton(R.string.ok, null)
+                                .show()
+                        }
+                        startActivity<SourceQualityReportActivity> {
+                            putExtra("type", QualityCheckSession.TAG_BOOK)
+                        }
+                    }
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun setSort(next: BookSourceSort) {

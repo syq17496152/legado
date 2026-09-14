@@ -1,4 +1,4 @@
-﻿<resources>
+<resources>
     <!--App-->
     <string name="app_name">阅读M</string>
     <string name="app_name_a">阅读M·A</string>
@@ -1106,6 +1106,60 @@
 
     <!-- check source config string -->
     <string name="check_source_config">校验设置</string>
+    <!-- import check config string (import-source-quality-filter) -->
+    <string name="import_check_config">导入校验设置</string>
+    <string name="import_check_enabled">开启导入校验</string>
+    <string name="import_check_enabled_summary">导入书源/订阅源时自动过滤低质量源（默认关闭）</string>
+    <string name="import_check_depth">校验深度</string>
+    <string name="import_check_depth_l1">仅结构（秒级，不联网）</string>
+    <string name="import_check_depth_l2">快速（默认：检测网址与搜索/列表可用性）</string>
+    <string name="import_check_depth_l3">深度（额外检测目录和正文）</string>
+    <string name="import_check_strictness">过滤严格度</string>
+    <string name="import_check_strict_lenient">宽松：只滤打不开的源（推荐）</string>
+    <string name="import_check_strict_standard">标准：还会滤搜索/列表失败的源</string>
+    <string name="import_check_strict_strict">严格：目录正文有问题也滤</string>
+    <string name="import_check_advanced">高级设置</string>
+    <string name="import_check_concurrency">并发探测数</string>
+    <string name="import_check_timeout">单源校验超时（秒）</string>
+    <string name="import_check_retry">搜索失败后换关键词重试</string>
+    <string name="import_check_large_hint">大集合导入建议使用「仅结构」或「快速」模式</string>
+    <string name="import_check_filtered_title">已过滤的源</string>
+    <string name="import_check_filtered_summary">导入 %1$d 条，过滤 %2$d 条；重新导入同一集合可更新旧源</string>
+    <string name="import_check_restore_all">导入勾选的源</string>
+    <string name="import_check_restore_all_confirm">确定导入全部 %1$d 条被过滤的源？这些源未通过质量校验</string>
+    <string name="import_check_import_disabled">导入（导入后自动禁用）</string>
+    <string name="import_check_copy_filtered">复制被过滤源列表</string>
+    <string name="import_check_stop_or_cancel">停止校验？</string>
+    <string name="import_check_stop_cancel">取消导入</string>
+    <string name="import_check_stop_pass">导入已通过校验的源</string>
+    <string name="import_check_network_down">网络不可用，%1$d 条源未校验直接导入</string>
+    <string name="import_check_imported_batch">已校验 %1$d/%2$d，已导入 %3$d</string>
+    <string name="import_check_state_usable">可用</string>
+    <string name="import_check_state_failed">失效</string>
+    <string name="import_check_state_suspect">存疑</string>
+    <string name="import_check_state_untested">未测</string>
+    <string name="import_check_low_score">低分</string>
+    <string name="quality_report_title">源质量体检</string>
+    <string name="quality_report_scope_all">全部源</string>
+    <string name="quality_report_scope_group">当前分组</string>
+    <string name="quality_report_scope_selected">选中源</string>
+    <string name="quality_report_start">开始体检</string>
+    <string name="quality_report_first_hint">质量体检只读探测不写库（可放心使用）；「校验」功能负责标注分组与权重</string>
+    <string name="quality_report_disable">禁用</string>
+    <string name="quality_report_delete">删除</string>
+    <string name="quality_report_delete_confirm">将先导出 %1$d 条源的 JSON 备份到备份目录，然后从书源中删除。确定继续？</string>
+    <string name="quality_report_backup_done">备份已保存：%1$s</string>
+    <string name="quality_report_progress">已体检 %1$d/%2$d，异常 %3$d</string>
+    <string name="import_status_filtered">已过滤</string>
+    <string name="quality_report_pause">暂停</string>
+    <string name="quality_report_resume">继续体检</string>
+    <string name="quality_report_paused_hint">已暂停于 %1$d/%2$d，点「继续体检」从断点续跑</string>
+    <string name="quality_report_disabled_toast">已禁用 %1$d 条源</string>
+    <string name="quality_report_deleted_toast">已删除 %1$d 条源，备份：%2$s</string>
+    <string name="quality_report_apply">应用结果</string>
+    <string name="quality_report_apply_confirm">将把体检结果（失效分组与权重）写入所选 %1$d 条源？</string>
+    <string name="quality_report_apply_running">体检进行中，请等待完成后再应用</string>
+    <string name="quality_report_applied_toast">已应用 %1$d 条源</string>
     <string name="check_source_item">校验项目</string>
     <string name="check_source_timeout">单个书源校验超时（秒）</string>
     <string name="timeout">超时</string>

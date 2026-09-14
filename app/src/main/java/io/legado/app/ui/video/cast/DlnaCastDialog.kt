@@ -10,7 +10,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
+import io.legado.app.constant.AppLog
 import io.legado.app.help.dlna.DlnaCastManager
+import io.legado.app.help.dlna.DlnaConstants
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.ui.theme.LegadoTheme
@@ -42,14 +44,25 @@ class DlnaCastDialog : BottomSheetDialogFragment() {
                     DlnaCastContent(
                         state = state,
                         onDismiss = { dismiss() },
-                        onRetry = { DlnaCastManager.startDiscovery(appContext) },
-                        onSelect = { device -> DlnaCastManager.castTo(appContext, device) },
+                        onRetry = {
+                            AppLog.putDebugWithTag(DlnaConstants.TAG, "UI 重试搜索", level = AppLog.Level.INFO)
+                            DlnaCastManager.startDiscovery(appContext)
+                        },
+                        onSelect = { device ->
+                            AppLog.putDebugWithTag(
+                                DlnaConstants.TAG,
+                                "UI 选择设备: ${device.displayName} location=${device.location}",
+                                level = AppLog.Level.INFO
+                            )
+                            DlnaCastManager.castTo(appContext, device)
+                        },
                         onTogglePause = { DlnaCastManager.togglePause() },
                         onStop = { DlnaCastManager.stopByUser() },
                         onSeek = { DlnaCastManager.seekTo(it) },
                         onVolume = { DlnaCastManager.setVolume(it) },
                         onSwitchDevice = {
                             // 换设备：重新走发现（REQ-03 Scenario「投屏中切换到另一个设备」）
+                            AppLog.putDebugWithTag(DlnaConstants.TAG, "UI 切换设备", level = AppLog.Level.INFO)
                             DlnaCastManager.teardown()
                             DlnaCastManager.startDiscovery(appContext)
                         }

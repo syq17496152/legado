@@ -13,13 +13,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.model.Debug
+import io.legado.app.ui.widget.compose.AppSettingPalette
+import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -87,12 +91,20 @@ fun DebugFilterChips(
     selected: DebugFilter,
     onSelect: (DebugFilter) -> Unit,
 ) {
+    // 取色基线归位（2026-09-13）：palette 直色，禁止 M3 colorScheme 派生色
+    val settings = rememberAppSettingPalette()
     DebugChipRow {
         items(DebugFilter.entries, key = { it.name }) { filter ->
             FilterChip(
                 selected = selected == filter,
                 onClick = { onSelect(filter) },
                 label = { Text(filter.title) },
+                colors = FilterChipDefaults.filterChipColors(
+                    containerColor = Color(settings.row),
+                    labelColor = settings.secondaryText,
+                    selectedContainerColor = settings.accent,
+                    selectedLabelColor = settings.onAccent
+                )
             )
         }
     }
@@ -100,8 +112,8 @@ fun DebugFilterChips(
 
 /**
  * 结构化事件卡片：类型标题 + 相对耗时 + 绝对时间戳 + 消息预览（点击看全文）。
- * 着色走取色唯一基线（MaterialTheme M3 角色，ThemeSpec 提供 container 角色）：
- * 错误=errorContainer / 响应=primaryContainer / 完成=tertiaryContainer / 过程=surfaceContainerHigh。
+ * 着色走取色唯一基线（AppSettingPalette 直色，2026-09-13 归位）：
+ * 错误=danger 淡底 / 响应=accent 淡底 / 完成=row+primaryText / 过程=row+secondaryText。
  */
 @Composable
 fun DebugEntryCard(
@@ -110,11 +122,12 @@ fun DebugEntryCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val settings = rememberAppSettingPalette()
     val (container, content) = when (entry.kind) {
-        -1 -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
-        10, 20, 30, 40 -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
-        1000 -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
-        else -> MaterialTheme.colorScheme.surfaceContainerHigh to MaterialTheme.colorScheme.onSurfaceVariant
+        -1 -> settings.danger.copy(alpha = 0.16f) to settings.danger
+        10, 20, 30, 40 -> settings.accent.copy(alpha = 0.16f) to settings.accent
+        1000 -> Color(settings.row) to settings.primaryText
+        else -> Color(settings.row) to settings.secondaryText
     }
     Card(
         onClick = onClick,
@@ -134,7 +147,7 @@ fun DebugEntryCard(
                 Text(
                     "+%.3fs".format(entry.elapsedMillis / 1000.0),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = settings.secondaryText,
                 )
             }
             Text(
@@ -146,7 +159,7 @@ fun DebugEntryCard(
             Text(
                 SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(entry.timestamp)),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = settings.secondaryText,
             )
         }
     }

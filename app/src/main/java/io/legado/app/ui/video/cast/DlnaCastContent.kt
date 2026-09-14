@@ -14,11 +14,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -43,6 +46,8 @@ import io.legado.app.help.dlna.CastPhase
 import io.legado.app.help.dlna.DlnaCastUiState
 import io.legado.app.help.dlna.DlnaDevice
 import io.legado.app.model.VideoPlay
+import io.legado.app.ui.widget.compose.AppSettingPalette
+import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 
 /**
  * add-dlna-cast：投屏面板内容（REQ-03 / REQ-05 / REQ-11）。
@@ -54,6 +59,10 @@ import io.legado.app.model.VideoPlay
  *  - 文案一律走 string 资源（禁硬编码中文），失败原因由 [CastError] 枚举映射而来 ——
  *    Manager 是长生命周期单例，不持有 Context 取文案（会泄漏）。
  *  - 本组件不直接调用 `DlnaCastManager`，所有动作经回调上抛：便于日后单测与预览。
+ *
+ * 取色基线（2026-09-13 用户批评归位）：全部走 [AppSettingPalette] 直色（ThemeStore 链），
+ * 禁止 MaterialTheme.colorScheme（M3 派生色不随主题背景直读，H9/H11 铁律）；
+ * M3 组件（TextButton/Slider/CircularProgressIndicator）必须显式 colors 指定直色。
  */
 @Composable
 fun DlnaCastContent(
@@ -67,6 +76,7 @@ fun DlnaCastContent(
     onVolume: (Int) -> Unit,
     onSwitchDevice: () -> Unit
 ) {
+    val settings = rememberAppSettingPalette()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -75,6 +85,7 @@ fun DlnaCastContent(
         Text(
             text = stringResource(R.string.dlna_cast_title),
             style = MaterialTheme.typography.titleMedium,
+            color = settings.primaryText,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(12.dp))
@@ -82,6 +93,7 @@ fun DlnaCastContent(
         when (state.phase) {
             CastPhase.CASTING, CastPhase.CONNECTING -> CastControlPanel(
                 state = state,
+                settings = settings,
                 onTogglePause = onTogglePause,
                 onStop = onStop,
                 onSeek = onSeek,
@@ -89,10 +101,11 @@ fun DlnaCastContent(
                 onSwitchDevice = onSwitchDevice
             )
 
-            CastPhase.DISCOVERING -> SearchingRow()
+            CastPhase.DISCOVERING -> SearchingRow(settings)
 
             else -> DeviceListPanel(
                 state = state,
+                settings = settings,
                 onSelect = onSelect,
                 onRetry = onRetry
             )
@@ -103,7 +116,10 @@ fun DlnaCastContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(contentColor = settings.secondaryText)
+            ) {
                 Text(stringResource(R.string.cancel))
             }
         }
@@ -112,13 +128,18 @@ fun DlnaCastContent(
 
 /** 搜索中 */
 @Composable
-private fun SearchingRow() {
+private fun SearchingRow(settings: AppSettingPalette) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        CircularProgressIndicator(
+            modifier = Modifier.size(18.dp),
+            strokeWidth = 2.dp,
+            color = settings.accent
+        )
         Spacer(Modifier.width(12.dp))
         Text(
             text = stringResource(R.string.dlna_searching_devices),
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            color = settings.primaryText
         )
     }
 }
@@ -127,6 +148,7 @@ private fun SearchingRow() {
 @Composable
 private fun DeviceListPanel(
     state: DlnaCastUiState,
+    settings: AppSettingPalette,
     onSelect: (DlnaDevice) -> Unit,
     onRetry: () -> Unit
 ) {
@@ -138,6 +160,7 @@ private fun DeviceListPanel(
         DeviceRow(
             title = stringResource(R.string.dlna_last_device, device.displayName),
             subtitle = device.modelName,
+            settings = settings,
             onClick = { onSelect(device) }
         )
         Spacer(Modifier.height(4.dp))
@@ -148,6 +171,7 @@ private fun DeviceListPanel(
             title = stringResource(R.string.dlna_last_device, state.lastDeviceName),
             subtitle = stringResource(R.string.dlna_last_device_offline),
             enabled = false,
+            settings = settings,
             onClick = {}
         )
         Spacer(Modifier.height(4.dp))
@@ -157,7 +181,7 @@ private fun DeviceListPanel(
         Text(
             text = stringResource(R.string.dlna_devices_found_count, state.devices.size),
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = settings.secondaryText
         )
         Spacer(Modifier.height(4.dp))
         LazyColumn(modifier = Modifier.heightIn(max = 260.dp)) {
@@ -165,6 +189,7 @@ private fun DeviceListPanel(
                 DeviceRow(
                     title = device.displayName,
                     subtitle = device.modelName,
+                    settings = settings,
                     onClick = { onSelect(device) }
                 )
             }
@@ -173,18 +198,22 @@ private fun DeviceListPanel(
         // 未发现设备 / 发现失败
         Text(
             text = state.error?.let { errorText(it) } ?: stringResource(R.string.dlna_no_device_found),
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            color = settings.primaryText
         )
         if (state.error == CastError.NO_DEVICE_FOUND || state.error == CastError.NO_WIFI) {
             Spacer(Modifier.height(4.dp))
             Text(
                 text = stringResource(R.string.dlna_no_device_hint),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = settings.secondaryText
             )
         }
         Spacer(Modifier.height(8.dp))
-        TextButton(onClick = onRetry) {
+        TextButton(
+            onClick = onRetry,
+            colors = ButtonDefaults.textButtonColors(contentColor = settings.accent)
+        ) {
             Text(stringResource(R.string.dlna_retry_search))
         }
     }
@@ -195,14 +224,14 @@ private fun DeviceListPanel(
         Text(
             text = stringResource(R.string.dlna_error_multi_ip, address),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = settings.secondaryText
         )
     }
     if (state.subnetMismatchHint) {
         Text(
             text = stringResource(R.string.dlna_error_maybe_different_subnet),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = settings.secondaryText
         )
     }
 }
@@ -213,12 +242,13 @@ private fun DeviceRow(
     title: String,
     subtitle: String?,
     enabled: Boolean = true,
+    settings: AppSettingPalette,
     onClick: () -> Unit
 ) {
     val titleColor = if (enabled) {
-        MaterialTheme.colorScheme.onSurface
+        settings.primaryText
     } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
+        settings.disabledText
     }
     Column(
         modifier = Modifier
@@ -237,7 +267,7 @@ private fun DeviceRow(
             Text(
                 text = it,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = settings.secondaryText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -249,6 +279,7 @@ private fun DeviceRow(
 @Composable
 private fun CastControlPanel(
     state: DlnaCastUiState,
+    settings: AppSettingPalette,
     onTogglePause: () -> Unit,
     onStop: () -> Unit,
     onSeek: (Long) -> Unit,
@@ -262,13 +293,14 @@ private fun CastControlPanel(
     val deviceName = state.currentDevice?.displayName.orEmpty()
     Text(
         text = stringResource(R.string.dlna_casting_to, deviceName),
-        style = MaterialTheme.typography.bodyLarge
+        style = MaterialTheme.typography.bodyLarge,
+        color = settings.primaryText
     )
     state.title?.takeIf { it.isNotBlank() }?.let {
         Text(
             text = it,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = settings.secondaryText,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
@@ -277,7 +309,7 @@ private fun CastControlPanel(
         Text(
             text = stringResource(R.string.dlna_proxy_relaying),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = settings.secondaryText
         )
     }
 
@@ -295,20 +327,33 @@ private fun CastControlPanel(
             onValueChangeFinished = {
                 dragging = false
                 onSeek((dragValue * state.durationMs).toLong())
-            }
+            },
+            colors = SliderDefaults.colors(
+                thumbColor = settings.accent,
+                activeTrackColor = settings.accent,
+                inactiveTrackColor = Color(settings.row)
+            )
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(formatHms(state.positionMs), style = MaterialTheme.typography.labelSmall)
-            Text(formatHms(state.durationMs), style = MaterialTheme.typography.labelSmall)
+            Text(
+                formatHms(state.positionMs),
+                style = MaterialTheme.typography.labelSmall,
+                color = settings.secondaryText
+            )
+            Text(
+                formatHms(state.durationMs),
+                style = MaterialTheme.typography.labelSmall,
+                color = settings.secondaryText
+            )
         }
     } else if (state.phase == CastPhase.CASTING) {
         Text(
             text = stringResource(R.string.dlna_seek_unsupported),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = settings.secondaryText
         )
     }
 
@@ -319,16 +364,29 @@ private fun CastControlPanel(
                 imageVector = if (state.paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
                 contentDescription = stringResource(
                     if (state.paused) R.string.dlna_resume else R.string.dlna_pause
-                )
+                ),
+                tint = settings.primaryText
             )
         }
         Spacer(Modifier.width(8.dp))
-        TextButton(onClick = onSwitchDevice) {
+        TextButton(
+            onClick = onSwitchDevice,
+            colors = ButtonDefaults.textButtonColors(contentColor = settings.accent)
+        ) {
             Text(stringResource(R.string.dlna_switch_device))
         }
         Spacer(Modifier.width(8.dp))
-        TextButton(onClick = onStop) {
-            Icon(Icons.Filled.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
+        // 结束投屏 = 危险操作，语义红（AppSettingPalette.danger，规范豁免类语义色）
+        TextButton(
+            onClick = onStop,
+            colors = ButtonDefaults.textButtonColors(contentColor = settings.danger)
+        ) {
+            Icon(
+                Icons.Filled.Stop,
+                contentDescription = null,
+                tint = settings.danger,
+                modifier = Modifier.size(18.dp)
+            )
             Spacer(Modifier.width(4.dp))
             Text(stringResource(R.string.dlna_stop_cast))
         }
@@ -340,14 +398,20 @@ private fun CastControlPanel(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = stringResource(R.string.dlna_volume),
-                style = MaterialTheme.typography.labelMedium
+                style = MaterialTheme.typography.labelMedium,
+                color = settings.primaryText
             )
             Spacer(Modifier.width(8.dp))
             Slider(
                 modifier = Modifier.weight(1f),
                 value = volume.toFloat(),
                 valueRange = 0f..100f,
-                onValueChange = { onVolume(it.toInt()) }
+                onValueChange = { onVolume(it.toInt()) },
+                colors = SliderDefaults.colors(
+                    thumbColor = settings.accent,
+                    activeTrackColor = settings.accent,
+                    inactiveTrackColor = Color(settings.row)
+                )
             )
         }
     }
@@ -357,7 +421,7 @@ private fun CastControlPanel(
         Text(
             text = errorText(error),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error
+            color = settings.danger
         )
     }
 
@@ -366,7 +430,7 @@ private fun CastControlPanel(
         Text(
             text = stringResource(R.string.dlna_error_multi_ip, address),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = settings.secondaryText
         )
     }
 }

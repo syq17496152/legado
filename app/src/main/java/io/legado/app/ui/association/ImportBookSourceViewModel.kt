@@ -20,7 +20,13 @@ import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.plainImportClient
 import io.legado.app.help.source.SourceHelp
+import io.legado.app.model.ImportCheck
+import io.legado.app.model.QualityCheckSession
 import io.legado.app.model.RuleUpdate
+import io.legado.app.model.SourceQualityChecker
+import io.legado.app.model.SourceQualityReport
+import io.legado.app.model.SourceQualityScorer
+import io.legado.app.model.SourceQualitySession
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
@@ -35,6 +41,26 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+
+/**
+ * 导入校验：被过滤源（复核窗口展示项）
+ */
+data class FilteredBookSource(
+    val index: Int,
+    val name: String,
+    val reason: String,
+    val score: Int
+)
+
+/**
+ * 导入校验结果汇总
+ */
+class ImportCheckOutcome(
+    val imported: Int,
+    val filtered: List<FilteredBookSource>,
+    val networkDown: Boolean,
+    val unCheckedCount: Int
+)
 
 
 class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
@@ -51,6 +77,22 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
     val selectStatus = arrayListOf<Boolean>()
     val newSourceStatus = arrayListOf<Boolean>()
     val updateSourceStatus = arrayListOf<Boolean>()
+
+    /** 导入校验（import-source-quality-filter）：L1 静态报告，与 allSources 平行；关闭时为 null 占位 */
+    val l1Reports = arrayListOf<SourceQualityReport?>()
+
+    /** 校验进度（已校验/总数/已过滤数），驱动导入弹框校验进度展示 */
+    val checkProgressLiveData = MutableLiveData<Triple<Int, Int, Int>>()
+
+    /** 校验进行中标记（弹框关闭取消 + 返回键拦截判断） */
+    @Volatile
+    var checkRunning = false
+
+    /** 校验 Job（弹框关闭真取消） */
+    private var checkJob: io.legado.app.help.coroutine.Coroutine<Unit>? = null
+
+    /** 校验过程中已通过的源索引（P2 半程落库：取消时导入已通过部分） */
+    private val passedSoFar = java.util.concurrent.ConcurrentLinkedQueue<Int>()
 
     val isSelectAll: Boolean
         get() {
@@ -262,15 +304,246 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
                 .chunked(500)
                 .flatMap { appDb.bookSourceDao.getBookSourceParts(it) }
                 .associateBy { it.bookSourceUrl }
+            // 导入校验开启：L1 静态结构检查（0 网络成本，解析后即时标记 FILTERED 态）
+            val checkEnabled = ImportCheck.enabled
+            if (checkEnabled) {
+                l1Reports.clear()
+            }
             allSources.forEachIndexed { index, it ->
                 val source = existing[it.bookSourceUrl]
                 checkSources.add(source)
-                selectStatus.add(source == null || source.lastUpdateTime < it.lastUpdateTime)
+                var selectable = source == null || source.lastUpdateTime < it.lastUpdateTime
+                if (checkEnabled) {
+                    val l1 = SourceQualityChecker.l1StaticCheckBookSource(it)
+                    l1Reports.add(l1)
+                    // L1 结构残缺 = 确定性失败，默认不勾选（FILTERED 态展示，用户可手动勾选恢复）
+                    if (l1.deterministicFail) {
+                        selectable = false
+                    }
+                } else {
+                    l1Reports.add(null)
+                }
+                selectStatus.add(selectable)
                 newSourceStatus.add(source == null)
                 updateSourceStatus.add(source != null && source.lastUpdateTime < it.lastUpdateTime)
             }
+            if (checkEnabled) {
+                val l1Fail = l1Reports.count { it?.deterministicFail == true }
+                AppLog.putDebugWithTag(
+                    QualityCheckSession.LOG_TAG,
+                    "L1 静态检查: total=${allSources.size} 结构残缺=$l1Fail",
+                    level = AppLog.Level.INFO
+                )
+            }
             successLiveData.postValue(allSources.size)
         }
+    }
+
+    /**
+     * 带质量校验的导入（ImportCheck.enabled 且深度>L1 时走此路径）：
+     * 断网预检短路 → 缓存命中复用 → 并发联网校验 → 档位判定 → 通过集落库 + 过滤集复核
+     *
+     * @param onProgress 校验进度回调（已校验/总数/已过滤）
+     * @param onComplete 完成回调（校验终止/复核窗口弹出均走此回调，主线程）
+     */
+    fun importSelectWithCheck(
+        onProgress: (Int, Int, Int) -> Unit,
+        onComplete: (ImportCheckOutcome?) -> Unit
+    ) {
+        val options = ImportCheck.toProbeOptions()
+        val selectedIndexes = mutableListOf<Int>()
+        selectStatus.forEachIndexed { index, b ->
+            if (b) selectedIndexes.add(index)
+        }
+        if (selectedIndexes.isEmpty()) {
+            onComplete(null)
+            return
+        }
+        checkRunning = true
+        passedSoFar.clear()
+        AppLog.putDebugWithTag(
+            QualityCheckSession.LOG_TAG,
+            "导入校验启动: selected=${selectedIndexes.size}",
+            level = AppLog.Level.INFO
+        )
+        checkJob = execute {
+            // 断网预检（AD 判定规则表断网豁免）：确认断网 → 全部"未测+存疑"放行
+            if (SourceQualityChecker.isNetworkDown()) {
+                importSelected(selectedIndexes, autoDisable = false)
+                onComplete(
+                    ImportCheckOutcome(
+                        imported = selectedIndexes.size,
+                        filtered = emptyList(),
+                        networkDown = true,
+                        unCheckedCount = selectedIndexes.size
+                    )
+                )
+                return@execute
+            }
+            val session = SourceQualitySession(options)
+            val checkedCounter = java.util.concurrent.atomic.AtomicInteger(0)
+            val filteredCounter = java.util.concurrent.atomic.AtomicInteger(0)
+            // 流式落库（社区合集 E2E 实证修复）：通过源每满 50 条立即落库，
+            // 防万条集合校验 25 分钟后取消/被杀导致全部丢失（913 条 E2E 铁证：force-stop 时整批未落库=0）
+            val pendingPassed = java.util.Collections.synchronizedList(mutableListOf<Int>())
+            fun flushPassed(force: Boolean = false) {
+                val batch = synchronized(pendingPassed) {
+                    if (pendingPassed.isEmpty() || (!force && pendingPassed.size < BATCH_IMPORT_SIZE)) {
+                        emptyList()
+                    } else {
+                        val b = pendingPassed.toList()
+                        pendingPassed.clear()
+                        b
+                    }
+                }
+                if (batch.isNotEmpty()) {
+                    AppLog.putDebugWithTag(
+                        QualityCheckSession.LOG_TAG,
+                        "流式落库: batch=${batch.size} 累计通过=${passedSoFar.size}",
+                        level = AppLog.Level.INFO
+                    )
+                    importSelected(batch, autoDisable = false)
+                }
+            }
+            val outcomes = coroutineScope {
+                selectedIndexes.map { index ->
+                    async {
+                        // 协程取消传播：弹框关闭即终止；并发由 session.semaphore 限流
+                        val source = allSources[index]
+                        val cached = if (source.lastUpdateTime > 0) {
+                            SourceQualityChecker.getCachedReport(source.bookSourceUrl, source.lastUpdateTime, options)
+                        } else null
+                        val report = cached ?: SourceQualityChecker.checkBookSource(source, session)
+                        if (cached == null && source.lastUpdateTime > 0) {
+                            SourceQualityChecker.putCachedReport(source.bookSourceUrl, source.lastUpdateTime, options, report)
+                        }
+                        val (filtered, reason) = SourceQualityScorer.isFiltered(report, options.strictness)
+                        val fCount = if (filtered) filteredCounter.incrementAndGet() else {
+                            passedSoFar.add(index)
+                            pendingPassed.add(index)
+                            flushPassed()
+                            filteredCounter.get()
+                        }
+                        checkProgressLiveData.postValue(
+                            Triple(checkedCounter.incrementAndGet(), selectedIndexes.size, fCount)
+                        )
+                        if (filtered) {
+                            index to FilteredBookSource(
+                                index = index,
+                                name = source.bookSourceName,
+                                reason = reason,
+                                score = report.score
+                            )
+                        } else {
+                            index to null
+                        }
+                    }
+                }.awaitAll()
+            }
+            flushPassed(force = true)  // 收尾：落库剩余不足 50 的通过源
+            val filteredList = outcomes.mapNotNull { it.second }
+            checkRunning = false
+            AppLog.putDebugWithTag(
+                QualityCheckSession.LOG_TAG,
+                "导入校验完成: 导入=${selectedIndexes.size - filteredList.size} 过滤=${filteredList.size}",
+                level = AppLog.Level.INFO
+            )
+            onComplete(
+                ImportCheckOutcome(
+                    imported = selectedIndexes.size - filteredList.size,
+                    filtered = filteredList,
+                    networkDown = false,
+                    unCheckedCount = 0
+                )
+            )
+        }.onError {
+            checkRunning = false
+            AppLog.put("ImportCheckError:${it.localizedMessage}", it)
+            onComplete(null)
+        }
+    }
+
+    /**
+     * 取消校验（弹框关闭确认框调用）：
+     * @param landPassed true=导入已通过校验的源（半程落库）；false=直接取消（无源落库）
+     */
+    fun cancelCheck(landPassed: Boolean) {
+        checkRunning = false
+        AppLog.putDebugWithTag(
+            QualityCheckSession.LOG_TAG,
+            "校验取消: landPassed=$landPassed 已通过=${passedSoFar.size}",
+            level = AppLog.Level.INFO
+        )
+        checkJob?.cancel()
+        checkJob = null
+        if (landPassed && passedSoFar.isNotEmpty()) {
+            importSelected(passedSoFar.toList(), autoDisable = false)
+        }
+        passedSoFar.clear()
+    }
+
+    /**
+     * 恢复导入（复核窗口"仍要导入"）：
+     * @param autoDisable true=导入后自动禁用（P8 置灰期望）
+     */
+    fun restoreFiltered(indexes: List<Int>, autoDisable: Boolean, finally: () -> Unit) {
+        execute {
+            importSelected(indexes, autoDisable)
+        }.onFinally {
+            finally.invoke()
+        }
+    }
+
+    /**
+     * 勾选索引集落库（公共路径：keepName/keepGroup/分组/customOrder 逻辑与 importSelect 一致）
+     */
+    private fun importSelected(indexes: List<Int>, autoDisable: Boolean) {
+        val group = groupName?.trim()
+        val keepName = AppConfig.importKeepName
+        val keepGroup = AppConfig.importKeepGroup
+        val keepEnable = AppConfig.importKeepEnable
+        val selectSource = arrayListOf<BookSource>()
+        indexes.forEach { index ->
+            val source = allSources[index]
+            checkSources[index]?.let {
+                if (keepName) {
+                    source.bookSourceName = it.bookSourceName
+                }
+                if (keepGroup) {
+                    source.bookSourceGroup = it.bookSourceGroup
+                }
+                if (keepEnable) {
+                    source.enabled = it.enabled
+                    source.enabledExplore = it.enabledExplore
+                }
+                source.customOrder = it.customOrder
+            }
+            if (autoDisable) {
+                source.enabled = false
+            }
+            if (!group.isNullOrEmpty()) {
+                if (isAddGroup) {
+                    val groups = linkedSetOf<String>()
+                    source.bookSourceGroup?.splitNotBlank(AppPattern.splitGroupRegex)?.let {
+                        groups.addAll(it)
+                    }
+                    groups.add(group)
+                    source.bookSourceGroup = groups.joinToString(",")
+                } else {
+                    source.bookSourceGroup = group
+                }
+            }
+            selectSource.add(source)
+        }
+        if (selectSource.isNotEmpty()) {
+            SourceHelp.insertBookSource(*selectSource.toTypedArray())
+            ContentProcessor.upReplaceRules()
+        }
+    }
+
+    companion object {
+        const val BATCH_IMPORT_THRESHOLD = 200
+        const val BATCH_IMPORT_SIZE = 50
     }
 
 }

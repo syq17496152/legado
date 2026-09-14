@@ -4,7 +4,6 @@ import android.content.Context
 import io.legado.app.constant.AppLog
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.model.VideoPlay
-import io.legado.app.utils.LogUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CoroutineScope
@@ -155,6 +154,11 @@ object DlnaCastManager {
         val appContext = context.applicationContext
         val pick = CastNetworkHelper.pickLanAddress(appContext)
         if (pick.address == null) {
+            AppLog.putDebugWithTag(
+                DlnaConstants.TAG,
+                "搜索中止: 无可用 WLAN 地址",
+                level = AppLog.Level.WARN
+            )
             _state.value = _state.value.copy(
                 phase = CastPhase.FAILED,
                 error = CastError.NO_WIFI,
@@ -163,6 +167,11 @@ object DlnaCastManager {
             return
         }
         discoveryJob?.cancel()
+        AppLog.putDebugWithTag(
+            DlnaConstants.TAG,
+            "开始搜索设备: 本机地址=${pick.address}",
+            level = AppLog.Level.INFO
+        )
         _state.value = _state.value.copy(
             phase = CastPhase.DISCOVERING,
             devices = emptyList(),
@@ -173,6 +182,11 @@ object DlnaCastManager {
             SsdpDiscovery.discover(appContext)
         }.onSuccess { devices ->
             val lastUdn = VideoPlay.dlnaLastDeviceUdn
+            AppLog.putDebugWithTag(
+                DlnaConstants.TAG,
+                "搜索完成: 发现 ${devices.size} 台设备 ${devices.joinToString { it.displayName }}",
+                level = AppLog.Level.INFO
+            )
             _state.value = _state.value.copy(
                 phase = if (devices.isEmpty()) CastPhase.FAILED else CastPhase.DEVICE_LIST_READY,
                 devices = devices,
@@ -200,10 +214,16 @@ object DlnaCastManager {
         val appContext = context.applicationContext
         val url = VideoPlay.videoUrl
         if (url.isNullOrBlank()) {
+            AppLog.putDebugWithTag(DlnaConstants.TAG, "投屏请求被拒: videoUrl 为空", level = AppLog.Level.WARN)
             _state.value = _state.value.copy(phase = CastPhase.FAILED, error = CastError.START_FAILED)
             return
         }
         if (_state.value.phase == CastPhase.CONNECTING) return // 防重复投递（REQ-04）
+        AppLog.putDebugWithTag(
+            DlnaConstants.TAG,
+            "UI 投屏请求: device=${device.displayName} udn=${device.udn} mode=待判定 url=$url",
+            level = AppLog.Level.INFO
+        )
         _state.value = _state.value.copy(
             phase = CastPhase.CONNECTING,
             currentDevice = device,
@@ -233,6 +253,11 @@ object DlnaCastManager {
             if (mode == DeliveryMode.FILE_PROXY) null
             else DlnaHttp.headContentType(url, headers)
         }
+        AppLog.putDebugWithTag(
+            DlnaConstants.TAG,
+            "投递决策: mode=$mode mime=$mime 会话头=${headers.size}个",
+            level = AppLog.Level.INFO
+        )
 
         // ② 代理模式先起代理并登记，拿到投递地址
         var castUrl = url
@@ -254,6 +279,11 @@ object DlnaCastManager {
             val pick = CastNetworkHelper.pickLanAddress(appContext)
             val lanIp = pick.address
             if (lanIp == null) {
+                AppLog.putDebugWithTag(
+                    DlnaConstants.TAG,
+                    "投屏失败: 代理模式但无可用局域网 IP",
+                    level = AppLog.Level.WARN
+                )
                 _state.value = _state.value.copy(
                     phase = CastPhase.FAILED,
                     error = CastError.NO_LAN_IP
@@ -265,6 +295,11 @@ object DlnaCastManager {
             // startServer 返回 null=启动失败，统一按 -1 走 START_FAILED 分支
             val port = server.startServer() ?: -1
             if (port <= 0) {
+                AppLog.putDebugWithTag(
+                    DlnaConstants.TAG,
+                    "投屏失败: 代理端口启动失败 port=$port",
+                    level = AppLog.Level.WARN
+                )
                 _state.value = _state.value.copy(
                     phase = CastPhase.FAILED,
                     error = CastError.START_FAILED
@@ -279,6 +314,11 @@ object DlnaCastManager {
             session = newSession
             castUrl = "http://$lanIp:$port${DlnaConstants.PROXY_PATH_PREFIX}" +
                 "/${newSession.token}/${newSession.baseKey}"
+            AppLog.putDebugWithTag(
+                DlnaConstants.TAG,
+                "代理就绪: ip=$lanIp port=$port castUrl=$castUrl",
+                level = AppLog.Level.INFO
+            )
             _state.value = _state.value.copy(
                 usingProxy = true,
                 subnetMismatchHint = !CastNetworkHelper.sameSubnet24(
@@ -287,6 +327,13 @@ object DlnaCastManager {
                 ),
                 multiAddressHint = if (pick.ambiguous) lanIp else null
             )
+            if (_state.value.subnetMismatchHint) {
+                AppLog.putDebugWithTag(
+                    DlnaConstants.TAG,
+                    "子网不一致提示: 手机=$lanIp 设备=${device.location.substringBefore("/cast").substringAfter("//")}",
+                    level = AppLog.Level.WARN
+                )
+            }
         } else {
             _state.value = _state.value.copy(usingProxy = false)
         }
@@ -300,9 +347,11 @@ object DlnaCastManager {
         var result = AvTransportClient.setAvTransportUri(device, castUrl, metadata)
         if (!result.success && metadata != DidlLiteBuilder.EMPTY_METADATA) {
             // 降级链：老设备拒收 DIDL → 空元数据重试一次，并记住该设备
-            LogUtils.d(DlnaConstants.TAG) {
-                "带元数据投递被拒（${result.errorText}），改用空元数据重试"
-            }
+            AppLog.putDebugWithTag(
+                DlnaConstants.TAG,
+                "带元数据投递被拒（${result.errorText}），改用空元数据重试",
+                level = AppLog.Level.WARN
+            )
             result = AvTransportClient.setAvTransportUri(
                 device,
                 castUrl,
@@ -313,6 +362,11 @@ object DlnaCastManager {
             }
         }
         if (!result.success) {
+            AppLog.putDebugWithTag(
+                DlnaConstants.TAG,
+                "投屏失败: SetAVTransportURI 被拒 ${result.errorText}",
+                level = AppLog.Level.ERROR
+            )
             _state.value = _state.value.copy(phase = CastPhase.FAILED, error = CastError.DEVICE_REJECTED)
             teardown(notifyDevice = false)
             return
@@ -320,6 +374,11 @@ object DlnaCastManager {
 
         // ④ Play
         if (!AvTransportClient.play(device).success) {
+            AppLog.putDebugWithTag(
+                DlnaConstants.TAG,
+                "投屏失败: Play 指令未成功",
+                level = AppLog.Level.ERROR
+            )
             _state.value = _state.value.copy(phase = CastPhase.FAILED, error = CastError.CONNECT_FAILED)
             teardown()
             return
@@ -328,12 +387,27 @@ object DlnaCastManager {
         // ⑤ 首帧判定（AD-11）：8s 内仍 STOPPED 视为拉流失败
         delay(2_000)
         val stateText = AvTransportClient.transportState(device)
+        AppLog.putDebugWithTag(
+            DlnaConstants.TAG,
+            "首帧判定: 2s 时状态=$stateText",
+            level = AppLog.Level.INFO
+        )
         if (stateText == AvTransportClient.STATE_STOPPED ||
             stateText == AvTransportClient.STATE_NO_MEDIA
         ) {
             delay(DlnaConstants.TIMEOUT_FIRST_FRAME_MS - 2_000)
             val again = AvTransportClient.transportState(device)
+            AppLog.putDebugWithTag(
+                DlnaConstants.TAG,
+                "首帧判定: 8s 复查状态=$again",
+                level = AppLog.Level.INFO
+            )
             if (again == AvTransportClient.STATE_STOPPED || again == AvTransportClient.STATE_NO_MEDIA) {
+                AppLog.putDebugWithTag(
+                    DlnaConstants.TAG,
+                    "投屏失败: 设备持续 STOPPED，判定拉流失败（电视取不到流，排查代理请求日志）",
+                    level = AppLog.Level.ERROR
+                )
                 _state.value = _state.value.copy(
                     phase = CastPhase.FAILED,
                     error = CastError.DEVICE_REJECTED
@@ -359,6 +433,11 @@ object DlnaCastManager {
             supportSeek = true,
             volume = RenderingControlClient.getVolume(device),
             error = null
+        )
+        AppLog.putDebugWithTag(
+            DlnaConstants.TAG,
+            "投屏建立成功: device=${device.displayName} castUrl=$castUrl",
+            level = AppLog.Level.INFO
         )
         startPolling(device)
     }
@@ -415,6 +494,11 @@ object DlnaCastManager {
     }
 
     private fun handleDeviceLost() {
+        AppLog.putDebugWithTag(
+            DlnaConstants.TAG,
+            "设备失联: 连续 ${DlnaConstants.POLL_FAILURE_THRESHOLD} 次轮询失败，结束会话",
+            level = AppLog.Level.WARN
+        )
         _state.value = _state.value.copy(error = CastError.DEVICE_LOST)
         teardown(notifyDevice = false)
         _state.value = _state.value.copy(phase = CastPhase.FAILED, error = CastError.DEVICE_LOST)
@@ -460,12 +544,21 @@ object DlnaCastManager {
     /** 用户主动结束投屏（REQ-05 / REQ-08） */
     fun stopByUser() {
         val device = _state.value.currentDevice
+        AppLog.putDebugWithTag(
+            DlnaConstants.TAG,
+            "用户结束投屏: device=${device?.displayName}",
+            level = AppLog.Level.INFO
+        )
         if (device != null) {
             Coroutine.async(scope, Dispatchers.IO) {
                 AvTransportClient.stop(device)
             }.onError { error ->
                 // Stop 失败不阻塞用户退出（AD-11）
-                LogUtils.d(DlnaConstants.TAG) { "Stop 下发失败，忽略: ${error.message}" }
+                AppLog.putDebugWithTag(
+                    DlnaConstants.TAG,
+                    "Stop 下发失败，忽略: ${error.message}",
+                    level = AppLog.Level.WARN
+                )
             }
         }
         teardown(notifyDevice = false)
@@ -486,6 +579,11 @@ object DlnaCastManager {
         ) {
             return
         }
+        AppLog.putDebugWithTag(
+            DlnaConstants.TAG,
+            "网络断开/切换: 结束当前会话",
+            level = AppLog.Level.WARN
+        )
         teardown(notifyDevice = true)
         _state.value = _state.value.copy(phase = CastPhase.FAILED, error = CastError.NETWORK_CHANGED)
     }
@@ -500,6 +598,11 @@ object DlnaCastManager {
      *   用户已单独下发 Stop）时传 false，避免多余请求；默认 true 兜底清理。
      */
     fun teardown(notifyDevice: Boolean = true) {
+        AppLog.putDebugWithTag(
+            DlnaConstants.TAG,
+            "会话收尾: phase=${_state.value.phase} notifyDevice=$notifyDevice",
+            level = AppLog.Level.INFO
+        )
         cancelPolling()
         if (notifyDevice) {
             _state.value.currentDevice?.let { device ->
@@ -507,7 +610,11 @@ object DlnaCastManager {
                     AvTransportClient.stop(device)
                 }.onError { error ->
                     // Stop 失败不阻塞收尾（AD-11）
-                    LogUtils.d(DlnaConstants.TAG) { "teardown Stop 下发失败，忽略: ${error.message}" }
+                    AppLog.putDebugWithTag(
+                        DlnaConstants.TAG,
+                        "teardown Stop 下发失败，忽略: ${error.message}",
+                        level = AppLog.Level.WARN
+                    )
                 }
             }
         }

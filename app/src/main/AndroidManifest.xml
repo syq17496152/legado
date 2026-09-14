@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -380,6 +380,10 @@
         <activity
             android:name=".ui.book.source.manage.BookSourceActivity"
             android:launchMode="singleTop"
+            android:screenOrientation="behind" />
+        <!-- 源质量体检结果页 -->
+        <activity
+            android:name=".ui.book.source.manage.SourceQualityReportActivity"
             android:screenOrientation="behind" />
         <!-- 订阅源管理 -->
         <activity

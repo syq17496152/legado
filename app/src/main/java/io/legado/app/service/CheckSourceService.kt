@@ -23,6 +23,7 @@ import io.legado.app.help.source.exploreKinds
 import io.legado.app.model.BookCheckResult
 import io.legado.app.model.CheckSource
 import io.legado.app.model.Debug
+import io.legado.app.model.SourceQualityChecker
 import io.legado.app.model.SourceWeightCalculator
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.RuleData
@@ -163,39 +164,21 @@ class CheckSourceService : BaseService() {
         source.respondTime = Debug.getRespondTime(source.bookSourceUrl)
     }
 
+    /**
+     * 域名探测核心委托 SourceQualityChecker（AD-08 等价重构：判定核心单一权威源）
+     * 行为保持：Socket 快探 2s 外壳/1.6s connect
+     */
     private suspend fun isDomainReachable(domain: String): Boolean {
-        return kotlin.runCatching {
-            withTimeout(2000) {
-                val url = URI(domain.substringBefore("#"))
-                val port = url.port.takeIf { it > 0 } ?: 80
-                Socket().use { socket ->
-                    socket.connect(InetSocketAddress(url.host, port), 1600)
-                    true
-                }
-            }
-        }.getOrDefault(false)
+        return SourceQualityChecker.isDomainReachable(domain)
     }
 
     /**
-     * 通过 AnalyzeUrl 发起真实请求校验域名可达性
-     * 支持 jslib/注释/#规避/空格等复杂源URL
+     * 通过 AnalyzeUrl 发起真实请求校验域名可达性（委托公共组件）
+     * 行为保持：原硬编码 30s 超时按原值传入（AD-08 防走样④）
      * @return Pair(是否可达, 真实域名host) - host用于回填source.lastHost,UI分组优先使用
      */
     private suspend fun checkDomainReachable(source: BookSource): Pair<Boolean, String?> {
-        return kotlin.runCatching {
-            withTimeout(30000) {
-                val analyzeUrl = AnalyzeUrl(
-                    source.bookSourceUrl,
-                    source = source,
-                    ruleData = RuleData(),
-                    coroutineContext = currentCoroutineContext()
-                )
-                analyzeUrl.getStrResponseAwait()
-                // 记录真实域名(从AnalyzeUrl处理后的最终URL提取,支持jslib/注释/#规避)
-                val realDomain = kotlin.runCatching { URI(analyzeUrl.url).host }.getOrNull()
-                Pair(true, realDomain)
-            }
-        }.getOrDefault(Pair(false, null))
+        return SourceQualityChecker.checkDomainReachable(source, 30000L)
     }
 
     private suspend fun doCheckSource(source: BookSource) {

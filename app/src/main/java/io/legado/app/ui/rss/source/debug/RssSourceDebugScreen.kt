@@ -37,6 +37,7 @@ import io.legado.app.ui.source.debug.DebugFilter
 import io.legado.app.ui.source.debug.DebugFilterChips
 import io.legado.app.ui.source.debug.toEntryUi
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
+import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 
 /**
  * debug-page-redesign：订阅源调试页 Compose Screen（对标 MD3，与书源调试页同构）。
@@ -181,6 +182,8 @@ fun RssSourceDebugScreen(
             }
         }
 
+        // 取色基线归位（2026-09-13）：accent 底 + onAccent 图标；运行中停止=语义红
+        val fabPalette = rememberAppSettingPalette()
         FloatingActionButton(
             onClick = {
                 when (phase) {
@@ -198,7 +201,8 @@ fun RssSourceDebugScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp),
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            containerColor = if (phase == RssDebugPhase.RUNNING) fabPalette.danger else fabPalette.accent,
+            contentColor = fabPalette.onAccent,
         ) {
             Icon(
                 imageVector = if (phase == RssDebugPhase.RUNNING) Icons.Default.Stop else Icons.Default.PlayArrow,

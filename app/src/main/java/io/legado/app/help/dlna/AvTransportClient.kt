@@ -1,6 +1,6 @@
 package io.legado.app.help.dlna
 
-import io.legado.app.utils.LogUtils
+import io.legado.app.constant.AppLog
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -174,9 +174,13 @@ object DlnaSoapExecutor {
                 val fault = text?.let { SoapEnvelope.parseFault(it) }
                 val ok = response.isSuccessful && fault == null
                 if (!ok) {
-                    LogUtils.d(DlnaConstants.TAG) {
-                        "$action -> $deviceName 失败: http=${response.code} fault=$fault"
-                    }
+                    // 诊断日志（2026-09-13 真机反馈：投屏失败无日志可查）：SOAP 失败必须落 AppLog，
+                    // 带 http 码与 UPnP fault 码，recordLog 关闭时 WARN 级 logcat 仍可采集
+                    AppLog.putDebugWithTag(
+                        DlnaConstants.TAG,
+                        "SOAP 失败: $action -> $deviceName http=${response.code} fault=$fault",
+                        level = AppLog.Level.WARN
+                    )
                 }
                 SoapResult(
                     success = ok,
@@ -186,7 +190,12 @@ object DlnaSoapExecutor {
                 )
             }
         }.getOrElse { error ->
-            LogUtils.d(DlnaConstants.TAG) { "$action -> $deviceName 异常: ${error.message}" }
+            AppLog.putDebugWithTag(
+                DlnaConstants.TAG,
+                "SOAP 异常: $action -> $deviceName ${error.message}",
+                error,
+                level = AppLog.Level.ERROR
+            )
             SoapResult(success = false, httpCode = -1, fault = null, raw = null)
         }
     }

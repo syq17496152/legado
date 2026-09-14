@@ -14,6 +14,22 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
 
+    <!-- add-dlna-cast AD-05 兜底②：投屏中状态条（面板关闭后仍可见，点击回到投屏面板） -->
+    <TextView
+        android:id="@+id/dlna_cast_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/primary"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:textColor="@color/white"
+        android:textSize="@dimen/text_14sp"
+        android:visibility="gone"
+        tools:text="正在投屏：客厅电视" />
+
     <FrameLayout
         android:id="@+id/layout_content"
         android:layout_width="match_parent"

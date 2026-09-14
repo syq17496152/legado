@@ -7,13 +7,30 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Comment
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.ToggleOn
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,14 +39,24 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.fragment.app.viewModels
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.RssSource
 import io.legado.app.help.config.AppConfig
+import io.legado.app.model.CheckDepth
+import io.legado.app.model.ImportCheck
+import io.legado.app.model.DimState
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppModalBottomSheet
+import io.legado.app.ui.widget.components.AppConfirmDialog
 import io.legado.app.ui.widget.components.ImportItem
 import io.legado.app.ui.widget.components.ImportSourceSheet
 import io.legado.app.ui.widget.components.ImportState
@@ -42,6 +69,7 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.showDialogFragment
+import io.legado.app.utils.toastOnUi
 
 /**
  * 导入rss源弹出窗口（S6 支干样板：改用 [ImportSourceSheet] Compose 组件渲染）。
@@ -76,6 +104,15 @@ class ImportRssSourceDialog() : ComposeDialogFragment(),
 
     /** 合集下载进度（已完成/总数），来自 progressLiveData 桥接（spinner-fix delta 2026-09-05） */
     private val progressState = mutableStateOf<Pair<Int, Int>?>(null)
+
+    /** 校验进度（已校验/总数/已过滤），来自 checkProgressLiveData 桥接 */
+    private val checkProgressState = mutableStateOf<Triple<Int, Int, Int>?>(null)
+
+    /** 复核窗口数据（过滤结果非空时弹出） */
+    private var reviewOutcome by mutableStateOf<ImportCheckOutcome?>(null)
+
+    /** 全选恢复二次确认（P3） */
+    private var showRestoreAllConfirm by mutableStateOf(false)
 
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
@@ -117,6 +154,9 @@ class ImportRssSourceDialog() : ComposeDialogFragment(),
         viewModel.progressLiveData.observe(viewLifecycleOwner) {
             progressState.value = it
         }
+        viewModel.checkProgressLiveData.observe(viewLifecycleOwner) {
+            checkProgressState.value = it
+        }
         viewModel.importSource(source)
     }
 
@@ -138,20 +178,34 @@ class ImportRssSourceDialog() : ComposeDialogFragment(),
         val items = remember(successCount.value, editTick.intValue) {
             viewModel.allSources.mapIndexed { index, s ->
                 val local = viewModel.checkSources.getOrNull(index)
+                val l1 = viewModel.l1Reports.getOrNull(index)
+                val filtered = l1?.deterministicFail == true
                 val state = when {
+                    filtered -> ImportState.FILTERED
                     local == null -> ImportState.NEW
                     s.lastUpdateTime > local.lastUpdateTime -> ImportState.UPDATE
                     else -> ImportState.EXIST
                 }
-                ImportItem(s.sourceName, s.sourceComment, state)
+                val detail = if (filtered) {
+                    l1?.dimensions?.values?.firstOrNull { it.state == DimState.FAIL }?.evidence
+                } else null
+                ImportItem(s.sourceName, s.sourceComment, state, detail)
             }
         }
 
         val loading = successCount.value == null && errorLive.value == null
-        // spinner-fix delta 2026-09-05：进度挂 title 展示（ImportSourceSheet 不新增参数）
-        val sheetTitle = progressState.value?.let { (done, total) ->
-            "${getString(R.string.import_rss_source)} · ${getString(R.string.import_fetching_progress, done, total)}"
-        } ?: getString(R.string.import_rss_source)
+        // 进度挂 title：校验进度优先于合集下载进度
+        val sheetTitle = when {
+            checkProgressState.value != null && viewModel.checkRunning -> {
+                val (done, total, filtered) = checkProgressState.value!!
+                getString(R.string.import_check_imported_batch, done, total, filtered)
+            }
+            progressState.value != null -> {
+                val (done, total) = progressState.value!!
+                "${getString(R.string.import_rss_source)} · ${getString(R.string.import_fetching_progress, done, total)}"
+            }
+            else -> getString(R.string.import_rss_source)
+        }
         val errorMsg = errorLive.value ?: if (successCount.value != null && successCount.value == 0) {
             getString(R.string.wrong_format)
         } else {
@@ -208,20 +262,111 @@ class ImportRssSourceDialog() : ComposeDialogFragment(),
             },
             onEditItem = { index -> openCodeDialog(index) },
             onImport = { doImport() },
-            onDismiss = { dismissAllowingStateLoss() },
+            onDismiss = { attemptDismiss() },
             menuActions = menuActions,
             loading = loading,
             errorMsg = errorMsg
         )
+
+        // 过滤复核弹层（P3/P8）
+        reviewOutcome?.let { outcome ->
+            FilteredReviewSheet(
+                outcome = outcome,
+                onRestore = { indexes, autoDisable ->
+                    reviewOutcome = null
+                    val waitDialog = WaitDialog(requireContext())
+                    waitDialog.show()
+                    viewModel.restoreFiltered(indexes, autoDisable) {
+                        waitDialog.dismiss()
+                        toastOnUi(getString(R.string.import_check_filtered_summary, outcome.imported, indexes.size))
+                        dismissAllowingStateLoss()
+                    }
+                },
+                onRestoreAll = {
+                    showRestoreAllConfirm = true
+                },
+                onDismiss = { reviewOutcome = null }
+            )
+        }
+
+        // P3：全选恢复二次确认（弹框族基线：统一 AppConfirmDialog，禁止裸 M3 AlertDialog）
+        if (showRestoreAllConfirm) {
+            val outcome = reviewOutcome
+            AppConfirmDialog(
+                title = stringResource(R.string.import_check_filtered_title),
+                body = stringResource(R.string.import_check_restore_all_confirm, outcome?.filtered?.size ?: 0),
+                confirmText = stringResource(R.string.ok),
+                dismissText = stringResource(R.string.cancel),
+                onConfirm = {
+                    showRestoreAllConfirm = false
+                    outcome?.let {
+                        reviewOutcome = null
+                        val waitDialog = WaitDialog(requireContext())
+                        waitDialog.show()
+                        viewModel.restoreFiltered(it.filtered.map { f -> f.index }, false) {
+                            waitDialog.dismiss()
+                            toastOnUi(getString(R.string.import_check_filtered_summary, it.imported, it.filtered.size))
+                            dismissAllowingStateLoss()
+                        }
+                    }
+                },
+                onDismiss = { showRestoreAllConfirm = false }
+            )
+        }
+    }
+
+    /** 校验中关闭拦截（P2：直接取消 / 导入已通过源） */
+    private fun attemptDismiss() {
+        if (viewModel.checkRunning) {
+            android.app.AlertDialog.Builder(requireContext())
+                .setTitle(R.string.import_check_stop_or_cancel)
+                .setPositiveButton(R.string.import_check_stop_pass) { _, _ ->
+                    viewModel.cancelCheck(landPassed = true)
+                    dismissAllowingStateLoss()
+                }
+                .setNegativeButton(R.string.import_check_stop_cancel) { _, _ ->
+                    viewModel.cancelCheck(landPassed = false)
+                    dismissAllowingStateLoss()
+                }
+                .show()
+        } else {
+            dismissAllowingStateLoss()
+        }
     }
 
     private fun doImport() {
+        // 导入校验分流：开启且深度>L1 走校验导入
+        if (ImportCheck.enabled && ImportCheck.depth != CheckDepth.L1) {
+            doImportWithCheck()
+            return
+        }
         val waitDialog = WaitDialog(requireContext())
         waitDialog.show()
         viewModel.importSelect {
             waitDialog.dismiss()
             dismissAllowingStateLoss()
         }
+    }
+
+    private fun doImportWithCheck() {
+        checkProgressState.value = null
+        val waitDialog = WaitDialog(requireContext())
+        waitDialog.show()
+        viewModel.importSelectWithCheck(
+            onProgress = { _, _, _ -> },
+            onComplete = { outcome ->
+                waitDialog.dismiss()
+                when {
+                    outcome == null -> Unit
+                    outcome.networkDown -> {
+                        toastOnUi(getString(R.string.import_check_network_down, outcome.unCheckedCount))
+                        dismissAllowingStateLoss()
+                    }
+                    outcome.filtered.isEmpty() -> dismissAllowingStateLoss()
+                    else -> reviewOutcome = outcome
+                }
+            }
+        )
     }
 
     private fun openCodeDialog(index: Int) {

@@ -202,3 +202,12 @@ git_log.txt
 /.workbuddy
 !/ai_tests/scripts/l2_verify_fix_0911b.py
 !/ai_tests/scripts/l2_verify_free_layout.py
+/ai_tests/logs/*.png
+/logs/build_dialog_fix_apk.txt
+/logs/build_pkg_27_tail.txt
+/logs/compile_debugpage_tail.txt
+/logs/compile_dialog_fix.txt
+/logs/daemon_stop_tail.txt
+/logs/dlna_compile_w.txt
+/logs/test_debugpage_tail.txt
+/logs/test_rhino_solo_tail.txt

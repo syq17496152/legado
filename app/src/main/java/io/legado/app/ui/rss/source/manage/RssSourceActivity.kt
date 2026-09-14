@@ -16,8 +16,12 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssSource
 import io.legado.app.databinding.ActivityRssSourceBinding
 import io.legado.app.help.DirectLinkUpload
+import io.legado.app.model.ImportCheck
+import io.legado.app.model.QualityCheckSession
 import io.legado.app.ui.association.ImportRssSourceDialog
 import io.legado.app.ui.association.showShibbolethDialog
+import io.legado.app.ui.book.source.manage.SourceQualityReportActivity
+import io.legado.app.ui.config.ImportCheckConfigDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
@@ -38,13 +42,16 @@ import io.legado.app.utils.share
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
+import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.startActivity
+import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
@@ -242,10 +249,50 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
             AppManagementMenuAction(getString(R.string.import_default_rule)) {
                 viewModel.importDefault()
             },
+            AppManagementMenuAction(getString(R.string.import_check_config)) {
+                showDialogFragment(ImportCheckConfigDialog())
+            },
+            AppManagementMenuAction(getString(R.string.quality_report_title)) {
+                showQualityReportScopeDialog()
+            },
             AppManagementMenuAction(getString(R.string.help)) {
                 showHelp("SourceMRssHelp")
             }
         )
+    }
+
+    /**
+     * 质量体检范围选择（与书源管理同构；体检只读不写库）
+     */
+    private fun showQualityReportScopeDialog() {
+        val options = arrayOf(
+            getString(R.string.quality_report_scope_all),
+            getString(R.string.quality_report_scope_selected)
+        )
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.quality_report_title)
+            .setItems(options) { _, which ->
+                lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    val sources = when (which) {
+                        1 -> appDb.rssSourceDao.getRssSources(*selectedUrls.value.toTypedArray())
+                        else -> appDb.rssSourceDao.flowAll().first()
+                    }
+                    if (sources.isEmpty()) {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            toastOnUi(getString(R.string.empty))
+                        }
+                        return@launch
+                    }
+                    QualityCheckSession.startRssCheck(this@RssSourceActivity, sources, ImportCheck.toProbeOptions())
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        startActivity<SourceQualityReportActivity> {
+                            putExtra("type", QualityCheckSession.TAG_RSS)
+                        }
+                    }
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun initGroupFlow() {

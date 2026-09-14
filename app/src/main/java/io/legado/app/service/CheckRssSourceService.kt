@@ -19,6 +19,7 @@ import io.legado.app.help.IntentData
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.sortUrls
 import io.legado.app.model.CheckRssSource
+import io.legado.app.model.SourceQualityChecker
 import io.legado.app.model.RssCheckResult
 import io.legado.app.model.SourceWeightCalculator
 import io.legado.app.model.analyzeRule.AnalyzeUrl
@@ -166,38 +167,19 @@ class CheckRssSourceService : BaseService() {
         }
     }
 
+    /**
+     * 域名探测核心委托 SourceQualityChecker（AD-08 等价重构）
+     * 行为保持：原用 CheckRssSource.timeout 按原值传入
+     */
     private suspend fun isDomainReachable(domain: String): Boolean {
-        return kotlin.runCatching {
-            withTimeout(2000) {
-                val url = URI(domain.substringBefore("#"))
-                val port = url.port.takeIf { it > 0 } ?: 80
-                Socket().use { socket ->
-                    socket.connect(InetSocketAddress(url.host, port), 1600)
-                    true
-                }
-            }
-        }.getOrDefault(false)
+        return SourceQualityChecker.isDomainReachable(domain)
     }
 
     /**
-     * 通过 AnalyzeUrl 发起真实请求校验域名可达性
-     * 支持 jslib/注释/#规避/空格等复杂源URL
+     * 通过 AnalyzeUrl 发起真实请求校验域名可达性（委托公共组件）
      */
     private suspend fun checkDomainReachable(source: RssSource): Pair<Boolean, String?> {
-        return kotlin.runCatching {
-            withTimeout(CheckRssSource.timeout) {
-                val analyzeUrl = AnalyzeUrl(
-                    source.sourceUrl,
-                    source = source,
-                    ruleData = RuleData(),
-                    coroutineContext = currentCoroutineContext()
-                )
-                analyzeUrl.getStrResponseAwait()
-                // 记录真实域名（复用AnalyzeUrl处理结果，供去重复用）
-                val realDomain = kotlin.runCatching { URI(analyzeUrl.url).host }.getOrNull()
-                Pair(true, realDomain)
-            }
-        }.getOrDefault(Pair(false, null))
+        return SourceQualityChecker.checkDomainReachableRss(source, CheckRssSource.timeout)
     }
 
     private suspend fun doCheckRssSource(source: RssSource): CheckResult {

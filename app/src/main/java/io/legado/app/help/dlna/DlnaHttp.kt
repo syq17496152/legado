@@ -1,6 +1,6 @@
 package io.legado.app.help.dlna
 
-import io.legado.app.utils.LogUtils
+import io.legado.app.constant.AppLog
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
@@ -64,13 +64,22 @@ object DlnaHttp {
             headers?.forEach { (k, v) -> builder.header(k, v) }
             client.newCall(builder.build()).execute().use { response ->
                 if (!response.isSuccessful) {
-                    LogUtils.d(DlnaConstants.TAG) { "fetchText ${response.code} -> $url" }
+                    AppLog.putDebugWithTag(
+                        DlnaConstants.TAG,
+                        "设备描述获取失败: code=${response.code} url=$url",
+                        level = AppLog.Level.WARN
+                    )
                     return@use null
                 }
                 response.body?.string()
             }
         }.onFailure {
-            LogUtils.d(DlnaConstants.TAG) { "fetchText failed: ${it.message}" }
+            AppLog.putDebugWithTag(
+                DlnaConstants.TAG,
+                "设备描述获取异常: ${it.message} url=$url",
+                it,
+                level = AppLog.Level.WARN
+            )
         }.getOrNull()
     }
 
@@ -90,10 +99,22 @@ object DlnaHttp {
                 .newCall(builder.build())
                 .execute()
                 .use { response ->
-                    if (response.isSuccessful) response.header("Content-Type") else null
+                    val ct = if (response.isSuccessful) response.header("Content-Type") else null
+                    // 诊断日志：403=防盗链拒 HEAD（MIME 将降级扩展名推断），是投屏失败排查的关键线索
+                    AppLog.putDebugWithTag(
+                        DlnaConstants.TAG,
+                        "HEAD 探测: code=${response.code} mime=$ct url=$url",
+                        level = if (response.isSuccessful) AppLog.Level.INFO else AppLog.Level.WARN
+                    )
+                    ct
                 }
         }.onFailure {
-            LogUtils.d(DlnaConstants.TAG) { "HEAD probe failed: ${it.message}" }
+            AppLog.putDebugWithTag(
+                DlnaConstants.TAG,
+                "HEAD 探测异常: ${it.message} url=$url",
+                it,
+                level = AppLog.Level.WARN
+            )
         }.getOrNull()
     }
 }

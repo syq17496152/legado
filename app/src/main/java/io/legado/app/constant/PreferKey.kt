@@ -239,6 +239,7 @@ object PreferKey {
     const val defaultHomePage = "defaultHomePage"
     const val showBookshelfFastScroller = "showBookshelfFastScroller"
     const val importKeepEnable = "importKeepEnable"
+    const val qualityReportFirstHint = "qualityReportFirstHint"
     const val importShowComment = "importShowComment"
     const val clickImgWay = "clickImgWay"
     const val keyPageOnLongPress = "keyPageOnLongPress"
