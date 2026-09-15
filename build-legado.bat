@@ -154,15 +154,18 @@ set /a MAX_ATTEMPTS=3
 
 :BUILD_LOOP
 set /a ATTEMPT+=1
-set "T0=%TIME: =0%"
+:: 计时用 ToFileTime（毫秒精度、区域无关）：
+:: %TIME% 子串 set /a 解析受区域格式影响（毫秒分隔符 "."/","/前导零变体会触发
+:: ". was unexpected at this time" 语法崩溃，且炸点在构建成功后导致 output\apk 拷贝失效——
+:: 2026-09-15 实证，此前误判为 pause 副作用），故计时全程走 PowerShell ToFileTime
+powershell -NoProfile -Command "[int64]((Get-Date).ToFileTime())" > "%TEMP%\legado_build_t0.txt" <nul
 call "%PROJECT_DIR%\gradlew.bat" %BUILD_TASK% %HEAP_ARGS% %P_FLAGS%
-set "T1=%TIME: =0%"
-set /a ELAPSED=((1%T1:~0,2%-100)*360000+(1%T1:~3,2%-100)*6000+(1%T1:~6,2%-100)*100+(1%T1:~9,2%-100)) - ((1%T0:~0,2%-100)*360000+(1%T0:~3,2%-100)*6000+(1%T0:~6,2%-100)*100+(1%T0:~9,2%-100))
-if %ELAPSED% LSS 0 set /a ELAPSED+=8640000
 if errorlevel 1 (
-    if !ATTEMPT! LSS !MAX_ATTEMPTS! if !ELAPSED! LSS 12000 (
+    set "FAST_FAIL=0"
+    powershell -NoProfile -Command "$t0=[int64](Get-Content \"$env:TEMP\legado_build_t0.txt\"); $min=((Get-Date).ToFileTime()-$t0)/600000000.0; exit ([int]($min -lt 2.0))" && set "FAST_FAIL=1"
+    if !ATTEMPT! LSS !MAX_ATTEMPTS! if "!FAST_FAIL!"=="1" (
         echo.
-        echo   [AUTO-RETRY !ATTEMPT!/!MAX_ATTEMPTS!] Fast failure (!ELAPSED!cs ^< 120s^) = transient transform-lock suspected.
+        echo   [AUTO-RETRY !ATTEMPT!/!MAX_ATTEMPTS!] Fast failure ^<2min = transient transform-lock suspected.
         echo   Stopping daemons and retrying...
         echo.
         call "%PROJECT_DIR%\gradlew.bat" --stop >nul 2>&1
@@ -170,11 +173,11 @@ if errorlevel 1 (
     )
     echo.
     echo ============================================================
-    echo   BUILD FAILED! ^(attempt !ATTEMPT!/!MAX_ATTEMPTS!, !ELAPSED!cs^)
+    echo   BUILD FAILED! ^(attempt !ATTEMPT!/!MAX_ATTEMPTS!^)
     echo ============================================================
     echo.
     echo   Fast failure repeatedly = transform-lock contention persists.
-    echo     Root fix: add F:\gh to Windows Defender exclusions (or exit TGitCache).
+    echo     Root fix: add F:\gh to Windows Defender exclusions ^(or exit TGitCache^).
     echo   Slow failure = real compile/R8 error, see error lines above.
     echo   Try: build-legado.bat clean
     echo.
@@ -229,18 +232,19 @@ if "!APK_FOUND!"=="1" (
     echo ============================================================
     set "VERIFY_BAD=0"
     for %%f in ("%APK_BUILD_DIR%\*.apk") do (
-        powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%%f'); $so = $z.Entries | Where-Object { $_.FullName -like 'lib/*/libcronet*.so' }; $manifest = $z.Entries | Where-Object { $_.FullName -eq 'assets/cronet.json' }; $z.Dispose(); if (-not $so -and $manifest) { exit 0 } else { exit 1 }" && (
-            echo   [OK] %%~nxf: no bundled so + cronet.json manifest present
-        ) || (
+        powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%%f'); $so = $z.Entries | Where-Object { $_.FullName -like 'lib/*/libcronet*.so' }; $manifest = $z.Entries | Where-Object { $_.FullName -eq 'assets/cronet.json' }; $z.Dispose(); if (-not $so -and $manifest) { exit 0 } else { exit 1 }" >nul 2>&1
+        if errorlevel 1 (
             echo   [FAIL] %%~nxf: unexpected bundled libcronet*.so OR missing assets/cronet.json!
             set "VERIFY_BAD=1"
+        ) else (
+            echo   [OK] %%~nxf: no bundled so + cronet.json manifest present
         )
     )
     if "!VERIFY_BAD!"=="1" (
         echo.
         echo ============================================================
         echo   [FAIL] Cronet dynamic-download packaging verification failed!
-        echo   - libcronet*.so in APK = bundled dependency leaked (check build.gradle deps)
+        echo   - libcronet*.so in APK = bundled dependency leaked ^(check build.gradle deps^)
         echo   - assets/cronet.json missing = run gradlew app:downloadCronet --no-configuration-cache
         echo   Runtime downloads so by ABI; without manifest the download check always fails.
         echo ============================================================
