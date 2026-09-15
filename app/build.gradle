@@ -182,8 +182,13 @@ android {
 
             applicationIdSuffix '.debug'
             versionNameSuffix 'debug'
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
+            // 2026-09-15 发布省流（用户裁决）：测试包/共存包对齐正式包开启 R8 裁剪+资源裁剪，
+            // 但通过 proguard-debug-rules.pro 的 -dontobfuscate/-dontoptimize 保持原名不混淆、
+            // 不内联优化（堆栈可读、行为与源码一致）；keep 规则与 release 共用（proguard-rules.pro
+            // 已被发版长期验证）。ABI 已按构建类型精简为仅 arm64-v8a（见上方 ndk 块）
+            minifyEnabled true
+            shrinkResources = true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro', 'proguard-debug-rules.pro'
         }
     }
     //noinspection GrDeprecatedAPIUsage
