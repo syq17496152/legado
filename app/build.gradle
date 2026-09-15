@@ -191,13 +191,11 @@ android {
             // 调试日志铁律：BuildConfig.DEBUG=true 分支可达，DebugLog/AppLog 不被裁剪。
             // ABI 已按构建类型精简为仅 arm64-v8a（见上方 ndk 块）
             //
-            // debuggable=false（AOAdapt 2026-09-15）：AGP 对 debuggable=true 的 buildType 强制
-            // R8 debug compilation mode（优化受限，optimize.txt 不生效，dex 恒 25.7MB）。
-            // 关闭 debuggable 后 R8 走 release mode，dex 降至 ~13MB。代价：不可 IDE attach 调试/
-            // adb run-as 私有目录；调试特性由显式字段 BuildConfig.BUILD_DEBUG 驱动（铁律保留）：
-            // AGP 规则 BuildConfig.DEBUG=buildType.debuggable，debuggable=false 会使 DEBUG=false，
-            // 故 2026-09-15 起全仓日志/调试门控改用 BUILD_DEBUG（debug=true/release=false，与 debuggable 解耦）
-            debuggable = false
+            // 2026-09-15 裁决：测试包（无 customAppId）恢复 debuggable=true 供 IDE attach/调试器使用；
+            // 共存包（-PcustomAppId=io.legado.app）与正式包保持 debuggable=false。
+            // 注意：debuggable=true 会使 R8 走 debug compilation mode（优化受限，体积回升至 ~37MB），
+            // 用户知情选择"测试包调试器优先"；共存包/正式包不受影响（体积 22.73/24.62MB）
+            debuggable = project.findProperty("customAppId") == null
             buildConfigField "boolean", "BUILD_DEBUG", "true"
             minifyEnabled true
             shrinkResources = true
