@@ -17,6 +17,8 @@
 
 > `build-legado.bat` **硬编码本机环境**（`JAVA_HOME=C:\Program Files\AdoptOpenJDK\jdk-17.0.0.20-hotspot`、`ANDROID_HOME=C:\Android\Sdk`、`GRADLE_USER_HOME=F:\gh`、`PROJECT_DIR`），换机器需先改头部。完整打包流程见 `docs/project-flow/build-apk-guide.md`。
 
+> 🔴 **强制（2026-09-15 三包优化铁律）：交付/发布 APK 一律走 `build-legado.bat`，禁止手动 `gradlew assembleXxx` 产出交付包**。原因：脚本内置 ①产物自动拷贝到 `output\apk\{test|release|coexist}\`（工作区产物会被同 variant 后续构建 stale 清理，手动 gradlew 的包不在保护范围）②Cronet 动态下载双向门禁 ③瞬态锁自动重试 ④daemon/缓存复用编排。手动 `gradlew` 仅限过程验证（如 R8/依赖排查），其产物不得交付。子规范见 `docs/project-rules/package-naming.md`「三包打包模式」与 `docs/project-flow/build-apk-guide.md` §三/§五。
+
 ## 关键文件速查
 
 | 用途 | 路径 |
@@ -126,7 +128,7 @@ OpenSpec 步骤 5→6 之间必须真机/模拟器验证，禁止只改代码不
 | 书源/订阅源/RSS源 | `legado-source-creator/SKILL.md` |
 | 网络层/前端/协程/WebView 优化 | `forks-reference.md` + `forks_comparison_methodology.md`（对比方法论） |
 | 前端 UI 改造/样式统一/页面迁移 | `ui-standards/architecture.md`（UI 设计架构体系总纲，**必读**：四组件族基线+取色唯一基线+开发门禁，防私自拉组件/硬编码色）+ `frontend-ui-standards.md` + `compose-ui-engineering` |
-| 打包构建/包名/APK发布 | `package-naming.md` + `apk-publish-workflow.md` |
+| 打包构建/包名/APK发布 | `package-naming.md` + `build-apk-guide.md`（§第零章打包脚本强制规范必读：交付一律走 `build-legado.bat`） |
 | 改动功能前（门禁） | `global-thinking-checklist.md`（前端入口+后端接口+数据库+覆盖安装+使用场景+回填点 6 维盘点） |
 | 数据库变更 | `database-migration-safety.md` |
 | 大型任务（10+文件/多Issue） | `work-methodology.md` |
