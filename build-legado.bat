@@ -131,28 +131,51 @@ set "P_FLAGS="
 if not "%CUSTOM_APP_ID%"=="" set "P_FLAGS=%P_FLAGS% -PcustomAppId=%CUSTOM_APP_ID%"
 if not "%APP_VERSION%"=="" set "P_FLAGS=%P_FLAGS% -PappVersion=%APP_VERSION%"
 
-:: Build with optional Gradle project properties
+:: Build with optional Gradle project properties + transient-lock auto-retry
 :: 2026-09-03 local-build-speedup（P1/P1b）：
 :: ① 移除 --no-daemon：复用 daemon 保住 Kotlin 增量编译快照（VFS/配置缓存同步生效）
 :: ② debug 分支注入降堆参数（红队 H5：-D 覆盖会整体替换 properties 参数串，
 ::    必须完整复制原串仅改 Xmx 4g→3g）；release 不注入，沿用 properties 4g（R8 OOM 防回归）
+:: 2026-09-15 cronet-dynamic-download 增强：transform 瞬态锁自动重试——
+::   官方 so/jar 大文件频繁进出 transforms 缓存后，Defender/TGitCache 与 Gradle 的
+::   rename 竞争导致 "Could not move temporary workspace" 瞬态失败（实测 10-30s 内快速失败）。
+::   策略：失败且耗时 <120s 判定为瞬态锁 → 自动 gradlew --stop 清场重试（最多 3 次，
+::   UP-TO-DATE 保住已完成任务，重试成本低）；真实编译/R8 错误耗时 >120s → 立即失败不浪费时间
 set "HEAP_ARGS="
 if "%BUILD_TYPE%"=="debug" (
 set HEAP_ARGS=-Dorg.gradle.jvmargs="-XX:+UseParallelGC -Xmx3g -Xms256m -XX:MaxMetaspaceSize=768m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8" -Dkotlin.daemon.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=768m"
 )
 
-if "%BUILD_TYPE%"=="release" (
-    call "%PROJECT_DIR%\gradlew.bat" assembleAppRelease %HEAP_ARGS% %P_FLAGS%
-) else (
-    call "%PROJECT_DIR%\gradlew.bat" assembleAppDebug %HEAP_ARGS% %P_FLAGS%
-)
+set "BUILD_TASK=assembleAppDebug"
+if "%BUILD_TYPE%"=="release" set "BUILD_TASK=assembleAppRelease"
 
+set /a ATTEMPT=0
+set /a MAX_ATTEMPTS=3
+
+:BUILD_LOOP
+set /a ATTEMPT+=1
+set "T0=%TIME: =0%"
+call "%PROJECT_DIR%\gradlew.bat" %BUILD_TASK% %HEAP_ARGS% %P_FLAGS%
+set "T1=%TIME: =0%"
+set /a ELAPSED=((1%T1:~0,2%-100)*360000+(1%T1:~3,2%-100)*6000+(1%T1:~6,2%-100)*100+(1%T1:~9,2%-100)) - ((1%T0:~0,2%-100)*360000+(1%T0:~3,2%-100)*6000+(1%T0:~6,2%-100)*100+(1%T0:~9,2%-100))
+if %ELAPSED% LSS 0 set /a ELAPSED+=8640000
 if errorlevel 1 (
+    if !ATTEMPT! LSS !MAX_ATTEMPTS! if !ELAPSED! LSS 12000 (
+        echo.
+        echo   [AUTO-RETRY !ATTEMPT!/!MAX_ATTEMPTS!] Fast failure (!ELAPSED!cs ^< 120s^) = transient transform-lock suspected.
+        echo   Stopping daemons and retrying...
+        echo.
+        call "%PROJECT_DIR%\gradlew.bat" --stop >nul 2>&1
+        goto BUILD_LOOP
+    )
     echo.
     echo ============================================================
-    echo   BUILD FAILED!
+    echo   BUILD FAILED! ^(attempt !ATTEMPT!/!MAX_ATTEMPTS!, !ELAPSED!cs^)
     echo ============================================================
     echo.
+    echo   Fast failure repeatedly = transform-lock contention persists.
+    echo     Root fix: add F:\gh to Windows Defender exclusions (or exit TGitCache).
+    echo   Slow failure = real compile/R8 error, see error lines above.
     echo   Try: build-legado.bat clean
     echo.
     call :STOP_DAEMON
@@ -190,40 +213,36 @@ if "!APK_FOUND!"=="0" (
 )
 
 :: ============================================================
-:: libcronet.so 打包验证（强制）
-:: 来源: 2026-07-30 用户决策，m3u8播放依赖Cronet Native引擎
-:: 详见: docs/project-rules/package-naming.md "libcronet.so 打包强制规范"
-:: 2026-08-30 修复三处潜在缺陷（启用延迟扩展后首次真正运行时暴露）:
-::   1) Expand-Archive 不支持 .apk 扩展名 → 弃用解压方案
-::   2) Expand-Archive 对 APK 内中日文 UTF-8 条目名崩溃（Illegal characters in path）
-::      → 改用 .NET ZipFile.OpenRead 流式读取（不解压/无临时文件/支持 UTF-8 条目名）
-::   3) 原命令单引号包裹 $env:TEMP 路径致 PowerShell 不展开（恒找不到 so）；
-::      校验逻辑改为"任一包失败即失败"（原最后一包通过则整体通过）
-::   4) cronet-bundled Maven 迁移后 so 带版本号（libcronet.151.x.x.x.so），
-::      旧精确名 libcronet.so 永远匹配失败 → 改为 libcronet*.so 模式匹配
-::   5) 校验范围改为本次构建产物（APK_BUILD_DIR）——dist 目录含迁移前动态下载
-::      模式的历史归档包（本就无内置 so），不应参与本次门禁
+:: Cronet 动态下载打包验证（强制）[2026-09-15 cronet-dynamic-download 路线反转]
+:: 2026-07-30 用户决策: m3u8播放依赖Cronet Native引擎 → 校验 so 必须进 APK
+:: 2026-09-15 路线反转: so 运行时按 ABI 动态下载, 不再进 APK(减重~5-11MB) →
+::   校验反转为两向门禁:
+::     1) APK 内不得含 libcronet*.so (若存在=bundled 依赖泄漏回退, 包体异常)
+::     2) APK 内必须含 assets/cronet.json (运行时下载 MD5 清单, 缺失=下载校验必失败)
+:: 历史沿革: 2026-08-30 修复解压缺陷改 .NET 流式读取/cronet-bundled 迁移带版本号匹配/
+::   校验范围限定本次构建产物; 2026-09-15 反转门禁语义
 :: ============================================================
 if "!APK_FOUND!"=="1" (
     echo.
     echo ============================================================
-    echo   Verifying libcronet.so in APK...
+    echo   Verifying Cronet dynamic-download packaging...
     echo ============================================================
     set "VERIFY_BAD=0"
     for %%f in ("%APK_BUILD_DIR%\*.apk") do (
-        powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%%f'); $found = $z.Entries | Where-Object { $_.FullName -like 'lib/arm64-v8a/libcronet*.so' }; $z.Dispose(); if ($found) { exit 0 } else { exit 1 }" && (
-            echo   [OK] %%~nxf: libcronet.so packed
+        powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%%f'); $so = $z.Entries | Where-Object { $_.FullName -like 'lib/*/libcronet*.so' }; $manifest = $z.Entries | Where-Object { $_.FullName -eq 'assets/cronet.json' }; $z.Dispose(); if (-not $so -and $manifest) { exit 0 } else { exit 1 }" && (
+            echo   [OK] %%~nxf: no bundled so + cronet.json manifest present
         ) || (
-            echo   [FAIL] %%~nxf: libcronet.so MISSING! m3u8 playback will fail!
+            echo   [FAIL] %%~nxf: unexpected bundled libcronet*.so OR missing assets/cronet.json!
             set "VERIFY_BAD=1"
         )
     )
     if "!VERIFY_BAD!"=="1" (
         echo.
         echo ============================================================
-        echo   [FAIL] libcronet.so verification failed!
-        echo   m3u8 playback will NOT work. Do not release this APK.
-        echo   Check: app\src\main\jniLibs\arm64-v8a\libcronet.so
+        echo   [FAIL] Cronet dynamic-download packaging verification failed!
+        echo   - libcronet*.so in APK = bundled dependency leaked (check build.gradle deps)
+        echo   - assets/cronet.json missing = run gradlew app:downloadCronet --no-configuration-cache
+        echo   Runtime downloads so by ABI; without manifest the download check always fails.
         echo ============================================================
         pause
         exit /b 1
