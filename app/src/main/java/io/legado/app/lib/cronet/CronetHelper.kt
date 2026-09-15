@@ -71,10 +71,16 @@ private fun initCronetEngineBlocking(): ExperimentalCronetEngine? {
 }
 
 private fun buildCronetEngine(): ExperimentalCronetEngine? {
-    // Cronet 500.0.1（cronet-bundled）：libcronet.so 已随 AAR 自动打包并按架构加载，
-    // 无需手动 System.loadLibrary / NativeCronetEngineBuilderImpl / 自定义 LibraryLoader（CronetLoader）
+    // cronet-dynamic-download（2026-09-15）：so 动态下载路线，引擎构建前校验 so 安装状态
+    // （下载失败/MD5 不匹配时 install()=false 直接返回 null → 调用方回退 OkHttp，与十层降级层 1 同源判定；
+    //   下载进行中 install() 会等待同一任务完成，本方法仅经 preInitCronetEngine 在 IO 线程调用，无主线程阻塞路径）
     // 统一用公开 ExperimentalCronetEngine.Builder，构建失败由外层 try-catch 兜底返回 null → 调用方回退 OkHttp
     return try {
+        if (!CronetLoader.installWithRetry()) {
+            // 进程内自动重试一次（installWithRetry），仍失败则本次启动不再重试，回退 OkHttp
+            AppLog.put("CronetHelper: so 未就绪(install=false)，跳过引擎构建回退 OkHttp")
+            return null
+        }
         disableCertificateVerify()
         val engine = ExperimentalCronetEngine.Builder(appCtx).apply {
             setStoragePath(appCtx.externalCache.absolutePath)//设置缓存路径

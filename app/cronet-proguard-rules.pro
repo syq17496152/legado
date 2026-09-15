@@ -156,6 +156,14 @@
 # Suppress unnecessary warnings.
 -dontnote org.chromium.net.ProxyChangeListener$ProxyReceiver
 -dontnote org.chromium.net.AndroidKeyStore
+
+# cronet-dynamic-download（2026-09-15）：ASM 改写后的 CronetLibraryLoader 通过注入字节码引用
+# CronetLoader.loadLibrary(String)，保留签名防止 R8 调整导致注入调用点悬空
+-keep class io.legado.app.lib.cronet.CronetLoader {
+    void loadLibrary(java.lang.String);
+    boolean install();
+    void preDownload();
+}
 # Needs 'void setTextAppearance(int)' (API level 23).
 -dontwarn org.chromium.base.ApiCompatibilityUtils
 # Needs 'boolean onSearchRequested(android.view.SearchEvent)' (API level 23).

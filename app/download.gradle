@@ -1,0 +1,98 @@
+import java.security.MessageDigest
+import groovy.json.JsonOutput
+
+// cronet-dynamic-download（2026-09-15）：构建期下载 Cronet 官方发布物
+// 移植自喵公子 app/download.gradle，去除 de.undercouch.download 插件依赖改为原生 HttpURLConnection（避免新增构建插件）
+// 用途：gradlew app:downloadCronet（更新 Cronet 版本时执行：先改 gradle.properties 的 CronetVersion 再运行）
+// 产物：cronetlib/ 7 个官方 jar + so/ 5 ABI so + src/main/assets/cronet.json（运行时 MD5 校验清单）
+
+def BASE_PATH = "https://storage.googleapis.com/chromium-cronet/android/" + CronetVersion + "/Release/cronet/"
+def assetsDir = projectDir.toString() + "/src/main/assets"
+def libPath = projectDir.toString() + "/cronetlib"
+def soPath = projectDir.toString() + "/so"
+// cronet_impl_util_java.jar 已并入 impl-common，下载会造成重复类，排除
+def CRONET_JARS = [
+        "cronet_api.jar",
+        "cronet_impl_common_java.jar",
+        "cronet_impl_native_java.jar",
+        "cronet_impl_native_sentinel_java.jar",
+        "cronet_impl_platform_java.jar",
+        "cronet_shared_java.jar",
+        "httpengine_native_provider_java.jar"
+]
+def CRONET_ABIS = ["armeabi-v7a", "arm64-v8a", "riscv64", "x86", "x86_64"]
+
+tasks.register('downloadCronet') {
+    group = 'cronet'
+    description = "Download Cronet ${CronetVersion} official jars/so and generate assets/cronet.json MD5 manifest"
+    outputs.dir(libPath)
+    outputs.dir(soPath)
+    outputs.file(assetsDir + "/cronet.json")
+
+    doLast {
+        // 工具闭包内联定义在 doLast 内（task 闭包对外部脚本方法/ext 的解析受 configuration cache 影响，内联最稳）
+        // 原生下载：显式超时防构建期挂死
+        def downloadTo = { String url, File dest ->
+            dest.parentFile?.mkdirs()
+            def conn = new URL(url).openConnection() as HttpURLConnection
+            conn.connectTimeout = 15000
+            conn.readTimeout = 60000
+            try {
+                if (conn.responseCode != 200) {
+                    throw new GradleException("Download failed HTTP ${conn.responseCode}: $url")
+                }
+                conn.inputStream.withCloseable { is -> dest.withOutputStream { it << is } }
+            } finally {
+                conn.disconnect()
+            }
+        }
+        // 从文件生成MD5
+        def generateMD5 = { final file ->
+            MessageDigest digest = MessageDigest.getInstance("MD5")
+            file.withInputStream() { is ->
+                byte[] buffer = new byte[8192]
+                int numRead = 0
+                while ((numRead = is.read(buffer)) > 0) {
+                    digest.update(buffer, 0, numRead)
+                }
+            }
+            return String.format("%032x", new BigInteger(1, digest.digest())).toLowerCase()
+        }
+
+        // 1. 下载 7 个官方 jar（覆盖写，保证与 CronetVersion 一致）
+        CRONET_JARS.each { jar ->
+            def dest = new File(libPath, jar)
+            downloadTo(BASE_PATH + jar, dest)
+            println "downloaded jar: ${jar} (${dest.length()} bytes)"
+        }
+        // 2. 清理非当期清单内的历史 jar（防旧版本残留引发重复类）
+        fileTree(libPath) { include "*.jar", "*.aar" }.files.findAll {
+            !CRONET_JARS.contains(it.name)
+        }.each {
+            println "removed stale jar: ${it.name}"
+            project.delete(it)
+        }
+        // 3. 下载 5 个 ABI 的 so（仅用于构建期计算 MD5，不进 APK）
+        CRONET_ABIS.each { abi ->
+            def soName = "libcronet." + CronetVersion + ".so"
+            def dest = new File(soPath, "${abi}.so")
+            downloadTo(BASE_PATH + "libs/" + abi + "/" + soName, dest)
+            println "downloaded so: ${abi} (${dest.length()} bytes)"
+        }
+        // 4. 生成 MD5 清单（运行时 CronetLoader 按此校验下载的 so）
+        def hashes = new LinkedHashMap<String, String>()
+        CRONET_ABIS.each { abi ->
+            def file = new File(soPath, "${abi}.so")
+            if (!file.isFile()) {
+                throw new GradleException("Missing Cronet library for $abi: $file")
+            }
+            hashes[abi] = generateMD5(file)
+        }
+        hashes["version"] = CronetVersion.toString()
+        def metadata = JsonOutput.toJson(hashes)
+        println "cronet.json: ${metadata}"
+        def f1 = new File(assetsDir + "/cronet.json")
+        f1.parentFile.mkdirs()
+        f1.setText(metadata, "UTF-8")
+    }
+}

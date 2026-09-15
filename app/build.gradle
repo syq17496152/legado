@@ -62,6 +62,10 @@ def name = "legado"
 def version = (project.findProperty("appVersion") as String) ?: "3.${releaseTimeProvider.get()}"
 def gitCommits = gitCommitsProvider.get()
 
+// cronet-dynamic-download（2026-09-15）：构建期下载 Cronet 官方 jar/so + ASM 改写注入自定义加载器
+apply from: 'download.gradle'       // downloadCronet 任务：7 jar + 5 ABI so + assets/cronet.json MD5 清单
+apply from: 'cronet-loader.gradle'  // adaptCronetLoader 任务：ASM 重定向 loadLibrary → CronetLoader（SHA-256 门禁）
+
 android {
     compileSdk = compile_sdk_version
     namespace = 'io.legado.app'
@@ -346,7 +350,7 @@ dependencies {
     // For loading data using the OkHttp network stack
     implementation(libs.media3.datasource.okhttp)
     // P0: Cronet DataSource（TLS 指纹与 Chrome 一致，解决 CDN TLS 指纹检测导致 m3u8 播放失败）
-    // 排除 cronet-api 传递依赖：项目已有 cronetlib/cronet_api.jar，避免 Duplicate class 冲突
+    // 排除 cronet-api 传递依赖：cronet-dynamic-download 路线下 API 由本地 cronetlib/cronet_api.jar 提供
     implementation(libs.media3.datasource.cronet) {
         exclude group: 'org.chromium.net', module: 'cronet-api'
     }
@@ -389,7 +393,12 @@ dependencies {
     implementation(libs.brotli)
     // T4.1: DoH（DNS over HTTPS）依赖，绕过本地 DNS 污染
     implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
-    implementation(libs.cronet.bundled)
+    // cronet-dynamic-download（2026-09-15）：官方 7 jar 本地化（download.gradle 构建期下载）
+    // + 版本降级副本（cronet-loader.gradle prepareCronetJars：官方 jar 为 Java 25 字节码，降至 Java 17 供工具链读取）
+    // + ASM 改写后的 cronet_impl_native_java.jar（重定向 loadLibrary 到 CronetLoader）
+    // so 不进 APK，运行时按 ABI 动态下载（详见 docs/specs/cronet-dynamic-download/）
+    implementation(preparedCronetJars)   // 6 jar 降级副本（impl_native 排除后单独走 ASM 改写注入）
+    implementation(dynamicCronetJar)
     implementation(libs.protobuf.javalite)
 
     //Glide

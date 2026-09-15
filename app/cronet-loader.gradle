@@ -1,0 +1,182 @@
+import java.security.MessageDigest
+import java.util.jar.JarOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import org.objectweb.asm.ClassReader
+import org.objectweb.asm.ClassWriter
+import org.objectweb.asm.Opcodes
+import org.objectweb.asm.tree.ClassNode
+import org.objectweb.asm.tree.FieldInsnNode
+import org.objectweb.asm.tree.InsnList
+import org.objectweb.asm.tree.InsnNode
+import org.objectweb.asm.tree.MethodInsnNode
+
+buildscript {
+    repositories { mavenCentral() }
+    // Build tooling only; this dependency is never packaged in the APK.
+    dependencies { classpath 'org.ow2.asm:asm-tree:9.8' }
+}
+
+// cronet-dynamic-download（2026-09-15）：移植自喵公子 cronet-loader.gradle，并扩展字节码版本降级
+// Version-pinned adaptation. Keep the checked-in official JAR byte-for-byte intact.
+// Cronet 153's public setLibraryLoader() is a no-op; reconnect its actual load site instead.
+// 升级 Cronet 版本时：必须先人工 review 新版 CronetLibraryLoader 字节码结构兼容性，
+// 再更新下方版本号与 SHA-256 校验值（门禁不匹配即构建失败，防止静默错误改写）
+//
+// 字节码版本降级背景（AOAdapt 2026-09-15）：Cronet 153 官方 jar 为 Java 25（major=69）字节码，
+// 本项目 kapt/javac 工具链上限 Java 21（major=65）→ kapt 报"错误的版本 69.0, 应为 65.0"。
+// 处理：prepareCronetJars 把 7 个 jar 内全部 class 的 major>61 降为 61（仅改 class 文件头版本号；
+// Cronet 为普通 Java 库代码，未使用 62+ 字节码特性），SHA-256 门禁在降级前对官方原 jar 校验。
+def cronetJarsDir = file('cronetlib')
+def preparedDir = layout.buildDirectory.dir('cronet-jars')
+def adapted = layout.buildDirectory.file('cronet-dynamic/cronet_impl_native_java.jar')
+def CRONET_JARS = [
+        'cronet_api.jar',
+        'cronet_impl_common_java.jar',
+        'cronet_impl_native_java.jar',
+        'cronet_impl_native_sentinel_java.jar',
+        'cronet_impl_platform_java.jar',
+        'cronet_shared_java.jar',
+        'httpengine_native_provider_java.jar'
+]
+
+/**
+ * 字节码版本降级：v69(Java25) → v61(Java17)，其余字节原样保留
+ */
+static def patchClassVersion(byte[] bytes) {
+    // class 文件头: u4 magic | u2 minor | u2 major
+    if (bytes.length >= 8 && bytes[0] == (byte) 0xCA && bytes[1] == (byte) 0xFE) {
+        int major = ((bytes[6] & 0xFF) << 8) | (bytes[7] & 0xFF)
+        if (major > 61) {
+            bytes[4] = 0; bytes[5] = 0          // minor = 0
+            bytes[6] = 0; bytes[7] = 61          // major = 61 (0x003D)
+        }
+    }
+    return bytes
+}
+
+/**
+ * 任务 1：官方 jar → build/cronet-jars/（版本降级副本，官方 cronetlib/ 保持原样）
+ * 门禁：cronet_impl_native_java.jar 原文件 SHA-256 必须匹配官方 153.0.8010.27 发布物
+ */
+def prepareCronetJars = tasks.register('prepareCronetJars') {
+    group = 'cronet'
+    description = 'Copy official Cronet jars with class-file version downgrade to Java 17'
+    inputs.files(CRONET_JARS.collect { cronetJarsDir.toPath().resolve(it).toFile() })
+    inputs.property('version', CronetVersion)
+    outputs.dir(preparedDir)
+    doLast {
+        def cronetVersion = inputs.properties['version'] as String
+        if (cronetVersion != '153.0.8010.27') {
+            throw new GradleException('Review the dynamic loader against the new official Cronet JAR first')
+        }
+        def originalNative = new File(cronetJarsDir, 'cronet_impl_native_java.jar')
+        def sha = MessageDigest.getInstance('SHA-256').digest(originalNative.bytes).encodeHex().toString()
+        if (sha != '775d145e5f33fd6157078a574f788b850bda5a0e7195aa9ec93e67afe6f64127') {
+            throw new GradleException('Review the dynamic loader against the new official Cronet JAR first')
+        }
+        def destDir = preparedDir.get().asFile
+        destDir.mkdirs()
+        CRONET_JARS.each { jarName ->
+            def out = new File(destDir, jarName)
+            new ZipFile(new File(cronetJarsDir, jarName)).withCloseable { source ->
+                new JarOutputStream(new FileOutputStream(out)).withCloseable { output ->
+                    source.entries().each { entry ->
+                        byte[] bytes = source.getInputStream(entry).withCloseable { it.bytes }
+                        if (entry.name.endsWith('.class')) {
+                            bytes = patchClassVersion(bytes)
+                        }
+                        def target = new ZipEntry(entry.name)
+                        target.time = 0
+                        output.putNextEntry(target)
+                        output.write(bytes)
+                        output.closeEntry()
+                    }
+                }
+            }
+        }
+        logger.lifecycle('Cronet jars prepared: class-file version downgraded to Java 17 (v61)')
+    }
+}
+
+/**
+ * 任务 2：ASM 改写 CronetLibraryLoader.loadLibrary（输入为降级后的 impl_native jar）
+ * 门禁：5 处结构断言不满足即构建失败
+ */
+def adaptCronetLoader = tasks.register('adaptCronetLoader') {
+    group = 'cronet'
+    description = 'ASM-redirect CronetLibraryLoader.loadLibrary to CronetLoader'
+    dependsOn prepareCronetJars
+    def original = preparedDir.map { it.file('cronet_impl_native_java.jar') }
+    inputs.files(original)
+    inputs.file('cronet-loader.gradle')
+    inputs.property('version', CronetVersion)
+    outputs.file(adapted)
+    doLast {
+        // configuration cache 下 task 执行期不可引用脚本对象，版本号经 inputs 传递
+        def cronetVersion = inputs.properties['version'] as String
+        if (cronetVersion != '153.0.8010.27') {
+            throw new GradleException('Review the dynamic loader against the new official Cronet JAR first')
+        }
+        def owner = 'org/chromium/net/impl/CronetLibraryLoader'
+        def destination = adapted.get().asFile
+        destination.parentFile.mkdirs()
+        new ZipFile(original.get().asFile).withCloseable { source ->
+            new JarOutputStream(new FileOutputStream(destination)).withCloseable { output ->
+                source.entries().each { entry ->
+                    byte[] bytes = source.getInputStream(entry).withCloseable { it.bytes }
+                    if (entry.name == owner + '.class') {
+                        def node = new ClassNode()
+                        def reader = new ClassReader(bytes)
+                        reader.accept(node, 0)
+                        def method = node.methods.find { it.name == 'loadLibrary' && it.desc == '()V' }
+                        def instructions = method.instructions.toArray()
+                        def calls = instructions.findAll { it instanceof MethodInsnNode &&
+                                it.owner == 'java/lang/System' && it.name == 'loadLibrary' }
+                        def flag = instructions.findAll { it instanceof FieldInsnNode &&
+                                it.opcode == Opcodes.PUTSTATIC && it.name == 'sLibAlreadyLoaded' }
+                        assert calls.size() == 3 && flag.size() == 1
+                        assert flag[0].previous.opcode == Opcodes.ICONST_1
+                        // Keep the AOSP branch unchanged; redirect only the two standalone Cronet names.
+                        calls.drop(1).each { call ->
+                            def route = new InsnList()
+                            route.add(new FieldInsnNode(Opcodes.GETSTATIC,
+                                    'io/legado/app/lib/cronet/CronetLoader', 'INSTANCE',
+                                    'Lio/legado/app/lib/cronet/CronetLoader;'))
+                            route.add(new InsnNode(Opcodes.SWAP))
+                            route.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL,
+                                    'io/legado/app/lib/cronet/CronetLoader', 'loadLibrary',
+                                    '(Ljava/lang/String;)V', false))
+                            method.instructions.insertBefore(call, route)
+                            method.instructions.remove(call)
+                        }
+                        // A failed download/load must not tell normal initialization that loading succeeded.
+                        method.instructions.remove(flag[0].previous)
+                        method.instructions.remove(flag[0])
+                        def returns = instructions.findAll { it.opcode == Opcodes.RETURN }
+                        assert returns.size() == 1
+                        def loaded = new InsnList()
+                        loaded.add(new InsnNode(Opcodes.ICONST_1))
+                        loaded.add(flag[0])
+                        method.instructions.insertBefore(returns[0], loaded)
+                        def writer = new ClassWriter(reader, ClassWriter.COMPUTE_MAXS)
+                        node.accept(writer)
+                        bytes = writer.toByteArray()
+                    }
+                    def target = new ZipEntry(entry.name)
+                    target.time = 0
+                    output.putNextEntry(target)
+                    output.write(bytes)
+                    output.closeEntry()
+                }
+            }
+        }
+        logger.lifecycle('Cronet 153: adapted only Java library loading; official native/JNI initialization unchanged')
+    }
+}
+
+// 降级后的 6 个 jar（impl_native 除外，单独走 ASM 改写）+ 改写后的 impl_native
+ext.preparedCronetJars = fileTree(dir: preparedDir.map { it.asFile },
+        include: ['*.jar'], exclude: ['cronet_impl_native_java.jar']).builtBy(prepareCronetJars)
+ext.dynamicCronetJar = files(adapted).builtBy(adaptCronetLoader)
+println "CRONET-LOADER-APPLIED prepared=${ext.has('preparedCronetJars')} dynamic=${ext.has('dynamicCronetJar')}"

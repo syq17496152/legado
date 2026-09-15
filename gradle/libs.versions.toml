@@ -73,8 +73,6 @@ commonsText = "1.13.1"
 rhino = "1.8.1"
 
 media3 = "1.10.1"
-# Cronet 500.0.1（cronet-bundled 单体构件：API+实现+libcronet.so 都随 AAR，替代本地 cronetlib/ 6 jar + jniLibs 内置 so）
-cronetBundled = "500.0.1"
 #noinspection GradleDependency
 gsyvideoplayer = "11.3.0"
 
@@ -150,7 +148,6 @@ lyricViewx = { module = "com.github.Moriafly:LyricViewX", version.ref = "lyricVi
 media-media = { module = "androidx.media:media", version.ref = "media" }
 media3-datasource-okhttp = { module = "androidx.media3:media3-datasource-okhttp", version.ref = "media3" }
 media3-datasource-cronet = { module = "androidx.media3:media3-datasource-cronet", version.ref = "media3" }
-cronet-bundled = { module = "org.chromium.net:cronet-bundled", version.ref = "cronetBundled" }
 media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
 media3-exoplayer-hls = { module = "androidx.media3:media3-exoplayer-hls", version.ref = "media3" }
 media3-effect = { module = "androidx.media3:media3-effect", version.ref = "media3" }
