@@ -15,9 +15,9 @@ import io.legado.app.constant.AppLog
 import splitties.init.appCtx
 
 /**
- * T5.1: 播放器实例池（P2-20，对齐 GSYVideoPlayer 实例复用思想 + 抖音/快手播放器池化实践）
+ * T5.1: 播放器实例池（P2-20，对齐 GSYVideoPlayer 实例复用思想 + 主流短视频平台播放器池化实践）
  *
- * 解决根因：抖音风格 ViewPager2 垂直滑动场景，GSY 全局单 manager 模型下每次切视频都
+ * 解决根因：沉浸竖滑风格 ViewPager2 垂直滑动场景，GSY 全局单 manager 模型下每次切视频都
  * release 旧 ExoPlayer 实例 + Builder().build() 新建实例（渲染器初始化/解码器查询/线程启动
  * 约 30-100ms），快速滑动时内存抖动 + 起播延迟。
  *

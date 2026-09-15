@@ -78,6 +78,16 @@ object MacCmsNormalizer {
                 level = AppLog.Level.INFO
             )
             json.toString()
-        }.getOrElse { body }
+        }.getOrElse {
+            // 诊断埋点（2026-09-15 日志盲区审计 P0）：规范化异常静默回落原 body（多线路丢失的
+            // 隐性路径之一），异常类型必须留痕供定位
+            AppLog.putDebugWithTag(
+                AppLog.TAG_RSS,
+                "MacCmsDiag 规范化异常回落: ${it::class.java.simpleName}: ${it.message?.take(60)}",
+                it,
+                level = AppLog.Level.WARN
+            )
+            body
+        }
     }
 }

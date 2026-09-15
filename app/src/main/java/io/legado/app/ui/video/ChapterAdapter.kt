@@ -16,6 +16,7 @@ class ChapterAdapter(
     private var chapters: List<BookChapter>,
     private var selectedPosition: Int = -1,
     private val isVolume: Boolean = false,
+    private val chapterLayoutRes: Int = R.layout.item_video_chapter,
     private val onChapterClick: (BookChapter, Int) -> Unit
 ) : RecyclerView.Adapter<ChapterAdapter.ChapterViewHolder>() {
 
@@ -26,7 +27,7 @@ class ChapterAdapter(
         val resourceId = if (isVolume) {
             R.layout.item_video_chapter_volume
         } else {
-            R.layout.item_video_chapter
+            chapterLayoutRes
         }
         val view = LayoutInflater.from(parent.context)
             .inflate(resourceId, parent, false)

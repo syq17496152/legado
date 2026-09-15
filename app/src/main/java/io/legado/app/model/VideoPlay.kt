@@ -44,6 +44,7 @@ import io.legado.app.help.gsyVideo.VideoPlayer
 import io.legado.app.help.video.VideoPlaybackPipeline
 import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.help.video.VideoUrlExtractor
+import io.legado.app.ui.video.VideoBookPreloader
 import io.legado.app.help.video.engine.HeaderResolver
 import io.legado.app.help.video.engine.SniffEngine
 import io.legado.app.help.video.engine.SniffRequest
@@ -373,6 +374,15 @@ object VideoPlay : CoroutineScope by MainScope(){
     @Volatile
     var currentSwitchToken: Long = 0
         private set
+    /**
+     * video-source-multiline-l0-preload AD-03：startPlay 防抖状态（同 key 300ms 窗口）
+     * 与 token 解耦：logs9 铁证重复 startPlay 的两次 token 不同（第二次调用前已 increment），
+     * "同 token"条件拦不住；改为基于章节/视频 URL 判重。
+     */
+    @Volatile
+    private var lastStartPlayDebounceKey: String = ""
+    @Volatile
+    private var lastStartPlayAt: Long = 0
     /** FR-6: switchToArticle 状态标志（异步加载期间为 true，完成后清除；仅用于状态跟踪，不阻止入口） */
     @Volatile
     private var isSwitchingArticle = false
@@ -416,7 +426,7 @@ object VideoPlay : CoroutineScope by MainScope(){
 
     /**
      * video-player-dual-layout AD-02：播放页布局模式
-     * 语义：0=抖音沉浸式（默认，ViewPager2 竖滑），1=传统布局（上播放器+下部信息区）
+     * 语义：0=沉浸式（默认，ViewPager2 竖滑），1=传统布局（上播放器+下部信息区）
      * - getter 异常值容错（备份导入/手改 prefs 出现非法值时回落 0，参照 playerType 先例）
      * - 布局分发：本字段是唯一数据源（单源）。实际走统一入口 `dispatchLayoutMode()` 的调用点为 **2 处**
      *   （VideoPlayerActivity 新会话 initFromIntent / 悬浮窗恢复）；onNewIntent 场景直接 `if(useViewPagerMode)`
@@ -556,8 +566,14 @@ object VideoPlay : CoroutineScope by MainScope(){
         val token = switchTokenCounter.incrementAndGet()
         currentSwitchToken = token
         switchBookJob = Coroutine.async(loadScope, IO) {
+            // video-source-multiline-l0-preload 1.0c：切换耗时归属埋点（initSource vs 起播）
+            val switchStartMs = System.currentTimeMillis()
             // 复用 initSource 写入链：sourceType=book、record=null（相邻影片无历史）
             val ok = initSource(next.origin, SourceType.book, next.bookUrl, null)
+            AppLog.put(
+                "VideoRoutesDiag switchToBook: offset=$offset, next=${next.bookUrl.takeLast(24)}, " +
+                    "initSourceMs=${System.currentTimeMillis() - switchStartMs}, ok=$ok"
+            )
             withContext(Main) {
                 // token 过期（期间已发起新切换）→ 状态由新切换管理，本次静默退出
                 if (currentSwitchToken != token) {
@@ -590,7 +606,24 @@ object VideoPlay : CoroutineScope by MainScope(){
         return true
     }
 
-    /**  订阅源文章列表（上下滑动切换文章，从 RssArticlesFragment 传入）  **/
+    /**
+     * video-source-multiline-l0-preload AD-02：步进式预取"前方一部"目录（fire-and-forget）
+     *
+     * 进入播放器 / 书源切换完成后调用：预取队列中当前影片的下一部目录写库，
+     * 使下次上滑切换时 initSource 命中 DB 缓存秒起播（logs9 铁证：无预取时每次切换网络拉目录 700-900ms）。
+     * - 仅书源模式：book 非空且 VideoPlaylistHolder 含当前影片且有 +1 邻居才预取
+     * - 仅预取前方一部（不预取 -1/全队列），步进式保证用户总滑向已预取的下一部
+     * - 预取并发/失败均静默（VideoBookPreloader 内部处理），绝不阻塞播放
+     */
+    fun prefetchNextNeighbor() {
+        val book = book ?: return
+        if (!VideoPlaylistHolder.containsBookUrl(book.bookUrl)) return
+        val next = VideoPlaylistHolder.neighborOf(book.bookUrl, 1) ?: return
+        VideoBookPreloader.preloadBookByUrl(loadScope, next.bookUrl, next.origin)
+        AppLog.put("VideoRoutesDiag prefetchNextNeighbor: fired, next=${next.bookUrl.takeLast(24)}")
+    }
+
+    /**  订阅源文章列表（上下滑动切换文章，从 RssArticlesFragment 传入）  */
     var rssArticles: List<RssArticle>? = null
     /**  当前订阅源文章索引（上下滑动切换文章）  **/
     var rssArticleIndex: Int = 0
@@ -624,6 +657,18 @@ object VideoPlay : CoroutineScope by MainScope(){
      * 开始播放
      */
     fun startPlay(player: StandardGSYVideoPlayer) {
+        // video-source-multiline-l0-preload AD-03：同 key 300ms 防抖（消除 logs9 双起播铁证：同影片 5ms 内两次 startPlay）
+        // key = 章节 URL ?: 当前视频 URL；key 空白（URL 未就绪）时不防抖，护首播/initSource 早期；
+        // 新影片（key 不同）不受限；与 switchToken 解耦（token 在两次调用间已递增，同 token 防抖拦不住）。
+        val debounceKey = chapter?.url ?: videoUrl.orEmpty()
+        if (debounceKey.isNotBlank() && debounceKey == lastStartPlayDebounceKey &&
+            System.currentTimeMillis() - lastStartPlayAt < 300
+        ) {
+            AppLog.put("VideoRoutesDiag startPlay: 300ms 内同key重复调用丢弃, keyLen=${debounceKey.length}")
+            return
+        }
+        lastStartPlayDebounceKey = debounceKey
+        lastStartPlayAt = System.currentTimeMillis()
         // P0: singleUrl 模式（直接传 videoUrl 播放）不需要 source，跳过 source == null 检查
         // 根因：adb am start 传 videoUrl 直接播放 m3u8 时，source 为 null，
         //   原 `if (source == null) return` 导致 singleUrl 分支永远不执行，播放器无法启动
@@ -861,12 +906,14 @@ object VideoPlay : CoroutineScope by MainScope(){
                             rssRouteIndex = directRouteIdx
                             rssEpisodes = routes[directRouteIdx].episodes
                             rssEpisodeIndex = 0
+                            AppLog.put("VideoRoutesDiag startPlay rssRoutes rebuilt: routes=${routes.size}, routeIdx=$directRouteIdx, episodes=${rssEpisodes?.size}")
                             postEvent(EventBus.VIDEO_SUB_TITLE, rssArticle.title) // R3 title 修复
                             playRssEpisode(player, routes[directRouteIdx].episodes[0])
                             postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1)) //通知 UI 更新多集列表
                             return@onSuccess
                         }
                         // 单 URL（现有逻辑）
+                        AppLog.put("VideoRoutesDiag startPlay rssRoutes null -> fallback single: routes=${routes?.size}, current rssEpisodes=${rssEpisodes?.size}")
                         // 2.4/R-P1-2：嗅探上下文头收集（T4.4/P3-1 两分支命中时记录，analyzeUrl 组装后 merge）
                         var sniffMergedHeaders: Map<String, String> = emptyMap()
                         val mUrl = if (content.isEmpty()) {
@@ -1020,7 +1067,13 @@ object VideoPlay : CoroutineScope by MainScope(){
             videoManager.listener().onCompletion()
         }
         videoManager.releaseMediaPlayer()
-        if (!isLoading) {
+        // 布局切换修复（2026-09-14 用户真机铁证 17:27:25 段落：沉浸式→传统 0->1 无响应）：
+        // switchLayoutMode 释放旧容器（GSYVideoView.release→releaseVideos）牵连本函数清空
+        // source/book/toc 全局状态，而 setupLegacyMode→startLegacyPlayback 依赖残留状态起播，
+        // 清空后 startPlay early return(source=null) 播放器无响应（17:30:29 反向切换碰巧因
+        // isLoading 悬挂未清空而幸存，症状不对称）。layoutSwitchInProgress 窗口内跳过状态清空，
+        // 仅释放 mediaPlayer；Activity 销毁路径（开关已复位）不受影响。
+        if (!isLoading && !layoutSwitchInProgress) {
             //还原所有状态
             videoUrl = null
             originalPlayUrl = null // 4.8b：历史键同步清空
@@ -1184,6 +1237,7 @@ object VideoPlay : CoroutineScope by MainScope(){
         rssEpisodes = null
         rssRouteIndex = 0
         rssEpisodeIndex = 0
+        AppLog.put("VideoRoutesDiag initSource begin: sourceKey=${sourceKey?.take(2)}***, sourceType=$sourceType, singleUrl=$singleUrl, bookUrlNotNull=${bookUrl != null}, recordNotNull=${record != null}, routes=null, episodes=null")
         source = sourceKey?.let {
             when (sourceType) {
                 SourceType.book -> appDb.bookSourceDao.getBookSource(it)
@@ -1214,6 +1268,9 @@ object VideoPlay : CoroutineScope by MainScope(){
         // 此处同步加载目录，不再依赖预加载碰运气；目录仍空时才由 startPlay 报"未找到章节"
         val bsVideoForToc = source as? BookSource
         val bookForToc = book
+        // video-source-multiline-l0-preload 1.0b：目录来源+耗时埋点（DB 命中 or 即时加载）
+        val tocFromDb = toc?.isNotEmpty() == true
+        val instantLoadStartMs = System.currentTimeMillis()
         if (bsVideoForToc?.bookSourceType == BookSourceType.video && bookForToc != null && toc.isNullOrEmpty()) {
             // MacCMS detail 接口响应本身含 vod_play_url，tocUrl 空时用 bookUrl 直接当目录地址
             if (bookForToc.tocUrl.isBlank()) {
@@ -1236,6 +1293,18 @@ object VideoPlay : CoroutineScope by MainScope(){
                     volumes.add(t)
                 }
             }
+            if (bsVideoForToc.bookSourceType == BookSourceType.video) {
+                AppLog.put(
+                    "VideoRoutesDiag initSource tocSource: fromDb=false, instantLoad=true, " +
+                        "tocSize=${toc?.size}, volumes=${volumes.size}, " +
+                        "loadMs=${System.currentTimeMillis() - instantLoadStartMs}"
+                )
+            }
+        } else if (tocFromDb && bsVideoForToc?.bookSourceType == BookSourceType.video) {
+            AppLog.put(
+                "VideoRoutesDiag initSource tocSource: fromDb=true, instantLoad=false, " +
+                    "tocSize=${toc?.size}, volumes=${volumes.size}, branch=volumes/flat判定"
+            )
         }
         upEpisodes()
         AppLog.put("initSource: 视频书源目录映射, tocSize=${toc?.size}, volumes=${volumes.size}, durVolumeIndex=$durVolumeIndex, chInVol=$chapterInVolumeIndex, bookDurChIdx=${book?.durChapterIndex}")
@@ -1269,6 +1338,9 @@ object VideoPlay : CoroutineScope by MainScope(){
             rssEpisodes = mappedRoutes.getOrNull(durVolumeIndex)?.episodes
             rssRouteIndex = durVolumeIndex
             rssEpisodeIndex = chapterInVolumeIndex
+            AppLog.put("VideoRoutesDiag initSource book#volumes: volumes=${volumes.size}, routes=${rssRoutes?.size}, episodes=${rssEpisodes?.size}, routeIdx=$rssRouteIndex, epIdx=$rssEpisodeIndex")
+            // 通知 UI 重建线路/集数选择器：书源卷章映射完成即刷新（首次进入/切换影片共用）
+            postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1))
             // video-booksource-align-rss AD-01：书源侧 VideoPlaybackQueue 接入删除（单页化后
             // 无扁平位映射/占位页需求），组件文件保留供订阅源多集分页改造后续用
         } else if (bookSourceForRoutes?.bookSourceType == BookSourceType.video) {
@@ -1285,6 +1357,9 @@ object VideoPlay : CoroutineScope by MainScope(){
                 rssEpisodes = episodes
                 rssRouteIndex = 0
                 rssEpisodeIndex = chapterInVolumeIndex.coerceIn(0, (episodes.size - 1).coerceAtLeast(0))
+                AppLog.put("VideoRoutesDiag initSource book#flat: episodes=${episodes.size}, routeIdx=$rssRouteIndex, epIdx=$rssEpisodeIndex")
+                // 通知 UI 重建线路/集数选择器
+                postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1))
                 AppLog.put("initSource: 无卷书源单线路回退, episodes=${episodes.size}, rssEpisodeIndex=$rssEpisodeIndex")
             }
         }
@@ -1761,6 +1836,7 @@ object VideoPlay : CoroutineScope by MainScope(){
         rssEpisodeIndex = 0
         rssRouteIndex = 0
         videoTitle = article.title
+        AppLog.put("VideoRoutesDiag switchToArticle idx=$index: 清空 rssRoutes/rssEpisodes, 异步 startPlay 将重建")
         // FR-4: 取消前一个 switchToArticle 异步任务，防止快速切换竞争
         // FR-6: isSwitchingArticle 状态保护，异步加载期间为 true
         switchArticleJob?.cancel()

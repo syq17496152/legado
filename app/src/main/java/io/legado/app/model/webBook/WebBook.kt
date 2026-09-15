@@ -30,7 +30,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
+import org.json.JSONObject
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.CoroutineContext
 
 @Suppress("MemberVisibilityCanBePrivate")
@@ -383,17 +385,38 @@ object WebBook {
         }
         val normalized = MacCmsNormalizer.normalize(body)
         val isMacCms = normalized != body
-        if (isMacCms && bookSource.ruleToc?.chapterList.isNullOrBlank()) {
-            // L0 零规则：routes 结构直产卷章
+        // 诊断埋点（VideoRoutesDiag）：目录来源 + MacCMS 规范化注入数量对照
+        // 解决 logs9 分析猜测①（episodes vs chapterCount 之谜）与猜测②（L0 是否被跳过）
+        val useCache = book.bookUrl == book.tocUrl && !book.tocHtml.isNullOrEmpty()
+        if (isMacCms) {
+            val normJson = kotlin.runCatching { JSONObject(normalized) }.getOrNull()
+            AppLog.put(
+                "VideoRoutesDiag videoChapterList: useCache=$useCache, isMacCms=true, " +
+                    "routesInjected=${normJson?.optJSONArray(MacCmsNormalizer.KEY_ROUTES)?.length() ?: -1}, " +
+                    "chaptersInjected=${normJson?.optJSONArray(MacCmsNormalizer.KEY_CHAPTERS)?.length() ?: -1}"
+            )
+        } else {
+            AppLog.put("VideoRoutesDiag videoChapterList: useCache=$useCache, isMacCms=false")
+        }
+        // video-booksource-multiline-l0-preload AD-01：视频书源 MacCMS 规范化成功（注入 routes）即优先 L0 直产，
+        // 不再要求 chapterList 规则为空（logs9 铁证：规则非空时 L1 只解析出 1 项，多线路端到端丢失）。
+        // buildFromMacCms 失败（routes 缺失/解析异常）返回 null 时自动回退 L1。
+        if (isMacCms) {
+            val l0Start = TimeUnit.NANOSECONDS.toMillis(System.nanoTime())
             val chapters = VideoBookChapterHelper.buildFromMacCms(normalized.orEmpty(), book, book.tocUrl)
             if (chapters != null) {
                 // 缓存规范化 body，覆盖安装/重进复用（与通用路径 tocHtml 语义一致）
                 book.tocHtml = normalized
+                AppLog.put(
+                    "VideoRoutesDiag L0直产: volumes=${chapters.count { it.isVolume }}, " +
+                        "chapters=${chapters.size}, loadMs=${TimeUnit.NANOSECONDS.toMillis(System.nanoTime()) - l0Start}"
+                )
                 return chapters
             }
+            AppLog.put("VideoRoutesDiag L0直产失败回退L1: buildFromMacCms=null")
         }
         // L1 规则写法 / L2 HTML 站 / L3 JS：走既有解析（MacCMS 时传注入双结构后的 body）
-        return BookChapterList.analyzeChapterList(
+        val l1Chapters = BookChapterList.analyzeChapterList(
             bookSource = bookSource,
             book = book,
             baseUrl = book.tocUrl,
@@ -401,6 +424,10 @@ object WebBook {
             body = normalized ?: body,
             isFromBookInfo = false
         )
+        AppLog.put(
+            "VideoRoutesDiag L1 analyze: chapters=${l1Chapters.size}, volumes=${l1Chapters.count { it.isVolume }}"
+        )
+        return l1Chapters
     }
 
     /**

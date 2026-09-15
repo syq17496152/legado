@@ -30,7 +30,7 @@
             android:maxLines="1"
             android:textColor="@color/primaryText"
             android:textSize="@dimen/text_15sp"
-            tools:text="起点中文" />
+            tools:text="示例书源" />
 
         <io.legado.app.ui.widget.anima.RotateLoading
             android:id="@+id/rotate_loading"

@@ -1,5 +1,6 @@
 package io.legado.app.help.ai
 
+import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.AiAgentTrace
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookCharacter
@@ -542,7 +543,16 @@ object AiChatService {
                 ?.takeIf { throwable.isAiFastFallbackCandidate() }
                 ?.let { resolveCompletionEndpoint(it, promptCacheKeyOverride) }
                 ?.takeIf { it.chatUrl != chatUrl || it.model != model }
-                ?: throw throwable
+                ?: run {
+                    // 诊断埋点（2026-09-15 日志盲区审计 P0）：AI 请求最终失败（无可用的备用模型）
+                    // 原是黑盒——只对用户 toast，App 日志页无记录。记 model/轮次/异常类型，
+                    // 不记录对话内容与 apiKey。
+                    AppLog.putWarn(
+                        "AiChatDiag 请求失败(无备用): model=$model, round=$round, " +
+                            "err=${throwable::class.java.simpleName}: ${throwable.message?.take(80)}"
+                    )
+                    throw throwable
+                }
             requestLog.append("round=").append(round)
                 .append(" fallbackModel=").append(fallback.model)
                 .append(" reason=").append(throwable.message ?: throwable.javaClass.simpleName)
@@ -612,6 +622,12 @@ object AiChatService {
             } catch (throwable: Throwable) {
                 lastError = throwable
                 if (attempt >= NETWORK_ABORT_RETRY_COUNT || !throwable.isAiRetryableRequestFailure()) {
+                    // 诊断埋点（2026-09-15 日志盲区审计 P0）：重试链路最终失败落 App 日志页
+                    //（attempt=0 且不可重试也到达此分支），记 model/重试轮次/异常类型，不记对话内容
+                    AppLog.putWarn(
+                        "AiChatDiag 请求失败: model=$model, attempt=$attempt, " +
+                            "err=${throwable::class.java.simpleName}: ${throwable.message?.take(80)}"
+                    )
                     throw throwable
                 }
             }

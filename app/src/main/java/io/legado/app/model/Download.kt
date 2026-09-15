@@ -1,6 +1,7 @@
 package io.legado.app.model
 
 import android.content.Context
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.IntentAction
 import io.legado.app.service.DownloadService
 import io.legado.app.service.DownloadTaskType
@@ -28,6 +29,12 @@ object Download {
         autoStart: Boolean = true,
         retry: Int = DownloadService.MAX_AUTO_RETRY
     ) {
+        // 诊断埋点（2026-09-15 日志盲区审计 P1）：任务创建入口原为黑盒（服务侧有日志，
+        // 入口侧"点了下载没反应"无从定位）。记路径模式+任务类型+头数量，不记完整 URL 与头内容。
+        AppLog.put(
+            "DownloadDiag 任务创建: type=${taskType?.name ?: "auto"}, autoStart=$autoStart, " +
+                "headers=${headers?.size ?: 0}, pathEnd=${url.takeLast(24)}"
+        )
         context.startService<DownloadService> {
             action = IntentAction.start
             putExtra("url", url)

@@ -211,3 +211,8 @@ git_log.txt
 /logs/dlna_compile_w.txt
 /logs/test_debugpage_tail.txt
 /logs/test_rhino_solo_tail.txt
+
+# === 品牌词合规清理（brand-name-sanitization v2，2026-09-15）：文档/测试/技能全部远端剥离，仅保留本地副本 ===
+/docs/
+/ai_tests/
+/.trae/skills/

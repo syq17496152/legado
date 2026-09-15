@@ -51,6 +51,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.viewpager2.widget.ViewPager2
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
@@ -173,7 +174,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     private var showLogin by mutableStateOf(false)
     private var showChangeSource by mutableStateOf(false)
 
-    // R3 抖音风格：ViewPager2 相关
+    // R3 沉浸竖滑风格：ViewPager2 相关
     // video-player-dual-layout D1：初值由持久化 layoutMode 决定（0=沉浸式 ViewPager，1=传统 legacy）
     private var useViewPagerMode = VideoPlay.layoutMode == 0
     private var videoPagerAdapter: VideoPagerAdapter? = null
@@ -487,6 +488,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 upView()
                 // AD-04: 恢复播放进度
                 restorePlayHistory()
+                // video-source-multiline-l0-preload AD-02：进入播放器即步进预取"前方一部"目录
+                // （书源场景：使首次上滑切换命中 DB 缓存秒起播；非书源 prefetchNextNeighbor 内部 guard 跳过）
+                VideoPlay.prefetchNextNeighbor()
             }
         } else {
             // 非新建恢复：从悬浮窗返回，按 layoutMode 分发布局（D3）
@@ -576,10 +580,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         return true
     }
 
-    // ==================== R3 抖音风格：ViewPager2 模式管理 ====================
+    // ==================== R3 沉浸竖滑风格：ViewPager2 模式管理 ====================
 
     /**
-     * R3 抖音风格：切换到 ViewPager2 沉浸式模式
+     * R3 沉浸竖滑风格：切换到 ViewPager2 沉浸式模式
      *
      * 隐藏旧模式布局，显示 ViewPager2 容器。
      * 订阅源非单URL时在 initSource 后调用。
@@ -1094,7 +1098,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     /**
-     * R3 抖音风格：Fragment 视图就绪回调
+     * R3 沉浸竖滑风格：Fragment 视图就绪回调
      *
      * VideoFragment.onViewCreated 中调用，确保 playerView 已初始化后再激活播放。
      * 解决 ViewPager2 创建 Fragment 异步时序问题：onPageSelected 可能在 Fragment 视图创建前触发。
@@ -1117,7 +1121,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     /**
-     * R3 抖音风格：获取指定位置的 VideoFragment
+     * R3 沉浸竖滑风格：获取指定位置的 VideoFragment
      */
     private fun getVideoFragment(position: Int): VideoFragment? {
         return supportFragmentManager.findFragmentByTag("f$position") as? VideoFragment
@@ -1148,7 +1152,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     }
 
     /**
-     * R3 抖音风格：线路切换后更新 ViewPager2
+     * R3 沉浸竖滑风格：线路切换后更新 ViewPager2
      */
     fun onRssRouteChangedForViewPager() {
         // 先归位到 0 再 notify：若先 notify，ViewPager2 同步期间 currentItem 可能仍指向
@@ -1600,10 +1604,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     private fun showToc(toc: List<BookChapter>) {
         // video-player-dual-layout W2-B3（用户反馈③）：去掉 iv_chapter 二级目录页入口，
         // 选集直接页内平铺（tocActivityResult 保留给未来页内展开复用）
+        // 2026-09-14 布局重排二轮：多集网格平铺（一行 N 个按集名平均分配宽度，列数屏宽自适应）
         val recyclerView = binding.chapters
-        val layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        recyclerView.layoutManager = layoutManager
-        val adapter = ChapterAdapter(toc,VideoPlay.chapterInVolumeIndex, false) { chapter, index ->
+        recyclerView.layoutManager = GridLayoutManager(this, episodeGridSpanCount())
+        val adapter = ChapterAdapter(toc, VideoPlay.chapterInVolumeIndex, false,
+            R.layout.item_video_chapter_vertical) { chapter, index ->
             if (index != VideoPlay.chapterInVolumeIndex) {
                 // add-dlna-cast REQ-08：投屏中选集先终止会话再放行
                 endCastForLocalSwitch()
@@ -1615,6 +1620,15 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
         recyclerView.adapter = adapter
         scrollToDurChapter(recyclerView, VideoPlay.chapterInVolumeIndex)
+    }
+
+    /**
+     * 2026-09-14 布局重排二轮：多集网格列数自适应
+     * 按屏宽/110dp（item 目标最小宽度）估算，钳制 [3,6]，横竖屏旋转后重进页面自动重算
+     */
+    private fun episodeGridSpanCount(): Int {
+        val screenWidthDp = resources.configuration.screenWidthDp
+        return (screenWidthDp / 110).coerceIn(3, 6)
     }
 
     /**
@@ -1691,9 +1705,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     private fun showRssEpisodes(episodes: List<RssEpisode>) {
         binding.tvEpisodeLabel.visible()
         val recyclerView = binding.chapters
-        val layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
-        recyclerView.layoutManager = layoutManager
-        val adapter = RssEpisodeAdapter(episodes, VideoPlay.rssEpisodeIndex) { episode, index ->
+        // 2026-09-14 布局重排二轮：多集网格平铺（一行 N 个按集名平均分配宽度）
+        recyclerView.layoutManager = GridLayoutManager(this, episodeGridSpanCount())
+        val adapter = RssEpisodeAdapter(
+            episodes, VideoPlay.rssEpisodeIndex, true
+        ) { episode, index ->
             if (index != VideoPlay.rssEpisodeIndex) {
                 // add-dlna-cast REQ-08：投屏中选集先终止会话再放行
                 endCastForLocalSwitch()
@@ -1753,6 +1769,11 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 val smoothScroller = object : LinearSmoothScroller(this@VideoPlayerActivity) {
                     override fun getHorizontalSnapPreference(): Int {
                         return SNAP_TO_START // 滚动到最左边
+                    }
+
+                    // 2026-09-14 布局重排：集数纵向平铺滚动后，纵向滚动也吸附到顶部
+                    override fun getVerticalSnapPreference(): Int {
+                        return SNAP_TO_START
                     }
                 }
                 smoothScroller.targetPosition = index
@@ -2123,6 +2144,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
 
         observeEvent<ArrayList<Int>>(EventBus.UP_VIDEO_INFO) {
+            AppLog.put("VideoRoutesDiag UP_VIDEO_INFO: viewPager=$useViewPagerMode, articles=${VideoPlay.rssArticles?.size}, routes=${VideoPlay.rssRoutes?.size}, episodes=${VideoPlay.rssEpisodes?.size}, book=${if (VideoPlay.book != null) 1 else 0}")
             if (useViewPagerMode) {
                 // 文章列表模式：文章数量不变，只需更新当前 Fragment 的集数/线路选择器
                 if (!VideoPlay.rssArticles.isNullOrEmpty()) {
@@ -2204,6 +2226,10 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 composeTitle = VideoPlay.displayEpisodeTitle(
                     VideoPlay.episodes?.getOrNull(VideoPlay.chapterInVolumeIndex)?.title
                 )
+                // 书源多线路直产修复（2026-09-14 用户真机铁证 17:30:21 段落：传统模式点「下一部」
+                // 只刷新信息区未起播，播放器继续播旧章节，且 isLoading 悬挂致布局切换连锁异常）：
+                // 切换影片完成后显式走 startLegacyPlayback 用 playerView 起播新章节（book 分支 startPlay）
+                startLegacyPlayback()
                 return@observeEvent
             }
             currentFragment?.deactivatePlayer()
@@ -2215,12 +2241,20 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             if (fragment?.playerView != null) {
                 fragment.activatePlayer()
             }
+            // 书源切换影片：initSource 已重建线路/集数（卷章映射/扁平回退并 postEvent UP_VIDEO_INFO），
+            // 此处主动刷新左下角选择器（ViewPager2 复用 Fragment 不重建视图，静态控件需显式刷新；
+            // 修复切换影片后选择器残留旧数据或不显示的问题）
+            currentFragment?.updateEpisodeSelector()
+            AppLog.put("VideoRoutesDiag BOOK_UNIT_SWITCHED: routes=${VideoPlay.rssRoutes?.size}, episodes=${VideoPlay.rssEpisodes?.size}, routeIdx=${VideoPlay.rssRouteIndex}, epIdx=${VideoPlay.rssEpisodeIndex}")
             // 标题单一权威：经 displayEpisodeTitle 归一（无语义集名回退影片名）
             composeTitle = VideoPlay.displayEpisodeTitle(
                 VideoPlay.episodes?.getOrNull(VideoPlay.chapterInVolumeIndex)?.title
             )
             currentFragment?.updateVideoTitle(composeTitle)
             upView()
+            // video-source-multiline-l0-preload AD-02：切换完成后步进预取新位置"前方一部"目录
+            // （保证用户上滑后总滑向已预取的下一部；非书源 guard 跳过）
+            VideoPlay.prefetchNextNeighbor()
         }
 
         observeEvent<String>(EventBus.VIDEO_PLAY_ERROR) {

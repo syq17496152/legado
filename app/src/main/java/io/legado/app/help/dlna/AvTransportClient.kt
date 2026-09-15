@@ -132,6 +132,8 @@ object AvTransportClient {
                 SoapEnvelope.soapActionHeader(DlnaConstants.SERVICE_AV_TRANSPORT, action)
             )
             .header("Content-Type", "text/xml; charset=\"utf-8\"")
+            // dlna-cast-xiaomi-fix：明示设备端关闭连接（部分电视只认该头，禁池是客户端兜底）
+            .header("Connection", "close")
             .build()
         return DlnaSoapExecutor.execute(request, device.displayName, action)
     }

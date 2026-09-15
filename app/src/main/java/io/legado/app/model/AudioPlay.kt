@@ -105,6 +105,9 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun resetData(book: Book) {
+        // 诊断埋点（2026-09-15 日志盲区审计 P1）：听书会话起播入口原为黑盒
+        //（AudioPlayService 服务侧有日志，model 层入口无），"点了听书没反应"类问题无从定位
+        AppLog.put("AudioDiag resetData: chapterSize=${book.totalChapterNum}, durIdx=${book.durChapterIndex}, sourceNull=${book.getBookSource() == null}")
         stop()
         AudioPlay.book = book
         readRecord.bookName = book.name

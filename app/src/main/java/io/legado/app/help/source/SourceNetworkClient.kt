@@ -66,6 +66,14 @@ object SourceNetworkClient {
             }
         }.getOrElse { throwable ->
             // 步骤3：失败时若 checkJs 非空，构造错误响应重试登录检测
+            // 诊断埋点（2026-09-15 日志盲区审计 P0）：网络请求失败原先是黑盒（无 checkJs 的源直接抛出
+            // 无 AppLog），App 日志页只见"解析失败"不见网络层根因。记异常类型+源 key，不记 URL。
+            AppLog.putDebugWithTag(
+                AppLog.TAG_SOURCE_MECHANISM,
+                "SourceNetDiag 请求失败: sourceKey=${source.getKey().take(20)}, err=${throwable::class.java.simpleName}: ${throwable.message?.take(80)}",
+                throwable,
+                level = AppLog.Level.WARN
+            )
             if (!checkJs.isNullOrBlank()) {
                 val errResponse = analyzeUrl.getErrStrResponse(throwable)
                 try {
@@ -130,6 +138,13 @@ object SourceNetworkClient {
                 Debug.log(tag, "≡检测到重定向(${it.code})")
                 Debug.log(tag, "┌重定向后地址")
                 Debug.log(tag, "└${response.url}")
+                // 诊断埋点（2026-09-15）：重定向原先只进源调试页 Debug 日志，App 日志页不可见；
+                // 域名跳转类源失效（原站迁移）的关键线索。只记 code 不记 URL。
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_SOURCE_MECHANISM,
+                    "SourceNetDiag 重定向: code=${it.code}, sourceKey=${tag.take(20)}",
+                    level = AppLog.Level.INFO
+                )
             }
         }
     }

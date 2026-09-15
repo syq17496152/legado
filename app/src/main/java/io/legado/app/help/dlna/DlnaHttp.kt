@@ -1,6 +1,7 @@
 package io.legado.app.help.dlna
 
 import io.legado.app.constant.AppLog
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
@@ -30,7 +31,14 @@ object DlnaHttp {
             .connectTimeout(3, TimeUnit.SECONDS)
             .readTimeout(DlnaConstants.TIMEOUT_SOAP_MS, TimeUnit.MILLISECONDS)
             .callTimeout(DlnaConstants.TIMEOUT_SOAP_MS, TimeUnit.MILLISECONDS)
-            .retryOnConnectionFailure(false)
+            // dlna-cast-xiaomi-fix（2026-09-14 真机铁证 logs23 20:51 会话）：小米电视 DLNA 服务
+            // 响应后立即关闭 TCP 连接，OkHttp 默认连接池复用死连接 → "unexpected end of stream"
+            // （重试 2-3ms 即败：池内全是死连接 + 禁重试成终局）。SOAP 指令低频（建立会话 4-6 条
+            // + 控制指令），每次新建连接仅多一次 LAN 握手（1-3ms），彻底根除死连接复用。
+            .connectionPool(ConnectionPool(0, 0, TimeUnit.NANOSECONDS))
+            // AD-02 禁重试仅针对防盗链 CDN 上游（streamClient）；soapClient 打局域网电视无封 IP 风险，
+            // 允许连接失败换新连接重试（与禁池双保险，部分电视仍会中途断流）
+            .retryOnConnectionFailure(true)
             .build()
     }
 

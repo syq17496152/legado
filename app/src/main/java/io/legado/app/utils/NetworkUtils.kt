@@ -189,7 +189,6 @@ object NetworkUtils {
      * 获取域名，供cookie保存和读取，处理失败返回传入的url
      * http://1.2.3.4 => 1.2.3.4
      * https://www.example.com =>  example.com
-     * http://www.biquge.com.cn => biquge.com.cn
      * http://www.content.example.com => example.com
      */
     fun getSubDomain(url: String): String {

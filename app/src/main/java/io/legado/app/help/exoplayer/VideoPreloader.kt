@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * T2.3: 下一个视频预加载器（256KB 预加载，对齐抖音官方方案）
+ * T2.3: 下一个视频预加载器（256KB 预加载，对齐主流短视频平台官方方案）
  *
  * 核心能力：
  * - 触发时机：当前视频播放进度达 50% 时
@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
  * - 首帧预加载面向"即将播放的相邻视频"（±1），256KB 预加载面向"正在播放的当前视频的下一集"
  * - 两者共用缓存层与 LRU，互不重复下载（同一 URL 已预加载则跳过）
  *
- * 成熟方案参考：抖音官方博客（256KB 预加载 + WiFi 3 个/4G 1 个 + LRU 淘汰）
+ * 成熟方案参考：主流短视频平台官方技术博客（256KB 预加载 + WiFi 3 个/4G 1 个 + LRU 淘汰）
  */
 object VideoPreloader {
 

@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
 import splitties.init.appCtx
 
 /**
- * R3 抖音风格视频播放 Fragment
+ * R3 沉浸竖滑风格视频播放 Fragment
  *
  * ViewPager2 中的单个视频播放单元。
  * 每个 Fragment 持有一个 VideoPlayer（GSY）+ 悬浮控件层。
@@ -772,10 +772,12 @@ class VideoFragment : Fragment() {
         val routes = VideoPlay.rssRoutes
         if (routes == null || routes.size <= 1) {
             tvRouteSelector?.gone()
+            AppLog.put("VideoRoutesDiag initRouteSelector: routes=${routes?.size ?: "null"} -> gone")
             return
         }
         tvRouteSelector?.visible()
         updateRouteSelectorText()
+        AppLog.put("VideoRoutesDiag initRouteSelector: routes=${routes.size} -> visible")
         tvRouteSelector?.setOnClickListener { anchor ->
             showRouteSelector(anchor)
         }
@@ -858,12 +860,14 @@ class VideoFragment : Fragment() {
         val episodes = VideoPlay.rssEpisodes
         if (episodes == null || episodes.isEmpty()) {
             rvEpisodes?.gone()
+            AppLog.put("VideoRoutesDiag initEpisodeSelector: episodes=${episodes?.size ?: "null"} -> gone")
             return
         }
         rvEpisodes?.visible()
         rvEpisodes?.layoutManager =
             LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
         updateEpisodeList()
+        AppLog.put("VideoRoutesDiag initEpisodeSelector: episodes=${episodes.size} -> visible")
     }
 
     /**
@@ -872,6 +876,16 @@ class VideoFragment : Fragment() {
     private fun updateEpisodeList() {
         val episodes = VideoPlay.rssEpisodes ?: return
         val rv = rvEpisodes ?: return
+        // 沉浸式多集不显示根修（2026-09-14 用户真机 logs3 21:54/21:55 会话铁证）：
+        // initEpisodeSelector 仅在 episodes 非空的 visible 分支才设 layoutManager；
+        // 首次进入/下滑切换文章时数据异步解析中（null）→ initEpisodeSelector 走 gone 分支，
+        // 之后数据到达走 updateEpisodeSelector→本函数直接设 adapter——rv 无 layoutManager
+        // 不渲染任何 item（高度 0），多集不可见；而 tvRouteSelector 是 TextView 不受影响。
+        // 此处补 LM 兜底（幂等）：无 layoutManager 时补横向列表。
+        if (rv.layoutManager == null) {
+            rv.layoutManager =
+                LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
+        }
         val adapter = RssEpisodeAdapter(episodes, VideoPlay.rssEpisodeIndex) { _, index ->
             if (index != VideoPlay.rssEpisodeIndex) {
                 VideoPlay.rssEpisodeIndex = index
@@ -916,6 +930,7 @@ class VideoFragment : Fragment() {
                 showRouteSelector(anchor)
             }
         }
+        AppLog.put("VideoRoutesDiag updateEpisodeSelector: routes=${routes?.size ?: "null"}, episodes=${episodes?.size ?: "null"}")
         // 更新标题（P4: 双控件统一同步）
         setTitle(VideoPlay.videoTitle)
     }
@@ -1039,7 +1054,7 @@ class VideoFragment : Fragment() {
                     handlePlayerTouchEvent(event)
                 }
                 // 始终消费事件（返回 true），阻止 GSY 的 onClick（onClickBlank 回调）和
-                // surface_container.onTouchEvent 触发。R3 抖音风格不使用 GSY 的亮度/音量/进度滑动手势。
+                // surface_container.onTouchEvent 触发。R3 沉浸竖滑风格不使用 GSY 的亮度/音量/进度滑动手势。
                 true
             } else {
                 false // 控件区域内不消费（让按钮处理；实际按钮在 controlsLayer 上层已消费）

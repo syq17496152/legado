@@ -407,6 +407,9 @@ object Backup {
         mutex.withLock {
             withContext(IO) {
                 backup(context, path, uploadCloud, uploadWebDavFallback)
+                // 诊断埋点（2026-09-15 日志盲区审计 P1）：备份成功完成原只进 logcat（LogUtils.d），
+                // App 日志页不可见；数据安全操作成败必须留痕
+                AppLog.put("BackupDiag 备份完成: cloud=$uploadCloud")
             }
         }
     }

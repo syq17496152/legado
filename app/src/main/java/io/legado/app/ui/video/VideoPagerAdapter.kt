@@ -6,7 +6,7 @@ import androidx.viewpager2.adapter.FragmentStateAdapter
 import io.legado.app.model.VideoPlay
 
 /**
- * R3 抖音风格视频播放 ViewPager2 适配器
+ * R3 沉浸竖滑风格视频播放 ViewPager2 适配器
  *
  * 多模式策略（优先级从高到低）：
  * - 书源模式（book != null）：video-booksource-align-rss AD-01 单页化——恒 1 页（禁滑动翻页），

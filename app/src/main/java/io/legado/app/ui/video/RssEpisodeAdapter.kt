@@ -16,17 +16,25 @@ import io.legado.app.lib.theme.ThemeStore.Companion.accentColor
  * R1 多集选择播放：订阅源集数列表适配器
  *
  * 结构与 ChapterAdapter 对称，但数据类型为 RssEpisode，点击回调用 rssEpisodeIndex。
- * 复用 item_video_chapter 布局，与书源集数列表 UI 一致。
+ * 默认复用 item_video_chapter 布局（沉浸式左下角横向小格子）；
+ * 传统模式集数平铺列表传入 layoutRes=item_video_chapter_vertical（纵向整行）。
  */
 class RssEpisodeAdapter(
     private var episodes: List<RssEpisode>,
     private var selectedPosition: Int = -1,
-    private val onEpisodeClick: (RssEpisode, Int) -> Unit
+    private val verticalLayout: Boolean = false,
+    private val onEpisodeClick: (RssEpisode, Int) -> Unit,
 ) : RecyclerView.Adapter<RssEpisodeAdapter.EpisodeViewHolder>() {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EpisodeViewHolder {
+        // 2026-09-14 布局重排：传统模式集数纵向平铺滚动（verticalLayout=true → 整行列表项）
+        val res = if (verticalLayout) {
+            R.layout.item_video_chapter_vertical
+        } else {
+            R.layout.item_video_chapter
+        }
         val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_video_chapter, parent, false)
+            .inflate(res, parent, false)
         return EpisodeViewHolder(view)
     }
 

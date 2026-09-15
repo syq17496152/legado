@@ -70,6 +70,8 @@ object RenderingControlClient {
                 SoapEnvelope.soapActionHeader(DlnaConstants.SERVICE_RENDERING_CONTROL, action)
             )
             .header("Content-Type", "text/xml; charset=\"utf-8\"")
+            // dlna-cast-xiaomi-fix：与 AvTransportClient 同款，明示设备端关闭连接
+            .header("Connection", "close")
             .build()
         return DlnaSoapExecutor.execute(request, device.displayName, action)
     }

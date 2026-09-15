@@ -6,7 +6,7 @@ export default {
         title: '源域名',
         id: 'sourceUrl',
         type: 'String',
-        hint: '通常填写网站主页,例: https://www.qidian.com',
+        hint: '通常填写网站主页,例: https://www.example-site.com',
         required: true,
       },
       {

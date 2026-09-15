@@ -458,6 +458,15 @@ class AnalyzeRule(
                 }
             }
         }
+        // 诊断埋点（2026-09-15 日志盲区审计 P0）：规则解析空结果原是黑盒——列表规则失效
+        // （"列表大小:1"类问题）的最终落点就在此处静默返回空表。记内容规模+规则特征供定位，
+        // 不输出业务正文。
+        AppLog.putDebugWithTag(
+            AppLog.TAG_ANALYZE,
+            "AnalyzeRuleDiag getElements 空: contentNull=${content == null}, " +
+                "contentLen=${content?.toString()?.length ?: 0}, ruleMode=${ruleList.firstOrNull()?.mode}, ruleLen=${ruleStr.length}",
+            level = AppLog.Level.WARN
+        )
         return ArrayList()
     }
 

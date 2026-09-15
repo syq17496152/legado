@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- video-player-dual-layout：双布局模式新增字符串（独立文件，避免与其他轨道争用 strings.xml）
-     W2：用户反馈①"抖音沉浸式"改名"沉浸式" ③信息区区块标题平铺 -->
+     W2：用户反馈①"沉浸式"命名统一 ③信息区区块标题平铺 -->
 <resources>
     <string name="video_layout_mode">布局模式</string>
     <string name="video_layout_mode_immersive">沉浸式</string>

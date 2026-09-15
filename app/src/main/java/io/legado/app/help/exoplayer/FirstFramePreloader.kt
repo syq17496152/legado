@@ -16,19 +16,19 @@ import splitties.init.appCtx
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * T2.2: 首帧预加载器（I-frame 预加载，对齐快手官方方案）
+ * T2.2: 首帧预加载器（I-frame 预加载，对齐主流短视频平台官方方案）
  *
  * 核心能力：
  * - 触发时机：视频列表/切换场景中，对当前位置 ±1 的视频启动预加载
  * - 加载内容：Range 请求拉取视频前 ~1MB（含 MP4 moov box + 第一个 I-frame，或 m3u8 清单 + 首个 ts 分片头部）
  * - 写入 ExoPlayer 缓存层：播放时命中缓存直接渲染首帧，不走网络
- * - 埋点：首帧命中/未命中写入埋点字段，验收首帧命中率≥80%（快手官方数据 90%+，考虑本项目源异构性下调至 80%）
+ * - 埋点：首帧命中/未命中写入埋点字段，验收首帧命中率≥80%（主流短视频平台官方数据 90%+，考虑本项目源异构性下调至 80%）
  *
  * 复用现有基础设施：
  * - 嗅探链路已支持 Range 请求与 moov 位置检测（SniffResult.moovPosition）
  * - 预加载器直接复用 ExoPlayerHelper 的请求头注入（Referer/Cookie/UA 防盗链）
  *
- * 成熟方案参考：快手官方博客（I-frame 预加载，首帧命中率 90%+）
+ * 成熟方案参考：主流短视频平台官方技术博客（I-frame 预加载，首帧命中率 90%+）
  */
 object FirstFramePreloader {
 

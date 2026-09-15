@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    R3 抖音风格沉浸式竖屏视频播放器 Fragment
+    R3 沉浸式竖屏视频播放器 Fragment
     设计文档 1.4 节布局规范 + ADR-8 多线路 UI 布局：
     - 根布局 ConstraintLayout
     - 播放器铺满 + 悬浮控件层叠加
