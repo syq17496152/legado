@@ -987,7 +987,7 @@ class DragSelectTouchHelper(
     }
 
     private object Logger {
-        private val DEBUG = BuildConfig.DEBUG
+        private val DEBUG = BuildConfig.BUILD_DEBUG
         fun d(msg: String) {
             DebugLog.d(javaClass.name, msg)
         }

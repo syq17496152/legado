@@ -90,7 +90,7 @@ object Debug {
         val safeMsg = AppLog.truncateSafely(msg)
         // 批次E：logcat 守卫放宽——recordLog 开启时 release 包也输出（调试是用户主动行为，
         // 会话短暂不构成噪音；AI 可 adb logcat -s sourceDebug 从用户真机采集）
-        if (BuildConfig.DEBUG || AppLog.recordLogEnabled()) {
+        if (BuildConfig.BUILD_DEBUG || AppLog.recordLogEnabled()) {
             Log.d("sourceDebug", safeMsg)
         }
         // 批次E：会话缓冲同步写入（不受 callback 过滤影响，全量留痕）

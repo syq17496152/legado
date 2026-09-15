@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.book.read
+package io.legado.app.ui.book.read
 
 import android.annotation.SuppressLint
 import android.content.ClipData
@@ -821,7 +821,7 @@ class ReadBookActivity : BaseReadBookActivity(),
                     R.id.menu_enable_replace -> item.isChecked = book.getUseReplaceRule()
                     R.id.menu_re_segment -> item.isChecked = book.getReSegment()
 //                    R.id.menu_enable_review -> {
-//                        item.isVisible = BuildConfig.DEBUG
+//                        item.isVisible = BuildConfig.BUILD_DEBUG
 //                        item.isChecked = AppConfig.enableReview
 //                    }
 
@@ -3510,7 +3510,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     override fun showLibraryCloudDebug() {
-        if (!BuildConfig.DEBUG) return
+        if (!BuildConfig.BUILD_DEBUG) return
         val book = ReadBook.book ?: return
         val chapterIndex = ReadBook.durChapterIndex
         lifecycleScope.launch {

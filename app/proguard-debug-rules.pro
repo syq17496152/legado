@@ -1,6 +1,5 @@
-# proguard-debug-rules.pro（2026-09-15 发布省流：测试包/共存包对齐正式包打包模式）
-# 目标：debug 也开 R8 裁剪（minify+shrinkResources）缩小体积，但保留类名/方法名原名（堆栈可读、无需 mapping）
-# -dontobfuscate：禁用混淆重命名（用户裁决"不要混淆"）
-# -dontoptimize：禁用 R8 优化器内联（debug 重视与源码行为/堆栈一致性，仅做 tree-shaking 裁剪）
+# proguard-debug-rules.pro（2026-09-15 三包优化：测试包/共存包对齐正式包裁剪深度）
+# debug proguardFiles 已换 proguard-android-optimize.txt（与 release 同款优化器，实测砍掉 14.2MB dex）
+# 本文件仅保留混淆红线：历史 R8 混淆重命名导致正式包大量未知错误（用户裁决），debug 同样禁止混淆
+# 调试日志铁律：BuildConfig.DEBUG=true 分支可达，DebugLog/AppLog 调用与字符串由 R8 可达性天然保留，禁止裁剪
 -dontobfuscate
--dontoptimize

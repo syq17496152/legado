@@ -1149,7 +1149,7 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             // 未达阈值，继续走友好提示让用户知道当前失败原因
         }
 
-        // T1.6: 用 AppLog.put 替代 Log.d（解决 Bug-4：release 包无日志输出，AppLog.kt L86 if (BuildConfig.DEBUG) 导致 release 包 Log.e 不输出）
+        // T1.6: 用 AppLog.put 替代 Log.d（解决 Bug-4：release 包无日志输出，AppLog.kt L86 if (BuildConfig.BUILD_DEBUG) 导致 release 包 Log.e 不输出）
         AppLog.put(
             "ExoPlayer onPlayerError: errorCode=${error.errorCode}(${error.errorCodeName}), " +
                 "cause=${error.cause?.javaClass?.simpleName}: ${error.cause?.message}, " +

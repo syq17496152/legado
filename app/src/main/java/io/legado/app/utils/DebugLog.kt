@@ -6,13 +6,13 @@ import io.legado.app.BuildConfig
 object DebugLog {
 
     fun e(tag: String, throwable: Throwable) {
-        if (BuildConfig.DEBUG) {
+        if (BuildConfig.BUILD_DEBUG) {
             Log.e(tag, throwable.stackTraceToString())
         }
     }
 
     fun e(tag: String, msg: String, throwable: Throwable? = null) {
-        if (BuildConfig.DEBUG) {
+        if (BuildConfig.BUILD_DEBUG) {
             if (throwable == null) {
                 Log.e(tag, msg)
             } else {
@@ -22,7 +22,7 @@ object DebugLog {
     }
 
     fun d(tag: String, msg: String, throwable: Throwable? = null) {
-        if (BuildConfig.DEBUG) {
+        if (BuildConfig.BUILD_DEBUG) {
             if (throwable == null) {
                 Log.d(tag, msg)
             } else {
@@ -32,7 +32,7 @@ object DebugLog {
     }
 
     fun i(tag: String, msg: String, throwable: Throwable? = null) {
-        if (BuildConfig.DEBUG) {
+        if (BuildConfig.BUILD_DEBUG) {
             if (throwable == null) {
                 Log.i(tag, msg)
             } else {
@@ -42,7 +42,7 @@ object DebugLog {
     }
 
     fun w(tag: String, msg: String, throwable: Throwable? = null) {
-        if (BuildConfig.DEBUG) {
+        if (BuildConfig.BUILD_DEBUG) {
             if (throwable == null) {
                 Log.w(tag, msg)
             } else {

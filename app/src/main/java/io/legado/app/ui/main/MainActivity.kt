@@ -2191,7 +2191,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 block.resume(null)
             }
             showDialogFragment(dialog)
-        } else if (!BuildConfig.DEBUG) {
+        } else if (!BuildConfig.BUILD_DEBUG) {
             val log = String(assets.open("updateLog.md").readBytes())
             val dialog = TextDialog(getString(R.string.update_log), log, TextDialog.Mode.MD)
             dialog.setOnDismissListener {
@@ -2247,7 +2247,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             }
             // ui-batch-fix-0905: 崩溃确认弹框必须仅在真实崩溃后出现（修复回归：弹框曾被移出
             // appCrash 块导致 release 包每次主页创建/重建都误弹"检测到崩溃"）
-            if (BuildConfig.DEBUG) {
+            if (BuildConfig.BUILD_DEBUG) {
                 return
             }
             showComposeConfirmDialog(

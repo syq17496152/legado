@@ -45,7 +45,7 @@ import java.io.File
  * - 大图 ViewPager2 position 是纯图片索引
  *
  * 日志规范（tasks.md §AOAdapt 日志模板）：
- * - 永久日志：AppLog.putDebugWithTag + TAG_IMAGE_CANVAS（受 BuildConfig.DEBUG 控制）
+ * - 永久日志：AppLog.putDebugWithTag + TAG_IMAGE_CANVAS（受 BuildConfig.BUILD_DEBUG 控制）
  */
 class ImageCanvasAdapter(
     private val onItemClick: (listPosition: Int, sharedView: View) -> Unit,

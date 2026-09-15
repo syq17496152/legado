@@ -56,17 +56,9 @@
 # 屏蔽错误Unresolved class name
 #noinspection ShrinkerUnresolvedReference
 
-# 移除Log类打印各个等级日志的代码，打正式包的时候可以做为禁log使用，这里可以作为禁止log打印的功能使用
-# 记得proguard-android.txt中一定不要加-dontoptimize才起作用
-# 另外的一种实现方案是通过BuildConfig.DEBUG的变量来控制
--assumenosideeffects class android.util.Log {
-    public static int v(...);
-    public static int i(...);
-    public static int w(...);
-    public static int d(...);
-    public static int e(...);
-}
-
+# 【2026-09-15 迁移说明】原此处的 -assumenosideeffects android.util.Log（移除全部 Log 打印）
+# 已剪切至 proguard-release-rules.pro（仅 release 引用）——三包优化后 debug/共存包共用本文件，
+# 若保留该段会移除测试包调试日志，违背"测试包调试日志铁律"（用户裁决：禁止关闭测试包调试日志）
 # 保持js引擎调用的java类
 -keep class * extends io.legado.app.help.JsExtensions{*;}
 # 数据类

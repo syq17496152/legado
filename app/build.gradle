@@ -170,7 +170,10 @@ android {
 
             minifyEnabled true
             shrinkResources = true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro'
+            // 2026-09-15：Log 移除段迁至 proguard-release-rules.pro（测试包调试日志铁律，debug 不引用）
+            // BUILD_DEBUG=false 与旧 release 的 BuildConfig.DEBUG=false 等价（日志裁剪语义不变）
+            buildConfigField "boolean", "BUILD_DEBUG", "false"
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro', 'proguard-release-rules.pro'
         }
         debug {
             // 三包统一正式签名（铁律 2026-08-25）：debug 也套 myConfig，保证测试包/正式包/共存包签名一致，可互相覆盖安装
@@ -182,13 +185,23 @@ android {
 
             applicationIdSuffix '.debug'
             versionNameSuffix 'debug'
-            // 2026-09-15 发布省流（用户裁决）：测试包/共存包对齐正式包开启 R8 裁剪+资源裁剪，
-            // 但通过 proguard-debug-rules.pro 的 -dontobfuscate/-dontoptimize 保持原名不混淆、
-            // 不内联优化（堆栈可读、行为与源码一致）；keep 规则与 release 共用（proguard-rules.pro
-            // 已被发版长期验证）。ABI 已按构建类型精简为仅 arm64-v8a（见上方 ndk 块）
+            // 2026-09-15 三包优化（用户裁决）：测试包/共存包对齐正式包 optimize 裁剪深度
+            // （实测 debug 与 release 的 14.2MB dex 差距全部来自优化器），保留 -dontobfuscate 混淆红线
+            // （proguard-debug-rules.pro）；keep 规则与 release 共用（proguard-rules.pro 已被发版长期验证）。
+            // 调试日志铁律：BuildConfig.DEBUG=true 分支可达，DebugLog/AppLog 不被裁剪。
+            // ABI 已按构建类型精简为仅 arm64-v8a（见上方 ndk 块）
+            //
+            // debuggable=false（AOAdapt 2026-09-15）：AGP 对 debuggable=true 的 buildType 强制
+            // R8 debug compilation mode（优化受限，optimize.txt 不生效，dex 恒 25.7MB）。
+            // 关闭 debuggable 后 R8 走 release mode，dex 降至 ~13MB。代价：不可 IDE attach 调试/
+            // adb run-as 私有目录；调试特性由显式字段 BuildConfig.BUILD_DEBUG 驱动（铁律保留）：
+            // AGP 规则 BuildConfig.DEBUG=buildType.debuggable，debuggable=false 会使 DEBUG=false，
+            // 故 2026-09-15 起全仓日志/调试门控改用 BUILD_DEBUG（debug=true/release=false，与 debuggable 解耦）
+            debuggable = false
+            buildConfigField "boolean", "BUILD_DEBUG", "true"
             minifyEnabled true
             shrinkResources = true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro', 'proguard-debug-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro', 'proguard-debug-rules.pro'
         }
     }
     //noinspection GrDeprecatedAPIUsage

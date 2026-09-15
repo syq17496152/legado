@@ -103,7 +103,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             && appCtx.getPrefBoolean(PreferKey.optimizeRender, false)
     // log-system-upgrade AD-01: 默认值按包类型区分——debug 测试包默认 true（AI 解析需要详细日志），release 默认 false
     // 用户显式设置后 key 存在，getPrefBoolean 以设置为准（两类包行为一致）
-    var recordLog = appCtx.getPrefBoolean(PreferKey.recordLog, BuildConfig.DEBUG)
+    var recordLog = appCtx.getPrefBoolean(PreferKey.recordLog, BuildConfig.BUILD_DEBUG)
     var editFontScale = appCtx.getPrefInt(PreferKey.editFontScale, 16)
     var editNonPrintable = appCtx.getPrefInt(PreferKey.editNonPrintable, 0)
     var editAutoWrap = appCtx.getPrefBoolean(PreferKey.editAutoWrap, true)
@@ -2052,7 +2052,7 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.onlyUpdateRead)
 
     var enableReview: Boolean
-        get() = BuildConfig.DEBUG && appCtx.getPrefBoolean(PreferKey.enableReview, false)
+        get() = BuildConfig.BUILD_DEBUG && appCtx.getPrefBoolean(PreferKey.enableReview, false)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.enableReview, value)
         }

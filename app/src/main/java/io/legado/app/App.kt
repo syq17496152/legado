@@ -496,14 +496,14 @@ class App : Application() {
         override fun log(level: Level, msg: String) {
             super.log(level, msg)
             // F9/2.19：事件总线日志降为 DEBUG 构建专属（真机日志 3039 条/8% 噪音源，事件流非诊断对象）
-            if (BuildConfig.DEBUG) {
+            if (BuildConfig.BUILD_DEBUG) {
                 LogUtils.d(TAG, msg)
             }
         }
 
         override fun log(level: Level, msg: String, th: Throwable?) {
             super.log(level, msg, th)
-            if (BuildConfig.DEBUG) {
+            if (BuildConfig.BUILD_DEBUG) {
                 LogUtils.d(TAG, "$msg\n${th?.stackTraceToString()}")
             }
         }
@@ -515,7 +515,7 @@ class App : Application() {
 
     companion object {
         init {
-            if (BuildConfig.DEBUG) {
+            if (BuildConfig.BUILD_DEBUG) {
                 System.setProperty("kotlinx.coroutines.debug", "on")
             }
         }

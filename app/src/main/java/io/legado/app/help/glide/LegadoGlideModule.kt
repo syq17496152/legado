@@ -73,7 +73,7 @@ class LegadoGlideModule : AppGlideModule() {
             )
             builder.setSourceExecutor(sourceExecutor)
         }
-        if (!BuildConfig.DEBUG && !AppConfig.recordLog) {
+        if (!BuildConfig.BUILD_DEBUG && !AppConfig.recordLog) {
             builder.setLogLevel(Log.ERROR)
         }
     }

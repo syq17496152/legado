@@ -83,7 +83,7 @@ object UrlUtil {
             .build()
         val response = client.newCall(request).execute()
         response.use { resp ->
-            if (AppConfig.recordLog || BuildConfig.DEBUG) {
+            if (AppConfig.recordLog || BuildConfig.BUILD_DEBUG) {
                 val headersString = buildString {
                     for (i in 0 until resp.headers.size) {
                         append(resp.headers.name(i))

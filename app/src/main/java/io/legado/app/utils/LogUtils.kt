@@ -137,7 +137,7 @@ object LogUtils {
 }
 
 fun Throwable.printOnDebug() {
-    if (BuildConfig.DEBUG) {
+    if (BuildConfig.BUILD_DEBUG) {
         printStackTrace()
     }
 }

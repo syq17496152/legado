@@ -16,7 +16,7 @@ object AppLog {
     fun syncEventBusLogger() {
         runCatching {
             com.jeremyliao.liveeventbus.LiveEventBus.config()
-                .enableLogger(BuildConfig.DEBUG || recordLogOrOff())
+                .enableLogger(BuildConfig.BUILD_DEBUG || recordLogOrOff())
         }
     }
 
@@ -217,7 +217,7 @@ object AppLog {
             mLogs.removeLastOrNull()
         }
         mLogs.add(0, LogEntry(System.currentTimeMillis(), safeMsg, throwable, Level.ERROR))
-        if (BuildConfig.DEBUG) {
+        if (BuildConfig.BUILD_DEBUG) {
             val stackTrace = Thread.currentThread().stackTrace
             Log.e(stackTrace[3].className, safeMsg, throwable)
         }
@@ -297,7 +297,7 @@ object AppLog {
         if (mLogs.size >= MAX_LOG_SIZE) mLogs.removeLastOrNull()
         mLogs.add(0, LogEntry(System.currentTimeMillis(), safeMsg, throwable, level))
         // V-004-P0-ImageLog: ERROR/WARN/INFO 级别在 release 包也输出到 logcat（DEBUG 保留守卫避免噪音）
-        if (BuildConfig.DEBUG || level == Level.ERROR || level == Level.WARN || level == Level.INFO) {
+        if (BuildConfig.BUILD_DEBUG || level == Level.ERROR || level == Level.WARN || level == Level.INFO) {
             Log.e(tag, safeMsg, throwable)
         }
     }
@@ -325,10 +325,10 @@ object AppLog {
         }
         mLogs.add(0, LogEntry(System.currentTimeMillis(), safeMsg, throwable, level))
         // R3-P0: ERROR/WARN/INFO 级别日志在 release 包也输出到 logcat（确保关键日志可采集）
-        // 根因：原 BuildConfig.DEBUG 守卫导致 release 包 putWarn/putInfo 不输出 logcat，
+        // 根因：原 BuildConfig.BUILD_DEBUG 守卫导致 release 包 putWarn/putInfo 不输出 logcat，
         //       视频预缓冲埋点日志在正式包丢失，无法定位线上问题
         // 方案：ERROR/WARN/INFO 级别无条件 Log.e 输出，DEBUG 保留 DEBUG 守卫（避免 release 包 logcat 噪音）
-        if (BuildConfig.DEBUG || level == Level.ERROR || level == Level.WARN || level == Level.INFO) {
+        if (BuildConfig.BUILD_DEBUG || level == Level.ERROR || level == Level.WARN || level == Level.INFO) {
             val stackTrace = Thread.currentThread().stackTrace
             Log.e(stackTrace[3].className, safeMsg, throwable)
         }

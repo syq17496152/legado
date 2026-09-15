@@ -390,7 +390,9 @@ def stage2_build_three(version: str, dry_run: bool) -> Dict[str, Path]:
     """Stage2 三包构建（R1/R8）：subprocess 调 build-legado.bat，解析 [ARTIFACT] 行。
 
     - 显式版本第 3 参保证三包同版本
-    - bat 自带 :STOP_DAEMON 清场与 libcronet.so 校验（每包后自动执行，不可跳过）
+    - daemon 复用是三包提速核心（2026-09-15 build-three-packages-optimize）：bat 成功路径
+      已无清场逻辑，三包全程共享 daemon（Kotlin 增量快照/构建缓存跨包生效）；
+      禁止恢复成功路径清场！失败路径清场 + 瞬态锁自动重试由 bat 内置处理
     - stdin=DEVNULL：bat 内 pause 读到 EOF 立即返回，不阻塞编排器
     """
     artifacts: Dict[str, Path] = {}

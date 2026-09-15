@@ -53,7 +53,7 @@ fun Context.toastOnUi(message: CharSequence?, duration: Int = Toast.LENGTH_SHORT
 fun Context.toastOnUiLegacy(message: CharSequence, duration: Int = Toast.LENGTH_SHORT) {
     runOnUI {
         kotlin.runCatching {
-            if (toastLegacy == null || BuildConfig.DEBUG || AppConfig.recordLog) {
+            if (toastLegacy == null || BuildConfig.BUILD_DEBUG || AppConfig.recordLog) {
                 toastLegacy = Toast.makeText(this, message, duration)
             } else {
                 toastLegacy?.setText(message)

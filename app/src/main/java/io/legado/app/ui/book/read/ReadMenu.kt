@@ -452,7 +452,7 @@ class ReadMenu @JvmOverloads constructor(
                                 onCustomButtonLongClick = { handleCustomButtonLongClick() },
                                 onCloudClick = { callBack.showLibraryCloudChapters(refresh = false) },
                                 onCloudLongClick = {
-                                    if (io.legado.app.BuildConfig.DEBUG) {
+                                    if (io.legado.app.BuildConfig.BUILD_DEBUG) {
                                         callBack.showLibraryCloudDebug()
                                     } else {
                                         callBack.showLibraryCloudChapters(refresh = true)
