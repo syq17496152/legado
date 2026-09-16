@@ -522,11 +522,18 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      */
     private val castPlayerControl = object : PlayerControl {
         override fun pauseLocal() {
-            kotlin.runCatching { currentFragment?.playerView?.currentPlayer?.onVideoPause() }
+            // 本通道由 DlnaCastManager 在 IO 线程调用，而 ExoPlayer 要求主线程访问：
+            // 直接调用会抛 "Player is accessed on the wrong thread"（异常被内层吞掉后
+            // 本地实际未暂停 → 手机与电视双路播放；2026-09-16 真机日志实证）
+            runOnUiThread {
+                kotlin.runCatching { currentFragment?.playerView?.currentPlayer?.onVideoPause() }
+            }
         }
 
         override fun resumeLocal() {
-            kotlin.runCatching { currentFragment?.playerView?.currentPlayer?.onVideoResume() }
+            runOnUiThread {
+                kotlin.runCatching { currentFragment?.playerView?.currentPlayer?.onVideoResume() }
+            }
         }
 
         override fun currentPositionMs(): Long =

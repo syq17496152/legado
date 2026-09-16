@@ -196,7 +196,11 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
             if (k.equals("Accept-Encoding", true)) return@forEach
             requestBuilder.header(k, v)
         }
-        if (!headOnly && !rangeHeader.isNullOrBlank()) {
+        // 清单请求不透传 Range：清单是文本、体量极小，永远整段取。
+        // 透传会让上游回 206（真机日志 `HLS 清单重写: code=206` 实证），而重写分支按整段文本处理，
+        // 若上游按区间只回了前半段，就会产出**被截断的清单**（分片列表不完整 → 渲染端起播失败）。
+        val isPlaylistUrl = MimeSniffer.isHlsUrl(source.url)
+        if (!headOnly && !rangeHeader.isNullOrBlank() && !isPlaylistUrl) {
             // 原样透传 Range：后缀区间（bytes=-n）需要上游自己算总长，我们算不了
             requestBuilder.header("Range", rangeHeader)
         }
@@ -249,8 +253,18 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
                 val finalUrl = upstream.request.url.toString()
                 val rewritten = HlsPlaylistRewriter.rewrite(text, finalUrl) { absolute ->
                     // 惰性登记分片（直播清单每次刷新都会出现新分片，预登记不可能）
+                    // mime 必须按**分片自身**推断，绝不能复用清单的 mime（`source.mime`）：
+                    //    复用会把每个 TS/m4s 分片的 Content-Type 标成 application/vnd.apple.mpegurl，
+                    //    渲染端按清单解析二进制分片必然失败——真机表现为长期停在「正在获取投屏内容信息」
+                    //    却持续拉分片（2026-09-16 铁证：launch 后 30s+ 不分片解码，请求累计 139→248 条）。
+                    //    推断不出则留空 → `serveHttp` 透传上游真实 Content-Type（CDN 对分片会返回
+                    //    video/mp2t 等正确类型）。
                     val key = castSession.registerShort(
-                        CastSource.Http(source.mime, absolute, source.headers)
+                        CastSource.Http(
+                            MimeSniffer.mimeFromUrl(absolute).orEmpty(),
+                            absolute,
+                            source.headers
+                        )
                     )
                     proxyPath(castSession, key)
                 }
