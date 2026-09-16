@@ -3,6 +3,7 @@ package io.legado.app.help.dlna
 import android.content.Context
 import android.net.wifi.WifiManager
 import android.os.SystemClock
+import io.legado.app.constant.AppLog
 import io.legado.app.utils.LogUtils
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -56,11 +57,33 @@ object SsdpDiscovery {
             // ③ 逐个拉描述文档并解析（失败的设备静默跳过，不影响其它设备）
             val devices = LinkedHashMap<String, DlnaDevice>()
             for (response in responses) {
-                val device = fetchDevice(response) ?: continue
+                // 单台设备的解析异常必须就地消化：一旦逃逸会冒泡到本方法顶层 catch，
+                // 把「部分设备可用」放大成「一台都没有」（2026-09-16 回归的放大器之一）
+                val device = kotlin.runCatching { fetchDevice(response) }
+                    .onFailure {
+                        AppLog.putDebugWithTag(
+                            DlnaConstants.TAG,
+                            "设备描述解析异常，跳过该设备: ${it.message}",
+                            it,
+                            level = AppLog.Level.WARN
+                        )
+                    }
+                    .getOrNull() ?: continue
                 devices.putIfAbsent(device.udn, device)
             }
-            LogUtils.d(DlnaConstants.TAG) {
-                "SSDP 响应 ${responses.size} 台，解析出 MediaRenderer ${devices.size} 台"
+            // 落差可诊断性（2026-09-16 回归教训）：收到响应却解析不出设备，必须与「真的没有设备响应」
+            // 在日志上可区分——否则客户端/解析异常会被静默降级成「未发现可投屏设备」，排查无从下手。
+            if (devices.isEmpty()) {
+                AppLog.putDebugWithTag(
+                    DlnaConstants.TAG,
+                    "SSDP 收到 ${responses.size} 条响应，但解析出 0 台 MediaRenderer" +
+                        "（区别于「无设备响应」，请查上方解析异常日志）",
+                    level = AppLog.Level.WARN
+                )
+            } else {
+                LogUtils.d(DlnaConstants.TAG) {
+                    "SSDP 响应 ${responses.size} 台，解析出 MediaRenderer ${devices.size} 台"
+                }
             }
             return devices.values.toList()
         } catch (e: Exception) {

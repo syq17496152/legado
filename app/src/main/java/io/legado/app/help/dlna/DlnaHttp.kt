@@ -35,7 +35,13 @@ object DlnaHttp {
             // 响应后立即关闭 TCP 连接，OkHttp 默认连接池复用死连接 → "unexpected end of stream"
             // （重试 2-3ms 即败：池内全是死连接 + 禁重试成终局）。SOAP 指令低频（建立会话 4-6 条
             // + 控制指令），每次新建连接仅多一次 LAN 握手（1-3ms），彻底根除死连接复用。
-            .connectionPool(ConnectionPool(0, 0, TimeUnit.NANOSECONDS))
+            // 双保险：① 各请求显式带 `Connection: close`（SOAP 与设备描述均已是）；
+            //          ② 客户端不保留空闲连接（maxIdleConnections = 0）。
+            // ⚠️ keepAliveDuration 必须 > 0 ——OkHttp 硬约束（okhttp 5.4.0 RealConnectionPool
+            //    构造即 require(keepAliveDuration > 0)），传 0 会抛 IllegalArgumentException
+            //    "keepAliveDuration <= 0: 0"。2026-09-16 回归铁证：早前此处写 ConnectionPool(0, 0,
+            //    NANOSECONDS)，soapClient 懒初始化即抛异常 → 设备发现与投屏全链路 100% 失败。
+            .connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS))
             // AD-02 禁重试仅针对防盗链 CDN 上游（streamClient）；soapClient 打局域网电视无封 IP 风险，
             // 允许连接失败换新连接重试（与禁池双保险，部分电视仍会中途断流）
             .retryOnConnectionFailure(true)
@@ -63,12 +69,19 @@ object DlnaHttp {
         headers: Map<String, String>? = null,
         timeoutMs: Long = DlnaConstants.TIMEOUT_DESCRIPTION_MS
     ): String? {
-        val client = soapClient.newBuilder()
-            .callTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-            .readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-            .build()
         return kotlin.runCatching {
-            val builder = Request.Builder().url(url).get()
+            // 客户端构建必须落在保护范围内：构建异常一旦逃逸会冒泡到 SsdpDiscovery.discover 的
+            // 顶层 catch，把整次设备发现降级成"0 台设备"（2026-09-16 回归铁证：非法连接池参数
+            // 使 UI 表现为"连设备都搜不到"）。
+            val client = soapClient.newBuilder()
+                .callTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .readTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .build()
+            val builder = Request.Builder()
+                .url(url)
+                // 渲染端常在响应后立即断连，显式声明关闭，避免连接进池被后续请求复用
+                .header("Connection", "close")
+                .get()
             headers?.forEach { (k, v) -> builder.header(k, v) }
             client.newCall(builder.build()).execute().use { response ->
                 if (!response.isSuccessful) {
