@@ -174,6 +174,54 @@ object VideoPlay : CoroutineScope by MainScope(){
         dlnaNoMetaDevices = updated.joinToString(",")
     }
 
+    // ==================== 2026-09-16d 投屏流畅度：缓存与预取参数（AD-16）====================
+    // 全部**用户可配**（投屏设置内），代码只提供默认值——性能参数取决于设备能力，
+    // 禁止写死保守值（用户裁决 2026-09-16）。
+
+    /** 分片内存缓存上限（MB）：32 / 64 / 128 / 256 */
+    var dlnaCacheMb: Int
+        get() = videoPrefs.getInt(DlnaConstants.PREF_CACHE_MB, DlnaConstants.DEFAULT_CACHE_MB)
+        set(value) {
+            videoPrefs.edit { putInt(DlnaConstants.PREF_CACHE_MB, value) }
+        }
+
+    /** 预取窗口（片数）：3 / 5 / 10 */
+    var dlnaPrefetchWindow: Int
+        get() = videoPrefs.getInt(
+            DlnaConstants.PREF_PREFETCH_WINDOW,
+            DlnaConstants.DEFAULT_PREFETCH_WINDOW
+        )
+        set(value) {
+            videoPrefs.edit { putInt(DlnaConstants.PREF_PREFETCH_WINDOW, value) }
+        }
+
+    /** 预取并发：2 / 3 / 4 */
+    var dlnaPrefetchConcurrency: Int
+        get() = videoPrefs.getInt(
+            DlnaConstants.PREF_PREFETCH_CONCURRENCY,
+            DlnaConstants.DEFAULT_PREFETCH_CONCURRENCY
+        )
+        set(value) {
+            videoPrefs.edit { putInt(DlnaConstants.PREF_PREFETCH_CONCURRENCY, value) }
+        }
+
+    /** 二级磁盘缓存容量（MB）：0 = 关闭；128 / 256 / 512 */
+    var dlnaDiskCacheMb: Int
+        get() = videoPrefs.getInt(
+            DlnaConstants.PREF_DISK_CACHE_MB,
+            DlnaConstants.DEFAULT_DISK_CACHE_MB
+        )
+        set(value) {
+            videoPrefs.edit { putInt(DlnaConstants.PREF_DISK_CACHE_MB, value) }
+        }
+
+    /** 「流畅优先」：多码率清单锁定最低带宽变体；关闭 = 画质优先（保持原多码率行为） */
+    var dlnaPreferSmooth: Boolean
+        get() = videoPrefs.getBoolean(DlnaConstants.PREF_PREFER_SMOOTH, true)
+        set(value) {
+            videoPrefs.edit { putBoolean(DlnaConstants.PREF_PREFER_SMOOTH, value) }
+        }
+
     // ==================== 画质增强（video-player-image-enhance A 期） ====================
     // 存储模式（AD-04）：Int 十倍值。亮度/对比度/色温 -500~500（实际 -50.0~50.0），饱和度 -1000~1000（实际 -100.0~100.0）
 

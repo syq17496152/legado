@@ -1,9 +1,13 @@
 package io.legado.app.help.dlna
 
 import io.legado.app.constant.AppLog
+import io.legado.app.model.VideoPlay
+import okhttp3.Cache
 import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import splitties.init.appCtx
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
@@ -48,14 +52,55 @@ object DlnaHttp {
             .build()
     }
 
-    /** 代理转发：读超时用于「首包」判定，总时长不限 */
-    val streamClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
+    /**
+     * 代理转发：读超时用于「首包」判定，总时长不限。
+     *
+     * AD-16：可选挂载**二级磁盘缓存**（容量取用户偏好 `dlnaDiskCacheMb`，0 = 不挂）。
+     * 偏好变化时**自动重建**（保证"改档后下一次会话生效"，无需重启 App）；
+     * 重建会丢弃既有连接池，因此只在偏好真正变化时才发生。
+     *
+     * 说明：缓存为 OkHttp 标准 `Cache`，GET 响应按 HTTP 语义自动决定是否落盘
+     * （预取与转发同路，重试/回看命中同一份缓存）；写盘随流进行，不额外阻塞转发。
+     */
+    val streamClient: OkHttpClient
+        get() {
+            val wantMb = VideoPlay.dlnaDiskCacheMb
+            streamClientHolder?.takeIf { mountedDiskCacheMb == wantMb }?.let { return it }
+            synchronized(this) {
+                streamClientHolder?.takeIf { mountedDiskCacheMb == wantMb }?.let { return it }
+                val client = buildStreamClient(wantMb)
+                streamClientHolder = client
+                mountedDiskCacheMb = wantMb
+                return client
+            }
+        }
+
+    @Volatile
+    private var streamClientHolder: OkHttpClient? = null
+
+    @Volatile
+    private var mountedDiskCacheMb = Int.MIN_VALUE
+
+    private fun buildStreamClient(diskCacheMb: Int): OkHttpClient {
+        val builder = OkHttpClient.Builder()
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(DlnaConstants.TIMEOUT_UPSTREAM_FIRST_BYTE_MS, TimeUnit.MILLISECONDS)
             .callTimeout(0, TimeUnit.SECONDS)
             .retryOnConnectionFailure(false)
-            .build()
+        if (diskCacheMb > 0) {
+            // 挂载失败（目录不可写等）不阻断投屏：降级为无磁盘缓存的纯内存模式
+            kotlin.runCatching {
+                builder.cache(
+                    Cache(
+                        File(appCtx.cacheDir, DlnaConstants.DISK_CACHE_DIR),
+                        diskCacheMb.toLong() * 1024 * 1024
+                    )
+                )
+            }.onFailure {
+                AppLog.put("DlnaCast 磁盘缓存挂载失败（忽略）: ${it.message}")
+            }
+        }
+        return builder.build()
     }
 
     /**

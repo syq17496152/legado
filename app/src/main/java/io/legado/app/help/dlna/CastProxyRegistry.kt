@@ -48,7 +48,10 @@ sealed interface CastSource {
 class CastProxySession internal constructor(
     val token: String,
     baseName: String,
-    val baseSource: CastSource
+    val baseSource: CastSource,
+    cacheMb: Int = 0,
+    prefetchWindow: Int = 0,
+    prefetchConcurrency: Int = 0
 ) {
     private val entries = ConcurrentHashMap<String, CastSource>()
     private val shortIdCounter = AtomicInteger(0)
@@ -56,8 +59,26 @@ class CastProxySession internal constructor(
     /** 基础条目的路径 key（投递给渲染端的那个地址） */
     val baseKey: String = CastProxyRegistry.sanitizeName(baseName)
 
+    /** AD-16：会话级分片内存缓存（字节上限来自用户偏好；0 = 禁用，供纯逻辑单测） */
+    val cache = CastSegmentCache(cacheMb.toLong() * 1024 * 1024)
+
+    /** AD-16：会话级滚动预取器（并发/窗口来自用户偏好） */
+    val prefetcher = CastSegmentPrefetcher(
+        cache,
+        prefetchConcurrency.coerceAtLeast(1),
+        prefetchWindow.coerceAtLeast(1)
+    )
+
     init {
         entries[baseKey] = baseSource
+    }
+
+    /**
+     * AD-16：会话收尾——取消在途预取并释放缓存（幂等，teardown 与 Service.onDestroy 都会调）。
+     */
+    fun dispose() {
+        kotlin.runCatching { prefetcher.cancel() }
+        cache.clear()
     }
 
     /**
@@ -96,9 +117,23 @@ object CastProxyRegistry {
     @Volatile
     private var current: CastProxySession? = null
 
-    /** 创建新会话（会覆盖上一会话，调用方负责先 teardown） */
-    fun createSession(baseName: String, source: CastSource): CastProxySession {
-        val session = CastProxySession(newToken(), baseName, source)
+    /** 创建新会话（会覆盖上一会话，调用方负责先 teardown）；缓存/预取参数来自用户偏好 */
+    fun createSession(
+        baseName: String,
+        source: CastSource,
+        cacheMb: Int = 0,
+        prefetchWindow: Int = 0,
+        prefetchConcurrency: Int = 0
+    ): CastProxySession {
+        current?.dispose()
+        val session = CastProxySession(
+            newToken(),
+            baseName,
+            source,
+            cacheMb,
+            prefetchWindow,
+            prefetchConcurrency
+        )
         current = session
         return session
     }
@@ -108,8 +143,9 @@ object CastProxyRegistry {
         return current?.takeIf { it.token == token }
     }
 
-    /** 会话结束时清空 —— 之后所有残留请求都拿不到条目 */
+    /** 会话结束时清空 —— 之后所有残留请求都拿不到条目；同时取消预取并释放缓存（AD-16） */
     fun clear() {
+        current?.dispose()
         current = null
     }
 

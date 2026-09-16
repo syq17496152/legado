@@ -3402,6 +3402,16 @@ function login() {
     <string name="dlna_return_to_phone">回到手机播放</string>
     <!-- 投屏态提示条 -->
     <string name="dlna_casting_banner">正在投屏：%1$s</string>
+    <string name="dlna_cast_settings">投屏设置</string>
+    <string name="dlna_setting_cache_mb">分片内存缓存</string>
+    <string name="dlna_setting_prefetch_window">预取窗口</string>
+    <string name="dlna_setting_prefetch_concurrency">预取并发</string>
+    <string name="dlna_setting_disk_cache_mb">磁盘缓存</string>
+    <string name="dlna_setting_prefer_smooth">流畅优先（多码率时选最低码率）</string>
+    <string name="dlna_setting_off">关闭</string>
+    <string name="dlna_setting_unit_mb">MB</string>
+    <string name="dlna_setting_unit_segment">片</string>
+    <string name="dlna_setting_hint">提示：缓存与预取越大越能减少卡顿，同时占用更多手机内存/存储。设置在下一次投屏生效。</string>
     <!-- 错误与降级 -->
     <string name="dlna_error_no_wifi">请先连接 Wi-Fi</string>
     <string name="dlna_error_no_ip">未获取到局域网 IP，请检查 Wi-Fi 或网络设置</string>

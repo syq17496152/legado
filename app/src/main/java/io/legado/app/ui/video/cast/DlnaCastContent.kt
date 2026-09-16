@@ -74,7 +74,8 @@ fun DlnaCastContent(
     onStop: () -> Unit,
     onSeek: (Long) -> Unit,
     onVolume: (Int) -> Unit,
-    onSwitchDevice: () -> Unit
+    onSwitchDevice: () -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val settings = rememberAppSettingPalette()
     Column(
@@ -116,6 +117,14 @@ fun DlnaCastContent(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
+            // AD-16：投屏缓存/预取设置入口（面板内切换视图，不跳独立页面）
+            TextButton(
+                onClick = onOpenSettings,
+                colors = ButtonDefaults.textButtonColors(contentColor = settings.accent)
+            ) {
+                Text(stringResource(R.string.dlna_cast_settings))
+            }
+            Spacer(Modifier.height(4.dp))
             TextButton(
                 onClick = onDismiss,
                 colors = ButtonDefaults.textButtonColors(contentColor = settings.secondaryText)

@@ -4,6 +4,7 @@ import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoHTTPD.Response
 import fi.iki.elonen.NanoHTTPD.Response.Status
 import io.legado.app.constant.AppLog
+import io.legado.app.model.VideoPlay
 import okhttp3.Request
 import okhttp3.ResponseBody
 import java.io.File
@@ -102,7 +103,35 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
         )
         activeRequests.incrementAndGet()
         return try {
-            serveSource(resolved, session, method == Method.HEAD)
+            // AD-16：命中会话内存缓存 → **不回源**直接返回（响应时间由「源站 RTT + 下载」降为「局域网传输」）。
+            // 仅限 GET 且非 Range、非清单：Range 的区间语义与整片不同（避免错位），清单必须实时重写。
+            val source = resolved.source
+            val rangeHeader = session.headers["range"]
+            if (method == Method.GET &&
+                source is CastSource.Http &&
+                rangeHeader.isNullOrBlank() &&
+                !MimeSniffer.isHlsUrl(source.url)
+            ) {
+                val cached = resolved.session.cache.get(source.url)
+                if (cached != null) {
+                    AppLog.putThrottled(
+                        "DlnaCast.cache",
+                        "缓存命中(不回源): $uri | ${resolved.session.cache.stats()}",
+                        level = AppLog.Level.INFO,
+                        tag = DlnaConstants.TAG
+                    )
+                    return buildResponse(
+                        Status.OK,
+                        cached.mime.ifBlank { DlnaConstants.MIME_FALLBACK },
+                        cached.bytes.inputStream(),
+                        cached.bytes.size.toLong()
+                    ).also { it.addHeader("Accept-Ranges", "bytes") }
+                }
+            }
+            val response = serveSource(resolved, session, method == Method.HEAD)
+            // AD-16：一次请求完成 → 推进预取窗口（滚动预取）
+            (source as? CastSource.Http)?.let { resolved.session.prefetcher.onServed(it.url) }
+            response
         } catch (e: Exception) {
             AppLog.put("DlnaCast 代理处理失败: ${e.message}", e)
             plain(Status.INTERNAL_ERROR, "internal error")
@@ -255,11 +284,19 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
                     "HLS 清单重写: code=${upstream.code} mime=$upstreamMime",
                     level = AppLog.Level.INFO
                 )
-                val text = runCatching { body?.string() }.getOrNull()
+                val rawText = runCatching { body?.string() }.getOrNull()
                 // 清单已完整读入内存，此处可安全关闭上游（与流式分支相反）
                 upstream.close()
-                if (text == null) return plain(Status.lookup(504), "playlist empty")
+                if (rawText == null) return plain(Status.lookup(504), "playlist empty")
+                // AD-16「流畅优先」：master 清单只保留最低带宽变体（用户可在投屏设置切"画质优先"）
+                val text = if (VideoPlay.dlnaPreferSmooth) {
+                    HlsPlaylistRewriter.keepLowestBandwidth(rawText)
+                } else {
+                    rawText
+                }
                 val finalUrl = upstream.request.url.toString()
+                // AD-16：按清单顺序收集分片源，供滚动预取使用
+                val orderedSegments = ArrayList<CastSource.Http>()
                 val rewritten = HlsPlaylistRewriter.rewrite(text, finalUrl) { absolute ->
                     // 惰性登记分片（直播清单每次刷新都会出现新分片，预登记不可能）
                     // mime 必须按**分片自身**推断，绝不能复用清单的 mime（`source.mime`）：
@@ -268,15 +305,17 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
                     //    却持续拉分片（2026-09-16 铁证：launch 后 30s+ 不分片解码，请求累计 139→248 条）。
                     //    推断不出则留空 → `serveHttp` 透传上游真实 Content-Type（CDN 对分片会返回
                     //    video/mp2t 等正确类型）。
-                    val key = castSession.registerShort(
-                        CastSource.Http(
-                            MimeSniffer.mimeFromUrl(absolute).orEmpty(),
-                            absolute,
-                            source.headers
-                        )
+                    val segmentSource = CastSource.Http(
+                        MimeSniffer.mimeFromUrl(absolute).orEmpty(),
+                        absolute,
+                        source.headers
                     )
+                    orderedSegments.add(segmentSource)
+                    val key = castSession.registerShort(segmentSource)
                     proxyPath(castSession, key)
                 }
+                // AD-16：清单驱动滚动预取（窗口/并发来自用户偏好；缓存禁用时为空操作）
+                castSession.prefetcher.onPlaylist(orderedSegments)
                 val bytes = rewritten.toByteArray(Charsets.UTF_8)
                 return buildResponse(
                     Status.OK,

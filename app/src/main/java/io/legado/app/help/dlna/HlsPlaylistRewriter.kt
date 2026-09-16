@@ -34,6 +34,12 @@ import java.net.URL
  */
 object HlsPlaylistRewriter {
 
+    /** master 清单的变体标签前缀（「流畅优先」筛选用） */
+    private const val STREAM_INF_PREFIX = "#EXT-X-STREAM-INF"
+
+    /** 变体带宽属性（「流畅优先」取最低档） */
+    private val BANDWIDTH_REGEX = Regex("BANDWIDTH\\s*=\\s*(\\d+)", RegexOption.IGNORE_CASE)
+
     /** 匹配标签行里的 URI 型属性（`URI=` / `X-ASSET-URI=` / `I-FRAME-...URI=` 都能命中） */
     private val URI_ATTRIBUTE_REGEX = Regex(
         "([A-Za-z0-9-]*URI)\\s*=\\s*(\"([^\"]*)\"|([^,\\s]*))"
@@ -70,6 +76,60 @@ object HlsPlaylistRewriter {
             if (index != lines.lastIndex) builder.append('\n')
         }
         return builder.toString()
+    }
+
+    /**
+     * AD-16「流畅优先」：master 清单**只保留最低 `BANDWIDTH` 变体**。
+     *
+     * 用途：渲染端自身的码率协商常会选到手机上行扛不住的高码率（投屏链路上手机是"下载+上传"
+     * 双份流量），锁定最低档可显著降低带宽需求。**会降低画质**，故由用户开关控制
+     * （`dlnaPreferSmooth`，默认开；关闭即"画质优先"，保持原多码率行为）。
+     *
+     * 覆盖两种变体形态（与 [rewrite] 的承载点一致）：
+     *  - 标签行 + 紧随的 URI 行（最常见）
+     *  - 标签行**行内** `URI="..."`（无独立 URI 行）
+     *
+     * 非 master 清单（无 `EXT-X-STREAM-INF`）或只有一个变体时原样返回。
+     */
+    fun keepLowestBandwidth(content: String): String {
+        if (!content.contains(STREAM_INF_PREFIX, ignoreCase = true)) return content
+        val lines = content.split("\n")
+        // 每个变体块：标签行下标 + URI 行下标（行内 URI 形态时为 -1）
+        val blocks = ArrayList<Pair<Int, Int>>()
+        var bestBlock = -1
+        var bestBandwidth = Long.MAX_VALUE
+        var index = 0
+        while (index < lines.size) {
+            val core = lines[index].removeSuffix("\r")
+            if (core.startsWith(STREAM_INF_PREFIX, ignoreCase = true)) {
+                val bandwidth = BANDWIDTH_REGEX.find(core)
+                    ?.groupValues?.getOrNull(1)?.toLongOrNull() ?: Long.MAX_VALUE
+                val inlineUri = URI_ATTRIBUTE_REGEX.containsMatchIn(core)
+                val uriIndex = if (inlineUri) {
+                    -1
+                } else {
+                    val next = index + 1
+                    if (next < lines.size && !lines[next].removeSuffix("\r").startsWith("#")) next else -1
+                }
+                if (bandwidth < bestBandwidth) {
+                    bestBandwidth = bandwidth
+                    bestBlock = blocks.size
+                }
+                blocks.add(index to uriIndex)
+                index = if (uriIndex >= 0) uriIndex + 1 else index + 1
+            } else {
+                index++
+            }
+        }
+        if (bestBlock < 0 || blocks.size <= 1) return content
+        // 丢弃除最优变体外的所有变体块（含其 URI 行）
+        val dropped = HashSet<Int>()
+        blocks.forEachIndexed { blockIndex, block ->
+            if (blockIndex == bestBlock) return@forEachIndexed
+            dropped.add(block.first)
+            if (block.second >= 0) dropped.add(block.second)
+        }
+        return lines.filterIndexed { lineIndex, _ -> lineIndex !in dropped }.joinToString("\n")
     }
 
     /** 标签行：改写行内所有 URI 型属性；没有属性则原样返回 */

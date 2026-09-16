@@ -8,6 +8,9 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import io.legado.app.constant.AppLog
@@ -41,6 +44,12 @@ class DlnaCastDialog : BottomSheetDialogFragment() {
             setContent {
                 LegadoTheme {
                     val state by DlnaCastManager.state.collectAsState()
+                    // AD-16：面板内切换到「投屏设置」视图（不跳独立页面、不新开会话）
+                    var showSettings by remember { mutableStateOf(false) }
+                    if (showSettings) {
+                        DlnaCastSettingsPanel(onDismiss = { showSettings = false })
+                        return@LegadoTheme
+                    }
                     DlnaCastContent(
                         state = state,
                         onDismiss = { dismiss() },
@@ -65,7 +74,8 @@ class DlnaCastDialog : BottomSheetDialogFragment() {
                             AppLog.putDebugWithTag(DlnaConstants.TAG, "UI 切换设备", level = AppLog.Level.INFO)
                             DlnaCastManager.teardown()
                             DlnaCastManager.startDiscovery(appContext)
-                        }
+                        },
+                        onOpenSettings = { showSettings = true }
                     )
                 }
             }

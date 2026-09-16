@@ -309,7 +309,11 @@ object DlnaCastManager {
             }
             val newSession = CastProxyRegistry.createSession(
                 CastProxyRegistry.sanitizeName(url),
-                source
+                source,
+                // AD-16：缓存/预取参数取用户偏好（投屏设置内可调），改档后**下一次会话**生效
+                cacheMb = VideoPlay.dlnaCacheMb,
+                prefetchWindow = VideoPlay.dlnaPrefetchWindow,
+                prefetchConcurrency = VideoPlay.dlnaPrefetchConcurrency
             )
             session = newSession
             castUrl = "http://$lanIp:$port${DlnaConstants.PROXY_PATH_PREFIX}" +

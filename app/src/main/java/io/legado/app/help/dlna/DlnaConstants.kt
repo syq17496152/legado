@@ -140,6 +140,38 @@ object DlnaConstants {
     /** 「无元数据兼容」名单的最大条数（超出按最近使用淘汰） */
     const val NO_META_DEVICES_MAX = 10
 
+    // ==================== 2026-09-16d 流畅度：缓存与预取参数（用户可配，AD-16）====================
+
+    /**
+     * 以下 5 项均为**用户可配**（投屏设置内），代码中只保留默认值。
+     * 铁律（用户裁决 2026-09-16）：性能参数取决于设备能力，禁止写死保守值。
+     */
+
+    /** 分片内存缓存上限（MB）：可选 32 / 64 / 128 / 256 */
+    const val PREF_CACHE_MB = "dlnaCacheMb"
+    const val DEFAULT_CACHE_MB = 64
+
+    /** 预取窗口（片数）：可选 3 / 5 / 10 */
+    const val PREF_PREFETCH_WINDOW = "dlnaPrefetchWindow"
+    const val DEFAULT_PREFETCH_WINDOW = 5
+
+    /** 预取并发：可选 2 / 3 / 4 */
+    const val PREF_PREFETCH_CONCURRENCY = "dlnaPrefetchConcurrency"
+    const val DEFAULT_PREFETCH_CONCURRENCY = 3
+
+    /** 二级磁盘缓存容量（MB）：0 = 关闭；可选 0 / 128 / 256 / 512 */
+    const val PREF_DISK_CACHE_MB = "dlnaDiskCacheMb"
+    const val DEFAULT_DISK_CACHE_MB = 256
+
+    /** 「流畅优先」（多码率清单锁定最低带宽变体）默认开 */
+    const val PREF_PREFER_SMOOTH = "dlnaPreferSmooth"
+
+    /** 单个分片允许进入内存缓存的最大字节数（防御单片撑爆） */
+    const val MAX_SEGMENT_BYTES = 8L * 1024 * 1024
+
+    /** 二级磁盘缓存目录名（挂在应用 cacheDir 下） */
+    const val DISK_CACHE_DIR = "dlna-cast"
+
     // ==================== 日志 TAG ====================
 
     const val TAG = "DlnaCast"
