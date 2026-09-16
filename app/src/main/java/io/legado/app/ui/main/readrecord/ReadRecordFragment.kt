@@ -7,11 +7,25 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
 import io.legado.app.constant.EventBus
@@ -54,13 +68,14 @@ import io.legado.app.ui.about.showReadRecordGoalDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.image.ImageCropContract
 import io.legado.app.ui.main.MainFragmentInterface
-import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.RoundedTagBarView
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.ImageCropHelper
 import io.legado.app.utils.applyMainBottomBarPadding
-import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.registerForActivityResult
@@ -127,7 +142,13 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
     private var currentDailyTimeline: List<DailyReadSummary> = emptyList()
     private var currentVisibleRankItems: List<ReadRecordRankItem> = emptyList()
     private var currentRecentCovers: List<ReadRecentVisualItem> = emptyList()
-    private var recordDaysExpanded = false
+    // 顶栏第二行（年份入口 + 月份 chip）与内容区日期 chip 行的渲染态；
+    // 唯一写入点 = writeFilterState（renderDateTopBar 与首帧预写入共用），避免双源
+    private val filterYearText = mutableStateOf("")
+    private val filterMonthItems = mutableStateOf<List<RoundedTagBarView.Item>>(emptyList())
+    private val filterMonthSelected = mutableStateOf(RecyclerView.NO_POSITION)
+    private val filterDayItems = mutableStateOf<List<RoundedTagBarView.Item>>(emptyList())
+    private val filterDaySelected = mutableStateOf(RecyclerView.NO_POSITION)
     private var pendingAvatarUpdate: ((String) -> Unit)? = null
     private var pendingAvatarCropRequest: ImageCropHelper.Request? = null
     private val selectGoalAvatar = registerForActivityResult(HandleFileContract()) {
@@ -153,49 +174,16 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
     }
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
-        setSupportToolbar(binding.titleBar.toolbar)
-        binding.titleBar.visibility = View.GONE
+        // read-record-header-unify AD-01：本页已改造为独立子页（ReadRecordStatsActivity 承载），
+        // 顶栏统一为子页单源 GlassTopAppBar——运行时替换共享布局的 title_bar / top_bar 节点
+        // （activity_read_record.xml 与 ReadRecordActivity 共用，故不改 XML 文件）
+        installComposeTopBar()
         binding.scrollView.applyMainBottomBarPadding(withInitialPadding = true)
-        binding.llRecordHeader.applyStatusBarPadding(withInitialPadding = true)
-        binding.topBar.applyStatusBarPadding(withInitialPadding = true)
-        binding.topBar.setMode(MainTopBarView.Mode.READ_RECORD)
-        binding.topBar.setSearchEntryVisible(false)
-        binding.topBar.setOnFilterExpandedChangedListener {
-            recordDaysExpanded = it
-        }
-        binding.topBar.titleSelect.setOnClickListener {
-            showYearSelector()
-        }
-        binding.topBar.moreButton.setOnClickListener {
-            showComponentConfigDialog()
-        }
-        // main-bottom-nav-simplify AD-01：standalone（独立子页）模式追加返回按钮
-        if (arguments?.getBoolean(ARG_STANDALONE, false) == true) {
-            binding.topBar.addActionButton(R.drawable.ic_back, R.string.back) {
-                requireActivity().finish()
-            }
-        }
-        binding.topBar.primaryBar.setOnTagClickListener { index ->
-            selectMonth(index + 1)
-        }
-        binding.topBar.tagsBar.setOnTagClickListener { index ->
-            val month = YearMonth.from(selectedDate)
-            val date = month.atDay((index + 1).coerceIn(1, month.lengthOfMonth()))
-            if (selectedDate != date) {
-                selectedDate = date
-                recordDaysExpanded = false
-                loadData(force = true)
-            }
-        }
+        installContentDayFilter()
+        // 首帧即预写入筛选渲染态：否则第二行 items 为空、顶栏从 56dp 跳到完整高度，内容区可见跳动
+        writeFilterState(selectedDate)
         binding.tvRecordDate.setOnClickListener {
-            if (isRegularReadRecordTopBar()) {
-                showYearSelector()
-            } else {
-                showDatePicker()
-            }
-        }
-        binding.ivComponentMenu.setOnClickListener {
-            showComponentConfigDialog()
+            showDatePicker()
         }
         binding.panelOverview.setViewCompositionStrategy(
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
@@ -296,10 +284,168 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
         preloadData()
     }
 
+    /**
+     * 顶栏单源安装（AD-01）：以 ComposeView + GlassTopAppBar 运行时替换共享布局的旧顶栏节点。
+     *
+     * 第一行：左侧返回箭头 + 标题「阅读记录」+ 右侧组件配置动作（一级直出）；
+     * 第二行（secondRow）：年份入口 + 月份 chip，两段各显式 38dp；
+     * 插入索引用 coerceAtMost(childCount) 兜底（容器替换后 addView 索引不得裸写）。
+     */
+    private fun installComposeTopBar() {
+        val container = binding.root as? ViewGroup ?: return
+        (binding.titleBar.parent as? ViewGroup)?.removeView(binding.titleBar)
+        (binding.topBar.parent as? ViewGroup)?.removeView(binding.topBar)
+        val topBarView = ComposeView(requireContext()).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoComposeTheme {
+                    GlassTopAppBar(
+                        title = getString(R.string.read_record),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { requireActivity().finish() },
+                        barHeight = 56.dp,
+                        actions = {
+                            TopBarActionRow(
+                                listOf(
+                                    MenuAction(
+                                        iconRes = R.drawable.ic_more_vert,
+                                        title = getString(R.string.read_record_customize_components),
+                                        alwaysShow = true,
+                                        onClick = { showComponentConfigDialog() }
+                                    )
+                                )
+                            )
+                        },
+                        secondRow = {
+                            Column(
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // 年份入口：单项 chip 仅作入口（无选中底；传 NO_POSITION 避免字色走选中态色）
+                                TagChipRow(
+                                    items = listOf(RoundedTagBarView.Item(filterYearText.value)),
+                                    selectedIndex = RecyclerView.NO_POSITION,
+                                    selectedBackgroundVisible = false,
+                                    onTagClick = { showYearSelector() }
+                                )
+                                TagChipRow(
+                                    items = filterMonthItems.value,
+                                    selectedIndex = filterMonthSelected.value,
+                                    selectedBackgroundVisible = true,
+                                    onTagClick = { index -> selectMonth(index + 1) }
+                                )
+                            }
+                        }
+                    )
+                }
+            }
+        }
+        container.addView(topBarView, 0.coerceAtMost(container.childCount))
+    }
+
+    /**
+     * 内容区顶部日期 chip 行（AD-05）：由顶栏下移而来，随内容滚动、不占固定屏幅。
+     * 同时完成旧头部清理：移除组件配置图标（入口已迁顶栏动作）、大字日期降为 20sp。
+     */
+    private fun installContentDayFilter() {
+        val container = binding.llReadRecordContent as? ViewGroup ?: return
+        val dayFilterView = ComposeView(requireContext()).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoComposeTheme {
+                    TagChipRow(
+                        items = filterDayItems.value,
+                        selectedIndex = filterDaySelected.value,
+                        selectedBackgroundVisible = true,
+                        onTagClick = { index -> selectDay(index + 1) }
+                    )
+                }
+            }
+        }
+        container.addView(dayFilterView, 0.coerceAtMost(container.childCount))
+        (binding.ivComponentMenu.parent as? ViewGroup)?.removeView(binding.ivComponentMenu)
+        binding.tvRecordDate.textSize = 20f
+    }
+
+    /**
+     * 筛选 chip 行（复用既有 RoundedTagBarView，零视觉偏差；显式 38dp 防高度塌陷）。
+     *
+     * update 执行顺序固定（AD-03）：①先按顶栏包/主题签名强刷配色；②再按快照判断数据是否变化，
+     * 未变化则跳过 submitItems（其内部会对选中项 scrollBy 自动居中，会拉回用户手动滚动位置）。
+     */
+    @Composable
+    private fun TagChipRow(
+        items: List<RoundedTagBarView.Item>,
+        selectedIndex: Int,
+        selectedBackgroundVisible: Boolean,
+        onTagClick: (Int) -> Unit
+    ) {
+        val submitted = remember { mutableStateOf<Pair<List<RoundedTagBarView.Item>, Int>?>(null) }
+        val styleSignature = remember { mutableStateOf<String?>(null) }
+        AndroidView(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(38.dp),
+            factory = { context ->
+                RoundedTagBarView(context).apply {
+                    setDisplayMode(RoundedTagBarView.DisplayMode.CHIP)
+                    setSelectedBackgroundVisible(selectedBackgroundVisible)
+                    setOnTagClickListener { index -> onTagClick(index) }
+                }
+            },
+            update = { view ->
+                val signature = TopBarConfig.currentSignature(AppConfig.isNightTheme)
+                if (styleSignature.value != signature) {
+                    styleSignature.value = signature
+                    // 强刷：applyTopBarStyle 同签名会早退，且宿主 Activity 不因日夜/顶栏包变更而重建
+                    view.applyTopBarStyle(force = true)
+                }
+                val snapshot = items to selectedIndex
+                if (submitted.value != snapshot) {
+                    submitted.value = snapshot
+                    view.submitItems(items, selectedIndex)
+                }
+            }
+        )
+    }
+
+    /** 写入顶栏第二行与内容区日期行的渲染态（本页筛选态唯一写入点） */
+    private fun writeFilterState(date: LocalDate) {
+        filterYearText.value = getString(R.string.read_record_year_value, date.year)
+        filterMonthItems.value = (1..12).map {
+            RoundedTagBarView.Item(getString(R.string.read_record_month_value, it))
+        }
+        filterMonthSelected.value = date.monthValue - 1
+        val month = YearMonth.from(date)
+        filterDayItems.value = (1..month.lengthOfMonth()).map {
+            RoundedTagBarView.Item(it.toString())
+        }
+        filterDaySelected.value = date.dayOfMonth - 1
+    }
+
+    /** 内容区日期 chip 点击：按当月天数钳制后重载（与原 tagsBar 点击行为一致） */
+    private fun selectDay(dayValue: Int) {
+        val month = YearMonth.from(selectedDate)
+        val date = month.atDay(dayValue.coerceIn(1, month.lengthOfMonth()))
+        if (selectedDate != date) {
+            selectedDate = date
+            loadData(force = true)
+        }
+    }
+
     override fun observeLiveBus() {
         observeEvent<Boolean>(EventBus.TOP_BAR_CHANGED) {
             if (it == AppConfig.isNightTheme) {
-                binding.topBar.refreshStyle()
+                // 顶栏取色与 chip 配色由 GlassTopAppBar / AndroidView.update 的签名强刷承担，
+                // 此处只需重写筛选渲染态（不再依赖已移除的 MainTopBarView.refreshStyle）
                 currentDashboard?.let(::renderDateTopBar)
             }
         }
@@ -458,47 +604,17 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
         )
     }
 
+    /**
+     * 刷新筛选区渲染态（本页筛选唯一写入点）。原 regular / 非 regular 双头部形态分叉
+     * 已随顶栏单源（AD-01）取消——两种顶栏包样式下页面头部结构完全一致。
+     */
     private fun renderDateTopBar(dashboard: ReadRecordDashboard) {
-        val regular = isRegularReadRecordTopBar()
-        binding.topBar.isVisible = regular
-        binding.llRecordHeader.isVisible = !regular
-        if (!regular) {
-            binding.llRecordHeader.background = null
-            binding.tvRecordDate.textSize = 28f
-            binding.tvRecordDate.text = dashboard.today.format(headlineFormatter)
-            binding.tvRecordDateHint.isVisible = true
-            binding.tvRecordDateHint.text = getString(
-                if (dashboard.hasDailyStats) {
-                    R.string.read_record_stats_ready
-                } else {
-                    R.string.read_record_stats_waiting
-                }
-            )
-            return
-        }
-        val month = YearMonth.from(dashboard.today)
-        binding.topBar.setMode(MainTopBarView.Mode.READ_RECORD)
-        binding.topBar.setSearchEntryVisible(false)
-        binding.topBar.setTitle(getString(R.string.read_record_year_value, dashboard.today.year))
-        binding.topBar.setPrimaryItems(
-            (1..12).map { RoundedTagBarView.Item(getString(R.string.read_record_month_value, it)) },
-            dashboard.today.monthValue - 1
-        )
-        binding.topBar.selectsBar.submitItems(emptyList(), -1)
-        binding.topBar.showSelects(false)
-        binding.topBar.tagsBar.submitItems(
-            (1..month.lengthOfMonth()).map { RoundedTagBarView.Item(it.toString()) },
-            dashboard.today.dayOfMonth - 1
-        )
-        binding.topBar.showTags(true)
-        val defaultExpanded = TopBarConfig.currentConfig(requireContext(), AppConfig.isNightTheme).expandFiltersByDefault
-        binding.topBar.setFiltersExpanded(defaultExpanded || recordDaysExpanded)
+        writeFilterState(dashboard.today)
     }
 
     private fun selectMonth(monthValue: Int) {
         val targetMonth = YearMonth.of(selectedDate.year, monthValue)
         selectedDate = targetMonth.atDay(selectedDate.dayOfMonth.coerceAtMost(targetMonth.lengthOfMonth()))
-        recordDaysExpanded = false
         loadData(force = true)
     }
 
@@ -511,13 +627,8 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             val targetYear = years[index]
             val targetMonth = YearMonth.of(targetYear, selectedDate.monthValue)
             selectedDate = targetMonth.atDay(selectedDate.dayOfMonth.coerceAtMost(targetMonth.lengthOfMonth()))
-            recordDaysExpanded = false
             loadData(force = true)
         }
-    }
-
-    private fun isRegularReadRecordTopBar(): Boolean {
-        return TopBarConfig.currentConfig(requireContext(), AppConfig.isNightTheme).style == TopBarConfig.STYLE_REGULAR
     }
 
     private fun showComponentConfigDialog() {
@@ -795,8 +906,6 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             createSurfaceDrawable(panelSurfaceColor, 14f)
         binding.panelGoalCard.background =
             createSurfaceDrawable(panelSurfaceColor, 14f)
-        binding.ivComponentMenu.background = null
-        binding.ivComponentMenu.setColorFilter(primaryTextColor)
         binding.ivRankMore.background = null
         binding.ivGoalEdit.background = null
         binding.ivRankMore.setColorFilter(secondaryTextColor)

@@ -3,9 +3,9 @@ package io.legado.app.ui.book.read.page.entities.column
 import android.graphics.Canvas
 import android.os.Build
 import androidx.annotation.Keep
+import io.legado.app.help.HighlightPalette
 import io.legado.app.help.HighlightStyle
 import io.legado.app.help.config.ReadBookConfig
-import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.ui.book.read.page.ContentTextView
 import io.legado.app.ui.book.read.page.HighlightDraw
 import io.legado.app.ui.book.read.page.entities.TextLine
@@ -20,6 +20,8 @@ data class TextColumn(
     override var start: Float,
     override var end: Float,
     override val charData: String,
+    /** R3：段落首行缩进列标记（由排版层按字符校验后置位） */
+    override val isParagraphIndent: Boolean = false,
 ) : TextBaseColumn {
 
     override var textLine: TextLine = emptyTextLine
@@ -56,7 +58,8 @@ data class TextColumn(
         }
 
     override fun draw(view: ContentTextView, canvas: Canvas) {
-        val hs = highlightStyle
+        // R12.4：色板派生样式按当前阅读器态解析（用户手选色 paletteSlot==null → 原样返回）
+        val hs = highlightStyle?.let { HighlightPalette.resolve(it) }
         val textPaint = if (textLine.isTitle) {
             ChapterProvider.titlePaint
         } else {
@@ -67,19 +70,18 @@ data class TextColumn(
         } else {
             ReadBookConfig.textColor
         }
-        // 背景填充(文字之下)
-        val fill = hs?.fill ?: 0
-        if (fill != 0) {
-            view.drawHighlightFill(canvas, start, 0f, end, textLine.height, fill)
-        }
+        // R3：段首缩进列不承载装饰类高亮（纯色背景填充照常渲染，避免整段底色缺口）
+        val highlightAllowed = !isParagraphIndent || HighlightDraw.shouldRenderOnIndentColumn(hs)
+        // R1a：背景填充已上移到 TextLine.drawHighlightFillRuns（按 run 合并 + 形状支持，
+        // 快绘/普通两条路径共用），此处不再逐列绘制填充；highlightAllowed 仍供下方字色/字体/着重号门控
         // 字色: 高亮优先
-        val hsTextColor = hs?.textColor ?: 0
+        val hsTextColor = if (highlightAllowed) hs?.textColor ?: 0 else 0
         val textColorVal = if (hsTextColor != 0) hsTextColor else baseColor
         if (textPaint.color != textColorVal) {
             textPaint.color = textColorVal
         }
         // 字体/粗斜体
-        val saved = if (hs != null && hs.needsPerColumnDraw) {
+        val saved = if (highlightAllowed && hs != null && hs.needsPerColumnDraw) {
             HighlightDraw.applyTextStyle(textPaint, hs)
         } else {
             null
@@ -95,7 +97,7 @@ data class TextColumn(
         }
         saved?.let { HighlightDraw.restoreTextStyle(textPaint, it) }
         // 着重号
-        val emphasis = hs?.emphasis
+        val emphasis = if (highlightAllowed) hs?.emphasis else null
         if (emphasis != null) {
             val emColor = if (emphasis.color != 0) emphasis.color else textColorVal
             HighlightDraw.drawEmphasis(canvas, start, end, textLine.height, emColor)

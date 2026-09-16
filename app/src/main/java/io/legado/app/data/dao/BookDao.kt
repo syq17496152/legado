@@ -295,6 +295,45 @@ interface BookDao {
         and origin not like '${BookType.webDavTag}%'""")
     fun getAllUseBookSource(): List<BookSource>
 
+    /**
+     * P1/B1-② 书源引用书籍数：左表为书源（无引用者计 0），子查询按 `origin` 聚合书籍数。
+     * 排除本地书（`loc_book` 与 `loc_book::xxx` 两种形态）与 WebDAV 书（`webDav::` 前缀）。
+     * 注：`loc_book` 用等值比较而非 `LIKE 'loc_book%'`——后者中的 `_` 是单字符通配符会误匹配。
+     * 触发口径：仅随 `book_sources` 变化推送（书籍表变化由页面在结构化变更点主动刷新，避免翻页级重算）。
+     */
+    @Query(
+        """
+        SELECT bs.bookSourceUrl AS bookSourceUrl, IFNULL(cnt.c, 0) AS bookCount
+        FROM book_sources bs
+        LEFT JOIN (
+            SELECT origin AS srcUrl, COUNT(*) AS c
+            FROM books
+            WHERE origin <> '${BookType.localTag}'
+              AND origin NOT LIKE '${BookType.localTag}::%'
+              AND origin NOT LIKE '${BookType.webDavTag}%'
+            GROUP BY origin
+        ) cnt ON cnt.srcUrl = bs.bookSourceUrl
+        """
+    )
+    fun flowBookCountByOrigin(): Flow<List<SourceBookCount>>
+
+    /** P1/B1-② 一次性取书源引用书籍数（供"页面进入/结构变更"时主动刷新，避免把 books 纳入观察表） */
+    @Query(
+        """
+        SELECT bs.bookSourceUrl AS bookSourceUrl, IFNULL(cnt.c, 0) AS bookCount
+        FROM book_sources bs
+        LEFT JOIN (
+            SELECT origin AS srcUrl, COUNT(*) AS c
+            FROM books
+            WHERE origin <> '${BookType.localTag}'
+              AND origin NOT LIKE '${BookType.localTag}::%'
+              AND origin NOT LIKE '${BookType.webDavTag}%'
+            GROUP BY origin
+        ) cnt ON cnt.srcUrl = bs.bookSourceUrl
+        """
+    )
+    suspend fun getBookCountByOrigin(): List<SourceBookCount>
+
     @Query("SELECT * FROM books WHERE name = :name and origin = :origin")
     fun getBookByOrigin(name: String, origin: String): Book?
 
@@ -422,6 +461,12 @@ interface BookDao {
     @Query("delete from books where type & ${BookType.notShelf} > 0")
     fun deleteNotShelfBook()
 }
+
+/** P1/B1-② 书源引用书籍数（查询投影） */
+data class SourceBookCount(
+    val bookSourceUrl: String,
+    val bookCount: Int
+)
 
 data class BookShelfIdentity(
     val bookUrl: String,

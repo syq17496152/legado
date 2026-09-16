@@ -495,6 +495,19 @@ class OtherConfigFragment : ComposeSettingFragment() {
                 value = AppConfig.imageLoadConcurrency,
                 onSelected = { AppConfig.imageLoadConcurrency = it }
             ),
+            // §9.5.6 高亮规则匹配性能治理：整章匹配总预算（超限降级，防低端机翻页卡顿）
+            numberAction(
+                key = PreferKey.highlightMatchBudgetMs,
+                title = getString(R.string.highlight_match_budget),
+                summary = getString(
+                    R.string.highlight_match_budget_summary,
+                    AppConfig.highlightMatchBudgetMs.toString()
+                ),
+                min = 50,
+                max = 5000,
+                value = AppConfig.highlightMatchBudgetMs,
+                onSelected = { AppConfig.highlightMatchBudgetMs = it }
+            ),
             switch(
                 key = PreferKey.processText,
                 title = getString(R.string.add_to_text_context_menu_t),

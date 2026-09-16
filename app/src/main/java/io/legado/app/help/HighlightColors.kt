@@ -8,21 +8,11 @@ package io.legado.app.help
  */
 object HighlightColors {
 
-    /** 背景填充预设(ARGB, 含 alpha) */
-    val bg = intArrayOf(
-        0x80FFF176.toInt(), // 黄
-        0x80AED581.toInt(), // 绿
-        0x804FC3F7.toInt(), // 蓝
-        0x80F06292.toInt(), // 粉
-        0x80FFB74D.toInt()  // 橙
-    )
+    /** 背景填充预设(ARGB, 含 alpha)；R12.4 起由 [HighlightPalette] 按阅读器态提供（唯一真源） */
+    val bg: IntArray
+        get() = HighlightPalette.bgPresets(HighlightPalette.currentTone())
 
-    /** 字体色预设(ARGB, 不透明) */
-    val text = intArrayOf(
-        0xFFD32F2F.toInt(), // 红
-        0xFF1976D2.toInt(), // 蓝
-        0xFF388E3C.toInt(), // 绿
-        0xFFF57C00.toInt(), // 橙
-        0xFF7B1FA2.toInt()  // 紫
-    )
+    /** 字体色预设(ARGB, 不透明)；R12.4 起由 [HighlightPalette] 按阅读器态提供（唯一真源） */
+    val text: IntArray
+        get() = HighlightPalette.textPresets(HighlightPalette.currentTone())
 }

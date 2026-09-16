@@ -58,7 +58,11 @@ fun ColorPickerSheet(
     onConfirm: (Int) -> Unit,
     onDismiss: () -> Unit,
     allowFollowDefault: Boolean = false,
-    onFollowDefault: () -> Unit = {}
+    onFollowDefault: () -> Unit = {},
+    /** R1a：是否允许半透明（true 时显示不透明度滑条，确认值保留 alpha） */
+    withAlpha: Boolean = false,
+    /** R1a：自定义预置色板（如项目语义色板）；null = 用 Material 默认色板 */
+    presets: IntArray? = null
 ) {
     val initialHsv = FloatArray(3)
     androidx.core.graphics.ColorUtils.colorToHSL(initialColor, initialHsv)
@@ -66,6 +70,11 @@ fun ColorPickerSheet(
     var saturation by remember { mutableFloatStateOf(initialHsv[1] * 100f) }
     var lightness by remember { mutableFloatStateOf(initialHsv[2] * 100f) }
     var pickedPreset by remember { mutableStateOf<Int?>(null) }
+    // R1a：alpha 初值取自 initialColor（无色/全透明时回退 100%）
+    val initialAlpha = (initialColor ushr 24) and 0xFF
+    var alphaPercent by remember {
+        mutableFloatStateOf(if (initialAlpha == 0) 100f else initialAlpha / 255f * 100f)
+    }
 
     val currentColor = pickedPreset ?: hslToColor(hue, saturation / 100f, lightness / 100f)
 
@@ -113,7 +122,7 @@ fun ColorPickerSheet(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(ColorPickerDialog.MATERIAL_COLORS.toList()) { preset ->
+                items((presets ?: ColorPickerDialog.MATERIAL_COLORS).toList()) { preset ->
                     val selected = pickedPreset == preset
                     Box(
                         modifier = Modifier
@@ -196,6 +205,25 @@ fun ColorPickerSheet(
                 }
             )
 
+            // R1a：不透明度滑条（仅 withAlpha 时显示；拖动即取消预置选中）
+            if (withAlpha) {
+                HslSlider(
+                    label = stringResource(R.string.color_alpha),
+                    value = alphaPercent,
+                    valueRange = 0f..100f,
+                    trackBrush = Brush.horizontalGradient(
+                        listOf(
+                            Color(currentColor).copy(alpha = 0f),
+                            Color(currentColor).copy(alpha = 1f)
+                        )
+                    ),
+                    onValueChange = {
+                        alphaPercent = it
+                        pickedPreset = null
+                    }
+                )
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
 
             // 可选槽位支持"跟随默认"（恢复默认色并清除自定义值），默认关闭保持向后兼容
@@ -212,7 +240,8 @@ fun ColorPickerSheet(
                     }
                 }
                 Button(
-                    onClick = { onConfirm(ColorUtils.withAlpha(currentColor, 1f)) },
+                    // R1a：withAlpha 时保留滑条 alpha（默认 100% 等价旧行为）
+                    onClick = { onConfirm(ColorUtils.withAlpha(currentColor, alphaPercent / 100f)) },
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 48.dp)

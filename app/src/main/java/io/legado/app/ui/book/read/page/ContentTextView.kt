@@ -13,6 +13,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.Bookmark
 import io.legado.app.help.HighlightMatcher
+import io.legado.app.help.HighlightStyle
 import io.legado.app.help.PaperInkHelper
 import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.isImage
@@ -105,21 +106,24 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
         }
     }
 
-    /** 高亮规则/手动高亮背景填充画笔 */
-    private val highlightFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-    }
-
+    /**
+     * 背景填充（R1a 起支持形状；参数带默认值以兼容旧调用）。
+     * 实际绘制委托 [HighlightDraw.drawFillRun]，快绘/逐列两条路径共用同一几何。
+     */
     fun drawHighlightFill(
         canvas: Canvas,
         left: Float,
         top: Float,
         right: Float,
         bottom: Float,
-        color: Int
+        color: Int,
+        shape: HighlightStyle.FillShape = HighlightStyle.FillShape.RECTANGLE,
+        pillLeftRadius: Float = 0f,
+        pillRightRadius: Float = 0f
     ) {
-        highlightFillPaint.color = color
-        canvas.drawRect(left, top, right, bottom, highlightFillPaint)
+        HighlightDraw.drawFillRun(
+            canvas, left, right, top, bottom, color, shape, pillLeftRadius, pillRightRadius
+        )
     }
 
     init {

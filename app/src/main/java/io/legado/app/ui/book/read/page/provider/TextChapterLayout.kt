@@ -2127,7 +2127,9 @@ class TextChapterLayout(
                 TextColumn(
                     charData = ChapterProvider.indentChar,
                     start = absStartX + x,
-                    end = absStartX + x1
+                    end = absStartX + x1,
+                    // R3：两端对齐路径的缩进列由本处显式入列，直接置标记
+                    isParagraphIndent = true
                 )
             )
             x = x1
@@ -2233,7 +2235,14 @@ class TextChapterLayout(
             val char = words[index]
             val cw = textWidths[index]
             val x1 = x + cw
-            addCharToLine(book, absStartX, textLine, char, x, x1, index + 1 == words.size, srcList, clickList)
+            // R3：自然路径的缩进列由 ContentProcessor 前置的缩进字符形成，
+            // 必须**按字符校验**（缩进未前置但正文首字符恰为全角空格时不得误标，否则正文前 N 列会丢失高亮）
+            val isIndent = hasIndent && index < indentLength &&
+                char == ChapterProvider.indentChar
+            addCharToLine(
+                book, absStartX, textLine, char, x, x1, index + 1 == words.size,
+                srcList, clickList, isIndent
+            )
             x = x1
             if (hasIndent && index == indentLength - 1) {
                 textLine.indentWidth = x
@@ -2254,7 +2263,9 @@ class TextChapterLayout(
         xEnd: Float,
         isLineEnd: Boolean,
         srcList: LinkedList<String>?,
-        clickList: LinkedList<String?>?
+        clickList: LinkedList<String?>?,
+        /** R3：该字符是否为段首缩进字符（自然路径按字符校验后传入） */
+        isIndent: Boolean = false
     ) {
         val column = when {
             !srcList.isNullOrEmpty() && (char == srcReplaceStr || char == reviewStr) -> {
@@ -2282,7 +2293,8 @@ class TextChapterLayout(
                 TextColumn(
                     start = absStartX + xStart,
                     end = absStartX + xEnd,
-                    charData = char
+                    charData = char,
+                    isParagraphIndent = isIndent
                 )
             }
         }

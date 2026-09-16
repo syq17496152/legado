@@ -39,4 +39,53 @@ object HighlightGeometry {
         require(starts.size == ends.size) { "starts/ends size mismatch" }
         return List(starts.size) { i -> Dot((starts[i] + ends[i]) / 2f, cy, r) }
     }
+
+    /** R1a：填充带（相对行顶的上下边界；canvas 已在行级平移，故 y 为行内偏移） */
+    data class Band(val top: Float, val bottom: Float)
+
+    /**
+     * R1a：按填充形状计算填充带（纯几何，无 Android 依赖）。
+     *
+     * - 矩形 / 圆角 / 胶囊：铺满整行高（与改造前逐列矩形**逐像素等价**）
+     * - 荧光笔（MARKER）：高度约 0.72 行高，垂直居中
+     * - 半高（HALF）：自基线略上方到行底（下半标记）
+     * - 基线带（BASELINE）：基线下方细带
+     */
+    fun fillBand(
+        baseline: Float,
+        textSize: Float,
+        height: Float,
+        shape: HighlightStyle.FillShape
+    ): Band {
+        return when (shape) {
+            HighlightStyle.FillShape.RECTANGLE,
+            HighlightStyle.FillShape.ROUNDED,
+            HighlightStyle.FillShape.PILL -> Band(0f, height)
+
+            HighlightStyle.FillShape.MARKER -> {
+                val h = height * 0.72f
+                val top = ((height - h) / 2f).coerceAtLeast(0f)
+                Band(top, top + h)
+            }
+
+            HighlightStyle.FillShape.HALF -> {
+                val top = (baseline - textSize * 0.5f).coerceIn(0f, height)
+                Band(top, height)
+            }
+
+            HighlightStyle.FillShape.BASELINE -> {
+                val top = (baseline + textSize * 0.15f).coerceIn(0f, height)
+                Band(top, height)
+            }
+        }
+    }
+
+    /**
+     * R1a：胶囊（PILL）端部的**水平**圆角半径。
+     *
+     * 简化说明：降级取「填充带高的一半」（视觉上接近胶囊），不依赖逐字墨迹盒——
+     * 该数据在自研排版路径上的可得性未确证。| 已知上限：端部圆角与字形边缘不严格贴合。
+     * | 升级路径：接入逐字墨迹盒后按实际字形端部半径绘制（另行立项）。
+     */
+    fun pillRadiusX(band: Band): Float = (band.bottom - band.top) / 2f
 }

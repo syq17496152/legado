@@ -145,6 +145,23 @@ abstract class BaseReadAloudService : BaseService(),
     var pageChanged = false
     private var toLast = false
     var paragraphStartPos = 0
+
+    /** P1/B1-③：段中触发时是否对齐到句首（装配时读取一次，全程生效） */
+    @Volatile
+    protected var alignSentenceStart = false
+
+    /**
+     * P1/B1-③：送引擎文本的起点（段中触发时对齐句首；偏好关闭则原样返回）。
+     * 返回前按 [text] 长度收窄 —— 同时兜住既有的 `substring` 越界崩溃隐患（D6）。
+     */
+    protected fun sentenceAlignedStart(text: String, startPos: Int): Int {
+        val aligned = if (alignSentenceStart && startPos > 0) {
+            ReadAloudSentenceAligner.alignToSentenceStart(text, startPos)
+        } else {
+            startPos
+        }
+        return aligned.coerceIn(0, text.length)
+    }
     var readAloudByPage = false
         private set
 
@@ -425,6 +442,8 @@ abstract class BaseReadAloudService : BaseService(),
             }
             readAloudNumber = textChapter.getReadLength(pageIndex) + startPos
             readAloudByPage = getPrefBoolean(PreferKey.readAloudByPage)
+            // P1/B1-③：段中触发对齐句首偏好（每次装配读取一次）
+            alignSentenceStart = AppConfig.readAloudAlignSentenceStart
             contentList = textChapter.getNeedReadAloud(0, readAloudByPage, 0)
                 .split("\n")
                 .filter { it.isNotEmpty() }

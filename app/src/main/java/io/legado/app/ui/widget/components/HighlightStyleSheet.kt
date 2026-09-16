@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -27,15 +28,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.help.HighlightStyle
 import io.legado.app.help.HighlightStyle.Deco
+import io.legado.app.help.HighlightStyle.FillShape
 import io.legado.app.help.HighlightStyle.Kind
+import io.legado.app.help.HighlightStyle.Shadow
 import io.legado.app.help.HighlightStyle.Underline
 import io.legado.app.help.HighlightStyles
 import io.legado.app.ui.book.read.HighlightActionMenu
+import java.util.Locale
 
 /**
  * 高亮选色面板（task 12.2E，存量升级自 View 版 [io.legado.app.ui.book.read.HighlightStyleDialog]）。
@@ -113,6 +118,32 @@ fun HighlightStyleSheet(
                 onExtra = { ch.onExtra?.let { onStyleChange(it(style)) } },
                 onPickColor = { onPickColor(ch.dialogId, ch.color(style), ch.withAlpha) }
             )
+            // B2-④：下划线启用时紧随其后显示「线宽 / 线距」滑条子行
+            if (ch.dialogId == HighlightActionMenu.HL_UNDERLINE && ch.isOn(style)) {
+                val u = style.underline ?: Underline()
+                HighlightSliderSubRow(
+                    labelRes = R.string.highlight_underline_width,
+                    value = u.resolvedWidth,
+                    min = 0.1f, max = 10f,
+                    onValueChange = { onStyleChange(style.copy(underline = u.copy(width = it))) }
+                )
+                HighlightSliderSubRow(
+                    labelRes = R.string.highlight_underline_distance,
+                    value = u.resolvedDistance,
+                    min = 0f, max = 20f,
+                    onValueChange = { onStyleChange(style.copy(underline = u.copy(distance = it))) }
+                )
+            }
+            // R1a：阴影启用时紧随其后显示「模糊半径」滑条子行
+            if (ch.dialogId == HighlightActionMenu.HL_SHADOW && ch.isOn(style)) {
+                val sd = style.shadow ?: Shadow()
+                HighlightSliderSubRow(
+                    labelRes = R.string.highlight_shadow_radius,
+                    value = sd.radius,
+                    min = 1f, max = 25f,
+                    onValueChange = { onStyleChange(style.copy(shadow = sd.copy(radius = it))) }
+                )
+            }
         }
         HorizontalDivider(
             color = MaterialTheme.colorScheme.outlineVariant,
@@ -191,13 +222,17 @@ private data class ChannelInfo(
     val color: (HighlightStyle) -> Int,
     val toggle: (HighlightStyle, Boolean) -> HighlightStyle,
     val underlineKind: ((HighlightStyle) -> Kind?)? = null,
+    /** R1a：填充形状（行内显示当前形状名，点击 onExtra 循环切换） */
+    val fillShapeOf: ((HighlightStyle) -> FillShape?)? = null,
     val onExtra: ((HighlightStyle) -> HighlightStyle)? = null
 )
 
 private val channels = listOf(
     ChannelInfo(R.string.highlight_bg_color, HighlightActionMenu.HL_FILL, true,
         { it.fill != 0 }, { it.fill },
-        { s, on -> s.copy(fill = if (on) (if (s.fill != 0) s.fill else 0x80FFF176.toInt()) else 0) }),
+        { s, on -> s.copy(fill = if (on) (if (s.fill != 0) s.fill else 0x80FFF176.toInt()) else 0) },
+        fillShapeOf = { s -> s.resolvedFillShape },
+        onExtra = { s -> s.copy(fillShape = nextFillShape(s.resolvedFillShape)) }),
     ChannelInfo(R.string.highlight_text_color, HighlightActionMenu.HL_TEXT, false,
         { it.textColor != 0 }, { it.textColor },
         { s, on -> s.copy(textColor = if (on) (if (s.textColor != 0) s.textColor else 0xFFE53935.toInt()) else 0) }),
@@ -218,7 +253,11 @@ private val channels = listOf(
         { s, on -> s.copy(box = if (on) (s.box ?: Deco()) else null) }),
     ChannelInfo(R.string.highlight_emphasis, HighlightActionMenu.HL_EMPHASIS, false,
         { it.emphasis != null }, { it.emphasis?.color ?: 0 },
-        { s, on -> s.copy(emphasis = if (on) (s.emphasis ?: Deco()) else null) })
+        { s, on -> s.copy(emphasis = if (on) (s.emphasis ?: Deco()) else null) }),
+    // R1a：文字阴影（颜色允许半透明；半径/偏移单位为 px，默认给一个可见的轻阴影供再调）
+    ChannelInfo(R.string.highlight_shadow, HighlightActionMenu.HL_SHADOW, true,
+        { it.shadow != null }, { it.shadow?.color ?: 0 },
+        { s, on -> s.copy(shadow = if (on) (s.shadow ?: Shadow(radius = 6f, dy = 2f)) else null) })
 )
 
 /** 单通道行：开关 + 标签 + 线型切换 + 取色色块，行高 ≥48dp。 */
@@ -247,10 +286,17 @@ private fun HighlightChannelRow(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
+        // 行内「额外项」：下划线线型 / R1a 填充形状（点击循环切换）
         val kind = channel.underlineKind?.invoke(style)
-        if (channel.underlineKind != null && channel.isOn(style) && kind != null) {
+        val shape = channel.fillShapeOf?.invoke(style)
+        val extraLabel = when {
+            channel.isOn(style) && kind != null -> underlineKindLabel(kind)
+            channel.isOn(style) && shape != null -> fillShapeLabel(shape)
+            else -> null
+        }
+        if (extraLabel != null) {
             Text(
-                text = underlineKindLabel(kind),
+                text = extraLabel,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
@@ -272,6 +318,43 @@ private fun HighlightChannelRow(
     }
 }
 
+/** B2-④：数值滑条子行（下划线线宽/线距）。取值范围与 `HighlightRuleStore.sanitizeRule` 既有域一致。 */
+@Composable
+private fun HighlightSliderSubRow(
+    labelRes: Int,
+    value: Float,
+    min: Float,
+    max: Float,
+    onValueChange: (Float) -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 48.dp, end = 16.dp)
+    ) {
+        Text(
+            text = stringResource(labelRes),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(60.dp)
+        )
+        Slider(
+            value = value.coerceIn(min, max),
+            onValueChange = onValueChange,
+            valueRange = min..max,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = String.format(Locale.getDefault(), "%.1f", value),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(36.dp)
+        )
+    }
+}
+
 @Composable
 private fun underlineKindLabel(kind: Kind): String = when (kind) {
     Kind.WAVY -> stringResource(R.string.highlight_underline_wavy)
@@ -284,4 +367,21 @@ private fun underlineKindLabel(kind: Kind): String = when (kind) {
 private fun nextKind(kind: Kind): Kind {
     val all = Kind.entries
     return all[(all.indexOf(kind) + 1) % all.size]
+}
+
+/** R1a：填充形状显示名 */
+@Composable
+private fun fillShapeLabel(shape: FillShape): String = when (shape) {
+    FillShape.ROUNDED -> stringResource(R.string.highlight_shape_rounded)
+    FillShape.MARKER -> stringResource(R.string.highlight_shape_marker)
+    FillShape.HALF -> stringResource(R.string.highlight_shape_half)
+    FillShape.BASELINE -> stringResource(R.string.highlight_shape_baseline)
+    FillShape.PILL -> stringResource(R.string.highlight_shape_pill)
+    else -> stringResource(R.string.highlight_shape_rectangle)
+}
+
+/** R1a：填充形状循环切换（矩形 → 圆角 → 荧光笔 → 半高 → 基线 → 胶囊） */
+private fun nextFillShape(shape: FillShape): FillShape {
+    val all = FillShape.entries
+    return all[(all.indexOf(shape) + 1) % all.size]
 }

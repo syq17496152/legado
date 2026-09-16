@@ -294,7 +294,13 @@ class TTSReadAloudService : BaseReadAloudService() {
             currentCoroutineContext().ensureActive()
             var text = contentList[i]
             if (paragraphStartPos > 0 && i == nowSpeak) {
-                text = text.substring(paragraphStartPos)
+                // P1/B1-③：段中触发时对齐到句首（默认关；返回值恒 <= 原起点，且 coerceIn 防越界）
+                val startPos = if (alignSentenceStart) {
+                    ReadAloudSentenceAligner.alignToSentenceStart(text, paragraphStartPos)
+                } else {
+                    paragraphStartPos
+                }
+                text = text.substring(startPos.coerceIn(0, text.length))
             }
             if (text.matches(AppPattern.notReadAloudRegex)) {
                 continue
@@ -373,7 +379,17 @@ class TTSReadAloudService : BaseReadAloudService() {
         TtsMultiRoleDiagnostics.reset(textChapter.chapter.index, chapterHasQuotes)
         for (p in nowSpeak until contentList.size) {
             currentCoroutineContext().ensureActive()
-            val paragraphStart = if (p == nowSpeak) paragraphStartPos else 0
+            val rawParagraphStart = if (p == nowSpeak) paragraphStartPos else 0
+            // P1/B1-③：段中触发对齐句首。filter(L384) 与 trim(L391-392) 与本值同基准，
+            // 否则「只改 trim」会 StringIndexOutOfBoundsException、「只改 filter」会漏读段头。
+            val paragraphStart = if (rawParagraphStart > 0 && alignSentenceStart) {
+                val paragraphText = contentList[p]
+                ReadAloudSentenceAligner
+                    .alignToSentenceStart(paragraphText, rawParagraphStart)
+                    .coerceIn(0, paragraphText.length)
+            } else {
+                rawParagraphStart
+            }
             val paragraph = contentList[p]
             if (paragraph.isBlank() || paragraph.matches(AppPattern.notReadAloudRegex)) {
                 readAloudNumber += paragraph.length + 1 - paragraphStart
@@ -464,7 +480,8 @@ class TTSReadAloudService : BaseReadAloudService() {
                 }
             }
             // 段界换行计数
-            readAloudNumber += 1 - paragraphStartPos
+            // P1/B1-③：记账基准与切片基准保持一致（对齐生效时用 paragraphStart，非首段时为 0，与改造前等价）
+            readAloudNumber += 1 - paragraphStart
             paragraphStartPos = 0
             // 段间停顿（§1.8-F C10：逐段驱动下的插入位置）
             val pauseMs = AppConfig.ttsParagraphPauseMs

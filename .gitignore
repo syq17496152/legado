@@ -31,6 +31,7 @@ tools/legado-jvm/.gradle/
 
 # 临时目录和输出
 temp/
+.temp/
 output/
 .zcode/
 
@@ -131,6 +132,7 @@ scripts/publish_config.json
 !/ai_tests/scripts/l2_verify_fix_0906.py
 !/ai_tests/scripts/l2_verify_bugfix_0908.py
 !/ai_tests/scripts/l2_verify_replace_edit.py
+!/ai_tests/scripts/l2_verify_highlight_palette_scope.py
 # opencode 运行时产物
 .opencode/goals/
 /docs/specs/rss-image-decrypt-optimization/*.md
@@ -202,6 +204,7 @@ git_log.txt
 /.workbuddy
 !/ai_tests/scripts/l2_verify_fix_0911b.py
 !/ai_tests/scripts/l2_verify_free_layout.py
+!/ai_tests/scripts/l2_verify_p1_b1_batch.py
 /ai_tests/logs/*.png
 /logs/build_dialog_fix_apk.txt
 /logs/build_pkg_27_tail.txt

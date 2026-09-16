@@ -78,13 +78,14 @@ object CssStyleParser {
 
     /** CSS 六通道 → 项目 HighlightStyle 通道映射（B15 4.4.3） */
     fun CssStyle.toHighlightStyle(): HighlightStyle {
+        // D4：口径统一——所有 HighlightStyle 出口都经 sanitized()（本处为新建对象，无 NPE 风险）
         return HighlightStyle(
             textColor = color ?: 0,
             bold = isBold,
             italic = isItalic,
             underline = if (isUnderline) HighlightStyle.Underline(kind = HighlightStyle.Kind.SOLID) else null
             // fontSizeSp/fontFamily: 项目无字号/字体族通道，降级忽略
-        )
+        ).sanitized()
     }
 
     /**

@@ -85,6 +85,9 @@ class CodeView @JvmOverloads constructor(context: Context, attrs: AttributeSet? 
     }
 
     init {
+        // P1/B1-①：关闭 EmojiCompat（emoji2 由 appcompat 传递引入，会在文本变更时对整段 Editable
+        // 施加/替换 EmojiSpan → 触发整篇重新布局；规则脚本常达数千~数万字符，粘贴/输入会明显卡顿）
+        setEmojiCompatEnabled(false)
         if (mAutoCompleteTokenizer == null) {
             mAutoCompleteTokenizer = KeywordTokenizer()
         }

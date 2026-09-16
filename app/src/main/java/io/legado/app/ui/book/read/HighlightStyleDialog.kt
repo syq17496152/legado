@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import io.legado.app.R
 import io.legado.app.help.HighlightStyle
 import io.legado.app.help.HighlightStyle.Deco
+import io.legado.app.help.HighlightStyle.Shadow
 import io.legado.app.help.HighlightStyle.Underline
 import io.legado.app.ui.book.read.config.ReaderBottomSheetComposeDialogFragment
 import io.legado.app.ui.book.read.config.ReaderBottomSheetFrame
@@ -114,6 +115,10 @@ class HighlightStyleDialog : ReaderBottomSheetComposeDialogFragment() {
             HighlightActionMenu.HL_STRIKE -> s.copy(strike = Deco(color))
             HighlightActionMenu.HL_BOX -> s.copy(box = Deco(color))
             HighlightActionMenu.HL_EMPHASIS -> s.copy(emphasis = Deco(color))
+            // R1a：阴影通道取色（保留既有半径/偏移；无阴影时以默认值新建）
+            HighlightActionMenu.HL_SHADOW -> s.copy(
+                shadow = (s.shadow ?: Shadow(radius = 6f, dy = 2f)).copy(color = color)
+            )
             else -> s
         }
     }

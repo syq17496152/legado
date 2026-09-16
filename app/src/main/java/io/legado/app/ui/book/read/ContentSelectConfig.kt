@@ -20,6 +20,9 @@ object ContentSelectConfig {
     const val ACTION_GENERATE_IMAGE = "generate_image"
     const val ACTION_SHARE_IMAGE = "share_image"
 
+    /** B2.5：手动划线（高亮）动作 —— 此前整条链零可达，本次恢复入口 */
+    const val ACTION_HIGHLIGHT = "highlight"
+
     private val legacyDefaultActions = setOf(
         ACTION_REPLACE,
         ACTION_COPY,
@@ -43,6 +46,9 @@ object ContentSelectConfig {
 
     val defaultActions = setOf(
         ACTION_WEB_SEARCH,
+        // B2.5：新用户默认可见划线入口；**不动** legacyDefaultActions / defaultActionsBeforeShare
+        // （那两个集合参与"老用户偏好迁移"判定，改动会使迁移逻辑失效）
+        ACTION_HIGHLIGHT,
         ACTION_REPLACE,
         ACTION_COPY,
         ACTION_BOOKMARK,

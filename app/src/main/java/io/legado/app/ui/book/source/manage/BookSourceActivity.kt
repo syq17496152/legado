@@ -42,6 +42,7 @@ import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.data.AppDatabase
+import io.legado.app.data.dao.SourceBookCount
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.databinding.ActivityBookSourceBinding
@@ -103,6 +104,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -136,6 +138,8 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     private val showSourceHostState = mutableStateOf(false)
     private val sourceHostHeaders = mutableStateMapOf<String, String?>()
     private val debugMessagesState = mutableStateMapOf<String, String>()
+    // P1/B1-②：书源 → 引用书籍数（不参与排序，仅用于列表副标题展示）
+    private val bookCountsState = mutableStateMapOf<String, Int>()
     private val isCheckingState = mutableStateOf(Debug.isChecking)
     private val qrResult = registerForActivityResult(QrCodeResult()) {
         it ?: return@registerForActivityResult
@@ -175,6 +179,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         initComposeContent()
         upBookSource()
         initLiveDataGroup()
+        initBookCounts()
         resumeCheckSource()
         if (!LocalConfig.bookSourcesHelpVersionIsLast) {
             showHelp("SourceMBookHelp")
@@ -289,6 +294,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                         showSourceHost = showSourceHostState.value,
                         sourceHostHeaders = sourceHostHeaders,
                         debugMessages = debugMessagesState,
+                        bookCounts = bookCountsState,
                         isChecking = isCheckingState.value,
                         checkBannerText = checkBannerState.value,
                         onCancelCheck = ::cancelSourceCheck,
@@ -622,6 +628,51 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
 
     override fun onResume() {
         super.onResume()
+        // P1/B1-②：回到本页时主动刷新一次引用计数（覆盖"离开期间书籍被增删/换源"的场景；
+        // 不把 books 表纳入观察，避免阅读进度写入（每次翻页）触发聚合重算）
+        refreshBookCounts()
+    }
+
+    /**
+     * P1/B1-②：书源引用书籍数 —— 观察 `book_sources` 变化（书源增删改）+ 页面进入时主动拉一次。
+     * 计数仅回填 [bookCountsState]（不参与排序，避免整表重排）。
+     */
+    private fun initBookCounts() {
+        lifecycleScope.launch {
+            appDb.bookDao.flowBookCountByOrigin()
+                .flowWithLifecycleAndDatabaseChange(
+                    lifecycle,
+                    table = AppDatabase.BOOK_SOURCE_TABLE_NAME
+                )
+                .debounce(800)
+                .catch {
+                    AppLog.put("书源引用计数更新出错", it)
+                }
+                .flowOn(IO)
+                .collect { list ->
+                    applyBookCounts(list)
+                }
+        }
+        refreshBookCounts()
+    }
+
+    private fun refreshBookCounts() {
+        lifecycleScope.launch(IO) {
+            kotlin.runCatching {
+                appDb.bookDao.getBookCountByOrigin()
+            }.onSuccess { list ->
+                applyBookCounts(list)
+            }.onFailure {
+                AppLog.put("书源引用计数刷新出错", it)
+            }
+        }
+    }
+
+    private fun applyBookCounts(list: List<SourceBookCount>) {
+        val map = list.associate { it.bookSourceUrl to it.bookCount }
+        if (map == bookCountsState.toMap()) return
+        bookCountsState.clear()
+        bookCountsState.putAll(map)
     }
 
     override fun onPause() {

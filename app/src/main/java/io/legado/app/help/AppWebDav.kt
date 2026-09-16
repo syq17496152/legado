@@ -123,11 +123,18 @@ object AppWebDav {
     @Throws(WebDavException::class)
     suspend fun restoreWebDav(name: String) {
         authorization?.let {
-            val webDav = WebDav(rootWebDavUrl + name, it)
-            webDav.downloadTo(Backup.zipFilePath, true)
-            FileUtils.delete(Backup.backupPath)
-            ZipUtils.unZipToPath(File(Backup.zipFilePath), Backup.backupPath)
-            Restore.restoreLocked(Backup.backupPath)
+            // R9：下载落点 Backup.zipFilePath 与「清空工作目录 + 解压 + 落库」整体纳入跨流程共享锁，
+            // 避免 WebDAV 恢复过程中被并发备份（或另一条恢复）清空工作目录
+            Restore.restoreAll {
+                val webDav = WebDav(rootWebDavUrl + name, it)
+                webDav.downloadTo(Backup.zipFilePath, true)
+                kotlin.runCatching {
+                    FileUtils.delete(Backup.backupPath)
+                    ZipUtils.unZipToPath(File(Backup.zipFilePath), Backup.backupPath)
+                }.onFailure { e ->
+                    AppLog.put("复制解压文件出错\n${e.localizedMessage}", e)
+                }.isSuccess
+            }
         }
     }
 

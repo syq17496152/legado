@@ -20,7 +20,9 @@ object HighlightMatcher {
 
     /**
      * @param pageBase 本页起始的章内偏移(= chapter.getReadLength(page.index))
-     * @return 每行每列的合并样式;null = 该列无高亮
+     * @return 每行每列生效的样式;null = 该列无高亮
+     *
+     * R12.3：同区间多命中取**整体优先级**（后定义者整体胜出），不做逐通道合并。
      */
     fun resolve(
         pageBase: Int,
@@ -39,7 +41,11 @@ object HighlightMatcher {
                 for (r in ranges) {
                     // 半开区间相交: [colStart,colEnd) ∩ [r.start,r.end)
                     if (colStart < r.end && colEnd > r.start) {
-                        acc = HighlightStyle.merge(acc, r.style)
+                        // R12.3：同区间多命中采用「整体优先级」——**后定义者整体胜出**，
+                        // 禁止逐通道 merge 拼出「既非 A 也非 B」的第三条样式。
+                        // ranges 顺序即优先级：规则（先）→ 手动高亮/划线（后），故手动高亮不被规则夺权；
+                        // 同层内后者胜出（用户自建规则通常追加在内置规则之后）。
+                        acc = r.style
                     }
                 }
                 lineColors.add(acc)

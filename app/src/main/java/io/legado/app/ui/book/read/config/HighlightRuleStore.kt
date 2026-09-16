@@ -3,6 +3,7 @@ package io.legado.app.ui.book.read.config
 import android.content.Context
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
+import io.legado.app.help.HighlightPalette
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.getPrefBoolean
@@ -74,6 +75,17 @@ object HighlightRuleStore {
                     AppLog.put("高亮规则：版本升级推送新内置规则 ${toAdd.size} 条（仅追加缺失 id）")
                 }
             }
+            // R12.3(b)：已退役内置条目的**幂等**处置（未个性化移除 / 已个性化保留并标注「(已退役)」）。
+            // 不引入版本旗标：`isLastVersion` 是「读后即写回」语义，存在评估与执行非原子的机会丢失窗口
+            // （builtin-replace-id-fix 既有教训），本处置本身幂等且仅在**实际变更时**留痕，重复执行零副作用。
+            val retired = retireBuiltinRules(merged)
+            if (retired.changed) {
+                AppLog.put(
+                    "高亮规则：退役内置条目处置 移除${retired.removed} 标注${retired.renamed} " +
+                        "剩余${retired.rules.size}条"
+                )
+            }
+            merged = retired.rules
             val normalized = normalizeRules(merged, context)
             save(context, normalized)
             cachedRules = normalized
@@ -175,7 +187,66 @@ object HighlightRuleStore {
             .toList()
     }
 
-    private fun createDefaultRules(context: Context): List<HighlightRule> {
+    /**
+     * R12.4：内置规则 id → 语义色板槽位。
+     * 命中者颜色由 [HighlightPalette] 按**当前阅读器态**（白天/夜间/墨水屏）解析，
+     * 修复「默认规则在夜间不可见」；用户已自定义样式（`styleJson` 存在且不含槽位）时不受影响。
+     */
+    private val builtinPaletteSlots: Map<String, String> = mapOf(
+        "dialog_default" to HighlightPalette.Slot.DIALOGUE,
+        "dialogue_speaker_default" to HighlightPalette.Slot.DIALOGUE,
+        "dialogue_para_default" to HighlightPalette.Slot.DIALOGUE,
+        "dash_dialogue_default" to HighlightPalette.Slot.DASH_DIALOGUE,
+        "book_title_default" to HighlightPalette.Slot.BOOK_TITLE,
+        "bracket_note_default" to HighlightPalette.Slot.NOTE,
+        "title_emphasis_default" to HighlightPalette.Slot.TITLE_EMPHASIS,
+        "thought_default" to HighlightPalette.Slot.THOUGHT,
+        "narrator_default" to HighlightPalette.Slot.NARRATOR,
+        "emphasis_default" to HighlightPalette.Slot.EMPHASIS,
+        "poetry_default" to HighlightPalette.Slot.POETRY,
+        "ellipsis_default" to HighlightPalette.Slot.ELLIPSIS,
+        "number_default" to HighlightPalette.Slot.NUMBER,
+        "english_default" to HighlightPalette.Slot.ENGLISH,
+        "date_time_default" to HighlightPalette.Slot.DATE_TIME,
+        "system_panel_default" to HighlightPalette.Slot.SYSTEM_PANEL,
+        "onomatopoeia_default" to HighlightPalette.Slot.ONOMATOPOEIA,
+        "url_muted_default" to HighlightPalette.Slot.URL
+    )
+
+    /**
+     * 给内置规则挂上色板槽位（仅当：内置 id 命中槽位表 + 该规则尚无自定义 `styleJson` + 确实使用颜色通道）。
+     *
+     * - 新装/重置：`createDefaultRules()` 路径挂槽位；
+     * - 存量用户：`normalizeRules()` 路径挂槽位（未被个性化者）；
+     * - 已自定义样式（`styleJson` 非空）→ **尊重用户**，不挂色板、原样保留。
+     */
+    private fun attachPaletteSlot(rule: HighlightRule): HighlightRule {
+        val slot = builtinPaletteSlots[rule.id] ?: return rule
+        if (rule.styleJson != null) return rule
+        val style = rule.toHighlightStyle()
+        val usesColor = style.textColor != 0 || style.underline != null ||
+            style.strike != null || style.box != null || style.emphasis != null
+        if (!usesColor) return rule
+        return rule.copy(styleJson = GSON.toJson(style.copy(paletteSlot = slot)))
+    }
+
+    private fun createDefaultRules(context: Context): List<HighlightRule> = defaultRules(
+        dialogEnabled = context.getPrefBoolean(PreferKey.highlightRuleDialog, true),
+        bookTitleEnabled = context.getPrefBoolean(PreferKey.highlightRuleBookTitle, true),
+        bracketNoteEnabled = context.getPrefBoolean(PreferKey.highlightRuleBracketNote, true)
+    )
+
+    /**
+     * 内置规则集（**context-free** 版本，供 JVM 单测断言「无重复 pattern / 无重复语义色值」等 §9.5.1 门禁）。
+     *
+     * R12.3(b) 语义收敛结果：等价项合并（emphasis ⊃ markdown_bold）、宽窄版并集（4 条宽版并入主形态）、
+     * 语义包含项（括号标注 ⊃ 系统面板/心理活动/旁白）保留为**变体**（默认关闭，靠整体优先级裁决，不再并列争抢）。
+     */
+    internal fun defaultRules(
+        dialogEnabled: Boolean = true,
+        bookTitleEnabled: Boolean = true,
+        bracketNoteEnabled: Boolean = true,
+    ): List<HighlightRule> {
         return listOf(
             HighlightRule(
                 id = "dialog_default",
@@ -184,7 +255,7 @@ object HighlightRuleStore {
                 sampleText = "她轻声说：“今晚就出发。”",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
                 isRegex = true,
-                enabled = context.getPrefBoolean(PreferKey.highlightRuleDialog, true),
+                enabled = dialogEnabled,
                 textColor = 0xFFFF8C00.toInt()
             ),
             HighlightRule(
@@ -194,7 +265,7 @@ object HighlightRuleStore {
                 sampleText = "最近在重读《百年孤独》，节奏依然很稳。",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
                 isRegex = true,
-                enabled = context.getPrefBoolean(PreferKey.highlightRuleBookTitle, true),
+                enabled = bookTitleEnabled,
                 underlineMode = 3,
                 underlineWidth = 0.5f,
                 underlineColor = 0xFF63C37D.toInt()
@@ -206,7 +277,7 @@ object HighlightRuleStore {
                 sampleText = "他停了一下（像是忽然想起了什么）。",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
                 isRegex = true,
-                enabled = context.getPrefBoolean(PreferKey.highlightRuleBracketNote, true),
+                enabled = bracketNoteEnabled,
                 textColor = 0xFF8F959E.toInt(),
                 underlineMode = 2,
                 underlineWidth = 0.5f,
@@ -228,7 +299,9 @@ object HighlightRuleStore {
             HighlightRule(
                 id = "thought_default",
                 name = "心理活动",
-                pattern = "（[^）\n]{0,40}(?:心想|暗道|心道|想到|寻思着|琢磨|嘀咕)[^）\n]{0,40}）",
+                // R12.3(b)：宽窄版并集（原 thought_wide_default 关键词并入主形态，宽版 id 退役）——
+                // 「宽窄版不并列共存」：同一语义只保留一条规则，避免两规则抢同一区间
+                pattern = "（[^）\n]{0,60}(?:心想|暗道|心道|想到|寻思着|琢磨|嘀咕|想道|心里|思量|思忖|盘算)[^）\n]{0,60}）",
                 sampleText = "她心中一紧（暗道不对，这里一定有问题）。",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
                 isRegex = true,
@@ -241,7 +314,8 @@ object HighlightRuleStore {
             HighlightRule(
                 id = "narrator_default",
                 name = "旁白说明",
-                pattern = "(?:未完待续|待续|下文再表|按：?|注：?)[^\n]{0,40}|（(?:注|旁白|作者有话说)[:：][^）\n]{0,40}）",
+                // R12.3(b)：宽窄版并集（原 narrator_wide_default 分支并入，「不再赘述/省略」类同义）
+                pattern = "(?:未完待续|待续|下文再表|按：?|注：?)[^\n]{0,40}|（(?:注|旁白|作者有话说)[:：][^）\n]{0,40}）|（(?:以下[^\n]{0,20}省略)[^\n]{0,40}）|[^\n]{0,20}(?:不再赘述|不再多说)",
                 sampleText = "（注：此处时间线与前文同步）",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
                 isRegex = true,
@@ -263,7 +337,8 @@ object HighlightRuleStore {
             HighlightRule(
                 id = "poetry_default",
                 name = "诗词引用",
-                pattern = "(?m)^[\\p{IsHan}，。！？；：、]{5,24}$",
+                // R12.3(b)：宽窄版并集（原 poetry_wide_default 的「诗词题头」分支并入）
+                pattern = "(?m)^[\\p{IsHan}，。！？；：、]{5,24}$|[\\n][七五言绝句律诗词牌曲牌][^\\n]{0,60}[^\\n]{10,50}[^\\n]{0,20}[，。！？]",
                 sampleText = "床前明月光，\n疑是地上霜。",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
                 isRegex = true,
@@ -286,7 +361,8 @@ object HighlightRuleStore {
             HighlightRule(
                 id = "number_default",
                 name = "数字金额",
-                pattern = "(?:¥|￥)?\\d+(?:\\.\\d+)?(?:元|块|万|千|百|亿|%|％)|[零〇一二两三四五六七八九十百千万亿]+(?:元|块|万|千|百|亿)",
+                // R12.3(b)：宽窄版并集（原 number_wide_default 的「美元/英镑」并入）
+                pattern = "(?:¥|￥)?\\d+(?:\\.\\d+)?(?:元|块|万|千|百|亿|%|％)|[零〇一二两三四五六七八九十百千万亿]+(?:元|块|万|千|百|亿)|[0-9零一二三四五六七八九十百千万亿]+(?:美元|英镑)",
                 sampleText = "原价100元，现在只要50元。",
                 group = HighlightRuleGroupStore.DEFAULT_GROUP,
                 isRegex = true,
@@ -374,16 +450,8 @@ object HighlightRuleStore {
                 enabled = false,
                 textColor = 0xFFFF8A65.toInt()
             ),
-            HighlightRule(
-                id = "markdown_bold_default",
-                name = "Markdown 强调",
-                pattern = "\\*\\*[^\\n*]{1,40}\\*\\*",
-                sampleText = "这里有一段**重点内容**需要强调。",
-                group = HighlightRuleGroupStore.DEFAULT_GROUP,
-                isRegex = true,
-                enabled = false,
-                textColor = 0xFFBA68C8.toInt()
-            ),
+            // R12.3(b)：`markdown_bold_default` 已退役（其 `**…**` 被 emphasis_default 首分支完全包含，
+            // 两条「强调」属语义等价 → 合并为一条），存量条目由 retireBuiltinRules() 幂等处置。
             HighlightRule(
                 id = "url_muted_default",
                 name = "网址/邮箱弱化",
@@ -393,48 +461,12 @@ object HighlightRuleStore {
                 isRegex = true,
                 enabled = false,
                 textColor = 0xFF78909C.toInt()
-            ),
-            HighlightRule(
-                id = "thought_wide_default",
-                name = "心理活动（宽版）",
-                pattern = "（[^）\\n]{0,60}(?:想道|暗道|心道|心里|思量|思忖|盘算)[^）\\n]{0,60}）",
-                sampleText = "（他心里盘算着接下来的计划。）",
-                group = HighlightRuleGroupStore.DEFAULT_GROUP,
-                isRegex = true,
-                enabled = false,
-                textColor = 0xFF9575CD.toInt()
-            ),
-            HighlightRule(
-                id = "narrator_wide_default",
-                name = "旁白说明（宽版）",
-                pattern = "（(?:以下[^\\n]{0,20}省略|注[:：])[^\\n]{0,40}）|[^\\n]{0,20}(?:不再赘述|不再多说)",
-                sampleText = "（以下内容省略）",
-                group = HighlightRuleGroupStore.DEFAULT_GROUP,
-                isRegex = true,
-                enabled = false,
-                textColor = 0xFFA1887F.toInt()
-            ),
-            HighlightRule(
-                id = "number_wide_default",
-                name = "数字金额（宽版）",
-                pattern = "[0-9零一二三四五六七八九十百千万亿]+(?:元|块|美元|英镑)|[0-9]+[%％]",
-                sampleText = "这件东西价值三千元，涨价了 15%。",
-                group = HighlightRuleGroupStore.DEFAULT_GROUP,
-                isRegex = true,
-                enabled = false,
-                textColor = 0xFFFFD54F.toInt()
-            ),
-            HighlightRule(
-                id = "poetry_wide_default",
-                name = "诗词题头",
-                pattern = "[\\n]([七五言绝句律诗词牌曲牌][^\\n]{0,60}[^\\n]{10,50}[^\\n]{0,20}[，。！？])",
-                sampleText = "\n七言绝句·咏梅\n墙角数枝梅，凌寒独自开。\n",
-                group = HighlightRuleGroupStore.DEFAULT_GROUP,
-                isRegex = true,
-                enabled = false,
-                textColor = 0xFF80CBC4.toInt()
             )
-        )
+            // R12.3(b)：以下 4 条「宽版」规则已退役——关键词/分支已并入对应主形态的并集 pattern，
+            // 「宽窄版不并列共存」；存量条目由 retireBuiltinRules() 幂等处置（未个性化移除、已个性化保留并标注）：
+            //   thought_wide_default → thought_default ｜ narrator_wide_default → narrator_default
+            //   number_wide_default  → number_default  ｜ poetry_wide_default  → poetry_default
+        ).map { attachPaletteSlot(it) }
     }
 
     private fun normalizeRules(
@@ -450,30 +482,7 @@ object HighlightRuleStore {
                 // F3/2.5 演进覆盖：用户 pattern 命中历史版本登记值（未做个性化修改）→ 升级到新版内置 pattern
                 val patternIsLegacy =
                     legacyBuiltinPatterns[safeRule.id]?.contains(safeRule.pattern) == true
-                builtin.copy(
-                    enabled = safeRule.enabled,
-                    group = normalizedGroup,
-                    // R-1 修复：保留用户改过的 pattern/sampleText/name（仅当用户改过时）
-                    pattern = if (patternIsLegacy) {
-                        builtin.pattern
-                    } else {
-                        safeRule.pattern.takeIf { it != builtin.pattern } ?: builtin.pattern
-                    },
-                    sampleText = safeRule.sampleText.takeIf { it.isNotBlank() } ?: builtin.sampleText,
-                    name = safeRule.name.takeIf { it.isNotBlank() } ?: builtin.name,
-                    targetScope = normalizeTargetScope(safeRule.targetScope, builtin.targetScope),
-                    textColor = safeRule.textColor ?: builtin.textColor,
-                    underlineMode = safeRule.underlineMode.takeIf { it != 0 } ?: builtin.underlineMode,
-                    underlineColor = safeRule.underlineColor ?: builtin.underlineColor,
-                    underlineWidth = safeRule.underlineWidth.takeIf { it != 1f } ?: builtin.underlineWidth,
-                    underlineSvgPath = safeRule.underlineSvgPath ?: builtin.underlineSvgPath,
-                    bgImage = safeRule.bgImage ?: builtin.bgImage,
-                    bgImageFit = safeRule.bgImageFit.takeIf { it != 0 } ?: builtin.bgImageFit,
-                    bgImageScale = safeRule.bgImageScale.takeIf { it != 1f } ?: builtin.bgImageScale,
-                    // B15: 保留用户的捕获组模板与 dotAll
-                    replacement = safeRule.replacement.ifBlank { builtin.replacement },
-                    isDotAll = safeRule.isDotAll || builtin.isDotAll
-                )
+                healBuiltin(safeRule, builtin, patternIsLegacy, normalizedGroup)
             } else {
                 // F3/2.8：愈合跳过留痕——用户修改被保留时输出诊断（真机排查"改了内置正则却被还原"疑云）
                 if (builtin != null && safeRule.pattern != builtin.pattern) {
@@ -492,9 +501,52 @@ object HighlightRuleStore {
             // 简化说明：跳过 migrateBgImage（依赖 TextLine.copyBgImageToInternal）
             // 已知上限：旧数据背景图文件不迁移，升级后规则背景图可能丢失
             // 升级路径：fork 内实现 TextLine.copyBgImageToInternal 后补迁移链
-            base
+            // R12.4：存量用户的内置规则补挂语义色板槽位（已自定义 styleJson 者不动）
+            attachPaletteSlot(base)
         }
     }
+
+    /**
+     * R12.2：内置规则「愈合」合并（内置演进 vs 用户修改的裁决）。
+     *
+     * 关键修复：原实现用 `builtin.copy(...)` 时**未透传 `styleJson`**，导致命中愈合条件的用户自定义样式
+     * 被静默清空（表现为「改过的颜色/线型被还原」）。此处显式保留用户样式（`styleJson` 优先），
+     * 并补齐此前同样被丢弃的 `underlineOffset`。
+     *
+     * 抽为纯函数（不依赖 Context）以便单测锁定「愈合不丢用户样式」。
+     */
+    internal fun healBuiltin(
+        safeRule: HighlightRule,
+        builtin: HighlightRule,
+        patternIsLegacy: Boolean,
+        normalizedGroup: String,
+    ): HighlightRule = builtin.copy(
+        enabled = safeRule.enabled,
+        group = normalizedGroup,
+        // R-1 修复：保留用户改过的 pattern/sampleText/name（仅当用户改过时）
+        pattern = if (patternIsLegacy) {
+            builtin.pattern
+        } else {
+            safeRule.pattern.takeIf { it != builtin.pattern } ?: builtin.pattern
+        },
+        sampleText = safeRule.sampleText.takeIf { it.isNotBlank() } ?: builtin.sampleText,
+        name = safeRule.name.takeIf { it.isNotBlank() } ?: builtin.name,
+        targetScope = normalizeTargetScope(safeRule.targetScope, builtin.targetScope),
+        textColor = safeRule.textColor ?: builtin.textColor,
+        underlineMode = safeRule.underlineMode.takeIf { it != 0 } ?: builtin.underlineMode,
+        underlineColor = safeRule.underlineColor ?: builtin.underlineColor,
+        underlineWidth = safeRule.underlineWidth.takeIf { it != 1f } ?: builtin.underlineWidth,
+        underlineOffset = safeRule.underlineOffset.takeIf { it != 2f } ?: builtin.underlineOffset,
+        underlineSvgPath = safeRule.underlineSvgPath ?: builtin.underlineSvgPath,
+        bgImage = safeRule.bgImage ?: builtin.bgImage,
+        bgImageFit = safeRule.bgImageFit.takeIf { it != 0 } ?: builtin.bgImageFit,
+        bgImageScale = safeRule.bgImageScale.takeIf { it != 1f } ?: builtin.bgImageScale,
+        // R12.2：用户已保存的完整样式必须原样保留（此前缺失 → 静默清空）
+        styleJson = safeRule.styleJson ?: builtin.styleJson,
+        // B15: 保留用户的捕获组模板与 dotAll
+        replacement = safeRule.replacement.ifBlank { builtin.replacement },
+        isDotAll = safeRule.isDotAll || builtin.isDotAll
+    )
 
     fun sanitizeRule(
         rule: HighlightRule,
@@ -612,12 +664,9 @@ object HighlightRuleStore {
         "system_panel_default",
         "chapter_en_default",
         "onomatopoeia_default",
-        "markdown_bold_default",
-        "url_muted_default",
-        "thought_wide_default",
-        "narrator_wide_default",
-        "number_wide_default",
-        "poetry_wide_default"
+        "url_muted_default"
+        // R12.3(b)：markdown_bold_default / thought_wide_default / narrator_wide_default /
+        // number_wide_default / poetry_wide_default 已退役 → 移出 builtinIds（不再参与愈合）
     )
 
     /**
@@ -635,15 +684,117 @@ object HighlightRuleStore {
         "book_title_default" to setOf("《[^》\n]{1,80}》"),
         "bracket_note_default" to setOf("（[^）\n]{1,80}）|\\([^\\)\n]{1,80}\\)|【[^】\n]{1,80}】"),
         "title_emphasis_default" to setOf("(?m)^(第[0-9零一二三四五六七八九十百千两0123456789IVXLCDMivxlcdm]{1,12}[章节回卷部篇集幕]|序章|楔子|引子|终章|尾声|后记|番外)[^\n]{0,40}$"),
-        "thought_default" to setOf("（[^）]*?(想道|暗道|心道|心里|想着|思量|思忖|盘算|盘算着)[^）]*?）"),
-        "narrator_default" to setOf("（以下\\S{0,20}省略|省略\\S{0,20}内容|[^\n]{0,20}的情景不再赘述|[^\n]{0,20}的情况不再多说）"),
+        "thought_default" to setOf(
+            "（[^）]*?(想道|暗道|心道|心里|想着|思量|思忖|盘算|盘算着)[^）]*?）",
+            // R12.3(b)：收敛前的 v2 窄版（未个性化用户愈合到「宽窄并集」新 pattern）
+            "（[^）\\n]{0,40}(?:心想|暗道|心道|想到|寻思着|琢磨|嘀咕)[^）\\n]{0,40}）"
+        ),
+        "narrator_default" to setOf(
+            "（以下\\S{0,20}省略|省略\\S{0,20}内容|[^\n]{0,20}的情景不再赘述|[^\n]{0,20}的情况不再多说）",
+            // R12.3(b)：收敛前的 v2 窄版
+            "(?:未完待续|待续|下文再表|按：?|注：?)[^\n]{0,40}|（(?:注|旁白|作者有话说)[:：][^）\n]{0,40}）"
+        ),
         "emphasis_default" to setOf("[*！]{1,2}[^*\n]{1,50}[*！]{1,2}"),
-        "poetry_default" to setOf("[\n]([七五言绝句律诗词牌曲牌][^\n]{0,60}[^\n]{10,50}[^\n]{0,20}[，。！？])\n"),
+        "poetry_default" to setOf(
+            "[\n]([七五言绝句律诗词牌曲牌][^\n]{0,60}[^\n]{10,50}[^\n]{0,20}[，。！？])\n",
+            // R12.3(b)：收敛前的 v2 窄版
+            "(?m)^[\\p{IsHan}，。！？；：、]{5,24}$"
+        ),
         "ellipsis_default" to setOf("x{2,}|\\*{2,}|\\.{2,}"),
-        "number_default" to setOf("[0-9零一二三四五六七八九十百千万亿]+[元块美元英镑]|[0-9]+[%％]"),
+        "number_default" to setOf(
+            "[0-9零一二三四五六七八九十百千万亿]+[元块美元英镑]|[0-9]+[%％]",
+            // R12.3(b)：收敛前的 v2 窄版
+            "(?:¥|￥)?\\d+(?:\\.\\d+)?(?:元|块|万|千|百|亿|%|％)|[零〇一二两三四五六七八九十百千万亿]+(?:元|块|万|千|百|亿)"
+        ),
         "english_default" to setOf("[a-zA-Z]{2,}[a-zA-Z0-9'-]*"),
         "date_time_default" to setOf("[0-9零一二三四五六七八九十]+年[0-9零一二三四五六七八九十]+月[0-9零一二三四五六七八九十]*日?|[0-9]+点[0-9零一二三四五六七八九十]*分?")
     )
 
-    private val garbledMarkers = listOf("锛", "銆", "鈥", "瀵", "涔", "鏍", "鐪", "鏈", "绗")
+    // 乱码标记（GBK↔UTF-8 误解码特征字），以 \u 转义书写以避免源码文件出现乱码字面量
+    private val garbledMarkers = listOf(
+        "\u950B", "\u9286", "\u9225", "\u7035", "\u6D94",
+        "\u93CD", "\u942A", "\u93C8", "\u7ED7"
+    )
+
+    // ---------------- R12.3(b)：内置规则退役与存量孤儿处置 ----------------
+
+    /** 已退役标记（追加到保留条目的 name 上，使「列表看不见却仍生效」的孤条目变为可见） */
+    const val RETIRED_SUFFIX = "(已退役)"
+
+    /**
+     * **已退役内置 id 表**（id → 该 id 的全部历史 pattern 集合）。
+     *
+     * 退役原因（§9.5.1 语义收敛）：
+     * - `markdown_bold_default`：`**…**` 被 `emphasis_default` 首分支完全包含 → **等价合并**；
+     * - `thought_wide_default` / `narrator_wide_default` / `number_wide_default` / `poetry_wide_default`：
+     *   宽窄版不并列共存，关键词/分支已并入主形态并集 pattern → **合并退役**。
+     *
+     * 用途：判定「是否被个性化」——条目 pattern 命中本表（=用户持有内置原值）且无自定义样式 → 可安全移除；
+     * 否则保留（不清空用户数据）并标注 [RETIRED_SUFFIX]。
+     */
+    private val retiredBuiltinPatterns: Map<String, Set<String>> = mapOf(
+        "markdown_bold_default" to setOf("\\*\\*[^\\n*]{1,40}\\*\\*"),
+        "thought_wide_default" to setOf(
+            "（[^）\\n]{0,60}(?:想道|暗道|心道|心里|思量|思忖|盘算)[^）\\n]{0,60}）"
+        ),
+        "narrator_wide_default" to setOf(
+            "（(?:以下[^\\n]{0,20}省略|注[:：])[^\\n]{0,40}）|[^\\n]{0,20}(?:不再赘述|不再多说)"
+        ),
+        "number_wide_default" to setOf(
+            "[0-9零一二三四五六七八九十百千万亿]+(?:元|块|美元|英镑)|[0-9]+[%％]"
+        ),
+        "poetry_wide_default" to setOf(
+            "[\\n]([七五言绝句律诗词牌曲牌][^\\n]{0,60}[^\\n]{10,50}[^\\n]{0,20}[，。！？])"
+        )
+    )
+
+    /** 退役处置结果 */
+    internal data class RetireResult(
+        val rules: List<HighlightRule>,
+        /** 被移除的条目数（未个性化的退役条目） */
+        val removed: Int,
+        /** 被追加「(已退役)」标注的条目数（本次实际变更量） */
+        val renamed: Int,
+    ) {
+        val changed: Boolean get() = removed > 0 || renamed > 0
+    }
+
+    /**
+     * R12.3(b)：退役内置条目的**幂等**处置（纯函数，供 JVM 单测）。
+     *
+     * - 命中 [retiredBuiltinPatterns] 且**未被个性化**（pattern 为内置原值 + 无自定义 `styleJson`）→ **移除**；
+     * - 已个性化（改过 pattern 或存过样式）→ **保留**并标注 [RETIRED_SUFFIX]（用户数据不丢，且在列表中可见）；
+     * - 非退役 id → 原样返回。
+     *
+     * 幂等性：已移除者下次无此条目（no-op）；已标注者 name 已含标记 → 不重复追加（[RetireResult.renamed] 不再增长）。
+     */
+    internal fun retireBuiltinRules(
+        rules: List<HighlightRule>,
+        retiredPatterns: Map<String, Set<String>> = retiredBuiltinPatterns,
+    ): RetireResult {
+        if (retiredPatterns.isEmpty()) return RetireResult(rules, 0, 0)
+        val out = ArrayList<HighlightRule>(rules.size)
+        var removed = 0
+        var renamed = 0
+        for (rule in rules) {
+            val historical = retiredPatterns[rule.id]
+            if (historical == null) {
+                out.add(rule)
+                continue
+            }
+            val customized = rule.styleJson != null || rule.pattern !in historical
+            if (!customized) {
+                removed++
+                continue
+            }
+            val name = rule.name.orEmpty()
+            if (name.endsWith(RETIRED_SUFFIX)) {
+                out.add(rule)
+            } else {
+                renamed++
+                out.add(rule.copy(name = "$name$RETIRED_SUFFIX"))
+            }
+        }
+        return RetireResult(out, removed, renamed)
+    }
 }

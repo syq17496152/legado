@@ -1,9 +1,13 @@
 package io.legado.app.ui.highlight
 
+import android.graphics.Typeface
 import android.os.Bundle
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
+import android.text.style.StrikethroughSpan
+import android.text.style.StyleSpan
+import android.text.style.UnderlineSpan
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -39,7 +43,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -231,6 +237,30 @@ private fun HighlightRule.toPreviewAnnotatedString(): AnnotatedString {
                     spanned.getSpanStart(span),
                     spanned.getSpanEnd(span)
                 )
+            }
+            // R12.2：预览与实渲染同源后新增的装饰 Span 同步映射，避免「预览有下划线、面板不显示」的二次失真
+            spanned.getSpans(0, text.length, UnderlineSpan::class.java).forEach { span ->
+                addStyle(
+                    SpanStyle(textDecoration = TextDecoration.Underline),
+                    spanned.getSpanStart(span),
+                    spanned.getSpanEnd(span)
+                )
+            }
+            spanned.getSpans(0, text.length, StrikethroughSpan::class.java).forEach { span ->
+                addStyle(
+                    SpanStyle(textDecoration = TextDecoration.LineThrough),
+                    spanned.getSpanStart(span),
+                    spanned.getSpanEnd(span)
+                )
+            }
+            spanned.getSpans(0, text.length, StyleSpan::class.java).forEach { span ->
+                when (span.style) {
+                    Typeface.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
+                    Typeface.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
+                    else -> null
+                }?.let {
+                    addStyle(it, spanned.getSpanStart(span), spanned.getSpanEnd(span))
+                }
             }
         }
     }

@@ -44,6 +44,10 @@ object PreferKey {
     const val hideNavigationBar = "hideNavigationBar"
     const val precisionSearch = "precisionSearch"
     const val readAloudByPage = "readAloudByPage"
+    // P1/B1-③：段中触发朗读时对齐到句首（默认关，保持既有行为）
+    const val readAloudAlignSentenceStart = "readAloudAlignSentenceStart"
+    // P1/B1-③：首次朗读起点偏好 = 页首/段首（默认关 → 沿用"当前可见行"起点）
+    const val readAloudStartAtPageTop = "readAloudStartAtPageTop"
     const val ttsEngine = "appTtsEngine"
     const val ttsFollowSys = "ttsFollowSys"
     const val ttsSpeechRate = "ttsSpeechRate"
@@ -294,6 +298,8 @@ object PreferKey {
     const val highlightRuleCurrentGroup = "highlightRuleCurrentGroup"
     // T-B2: 覆盖安装一次性内置规则补齐标志（首次升级到 V2 时自动 MERGE 缺失 builtinIds）
     const val highlightRuleBuiltinMergedV2 = "highlightRuleBuiltinMergedV2"
+    // §9.5.6 高亮匹配性能治理：整章匹配总预算（毫秒，默认 300，可在「其他设置」调整）
+    const val highlightMatchBudgetMs = "highlightMatchBudgetMs"
 
     // F-P1-8 书源/订阅源文件夹视图模式（0=列表视图, 1=文件夹视图）—— 已废弃，保留兼容
     // （theme-rss-header-layout-sync F4: 原 rssViewMode 0 引用已删除；sourceViewMode 仍被

@@ -299,7 +299,10 @@ class ContentSelectMenuConfigDialog : ComposeDialogFragment() {
             ActionItem(ContentSelectConfig.ACTION_DICT, R.string.dict),
             ActionItem(ContentSelectConfig.ACTION_ASK_AI, R.string.ask_ai),
             ActionItem(ContentSelectConfig.ACTION_GENERATE_IMAGE, R.string.ai_image_generate),
-            ActionItem(ContentSelectConfig.ACTION_SHARE_IMAGE, R.string.share)
+            ActionItem(ContentSelectConfig.ACTION_SHARE_IMAGE, R.string.share),
+            // B2.5：划线动作必须登记在这里（`sanitizeActionIds` 的白名单由本列表派生），
+            // 否则用户在配置页保存一次后该动作会被静默剔除、菜单里消失
+            ActionItem(ContentSelectConfig.ACTION_HIGHLIGHT, R.string.highlight)
         )
         private val knownActionIds = actionItems.map { it.id }.toSet()
 

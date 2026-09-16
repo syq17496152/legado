@@ -14,6 +14,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.BookHighlight
 import io.legado.app.data.entities.Bookmark
 import io.legado.app.data.entities.DictRule
 import io.legado.app.data.entities.HttpTTS
@@ -54,8 +55,7 @@ import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import java.io.File
@@ -66,39 +66,65 @@ import java.io.FileInputStream
  */
 object Restore {
 
-    private val mutex = Mutex()
-
     private const val TAG = "Restore"
 
+    /**
+     * 恢复（本地文件）。
+     * R9：把「清空工作目录 + 解压」与「落库」整体纳入跨流程共享锁，
+     * 避免恢复过程中被并发备份（或另一条恢复）清空工作目录。
+     */
     suspend fun restore(context: Context, uri: Uri) {
         LogUtils.d(TAG, "开始恢复备份 uri:$uri")
-        kotlin.runCatching {
-            FileUtils.delete(Backup.backupPath)
-            if (uri.isContentScheme()) {
-                DocumentFile.fromSingleUri(context, uri)!!.openInputStream()!!.use {
-                    ZipUtils.unZipToPath(it, Backup.backupPath)
+        restoreAll {
+            kotlin.runCatching {
+                FileUtils.delete(Backup.backupPath)
+                if (uri.isContentScheme()) {
+                    DocumentFile.fromSingleUri(context, uri)!!.openInputStream()!!.use {
+                        ZipUtils.unZipToPath(it, Backup.backupPath)
+                    }
+                } else {
+                    ZipUtils.unZipToPath(File(uri.path!!), Backup.backupPath)
                 }
-            } else {
-                ZipUtils.unZipToPath(File(uri.path!!), Backup.backupPath)
-            }
-        }.onFailure {
-            AppLog.put("复制解压文件出错\n${it.localizedMessage}", it)
-            return
-        }
-        kotlin.runCatching {
-            restoreLocked(Backup.backupPath)
-            LocalConfig.lastBackup = System.currentTimeMillis()
-        }.onFailure {
-            appCtx.toastOnUi("恢复备份出错\n${it.localizedMessage}")
-            AppLog.put("恢复备份出错\n${it.localizedMessage}", it)
+            }.onFailure {
+                AppLog.put("复制解压文件出错\n${it.localizedMessage}", it)
+            }.isSuccess
         }
     }
 
-    suspend fun restoreLocked(path: String) {
-        mutex.withLock {
-            restore(path)
+    /**
+     * 恢复全流程入口（R9）：准备阶段与落库同处一个临界区。
+     *
+     * 云存储 / WebDAV / 本地文件三条恢复入口统一走此入口，保证「清空+解压+落库」全过程互斥。
+     *
+     * @param prepare 准备阶段（清理工作目录 + 解压/下载落盘）；返回 false 表示准备失败，不再落库
+     */
+    suspend fun restoreAll(prepare: suspend () -> Boolean) {
+        BackupRestoreLock.withStorageLock {
+            if (!prepare()) return@withStorageLock
+            kotlin.runCatching {
+                restoreUnlocked(Backup.backupPath)
+                LocalConfig.lastBackup = System.currentTimeMillis()
+            }.onFailure {
+                appCtx.toastOnUi("恢复备份出错\n${it.localizedMessage}")
+                AppLog.put("恢复备份出错\n${it.localizedMessage}", it)
+            }
         }
     }
+
+    /**
+     * 工作目录已就绪时的落库入口（对外唯一加锁入口）。
+     * 注意：临界区内禁止再调用本方法（`Mutex` 不可重入）。
+     */
+    suspend fun restoreLocked(path: String) {
+        BackupRestoreLock.withStorageLock {
+            restoreUnlocked(path)
+        }
+    }
+
+    /**
+     * 未加锁的落库实现：仅供 [restoreAll] / [restoreLocked] 在持有共享锁时调用。
+     */
+    private suspend fun restoreUnlocked(path: String) = restore(path)
 
     private suspend fun restore(path: String) {
         val aes = BackupAES()
@@ -130,6 +156,10 @@ object Restore {
         }
         fileToListT<Bookmark>(path, "bookmark.json")?.let {
             withContext(IO) { appDb.bookmarkDao.insert(*it.toTypedArray()) }
+        }
+        // B2.5：手动划线导入（insert 为 REPLACE → 幂等，重复恢复不会产生重复记录）
+        fileToListT<BookHighlight>(path, "highlights.json")?.let {
+            withContext(IO) { appDb.bookHighlightDao.insert(*it.toTypedArray()) }
         }
         fileToListT<BookGroup>(path, "bookGroup.json")?.let {
             withContext(IO) { appDb.bookGroupDao.insert(*it.toTypedArray()) }

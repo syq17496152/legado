@@ -61,6 +61,12 @@
         android:title="@string/highlight_rule_manage"
         app:showAsAction="never" />
 
+    <!-- B2.5：清除本章划线（手动划线的删除入口） -->
+    <item
+        android:id="@+id/menu_clear_chapter_highlights"
+        android:title="@string/highlight_clear_chapter"
+        app:showAsAction="never" />
+
     <item
         android:id="@+id/menu_edit_content"
         android:title="@string/edit_content"

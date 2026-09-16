@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -18,7 +19,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
@@ -32,14 +38,15 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
-import com.jaredrummler.android.colorpicker.ColorPickerDialog
-import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import io.legado.app.R
 import io.legado.app.data.entities.BookHighlight
 import io.legado.app.help.HighlightColors
+import io.legado.app.help.HighlightGeometry
 import io.legado.app.help.HighlightStyle
 import io.legado.app.model.ReadBook
+import io.legado.app.ui.book.read.HighlightActionMenu
 import io.legado.app.ui.book.read.HighlightStyleDialog
+import io.legado.app.ui.widget.components.ColorPickerSheet
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleStore
 import io.legado.app.ui.font.FontSelectDialog
@@ -78,15 +85,13 @@ import io.legado.app.ui.theme.bodySecondary
  * - 保存链路不变：isValidRule → HighlightRuleStore.save → ReadBook.upHighlightRules() →
  *   「批量」来源划线删除 → HighlightRuleActivity.refreshList() → dismiss
  *
- * 已知上限（阻塞点1，短期保留）：取色仍用第三方 ColorPickerDialog 并强制 R.style.AppTheme_Light 亮色；
- * 升级路径：替换为 Compose 自绘色板（复用 HighlightColors 预设通道 + rememberAppDialogStyle 动态色）。
+ * R1a：取色已改用 Compose 版 `ColorPickerSheet`（统一取色入口，支持半透明与项目色板预设），
+ * 不再使用第三方 ColorPickerDialog —— 其"强制亮色主题"的已知上限随之解除。
  */
 class HighlightRuleEditDialog : ComposeDialogFragment(),
-    FontSelectDialog.CallBack,
-    ColorPickerDialogListener {
+    FontSelectDialog.CallBack {
 
     companion object {
-        private const val COLOR_PICKER_TAG = "highlight-rule-color-picker"
 
         /**
          * 新建规则(预填 pattern/isRegex/style)。
@@ -124,38 +129,25 @@ class HighlightRuleEditDialog : ComposeDialogFragment(),
         )
 
         fun colorPickerConfig(dialogId: Int, initial: Int, withAlpha: Boolean): ColorPickerConfig {
-            val seed = if (initial != 0) initial else HighlightColors.bg.first()
+            // D1 修复：墨水屏态下 bg/text 预设可为**空数组**——原 `HighlightColors.bg.first()`
+            // 会抛 NoSuchElementException（取色即崩）；此处同时为非空预设做兜底
+            val bgPresets = HighlightColors.bg
+            val textPresets = HighlightColors.text
+            val presets = if (withAlpha) {
+                if (bgPresets.isEmpty()) textPresets else bgPresets
+            } else {
+                if (textPresets.isEmpty()) bgPresets else textPresets
+            }
+            val seed = if (initial != 0) initial else presets.firstOrNull() ?: 0
             return ColorPickerConfig(
                 dialogId = dialogId,
                 color = seed,
                 withAlpha = withAlpha,
-                presets = if (withAlpha) HighlightColors.bg else HighlightColors.text
+                presets = presets
             )
         }
 
-        fun bindColorPickerListener(
-            dialog: ColorPickerDialog,
-            listener: ColorPickerDialogListener
-        ): ColorPickerDialog = dialog.also { it.setColorPickerDialogListener(listener) }
-
-        // 已知上限/compat：ColorPickerDialog 强制亮色主题是为避免暗色下预设色块全白（Issue-2 根因），保留现状
-        fun createColorPickerDialog(
-            dialogId: Int,
-            initial: Int,
-            withAlpha: Boolean,
-            listener: ColorPickerDialogListener
-        ): ColorPickerDialog {
-            val config = colorPickerConfig(dialogId, initial, withAlpha)
-            val dialog = ColorPickerDialog.newBuilder()
-                .setColor(config.color)
-                .setShowAlphaSlider(config.withAlpha)
-                .setDialogType(ColorPickerDialog.TYPE_PRESETS)
-                .setPresets(config.presets)
-                .setDialogId(config.dialogId)
-                .create()
-            dialog.setStyle(androidx.fragment.app.DialogFragment.STYLE_NO_FRAME, R.style.AppTheme_Light)
-            return bindColorPickerListener(dialog, listener)
-        }
+        // R1a：第三方取色器创建/绑定入口已移除（改用 Compose `ColorPickerSheet`）
     }
 
     override val dialogHeight: Int = ViewGroup.LayoutParams.MATCH_PARENT
@@ -170,19 +162,21 @@ class HighlightRuleEditDialog : ComposeDialogFragment(),
     private var dotAll by mutableStateOf(false)
     private var editingStyle by mutableStateOf(HighlightStyle())
 
+    /** R1a：Compose 版取色面板状态（null = 未打开）；替换第三方 `ColorPickerDialog` */
+    private var pickerConfig by mutableStateOf<ColorPickerConfig?>(null)
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        childFragmentManager.findFragmentByTag(COLOR_PICKER_TAG)
-            ?.let { it as? ColorPickerDialog }
-            ?.setColorPickerDialogListener(this)
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 LegadoTheme {
                     EditDialogContent()
+                    // R1a：统一取色入口（Compose 版 ColorPickerSheet），与弹框并列于同一 Compose 树
+                    HighlightColorPickerHost()
                 }
             }
         }
@@ -266,10 +260,15 @@ class HighlightRuleEditDialog : ComposeDialogFragment(),
         )
     }
 
-    /** 预览（AD-04）：SpanStyle 等价渲染 fill/textColor/bold/italic/underline/strike，保留原局限。 */
+    /** 预览：SpanStyle 等价渲染 字色/粗斜体/下划线/删除线/阴影；R1a 起背景形状由 `drawBehind`
+     * 自绘（复用 [HighlightGeometry.fillBand]，与阅读页同一几何），矩形仍用 `SpanStyle.background`。 */
     @Composable
     private fun StylePreviewBlock(target: HighlightStyle, dialogStyle: AppDialogStyle) {
         val sampleText = "预览文字 Preview"
+        val shape = target.resolvedFillShape
+        val fill = target.fill
+        val drawShape = fill != 0 && shape != HighlightStyle.FillShape.RECTANGLE
+        val shadowStyle = target.shadow?.normalized()
         val annotated = buildAnnotatedString {
             withStyle(
                 SpanStyle(
@@ -279,8 +278,8 @@ class HighlightRuleEditDialog : ComposeDialogFragment(),
                     } else {
                         Color.Unspecified
                     },
-                    background = if (target.fill != 0) {
-                        Color(target.fill)
+                    background = if (fill != 0 && !drawShape) {
+                        Color(fill)
                     } else {
                         Color.Unspecified
                     },
@@ -292,6 +291,14 @@ class HighlightRuleEditDialog : ComposeDialogFragment(),
                         target.underline != null -> TextDecoration.Underline
                         target.strike != null -> TextDecoration.LineThrough
                         else -> TextDecoration.None
+                    },
+                    // R1a：文字阴影（color == 0 时预览取黑，面板底色较浅）
+                    shadow = shadowStyle?.let {
+                        Shadow(
+                            color = Color(if (it.color != 0) it.color else 0xFF000000.toInt()),
+                            offset = Offset(it.dx, it.dy),
+                            blurRadius = it.radius
+                        )
                     }
                 )
             ) { append(sampleText) }
@@ -303,8 +310,84 @@ class HighlightRuleEditDialog : ComposeDialogFragment(),
             cornerRadius = dialogStyle.panelRadius,
             insidePadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
         ) {
-            Text(text = annotated, fontSize = MaterialTheme.typography.bodySecondary.fontSize, color = dialogStyle.primaryText)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (drawShape) {
+                            Modifier.drawBehind {
+                                // 与阅读页同一几何（HighlightGeometry.fillBand），以文本块高度为"行"
+                                val band = HighlightGeometry.fillBand(
+                                    baseline = size.height * 0.8f,
+                                    textSize = size.height * 0.62f,
+                                    height = size.height,
+                                    shape = shape
+                                )
+                                val h = (band.bottom - band.top).coerceAtLeast(0f)
+                                if (h > 0f) {
+                                    val topLeft = Offset(0f, band.top)
+                                    val sz = Size(size.width, h)
+                                    when (shape) {
+                                        HighlightStyle.FillShape.ROUNDED -> drawRoundRect(
+                                            color = Color(fill),
+                                            topLeft = topLeft,
+                                            size = sz,
+                                            cornerRadius = CornerRadius(3.dp.toPx())
+                                        )
+
+                                        HighlightStyle.FillShape.PILL -> drawRoundRect(
+                                            color = Color(fill),
+                                            topLeft = topLeft,
+                                            size = sz,
+                                            cornerRadius = CornerRadius(h / 2f)
+                                        )
+
+                                        else -> drawRect(color = Color(fill), topLeft = topLeft, size = sz)
+                                    }
+                                }
+                            }
+                        } else {
+                            Modifier
+                        }
+                    )
+            ) {
+                Text(
+                    text = annotated,
+                    fontSize = MaterialTheme.typography.bodySecondary.fontSize,
+                    color = dialogStyle.primaryText
+                )
+            }
         }
+    }
+
+    /** R1a：取色面板宿主（Compose 版 `ColorPickerSheet`；未打开时不渲染任何内容） */
+    @Composable
+    private fun HighlightColorPickerHost() {
+        pickerConfig?.let { cfg ->
+            ColorPickerSheet(
+                title = stringResource(channelTitleRes(cfg.dialogId)),
+                initialColor = cfg.color,
+                withAlpha = cfg.withAlpha,
+                presets = cfg.presets,
+                onConfirm = { color ->
+                    editingStyle =
+                        HighlightStyleDialog.applyChannelColor(editingStyle, cfg.dialogId, color)
+                    pickerConfig = null
+                },
+                onDismiss = { pickerConfig = null }
+            )
+        }
+    }
+
+    /** R1a：取色面板标题（按通道 dialogId 取对应通道名） */
+    private fun channelTitleRes(dialogId: Int): Int = when (dialogId) {
+        HighlightActionMenu.HL_FILL -> R.string.highlight_bg_color
+        HighlightActionMenu.HL_TEXT -> R.string.highlight_text_color
+        HighlightActionMenu.HL_UNDERLINE -> R.string.highlight_underline
+        HighlightActionMenu.HL_STRIKE -> R.string.highlight_strike
+        HighlightActionMenu.HL_BOX -> R.string.highlight_box
+        HighlightActionMenu.HL_SHADOW -> R.string.highlight_shadow
+        else -> R.string.highlight_emphasis
     }
 
     /** 加载规则（edit(id)）或入参（create）到 Compose 状态。 */
@@ -395,12 +478,8 @@ class HighlightRuleEditDialog : ComposeDialogFragment(),
     }
 
     private fun pickColor(dialogId: Int, initial: Int, withAlpha: Boolean) {
-        createColorPickerDialog(
-            dialogId = dialogId,
-            initial = initial,
-            withAlpha = withAlpha,
-            listener = this@HighlightRuleEditDialog
-        ).show(childFragmentManager, COLOR_PICKER_TAG)
+        // R1a：打开 Compose 版取色面板（由 `HighlightColorPickerHost` 渲染）
+        pickerConfig = colorPickerConfig(dialogId, initial, withAlpha)
     }
 
     private fun pickFont(current: String) {
@@ -414,12 +493,7 @@ class HighlightRuleEditDialog : ComposeDialogFragment(),
         editingStyle = editingStyle.copy(fontPath = path)
     }
 
-    // --- ColorPickerDialogListener ---
-    override fun onColorSelected(dialogId: Int, color: Int) {
-        editingStyle = HighlightStyleDialog.applyChannelColor(editingStyle, dialogId, color)
-    }
-
-    override fun onDialogDismissed(dialogId: Int) {}
+    // R1a：取色回调已并入 `HighlightColorPickerHost`（Compose `ColorPickerSheet.onConfirm`）
 
     /** 字体路径转可读名（content uri 解码后取末段文件名）；空=默认 */
     private fun fontDisplayName(path: String): String {

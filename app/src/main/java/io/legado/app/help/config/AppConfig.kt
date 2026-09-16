@@ -2974,6 +2974,30 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(PreferKey.ttsTimerMode, value)
         }
 
+    /** P1/B1-③：段中触发朗读时是否对齐到本句句首（默认关 → 与改造前行为一致） */
+    var readAloudAlignSentenceStart: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.readAloudAlignSentenceStart, false)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.readAloudAlignSentenceStart, value)
+        }
+
+    /** P1/B1-③：首次朗读起点是否固定为页首/段首（默认关 → 沿用"当前可见行"起点） */
+    var readAloudStartAtPageTop: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.readAloudStartAtPageTop, false)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.readAloudStartAtPageTop, value)
+        }
+
+    /**
+     * §9.5.6 高亮规则**整章匹配总预算**（毫秒，默认 300）。
+     * 超预算即降级（停剩余规则 + 复用上次结果 / 本页暂不高亮），取代此前「逐规则 3s 累加」的最坏 72s 卡顿。
+     */
+    var highlightMatchBudgetMs: Int
+        get() = appCtx.getPrefInt(PreferKey.highlightMatchBudgetMs, 300).coerceIn(50, 5000)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.highlightMatchBudgetMs, value.coerceIn(50, 5000))
+        }
+
     var ttsTimerChapters: Int
         get() = appCtx.getPrefInt(PreferKey.ttsTimerChapters, 3)
         set(value) {

@@ -203,7 +203,7 @@ class HttpReadAloudService : BaseReadAloudService(),
             if (index < nowSpeak) continue
             var text = contentList[index]
             if (paragraphStartPos > 0 && index == nowSpeak) {
-                text = text.substring(paragraphStartPos)
+                text = text.substring(sentenceAlignedStart(text, paragraphStartPos))
             }
             val fileName = md5SpeakFileName(text)
             val speakText = text.replace(AppPattern.notReadAloudRegex, "")
@@ -305,7 +305,7 @@ class HttpReadAloudService : BaseReadAloudService(),
                     if (index < nowSpeak) return@forEachIndexed
                     var text = content
                     if (paragraphStartPos > 0 && index == nowSpeak) {
-                        text = text.substring(paragraphStartPos)
+                        text = text.substring(sentenceAlignedStart(text, paragraphStartPos))
                     }
                     val speakText = text.replace(AppPattern.notReadAloudRegex, "")
                     if (speakText.isEmpty()) {

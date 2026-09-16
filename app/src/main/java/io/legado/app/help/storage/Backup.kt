@@ -45,8 +45,7 @@ import io.legado.app.utils.writeToOutputStream
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import java.io.File
@@ -98,8 +97,6 @@ object Backup {
 
     private const val TAG = "Backup"
 
-    private val mutex = Mutex()
-
     private val backupFileNames by lazy {
         arrayOf(
             "bookshelf.json",
@@ -109,6 +106,8 @@ object Backup {
             "rssSources.json",
             "rssStar.json",
             "replaceRule.json",
+            // B2.5：手动划线（与 BackupSelectorConfig 条目、导出分支同名同文件）
+            "highlights.json",
             HighlightRuleStore.backupFileName,
             "readRecord.json",
             "readRecordDetail.json",
@@ -382,7 +381,8 @@ object Backup {
     fun autoBack(context: Context) {
         if (shouldBackup()) {
             Coroutine.async {
-                mutex.withLock {
+                // R9：与恢复共用跨流程共享锁，避免定时备份与恢复并发清空工作目录
+                BackupRestoreLock.withStorageLock {
                     if (shouldBackup()) {
                         val backupZipFileName = getNowZipFileName()
                         if (!AppCloudStorage.hasBackup(backupZipFileName)) {
@@ -404,7 +404,8 @@ object Backup {
         uploadCloud: Boolean = true,
         uploadWebDavFallback: Boolean = false
     ) {
-        mutex.withLock {
+        // R9：与恢复共用跨流程共享锁；临界区内禁止再调 backupLocked/restoreLocked（不可重入）
+        BackupRestoreLock.withStorageLock {
             withContext(IO) {
                 backup(context, path, uploadCloud, uploadWebDavFallback)
                 // 诊断埋点（2026-09-15 日志盲区审计 P1）：备份成功完成原只进 logcat（LogUtils.d），
@@ -477,6 +478,10 @@ object Backup {
         }
         if (selectedFiles.contains("ttsCastingTemplates.json")) {
             writeListToJson(appDb.ttsCastingTemplateDao.all(), "ttsCastingTemplates.json", backupPath)
+        }
+        // B2.5：手动划线纳入备份（此前不在备份范围 → 换机/重装即丢且无法重建）
+        if (selectedFiles.contains("highlights.json")) {
+            writeListToJson(appDb.bookHighlightDao.all, "highlights.json", backupPath)
         }
         if (selectedFiles.contains("keyboardAssists.json")) {
             writeListToJson(appDb.keyboardAssistsDao.all, "keyboardAssists.json", backupPath)

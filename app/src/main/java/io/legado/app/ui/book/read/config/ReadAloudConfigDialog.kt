@@ -116,6 +116,9 @@ enum class ReadAloudConfigGroup(
         "\u6717\u8bfb",
         setOf(
             PreferKey.readAloudByPage,
+            // P1/B1-③：段中触发对齐句首 / 首次起点偏好
+            PreferKey.readAloudAlignSentenceStart,
+            PreferKey.readAloudStartAtPageTop,
             PreferKey.streamReadAloudAudio,
             PreferKey.ttsFollowSys,
             PreferKey.ttsSpeechRate
@@ -403,6 +406,20 @@ class ReadAloudConfigDialog() : ComposeDialogFragment(),
                 key = PreferKey.readAloudByPage,
                 title = getString(R.string.read_aloud_by_page),
                 summary = getString(R.string.read_aloud_by_page_summary),
+                defaultValue = false
+            ),
+            // P1/B1-③：段中触发对齐句首（默认关 → 与改造前行为一致）
+            switch(
+                key = PreferKey.readAloudAlignSentenceStart,
+                title = getString(R.string.read_aloud_align_sentence),
+                summary = getString(R.string.read_aloud_align_sentence_summary),
+                defaultValue = false
+            ),
+            // P1/B1-③：首次朗读起点 = 页首/段首（默认关 → 沿用"当前可见行"起点）
+            switch(
+                key = PreferKey.readAloudStartAtPageTop,
+                title = getString(R.string.read_aloud_start_at_page_top),
+                summary = getString(R.string.read_aloud_start_at_page_top_summary),
                 defaultValue = false
             ),
             switch(

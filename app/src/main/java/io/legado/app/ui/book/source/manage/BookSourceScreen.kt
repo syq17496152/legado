@@ -50,6 +50,8 @@ internal fun BookSourceScreen(
     showSourceHost: Boolean,
     sourceHostHeaders: Map<String, String?>,
     debugMessages: Map<String, String>,
+    // P1/B1-②：书源 → 引用书籍数（副标题在校验消息为空时展示；不参与排序）
+    bookCounts: Map<String, Int> = emptyMap(),
     isChecking: Boolean,
     // 批D：校验进度横幅（原 Snackbar 承载，改 Compose 状态驱动）
     checkBannerText: String? = null,
@@ -98,12 +100,16 @@ internal fun BookSourceScreen(
     @Composable
     fun itemRow(source: BookSourcePart, dragHandle: (@Composable () -> Unit)? = null) {
         val message = debugMessages[source.bookSourceUrl].orEmpty()
+        // P1/B1-②：校验消息优先；空位显示"引用书籍 N 本"
+        val subtitle = message.ifBlank {
+            stringResource(R.string.source_book_count, bookCounts[source.bookSourceUrl] ?: 0)
+        }
         BookSourceItemRow(
             title = source.getDisPlayNameGroup(),
             enabled = source.enabled,
             hasExploreUrl = source.hasExploreUrl,
             enabledExplore = source.enabledExplore,
-            debugMessage = message,
+            debugMessage = subtitle,
             debugInProgress = message.isNotBlank() &&
                 isChecking &&
                 !message.contains(FINAL_DEBUG_MESSAGE_REGEX),

@@ -9,6 +9,7 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.book.CacheCloudIndex
 import io.legado.app.help.book.CacheCloudIndexStore
 import io.legado.app.help.config.AppConfig
+import io.legado.app.constant.AppLog
 import io.legado.app.help.storage.Backup
 import io.legado.app.help.storage.Restore
 import io.legado.app.lib.cloud.CloudStorageBackend
@@ -87,15 +88,22 @@ object AppCloudStorage {
     }
 
     suspend fun restore(name: String) {
-        val location = findBackupLocation(name)
-        if (location != null && type == CloudStorageType.S3) {
-            s3Backend.downloadTo(location.containerId, name, File(Backup.zipFilePath), true)
-        } else {
-            storage(S3ContainerScope.MAIN_BACKUP).downloadTo(name, File(Backup.zipFilePath), true)
+        // R9：下载落点 Backup.zipFilePath 与「清空工作目录 + 解压 + 落库」整体纳入跨流程共享锁，
+        // 避免云恢复过程中被并发备份（或另一条恢复）清空工作目录
+        Restore.restoreAll {
+            val location = findBackupLocation(name)
+            if (location != null && type == CloudStorageType.S3) {
+                s3Backend.downloadTo(location.containerId, name, File(Backup.zipFilePath), true)
+            } else {
+                storage(S3ContainerScope.MAIN_BACKUP).downloadTo(name, File(Backup.zipFilePath), true)
+            }
+            kotlin.runCatching {
+                FileUtils.delete(Backup.backupPath)
+                ZipUtils.unZipToPath(File(Backup.zipFilePath), Backup.backupPath)
+            }.onFailure {
+                AppLog.put("复制解压文件出错\n${it.localizedMessage}", it)
+            }.isSuccess
         }
-        FileUtils.delete(Backup.backupPath)
-        ZipUtils.unZipToPath(File(Backup.zipFilePath), Backup.backupPath)
-        Restore.restoreLocked(Backup.backupPath)
     }
 
     suspend fun hasBackup(name: String): Boolean {

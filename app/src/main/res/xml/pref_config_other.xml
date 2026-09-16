@@ -246,6 +246,12 @@
             android:title="@string/image_load_concurrency"
             app:iconSpaceReserved="false" />
 
+        <io.legado.app.lib.prefs.Preference
+            android:key="highlightMatchBudgetMs"
+            android:summary="@string/highlight_match_budget_summary"
+            android:title="@string/highlight_match_budget"
+            app:iconSpaceReserved="false" />
+
         <io.legado.app.lib.prefs.SwitchPreference
             android:defaultValue="true"
             android:key="process_text"

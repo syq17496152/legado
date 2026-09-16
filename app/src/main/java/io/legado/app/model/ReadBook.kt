@@ -34,6 +34,7 @@ import io.legado.app.model.localBook.TextFile
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.BaseReadAloudService
 import io.legado.app.service.CacheBookService
+import io.legado.app.service.SpeechFollowState
 import io.legado.app.ui.about.ReadRecordWidgetStore
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleStore
@@ -101,9 +102,6 @@ object ReadBook : CoroutineScope by MainScope() {
     private val curChapterLoadingLock = Mutex()
     private val nextChapterLoadingLock = Mutex()
     var readStartTime: Long = System.currentTimeMillis()
-    private const val READ_ALOUD_USER_NAVIGATION_LOCK_MS = 1500L
-    @Volatile
-    private var readAloudUserNavigationUntil = 0L
     @Volatile
     private var readAloudPendingLoadChapterIndex = -1
 
@@ -133,16 +131,31 @@ object ReadBook : CoroutineScope by MainScope() {
     var highlightRulesVersion = 0
         private set
 
+    /**
+     * §9.5.6：最近一次**成功**（未超预算）的整章匹配结果 —— `章节文本 to 命中集`。
+     * 超预算降级时按「章节文本一致」复用，避免低端机上出现「暂不高亮」的视觉跳变。
+     */
+    @Volatile
+    private var lastRuleMatches: Pair<String, List<HighlightRuleMatcher.RuleMatch>>? = null
+
+    /**
+     * R4：朗读导航打点（8 处调用点签名保持不变）。
+     * 非朗读来源的导航（用户手动翻页/跳转）→ 脱离跟随（取代原 1500ms 时间窗启发式）。
+     */
     private fun markReadAloudUserNavigation(fromReadAloud: Boolean) {
         if (!fromReadAloud && BaseReadAloudService.isRun) {
-            readAloudUserNavigationUntil =
-                System.currentTimeMillis() + READ_ALOUD_USER_NAVIGATION_LOCK_MS
+            SpeechFollowState.detachForManualNavigation()
         }
     }
 
-    fun isReadAloudUserNavigationActive(): Boolean {
-        return BaseReadAloudService.isRun &&
-                System.currentTimeMillis() < readAloudUserNavigationUntil
+    /**
+     * R4：是否允许把朗读进度写回可视阅读位置（原 `isReadAloudUserNavigationActive` 的语义迁移）。
+     * 服务未播放时恒定 false —— 禁止「已停止仍写可视页」。
+     */
+    fun shouldApplySpeechProgressToVisibleReader(): Boolean {
+        return SpeechFollowState.shouldApplySpeechProgressToVisibleReader(
+            BaseReadAloudService.isPlay()
+        )
     }
 
     fun markRecentRead(book: Book, readTime: Long = System.currentTimeMillis()) {
@@ -247,6 +260,8 @@ object ReadBook : CoroutineScope by MainScope() {
             )
         )
         postEvent(EventBus.ALOUD_STATE, io.legado.app.constant.Status.STOP)
+        // R4：切换书籍必须重置跟随状态，避免把上一本书的「脱离/跟随」语义带到新书
+        SpeechFollowState.reset()
     }
 
     fun upWebBook(book: Book) {
@@ -419,10 +434,12 @@ object ReadBook : CoroutineScope by MainScope() {
             HighlightTextBuilder.LineInput(
                 line.columns.map { col -> (col as? TextColumn)?.charData ?: "" },
                 line.charSize,
-                line.isParagraphEnd
+                line.isParagraphEnd,
+                // R12.1：标题行标记，供规则作用域（仅标题/仅正文）过滤
+                line.isTitle
             )
         }
-        val text = HighlightTextBuilder.build(lines)
+        val chapterText = HighlightTextBuilder.buildChapter(lines)
         val rules = rulesSnapshot.map {
             HighlightRuleMatcher.Rule(
                 id = it.id,
@@ -431,19 +448,38 @@ object ReadBook : CoroutineScope by MainScope() {
                 style = it.toHighlightStyle(),
                 timeoutMs = it.timeoutMillisecond,
                 replacement = it.replacement,
-                isDotAll = it.isDotAll
+                isDotAll = it.isDotAll,
+                // R12.1：把编辑器里的作用域选项真正传给匹配层（此前该字段无消费点）
+                targetScope = it.targetScope
             )
         }
         val startMs = System.currentTimeMillis()
-        val matches = HighlightRuleMatcher.matchWithTemplate(text, rules)
+        // §9.5.6：整章总预算（默认 300ms，可在「其他设置」调整）；超预算即降级，取代「逐规则 3s 累加」
+        val budgetMs = AppConfig.highlightMatchBudgetMs.toLong()
+        val outcome = HighlightRuleMatcher.matchWithBudget(
+            chapterText.text, rules, chapterText.titleFlags,
+            deadlineMs = startMs + budgetMs,
+            withTemplate = true
+        )
+        val matches: List<HighlightRuleMatcher.RuleMatch>
+        if (outcome.truncated) {
+            // 降级：优先复用上次**成功**结果；无可用旧结果则本页暂不高亮。
+            // 注意：降级结果**不写入** textChapter 缓存 → 下次调用自然重试并在成功后补齐（不固化半成品）
+            val cached = lastRuleMatches
+            matches = if (cached != null && cached.first == chapterText.text) cached.second else emptyList()
+        } else {
+            matches = outcome.matches
+            lastRuleMatches = chapterText.text to matches
+        }
         runCatching {
             AppLog.putDebugWithTag(
                 AppLog.TAG_HIGHLIGHT_STYLE,
-                "匹配完成 规则${rules.size} 命中${matches.size} 耗时${System.currentTimeMillis() - startMs}ms",
+                "匹配完成 规则${rules.size} 命中${matches.size} 耗时${System.currentTimeMillis() - startMs}ms" +
+                    " 降级=${outcome.truncated} 预算=${budgetMs}ms",
                 level = AppLog.Level.INFO
             )
         }
-        if (textChapter.isCompleted) {
+        if (textChapter.isCompleted && !outcome.truncated) {
             textChapter.highlightRuleMatches = matches
             textChapter.highlightRuleMatchesVersion = versionSnapshot
         }
@@ -466,6 +502,15 @@ object ReadBook : CoroutineScope by MainScope() {
         appDb.bookHighlightDao.delete(highlight)
         highlights = highlights.filter { it.time != highlight.time }
         callBack?.get()?.upContent(resetPageOffset = false)
+    }
+
+    /**
+     * B2.5：清除指定章节的全部手动划线（"划错无解"的最小删除入口）。
+     *
+     * 复用 [removeHighlight] 的「落库删除 + 本地列表同步 + 重绘」链路，逐条删除以保证即时重绘。
+     */
+    fun clearChapterHighlights(chapterIndex: Int) {
+        highlights.filter { it.chapterIndex == chapterIndex }.forEach { removeHighlight(it) }
     }
 
     fun clearSearchResult() {
@@ -750,9 +795,20 @@ object ReadBook : CoroutineScope by MainScope() {
             if (fromReadAloud && BaseReadAloudService.isRun && it.isCompleted) {
                 val scrollPageAnim = pageAnim() == 3
                 if (scrollPageAnim && pageChanged) {
+                    // 滚动翻页模式：既有语义与优先级保持不变（章节读完即暂停）
                     ReadAloud.pause(appCtx)
                 } else {
-                    readAloud(!BaseReadAloudService.pause)
+                    // R4：非滚动路径交由跟随状态机决策（仅朗读推进 / 同步继续 / 停止）
+                    when (
+                        SpeechFollowState.nextChapterDecision(
+                            // 与 moveToNextChapter 同一判定口径（含模拟翻页）
+                            hasNextSpeechChapter = durChapterIndex < simulatedChapterSize - 1,
+                            visibleSyncMoved = pageChanged
+                        )
+                    ) {
+                        SpeechFollowState.NextChapterDecision.STOP -> ReadAloud.pause(appCtx)
+                        else -> readAloud(!BaseReadAloudService.pause)
+                    }
                 }
             }
         }
@@ -767,6 +823,8 @@ object ReadBook : CoroutineScope by MainScope() {
         book ?: return
         val textChapter = curTextChapter ?: return
         if (textChapter.isCompleted) {
+            // R4：新朗读会话启动 → 恢复跟随（跨章返回/重新发起朗读不再从页首重播）
+            SpeechFollowState.restoreForNewSpeechSession()
             ReadAloud.play(appCtx, play, startPos = startPos)
         }
     }

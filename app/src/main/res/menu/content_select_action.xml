@@ -37,4 +37,9 @@
     <item
         android:id="@+id/menu_share_image"
         android:title="@string/share" />
+
+    <!-- B2.5：手动划线（高亮）入口 -->
+    <item
+        android:id="@+id/menu_highlight"
+        android:title="@string/highlight" />
 </menu>

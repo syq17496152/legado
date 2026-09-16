@@ -39,23 +39,36 @@ data class HighlightRule(
 ) {
 
     fun styleSummary(): String {
-        val parts = ArrayList<String>(4)
+        val parts = ArrayList<String>(6)
         parts.add(targetScopeLabel())
-        textColor?.let {
-            parts.add("字色 ${it.toHexColor()}")
+        // R12.2：摘要与阅读页渲染同源——统一由 toHighlightStyle() 派生（styleJson 优先，legacy 仅作降级输入），
+        // 修复「改过样式后列表仍显示旧色」的不一致
+        val style = toHighlightStyle()
+        if (style.fill != 0) {
+            parts.add("背景 ${style.fill.toHexColor()}")
         }
-        if (underlineMode != 0) {
-            parts.add(
-                when (underlineMode) {
-                    1 -> "实线下划线"
-                    2 -> "虚线下划线"
-                    3 -> "波浪下划线"
-                    4 -> "双下划线"
-                    5 -> "自定义SVG"
-                    else -> "下划线"
-                } + underlineColor?.let { " ${it.toHexColor()}" }.orEmpty()
-            )
+        if (style.textColor != 0) {
+            parts.add("字色 ${style.textColor.toHexColor()}")
         }
+        style.underline?.let { u ->
+            val kindLabel = when (u.kind) {
+                HighlightStyle.Kind.SOLID -> "实线下划线"
+                HighlightStyle.Kind.DASHED -> "虚线下划线"
+                HighlightStyle.Kind.WAVY -> "波浪下划线"
+                HighlightStyle.Kind.DOUBLE -> "双下划线"
+                HighlightStyle.Kind.DOTTED -> "点线下划线"
+            }
+            parts.add(kindLabel + if (u.color != 0) " ${u.color.toHexColor()}" else "")
+            // 仅展示显式设置过的线宽/线距（未设置为 null）
+            u.width?.let { parts.add("线宽 $it") }
+            u.distance?.let { parts.add("线距 $it") }
+        }
+        style.strike?.let { parts.add("删除线" + if (it.color != 0) " ${it.color.toHexColor()}" else "") }
+        if (style.box != null) parts.add("方框")
+        if (style.emphasis != null) parts.add("着重号")
+        if (style.bold) parts.add("加粗")
+        if (style.italic) parts.add("斜体")
+        if (style.fontPath.isNotEmpty()) parts.add("自定义字体")
         if (!bgImage.isNullOrBlank()) {
             parts.add(
                 when (bgImageFit) {
@@ -65,7 +78,7 @@ data class HighlightRule(
                 }
             )
         }
-        if (parts.isEmpty()) {
+        if (parts.size <= 1) {
             parts.add("无样式")
         }
         return parts.joinToString(" / ")
@@ -103,11 +116,19 @@ data class HighlightRule(
     fun toHighlightStyle(): HighlightStyle {
         // 优先: styleJson 完整样式
         if (!styleJson.isNullOrBlank()) {
-            GSON.fromJsonObject<HighlightStyle>(styleJson).getOrNull()?.let { return it }
+            // 健壮性：GSON 反序列化缺失字段会写入 null（如 fontPath），必须兜底后再返回
+            GSON.fromJsonObject<HighlightStyle>(styleJson).getOrNull()?.let { return it.sanitized() }
         }
         // 降级: 从旧字段映射
         val underline = underlineModeToKind()?.let { kind ->
-            HighlightStyle.Underline(kind = kind, color = underlineColor ?: 0)
+            HighlightStyle.Underline(
+                kind = kind,
+                color = underlineColor ?: 0,
+                // 约定「默认值 = 未设置」（与 HighlightRuleStore.healBuiltin 同口径）：
+                // 等于默认值即视为未设置（null），否则会把默认值写死成"用户显式设置"
+                width = underlineWidth.takeIf { it != HighlightStyle.Underline.DEFAULT_WIDTH },
+                distance = underlineOffset.takeIf { it != HighlightStyle.Underline.DEFAULT_DISTANCE }
+            )
         }
         return HighlightStyle(
             fill = 0,

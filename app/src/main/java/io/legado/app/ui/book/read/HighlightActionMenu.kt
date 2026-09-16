@@ -54,5 +54,7 @@ class HighlightActionMenu(context: Context, private val callBack: CallBack) :
         const val HL_STRIKE = 8104
         const val HL_BOX = 8105
         const val HL_EMPHASIS = 8106
+        /** R1a：文字阴影通道取色（半透明允许） */
+        const val HL_SHADOW = 8107
     }
 }

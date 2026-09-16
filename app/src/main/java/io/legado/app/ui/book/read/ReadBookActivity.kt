@@ -37,6 +37,8 @@ import androidx.core.view.isVisible
 import androidx.core.view.doOnLayout
 import androidx.core.view.size
 import androidx.lifecycle.lifecycleScope
+import androidx.fragment.app.DialogFragment
+import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import io.legado.app.BuildConfig
 import io.legado.app.R
@@ -51,6 +53,10 @@ import io.legado.app.constant.Status
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.BookHighlight
+import io.legado.app.help.HighlightColors
+import io.legado.app.help.HighlightStyle
+import io.legado.app.ui.font.FontSelectDialog
 import io.legado.app.data.entities.BookParagraphRule
 import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.entities.BookSource
@@ -241,7 +247,19 @@ class ReadBookActivity : BaseReadBookActivity(),
     AutoReadDialog.CallBack,
     TxtTocRuleDialog.CallBack,
     ColorPickerDialogListener,
-    LayoutProgressListener {
+    LayoutProgressListener,
+    HighlightStyleDialog.StyleHost,
+    FontSelectDialog.CallBack {
+
+    // --- B2.5：手动划线（高亮）样式面板宿主 ---
+    /** 当前编辑中的划线（落库后即写入；样式改动通过 [ReadBook.updateHighlight] 同步） */
+    private var editingHighlight: BookHighlight? = null
+    /** 宿主侧样式真源（弹框经 [HighlightStyleDialog.StyleHost.currentHighlightStyle] 读取） */
+    private var editingHighlightStyle: HighlightStyle = HighlightStyle()
+    /** 已打开的样式面板（取色/选字写回后驱动其 Compose 镜像重组） */
+    private var highlightStyleDialog: HighlightStyleDialog? = null
+    /** B2.5：连点去抖（微秒时间戳，避免同一选区重复落库；`time` 为主键会走 REPLACE） */
+    private var lastHighlightSubmitUs = 0L
 
     private var pendingReadAloudPlayerOpen = false
     private var pendingReadAloudPanelIntentOpen = false
@@ -902,6 +920,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             R.id.menu_tts_prebuild -> showTtsPrebuildDialog()
             R.id.menu_add_bookmark -> addBookmark()
             R.id.menu_highlight_rule -> startActivity<HighlightRuleActivity>()
+            R.id.menu_clear_chapter_highlights -> confirmClearChapterHighlights()
             R.id.menu_simulated_reading -> showSimulatedReading()
             R.id.menu_edit_content -> showDialogFragment(ContentEditDialog())
             R.id.menu_update_toc -> ReadBook.book?.let {
@@ -1395,8 +1414,117 @@ class ReadBookActivity : BaseReadBookActivity(),
                 showShareNotePreviewOverlay(selectedText)
                 return true
             }
+
+            R.id.menu_highlight -> {
+                addHighlightFromSelection()
+                return true
+            }
         }
         return false
+    }
+
+    /**
+     * B2.5：由当前选文创建手动划线，并打开样式面板继续调整。
+     *
+     * - 划线先落库（默认淡黄填充），面板内改动即时写回（[onHighlightStyleChanged]）
+     * - Epub 原生选区无章内坐标（[ContentTextView.getSelectedReadPosition] 返回 null）→ 降级提示
+     * - 连点去抖：同微秒时间戳直接忽略
+     */
+    private fun addHighlightFromSelection() {
+        val book = ReadBook.book ?: return
+        val readView = binding.readView
+        val pos = readView.getSelectedReadPosition()
+        if (pos == null) {
+            toastOnUi(R.string.highlight_not_supported_here)
+            return
+        }
+        val text = selectedText
+        if (text.isBlank()) return
+        val nowUs = System.currentTimeMillis() * 1000
+        if (nowUs == lastHighlightSubmitUs) return
+        lastHighlightSubmitUs = nowUs
+        val style = HighlightStyle(fill = 0x66FFEB3B.toInt())
+        val highlight = BookHighlight(
+            time = nowUs,
+            bookName = book.name,
+            bookAuthor = book.author,
+            chapterIndex = pos.chapterIndex,
+            chapterPos = pos.chapterPosition,
+            chapterPosEnd = pos.chapterPosition + text.length,
+            chapterName = ReadBook.curTextChapter?.chapter?.title.orEmpty(),
+            bookText = text,
+            style = GSON.toJson(style)
+        )
+        ReadBook.addHighlight(highlight)
+        editingHighlight = highlight
+        editingHighlightStyle = style
+        val dialog = HighlightStyleDialog()
+        highlightStyleDialog = dialog
+        showDialogFragment(dialog)
+    }
+
+    // --- HighlightStyleDialog.StyleHost（B2.5 划线样式面板宿主）---
+
+    override fun currentHighlightStyle(): HighlightStyle = editingHighlightStyle
+
+    override fun onHighlightStyleChanged(style: HighlightStyle) {
+        editingHighlightStyle = style
+        // 划线已落库 → 同步 JSON 列并更新（内部触发重绘）
+        editingHighlight?.let { highlight ->
+            highlight.applyStyle(style)
+            ReadBook.updateHighlight(highlight)
+        }
+    }
+
+    override fun pickHighlightColor(dialogId: Int, initial: Int, withAlpha: Boolean) {
+        // 与 D1 同源兜底：墨水屏态下预设可能为空数组 → 取另一组，仍为空则回退 0
+        val primary = if (withAlpha) HighlightColors.bg else HighlightColors.text
+        val secondary = if (withAlpha) HighlightColors.text else HighlightColors.bg
+        val presets = if (primary.isEmpty()) secondary else primary
+        val seed = if (initial != 0) initial else presets.firstOrNull() ?: 0
+        val dialog = ColorPickerDialog.newBuilder()
+            .setColor(seed)
+            .setShowAlphaSlider(withAlpha)
+            .setDialogType(ColorPickerDialog.TYPE_PRESETS)
+            .setPresets(presets)
+            .setDialogId(dialogId)
+            .create()
+        dialog.setColorPickerDialogListener(this)
+        dialog.setStyle(DialogFragment.STYLE_NO_FRAME, R.style.AppTheme_Light)
+        dialog.show(supportFragmentManager, HL_STYLE_PICKER_TAG)
+    }
+
+    override fun pickHighlightFont(current: String) {
+        showDialogFragment(FontSelectDialog())
+    }
+
+    // --- FontSelectDialog.CallBack（划线样式字体通道）---
+
+    override val curFontPath: String get() = editingHighlightStyle.fontPath
+
+    override fun selectFont(path: String) {
+        onHighlightStyleChanged(editingHighlightStyle.copy(fontPath = path))
+        highlightStyleDialog?.refresh()
+    }
+
+    /**
+     * B2.5：清除本章划线 —— 一次点击会清空整章划线（破坏性）→ 先二次确认，并显示待删条数。
+     */
+    private fun confirmClearChapterHighlights() {
+        val chapterIndex = ReadBook.curTextChapter?.chapter?.index ?: return
+        val count = ReadBook.highlights.count { it.chapterIndex == chapterIndex }
+        if (count == 0) {
+            toastOnUi(R.string.highlight_clear_chapter_empty)
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.highlight_clear_chapter)
+            .setMessage(getString(R.string.highlight_clear_chapter_confirm, count))
+            .setPositiveButton(R.string.ok) { _, _ ->
+                ReadBook.clearChapterHighlights(chapterIndex)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun handleSelectedTextReadAloud() {
@@ -4173,6 +4301,12 @@ class ReadBookActivity : BaseReadBookActivity(),
      */
     override fun onClickReadAloud() {
         autoPageStop()
+        // P1/B1-③：首次朗读起点偏好 = 页首/段首（startPos=0 → 命中既有"段首对齐"分支，行为可控）
+        if (!BaseReadAloudService.isRun && AppConfig.readAloudStartAtPageTop) {
+            ReadAloud.upReadAloudClass()
+            ReadBook.readAloud()
+            return
+        }
         when {
             !BaseReadAloudService.isRun -> {
                 ReadAloud.upReadAloudClass()
@@ -4375,7 +4509,19 @@ class ReadBookActivity : BaseReadBookActivity(),
     /**
      * colorSelectDialog
      */
-    override fun onColorSelected(dialogId: Int, color: Int) = ReadBookConfig.durConfig.run {
+    override fun onColorSelected(dialogId: Int, color: Int) {
+        // B2.5：划线样式面板的通道取色（dialogId 用 HighlightActionMenu.HL_*，区间 8101..8107）
+        if (dialogId in HighlightActionMenu.HL_FILL..HighlightActionMenu.HL_SHADOW) {
+            onHighlightStyleChanged(
+                HighlightStyleDialog.applyChannelColor(currentHighlightStyle(), dialogId, color)
+            )
+            highlightStyleDialog?.refresh()
+            return
+        }
+        onReadConfigColorSelected(dialogId, color)
+    }
+
+    private fun onReadConfigColorSelected(dialogId: Int, color: Int) = ReadBookConfig.durConfig.run {
         when (dialogId) {
             TEXT_COLOR -> {
                 setCurTextColor(color)
@@ -5010,8 +5156,8 @@ class ReadBookActivity : BaseReadBookActivity(),
             if (!isCurrentReadAloudProgress(progress)) return@observeEvent
             val chapterStart = progress.chapterPosition
             readAloudPlayerPanel.onTtsProgress(chapterStart)
-            if (BaseReadAloudService.isPlay() &&
-                !ReadBook.isReadAloudUserNavigationActive() &&
+            // R4：消费点迁移到跟随状态机（服务未播放 → 恒定 false，禁止「已停止仍写可视页」）
+            if (ReadBook.shouldApplySpeechProgressToVisibleReader() &&
                 isCurrentReadAloudProgress(progress)
             ) {
                 ReadBook.curTextChapter?.let { textChapter ->
@@ -5096,6 +5242,9 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     companion object {
         const val RESULT_DELETED = 100
+
+        /** B2.5：划线样式面板取色器 Fragment tag */
+        private const val HL_STYLE_PICKER_TAG = "hl_style_picker"
         private val shareNoteProgressPercentRegex = Regex("""(\d+(?:[,.]\d+)?)\s*%""")
     }
 

@@ -43,7 +43,10 @@ data class BookHighlight(
     /** 解析后的样式(惰性缓存) */
     fun styleObj(): HighlightStyle {
         styleCache?.let { return it }
+        // D4 修复：GSON 反序列化缺失字段会写入 null（fontPath 等），直接缓存后 copy() 会抛 NPE
+        // → 必须经 sanitized() 归一化再缓存
         return (GSON.fromJsonObject<HighlightStyle>(style).getOrNull() ?: HighlightStyle())
+            .sanitized()
             .also { styleCache = it }
     }
 
