@@ -214,7 +214,15 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
             return plain(Status.lookup(504), "upstream timeout")
         }
 
-        response.use { upstream ->
+        // ⚠️ 这里必须是 `also`，**绝不能用 `use`**：`use` 是 inline 且会在 lambda 结束时关闭上游响应，
+        // 而 NanoHTTPD 是 `serve()` 返回之后才写响应体 → 框架读到已关闭的流，抛
+        // `Could not send response to the client: java.io.IOException: closed`
+        // （`okio.RealBufferedSource$inputStream$1.read`）。
+        // 2026-09-16 真机铁证：三批日志共 748 处该错误；清单路径因 `body.string()` 先读入内存而
+        // 正常，所有分片响应全部写失败 → 电视永远取不到分片，停在「正在获取投屏内容信息」。
+        // 流式分支的关闭责任随 `upstreamStream` 交给 NanoHTTPD（其 `Response.send()` 发完后
+        // 会 `safeClose(data)`，字节码实证）：NanoHTTPD 关流 → 我们关上游，形成闭环。
+        response.also { upstream ->
             val body: ResponseBody? = upstream.body
             val upstreamLength = body?.contentLength() ?: -1L
             val upstreamMime = upstream.header("Content-Type")
@@ -223,7 +231,7 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
             if (headOnly) {
                 val total = parseTotalFromContentRange(upstream.header("Content-Range"))
                     ?: upstreamLength.takeIf { it >= 0 } ?: 0L
-                body?.close()
+                upstream.close()
                 return buildResponse(Status.OK, mime, emptyStream(), total)
                     .also { it.addHeader("Accept-Ranges", "bytes") }
             }
@@ -236,7 +244,7 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
                     "上游取流返回 ${upstream.code}: url=${upstream.request.url}",
                     level = AppLog.Level.WARN
                 )
-                body?.close()
+                upstream.close()
                 return plain(Status.lookup(upstream.code), "upstream ${upstream.code}")
             }
 
@@ -248,7 +256,8 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
                     level = AppLog.Level.INFO
                 )
                 val text = runCatching { body?.string() }.getOrNull()
-                body?.close()
+                // 清单已完整读入内存，此处可安全关闭上游（与流式分支相反）
+                upstream.close()
                 if (text == null) return plain(Status.lookup(504), "playlist empty")
                 val finalUrl = upstream.request.url.toString()
                 val rewritten = HlsPlaylistRewriter.rewrite(text, finalUrl) { absolute ->
@@ -288,7 +297,7 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
                 return buildResponse(
                     Status.PARTIAL_CONTENT,
                     mime,
-                    body?.byteStream() ?: emptyStream(),
+                    upstreamStream(upstream, body),
                     upstreamLength
                 ).apply {
                     addHeader("Accept-Ranges", "bytes")
@@ -300,7 +309,7 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
             if (!rangeHeader.isNullOrBlank() && total != null && total > 0L) {
                 val asked = parseRange(rangeHeader, total)
                 if (asked != null && asked.partial) {
-                    val stream = body?.byteStream() ?: return plain(Status.lookup(504), "no body")
+                    val stream = upstreamStream(upstream, body)
                     val skip = stream.skip(asked.start)
                     if (skip < asked.start) {
                         stream.close()
@@ -320,13 +329,13 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
             }
 
             // 普通整段传输
-            val stream = body?.byteStream()
+            val stream = upstreamStream(upstream, body)
             return if (total != null) {
-                buildResponse(Status.OK, mime, stream ?: emptyStream(), total)
+                buildResponse(Status.OK, mime, stream, total)
                     .also { it.addHeader("Accept-Ranges", "bytes") }
             } else {
                 // 未知长度（直播）：必须走 chunked，不能猜 Content-Length
-                buildResponse(Status.OK, mime, stream ?: emptyStream(), -1L)
+                buildResponse(Status.OK, mime, stream, -1L)
                     .also { it.addHeader("Accept-Ranges", "bytes") }
             }
         }
@@ -373,6 +382,51 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
     }
 
     private fun emptyStream(): InputStream = ByteArray(0).inputStream()
+
+    /**
+     * 取得「随响应体关闭而关闭上游」的输入流（配合 [serveHttp] 中的 `also` 说明一起读）。
+     *
+     * 为什么需要它：`serveHttp` 不能在返回前关闭上游（NanoHTTPD 是 `serve()` 返回**之后**
+     * 才写响应体），而 `Response.send()` 在正常发完后会 `safeClose(data)`
+     * （字节码 `NanoHTTPD$Response.send` 实证：`getfield data` → `access$000`）。
+     * 因此把上游 [okhttp3.Response] 的关闭动作绑定到这条流上，即完成闭环：
+     * 框架关流 → 我们关上游；客户端中途断开时框架走 catch 分支不关流，
+     * 由 OkHttp 的连接泄漏检测回收（不影响正确性）。
+     *
+     * body 为 null（极少见）时立即关闭上游并返回空流。
+     */
+    private fun upstreamStream(upstream: okhttp3.Response, body: ResponseBody?): InputStream =
+        if (body == null) {
+            kotlin.runCatching { upstream.close() }
+            emptyStream()
+        } else {
+            UpstreamStream(body.byteStream(), upstream)
+        }
+
+    /**
+     * 把上游响应的关闭责任绑定到底层流上，见 [upstreamStream]。
+     *
+     * `skip` 必须委托：本地切片分支（上游忽略 Range 时）靠 `skip` 定位区间起点，
+     * 若走 `InputStream` 的默认实现会逐字节读取丢弃，大文件下等于白搬一遍数据。
+     */
+    private class UpstreamStream(
+        private val stream: InputStream,
+        private val upstream: okhttp3.Response
+    ) : InputStream() {
+
+        override fun read(): Int = stream.read()
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int = stream.read(b, off, len)
+
+        override fun available(): Int = stream.available()
+
+        override fun skip(n: Long): Long = stream.skip(n)
+
+        override fun close() {
+            kotlin.runCatching { stream.close() }
+            kotlin.runCatching { upstream.close() }
+        }
+    }
 
     /** 解析出的区间（[partial] 为 false 表示客户端没要区间，回整段） */
     private data class ResolvedRange(val start: Long, val end: Long, val partial: Boolean)
