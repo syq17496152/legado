@@ -70,7 +70,10 @@ import splitties.init.appCtx
 import splitties.systemservices.connectivityManager
 import org.json.JSONArray
 import io.legado.app.data.PlayHistoryStore
+import io.legado.app.help.dlna.CastTuner
+import io.legado.app.help.dlna.CastTuning
 import io.legado.app.help.dlna.DlnaConstants
+import io.legado.app.help.exoplayer.DeviceInfoHelper
 import java.io.File
 
 object VideoPlay : CoroutineScope by MainScope(){
@@ -221,6 +224,56 @@ object VideoPlay : CoroutineScope by MainScope(){
         set(value) {
             videoPrefs.edit { putBoolean(DlnaConstants.PREF_PREFER_SMOOTH, value) }
         }
+
+    // ============ dlna-cast-cache-unify：缓存统一与档位（AD-01 / AD-04）============
+
+    /** 复用播放器视频缓存：投屏 L2 与播放器共享同一个 media3 `SimpleCache` 实例（默认开） */
+    var dlnaReusePlayerCache: Boolean
+        get() = videoPrefs.getBoolean(DlnaConstants.PREF_REUSE_PLAYER_CACHE, true)
+        set(value) {
+            videoPrefs.edit { putBoolean(DlnaConstants.PREF_REUSE_PLAYER_CACHE, value) }
+        }
+
+    /** 本会话不写入共享缓存（仅内存 L1 + 回源，避免挤占播放器缓存；默认关） */
+    var dlnaSessionMemoryOnly: Boolean
+        get() = videoPrefs.getBoolean(DlnaConstants.PREF_SESSION_MEMORY_ONLY, false)
+        set(value) {
+            videoPrefs.edit { putBoolean(DlnaConstants.PREF_SESSION_MEMORY_ONLY, value) }
+        }
+
+    /**
+     * 档位模式：自动（按设备内存取推荐档）/ 自定义（用上面三项手动值）。
+     *
+     * 语义：**只有显式切到自定义，手动值才参与生效计算**——自动模式下即使偏好里残留旧的手动值
+     * 也一律忽略，避免"推荐档被旧值污染"。改档只在**下一次投屏会话**生效。
+     */
+    var dlnaTuningMode: String
+        get() = videoPrefs.getString(DlnaConstants.PREF_TUNING_MODE, DlnaConstants.TUNING_MODE_AUTO)
+            ?: DlnaConstants.TUNING_MODE_AUTO
+        set(value) {
+            videoPrefs.edit { putString(DlnaConstants.PREF_TUNING_MODE, value) }
+        }
+
+    /** 生效档位（会话创建时读取一次）：自动档 + 按共享缓存容量收敛预取窗口 */
+    val dlnaTuning: CastTuning
+        get() = CastTuner.resolve(
+            mode = dlnaTuningMode,
+            manual = CastTuning(dlnaCacheMb, dlnaPrefetchWindow, dlnaPrefetchConcurrency),
+            totalMemoryMb = DeviceInfoHelper.totalMemoryMb(),
+            sharedCapacityBytes = dlnaSharedCacheCapacityBytes()
+        )
+
+    /** 推荐档（**仅供设置面板展示**，不参与生效计算） */
+    val dlnaRecommendedTuning: CastTuning
+        get() = CastTuner.recommend(DeviceInfoHelper.totalMemoryMb())
+
+    /**
+     * 共享缓存容量（字节）：
+     *  - 复用开 → 播放器视频缓存容量（同一实例，容量口径自然合并，见 AD-01 Tradeoff）
+     *  - 复用关 → 0（不限制窗口，走投屏独立磁盘缓存）
+     */
+    fun dlnaSharedCacheCapacityBytes(): Long =
+        if (dlnaReusePlayerCache) videoCacheSize.toLong() * 1024 * 1024 else 0L
 
     // ==================== 画质增强（video-player-image-enhance A 期） ====================
     // 存储模式（AD-04）：Int 十倍值。亮度/对比度/色温 -500~500（实际 -50.0~50.0），饱和度 -1000~1000（实际 -100.0~100.0）

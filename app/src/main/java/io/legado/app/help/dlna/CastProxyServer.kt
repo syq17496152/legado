@@ -103,40 +103,122 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
         )
         activeRequests.incrementAndGet()
         return try {
-            // AD-16：命中会话内存缓存 → **不回源**直接返回（响应时间由「源站 RTT + 下载」降为「局域网传输」）。
-            // 仅限 GET 且非 Range、非清单：Range 的区间语义与整片不同（避免错位），清单必须实时重写。
             val source = resolved.source
             val rangeHeader = session.headers["range"]
-            if (method == Method.GET &&
-                source is CastSource.Http &&
-                rangeHeader.isNullOrBlank() &&
-                !MimeSniffer.isHlsUrl(source.url)
-            ) {
-                val cached = resolved.session.cache.get(source.url)
-                if (cached != null) {
-                    AppLog.putThrottled(
-                        "DlnaCast.cache",
-                        "缓存命中(不回源): $uri | ${resolved.session.cache.stats()}",
-                        level = AppLog.Level.INFO,
-                        tag = DlnaConstants.TAG
-                    )
-                    return buildResponse(
-                        Status.OK,
-                        cached.mime.ifBlank { DlnaConstants.MIME_FALLBACK },
-                        cached.bytes.inputStream(),
-                        cached.bytes.size.toLong()
-                    ).also { it.addHeader("Accept-Ranges", "bytes") }
-                }
+            val headOnly = method == Method.HEAD
+            // 先落成局部变量：`source is CastSource.Http` 的智能转换只在 if 分支内有效，
+            // 跨分支使用会退化成 CastSource（编译期即报 `Unresolved reference 'url'`）
+            val httpSource = source as? CastSource.Http
+            val isSegmentRequest = !headOnly && httpSource != null &&
+                !MimeSniffer.isHlsUrl(httpSource.url)
+            // 缓存命中路径（AD-16 + cache-unify AD-01/AD-06）：L1 内存 → L2 共享播放器缓存。
+            // 门控：仅 GET、HTTP 源、非清单（清单必须实时重写）；**Range 也走缓存**（按区间切片，
+            // 见 CastRangeSpec）；HEAD 不进缓存（交给既有上游探测，避免猜长度）。
+            val hit = if (isSegmentRequest && httpSource != null) {
+                serveFromCache(resolved.session, httpSource, rangeHeader, uri)
+            } else {
+                null
             }
-            val response = serveSource(resolved, session, method == Method.HEAD)
+            if (hit != null) {
+                // ️ 命中路径**同样**要推进预取窗口：早期实现只在"未命中回源"分支推进，
+                // 电视连续命中时游标停住 → 窗口不滚动（红队 P1-14）
+                resolved.session.prefetcher.onServed(httpSource?.url)
+                return hit
+            }
+            // 两级缓存都没命中 → 走既有回源路径（分片类请求计入命中率分母，AD-07）
+            if (isSegmentRequest) {
+                resolved.session.originPulls.incrementAndGet()
+            }
+            val response = serveSource(resolved, session, headOnly)
             // AD-16：一次请求完成 → 推进预取窗口（滚动预取）
-            (source as? CastSource.Http)?.let { resolved.session.prefetcher.onServed(it.url) }
+            resolved.session.prefetcher.onServed(httpSource?.url)
             response
         } catch (e: Exception) {
             AppLog.put("DlnaCast 代理处理失败: ${e.message}", e)
             plain(Status.INTERNAL_ERROR, "internal error")
         } finally {
             activeRequests.decrementAndGet()
+        }
+    }
+
+    // ==================== 缓存命中路径 ====================
+
+    /**
+     * L1（内存 LRU）→ L2（共享播放器缓存）逐级尝试；返回 null 表示"都不命中，交回既有回源路径"。
+     *
+     * 为什么只做**整段已完整缓存**的情形：
+     *  - L1 条目在写入时已按 REQ-8 校验"读满"，故其 `bytes.size` 即分片总长，可按需切片
+     *  - L2 先用 `getContentMetadata` 取总长、再先判整段命中才读，读不满即放弃
+     *  - **部分命中一律交回既有回源路径**：既有路径的 Range/206/416 语义已被真机充分验证，
+     *    而"缓存 + 上游断点续读"的混合读收益有限、风险高（AOAdapt 记录见 design AD-06 ChangeLog）
+     */
+    private fun serveFromCache(
+        castSession: CastProxySession,
+        source: CastSource.Http,
+        rangeHeader: String?,
+        uri: String
+    ): Response? {
+        // ---- L1：内存 LRU（不到 1 微秒级，先试）----
+        castSession.cache.get(source.url)?.let { entry ->
+            val total = entry.bytes.size.toLong()
+            // 越界 → null 交回既有路径（由它回 416 并带 Content-Range: bytes */total）
+            val range = CastRangeSpec.parse(rangeHeader, total) ?: return null
+            val bytes = if (range.partial) {
+                entry.bytes.copyOfRange(range.start.toInt(), (range.end + 1).toInt())
+            } else {
+                entry.bytes
+            }
+            AppLog.putThrottled(
+                "DlnaCast.cacheL1",
+                "L1 命中(内存): $uri | ${castSession.cache.stats()}",
+                level = AppLog.Level.INFO,
+                tag = DlnaConstants.TAG
+            )
+            castSession.l1Hits.incrementAndGet()
+            return cacheResponse(entry.mime, bytes, range, total)
+        }
+
+        // ---- L2：共享播放器缓存（复用开启时才有实例）----
+        val shared = CastL2Store.sharedCacheOrNull() ?: return null
+        val total = CastL2Store.contentLength(shared, source.url)
+        // 长度不可知 → 无法判定"整段命中"，交回既有回源路径
+        if (total <= 0L) return null
+        // 单片超上限（分片异常大）→ 不整片读入内存，交回既有流式路径
+        if (total > DlnaConstants.MAX_SEGMENT_BYTES) return null
+        val range = CastRangeSpec.parse(rangeHeader, total) ?: return null
+        val wanted = if (range.partial) range.length else total
+        val cached = CastL2Store.cachedBytes(shared, source.url, range.start, wanted)
+        if (!CastRangeSpec.isFullyCached(cached, wanted)) return null
+        val bytes = CastL2Store.readFully(source, range.start, wanted.toInt()) ?: return null
+        AppLog.putThrottled(
+            "DlnaCast.cacheL2",
+            "L2 命中(共享播放器缓存): $uri | 已缓存=${cached}B 长度=${wanted}B",
+            level = AppLog.Level.INFO,
+            tag = DlnaConstants.TAG
+        )
+        castSession.l2Hits.incrementAndGet()
+        // 分片 MIME 按自身 URL 推断（与惰性登记同一口径）；推断不出用兜底类型
+        return cacheResponse(MimeSniffer.mimeFromUrl(source.url).orEmpty(), bytes, range, total)
+    }
+
+    /** 由缓存字节构造响应：整段 200 / 区间 206，均带 `Accept-Ranges` */
+    private fun cacheResponse(
+        mime: String,
+        bytes: ByteArray,
+        range: CastRangeSpec.Range,
+        total: Long
+    ): Response {
+        val status = if (range.partial) Status.PARTIAL_CONTENT else Status.OK
+        return buildResponse(
+            status,
+            mime.ifBlank { DlnaConstants.MIME_FALLBACK },
+            bytes.inputStream(),
+            bytes.size.toLong()
+        ).apply {
+            addHeader("Accept-Ranges", "bytes")
+            if (range.partial) {
+                addHeader("Content-Range", CastRangeSpec.contentRange(range.start, range.end, total))
+            }
         }
     }
 
@@ -189,7 +271,7 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
         val total = file.length()
         if (total <= 0L) return plain(Status.NOT_FOUND, "empty file")
 
-        val range = parseRange(rangeHeader, total)
+        val range = CastRangeSpec.parse(rangeHeader, total)
             ?: return plain(Status.RANGE_NOT_SATISFIABLE, "range not satisfiable", total)
         val length = range.end - range.start + 1
         if (headOnly) {
@@ -346,7 +428,7 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
 
             // 客户端要了 Range 但上游忽略了（回了 200 全量）→ 本地切片并改回 206
             if (!rangeHeader.isNullOrBlank() && total != null && total > 0L) {
-                val asked = parseRange(rangeHeader, total)
+                val asked = CastRangeSpec.parse(rangeHeader, total)
                 if (asked != null && asked.partial) {
                     val stream = upstreamStream(upstream, body)
                     val skip = stream.skip(asked.start)
@@ -467,50 +549,8 @@ class CastProxyServer : NanoHTTPD(DlnaConstants.PROXY_PORT_AUTO) {
         }
     }
 
-    /** 解析出的区间（[partial] 为 false 表示客户端没要区间，回整段） */
-    private data class ResolvedRange(val start: Long, val end: Long, val partial: Boolean)
-
-    /**
-     * 解析 `Range` 头。
-     *
-     * 只支持**单区间**（`bytes=a-b` / `bytes=a-` / `bytes=-n`）：
-     * 多区间按 RFC 7233 允许的方式**忽略**（回 200 全量），不做 `multipart/byteranges`
-     * —— 电视播放器基本只用单区间，实现 multipart 收益为零、出错面大。
-     *
-     * @return null 表示区间越界（应回 416）；[ResolvedRange.partial] 为 false 表示整段
-     */
-    private fun parseRange(header: String?, total: Long): ResolvedRange? {
-        if (header.isNullOrBlank() || total <= 0L) return ResolvedRange(0, total - 1, false)
-        val spec = header.trim()
-        if (!spec.startsWith("bytes=", true)) return ResolvedRange(0, total - 1, false)
-        val value = spec.substringAfter('=').trim()
-        if (value.contains(',')) return ResolvedRange(0, total - 1, false) // 多区间 → 忽略
-        val dash = value.indexOf('-')
-        if (dash < 0) return ResolvedRange(0, total - 1, false)
-        val startText = value.substring(0, dash).trim()
-        val endText = value.substring(dash + 1).trim()
-        return when {
-            startText.isEmpty() && endText.isEmpty() -> ResolvedRange(0, total - 1, false)
-            startText.isEmpty() -> {
-                // 后缀区间 bytes=-n：取最后 n 字节
-                val suffix = endText.toLongOrNull() ?: return ResolvedRange(0, total - 1, false)
-                if (suffix <= 0L) return null
-                val start = (total - suffix).coerceAtLeast(0L)
-                ResolvedRange(start, total - 1, true)
-            }
-            else -> {
-                val start = startText.toLongOrNull() ?: return ResolvedRange(0, total - 1, false)
-                if (start >= total) return null // 越界 → 416
-                val end = if (endText.isEmpty()) {
-                    total - 1
-                } else {
-                    (endText.toLongOrNull() ?: (total - 1)).coerceAtMost(total - 1)
-                }
-                if (end < start) return null
-                ResolvedRange(start, end, true)
-            }
-        }
-    }
+    // Range 解析已抽到 `CastRangeSpec`（本地文件 / L1 / L2 三处共用同一口径，并进 JVM 单测），
+    // 此处不再保留私有实现 —— 两份口径并存迟早漂移，进而出现"缓存说命中、响应却错位"。
 
     /** 从 `Content-Range: bytes a-b/total` 里取 total */
     private fun parseTotalFromContentRange(value: String?): Long? {

@@ -69,8 +69,29 @@ class CastProxySession internal constructor(
         prefetchWindow.coerceAtLeast(1)
     )
 
+    /**
+     * cache-unify AD-07：**命中分级计数**（L1 内存 / L2 共享播放器缓存 / 回源）。
+     *
+     * 存在的唯一目的：真机能回答"共享缓存到底有没有被复用"——否则"理论上能复用"
+     * 与"实际命中率为 0"（URL 不一致时）在日志上无法区分（AD-03 明确要求可观测）。
+     * 只统计**分片类**请求（清单/HEAD 不计入，它们本来就必须回源）。
+     */
+    val l1Hits = AtomicInteger()
+    val l2Hits = AtomicInteger()
+    val originPulls = AtomicInteger()
+
     init {
         entries[baseKey] = baseSource
+    }
+
+    /** 命中分级摘要（会话收尾打一行；分母 = 分片类请求数，不含清单/HEAD） */
+    fun hitSummary(): String {
+        val l1 = l1Hits.get()
+        val l2 = l2Hits.get()
+        val origin = originPulls.get()
+        val total = l1 + l2 + origin
+        val percent = if (total <= 0) 0 else (l1 + l2) * 100 / total
+        return "L1命中(内存)=$l1 L2命中(共享)=$l2 回源=$origin 分片请求=$total 缓存命中率=$percent%"
     }
 
     /**

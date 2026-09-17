@@ -104,6 +104,18 @@ object DlnaHttp {
     }
 
     /**
+     * dlna-cast-cache-unify AD-02：**不带磁盘缓存的流客户端**（media3 路径专用）。
+     *
+     * 复用开启时投屏 L2 落盘交给播放器的 media3 `SimpleCache`（同一实例）。若 media3 的底层
+     * 仍用挂了 OkHttp `Cache` 的 [streamClient]，同一分片会被写两份
+     * （`cacheDir/dlna-cast` + `externalCache/exoplayer`）—— 既浪费空间，也让"命中率"统计失真。
+     * 因此 media3 路径一律走本客户端；其余参数与 [streamClient] 完全一致。
+     */
+    val streamClientNoDiskCache: OkHttpClient by lazy {
+        streamClient.newBuilder().cache(null).build()
+    }
+
+    /**
      * 拉取文本内容（用于 device description XML）。
      *
      * 任何失败都返回 null 并只留一条 debug 日志 —— 发现阶段一台设备解析失败

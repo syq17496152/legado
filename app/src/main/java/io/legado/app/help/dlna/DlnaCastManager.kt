@@ -307,13 +307,22 @@ object DlnaCastManager {
                 teardown(notifyDevice = false)
                 return
             }
+            // cache-unify AD-01/AD-04：
+            //  ① 生效档 = 「自动推荐档（按设备总内存）/ 自定义档」+ 按共享缓存容量收敛窗口
+            //  ② 先把共享播放器缓存实例**预热**：首次访问是懒初始化（建目录/恢复索引都是同步 IO），
+            //     若等到电视第一个请求才触发，这段成本会落在代理请求线程上、拖慢首片响应。
+            //     本流程本就是 IO 线程（前面已做过绑定端口/SSDP 等阻塞调用），故直接预热即可。
+            val tuning = VideoPlay.dlnaTuning
+            if (CastL2Store.reuseEnabled) {
+                CastL2Store.warmUp()
+            }
             val newSession = CastProxyRegistry.createSession(
                 CastProxyRegistry.sanitizeName(url),
                 source,
-                // AD-16：缓存/预取参数取用户偏好（投屏设置内可调），改档后**下一次会话**生效
-                cacheMb = VideoPlay.dlnaCacheMb,
-                prefetchWindow = VideoPlay.dlnaPrefetchWindow,
-                prefetchConcurrency = VideoPlay.dlnaPrefetchConcurrency
+                // AD-16 + cache-unify AD-04：参数取生效档（投屏设置内可调），改档**下一次会话**生效
+                cacheMb = tuning.cacheMb,
+                prefetchWindow = tuning.prefetchWindow,
+                prefetchConcurrency = tuning.prefetchConcurrency
             )
             session = newSession
             castUrl = "http://$lanIp:$port${DlnaConstants.PROXY_PATH_PREFIX}" +
@@ -621,6 +630,15 @@ object DlnaCastManager {
                     )
                 }
             }
+        }
+        // cache-unify AD-07：会话收尾输出**一次**命中分级汇总 —— 真机据此判定"复用是否真的生效"
+        //（L2 命中率长期为 0 说明两侧 URL 不一致，AD-03 的登记后续项即可据此立项）
+        session?.let {
+            AppLog.putDebugWithTag(
+                DlnaConstants.TAG,
+                "会话缓存汇总: ${it.hitSummary()}",
+                level = AppLog.Level.INFO
+            )
         }
         CastProxyRegistry.clear()
         session = null

@@ -54,6 +54,17 @@ object DeviceInfoHelper {
         return tier
     }
 
+    /**
+     * 设备总内存（MB）。
+     *
+     * dlna-cast-cache-unify AD-04：投屏档位推荐需要"设备总内存"这一单一事实来源。
+     * 直接复用既有私有实现 —— **不新增检测逻辑**，也**不改动 [getDeviceTier] 的 HIGH/MID 判定**
+     *（后者被 `VideoPrefiller` 等处的 `when(tier)` 消费，扩枚举会导致 `when` 无 else 编译失败）。
+     *
+     * @return 总内存 MB；检测失败返回 0（调用方按"不可知"退化到兜底档）
+     */
+    fun totalMemoryMb(): Long = kotlin.runCatching { getTotalMemoryMB() }.getOrDefault(0L)
+
     private fun getTotalMemoryMB(): Long {
         val memoryInfo = ActivityManager.MemoryInfo()
         (appCtx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager)

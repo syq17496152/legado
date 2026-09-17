@@ -3412,6 +3412,16 @@ function login() {
     <string name="dlna_setting_unit_mb">MB</string>
     <string name="dlna_setting_unit_segment">片</string>
     <string name="dlna_setting_hint">提示：缓存与预取越大越能减少卡顿，同时占用更多手机内存/存储。设置在下一次投屏生效。</string>
+    <string name="dlna_setting_reuse_hint">复用开启后，投屏与播放器共用视频缓存：播放器已下载的分片投屏时可直接复用；投屏预取也会占用该缓存。</string>
+    <string name="dlna_setting_tuning_mode">档位模式</string>
+    <string name="dlna_setting_mode_auto">自动（推荐）</string>
+    <string name="dlna_setting_mode_custom">自定义</string>
+    <string name="dlna_setting_recommended_fmt">本机内存 %2$d GB · 推荐档 %1$d MB</string>
+    <string name="dlna_setting_effective_fmt">生效档：内存缓存 %1$d MB / 预取窗口 %2$d 片 / 并发 %3$d</string>
+    <string name="dlna_setting_window_clamped_fmt">按当前缓存容量，预取窗口已收敛为 %1$d 片</string>
+    <string name="dlna_setting_reuse_player_cache">复用播放器视频缓存</string>
+    <string name="dlna_setting_session_memory_only">本会话不写入共享缓存</string>
+    <string name="dlna_setting_shared_managed_fmt">由播放器视频缓存设置控制（当前 %1$d MB）</string>
     <!-- 错误与降级 -->
     <string name="dlna_error_no_wifi">请先连接 Wi-Fi</string>
     <string name="dlna_error_no_ip">未获取到局域网 IP，请检查 Wi-Fi 或网络设置</string>

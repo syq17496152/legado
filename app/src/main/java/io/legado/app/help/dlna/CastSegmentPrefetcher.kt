@@ -13,17 +13,23 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * add-dlna-cast AD-16：**分片滚动预取器**（会话级）。
+ * add-dlna-cast AD-16 + dlna-cast-cache-unify AD-02：**分片滚动预取器**（会话级）。
  *
- * 职责：把"渲染端要一片才去源站取一片"变成"手机提前把窗口内的分片备进内存"。
+ * 职责：把"渲染端要一片才去源站取一片"变成"手机提前把窗口内的分片备好"。
  * 触发点两处：① 清单重写完成（拿到有序分片表）② 每次命中/转发之后（推进窗口）。
  *
- * 铁律（对应 AD-16 Decision 第 2/7/8/9 条）：
+ * 铁律：
  *  1. **在途去重**：同一 URL 只允许一次在途预取（否则同片双倍流量，反而加剧 WiFi 争用）
- *  2. **并发受限**：`Semaphore(concurrency)`，默认 3，用户可配；避免打爆源站触发风控
+ *  2. **并发受限**：`Semaphore(concurrency)`，用户可配；避免打爆源站触发风控
  *  3. **失败静默、绝不重试**（AD-02 禁重试铁律）：预取失败就当没发生，渲染端请求时走正常回源
  *  4. **scope 归会话**：`teardown` 调 [cancel]，杜绝跨会话残留
- *  5. 预取请求语义与正常转发一致：带同一份会话 headers、**剥除 `Accept-Encoding`**
+ *  5. **落库位置随复用开关走**（AD-01/AD-02）：
+ *     - 复用开 → 经 media3 `CacheDataSink` 写**播放器同一个 `SimpleCache`**（同库同键，
+ *       播放器已下的分片投屏可直接命中，反之亦然）
+ *     - 复用关 → 保持既有 OkHttp 直下（走投屏独立磁盘缓存）
+ *     - 「本会话不写共享缓存」开启时 media3 路径**只读不留**（字节仅用于 L1）
+ *  6. **REQ-8 完整性闸**：只有"读满（实际字节 == 上游声明长度）"的整片才允许进 L1 内存缓存
+ *     —— 截断数据一旦进 L1，命中时会按 `bytes.size` 回一个"长度不足的 200"，渲染端会当完整分片解码
  *
  * 注意：本类中 `response.use {}` 是**正确**的——它把响应体读进内存，不把流交出去，
  * 与 IF-8（把流交给 NanoHTTPD 时禁止 use）不是同一场景。
@@ -57,7 +63,12 @@ class CastSegmentPrefetcher(
         kick()
     }
 
-    /** 命中或转发完成之后调用：推进游标并补齐窗口 */
+    /**
+     * 命中或转发完成之后调用：推进游标并补齐窗口。
+     *
+     * ⚠️ **所有命中路径（L1/L2/L3）都必须调用**：早期实现只在"未命中回源"分支推进，
+     * 导致 L1 命中时游标停住、窗口不滚动（红队 P1-14）。
+     */
     fun onServed(url: String?) {
         if (!cache.enabled) return
         if (url.isNullOrBlank()) return
@@ -96,20 +107,10 @@ class CastSegmentPrefetcher(
             try {
                 gate.withPermit {
                     if (cache.contains(url)) return@withPermit
-                    val builder = Request.Builder().url(url).get()
-                    // 会话 headers 是防盗链关键；Accept-Encoding 必须剥除（否则拿到压缩体）
-                    source.headers.forEach { (k, v) ->
-                        if (!k.equals("Accept-Encoding", true)) builder.header(k, v)
-                    }
-                    DlnaHttp.streamClient.newCall(builder.build()).execute().use { response ->
-                        if (!response.isSuccessful) return@use
-                        val body = response.body ?: return@use
-                        val bytes = body.bytes()
-                        if (bytes.isEmpty()) return@use
-                        val mime = response.header("Content-Type").orEmpty()
-                        if (cache.put(url, bytes, mime)) {
-                            cache.addPrefetchedBytes(bytes.size.toLong())
-                        }
+                    if (CastL2Store.reuseEnabled) {
+                        prefetchViaMedia3(source)
+                    } else {
+                        prefetchViaOkHttp(source)
                     }
                 }
             } catch (e: Exception) {
@@ -121,6 +122,43 @@ class CastSegmentPrefetcher(
                 )
             } finally {
                 inflight.remove(url)
+            }
+        }
+    }
+
+    /**
+     * 经 media3 写入共享缓存（复用开启时的唯一路径）。
+     *
+     * 写盘由 media3 的 `TeeDataSource`（内部 `CacheDataSink`）在流经时完成；
+     * 本方法只负责"读满、判完整、填 L1"。
+     */
+    private fun prefetchViaMedia3(source: CastSource.Http) {
+        val outcome = CastL2Store.prefetch(source, writeToCache = !CastL2Store.sessionMemoryOnly)
+        val bytes = outcome.bytes ?: return
+        if (!outcome.complete) return // 截断 → 绝不进 L1（REQ-8）
+        if (cache.put(source.url, bytes, source.mime)) {
+            cache.addPrefetchedBytes(bytes.size.toLong())
+        }
+    }
+
+    /** 既有 OkHttp 直下路径（复用关闭时使用：字节经 `streamClient` 自动落投屏独立磁盘缓存） */
+    private fun prefetchViaOkHttp(source: CastSource.Http) {
+        val builder = Request.Builder().url(source.url).get()
+        // 会话 headers 是防盗链关键；Accept-Encoding 必须剥除（否则拿到压缩体）
+        source.headers.forEach { (k, v) ->
+            if (!k.equals("Accept-Encoding", true)) builder.header(k, v)
+        }
+        DlnaHttp.streamClient.newCall(builder.build()).execute().use { response ->
+            if (!response.isSuccessful) return
+            val body = response.body ?: return
+            val bytes = body.bytes()
+            if (bytes.isEmpty()) return
+            // REQ-8：上游声明长度与实际读到的字节数不一致（或长度不可知）时，只落磁盘不落 L1
+            val declared = response.header("Content-Length")?.toLongOrNull() ?: -1L
+            if (!CastRangeSpec.isComplete(bytes.size.toLong(), declared)) return
+            val mime = response.header("Content-Type").orEmpty()
+            if (cache.put(source.url, bytes, mime)) {
+                cache.addPrefetchedBytes(bytes.size.toLong())
             }
         }
     }

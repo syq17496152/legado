@@ -147,19 +147,24 @@ object DlnaConstants {
      * 铁律（用户裁决 2026-09-16）：性能参数取决于设备能力，禁止写死保守值。
      */
 
-    /** 分片内存缓存上限（MB）：可选 32 / 64 / 128 / 256 */
+    /** 分片内存缓存上限（MB）：档位见 [CACHE_MB_TIERS] */
     const val PREF_CACHE_MB = "dlnaCacheMb"
-    const val DEFAULT_CACHE_MB = 64
+    const val DEFAULT_CACHE_MB = 128
 
-    /** 预取窗口（片数）：可选 3 / 5 / 10 */
+    /** 预取窗口（片数）：档位见 [PREFETCH_WINDOW_TIERS] */
     const val PREF_PREFETCH_WINDOW = "dlnaPrefetchWindow"
     const val DEFAULT_PREFETCH_WINDOW = 5
 
-    /** 预取并发：可选 2 / 3 / 4 */
+    /** 预取并发：档位见 [PREFETCH_CONCURRENCY_TIERS] */
     const val PREF_PREFETCH_CONCURRENCY = "dlnaPrefetchConcurrency"
     const val DEFAULT_PREFETCH_CONCURRENCY = 3
 
-    /** 二级磁盘缓存容量（MB）：0 = 关闭；可选 0 / 128 / 256 / 512 */
+    /**
+     * 投屏独立磁盘缓存容量（MB）：0 = 关闭；档位见 [DISK_CACHE_MB_TIERS]。
+     *
+     * ⚠️ 仅在「复用播放器视频缓存」**关闭**时生效；开启时磁盘层是播放器的
+     * `SimpleCache`（同一实例），本项在设置面板内置灰只读（AD-01）。
+     */
     const val PREF_DISK_CACHE_MB = "dlnaDiskCacheMb"
     const val DEFAULT_DISK_CACHE_MB = 256
 
@@ -169,8 +174,41 @@ object DlnaConstants {
     /** 单个分片允许进入内存缓存的最大字节数（防御单片撑爆） */
     const val MAX_SEGMENT_BYTES = 8L * 1024 * 1024
 
-    /** 二级磁盘缓存目录名（挂在应用 cacheDir 下） */
+    /** 投屏独立磁盘缓存目录名（挂在应用 cacheDir 下，仅复用关闭时使用） */
     const val DISK_CACHE_DIR = "dlna-cast"
+
+    // ==================== 2026-09-17 dlna-cast-cache-unify：档位单源化（AD-04/AD-08）====================
+    //
+    // 铁律：**档位列表只允许定义在本文件**，UI 与解析逻辑一律消费这些常量
+    //（禁止在 Composable 内再写一份字面量列表 —— AD-08）。
+    // 默认档不写死：由设备总内存算出推荐档（见 CastTuning），仅当内存不可知时退回 DEFAULT_*。
+
+    /** 内存缓存档位（MB） */
+    val CACHE_MB_TIERS = listOf(64, 128, 256, 512)
+
+    /** 预取窗口档位（片） */
+    val PREFETCH_WINDOW_TIERS = listOf(5, 10, 15)
+
+    /** 预取并发档位 */
+    val PREFETCH_CONCURRENCY_TIERS = listOf(3, 4, 6)
+
+    /** 投屏独立磁盘缓存档位（MB；0 = 关闭） */
+    val DISK_CACHE_MB_TIERS = listOf(0, 128, 256, 512)
+
+    /** 档位模式：自动（推荐档，随设备内存）/ 自定义（用户手选） */
+    const val PREF_TUNING_MODE = "dlnaTuningMode"
+    const val TUNING_MODE_AUTO = "auto"
+    const val TUNING_MODE_CUSTOM = "custom"
+
+    /** 复用播放器视频缓存（L2 与播放器共享同一个 media3 `SimpleCache` 实例），默认开 */
+    const val PREF_REUSE_PLAYER_CACHE = "dlnaReusePlayerCache"
+
+    /** 本会话不写入共享缓存（仅用内存 L1 + 回源，避免挤占播放器缓存），默认关 */
+    const val PREF_SESSION_MEMORY_ONLY = "dlnaSessionMemoryOnly"
+
+    /** 推荐档阈值：设备总内存 ≥ 该值（MB，按整数 GB 截断）→ 对应档位 */
+    const val RAM_TIER_HIGH_MB = 12 * 1024
+    const val RAM_TIER_MID_MB = 8 * 1024
 
     // ==================== 日志 TAG ====================
 
