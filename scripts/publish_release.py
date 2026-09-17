@@ -15,7 +15,7 @@ APK 一键发布编排器：版本确认 → 三包构建 → 校验强化 → g
                       与 build.gradle releaseTime() 及 version_pattern 同构）
     Stage2 三包构建   依次 subprocess 调 build-legado.bat（test/release/coexist，
                       显式版本第 3 参保证同版本），每包后 bat 内嵌 daemon 清场
-    Stage3 校验强化   三包齐全 / libcronet.so / apksigner 验签 / 包名版本一致性 /
+    Stage3 校验强化   三包齐全 / Cronet 动态下载双门禁 / apksigner 验签 / 包名版本一致性 /
                       updateLog 当日条目——致命项 fail-fast exit
     gh release gh CLI 上传三包（test 包带 _debug 后缀命名防同名冲突）；
                       gitee 走原 requests 层
@@ -451,18 +451,28 @@ def find_sdk_tool(tool_name: str) -> Optional[Path]:
     return None
 
 
-def check_libcronet(apk: Path) -> bool:
-    """libcronet 存在校验（R4，zipfile 直查，不依赖 bat 内校验）。
+def check_cronet_packaging(apk: Path) -> Tuple[bool, str]:
+    """Cronet **动态下载双向门禁**（R4，zipfile 直查，不依赖 bat 内校验）。
 
-    cronet-bundled Maven 迁移后 so 带版本号（如 libcronet.151.0.7922.47.so），
-    故用 libcronet*.so 前缀匹配而非精确名。
+    现行标准（2026-09-15 cronet-dynamic-download 迁移，见
+    `docs/project-rules/package-naming.md`「Cronet 动态下载门禁」）：
+      ① APK **必须不含** `lib/*/libcronet*.so` —— 存在即 bundled 泄漏（包体异常）
+      ② APK **必须含** `assets/cronet.json` —— 缺失则运行时按 ABI 下载 so 的校验必失败
+
+    ⚠️ 旧实现（cronet-bundled 时代）要求"APK 内含 libcronet*.so"，与现行路线完全相反：
+    按现行动态下载打的包会被它 100% 拦截（2026-09-17 三包发布实测 exit 1 铁证）。
     """
     try:
         with zipfile.ZipFile(apk) as z:
-            return any(n.startswith("lib/arm64-v8a/libcronet") and n.endswith(".so")
-                       for n in z.namelist())
+            names = z.namelist()
     except zipfile.BadZipFile:
-        return False
+        return False, "APK 无法解析（BadZipFile）"
+    leaked = [n for n in names if n.startswith("lib/") and "libcronet" in n and n.endswith(".so")]
+    if leaked:
+        return False, f"lib/*/libcronet*.so 泄漏（bundled 残留）: {leaked[:3]}"
+    if "assets/cronet.json" not in names:
+        return False, "assets/cronet.json 缺失（运行时 so 下载校验必失败）"
+    return True, "无 libcronet*.so + 含 assets/cronet.json"
 
 
 def run_tool(tool: Path, tool_args: List[str]) -> Tuple[bool, str]:
@@ -496,7 +506,7 @@ def stage3_verify(config: dict, version: str, dry_run: bool,
         if missing:
             log("VERIFY", f"[dry-run] 产物缺失 {missing} —— 实际发布时将 fail-fast 拦截（模拟通过）")
         else:
-            log("VERIFY", "[dry-run] 将执行: libcronet.so 三包检查 / apksigner 验签 / "
+            log("VERIFY", "[dry-run] 将执行: Cronet 动态下载双门禁检查 / apksigner 验签 / "
                           "aapt2 包名版本一致性 / updateLog 当日条目")
         log_path = PROJECT_ROOT / config["update_log_path"]
         body = read_update_log(log_path, version)
@@ -506,12 +516,13 @@ def stage3_verify(config: dict, version: str, dry_run: bool,
         log("VERIFY", f"产物缺失（R3 fail-fast）: {missing} —— 不再仅 WARN", "ERROR")
         sys.exit(1)
 
-    # 致命项 2：libcronet.so（R4，exit 1 不降级）
+    # 致命项 2：Cronet 动态下载双向门禁（R4，exit 1 不降级）
     for pkg, apk in apks.items():
-        if not check_libcronet(apk):
-            log("VERIFY", f"[{pkg}] libcronet.so 缺失: {apk.name}（m3u8 播放将失效，exit 1）", "ERROR")
+        ok, detail = check_cronet_packaging(apk)
+        if not ok:
+            log("VERIFY", f"[{pkg}] Cronet 打包门禁失败: {apk.name} —— {detail}（exit 1）", "ERROR")
             sys.exit(1)
-    log("VERIFY", "libcronet.so 三包齐全")
+    log("VERIFY", "Cronet 动态下载双门禁：三包全部通过（无 libcronet*.so + 含 assets/cronet.json）")
 
     # 致命项 3/4：apksigner 验签 + aapt2 包名/版本一致性（R5）
     apksigner = find_sdk_tool("apksigner.bat")
