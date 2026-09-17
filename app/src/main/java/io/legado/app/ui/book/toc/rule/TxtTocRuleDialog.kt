@@ -36,7 +36,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -122,14 +121,17 @@ class TxtTocRuleDialog() : ComposeDialogFragment(),
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 LegadoComposeTheme {
-                    val tocRules by produceState<List<TxtTocRule>>(
-                        initialValue = emptyList()
-                    ) {
+                    // 列表状态用引用判等承载：TxtTocRule.equals 仅比 id，若沿用结构相等策略，
+                    // DB 回灌的同 id 新实例会被判「相等」而跳过赋值 → 开关等变更无法反映到界面
+                    var tocRules by remember {
+                        mutableStateOf<List<TxtTocRule>>(emptyList(), referentialEqualityPolicy())
+                    }
+                    LaunchedEffect(Unit) {
                         appDb.txtTocRuleDao.observeAll().catch {
                             AppLog.put("TXT目录规则对话框获取数据失败\n${it.localizedMessage}", it)
                         }.flowOn(IO).conflate().collect { rules ->
                             initSelectedName(rules)
-                            value = rules
+                            tocRules = rules
                         }
                     }
                     TxtTocRuleContent(
@@ -137,8 +139,10 @@ class TxtTocRuleDialog() : ComposeDialogFragment(),
                         selectedName = selectedName,
                         onSelect = { rule -> selectedName = rule.name },
                         onToggleEnable = { rule, checked ->
-                            rule.enable = checked
-                            viewModel.update(rule)
+                            val updated = rule.copy(enable = checked)
+                            // 本地先行替换元素（即时反馈），随后落库；禁止原地改实体（变更不可观测）
+                            tocRules = tocRules.map { if (it.id == rule.id) updated else it }
+                            viewModel.update(updated)
                         },
                         onEdit = { rule ->
                             showDialogFragment(TxtTocRuleEditDialog(rule?.id))

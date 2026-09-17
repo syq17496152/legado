@@ -955,25 +955,42 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         isSelectMode.value = current.isNotEmpty()
     }
 
+    /**
+     * 本地变更统一入口：改完 [sourcesState] 立即递增渲染版本信号。
+     * BookSourceScreen 的行模型以 (sourceDataVersion, showSourceHost) 为缓存键；本地改动若不递增版本号，
+     * 行渲染会继续读旧快照（开关 checked／发现指示点／菜单文字全部定格，而 DB 实际已更新）。
+     */
+    private fun mutateSourcesLocally(block: () -> Unit) {
+        block()
+        sourceDataVersion++
+    }
+
     private fun toggleSourceEnabled(source: BookSourcePart, enabled: Boolean) {
-        val updated = sourcesState.replaceFirst(
-            predicate = { it.bookSourceUrl == source.bookSourceUrl },
-            transform = { it.copy(enabled = enabled) }
-        ) ?: source.copy(enabled = enabled)
+        val updated = source.copy(enabled = enabled)
+        mutateSourcesLocally {
+            sourcesState.replaceFirst(
+                predicate = { it.bookSourceUrl == source.bookSourceUrl },
+                transform = { updated }
+            )
+        }
         viewModel.enable(enabled, listOf(updated))
     }
 
     private fun updateSelectedEnabled(enabled: Boolean) {
         val urls = selectedUrls.value
         if (urls.isEmpty()) return
-        sourcesState.replaceMatching({ it.bookSourceUrl in urls }) { it.copy(enabled = enabled) }
+        mutateSourcesLocally {
+            sourcesState.replaceMatching({ it.bookSourceUrl in urls }) { it.copy(enabled = enabled) }
+        }
     }
 
     private fun updateSelectedExplore(enabled: Boolean) {
         val urls = selectedUrls.value
         if (urls.isEmpty()) return
-        sourcesState.replaceMatching({ it.bookSourceUrl in urls }) {
-            it.copy(enabledExplore = enabled)
+        mutateSourcesLocally {
+            sourcesState.replaceMatching({ it.bookSourceUrl in urls }) {
+                it.copy(enabledExplore = enabled)
+            }
         }
     }
 
@@ -1140,10 +1157,13 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     }
 
     private fun enableExplore(enable: Boolean, bookSource: BookSourcePart) {
-        val updated = sourcesState.replaceFirst(
-            predicate = { it.bookSourceUrl == bookSource.bookSourceUrl },
-            transform = { it.copy(enabledExplore = enable) }
-        ) ?: bookSource.copy(enabledExplore = enable)
+        val updated = bookSource.copy(enabledExplore = enable)
+        mutateSourcesLocally {
+            sourcesState.replaceFirst(
+                predicate = { it.bookSourceUrl == bookSource.bookSourceUrl },
+                transform = { updated }
+            )
+        }
         viewModel.enableExplore(enable, listOf(updated))
     }
 
