@@ -22,10 +22,10 @@ import com.shuyu.gsyvideoplayer.listener.GSYSampleCallBack
 import com.shuyu.gsyvideoplayer.video.base.GSYVideoView
 import io.legado.app.R
 import io.legado.app.constant.AppLog
-import io.legado.app.constant.BookSourceType
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssEpisode
 import io.legado.app.help.gsyVideo.VideoPlayer
+import io.legado.app.help.source.isVideoSource
 import io.legado.app.model.Download
 import io.legado.app.model.VideoPlay
 import io.legado.app.service.DownloadTaskType
@@ -672,7 +672,8 @@ class VideoFragment : Fragment() {
         // video-booksource-multiroute AD-06：视频书源模式标题可点开详情抽屉
         // （书源有 intro/coverUrl 详情数据；订阅源无此数据，不注入入口，UI 零退化）
         val detailSource = VideoPlay.source as? BookSource
-        if (detailSource?.bookSourceType == BookSourceType.video) {
+        // video-source-dual-track AD-02：判定收口（静态源类型 OR 运行时 book.type）
+        if (detailSource.isVideoSource(VideoPlay.book?.type)) {
             tvVideoTitle?.setOnClickListener {
                 showVideoBookDetailSheet()
             }

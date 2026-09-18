@@ -36,6 +36,7 @@ import io.legado.app.data.entities.RssStar
 import io.legado.app.help.CacheManager
 import io.legado.app.help.book.getDanmaku
 import io.legado.app.help.book.update
+import io.legado.app.help.source.isVideoSource
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.gsyVideo.ExoVideoManager
 import io.legado.app.help.gsyVideo.ExoVideoManager.Companion.FULLSCREEN_ID
@@ -1372,7 +1373,11 @@ object VideoPlay : CoroutineScope by MainScope(){
         // video-source-multiline-l0-preload 1.0b：目录来源+耗时埋点（DB 命中 or 即时加载）
         val tocFromDb = toc?.isNotEmpty() == true
         val instantLoadStartMs = System.currentTimeMillis()
-        if (bsVideoForToc?.bookSourceType == BookSourceType.video && bookForToc != null && toc.isNullOrEmpty()) {
+        // video-source-dual-track AD-03：门禁解耦——原条件含静态视频类型判定，对"视频身份由目录 JS
+        // 运行时写入 book.type"的自定义源恒为假，导致目录永不加载（死锁式"未找到章节"）。
+        // 现仅解耦该条件：源为 BookSource 且目录为空即触发即时加载；是否按视频链路处理交由
+        // 后续映射环节的 AD-02 helper 判定（保留 BookSource 非空守卫，避免订阅源/单 URL 会话误入）。
+        if (bsVideoForToc != null && bookForToc != null && toc.isNullOrEmpty()) {
             // MacCMS detail 接口响应本身含 vod_play_url，tocUrl 空时用 bookUrl 直接当目录地址
             if (bookForToc.tocUrl.isBlank()) {
                 bookForToc.tocUrl = bookForToc.bookUrl
@@ -1394,14 +1399,14 @@ object VideoPlay : CoroutineScope by MainScope(){
                     volumes.add(t)
                 }
             }
-            if (bsVideoForToc.bookSourceType == BookSourceType.video) {
+            if (bsVideoForToc.isVideoSource(bookForToc?.type)) {
                 AppLog.put(
                     "VideoRoutesDiag initSource tocSource: fromDb=false, instantLoad=true, " +
                         "tocSize=${toc?.size}, volumes=${volumes.size}, " +
                         "loadMs=${System.currentTimeMillis() - instantLoadStartMs}"
                 )
             }
-        } else if (tocFromDb && bsVideoForToc?.bookSourceType == BookSourceType.video) {
+        } else if (tocFromDb && bsVideoForToc.isVideoSource(bookForToc?.type)) {
             AppLog.put(
                 "VideoRoutesDiag initSource tocSource: fromDb=true, instantLoad=false, " +
                     "tocSize=${toc?.size}, volumes=${volumes.size}, branch=volumes/flat判定"
@@ -1412,7 +1417,7 @@ object VideoPlay : CoroutineScope by MainScope(){
         // video-booksource-multiroute：视频书源时把卷章映射为线路/集数模型，
         // 复用订阅源线路/集数选择器 UI（数据源 rssRoutes/rssEpisodes），UI 层零改动
         val bookSourceForRoutes = source as? BookSource
-        if (bookSourceForRoutes?.bookSourceType == BookSourceType.video && volumes.isNotEmpty()) {
+        if (bookSourceForRoutes.isVideoSource(bookForToc?.type) && volumes.isNotEmpty()) {
             val tocList = toc.orEmpty()
             val mappedRoutes: List<RssRoute> = volumes.mapIndexed { vIndex, volume ->
                 val start = volume.index
@@ -1444,7 +1449,7 @@ object VideoPlay : CoroutineScope by MainScope(){
             postEvent(EventBus.UP_VIDEO_INFO, arrayListOf(1))
             // video-booksource-align-rss AD-01：书源侧 VideoPlaybackQueue 接入删除（单页化后
             // 无扁平位映射/占位页需求），组件文件保留供订阅源多集分页改造后续用
-        } else if (bookSourceForRoutes?.bookSourceType == BookSourceType.video) {
+        } else if (bookSourceForRoutes.isVideoSource(bookForToc?.type)) {
             // ui-batch-fix-0905：无卷书源回退——TOC 为扁平章节列表（无卷行）时映射整体跳过，
             // 导致沉浸式左下角集数选择器与详情抽屉空白（与订阅源体验不一致）。
             // 镜像 parseRssRoutes 扁平回退：全部章节包装为单线路"线路1"，
@@ -1741,7 +1746,7 @@ object VideoPlay : CoroutineScope by MainScope(){
         }
         // 视频书源：目录含线路卷（isVolume）即为多线路模式
         val b = source as? BookSource ?: return false
-        return b.bookSourceType == BookSourceType.video && volumes.isNotEmpty()
+        return b.isVideoSource(book?.type) && volumes.isNotEmpty()
     }
 
     /**
@@ -1755,7 +1760,7 @@ object VideoPlay : CoroutineScope by MainScope(){
     fun switchToRoute(routeIndex: Int, player: GSYBaseVideoPlayer): Boolean {
         // video-booksource-multiroute：视频书源分支——目录卷章内存切片，无网络采集
         val bookSource = source as? BookSource
-        if (bookSource != null && bookSource.bookSourceType == BookSourceType.video) {
+        if (bookSource.isVideoSource(book?.type)) {
             return switchBookRoute(routeIndex, player)
         }
         // source 是 BaseSource，需 cast 为 RssSource 才能访问 ruleEpisodes
@@ -2110,7 +2115,7 @@ object VideoPlay : CoroutineScope by MainScope(){
     fun playRssEpisode(player: GSYBaseVideoPlayer, episode: RssEpisode) {
         // video-booksource-multiroute：视频书源分派——episode 来自卷章映射，按索引走章节播放链
         val bookSource = source as? BookSource
-        if (bookSource != null && bookSource.bookSourceType == BookSourceType.video) {
+        if (bookSource.isVideoSource(book?.type)) {
             val idx = rssEpisodes?.indexOfFirst { it.url == episode.url && it.title == episode.title } ?: -1
             if (idx >= 0) {
                 rssEpisodeIndex = idx

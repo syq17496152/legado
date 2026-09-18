@@ -1,6 +1,7 @@
 package io.legado.app.help.ai
 
 import io.legado.app.constant.BookSourceType
+import io.legado.app.help.source.isVideoSource
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.SearchBook
@@ -384,7 +385,8 @@ object AiLibraryTool {
     }
 
     private fun searchBookToJson(book: SearchBook): JSONObject {
-        val isVideo = appDb.bookSourceDao.getBookSource(book.origin)?.bookSourceType == BookSourceType.video
+        // video-source-dual-track AD-02：判定收口（静态源类型 OR 运行时 book.type）
+        val isVideo = appDb.bookSourceDao.getBookSource(book.origin).isVideoSource(book.type)
         return JSONObject().apply {
             put("name", book.name)
             put("author", book.author)

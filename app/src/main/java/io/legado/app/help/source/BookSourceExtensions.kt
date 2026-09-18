@@ -173,3 +173,24 @@ fun BookSource.getBookType(): Int {
         else -> BookType.text
     }
 }
+
+/**
+ * 视频身份统一判定（video-source-dual-track AD-02 / AD-05）
+ *
+ * 语义：**任一侧表态 video 即真**——运行时书籍类型的 video 位，或源静态声明的视频类型；
+ * 两侧均不表态返回 false（回落非视频链路，文本/音频/图片/文件/本地书零误判）。
+ *
+ * 为什么不能只看静态声明：部分自定义源（以卷名为线路的写法）`bookSourceType = 0`，
+ * 其视频身份由目录规则 JS 在运行时写入 `book.type = BookType.video`；若只看静态声明，
+ * 判定会整链落空（目录不即时加载 → 线路不建立 → 播放报"未找到章节"）。
+ *
+ * 注意：`BookType` 是位标志、`BookSourceType` 是独立枚举——两者 video 数值同为 4 但语义不同，
+ * 故位侧必须用位与、静态侧用等值比较，不可互换。
+ *
+ * @param bookType 调用方取到的运行时书籍类型（`Book.type` / `SearchBook.type`）；
+ *                 取不到时传 null，退化为静态判定（不放大也不缩小语义）
+ */
+fun BookSource?.isVideoSource(bookType: Int?): Boolean {
+    return ((bookType ?: 0) and BookType.video) > 0 ||
+        this?.bookSourceType == BookSourceType.video
+}

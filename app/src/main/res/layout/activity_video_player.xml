@@ -64,6 +64,22 @@
                 android:layout_height="wrap_content"
                 tools:layout_height="300dp" />
 
+            <!-- video-source-dual-track AD-04：信息区合并为单一滚动容器——图片(iv_cover)、详情(intro)、
+                 线路(volumes)、集数(chapters) 整体上下滚动；playerView 与底部操作栏 legacy_actions
+                 留在滚动区外，避免影响 setupPlayerView() 的 surface 尺寸计算 -->
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/legacy_scroll"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:fillViewport="true"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
             <LinearLayout
                 android:id="@+id/data"
                 android:layout_width="match_parent"
@@ -126,7 +142,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:maxHeight="140dp"
                         android:scrollbars="none">
                         <FrameLayout
                             android:id="@+id/tv_intro_container"
@@ -138,12 +153,12 @@
 
             </LinearLayout>
 
-            <!-- 线路/集数区：weight=1 占据信息区下方剩余空间，集数 RecyclerView 纵向平铺滚动（2026-09-14 布局重排） -->
+            <!-- 线路/集数区：已并入 legacy_scroll 整体滚动（video-source-dual-track AD-04）；
+                     高度改 wrap_content 随内容展开，集数 RecyclerView 自身不再滚动（nestedScrollingEnabled=false） -->
             <LinearLayout
                 android:id="@+id/chapters_container"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
+                android:layout_height="wrap_content"
                 android:orientation="vertical">
 
                 <!-- W2-B3：区块标题平铺（去掉 iv_chapter 二级目录页入口，线路/选集直接页内呈现） -->
@@ -187,8 +202,7 @@
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/chapters"
                     android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
                     android:clipToPadding="false"
                     android:orientation="vertical"
                     android:paddingTop="2dp"
@@ -196,6 +210,9 @@
                     app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
 
             </LinearLayout>
+
+                </LinearLayout>
+            </androidx.core.widget.NestedScrollView>
 
             <!-- video-player-dual-layout W2-B2：传统布局功能按钮区（对齐沉浸式核心能力：下载/收藏/悬浮窗/设置）
                  2026-09-14 布局重排：操作按钮区移至最底部（在线路/集数区下方），线路/集数区上移到图片描述下方 -->

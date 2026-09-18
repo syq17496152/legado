@@ -14,6 +14,7 @@ import io.legado.app.help.book.removeAllBookType
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.SourceNetworkClient
 import io.legado.app.help.source.getBookType
+import io.legado.app.help.source.isVideoSource
 import io.legado.app.help.video.MacCmsNormalizer
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.model.Debug
@@ -306,7 +307,11 @@ object WebBook {
             // video-booksource-multiroute：视频书源目录分流（严格隔离分支，文本书源/订阅源路径零改动）
             // L0 零规则（MacCMS 自动规范化直产卷章）/ L1 规则写法（注入双结构后走既有解析）/
             // L2 CSS·XPath·正则 / L3 JS（非 MacCMS body 原样返回，走既有解析路径不受影响）
-            if (bookSource.bookSourceType == BookSourceType.video) {
+            // video-source-dual-track AD-02：判定改调统一 helper（静态源类型 OR 运行时 book.type），
+            // 与其余判定点同构。注意上方 L300-301 刚用 getBookType() 重置过 book.type，
+            // 故对 bookSourceType=0 的自定义源此处当前仍走静态侧（行为等价，意图是语义对齐、
+            // 消除静态判定残留，防止未来上游时序调整后此处漏判）。
+            if (bookSource.isVideoSource(book.type)) {
                 val videoChapters = videoBookChapterListAwait(bookSource, book)
                 if (videoChapters != null) {
                     return@runCatching ChapterListResult(book.copy(), videoChapters)

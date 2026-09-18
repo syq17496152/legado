@@ -52,8 +52,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.viewpager2.widget.ViewPager2
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.core.widget.NestedScrollView
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
@@ -790,6 +790,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      * 注：rssEpisode.cover/duration 为预留字段（当前恒空），封面回退 rssArticle.image、时长隐藏。
      */
     private fun bindLegacyInfo() {
+        // video-source-dual-track AD-04：线路/集数列表已并入 legacy_scroll 整体滚动（wrap_content），
+        // 关闭其自身嵌套滚动，避免与外层 NestedScrollView 争抢手势。
+        // 注意：该属性只能在视图构造完成后于运行时设置——若写在 XML 的 android:nestedScrollingEnabled 上，
+        // 会在 View.<init> 阶段回调 setNestedScrollingEnabled()，而 NestedScrollView/RecyclerView 的
+        // NestedScrollingChildHelper 此时尚未创建，直接抛 NPE（2026-09-18 真机崩溃实证）。
+        binding.volumes.isNestedScrollingEnabled = false
+        binding.chapters.isNestedScrollingEnabled = false
         val book = VideoPlay.book
         // W3 诊断日志：确认分支走向与数据状态（图片/按钮问题定位）
         AppLog.put("bindLegacyInfo: book=${if (book != null) book.name.take(4) else "null"}, routes=${VideoPlay.rssRoutes?.size}, episodes=${VideoPlay.rssEpisodes?.size}, articles=${VideoPlay.rssArticles?.size}, articleIdx=${VideoPlay.rssArticleIndex}, articleImg=${VideoPlay.rssArticles?.getOrNull(VideoPlay.rssArticleIndex)?.image?.isNotBlank()}")
@@ -1771,24 +1778,31 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
     private fun scrollToDurChapter(recyclerView: RecyclerView, index: Int) {
         recyclerView.postDelayed({
-            val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
-            layoutManager?.run {
-                val smoothScroller = object : LinearSmoothScroller(this@VideoPlayerActivity) {
-                    override fun getHorizontalSnapPreference(): Int {
-                        return SNAP_TO_START // 滚动到最左边
-                    }
-
-                    // 2026-09-14 布局重排：集数纵向平铺滚动后，纵向滚动也吸附到顶部
-                    override fun getVerticalSnapPreference(): Int {
-                        return SNAP_TO_START
-                    }
-                }
-                smoothScroller.targetPosition = index
-                this.startSmoothScroll(smoothScroller)
-            }
             val adapter = recyclerView.adapter as? ChapterAdapter
             adapter?.updateSelectedPosition(index)
+            // video-source-dual-track AD-04：集数区已并入 legacy_scroll 整体滚动
+            // （layout_height=wrap_content + nestedScrollingEnabled=false），RecyclerView 自身滚动范围≈0，
+            // 原 LinearSmoothScroller 定位在此形态下失效；改为计算目标子项在滚动容器内的偏移并滚动父容器。
+            val scrollContainer = findViewById<NestedScrollView>(R.id.legacy_scroll)
+            val targetChild = recyclerView.layoutManager?.findViewByPosition(index)
+            if (scrollContainer != null && targetChild != null) {
+                scrollContainer.smoothScrollTo(0, offsetInAncestor(targetChild, scrollContainer))
+            }
         }, 200)
+    }
+
+    /**
+     * 计算 [child] 相对于祖先 [ancestor] 的纵向偏移（逐级累加 top 直至命中祖先），
+     * 供集数定位时滚动父容器使用（video-source-dual-track AD-04）。
+     */
+    private fun offsetInAncestor(child: View, ancestor: View): Int {
+        var offset = 0
+        var current: View? = child
+        while (current != null && current !== ancestor) {
+            offset += current.top
+            current = current.parent as? View
+        }
+        return offset
     }
 
     private fun upView() {

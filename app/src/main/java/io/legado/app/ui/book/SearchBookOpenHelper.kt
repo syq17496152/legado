@@ -3,8 +3,8 @@ package io.legado.app.ui.book
 import android.content.Context
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookSourceType
-import io.legado.app.constant.BookType
 import io.legado.app.constant.SourceType
+import io.legado.app.help.source.isVideoSource
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.ui.book.info.BookInfoNavigator
@@ -22,8 +22,9 @@ object SearchBookOpenHelper {
     }
 
     fun isVideoResult(book: SearchBook, sourceTypeHint: Int? = null): Boolean {
-        return book.type and BookType.video > 0 ||
-                sourceTypeHint == BookSourceType.video ||
-                appDb.bookSourceDao.getBookSource(book.origin)?.bookSourceType == BookSourceType.video
+        // video-source-dual-track AD-02：静态源类型与运行时 book.type 的判定收口为统一 helper；
+        // sourceTypeHint 为调用方显式提示，仍作为独立真值保留
+        return sourceTypeHint == BookSourceType.video ||
+                appDb.bookSourceDao.getBookSource(book.origin).isVideoSource(book.type)
     }
 }

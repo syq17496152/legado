@@ -1,13 +1,13 @@
 package io.legado.app.ui.video
 
 import io.legado.app.constant.AppLog
-import io.legado.app.constant.BookSourceType
 import io.legado.app.constant.BookType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.isNotShelf
+import io.legado.app.help.source.isVideoSource
 import io.legado.app.model.webBook.WebBook
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -56,7 +56,8 @@ object VideoBookPreloader {
         if (searchBook.bookUrl.isBlank() || searchBook.origin.isBlank()) return false
         if (appDb.bookChapterDao.getChapterList(searchBook.bookUrl).isNotEmpty()) return true
         val source = appDb.bookSourceDao.getBookSource(searchBook.origin) ?: return false
-        if (source.bookSourceType != BookSourceType.video && (searchBook.type and BookType.video) <= 0) {
+        // video-source-dual-track AD-02：判定收口为统一 helper（静态源类型 OR 运行时 book.type）
+        if (!source.isVideoSource(searchBook.type)) {
             return false
         }
         val stored = appDb.bookDao.getBook(searchBook.bookUrl)
@@ -103,12 +104,14 @@ object VideoBookPreloader {
                         AppLog.put("VideoRoutesDiag preloadBook: urlEnd=$logTag, source=null, skip")
                         return@withPermit
                     }
-                    if (source.bookSourceType != BookSourceType.video) {
+                    // video-source-dual-track AD-02：判定收口为统一 helper；此处复用下方原有的 stored 查询
+                    // （上移至此），不新增 DB 访问——源静态类型与运行时 book.type 任一侧为视频即预取
+                    val stored = appDb.bookDao.getBook(bookUrl)
+                    if (!source.isVideoSource(stored?.type)) {
                         AppLog.put("VideoRoutesDiag preloadBook: urlEnd=$logTag, notVideo, skip")
                         return@withPermit
                     }
                     val startMs = System.currentTimeMillis()
-                    val stored = appDb.bookDao.getBook(bookUrl)
                     val inBookshelf = stored?.isNotShelf == false
                     // 书源多线路直产修复（2026-09-14 用户真机铁证 bindLegacyInfo: book=http）：
                     // name 保持空串而非 bookUrl，WebBook.getBookInfoAwait(canReName=false) 内
