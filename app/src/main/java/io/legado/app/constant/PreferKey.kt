@@ -252,6 +252,12 @@ object PreferKey {
     const val recordHeapDump = "recordHeapDump"
     const val optimizeRender = "optimizeRender"
     const val updateToVariant = "updateToVariant"
+
+    /** 更新加速：GitHub 代理模板列表（JSON 数组字符串；未配置=内置默认，`[]`=用户已清空） */
+    const val updateGithubProxyTemplates = "updateGithubProxyTemplates"
+
+    /** 更新加速：当前选中的代理模板索引（-1=不使用代理） */
+    const val updateGithubProxyIndex = "updateGithubProxyIndex"
     const val streamReadAloudAudio = "streamReadAloudAudio"
     const val pauseReadAloudWhilePhoneCalls = "pauseReadAloudWhilePhoneCalls"
     const val readAloudByMediaButton = "readAloudByMediaButton"

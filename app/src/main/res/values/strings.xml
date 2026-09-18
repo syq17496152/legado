@@ -1621,6 +1621,16 @@
     <string name="start_chapter">Start Chapter</string>
     <string name="update_to_variant_title">检查更新查找版本</string>
     <string name="update_to_variant_summary">切换正式版/测试版</string>
+    <string name="update_accel_tip">代理为第三方服务，请自行甄别。模板支持 ${url} 占位符；未填写占位符时会把原始地址拼到代理地址后面。</string>
+    <string name="update_accel_no_proxy">不使用代理</string>
+    <string name="update_accel_add">添加代理</string>
+    <string name="update_accel_add_title">添加代理</string>
+    <string name="update_accel_edit">编辑</string>
+    <string name="update_accel_edit_title">编辑代理</string>
+    <string name="update_accel_delete">删除</string>
+    <string name="update_accel_hint">https://proxy.example/${url}</string>
+    <string name="update_accel_summary_none">GitHub 通道，不使用代理</string>
+    <string name="update_accel_summary_proxy">GitHub 通道，代理：%1$s</string>
     <string name="default_version">当前</string>
     <string name="official_version">正式版</string>
     <string name="beta_release_version">测试版</string>

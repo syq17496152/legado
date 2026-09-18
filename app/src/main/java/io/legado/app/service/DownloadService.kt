@@ -530,7 +530,30 @@ class DownloadService : BaseService() {
             size.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
             size.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         )
+        maybeInstallApk(localPath)
         maybeStopSelf()
+    }
+
+    /**
+     * 更新包下载完成后拉起系统安装器（app-update-github-channel AD-06）
+     *
+     * 判据为产物后缀：apk 只可能来自应用内更新下载，故无需额外持久化标记。
+     * Android 10+ 后台启动 Activity 受限，此处依赖本服务处于前台服务状态（系统例外条件之一）；
+     * 被拦时记日志并由"下载管理页手动打开"兜底，不重复弹窗。
+     */
+    private fun maybeInstallApk(localPath: String) {
+        if (!localPath.endsWith(".apk", ignoreCase = true)) return
+        scope.launch(Dispatchers.Main) {
+            kotlin.runCatching {
+                openFileUri(
+                    Uri.fromFile(File(localPath)),
+                    "application/vnd.android.package-archive"
+                )
+                AppLog.put("DownloadDiag 拉起安装器: ${File(localPath).name}")
+            }.onFailure {
+                AppLog.put("DownloadDiag 拉起安装器失败: ${it.localizedMessage}", it)
+            }
+        }
     }
 
     private fun handleFail(id: Long, info: DownloadInfo, error: DownloadError) {
@@ -771,6 +794,9 @@ internal fun resolveVideoFileName(raw: String?, url: String, videoExts: Set<Stri
     if (rawName.isNotBlank()) {
         val safe = sanitizeDownloadName(rawName)
         val ext = safe.substringAfterLast('.', "").lowercase()
+        // apk 显式放行：更新包文件名必须保留 .apk 后缀，否则系统无法识别为安装包
+        // （app-update-github-channel AD-05；仅认 apk，不建通用扩展名白名单以免误伤视频补全）
+        if (ext == "apk") return safe
         return if (ext in videoExts) safe else "$safe.mp4"
     }
     val path = url.substringBefore('?').substringBefore('#')

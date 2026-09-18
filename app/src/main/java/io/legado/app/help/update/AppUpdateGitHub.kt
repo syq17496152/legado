@@ -2,6 +2,7 @@ package io.legado.app.help.update
 
 import androidx.annotation.Keep
 import io.legado.app.constant.AppConst
+import io.legado.app.constant.AppLog
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
@@ -10,11 +11,23 @@ import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.text
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 
 @Keep
 @Suppress("unused")
 object AppUpdateGitHub : AppUpdate.AppUpdateInterface {
+
+    /** 发布仓 Releases API（本 fork 发布仓，公开可匿名访问；实测直连可用） */
+    private const val RELEASE_URL =
+        "https://api.github.com/repos/syq17496152/legado/releases/latest"
+
+    /** 单次候选尝试限时 */
+    private const val ATTEMPT_TIMEOUT_MS = 8_000L
+
+    /** 候选上限 = 直连 + 前 3 个代理模板，防止叠加大量模板把总超时耗尽（design §5.2/§5.4） */
+    private const val MAX_QUERY_CANDIDATES = 4
 
     private val checkVariant: AppVariant
         get() = when (AppConfig.updateToVariant) {
@@ -25,52 +38,101 @@ object AppUpdateGitHub : AppUpdate.AppUpdateInterface {
             else -> AppConst.appInfo.appVariant
         }
 
+    /**
+     * 查询候选序列：直连优先，失败后按代理模板逐个兜底（app-update-github-channel AD-02）
+     *
+     * 直连优先的依据（实测）：`api.github.com` 直连可用且最快（200/0.94s），而公共加速站多为
+     * 文件下载代理，对 API 的支持参差（实测仅部分站点返回完整 JSON）→ 代理只作失败重试路径，
+     * 避免选中一个不支持 API 的模板就导致"检查更新"整体失效。
+     */
+    private fun buildQueryCandidates(): List<String> {
+        val proxied = AppUpdateConfig.githubProxyTemplates
+            .map { AppUpdateConfig.applyTemplate(it, RELEASE_URL) }
+        return (listOf(RELEASE_URL) + proxied).distinct().take(MAX_QUERY_CANDIDATES)
+    }
+
     private suspend fun getLatestRelease(): List<AppReleaseInfo> {
-        // 更新源指向本 fork 发布仓（修复硬编码上游原版仓导致应用内更新对 fork 发版失效）
-        // beta 与正式统一走 /releases/latest（app-update-variant-fix）：三包 asset 同处一个
-        // release，变体靠文件名区分（AppReleaseInfo.resolveAppVariant）；旧 tags/beta 滚动
-        // 发布从未创建过（实测 404），导致 beta 包 GitHub 兜底必报"获取新版本出错(404)"
-        val lastReleaseUrl = "https://api.github.com/repos/syq17496152/legado/releases/latest"
+        val candidates = buildQueryCandidates()
+        val proxyLabel = AppUpdateConfig.selectedGithubProxyTemplate
+            ?.let { AppUpdateConfig.proxyLabel(it) }
+            ?: "none"
+        AppLog.put("AppUpdate 检查开始: 候选数=${candidates.size}, 选中代理=$proxyLabel")
+        var lastError: Throwable? = null
+        candidates.forEachIndexed { index, candidateUrl ->
+            // 取消必须透传：超时取消由 withTimeoutOrNull 转成 null（继续下一候选），
+            // 而父协程取消要能真正中断整段（项目铁律：runCatching 会吞 CancellationException）
+            val result = withTimeoutOrNull(ATTEMPT_TIMEOUT_MS) {
+                try {
+                    Result.success(fetchRelease(candidateUrl))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    Result.failure(e)
+                }
+            }
+            val releases = result?.getOrNull()
+            if (releases != null) {
+                AppLog.put("AppUpdate 候选命中: 序号=$index, 数量=${releases.size}")
+                return releases.sortedByDescending { it.createdAt }
+            }
+            lastError = result?.exceptionOrNull() ?: lastError
+            val reason = lastError?.let { "${it.javaClass.simpleName}:${it.message}" } ?: "超时"
+            AppLog.put("AppUpdate 候选失败: 序号=$index, 原因=$reason")
+        }
+        AppLog.put("AppUpdate 全部候选失败: 候选数=${candidates.size}")
+        val message = lastError?.localizedMessage ?: lastError?.message
+        throw NoStackTraceException(
+            if (message.isNullOrBlank()) "获取新版本出错" else "获取新版本出错 $message"
+        )
+    }
+
+    private suspend fun fetchRelease(url: String): List<AppReleaseInfo> {
         val res = okHttpClient.newCallResponse {
-            url(lastReleaseUrl)
+            url(url)
         }
         if (!res.isSuccessful) {
-            throw NoStackTraceException("获取新版本出错(${res.code})")
+            throw NoStackTraceException("(${res.code})")
         }
         val body = res.body.text()
         if (body.isBlank()) {
-            throw NoStackTraceException("获取新版本出错")
+            throw NoStackTraceException("空响应")
         }
         return GSON.fromJsonObject<GithubRelease>(body)
-            .getOrElse {
-                throw NoStackTraceException("获取新版本出错 " + it.localizedMessage)
-            }
+            .getOrElse { throw NoStackTraceException(it.localizedMessage ?: "解析失败") }
             .gitReleaseToAppReleaseInfo()
-            .sortedByDescending { it.createdAt }
     }
 
     override fun check(
         scope: CoroutineScope,
     ): Coroutine<AppUpdate.UpdateInfo> {
+        // 20s 覆盖"多候选逐个重试"的最坏情况（单次 8s × 候选上限，受外层总超时约束）
         return Coroutine.async(scope) {
             checkAwait()
-        }.timeout(10000)
+        }.timeout(20000)
     }
 
     suspend fun checkAwait(): AppUpdate.UpdateInfo {
-        return getLatestRelease()
+        val release = getLatestRelease()
             .filter { it.appVariant == checkVariant }
-            .firstOrNull { it.versionName > AppConst.appInfo.versionName }
-            ?.let {
-                AppUpdate.UpdateInfo(
-                    it.versionName,
-                    it.note,
-                    it.downloadUrl,
-                    it.name,
-                    it.assetSize,
-                    it.createdAt
-                )
-            }
-            ?: throw NoStackTraceException("已是最新版本")
+            .maxByOrNull { it.createdAt }
+            ?: throw AppUpdate.latestVersionError()
+        // 下载地址按当前选中的代理模板改写（未选中则原样）
+        val updateInfo = AppUpdate.UpdateInfo(
+            tagName = release.versionName,
+            updateLog = release.note,
+            downloadUrl = AppUpdateConfig.applyGithubProxy(release.downloadUrl),
+            fileName = release.name,
+            assetSize = release.assetSize,
+            publishDate = release.createdAt,
+            versionCode = release.versionCode
+        )
+        if (!AppUpdate.isNewerThanCurrent(updateInfo)) {
+            throw AppUpdate.latestVersionError()
+        }
+        AppLog.put(
+            "AppUpdate 组装更新信息: 版本=${updateInfo.tagName}, " +
+                "versionCode=${updateInfo.versionCode}, 代理=${AppUpdateConfig.selectedGithubProxyTemplate != null}"
+        )
+        return updateInfo
     }
 }

@@ -12,7 +12,9 @@ data class AppReleaseInfo(
     val name: String,
     val downloadUrl: String,
     val assetUrl: String,
-    val assetSize: Long = 0
+    val assetSize: Long = 0,
+    /** 资产名解析出的 versionCode；0 表示资产名未携带（改用 versionName 数值化比较，见 AppUpdate.isNewerThanCurrent） */
+    val versionCode: Long = parseVersionCode(name)
 ) {
     val versionName: String = parseVersionName(name)
 
@@ -30,6 +32,22 @@ data class AppReleaseInfo(
             } else {
                 segment
             }
+        }
+
+        /**
+         * 从资产文件名解析 versionCode（app-update-github-channel AD-03）
+         *
+         * 兼容带 code 的命名（`legado_app_3.26.081303_10539.apk` → 10539）；
+         * 本项目当前发布命名为 `legado_miss_app_3.26.091720.apk`（不含 code）→ 返回 0，
+         * 由 AppUpdate 退回 versionName 数值化比较。
+         */
+        internal fun parseVersionCode(name: String): Long {
+            return Regex("""_(\d+)\.apk$""", RegexOption.IGNORE_CASE)
+                .find(name)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toLongOrNull()
+                ?: 0L
         }
 
         private val VERSION_SEGMENT = Regex("""^3\.\d{2}\.\d{6,8}$""")
@@ -79,20 +97,6 @@ data class GithubRelease(
             .map { it.assetToAppReleaseInfo(isPreRelease, body) }
     }
 }
-@Keep
-data class GiteeRelease(
-    val assets: List<GiteeAsset>?,
-    val body: String,
-    @SerializedName("prerelease")
-    val prerelease: Boolean,
-) {
-    fun gitReleaseToAppReleaseInfo(): List<AppReleaseInfo> {
-        assets ?: throw NoStackTraceException("获取新版本出错")
-        return assets
-            .filter { it.isValid }
-            .map { it.assetToAppReleaseInfo(prerelease, body) }
-    }
-}
 
 @Keep
 data class Asset(
@@ -122,21 +126,3 @@ data class Asset(
         return AppReleaseInfo(appVariant, timestamp, note, name, apkUrl, url, size)
     }
 }
-
-@Keep
-data class GiteeAsset(
-    @SerializedName("browser_download_url")
-    val apkUrl: String,
-    @SerializedName("name")
-    val name: String
-) {
-    val isValid: Boolean
-        get() = apkUrl.contains(".apk")
-
-    fun assetToAppReleaseInfo(preRelease: Boolean, note: String): AppReleaseInfo {
-        val appVariant = resolveAppVariant(name, preRelease)
-        return AppReleaseInfo(appVariant, 0, note, name, apkUrl, "")
-    }
-}
-
-

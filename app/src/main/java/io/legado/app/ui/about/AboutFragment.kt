@@ -5,6 +5,7 @@ import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.constant.AppConst.appInfo
 import io.legado.app.help.update.AppUpdate
+import io.legado.app.help.update.AppUpdateConfig
 import io.legado.app.ui.config.compose.ComposeSettingFragment
 import io.legado.app.ui.config.compose.SettingActionSpec
 import io.legado.app.ui.config.compose.SettingPageSpec
@@ -49,6 +50,13 @@ class AboutFragment : ComposeSettingFragment() {
                             title = getString(R.string.check_update)
                         ) {
                             checkUpdate()
+                        },
+                        action(
+                            key = KEY_UPDATE_ACCELERATION,
+                            title = getString(R.string.update_acceleration_manage),
+                            summary = AppUpdateConfig.summary(requireContext())
+                        ) {
+                            UpdateAcceleratorDialog.show(this)
                         }
                     )
                 ),
@@ -139,6 +147,7 @@ class AboutFragment : ComposeSettingFragment() {
         private const val KEY_CONTRIBUTORS = "contributors"
         private const val KEY_UPDATE_LOG = "update_log"
         private const val KEY_CHECK_UPDATE = "check_update"
+        private const val KEY_UPDATE_ACCELERATION = "update_acceleration"
         private const val KEY_LICENSE = "license"
         private const val KEY_DISCLAIMER = "disclaimer"
         private const val KEY_PRIVACY_POLICY = "privacyPolicy"
