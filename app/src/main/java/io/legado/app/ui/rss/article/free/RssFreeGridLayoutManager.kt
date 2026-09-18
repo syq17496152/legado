@@ -81,6 +81,19 @@ class RssFreeGridLayoutManager(
     /** 本帧是否需要在布局结束后再请求一次布局（footer 实测高度变化） */
     private var needRelayout = false
 
+    /**
+     * 数据整体替换标记（v1.3，rss-free-layout-polish AD-11）。
+     *
+     * 与 [rectsValid] 分离：
+     * - [rectsValid] 表达「矩形表是否可用」（几何脏）；
+     * - 本标记表达「已挂载 child 的 position 可能过期，必须经 scrap 通道重解析」（数据脏）。
+     *
+     * `notifyDataSetChanged` 后 holder 的 position 会停留旧值（见 [onItemsChanged] 的崩溃铁证），
+     * 因此只要发生数据整体替换就必须 scrap；但若几何输入（比例 / viewType / 数量）未变，
+     * 则无需重算矩形表 —— 这是把「数据刷新」与「全表重算」解耦的关键。
+     */
+    private var dataSetChanged = false
+
     // ---------------------------------------------------------------- 诊断日志节流（compose-shell-binding-fix）
 
     /**
@@ -96,32 +109,32 @@ class RssFreeGridLayoutManager(
     /** 当前窗口内被抑制的日志条数 */
     private var suppressedInWindow = 0
 
-    /** 当前窗口被抑制的最后一条内容（合并行回显用） */
-    private var lastSuppressed = ""
-
     /**
      * 常规逐帧诊断日志节流输出：2000ms 窗口内仅输出首条真实值，
-     * 窗口到期后的下一次调用先补发上窗口合并摘要（suppressed 计数 + 最后一条）。
+     * 窗口到期后的下一次调用先补发上窗口合并摘要（仅条数）。
      * 关键事件（提前返回/回填/footer 校准）不走本函数，始终全量。
+     *
+     * v1.3（AD-13）：参数改为**惰性** `() -> String` —— 布局路径每帧都会调用本函数，
+     * 若在调用点先拼接字符串再被节流丢弃，是纯浪费；抑制期间一律不求值。
      */
-    private fun putThrottledLog(message: String) {
+    private fun putThrottledLog(message: () -> String) {
         if (fullLogEnabled) {
-            AppLog.put(message)
+            AppLog.put(message())
             return
         }
         val now = SystemClock.elapsedRealtime()
         if (now - throttleWindowStart < THROTTLE_WINDOW_MS) {
             if (suppressedInWindow == 0) throttleWindowStart = now
             suppressedInWindow++
-            lastSuppressed = message
             return
         }
         if (suppressedInWindow > 0) {
-            AppLog.put("RssFree[节流] 上窗口合并 suppressed=$suppressedInWindow last=[$lastSuppressed]")
+            // 只回显条数：窗口到期时再求值旧 lambda 会输出陈旧数据，误导诊断
+            AppLog.put("RssFree[节流] 上窗口合并 suppressed=$suppressedInWindow 条")
             suppressedInWindow = 0
         }
         throttleWindowStart = now
-        AppLog.put(message)
+        AppLog.put(message())
     }
 
     override fun onAttachedToWindow(view: RecyclerView?) {
@@ -228,10 +241,16 @@ class RssFreeGridLayoutManager(
     /** 全量重算矩形表。调用后 [rectsValid] 为 true */
     private fun rebuild() {
         val count = itemCountProvider()
+        val availableWidth = currentAvailableWidth()
         if (count == 0) {
             rectsValid = false
-            lastBuiltWidth = currentAvailableWidth()
+            lastBuiltWidth = availableWidth
             return
+        }
+        // 可用宽度变化（旋转 / 分屏 / 折叠屏）：行组成需按新宽度重新定型（AD-10）。
+        // lastBuiltWidth > 0 保证首次构建不触发解锁 —— 首次正是定型时机
+        if (lastBuiltWidth > 0 && availableWidth != lastBuiltWidth) {
+            calculator.unlockItemsPerRow()
         }
         if (count != ratioCache.size) {
             ratioCache = FloatArray(count)
@@ -240,7 +259,7 @@ class RssFreeGridLayoutManager(
         fillInputs(count)
         calculator.build(buildGeometry(), ratioCache, viewTypeCache)
         rectsValid = true
-        lastBuiltWidth = currentAvailableWidth()
+        lastBuiltWidth = availableWidth
         pendingDirtyFrom = -1
     }
 
@@ -248,14 +267,17 @@ class RssFreeGridLayoutManager(
 
     override fun onItemsAdded(recyclerView: RecyclerView, positionStart: Int, itemCount: Int) {
         rectsValid = false
+        dataSetChanged = true
     }
 
     override fun onItemsRemoved(recyclerView: RecyclerView, positionStart: Int, itemCount: Int) {
         rectsValid = false
+        dataSetChanged = true
     }
 
     override fun onItemsMoved(recyclerView: RecyclerView, from: Int, to: Int, itemCount: Int) {
         rectsValid = false
+        dataSetChanged = true
     }
 
     /**
@@ -264,10 +286,16 @@ class RssFreeGridLayoutManager(
      * 首次 rebuild 的"仅 1 行 footer"且 rectsValid=true → 后续数据到达不再 rebuild → fill() 只在
      * 1 条矩形里补齐 → 0 个文章 View 被 attach = 白屏。前台 isResumed 时 diff 路径恒回退全量
      * notifyDataSetChanged（RecyclerAdapter.kt:170-174），故前台必现。
+     *
+     * v1.3（AD-11）：矩形表是否作废改由**几何输入是否真变化**决定 —— 前台全量刷新频率很高
+     * （已读态变更、图片入库等都会触发），若无条件重算，千级列表每次都要 O(n) 重新取比例。
+     * 但 [dataSetChanged] 必须置位：notifyDataSetChanged 后 holder 的 position 停留旧值，
+     * 不经 scrap 通道会在差量贴位时错位（真机铁证 crash-19-54-47）。
      */
     override fun onItemsChanged(recyclerView: RecyclerView) {
         // 注意：不重置 scrollOffset——加载更多（notifyDataSetChanged）后必须保持滚动位置
-        rectsValid = false
+        dataSetChanged = true
+        if (refreshInputs()) rectsValid = false
     }
 
     override fun onItemsUpdated(
@@ -276,7 +304,8 @@ class RssFreeGridLayoutManager(
         itemCount: Int,
         payload: Any?
     ) {
-        // 已读态等 payload 更新不改变几何，只有比例/viewType 真变了才作废矩形表
+        // 已读态等 payload 更新不改变几何，只有比例/viewType 真变了才作废矩形表；
+        // payload 更新不改变 position 语义，故无需 dataSetChanged
         if (refreshInputs()) rectsValid = false
     }
 
@@ -285,16 +314,28 @@ class RssFreeGridLayoutManager(
         newAdapter: RecyclerView.Adapter<*>?
     ) {
         rectsValid = false
+        dataSetChanged = true
         ratioCache = FloatArray(0)
         viewTypeCache = IntArray(0)
         scrollOffset = 0
         lastBuiltWidth = -1
         pendingDirtyFrom = -1
+        // 换源 / 换布局：行组成解锁，下次构建按新源比例表重新定型（AD-10）
+        calculator.unlockItemsPerRow()
     }
 
     /** 供外部在切换布局/数据整体替换后强制重算 */
     fun invalidateRects() {
         rectsValid = false
+    }
+
+    /**
+     * 行组成解锁（v1.3，AD-10）：供宿主在需要「重新定型每行张数」时调用。
+     *
+     * 换源 / 换 Adapter 与可用宽度变化已由本类内部自动解锁，宿主只需处理「用户全量刷新」。
+     */
+    fun unlockItemsPerRow() {
+        calculator.unlockItemsPerRow()
     }
 
     // ---------------------------------------------------------------- 布局
@@ -303,6 +344,8 @@ class RssFreeGridLayoutManager(
         if (state.itemCount == 0) {
             removeAndRecycleAllViews(recycler)
             rectsValid = false
+            // 空列表同样要消费数据脏标记：残留会让下一次布局多走一次无谓的全量 scrap
+            dataSetChanged = false
             scrollOffset = 0
             pendingDirtyFrom = -1
             return
@@ -313,30 +356,34 @@ class RssFreeGridLayoutManager(
             calculator.itemCount > 0 &&
             availableWidth != lastBuiltWidth
         val anchor = if (widthChanged) firstAttachedPosition() else NO_POSITION
-        // 数据变化（onItemsChanged/Added/Removed/Moved 置 rectsValid=false）后的全量布局，
-        // 必须先 detach+scrap：notifyDataSetChanged 后**已挂载 holder 的 mPosition 停留旧值**
+        // 几何脏（矩形表需重算）与数据脏（child 位置需重解析）分离（v1.3，AD-11）。
+        // 数据整体替换后即便几何未变，也必须走 scrap 通道：notifyDataSetChanged 后已挂载
+        // holder 的 mPosition 停留旧值，直接差量贴位会错位
         //（真机铁证 crash-19-54-47：footer 停在旧位 → findViewByPosition(新位) 落空 →
         // createViewHolder 重建仍挂 parent 的单实例 footer → IllegalStateException）。
         // 走 scrap 通道后 RecyclerView 会重解析位置（invalid holder 重新 bind 到新 position），
         // 且 detach 后单实例 footer 的 parent == null，即使极端路径重建也安全。
-        val dataChanged = !rectsValid
-        if (dataChanged || widthChanged) {
+        val geometryDirty = !rectsValid
+        val needScrap = dataSetChanged
+        if (geometryDirty || widthChanged) {
             rebuild()
             if (anchor != NO_POSITION) {
                 scrollOffset = calculator.getTop(anchor).coerceAtLeast(0)
             }
         }
-        if (dataChanged && childCount > 0) {
-            detachAndScrapAttachedViews(recycler)
+        if (needScrap) {
+            if (childCount > 0) detachAndScrapAttachedViews(recycler)
+            // 无论是否有 child 都必须消费该数据脏标记，避免污染后续帧
+            dataSetChanged = false
         }
         scrollOffset = scrollOffset.coerceIn(0, maxScrollOffset)
         fill(recycler, state)
         // 调试：每次布局后汇报关键状态（节流输出，全量开关见 LocalConfig.rssFreeFullLog）
-        putThrottledLog(
+        putThrottledLog {
             "RssFree[布局] itemCount(state)=${state.itemCount} rectsValid=$rectsValid " +
                 "calcItem=${calculator.itemCount} contentH=${calculator.contentHeight} " +
                 "childCount=$childCount availW=${currentAvailableWidth()} targetH=${currentTargetRowHeight()}"
-        )
+        }
         consumePendingDirtyIfSafe()
         requestRelayoutIfNeeded()
     }
@@ -363,10 +410,10 @@ class RssFreeGridLayoutManager(
         // 上下各多铺一屏，避免滑动露白与 consume 不足导致的卡顿
         val buffer = viewportHeight
 
-        putThrottledLog(
+        putThrottledLog {
             "RssFree[填充] limit=$limit stateItem=${state.itemCount} " +
                 "viewportTop=$viewportTop viewportBottom=$viewportBottom"
-        )
+        }
         // 1) 回收越界 child；其余按最新矩形表重新贴位
         //    数据变化后的全量布局由 onLayoutChildren 先 detach+scrap（holder 位置在 scrap 通道
         //    重解析），本差量路径只在数据未变的滚动/重贴位时执行，child 位置可信。
@@ -391,12 +438,17 @@ class RssFreeGridLayoutManager(
         // 2) 补齐区间内缺失的 child
         val first = positionAtOrAfter(viewportTop - buffer)
         val last = positionAtOrBefore(viewportBottom + buffer)
-        putThrottledLog("RssFree[区间] first=$first last=$last buffer=$buffer limit=$limit")
+        // 先收集已挂载 position（排序后二分）：替代逐 position 的 findViewByPosition 线性扫描，
+        // 单帧最坏 O(childCount²) → O(c log c)（v1.3，AD-13）
+        val attachedCount = collectAttachedPositions()
+        putThrottledLog {
+            "RssFree[区间] first=$first last=$last buffer=$buffer limit=$limit attached=$attachedCount"
+        }
         if (first != NO_POSITION && last != NO_POSITION) {
             val end = last.coerceAtMost(limit - 1)
             for (position in first..end) {
                 if (position >= limit) break
-                if (findViewByPosition(position) != null) continue
+                if (hasAttachedPosition(position, attachedCount)) continue
                 val view = recycler.getViewForPosition(position)
                 addView(view)
                 measureChildForPosition(view, position)
@@ -404,6 +456,35 @@ class RssFreeGridLayoutManager(
             }
         }
     }
+
+    /**
+     * 已挂载 child 的 position 缓存（v1.3，AD-13）。
+     *
+     * 补齐循环原先对每个 position 调 `findViewByPosition`（其内部线性扫描全部 child），
+     * 单帧最坏 O(childCount²)。改为「每帧一次扫描 + 排序 + 二分查找」。
+     * 数组按需扩容并跨帧**复用**，避免每帧分配。
+     */
+    private var attachedPositions = IntArray(0)
+
+    /** 收集当前已挂载 child 的 position 到 [attachedPositions]（升序），返回有效个数 */
+    private fun collectAttachedPositions(): Int {
+        val count = childCount
+        if (attachedPositions.size < count) {
+            attachedPositions = IntArray(count)
+        }
+        var n = 0
+        for (i in 0 until count) {
+            val position = getChildAt(i)?.let { getPosition(it) } ?: NO_POSITION
+            if (position != NO_POSITION) attachedPositions[n++] = position
+        }
+        // 复用数组的**前 n 个**才是有效数据，排序范围必须限定，避免读到上一帧残留
+        java.util.Arrays.sort(attachedPositions, 0, n)
+        return n
+    }
+
+    /** [position] 是否在 [collectAttachedPositions] 收集的集合内（二分查找） */
+    private fun hasAttachedPosition(position: Int, size: Int): Boolean =
+        java.util.Arrays.binarySearch(attachedPositions, 0, size, position) >= 0
 
     /**
      * 按矩形表精确指定宽高后测量。
@@ -622,6 +703,9 @@ class RssFreeGridLayoutManager(
 
     /** 执行重排并补偿滚动偏移，使锚点项在屏幕上的位置保持不变 */
     private fun applyRecalc(fromPosition: Int) {
+        // 脏区位置判定必须用**重算前**的矩形表：语义是「脏区此刻在屏幕上是否可见」。
+        // 重算后 fromPosition 的 y 已改变，用新值判定会误判（v1.3，AD-12）
+        val dirtyTopBefore = calculator.getTop(fromPosition)
         val anchor = firstAttachedPosition()
         val topBefore = if (anchor == NO_POSITION) 0 else calculator.getTop(anchor)
         fillInputs(calculator.itemCount)
@@ -630,7 +714,11 @@ class RssFreeGridLayoutManager(
         if (topAfter != topBefore) {
             scrollOffset = (scrollOffset + (topAfter - topBefore)).coerceIn(0, maxScrollOffset)
         }
-        requestLayout()
+        // 脏区完全在视口下方：当前屏幕内容不受影响，无需即时布局（用户滚动时自然按新表定位）。
+        // 只有脏区与可见区相交、或位于视口上方（已补偿 offset）时才请求布局
+        if (dirtyTopBefore < scrollOffset + viewportHeight) {
+            requestLayout()
+        }
     }
 
     // ---------------------------------------------------------------- 状态存取

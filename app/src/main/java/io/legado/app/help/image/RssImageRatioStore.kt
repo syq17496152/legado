@@ -62,8 +62,13 @@ object RssImageRatioStore {
     /** 磁盘缓存有效期 20 天（秒），与 RssArticlesAdapter3 口径一致 */
     private const val SAVE_TIME_SECONDS = 60 * 60 * 24 * 20
 
-    /** 单批预取的最大并发数；过高会挤占订阅源列表本身的图片加载带宽 */
-    private const val PREFETCH_CONCURRENCY = 4
+    /**
+     * 单批预取的最大并发数。
+     *
+     * v1.3（rss-free-layout-polish AD-15）由 4 收敛为 3：预取与列表展示共享同一 Glide 磁盘缓存，
+     * 额外带宽主要来自前瞻区间尚未加载过的图；降低瞬时并发可减少对列表图片加载的挤压。
+     */
+    private const val PREFETCH_CONCURRENCY = 3
 
     /** 每源保留的样本数上限，用于估算兜底（中位数）。FIFO 淘汰 */
     private const val SAMPLE_CAPACITY = 32
@@ -76,6 +81,17 @@ object RssImageRatioStore {
 
     /** 源 → 已解析比例样本（用于 ratio 未知时估算）。ArrayDeque 非线程安全，访问需持锁 */
     private val sourceSamples = HashMap<String, ArrayDeque<Float>>()
+
+    /**
+     * 源 → 中位数估算值缓存（v1.3，rss-free-layout-polish AD-13）。
+     *
+     * 布局路径对**每个尚未解析**的 item 都会走 [medianOf]；原先每次调用都执行
+     * `toFloatArray().sortedArray()`（两次数组分配 + 排序），千级列表下单帧开销可观。
+     * 改为在样本写入时（[store]）重算一次并缓存，[peek] 路径因此零分配。
+     *
+     * **并发**：只在 `synchronized(sourceSamples)` 临界区内读写，与样本表保持同一原子性。
+     */
+    private val medianCache = HashMap<String, Float>()
 
     /**
      * 正在解析中的缓存键集合。
@@ -269,13 +285,15 @@ object RssImageRatioStore {
         return runCatching { Base64.decode(payload, Base64.DEFAULT) }.getOrNull()
     }
 
-    /** 写入内存缓存 + 源级样本 */
+    /** 写入内存缓存 + 源级样本，并刷新该源的中位数估算缓存（AD-13） */
     private fun store(origin: String, link: String, ratio: Float) {
         memory.put(keyOf(origin, link), ratio)
         synchronized(sourceSamples) {
             val samples = sourceSamples.getOrPut(origin) { ArrayDeque(SAMPLE_CAPACITY) }
             if (samples.size >= SAMPLE_CAPACITY) samples.removeFirst()
             samples.addLast(ratio)
+            // 与样本写入同一临界区更新，保证 peek 读到的中位数与样本表状态一致
+            medianCache[origin] = medianOfLocked(samples)
         }
     }
 
@@ -286,14 +304,21 @@ object RssImageRatioStore {
     }
 
     /**
-     * 源级估算比例：取已解析样本的中位数。
+     * 源级估算比例：取已解析样本的中位数（**读缓存，零分配**）。
+     *
      * 中位数比均值更抗极端值（全景图/长条图）干扰，适合作为「未知图片」的占位比例。
+     * 缓存由 [store] 在样本变化时于同一临界区刷新，故此处只做一次 map 读；
+     * 未命中（该源尚无样本）时返回 [FreeGridSizeCalculator.DEFAULT_RATIO]。
      */
-    private fun medianOf(origin: String): Float {
-        val sorted = synchronized(sourceSamples) {
-            sourceSamples[origin]?.toFloatArray()?.sortedArray()
-        } ?: return FreeGridSizeCalculator.DEFAULT_RATIO
-        if (sorted.isEmpty()) return FreeGridSizeCalculator.DEFAULT_RATIO
+    private fun medianOf(origin: String): Float =
+        synchronized(sourceSamples) { medianCache[origin] }
+            ?: FreeGridSizeCalculator.DEFAULT_RATIO
+
+    /** 由样本表计算中位数（调用方必须已持有 `sourceSamples` 锁） */
+    private fun medianOfLocked(samples: ArrayDeque<Float>): Float {
+        if (samples.isEmpty()) return FreeGridSizeCalculator.DEFAULT_RATIO
+        val sorted = samples.toFloatArray()
+        sorted.sort()
         return sorted[sorted.size / 2]
     }
 
@@ -307,9 +332,12 @@ object RssImageRatioStore {
         )
     }
 
-    /** 切换订阅源时清理该源的样本与在途标记（内存缓存保留，键本身含 origin 不会串源） */
+    /** 切换订阅源时清理该源的样本、中位数估算缓存与在途标记（内存缓存保留，键本身含 origin 不会串源） */
     fun resetSource(origin: String) {
-        synchronized(sourceSamples) { sourceSamples.remove(origin) }
+        synchronized(sourceSamples) {
+            sourceSamples.remove(origin)
+            medianCache.remove(origin)
+        }
     }
 
     /** 供调试/单测观察：当前内存缓存条数 */

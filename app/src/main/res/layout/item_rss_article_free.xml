@@ -20,7 +20,8 @@
     app:cardCornerRadius="12dp"
     app:cardElevation="0dp"
     app:cardPreventCornerOverlap="false"
-    app:cardUseCompatPadding="false">
+    app:cardUseCompatPadding="false"
+    app:cardBackgroundColor="@android:color/transparent">
 
     <LinearLayout
         android:layout_width="match_parent"

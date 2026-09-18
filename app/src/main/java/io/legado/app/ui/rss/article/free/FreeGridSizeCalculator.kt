@@ -30,10 +30,12 @@ data class FreeGridGeometry(
 /**
  * 「自由」布局（等行高流式自由网格 / Justified Photo Grid）的矩形预计算器。
  *
- * 设计依据：`docs/specs/rss-free-layout/design.md`（算法一「分行 + 行内宽度分配」）。
+ * 设计依据：`docs/specs/rss-free-layout/design.md`（算法一「分行 + 行内宽度分配」）；
+ * 行组成定型（v1.3）依据：`docs/specs/rss-free-layout-polish/design.md` AD-10。
  *
  * 架构思路参照 500px/greedo-layout-for-android（MIT）的「预计算 Rect 表 + 薄 LayoutManager」，
- * 用 Kotlin 重写并扩展本项目所需能力：footer 独占整行、文字块常量高、增量重算、脏标记区间重排。
+ * 用 Kotlin 重写并扩展本项目所需能力：footer 独占整行、文字块常量高、增量重算、脏标记区间重排、
+ * **整表行组成定型**（见 [frozenItemsPerRow]）。
  *
  * **本类为纯计算层**：不依赖任何 Android API，可直接 JVM 单测（见 FreeGridSizeCalculatorTest）。
  *
@@ -43,7 +45,10 @@ data class FreeGridGeometry(
  *    **例外**：装不满的最后一行（自然行高 > 目标行高）收敛到目标行高并左对齐留白，
  *    此时不做末位补偿，以保证各图仍按原比例显示、不被横向拉伸
  * 3. 非图片项独占整行，不参与图片分行
- * 4. `recalcFrom(p)` 的结果与全量 `build()` 逐字节一致
+ * 4. `recalcFrom(p)` 的结果与全量 `build()` 逐字节一致。
+ *    **前提（v1.3）**：两者使用同一批定型状态 —— 定型后 `build` 与 `recalcFrom` 均沿用
+ *    [frozenItemsPerRow]，因此该性质仍成立；跨 [unlockItemsPerRow] 前后不可直接对比
+ * 5. 行组成定型后，比例回填（[recalcFrom]）**不改变**每行张数，只改变行内宽度与行高
  */
 class FreeGridSizeCalculator {
 
@@ -61,11 +66,36 @@ class FreeGridSizeCalculator {
     /**
      * 整表统一的每行图片张数（v1.2 行数均衡方案）。
      *
-     * 由当前比例表的自平均值反推（见 [computeItemsPerRow]）：横图为主 → 2 张/行、
-     * 竖图封面为主 → 3-4 张/行。比例表更新（图片尺寸流式回填）时随 build/recalc 重算，
-     * 整表行组成因此保持一致，消除旧行数跳变。
+     * 由比例表的自平均值反推（见 [computeItemsPerRow]）：横图为主 → 2 张/行、
+     * 竖图封面为主 → 3-4 张/行。
+     *
+     * **定型语义（v1.3，AD-10）**：首次 [build] 算出后即冻结（见 [frozenItemsPerRow]），
+     * 之后比例流式回填（[recalcFrom]）**不再重算** —— 源均值会随样本漂移，若每批预取回填
+     * 都重算，整表图片分组会反复变化，用户可见表现就是「列表一直在闪」。
+     * 行组成稳定优先于「行高严格逼近目标」。
      */
     private var itemsPerRow = 2
+
+    /**
+     * 已定型的每行张数；**0 表示未定型**（下一次 [build] 会计算并定型）。
+     *
+     * 解锁（重置为 0）的三种情况由调用方在对应时机调用 [unlockItemsPerRow]：
+     * ① 换源 / 换 Adapter；② 可用宽度变化（旋转 / 分屏 / 折叠屏）；③ 用户全量刷新。
+     */
+    private var frozenItemsPerRow = 0
+
+    /** 行组成是否已定型（供诊断日志与单测观察） */
+    val isItemsPerRowFrozen: Boolean get() = frozenItemsPerRow > 0
+
+    /**
+     * 解锁行组成：下一次 [build] 会按当前比例表重新计算并重新定型。
+     *
+     * 调用时机（由 LayoutManager 保证）：换源 / 换 Adapter、可用宽度变化、用户全量刷新。
+     * 比例回填路径（[recalcFrom]）**不得**调用本方法，否则行组成会重新漂移。
+     */
+    fun unlockItemsPerRow() {
+        frozenItemsPerRow = 0
+    }
 
     /** 当前 item 总数（含 footer 等非图片项） */
     val itemCount: Int get() = ratioArray.size
@@ -107,7 +137,13 @@ class FreeGridSizeCalculator {
         // 行数必然 <= itemCount（每行至少 1 项，独占行亦各占 1 行）
         this.rowStarts = IntArray(ratios.size)
         this.rowCount = 0
-        itemsPerRow = computeItemsPerRow()
+        // 行组成定型（AD-10）：已定型则沿用（分页追加、数据刷新都不改变既有行分组），
+        // 未定型（首次构建，或刚被 unlockItemsPerRow 解锁）则按当前比例表计算并冻结
+        itemsPerRow = if (frozenItemsPerRow > 0) {
+            frozenItemsPerRow
+        } else {
+            computeItemsPerRow().also { frozenItemsPerRow = it }
+        }
         layoutFrom(0, 0)
     }
 
@@ -138,8 +174,14 @@ class FreeGridSizeCalculator {
         val startY = rects[startPosition * 4 + 1]
         // 从该行起覆盖写入：rowCount 回退到 rowIndex，layoutFrom 会从该槽位重新记录行起点
         rowCount = rowIndex
-        // 比例表已更新，每行张数随之重算（自均值漂移时后续行组成自动跟随）
-        itemsPerRow = computeItemsPerRow()
+        // 行组成定型（AD-10）：比例回填**不重算**每行张数 —— 否则源均值随样本漂移会让整表
+        // 图片分组反复变化（滚动时每批预取回填都会触发一次），用户可见表现即「持续闪烁」。
+        // 正常路径沿用已冻结值；仅未定型的极端情况下兜底定型一次
+        itemsPerRow = if (frozenItemsPerRow > 0) {
+            frozenItemsPerRow
+        } else {
+            computeItemsPerRow().also { frozenItemsPerRow = it }
+        }
         layoutFrom(startPosition, startY)
         return startPosition
     }
@@ -270,6 +312,10 @@ class FreeGridSizeCalculator {
 
     /**
      * 由比例表自均值反推整表统一的每行张数。
+     *
+     * **调用时机（v1.3，AD-10）**：只在「行组成定型」时调用 —— 即 [build] 与 [recalcFrom]
+     * 中 `frozenItemsPerRow <= 0` 的兜底分支。比例回填的正常路径**不得**调用本函数，
+     * 否则行组成会随样本漂移而反复变化。
      *
      * 推导：行高 = `usable / (k × avgRatio)`，令行高 ≈ 目标行高，得
      * `k = availableWidth / (targetRowHeight × avgRatio)`（忽略间距的近似，误差 ≤ 半张）。

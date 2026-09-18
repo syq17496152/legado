@@ -346,6 +346,11 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
                 .catch {
                     AppLog.put("订阅文章界面获取数据失败\n${it.localizedMessage}", it)
                 }.flowOn(IO).collect { newList ->
+                    // 自由布局行组成解锁（AD-10）：用户下拉刷新（fullRefresh）后按最新比例表
+                    // 重新定型。换源与可用宽度变化由 LayoutManager 内部自动解锁，此处只管这一条
+                    if (isFreeLayout && fullRefresh) {
+                        freeLayoutManager?.unlockItemsPerRow()
+                    }
                     // 自由布局首屏门控：先把前若干条图片尺寸预热进缓存，再渲染，
                     // 避免首屏铺好之后因比例回填而整体跳动（仅首次、仅 articleStyle=5）
                     if (isFreeLayout && !firstScreenGated && newList.isNotEmpty()) {
