@@ -114,6 +114,8 @@ class VideoFragment : Fragment() {
     private var btnSettings: ImageButton? = null
     private var btnFullscreen: ImageButton? = null
     private var btnDownload: ImageButton? = null
+    /** 弹幕开关（沉浸式悬浮层入口，与传统模式 GSY 控制条 toggle_danmaku 同状态源） */
+    private var btnDanmaku: ImageButton? = null
     // B1+ 修复：全屏模式下的悬浮返回按钮（F1 的 titleBarNew.gone() 隐藏了 TitleBar 返回按钮）
     private var btnBackOverlay: ImageButton? = null
 
@@ -254,6 +256,8 @@ class VideoFragment : Fragment() {
                     // Bug修复：GSY 在 setUp 时可能覆盖我们设置的 OnTouchListener
                     // 在 onPrepared 后重新注册，确保手势检测正常工作
                     reRegisterTouchListener()
+                    // 弹幕视图已在 setUp → initDanmaku 内初始化完成，此时同步开关入口
+                    updateDanmakuButtonState()
                 }
                 // 阶段8 F10：视频准备就绪后启动进度监听（80%触发预缓冲）
                 startProgressMonitor()
@@ -687,6 +691,13 @@ class VideoFragment : Fragment() {
         btnSettings = view.findViewById(R.id.btn_settings)
         btnFullscreen = view.findViewById(R.id.btn_fullscreen)
         btnDownload = view.findViewById(R.id.btn_download)
+        // 弹幕开关：显隐由 updateDanmakuButtonState 按「本集是否有弹幕数据」决定（默认 gone）
+        btnDanmaku = view.findViewById(R.id.btn_danmaku)
+        btnDanmaku?.setOnClickListener {
+            val pv = _playerView ?: return@setOnClickListener
+            pv.toggleDanmakuShow()
+            updateDanmakuButtonState()
+        }
         // video-player-ux-fixes P1: 本地已下载视频（file:// 直连）无下载意义，隐藏下载按钮
         // （判定链：DownloadManageActivity 播放时 putExtra videoUrl=Uri.fromFile(file)，
         //   在线直链 http(s) 不受影响；Activity 生命周期内 videoUrl 不变，无需动态恢复）
@@ -1343,6 +1354,33 @@ class VideoFragment : Fragment() {
     }
 
     // ==================== 按钮状态更新 ====================
+
+    /**
+     * 弹幕开关入口状态同步（沉浸式悬浮层）
+     *
+     * 可用性取自 `VideoPlayer.isDanmakuAvailable`：本集无弹幕数据时 `initDanmaku()` 早退、
+     * DanmakuView 不创建 → 入口保持 gone（与传统模式 `toggle_danmaku` 置 GONE 的口径一致）。
+     * 有弹幕时展示入口，并按全局 `danmakuShow` 切换图标与无障碍描述。
+     *
+     * 同时隐藏 GSY 原始控制条中的 `toggle_danmaku`：沉浸式以自定义悬浮层为唯一弹幕入口，
+     * 否则点击视频调出 GSY 控制条时会出现两个弹幕开关（重复入口）。
+     */
+    private fun updateDanmakuButtonState() {
+        val pv = _playerView
+        pv?.findViewById<TextView>(R.id.toggle_danmaku)?.gone()
+        if (pv == null || !pv.isDanmakuAvailable) {
+            btnDanmaku?.gone()
+            return
+        }
+        val showing = pv.isDanmakuShowing
+        btnDanmaku?.visible()
+        btnDanmaku?.setImageResource(
+            if (showing) R.drawable.ic_danmaku else R.drawable.ic_danmaku_off
+        )
+        btnDanmaku?.contentDescription = getString(
+            if (showing) R.string.video_danmaku_off else R.string.video_danmaku_on
+        )
+    }
 
     private fun updateStarButtonState() {
         val isStarred = VideoPlay.rssStar != null

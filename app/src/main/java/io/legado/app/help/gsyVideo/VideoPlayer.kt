@@ -621,6 +621,31 @@ class VideoPlayer: StandardGSYVideoPlayer {
     }
 
     /**
+     * 弹幕是否可用（本集有弹幕数据且视图已初始化）
+     *
+     * `initDanmaku()` 在无弹幕数据时早退、不创建 `mDanmakuView`，故以该字段作为可用性判据；
+     * 沉浸式悬浮层据此决定是否展示弹幕开关入口（与传统模式 GSY 控制条 `toggle_danmaku`
+     * 在无数据时置 `GONE` 的口径一致）。
+     */
+    val isDanmakuAvailable: Boolean
+        get() = mDanmakuView != null
+
+    /** 当前是否显示弹幕（与传统模式 `toggle_danmaku` 共用 `VideoPlay.danmakuShow` 状态源） */
+    val isDanmakuShowing: Boolean
+        get() = VideoPlay.danmakuShow
+
+    /**
+     * 翻转弹幕显隐（沉浸式悬浮层开关入口）
+     *
+     * 与 `toggle_danmaku` 的点击逻辑完全一致：改全局状态 + 走同一 `resolveDanmakuShow()` 落显隐，
+     * 保证两种布局模式的弹幕状态互通，不产生第二套状态源。
+     */
+    fun toggleDanmakuShow() {
+        VideoPlay.danmakuShow = !VideoPlay.danmakuShow
+        resolveDanmakuShow()
+    }
+
+    /**
      * 弹幕偏移
      */
     private fun resolveDanmakuSeek(time: Long) {

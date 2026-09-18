@@ -157,6 +157,22 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent">
 
+            <!-- 弹幕开关（沉浸式悬浮层补弹幕入口：与传统模式 GSY 控制条 toggle_danmaku 共用
+                 VideoPlay.danmakuShow 状态源）。默认 gone，由 VideoFragment.updateDanmakuButtonState
+                 按「本集是否有弹幕数据」决定显隐——无弹幕时与传统模式同样不展示入口 -->
+            <ImageButton
+                android:id="@+id/btn_danmaku"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="16dp"
+                android:background="@drawable/bg_overlay_button"
+                android:contentDescription="@string/video_danmaku_off"
+                android:src="@drawable/ic_danmaku"
+                android:scaleType="centerInside"
+                android:padding="12dp"
+                android:tint="#FFFFFF"
+                android:visibility="gone" />
+
             <!-- 全屏按钮（U1：从视频中下方迁移到右侧功能区，随整体显隐；
                  bug①修复：默认 visible，由 updateFullscreenButtonVisibility 保持显示；随 right_buttons 3秒自动隐藏+单击显示） -->
             <ImageButton

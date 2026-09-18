@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24.0"
+    android:viewportHeight="24.0">
+    <!-- 弹幕开启态：对话框内多条弹幕行（与项目既有 24dp 填充图标同风格） -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M20,4H4C2.9,4 2,4.9 2,6v12c0,1.1 0.9,2 2,2h16c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2zM4,8h10v2H4V8zM16,8h4v2h-4V8zM4,12h4v2H4v-2zM10,12h10v2H10v-2zM4,16h7v2H4v-2zM13,16h7v2h-7v-2z" />
+</vector>
