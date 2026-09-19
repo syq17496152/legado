@@ -111,6 +111,21 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
     private var groupMenuExpanded by mutableStateOf(false)
     private var downloadRunning by mutableStateOf(CacheBook.isRun)
 
+    /** F43 批量缓存进度摘要：(在跑的书数, 待下载章节数)；无任务时为 null */
+    private var cacheTaskSummary by mutableStateOf(cacheTaskSummaryOf())
+
+    private fun cacheTaskSummaryOf(): Pair<Int, Int>? {
+        var runningBooks = 0
+        var pendingChapters = 0
+        CacheBook.cacheBookMap.values.forEach { model ->
+            if (model.isRun()) {
+                runningBooks++
+                pendingChapters += model.waitCount + model.onDownloadCount
+            }
+        }
+        return runningBooks.takeIf { it > 0 }?.let { it to pendingChapters }
+    }
+
     private val exportDir = registerForActivityResult(HandleFileContract()) { result ->
         var isReadyPath = false
         var dirPath = ""
@@ -359,7 +374,9 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                             CacheBook.start(this, it, 0, it.lastChapterIndex)
                         }
                     },
-                    onExport = { export(it) }
+                    onExport = { export(it) },
+                    taskSummary = cacheTaskSummary,
+                    onCancelTask = { CacheBook.stop(this) }
                 )
             }
         }
@@ -422,9 +439,11 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
         }
         observeEvent<String>(EventBus.UP_DOWNLOAD) {
             notifyItemChanged(it)
+            cacheTaskSummary = cacheTaskSummaryOf()
         }
         observeEvent<String>(EventBus.UP_DOWNLOAD_STATE) {
             downloadRunning = CacheBook.isRun
+            cacheTaskSummary = cacheTaskSummaryOf()
         }
         observeEvent<Pair<Book, BookChapter>>(EventBus.SAVE_CONTENT) { (book, chapter) ->
             viewModel.cacheChapters[book.bookUrl]?.add(chapter.url)

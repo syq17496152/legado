@@ -724,6 +724,11 @@
     <string name="help">帮助</string>
     <string name="my">我的</string>
     <string name="reading">阅读</string>
+    <string name="cache_batch_running">正在缓存 %1$d 本 · 待下载 %2$d 章</string>
+    <string name="book_info_new_chapters_badge">新 %1$d 章</string>
+    <string name="book_info_read_progress">第 %1$d 章 · %2$d%%</string>
+    <string name="book_info_intro_expand">展开全文 ▾</string>
+    <string name="book_info_intro_collapse">收起 ▴</string>
     <string name="battery_show">%d%%</string>
     <string name="timer_m">%d 分钟</string>
     <string name="brightness_auto">自动亮度 %s</string>

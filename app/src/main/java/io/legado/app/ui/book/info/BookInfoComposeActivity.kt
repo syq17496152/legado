@@ -363,6 +363,12 @@ class BookInfoComposeActivity :
                 }
             },
             onOpenToc = ::openChapterListSafely,
+            // F57 追更直达：hero 区「最新章」直达末章（取最后一个非卷名条目，复用既有直开链路）
+            onOpenLatestChapter = {
+                viewModel.chapterListData.value
+                    ?.lastOrNull { !it.isVolume }
+                    ?.let(::openChapterDirect)
+            },
             onOpenChapter = { item ->
                 viewModel.chapterListData.value
                     ?.firstOrNull { it.index == item.index }

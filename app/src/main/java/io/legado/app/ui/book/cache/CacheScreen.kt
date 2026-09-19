@@ -31,6 +31,8 @@ import io.legado.app.help.book.isLocal
 import io.legado.app.model.CacheBook
 import io.legado.app.ui.theme.bodyTertiary
 import io.legado.app.ui.theme.bodySecondary
+import io.legado.app.ui.widget.components.InlineTaskBar
+import io.legado.app.ui.widget.components.InlineTaskState
 
 /**
  * 缓存列表页纯 Compose 壳层：宿主（CacheActivity）提供数据源与回调，本 Screen 仅自绘列表。
@@ -48,24 +50,38 @@ fun CacheScreen(
     exportProgressOf: (bookUrl: String) -> Int?,
     onDownloadToggle: (Book) -> Unit,
     onExport: (Book) -> Unit,
+    /** F43 批量任务内联反馈条：非空时顶部常驻「正在缓存 N 本 · 待下载 X 章」+ 取消 */
+    taskSummary: Pair<Int, Int>? = null,
+    onCancelTask: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    LazyColumn(
+    Column(
         modifier = modifier
             .fillMaxSize()
             .navigationBarsPadding()
     ) {
-        itemsIndexed(books, key = { _, book -> book.bookUrl }) { _, book ->
-            CacheBookItemRow(
-                book = book,
-                // 订阅该条目局部刷新 tick：值变化触发本 item 重组
-                refreshTick = refreshTickOf(book.bookUrl),
-                cacheChapterCount = if (book.isLocal) null else cacheChaptersOf(book.bookUrl)?.size,
-                exportMsg = exportMsgOf(book.bookUrl),
-                exportProgress = exportProgressOf(book.bookUrl),
-                onDownloadToggle = { onDownloadToggle(book) },
-                onExport = { onExport(book) }
+        // F43：原实现只把下载菜单项文案切成「停止」，批量缓存进度无处可见；
+        // 顶部内联条常驻显示"在跑几本 / 还差几章"并给出取消出口
+        taskSummary?.let { (bookCount, pendingChapters) ->
+            InlineTaskBar(
+                state = InlineTaskState.Running,
+                text = stringResource(R.string.cache_batch_running, bookCount, pendingChapters),
+                onCancel = onCancelTask
             )
+        }
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            itemsIndexed(books, key = { _, book -> book.bookUrl }) { _, book ->
+                CacheBookItemRow(
+                    book = book,
+                    // 订阅该条目局部刷新 tick：值变化触发本 item 重组
+                    refreshTick = refreshTickOf(book.bookUrl),
+                    cacheChapterCount = if (book.isLocal) null else cacheChaptersOf(book.bookUrl)?.size,
+                    exportMsg = exportMsgOf(book.bookUrl),
+                    exportProgress = exportProgressOf(book.bookUrl),
+                    onDownloadToggle = { onDownloadToggle(book) },
+                    onExport = { onExport(book) }
+                )
+            }
         }
     }
 }

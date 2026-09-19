@@ -99,6 +99,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import io.legado.app.ui.widget.compose.AppSemanticColors
 import io.legado.app.ui.widget.compose.BookCoverImage
 import io.legado.app.ui.widget.compose.releaseComposeImage
 import androidx.compose.ui.zIndex
@@ -133,6 +134,7 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.roundToInt
 import androidx.compose.material3.MaterialTheme
+import android.text.TextUtils
 import io.legado.app.ui.theme.bodyTertiary
 import io.legado.app.ui.theme.bodySecondary
 import io.legado.app.ui.theme.subtitleLarge
@@ -181,6 +183,8 @@ data class BookInfoActions(
     val onRefresh: () -> Unit = {},
     val onRefreshToc: () -> Unit = {},
     val onRead: () -> Unit = {},
+    /** F57 追更直达：点 hero 区「最新章」直接跳到最后一章（宿主复用既有 openChapterDirect 链路） */
+    val onOpenLatestChapter: () -> Unit = {},
     val onShelf: () -> Unit = {},
     val onChangeCover: () -> Unit = {},
     val onPreviewCover: () -> Unit = {},
@@ -1729,14 +1733,51 @@ private fun BookInfoPosterHero(
                 )
             )
             if (state.latestChapterTitle.isNotBlank()) {
-                Text(
-                    text = state.latestChapterTitle,
-                    color = Color.White.copy(alpha = 0.72f),
-                    fontSize = 12.5.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = heroShadow
-                )
+                // F57 追更直达：最新章由纯展示改为可点（直达末章），并在追更场景给出「新 N 章」danger 徽标。
+                // 未读口径：已读位置之后的章节数；从未读过（index<0）时不显示，避免「新 全部章」的误导。
+                val newChapterCount = if (state.currentChapterIndex >= 0) {
+                    (state.chapterCount - 1 - state.currentChapterIndex).coerceAtLeast(0)
+                } else {
+                    0
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .combinedClickable(
+                            onClick = actions.onOpenLatestChapter,
+                            onLongClick = actions.onOpenToc
+                        )
+                ) {
+                    Text(
+                        text = state.latestChapterTitle,
+                        color = Color.White.copy(alpha = 0.72f),
+                        fontSize = 12.5.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = heroShadow,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (newChapterCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(AppSemanticColors.Danger)
+                                .padding(horizontal = 6.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    R.string.book_info_new_chapters_badge,
+                                    newChapterCount
+                                ),
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
             }
             if (state.readTimeText.isNotBlank()) {
                 Text(
@@ -1804,6 +1845,9 @@ private fun BookInfoContentPanel(
     }
 }
 
+/** F56 简介折叠态行数（展开态不限行） */
+private const val CollapsedIntroLines = 5
+
 @Composable
 private fun BookInfoIntroPanel(
     intro: String,
@@ -1814,6 +1858,11 @@ private fun BookInfoIntroPanel(
 ) {
     val displayIntro = intro.ifBlank { stringResource(R.string.intro_show_null) }
     val isWebIntro = intro.startsWith("<useweb>", ignoreCase = true)
+    // F56 简介折叠/展开：默认 5 行折叠 +「展开全文」；展开态按书记忆（会话级——
+    // 跨启动持久化需新增存储，本页克制不做，见 OPTIMIZATION 裁定）
+    var introExpanded by remember(state.bookUrl) { mutableStateOf(false) }
+    // 溢出标记一旦成立即保持（展开态无省略号，不能反过来清掉入口）
+    var introOverflows by remember(state.intro) { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1845,9 +1894,26 @@ private fun BookInfoIntroPanel(
                     state = state,
                     actions = actions,
                     style = style,
-                    webIntroExpandPages = webIntroExpandPages
+                    webIntroExpandPages = webIntroExpandPages,
+                    expanded = introExpanded,
+                    onOverflowChange = { introOverflows = it }
                 )
             }
+        }
+        // 展开/收起入口：折叠态仅在确有溢出时出现（短简介不出现无效入口）
+        if (!isWebIntro && (introExpanded || introOverflows)) {
+            Text(
+                text = if (introExpanded) {
+                    stringResource(R.string.book_info_intro_collapse)
+                } else {
+                    stringResource(R.string.book_info_intro_expand)
+                },
+                color = style.colors.accent,
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+                modifier = Modifier
+                    .padding(top = 6.dp, start = 22.dp, end = 22.dp)
+                    .clickable { introExpanded = !introExpanded }
+            )
         }
     }
 }
@@ -1859,6 +1925,16 @@ private fun BookInfoBottomActions(
     style: BookInfoComposeStyle,
     modifier: Modifier = Modifier
 ) {
+    // F57 续读条文案：仅在"有目录 + 已读过"时给出，避免未读新书显示「第 1 章 · 0%」
+    val readProgressText = if (state.chapterCount > 0 && state.currentChapterIndex >= 0) {
+        stringResource(
+            R.string.book_info_read_progress,
+            state.currentChapterIndex + 1,
+            ((state.currentChapterIndex + 1) * 100 / state.chapterCount).coerceIn(0, 100)
+        )
+    } else {
+        null
+    }
     Box(
         modifier = modifier
             .background(
@@ -1888,7 +1964,9 @@ private fun BookInfoBottomActions(
                 modifier = Modifier.weight(1f)
             )
             BookInfoActionButton(
-                text = stringResource(R.string.reading),
+                // F57 续读条：有阅读进度时主按钮文案带出「第 N 章 · XX%」，
+                // 把「我读到哪了」前置到点按之前（数据全部来自既有 state，零新增存储）
+                text = readProgressText ?: stringResource(R.string.reading),
                 primary = true,
                 style = style,
                 onClick = actions.onRead,
@@ -1988,7 +2066,9 @@ private fun BookInfoPreviewImage(
 @Composable
 private fun BookInfoRichIntro(
     rawIntro: String,
-    style: BookInfoComposeStyle
+    style: BookInfoComposeStyle,
+    expanded: Boolean,
+    onOverflowChange: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val markwon = remember(context) {
@@ -2008,6 +2088,9 @@ private fun BookInfoRichIntro(
         },
         update = { textView ->
             textView.setTextColor(style.colors.primaryText.toArgb())
+            // F56 折叠：折叠态限 5 行 + 省略号；展开态不限
+            textView.maxLines = if (expanded) Int.MAX_VALUE else CollapsedIntroLines
+            textView.ellipsize = if (expanded) null else TextUtils.TruncateAt.END
             if (textView.tag != rawIntro) {
                 textView.tag = rawIntro
                 when {
@@ -2027,6 +2110,15 @@ private fun BookInfoRichIntro(
                     }
                 }
             }
+            // 溢出探测（折叠态）：末行有省略号即说明被截断；展开态不反向清除标记
+            if (!expanded) {
+                textView.post {
+                    val layout = textView.layout ?: return@post
+                    val lastLine = layout.lineCount - 1
+                    val truncated = lastLine >= 0 && layout.getEllipsisCount(lastLine) > 0
+                    if (truncated) onOverflowChange(true)
+                }
+            }
         }
     )
 }
@@ -2037,7 +2129,9 @@ private fun BookInfoIntroContent(
     state: BookInfoUiState,
     actions: BookInfoActions,
     style: BookInfoComposeStyle,
-    webIntroExpandPages: Int
+    webIntroExpandPages: Int,
+    expanded: Boolean = true,
+    onOverflowChange: (Boolean) -> Unit = {}
 ) {
     if (rawIntro.startsWith("<useweb>", ignoreCase = true)) {
         BookInfoWebIntro(
@@ -2048,7 +2142,7 @@ private fun BookInfoIntroContent(
             expandPages = webIntroExpandPages
         )
     } else {
-        BookInfoRichIntro(rawIntro, style)
+        BookInfoRichIntro(rawIntro, style, expanded, onOverflowChange)
     }
 }
 

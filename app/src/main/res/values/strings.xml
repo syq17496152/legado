@@ -755,6 +755,11 @@
     <string name="help">Help</string>
     <string name="my">Me</string>
     <string name="reading">Read</string>
+    <string name="cache_batch_running">Caching %1$d books · %2$d chapters queued</string>
+    <string name="book_info_new_chapters_badge">New %1$d</string>
+    <string name="book_info_read_progress">Ch. %1$d · %2$d%%</string>
+    <string name="book_info_intro_expand">Read more ▾</string>
+    <string name="book_info_intro_collapse">Collapse ▴</string>
     <string name="battery_show">%d%%</string>
     <string name="timer_m">%d min</string>
     <string name="brightness_auto">Auto-Brightness %s</string>
