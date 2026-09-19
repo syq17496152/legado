@@ -28,6 +28,7 @@ import io.legado.app.ui.rss.source.edit.RssSourceEditActivity
 import io.legado.app.ui.widget.compose.AppManagementAction
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementScaffold
+import io.legado.app.ui.widget.compose.replaceAt
 import io.legado.app.ui.widget.compose.replaceByIndex
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
@@ -490,7 +491,8 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         val updated = source.copy(enabled = enabled)
         val index = sourcesState.indexOfFirst { it.sourceUrl == source.sourceUrl }
         if (index >= 0) {
-            sourcesState[index] = updated
+            // 写回必须走 SnapshotListUpdates（直接下标写在本项目上下文不落地，界面会定格）
+            sourcesState.replaceAt(index, updated)
         }
         viewModel.update(updated)
     }
@@ -501,7 +503,7 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
         sourcesState.indices.forEach { index ->
             val source = sourcesState[index]
             if (source.sourceUrl in urls && source.enabled != enabled) {
-                sourcesState[index] = source.copy(enabled = enabled)
+                sourcesState.replaceAt(index, source.copy(enabled = enabled))
             }
         }
     }

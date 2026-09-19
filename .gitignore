@@ -206,6 +206,10 @@ git_log.txt
 !/ai_tests/scripts/l2_verify_free_layout.py
 !/ai_tests/scripts/l2_verify_p1_b1_batch.py
 !/ai_tests/scripts/l2_verify_source_list_refresh.py
+# ui-subpage-optimization Track A 固化脚本（2026-09-19）：代码层门禁 / 蓝图引用校验 / 组件渲染基线
+!/ai_tests/scripts/ui_gate.py
+!/ai_tests/scripts/verify_doc_refs.py
+!/ai_tests/scripts/baseline_shots.py
 /ai_tests/logs/*.png
 /logs/build_dialog_fix_apk.txt
 /logs/build_pkg_27_tail.txt
