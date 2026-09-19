@@ -77,6 +77,9 @@
     <string name="book_source_empty_title">还没有书源</string>
     <string name="book_source_empty_subtitle">新建、导入或添加书源开始使用</string>
     <string name="book_source_cover_fallback">源</string>
+    <string name="toc_unread_chapters">%1$d 章未读</string>
+    <string name="toc_new_chapter">新</string>
+    <string name="toc_locate_current">定位到当前章</string>
     <string name="settings_search">搜索设置</string>
     <string name="settings_search_match_count">%1$d 项匹配</string>
     <string name="settings_search_no_result">没有匹配的设置项</string>

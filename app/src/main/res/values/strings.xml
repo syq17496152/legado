@@ -78,6 +78,9 @@
     <string name="book_source_empty_title">No book sources yet</string>
     <string name="book_source_empty_subtitle">Create, import, or add book sources to get started</string>
     <string name="book_source_cover_fallback">Src</string>
+    <string name="toc_unread_chapters">%1$d unread</string>
+    <string name="toc_new_chapter">New</string>
+    <string name="toc_locate_current">Locate current chapter</string>
     <string name="settings_search">Search settings</string>
     <string name="settings_search_match_count">%1$d matches</string>
     <string name="settings_search_no_result">No matching settings</string>

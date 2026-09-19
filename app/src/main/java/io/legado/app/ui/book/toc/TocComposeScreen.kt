@@ -21,7 +21,10 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -305,6 +308,8 @@ fun TocComposeScreen(
                 onSearchQueryChange = { searchQuery = it },
                 onBack = onBack,
                 onSelectPage = { selectedPage = it },
+                // B/toc 优化 1：未读增量徽标（book.getUnreadChapterNum() 为既有数据源）
+                unreadCount = book?.getUnreadChapterNum() ?: 0,
                 chapterActions = {
                     buildChapterActions(
                         book = book,
@@ -420,7 +425,27 @@ fun TocComposeScreen(
             if (selectedPage == TocPage.Chapters) {
                 TocBottomBar(
                     book = book,
-                    onCurrentClick = {
+                    // 主意图：继续阅读（直达正文，复用既有开章链路）
+                    onContinueRead = {
+                        book?.let { currentBook ->
+                            val currentChapter = chapterList.firstOrNull {
+                                it.index == currentBook.durChapterIndex
+                            }
+                            if (currentChapter != null) {
+                                onOpenChapter(currentBook, chapterList, currentChapter)
+                            } else {
+                                // 章节列表未就绪时退回定位行为，避免静默无响应
+                                scope.launch {
+                                    chapterListState.scrollToItem(
+                                        visiblePositionOf(visibleChapters, currentBook.durChapterIndex),
+                                        if (hasVolumes) volumeHeaderOffsetPx else 0
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    // 次意图：定位当前章（保留原 scrollToItem 行为）
+                    onLocate = {
                         book?.let {
                             scope.launch {
                                 chapterListState.scrollToItem(
@@ -483,6 +508,7 @@ private fun TocTopBar(
     onSearchQueryChange: (String) -> Unit,
     onBack: () -> Unit,
     onSelectPage: (TocPage) -> Unit,
+    unreadCount: Int,
     chapterActions: @Composable () -> List<AppManagementMenuAction>,
     bookmarkActions: @Composable () -> List<AppManagementMenuAction>
 ) {
@@ -538,6 +564,7 @@ private fun TocTopBar(
         TocTabs(
             selectedPage = selectedPage,
             onSelectPage = onSelectPage,
+            unreadCount = unreadCount,
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -596,6 +623,7 @@ private fun TocSearchField(
 private fun TocTabs(
     selectedPage: TocPage,
     onSelectPage: (TocPage) -> Unit,
+    unreadCount: Int,
     modifier: Modifier = Modifier
 ) {
     val palette = rememberAppManagementPalette()
@@ -610,6 +638,7 @@ private fun TocTabs(
             text = stringResource(R.string.chapter_list),
             selected = selectedPage == TocPage.Chapters,
             onClick = { onSelectPage(TocPage.Chapters) },
+            badge = unreadCount.takeIf { it > 0 }?.let { stringResource(R.string.toc_unread_chapters, it) },
             modifier = Modifier.weight(1f)
         )
         TocTabButton(
@@ -626,7 +655,8 @@ private fun TocTabButton(
     text: String,
     selected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    badge: String? = null
 ) {
     val palette = rememberAppManagementPalette()
     val interactionSource = remember { MutableInteractionSource() }
@@ -644,15 +674,27 @@ private fun TocTabButton(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = text,
-            color = if (selected) palette.settings.accent else palette.settings.primaryText,
-            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            fontFamily = palette.settings.bodyFontFamily,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = text,
+                color = if (selected) palette.settings.accent else palette.settings.primaryText,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                fontFamily = palette.settings.bodyFontFamily,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            badge?.let {
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    text = it,
+                    color = palette.settings.accent,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                    fontFamily = palette.settings.bodyFontFamily,
+                    maxLines = 1
+                )
+            }
+        }
     }
 }
 
@@ -699,6 +741,10 @@ private fun TocChapterList(
                             cached = chapterCacheMap[chapter.primaryStr()] ?: true,
                             countWords = countWords,
                             indented = hasVolumes,
+                            // B/toc 优化 1：当前位置之后的增量区间（止于 lastChapterIndex）标记「新」
+                            isNew = book != null &&
+                                chapter.index > book.durChapterIndex &&
+                                chapter.index <= book.lastChapterIndex,
                             onClick = { onOpenChapter(chapter) }
                         )
                     }
@@ -774,6 +820,7 @@ private fun TocChapterRow(
     cached: Boolean,
     countWords: Boolean,
     indented: Boolean,
+    isNew: Boolean,
     onClick: () -> Unit
 ) {
     val isCurrent = book?.durChapterIndex == chapter.index
@@ -837,6 +884,17 @@ private fun TocChapterRow(
                     modifier = Modifier.padding(top = 3.dp)
                 )
             }
+        }
+        // B/toc 优化 1：未读增量微点标（仅 accent 小字，不抢当前章高亮锚地位）
+        if (isNew && !isCurrent) {
+            Text(
+                text = stringResource(R.string.toc_new_chapter),
+                color = palette.settings.accent,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                fontFamily = palette.settings.bodyFontFamily,
+                maxLines = 1,
+                modifier = Modifier.padding(end = 6.dp)
+            )
         }
         val iconRes = when {
             isCurrent -> R.drawable.ic_check
@@ -936,7 +994,8 @@ private fun TocBookmarkRow(
 @Composable
 private fun TocBottomBar(
     book: Book?,
-    onCurrentClick: () -> Unit,
+    onContinueRead: () -> Unit,
+    onLocate: () -> Unit,
     onTopClick: () -> Unit,
     onBottomClick: () -> Unit
 ) {
@@ -948,22 +1007,48 @@ private fun TocBottomBar(
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // B/toc 优化 2：锚点卡双意图分离——主意图「继续阅读」给主按钮（直达正文），
+        // 次意图「定位」给卡右 ⌖ 图标（保留原 scrollToItem 行为）
         AppManagementCard(
             palette = palette,
             modifier = Modifier.weight(1f),
             insidePadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
             drawPanelImage = true,
-            onClick = onCurrentClick
+            onClick = onContinueRead
         ) {
-            Text(
-                text = book?.let { "${it.durChapterTitle}(${it.durChapterIndex + 1}/${it.simulatedTotalChapterNum()})" }
-                    ?: stringResource(R.string.chapter_list),
-                color = palette.settings.primaryText,
-                fontSize = MaterialTheme.typography.bodySmall.fontSize,
-                fontFamily = palette.settings.bodyFontFamily,
-                maxLines = 1,
-                overflow = TextOverflow.MiddleEllipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = book?.let { "${it.durChapterTitle}(${it.durChapterIndex + 1}/${it.simulatedTotalChapterNum()})" }
+                        ?: stringResource(R.string.chapter_list),
+                    color = palette.settings.primaryText,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                    fontFamily = palette.settings.bodyFontFamily,
+                    maxLines = 1,
+                    overflow = TextOverflow.MiddleEllipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.continue_read) + " ›",
+                    color = palette.settings.accent,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                    fontFamily = palette.settings.bodyFontFamily,
+                    maxLines = 1
+                )
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Default.MyLocation,
+                    contentDescription = stringResource(R.string.toc_locate_current),
+                    tint = palette.settings.secondaryText,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onLocate
+                        )
+                )
+            }
         }
         TocBottomIconButton(
             iconRes = R.drawable.ic_arrow_drop_up,
