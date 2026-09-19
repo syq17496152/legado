@@ -263,7 +263,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                         ),
                         AppManagementAction(
                             text = getString(R.string.check_select_source),
-                            onClick = ::checkSource
+                            onClick = { checkSource() }
                         ),
                         AppManagementAction(
                             text = getString(R.string.export_selection),
@@ -299,6 +299,22 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                         checkBannerText = checkBannerState.value,
                         onCancelCheck = ::cancelSourceCheck,
                         dataVersion = sourceDataVersion,
+                        searchQuery = searchQueryState.value,
+                        emptyActions = BookSourceEmptyActions(
+                            onAdd = { startActivity<BookSourceEditActivity>() },
+                            onImportLocal = {
+                                importDoc.launch {
+                                    mode = HandleFileContract.FILE
+                                    allowExtensions = arrayOf("txt", "json")
+                                }
+                            },
+                            onImportOnline = ::showImportDialog,
+                            onImportQr = { qrResult.launch() },
+                            onClearSearch = { updateSearchQuery("") }
+                        ),
+                        // 与 CHECK_SOURCE_DONE 的自动筛选同口径（同字面量，保证命中同一分组）
+                        onFilterFailed = { updateSearchQuery(FAILED_SOURCE_GROUP_KEY) },
+                        onCheck = { checkSource(sourcesState.toList()) },
                         reorderEnabled = sort == BookSourceSort.Default &&
                             searchQueryState.value.isBlank() &&
                             !groupSourcesByDomain,
@@ -790,7 +806,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
         }
     }
 
-    private fun checkSource() {
+    private fun checkSource(items: List<BookSourcePart> = getSelectedSources()) {
         showComposeTextInputDialog(
             title = getString(R.string.search_book_key),
             hint = "search word",
@@ -801,7 +817,7 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
                 if (text.isNotEmpty()) {
                     CheckSource.keyword = text
                 }
-                val selectItems = getSelectedSources()
+                val selectItems = items
                 CheckSource.start(this@BookSourceActivity, selectItems)
                 val currentItems = sourcesState
                 val firstItem = currentItems.indexOf(selectItems.firstOrNull())
@@ -891,8 +907,8 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
             updateCheckingState(false)
             refreshDebugMessages(force = true)
             groups.forEach { group ->
-                if (group.contains("失效") && searchQueryState.value.isEmpty()) {
-                    updateSearchQuery("失效")
+                if (group.contains(FAILED_SOURCE_GROUP_KEY) && searchQueryState.value.isEmpty()) {
+                    updateSearchQuery(FAILED_SOURCE_GROUP_KEY)
                     toastOnUi("发现有失效书源，已为您自动筛选！")
                 }
             }
@@ -1352,3 +1368,9 @@ private class SourceGroupFilterDialog : ComposeDialogFragment() {
         }
     }
 }
+
+/**
+ * F68 聚合条「失效」筛选键：与 `CheckSource` 校验后写入的失效分组名同字面量，
+ * 也即 `CHECK_SOURCE_DONE` 自动筛选沿用的既有口径（保证两条路径命中同一分组）。
+ */
+private const val FAILED_SOURCE_GROUP_KEY = "失效"

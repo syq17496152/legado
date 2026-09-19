@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.RssFeed
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,6 +23,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.data.entities.RssSource
+import io.legado.app.ui.widget.components.EmptyStateAction
+import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.compose.AppManagementLazyColumn
 import io.legado.app.ui.widget.compose.AppManagementListRow
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
@@ -34,10 +39,15 @@ internal fun RssSourceScreen(
     selectedUrls: Set<String>,
     isSelectMode: Boolean,
     reorderEnabled: Boolean,
+    /** 当前搜索词（F157 空态双语义判据：空库引导 vs 无匹配纠偏） */
+    searchQuery: String,
     onReorder: (List<RssSource>) -> Unit,
     onToggleSelect: (RssSource) -> Unit,
     onToggleEnabled: (RssSource, Boolean) -> Unit,
     onEdit: (RssSource) -> Unit,
+    onAdd: () -> Unit,
+    onImportOnline: () -> Unit,
+    onClearSearch: () -> Unit,
     sourceMenuActions: (RssSource) -> List<AppManagementMenuAction>
 ) {
     val palette = rememberAppManagementPalette()
@@ -86,6 +96,41 @@ internal fun RssSourceScreen(
         state = lazyListState,
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
+        // F157 空态双语义：原实现列表为空时页面全白，用户无法区分"库是空的"与"搜索没匹配"。
+        // 空库 → 给可立即脱困的「添加订阅源 / 网络导入」；有搜索词 → 给「清空搜索」纠偏。
+        if (sources.isEmpty()) {
+            item(key = "__rss_source_empty__") {
+                if (searchQuery.isBlank()) {
+                    EmptyStatePlaceholder(
+                        icon = Icons.Default.RssFeed,
+                        title = stringResource(R.string.rss_source_empty_title),
+                        subtitle = stringResource(R.string.rss_source_empty_subtitle),
+                        primaryAction = EmptyStateAction(
+                            label = stringResource(R.string.add),
+                            onClick = onAdd
+                        ),
+                        secondaryActions = listOf(
+                            EmptyStateAction(
+                                label = stringResource(R.string.import_on_line),
+                                onClick = onImportOnline
+                            )
+                        ),
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    EmptyStatePlaceholder(
+                        icon = Icons.Default.SearchOff,
+                        title = stringResource(R.string.rss_source_no_match_title),
+                        subtitle = stringResource(R.string.rss_source_no_match_subtitle, searchQuery),
+                        primaryAction = EmptyStateAction(
+                            label = stringResource(R.string.rss_source_clear_search),
+                            onClick = onClearSearch
+                        ),
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
         if (reorderEnabled) {
             items(
                 items = orderedSources,
@@ -134,7 +179,12 @@ private fun RssSourceItemRow(
 ) {
     AppManagementListRow(
         title = source.sourceName,
-        subtitle = source.sourceGroup,
+        // F158 健康度元信息外显：meta 行由「仅分组」扩为「分组 · 上次更新 X 前」，
+        // 便于一眼识别长期未更新的源（数据源 = 既有 lastUpdateTime，零新增存储）
+        subtitle = listOfNotNull(
+            source.sourceGroup?.takeIf { it.isNotBlank() },
+            relativeUpdateLabel(source.lastUpdateTime)
+        ).joinToString(separator = " · "),
         palette = palette,
         selected = isSelected,
         selectionVisible = isSelectMode,
@@ -155,4 +205,20 @@ private fun RssSourceItemRow(
         moreActions = moreActions,
         leadingContent = dragHandle
     )
+}
+
+/**
+ * F158：源条目「上次更新」相对时间（本地化，复用既有 just_now/minutes_ago/hours_ago/days_ago 词条）。
+ * `lastUpdateTime <= 0` 表示从未更新过，单列文案而非"1970 年前"这类无意义相对时间。
+ */
+@Composable
+private fun relativeUpdateLabel(lastUpdateTime: Long): String {
+    if (lastUpdateTime <= 0L) return stringResource(R.string.rss_source_never_updated)
+    val diff = System.currentTimeMillis() - lastUpdateTime
+    return when {
+        diff < 60_000L -> stringResource(R.string.just_now)
+        diff < 3_600_000L -> stringResource(R.string.minutes_ago, (diff / 60_000L).toInt())
+        diff < 86_400_000L -> stringResource(R.string.hours_ago, (diff / 3_600_000L).toInt())
+        else -> stringResource(R.string.days_ago, (diff / 86_400_000L).toInt())
+    }
 }

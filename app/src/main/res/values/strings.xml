@@ -411,6 +411,12 @@
     <string name="search_book_source">Search book sources</string>
     <string name="select_book_source">Select book source</string>
     <string name="search_rss_source">Search RSS sources</string>
+    <string name="rss_source_empty_title">No RSS sources yet</string>
+    <string name="rss_source_empty_subtitle">Add one manually, or import from the web</string>
+    <string name="rss_source_no_match_title">No matching sources</string>
+    <string name="rss_source_no_match_subtitle">No source matches \"%1$s\"</string>
+    <string name="rss_source_clear_search">Clear search</string>
+    <string name="rss_source_never_updated">Never updated</string>
     <string name="search_book_source_num">Search( %d sources in total)</string>
     <string name="chapter_list_size">Chapters(%d)</string>
     <string name="text_bold">Bold</string>
@@ -428,6 +434,13 @@
     <string name="padding_right">Right</string>
     <string name="check_book_source">Check book sources</string>
     <string name="check_select_source">Check the selected source</string>
+    <string name="source_health_healthy">Healthy %1$d</string>
+    <string name="source_health_failed">Failed %1$d</string>
+    <string name="source_health_unchecked">Unchecked %1$d</string>
+    <string name="source_health_check_all">Check</string>
+    <string name="book_source_no_match_title">No matching sources</string>
+    <string name="book_source_no_match_subtitle">No source matches \"%1$s\"</string>
+    <string name="book_source_clear_search">Clear search</string>
     <string name="progress_show">%1$s      Progress %2$d/%3$d</string>
     <string name="tts_fix">Please install and select Chinese TTS!</string>
     <string name="tts_init_failed">TTS initialization failed!</string>

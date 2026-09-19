@@ -1,8 +1,11 @@
 package io.legado.app.ui.book.source.manage
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -10,6 +13,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -22,6 +28,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -29,17 +37,32 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.data.entities.BookSourcePart
+import io.legado.app.ui.widget.components.EmptyStateAction
+import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.components.InlineTaskBar
 import io.legado.app.ui.widget.components.InlineTaskState
 import io.legado.app.ui.widget.compose.AppManagementLazyColumn
 import io.legado.app.ui.widget.compose.AppManagementListRow
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementPalette
+import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import androidx.compose.material3.MaterialTheme
 import io.legado.app.ui.theme.bodyTertiary
+
+/**
+ * 空态动作集（优化 2：无结果态导入引导）——聚成数据类避免把 5 个回调平铺进
+ * 本已很长的 [BookSourceScreen] 参数表。
+ */
+internal data class BookSourceEmptyActions(
+    val onAdd: () -> Unit,
+    val onImportLocal: () -> Unit,
+    val onImportOnline: () -> Unit,
+    val onImportQr: () -> Unit,
+    val onClearSearch: () -> Unit
+)
 
 @Composable
 internal fun BookSourceScreen(
@@ -57,6 +80,13 @@ internal fun BookSourceScreen(
     onCancelCheck: () -> Unit = {},
     // bugfix-0908 T5：数据版本信号（宿主实际变更时递增），替代原万级 joinToString 指纹
     dataVersion: Int = 0,
+    /** 当前搜索词（优化 2 空态双语义判据） */
+    searchQuery: String,
+    emptyActions: BookSourceEmptyActions,
+    /** F68 聚合条：一键筛选失效源（走宿主既有 `updateSearchQuery("失效")` 链路） */
+    onFilterFailed: () -> Unit,
+    /** F68 聚合条：对当前可见源发起校验（复用宿主既有校验流程） */
+    onCheck: () -> Unit,
     reorderEnabled: Boolean,
     onReorder: (List<BookSourcePart>) -> Unit,
     onToggleSelect: (BookSourcePart) -> Unit,
@@ -125,6 +155,20 @@ internal fun BookSourceScreen(
 
     // 批D：校验进度横幅（原 Snackbar 承载，校验中显示在列表顶部，可取消）
     // A2.4.5：私有 CheckProgressBanner 提升为公共 InlineTaskBar（同语义复用，消除重复实现）
+    // F68 健康度聚合条：计数从既有 debugMessages（校验消息，末尾为 成功/失败）派生，零新增存储。
+    // 口径与既有 FINAL_DEBUG_MESSAGE_REGEX 一致；未出消息的源计入「未校验」。
+    var healthyCount = 0
+    var failedCount = 0
+    var uncheckedCount = 0
+    sources.forEach { source ->
+        val message = debugMessages[source.bookSourceUrl].orEmpty()
+        when {
+            message.contains(DEBUG_FAILED_MARK) -> failedCount++
+            message.contains(DEBUG_SUCCESS_MARK) -> healthyCount++
+            else -> uncheckedCount++
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         checkBannerText?.takeIf { it.isNotBlank() }?.let { bannerText ->
             InlineTaskBar(
@@ -133,12 +177,66 @@ internal fun BookSourceScreen(
                 onCancel = onCancelCheck
             )
         }
+        // 仅在确有校验结果时出现（全未校验时该条无信息量，属噪声）
+        if (healthyCount + failedCount > 0) {
+            SourceHealthBar(
+                healthyCount = healthyCount,
+                failedCount = failedCount,
+                uncheckedCount = uncheckedCount,
+                palette = palette,
+                onFilterFailed = onFilterFailed,
+                onCheck = onCheck
+            )
+        }
         AppManagementLazyColumn(
             palette = palette,
             state = lazyListState,
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
+        // 优化 2 无结果态导入引导：原实现列表为空即全白，无法区分"库空"与"搜不到"。
+        // 空库 → 添加 + 三种导入；有搜索词 → 清空搜索纠偏。
+        if (sources.isEmpty()) {
+            item(key = "__book_source_empty__") {
+                if (searchQuery.isBlank()) {
+                    EmptyStatePlaceholder(
+                        icon = Icons.Default.MenuBook,
+                        title = stringResource(R.string.book_source_empty_title),
+                        subtitle = stringResource(R.string.book_source_empty_subtitle),
+                        primaryAction = EmptyStateAction(
+                            label = stringResource(R.string.add_book_source),
+                            onClick = emptyActions.onAdd
+                        ),
+                        secondaryActions = listOf(
+                            EmptyStateAction(
+                                label = stringResource(R.string.import_local),
+                                onClick = emptyActions.onImportLocal
+                            ),
+                            EmptyStateAction(
+                                label = stringResource(R.string.import_on_line),
+                                onClick = emptyActions.onImportOnline
+                            ),
+                            EmptyStateAction(
+                                label = stringResource(R.string.import_by_qr_code),
+                                onClick = emptyActions.onImportQr
+                            )
+                        ),
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    EmptyStatePlaceholder(
+                        icon = Icons.Default.SearchOff,
+                        title = stringResource(R.string.book_source_no_match_title),
+                        subtitle = stringResource(R.string.book_source_no_match_subtitle, searchQuery),
+                        primaryAction = EmptyStateAction(
+                            label = stringResource(R.string.book_source_clear_search),
+                            onClick = emptyActions.onClearSearch
+                        ),
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
         if (reorderEnabled) {
             // 手动排序:扁平列表 + 拖动手柄重排(长按仍为多选,不冲突)。
             items(
@@ -178,6 +276,65 @@ internal fun BookSourceScreen(
             }
         }
         }
+    }
+}
+
+/**
+ * F68 健康度聚合条：校验后一次性给出「可用 / 失效 / 未校验」分布，
+ * 免去用户在万级列表里逐行找红字。点「失效 N」直接复用宿主既有失效筛选链路。
+ */
+@Composable
+private fun SourceHealthBar(
+    healthyCount: Int,
+    failedCount: Int,
+    uncheckedCount: Int,
+    palette: AppManagementPalette,
+    onFilterFailed: () -> Unit,
+    onCheck: () -> Unit
+) {
+    val settings = palette.settings
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.source_health_healthy, healthyCount),
+            color = colorResource(R.color.success),
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = stringResource(R.string.source_health_failed, failedCount),
+            color = if (failedCount > 0) settings.danger else settings.secondaryText,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            modifier = Modifier
+                .clip(MaterialTheme.shapes.small)
+                .clickable(enabled = failedCount > 0, onClick = onFilterFailed)
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = stringResource(R.string.source_health_unchecked, uncheckedCount),
+            color = settings.secondaryText,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            modifier = Modifier.weight(1f)
+        )
+        LegadoMiuixActionButton(
+            text = stringResource(R.string.source_health_check_all),
+            palette = palette.miuix,
+            onClick = onCheck,
+            minWidth = 56.dp,
+            minHeight = 30.dp,
+            insidePadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp)
+        )
     }
 }
 
@@ -261,6 +418,10 @@ private fun BookSourceItemRow(
 }
 
 private val FINAL_DEBUG_MESSAGE_REGEX = Regex("成功|失败")
+
+/** F68 聚合条计数判据（与 [FINAL_DEBUG_MESSAGE_REGEX] 同口径） */
+private const val DEBUG_SUCCESS_MARK = "成功"
+private const val DEBUG_FAILED_MARK = "失败"
 
 /** bugfix-0908 T5：扁平行模型（域名分组头或普通源行），单 items(key) 批量提交 */
 private data class SourceRowModel(
