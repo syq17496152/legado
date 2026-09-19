@@ -66,7 +66,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.UiCorner
@@ -150,7 +149,8 @@ fun rememberAppDialogStyle(): AppDialogStyle {
         primaryText = Color(context.primaryTextColor),
         secondaryText = Color(context.secondaryTextColor),
         stroke = Color(stroke),
-        danger = Color(ContextCompat.getColor(context, R.color.md_red_500)),
+        // 语义色单源（AD-14）：danger 真值见 AppSemanticColors，禁止在此写具体色值
+        danger = AppSemanticColors.Danger,
         panelRadius = context.composePanelRadius(),
         actionRadius = context.composeActionRadius(),
         bodyFontFamily = FontFamily(context.uiTypeface()),

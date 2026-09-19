@@ -89,6 +89,7 @@ import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.AppManagementListRow
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
+import io.legado.app.ui.widget.compose.AppSemanticColors
 import io.legado.app.ui.widget.compose.appSettingPanelBackground
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
@@ -1831,7 +1832,8 @@ private fun CompactAction(
             fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
             fontWeight = FontWeight.Medium,
             fontFamily = palette.bodyFontFamily,
-            color = if (danger) Color(0xFFD44848) else palette.accent
+            // 语义色单源（AD-14）：danger 真值见 AppSemanticColors
+            color = if (danger) AppSemanticColors.Danger else palette.accent
         )
     }
 }
