@@ -23,6 +23,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -154,11 +156,78 @@ internal fun BookInfoManageScreen(
                             maxLines = 6,
                             overflow = TextOverflow.Ellipsis
                         )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        // F98（ui-subpage-optimization）：沉浸 Tab 的决策支持——
+                        // 原为「一句描述文本 + 无回切入口」，用户需退出本页开一本书才能看效果。
+                        // 补①结构示意占位（封面通栏 + 浮层两栏，明确标注「示意，以详情页为准」）
+                        //   ②「切回经典样式继续编辑组件」显式动线（复用既有 onStyleChanged，行为同 Tab）
+                        ImmersiveStructurePreview(palette = palette)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(R.string.book_info_style_preview_note),
+                            color = palette.settings.secondaryText,
+                            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    LegadoMiuixActionButton(
+                        text = stringResource(R.string.book_info_style_back_to_classic),
+                        palette = palette.miuix,
+                        onClick = { onStyleChanged(BookInfoPageStyle.CLASSIC) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    )
 
                     Spacer(modifier = Modifier.weight(1f))
                 }
             }
+        }
+    }
+}
+
+/**
+ * 沉浸样式结构示意（F98）：封面通栏 + 下方浮层两栏（左封面信息 / 右元信息）。
+ *
+ * 仅用主题色块勾勒结构关系，**不做运行时真实渲染**（依赖详情页渲染上下文，成本不成比例）；
+ * 页面另有「结构示意，实际效果以详情页为准」文案兜底，避免用户误当真实预览。
+ */
+@Composable
+private fun ImmersiveStructurePreview(palette: AppManagementPalette) {
+    val blockColor = Color(palette.settings.rowPressed)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // 封面通栏
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(72.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(blockColor)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        // 浮层两栏
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(blockColor)
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(blockColor)
+            )
         }
     }
 }

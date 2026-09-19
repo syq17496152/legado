@@ -77,6 +77,8 @@
     <string name="book_source_empty_title">还没有书源</string>
     <string name="book_source_empty_subtitle">新建、导入或添加书源开始使用</string>
     <string name="book_source_cover_fallback">源</string>
+    <string name="book_info_style_preview_note">结构示意，实际效果以详情页为准</string>
+    <string name="book_info_style_back_to_classic">切回经典样式继续编辑组件</string>
     <string name="toc_unread_chapters">%1$d 章未读</string>
     <string name="toc_new_chapter">新</string>
     <string name="toc_locate_current">定位到当前章</string>
