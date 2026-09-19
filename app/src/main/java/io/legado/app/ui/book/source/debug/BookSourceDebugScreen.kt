@@ -34,6 +34,7 @@ import io.legado.app.model.Debug
 import io.legado.app.ui.source.debug.DebugEntryCard
 import io.legado.app.ui.source.debug.DebugFilter
 import io.legado.app.ui.source.debug.DebugFilterChips
+import io.legado.app.ui.source.debug.DebugSummaryBar
 import io.legado.app.ui.source.debug.DebugChipRow
 import io.legado.app.ui.source.debug.toEntryUi
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
@@ -182,6 +183,22 @@ fun BookSourceDebugScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    // F65 调试结论条：把「判断是否通过」从读完所有日志降为看一行结论，
+                    // 总耗时 = 末事件相对耗时（数据现成，纯展示层）
+                    if (phase == DebugPhase.SUCCESS || phase == DebugPhase.FAILED || phase == DebugPhase.CANCELLED) {
+                        item(key = "summary") {
+                            DebugSummaryBar(
+                                // 复用事件 kind 语义：1000=完成 / -1=失败 / 其余=取消
+                                phaseKind = when (phase) {
+                                    DebugPhase.SUCCESS -> 1000
+                                    DebugPhase.FAILED -> -1
+                                    else -> 0
+                                },
+                                errorMessage = entries.firstOrNull { it.kind == -1 }?.message,
+                                totalElapsedMillis = entries.lastOrNull()?.elapsedMillis ?: 0L,
+                            )
+                        }
+                    }
                     items(visibleEntries, key = { it.id }) { entry ->
                         DebugEntryCard(
                             entry = entry,

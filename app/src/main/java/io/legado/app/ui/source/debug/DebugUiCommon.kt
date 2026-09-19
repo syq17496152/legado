@@ -3,24 +3,34 @@ package io.legado.app.ui.source.debug
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.legado.app.R
 import io.legado.app.model.Debug
 import io.legado.app.ui.widget.compose.AppSettingPalette
 import io.legado.app.ui.widget.compose.rememberAppSettingPalette
@@ -72,6 +82,83 @@ fun List<DebugEntryUi>.buildExportText(kindTitle: (Int) -> String): String =
             append(entry.message)
         }
     }
+
+/**
+ * 调试结论条（F65，ui-subpage-optimization）：把「判断调试是否通过」从读完所有日志
+ * 降为看一行结论。
+ *
+ * - 成功：✓ 调试完成 · 总耗时 X.Xs（绿）
+ * - 失败：✗ 调试失败 · 错误概要（danger 红）
+ * - 取消：⏹ 已取消 · 总耗时 X.Xs（中性）
+ *
+ * 总耗时 = 末事件相对耗时（[DebugEntryUi.elapsedMillis] 数据现成），纯展示层，不引入链路追踪。
+ */
+@Composable
+fun DebugSummaryBar(
+    phaseKind: Int,
+    errorMessage: String?,
+    totalElapsedMillis: Long,
+    modifier: Modifier = Modifier,
+) {
+    val settings = rememberAppSettingPalette()
+
+    @Composable
+    fun row(label: String, detail: String, container: Color, content: Color) {
+        Card(
+            modifier = modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = container, contentColor = content),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = when (phaseKind) {
+                            1000 -> Icons.Default.Check
+                            -1 -> Icons.Default.ErrorOutline
+                            else -> Icons.Default.Stop
+                        },
+                        contentDescription = null,
+                        tint = content,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(label, style = MaterialTheme.typography.labelLarge)
+                }
+                Text(detail, style = MaterialTheme.typography.labelMedium, color = content)
+            }
+        }
+    }
+
+    when (phaseKind) {
+        1000 ->
+            row(
+                label = "调试完成",
+                detail = "总耗时 %.2fs".format(totalElapsedMillis / 1000.0),
+                container = Color(settings.row),
+                // success 语义色走既有登记资源（theme-tokens §9.3，非硬编码）
+                content = colorResource(R.color.success),
+            )
+        -1 ->
+            row(
+                label = "调试失败",
+                detail = errorMessage?.take(24) ?: "存在错误",
+                container = settings.danger.copy(alpha = 0.12f),
+                content = settings.danger,
+            )
+        else ->
+            row(
+                label = "已取消",
+                detail = "总耗时 %.2fs".format(totalElapsedMillis / 1000.0),
+                container = Color(settings.row),
+                content = settings.secondaryText,
+            )
+    }
+}
 
 /** 横滑 Chips 行（fadingEdge 由使用方按需叠加，先保持简单） */
 @Composable
