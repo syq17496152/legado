@@ -3,7 +3,6 @@ package io.legado.app.ui.widget.compose
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -12,7 +11,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.legado.app.help.config.AppConfig
 import my.nanihadesuka.compose.InternalLazyColumnScrollbar
-import my.nanihadesuka.compose.InternalLazyVerticalGridScrollbar
 import my.nanihadesuka.compose.ScrollbarLayoutSide
 import my.nanihadesuka.compose.ScrollbarSelectionActionable
 import my.nanihadesuka.compose.ScrollbarSelectionMode
@@ -35,31 +33,6 @@ fun ComposeLazyListFastScroller(
         viewportMainAxisPx = state.layoutInfo.viewportSize.height
     )
     InternalLazyColumnScrollbar(
-        state = state,
-        modifier = modifier
-            .fillMaxHeight()
-            .width(maxOf(touchTargetWidth, dragHotZoneWidth)),
-        settings = settings
-    )
-}
-
-@Composable
-fun ComposeLazyGridFastScroller(
-    state: LazyGridState,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    minThumbHeight: Dp = 44.dp,
-    touchTargetWidth: Dp = AppConfig.fastScrollerTouchTargetDp.dp,
-    dragHotZoneWidth: Dp = touchTargetWidth
-) {
-    val totalItems = state.layoutInfo.totalItemsCount
-    val visibleItems = state.layoutInfo.visibleItemsInfo.size
-    if (!enabled || totalItems <= visibleItems || visibleItems <= 0 || totalItems <= 0) return
-    val settings = rememberLegadoScrollbarSettings(
-        minThumbHeight = minThumbHeight,
-        viewportMainAxisPx = state.layoutInfo.viewportSize.height
-    )
-    InternalLazyVerticalGridScrollbar(
         state = state,
         modifier = modifier
             .fillMaxHeight()

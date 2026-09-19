@@ -1,7 +1,6 @@
 package io.legado.app.ui.widget.components
 
 import io.legado.app.ui.widget.components.AppShapes
-import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,7 +10,6 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -56,17 +54,3 @@ fun AppModalBottomSheet(
         }
     }
 }
-
-/**
- * 高亮/文案选区场景的半屏 Sheet：ContentView 高度拖动、peek 固定为部分展开。
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun rememberHalfSheetState(
-    flingBehavior: FlingBehavior? = null,
-    confirmValueChange: (SheetValue) -> Boolean = { true },
-    skipPartiallyExpanded: Boolean = false
-): SheetState = rememberModalBottomSheetState(
-    skipPartiallyExpanded = skipPartiallyExpanded,
-    confirmValueChange = confirmValueChange
-)
