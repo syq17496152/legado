@@ -213,6 +213,7 @@ git_log.txt
 !/ai_tests/scripts/l2_verify_theme_fontcolor_preserve.py
 !/ai_tests/scripts/l2_verify_theme_first_install.py
 !/ai_tests/scripts/l2_verify_theme_section.py
+!/ai_tests/scripts/l2_verify_inline_task_bar.py
 /ai_tests/logs/*.png
 /logs/build_dialog_fix_apk.txt
 /logs/build_pkg_27_tail.txt

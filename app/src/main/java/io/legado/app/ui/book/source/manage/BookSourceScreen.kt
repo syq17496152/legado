@@ -1,10 +1,8 @@
 package io.legado.app.ui.book.source.manage
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -29,9 +27,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.data.entities.BookSourcePart
+import io.legado.app.ui.widget.components.InlineTaskBar
+import io.legado.app.ui.widget.components.InlineTaskState
 import io.legado.app.ui.widget.compose.AppManagementLazyColumn
 import io.legado.app.ui.widget.compose.AppManagementListRow
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
@@ -125,11 +124,12 @@ internal fun BookSourceScreen(
     }
 
     // 批D：校验进度横幅（原 Snackbar 承载，校验中显示在列表顶部，可取消）
+    // A2.4.5：私有 CheckProgressBanner 提升为公共 InlineTaskBar（同语义复用，消除重复实现）
     Column(modifier = Modifier.fillMaxSize()) {
         checkBannerText?.takeIf { it.isNotBlank() }?.let { bannerText ->
-            CheckProgressBanner(
+            InlineTaskBar(
+                state = InlineTaskState.Running,
                 text = bannerText,
-                palette = palette,
                 onCancel = onCancelCheck
             )
         }
@@ -178,45 +178,6 @@ internal fun BookSourceScreen(
             }
         }
         }
-    }
-}
-
-@Composable
-private fun CheckProgressBanner(
-    text: String,
-    palette: AppManagementPalette,
-    onCancel: () -> Unit
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
-    ) {
-        CircularProgressIndicator(
-            color = palette.settings.accent,
-            strokeWidth = 2.dp,
-            modifier = Modifier.size(16.dp)
-        )
-        Text(
-            text = text,
-            color = palette.settings.secondaryText,
-            fontSize = 13.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 8.dp)
-        )
-        Text(
-            text = stringResource(R.string.cancel),
-            color = palette.settings.accent,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier
-                .clickable(onClick = onCancel)
-                .padding(horizontal = 10.dp, vertical = 8.dp)
-        )
     }
 }
 

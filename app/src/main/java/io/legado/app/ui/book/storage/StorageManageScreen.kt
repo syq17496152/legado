@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.ui.widget.components.AppTextDialog
 import io.legado.app.ui.widget.components.ConfirmDialog
+import io.legado.app.ui.widget.components.EmptyStateAction
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.MetricGrid
@@ -121,8 +122,7 @@ fun StorageManageScreen(
                 loadError != null -> EmptyStatePlaceholder(
                     icon = Icons.Default.ErrorOutline,
                     title = loadError,
-                    actionLabel = stringResource(R.string.retry),
-                    onAction = onRefresh,
+                    primaryAction = EmptyStateAction(stringResource(R.string.retry), onRefresh),
                     modifier = Modifier.fillMaxSize()
                 )
                 items.isEmpty() -> EmptyStatePlaceholder(

@@ -79,6 +79,7 @@ import io.legado.app.lib.theme.onAccentFor
 import io.legado.app.lib.theme.rememberThemeUiPalette
 import io.legado.app.lib.theme.titleTypeface
 import io.legado.app.model.BookCover
+import io.legado.app.ui.widget.components.EmptyStateAction
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.components.ShelfGridSkeleton
 import io.legado.app.ui.widget.components.ShelfListSkeleton
@@ -161,8 +162,7 @@ fun BookshelfScreen(
             EmptyStatePlaceholder(
                 icon = Icons.Filled.Error,
                 title = stringResource(R.string.load_error_retry),
-                actionLabel = stringResource(R.string.retry),
-                onAction = onRetry,
+                primaryAction = EmptyStateAction(stringResource(R.string.retry), onRetry),
                 modifier = Modifier.fillMaxSize(),
             )
         } else if (books.isEmpty()) {
