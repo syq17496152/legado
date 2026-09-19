@@ -49,6 +49,7 @@ import io.legado.app.help.http.newCallResponse
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.utils.CenterCropBitmapDrawable
 import io.legado.app.utils.MD5Utils
+import io.legado.app.utils.MIN_FONT_SURFACE_CONTRAST
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.toastOnUi
@@ -1005,8 +1006,6 @@ object ThemeConfig {
             refreshEffectiveFontColorCache(getThemeConfig(context, isNightTheme))
             effectiveTitleFontColorCache.orEmpty()
         }
-
-    private const val MIN_FONT_SURFACE_CONTRAST = 1.3
 
     private fun String.toSurfaceColorOrNull(): Int? {
         val normalized = normalizeThemeColor(this) ?: return null

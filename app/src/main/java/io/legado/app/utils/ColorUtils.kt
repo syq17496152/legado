@@ -10,6 +10,17 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
+/**
+ * 字体/容器最低对比度下限（**运行时统一口径单源**，AD-16 / A3.4b）。
+ *
+ * XML 侧（`ThemeConfig` 的撞色 sanitize）与 Compose 侧（`ThemeSpec.withContrastGuard`）
+ * **必须复用本常量**，禁止各自声明——改造前两处分别为 `1.3` / `3.0f`，
+ * 导致同主题下 View 页与 Compose 页的文字改写分叉。
+ *
+ * ⚠️ 本值是**运行时兜底下限**（低于它才替换文字色），验收标准仍按 WCAG AA ≥4.5:1 执行。
+ */
+const val MIN_FONT_SURFACE_CONTRAST = 3.0
+
 @Suppress("unused", "MemberVisibilityCanBePrivate")
 object ColorUtils {
 

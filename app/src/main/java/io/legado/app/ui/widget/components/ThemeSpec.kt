@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.ColorUtils
 import io.legado.app.utils.ColorUtils as LegadoColorUtils
+import io.legado.app.utils.MIN_FONT_SURFACE_CONTRAST
 
 /**
  * 主题实体：5 核心色 → M3 34 槽位推导（收敛 AD-12/AD-18 的落地算法）。
@@ -156,9 +157,6 @@ fun ThemeSpec.toM3Scheme(): ColorScheme {
     }
     return scheme.withContrastGuard()
 }
-
-/** 最低字面/容器对比度下限兜底（大字号 WCAG AA 档；非 WCAG 4.5 合规线，验收仍按 ≥4.5 执行） */
-private const val MIN_FONT_SURFACE_CONTRAST = 3.0f
 
 /** M3 中性文字兜底色（跨昼夜二选一，取对比度更高者） */
 private val contrastFallbackLight = Color(0xFF1D1B20)
