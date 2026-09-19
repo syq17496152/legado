@@ -80,7 +80,6 @@ import io.legado.app.lib.theme.rememberThemeUiPalette
 import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.lib.theme.titleTextColor
 import io.legado.app.lib.theme.toThemeTextColorOrNull
-import io.legado.app.utils.ColorUtils
 import io.legado.app.lib.theme.composeActionRadius
 import io.legado.app.lib.theme.composePanelRadius
 import io.legado.app.ui.widget.ModernActionPopup
@@ -156,7 +155,8 @@ fun rememberAppSettingPalette(): AppSettingPalette {
     val primaryText = Color(customTitleText ?: customUiText ?: context.titleTextColor)
     val accentArgb = context.accentColor
     val accent = Color(accentArgb)
-    val onAccent = if (ColorUtils.isColorLight(accentArgb)) Color.Black else Color.White
+    // onAccent 单源（AD-15）：统一走 AppUiTokens.onAccent → ThemeSpec.contrastOn，禁止在此重复推导
+    val onAccent = AppUiTokens.onAccent(accent)
     val panelRadiusPx = UiCorner.panelRadius(context)
     return remember(
         page,

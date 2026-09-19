@@ -22,6 +22,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.utils.BitmapUtils
+import io.legado.app.utils.ColorUtils as AppColorUtils
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
@@ -77,7 +78,7 @@ object UiCorner {
     }
 
     fun effectStrokeColor(color: Int): Int {
-        val base = if (ColorUtils.calculateLuminance(color) > 0.5) Color.BLACK else Color.WHITE
+        val base = if (AppColorUtils.isColorLight(color)) Color.BLACK else Color.WHITE
         val alpha = 0.10f
         return ColorUtils.setAlphaComponent(base, (alpha.coerceIn(0f, 0.5f) * 255).toInt())
     }

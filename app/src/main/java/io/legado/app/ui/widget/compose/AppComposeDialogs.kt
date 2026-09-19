@@ -143,7 +143,8 @@ fun rememberAppDialogStyle(): AppDialogStyle {
     // 文字色按对话框实际背景明暗推导，而非全局 night 标志，避免深底深字/浅底白字
     return AppDialogStyle(
         accent = Color(accent),
-        onAccent = if (ColorUtils.isColorLight(accent)) Color.Black else Color.White,
+        // onAccent 单源（AD-15）：统一走 AppUiTokens.onAccent → ThemeSpec.contrastOn，禁止在此重复推导
+        onAccent = AppUiTokens.onAccent(Color(accent)),
         surface = Color(ColorUtils.withAlpha(surfaceBase, layoutAlpha)),
         fieldSurface = Color(ColorUtils.withAlpha(fieldSurface, fieldAlpha)),
         primaryText = Color(context.primaryTextColor),
