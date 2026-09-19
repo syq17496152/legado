@@ -297,14 +297,18 @@
                             android:textSize="16sp"
                             android:textStyle="bold" />
 
-                        <ImageView
+                        <!-- F26（ui-subpage-optimization）：原为裸图标 ic_arrow_right（语义不明，用户分不清更多/刷新/分享），
+                             改为文字按钮「查看全部排行」——文案复用既有 R.string.read_record_view_all_rank，点击行为不变 -->
+                        <TextView
                             android:id="@+id/iv_rank_more"
-                            android:layout_width="28dp"
-                            android:layout_height="28dp"
-                            android:contentDescription="@string/read_record_view_all_rank"
-                            android:padding="4dp"
-                            android:src="@drawable/ic_arrow_right"
-                            app:tint="@color/secondaryText" />
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:paddingHorizontal="6dp"
+                            android:paddingVertical="4dp"
+                            android:text="@string/read_record_view_all_rank"
+                            android:textColor="@color/secondaryText"
+                            android:textSize="12sp" />
 
                     </LinearLayout>
 

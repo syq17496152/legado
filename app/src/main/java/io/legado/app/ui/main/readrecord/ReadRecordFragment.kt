@@ -8,15 +8,17 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -94,6 +96,9 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Date
 import java.util.Locale
+
+/** F27：年份复合 chip 固定宽度（「YYYY 年」+ 左右内边距；与月份行同处一行，宽度需稳定不随文案跳动） */
+private val YearChipWidth = 92.dp
 
 class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFragmentInterface {
 
@@ -321,22 +326,28 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
                             )
                         },
                         secondRow = {
-                            Column(
+                            // F27（ui-subpage-optimization）：年/月筛选层级收纳——原「年份独占一行 + 月份一行」
+                            // 收敛为一行两级（行首=年，其后=月），省出 38dp 给统计内容；层级改由位置表达。
+                            // 年份选择交互与行为零变化（仍弹既有 showYearSelector）。
+                            Row(
                                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 // 年份入口：单项 chip 仅作入口（无选中底；传 NO_POSITION 避免字色走选中态色）
                                 TagChipRow(
                                     items = listOf(RoundedTagBarView.Item(filterYearText.value)),
                                     selectedIndex = RecyclerView.NO_POSITION,
                                     selectedBackgroundVisible = false,
-                                    onTagClick = { showYearSelector() }
+                                    onTagClick = { showYearSelector() },
+                                    modifier = Modifier.width(YearChipWidth)
                                 )
                                 TagChipRow(
                                     items = filterMonthItems.value,
                                     selectedIndex = filterMonthSelected.value,
                                     selectedBackgroundVisible = true,
-                                    onTagClick = { index -> selectMonth(index + 1) }
+                                    onTagClick = { index -> selectMonth(index + 1) },
+                                    modifier = Modifier.weight(1f)
                                 )
                             }
                         }
@@ -386,13 +397,13 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
         items: List<RoundedTagBarView.Item>,
         selectedIndex: Int,
         selectedBackgroundVisible: Boolean,
-        onTagClick: (Int) -> Unit
+        onTagClick: (Int) -> Unit,
+        modifier: Modifier = Modifier.fillMaxWidth()
     ) {
         val submitted = remember { mutableStateOf<Pair<List<RoundedTagBarView.Item>, Int>?>(null) }
         val styleSignature = remember { mutableStateOf<String?>(null) }
         AndroidView(
-            modifier = Modifier
-                .fillMaxWidth()
+            modifier = modifier
                 .height(38.dp),
             factory = { context ->
                 RoundedTagBarView(context).apply {
@@ -906,9 +917,10 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             createSurfaceDrawable(panelSurfaceColor, 14f)
         binding.panelGoalCard.background =
             createSurfaceDrawable(panelSurfaceColor, 14f)
-        binding.ivRankMore.background = null
+        // F26：排行入口已由 ImageView 改为 TextView（文字按钮）——
+        // 保留 selectableItemBackgroundBorderless 波纹（不置 null），仅更新文字色；goal 编辑仍是 ImageView，走 setColorFilter
+        binding.ivRankMore.setTextColor(secondaryTextColor)
         binding.ivGoalEdit.background = null
-        binding.ivRankMore.setColorFilter(secondaryTextColor)
         binding.ivGoalEdit.setColorFilter(secondaryTextColor)
         binding.heatmapView.submit(currentHeatmapCells, accentColor, panelSurfaceColor)
     }
