@@ -116,7 +116,10 @@ class App : Application() {
         // F-暗夜紫默认主题：首次安装时将暗夜紫设为夜间主题配置
         // 语义：夜间主题名（dNThemeName）未设置时预设暗夜紫配色；themeMode 亦未设置时才强制夜间模式（themeMode="2"）；
         // 已设置过夜间主题名的用户不受影响，保留原配色。
-        val firstInstallDarkPurple = getPrefString(PreferKey.dNThemeName).isNullOrBlank()
+        // A3.5b：改用独立首启标志位判定——原「dNThemeName 为空」会把**只用过日间主题、从不设夜间主题
+        // 的存量用户**误判为首装，进而强制切夜间 + 改顶栏样式（灾难性覆盖用户主题）。
+        // 标志位由 ThemeRuntimeKeys.migrateThemeFirstInstallFlag 在 attachBaseContext 幂等迁移。
+        val firstInstallDarkPurple = getPrefBoolean(PreferKey.themeFirstInstallDone, false)
         if (firstInstallDarkPurple) {
             // T12（theme-arch-gap）：字面量换 DARK_PURPLE_THEME_NAME 常量
             // theme-fontscale-daynight AD-03：改读代码内置配置（历史 themeConfig.json 资产已移除）
@@ -245,6 +248,7 @@ class App : Application() {
     override fun attachBaseContext(base: Context) {
         runCatching {
             ThemeRuntimeKeys.migrateLegacyNightValues(base)
+            ThemeRuntimeKeys.migrateThemeFirstInstallFlag(base)
         }
         super.attachBaseContext(AppContextWrapper.wrap(base))
     }

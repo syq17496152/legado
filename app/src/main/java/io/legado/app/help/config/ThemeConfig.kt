@@ -1174,6 +1174,14 @@ object ThemeConfig {
         }
     }
 
+    /**
+     * 主题配置（GSON 序列化到 `themeConfig.json`）。
+     *
+     * ⚠️ **A3.5c 约束（AD-17 用户主题数据保护）**：GSON **按字段名**序列化，无 schema version。
+     * 因此**任何字段重命名都必须保留 `@SerializedName("旧字段名")` 别名**，否则存量用户的
+     * 该字段会静默丢失（回落到默认值，表现为「升级后主题配色变了」）。
+     * 删除字段亦须先保留别名一版（先写新字段、读旧别名，再在下个版本移除）。
+     */
     @Keep
     data class Config(
         var themeName: String,

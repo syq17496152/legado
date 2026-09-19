@@ -270,6 +270,14 @@ object PreferKey {
     const val dThemeName = "durThemeName"
     const val dNThemeName = "durThemeNameNight"
 
+    /**
+     * A3.5b 首启标志位：`true` = 真首装（用于暗夜紫默认主题预设），`false` = 存量用户。
+     *
+     * 由 `ThemeRuntimeKeys.migrateThemeFirstInstallFlag` 在 `attachBaseContext` 幂等迁移；
+     * 取代原「`dNThemeName` 是否为空」判据（该判据会把只用过日间主题的存量用户误判为首装）。
+     */
+    const val themeFirstInstallDone = "theme_first_install_done"
+
     const val cPrimary = "colorPrimary"
     const val cAccent = "colorAccent"
     const val cBackground = "colorBackground"

@@ -51,6 +51,30 @@ object ThemeRuntimeKeys {
         editor.commit()
     }
 
+    private const val themeFirstInstallMigratedKey = "themeFirstInstallFlagMigrated"
+
+    /**
+     * 首启标志位迁移（AD-17 / A3.5b）。
+     *
+     * 背景：`App.kt` 原用「`dNThemeName` 是否为空」判定首装 → **只用过日间主题、从不设夜间主题的
+     * 存量用户会被误判为首装**，进而被强制切夜间 + 改顶栏样式（灾难性覆盖用户主题）。
+     *
+     * 迁移口径（哨兵键 + 幂等，与 [migrateLegacyNightValues] 同范式）：
+     *  · `themeMode` / `dNThemeName` / `dThemeName` 任一已非空 ⇒ 存量用户 ⇒ 写 `false`
+     *  · 三者全为空 ⇒ 真首装 ⇒ 写 `true`
+     */
+    fun migrateThemeFirstInstallFlag(context: Context) {
+        val prefs = context.defaultSharedPreferences
+        if (prefs.getBoolean(themeFirstInstallMigratedKey, false)) return
+        val isLegacyUser = listOf(
+            PreferKey.themeMode, PreferKey.dNThemeName, PreferKey.dThemeName
+        ).any { !prefs.getString(it, null).isNullOrBlank() }
+        prefs.edit()
+            .putBoolean(PreferKey.themeFirstInstallDone, !isLegacyUser)
+            .putBoolean(themeFirstInstallMigratedKey, true)
+            .commit()
+    }
+
     fun fontScale(isNight: Boolean = AppConfig.isNightTheme): String =
         if (isNight) PreferKey.fontScaleN else PreferKey.fontScale
 
