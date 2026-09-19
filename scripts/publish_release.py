@@ -27,6 +27,7 @@ APK 一键发布编排器：版本确认 → 三包构建 → 校验强化 → g
 
 import argparse
 import datetime
+import difflib
 import json
 import os
 import re
@@ -68,6 +69,33 @@ EXPECTED_PACKAGES = {
     "coexist": "io.legado.app.debug",
 }
 
+# ---------------------------------------------------------------- 更新日志规范常量
+# （update-log-release-optimize；规范正本 docs/project-rules/version-delivery-sync.md）
+MAX_ITEM_CHARS = 40          # 单条上限（去空白 Unicode 码点）
+MAX_DAY_CHARS = 600          # 单天上限（去空白，含标题与分节标题）
+                             # 2026-09-19 由 250 上调至 600：实测"一天含多个独立大功能"日
+                             # （如 09/13 合并 6 批 = 导入校验/源质量体检/投屏三大功能）250 字必然丢功能
+MAX_BODY_CHARS = 65000       # Release body 上限（GitHub --notes 65535，留余量）
+DUP_SIMILARITY = 0.85        # C2 条目去重相似度阈值
+RELEASE_NOTES_DIR = "output/release-notes"
+
+# C3 事务剔除关键词（命中即整条剔除：内部工程事务对用户不可感知）
+# 注意：只列不易误伤的强特征词，避免误剔用户可感知条目（如"下载"不列"载"）
+TRIVIAL_KEYWORDS = (
+    "构建", "打包", "编译", "依赖升级", "Gradle", "CI", "脚本",
+    "日志治理", "埋点", "规范沉淀", "文档沉淀", "代码搬迁", "重命名", "元数据",
+    "基准测试", "性能基线", "瘦身", "体积优化",
+)
+
+# C4 前后对比表述（只保留"现状"半句）
+CONTRAST_TAIL_MARKS = ("现在", "现已", "改为", "调整为")
+CONTRAST_HEAD_MARKS = ("此前", "原来", "原先", "之前")
+
+
+def strip_ws(text: str) -> str:
+    """去掉所有空白（字数判定口径：Unicode 码点数，中文按 1 计）"""
+    return re.sub(r"\s+", "", text)
+
 
 def log(stage: str, msg: str, level: str = "INFO"):
     """统一日志输出"""
@@ -99,6 +127,9 @@ def parse_args():
     parser.add_argument("--skip-build", action="store_true",
                         help="跳过 Stage2 构建，复用 output/apk/ 各目录下最新产物直接走校验+发布+tag"
                              "（复用场景：三包已由 build-legado.bat 手工产出；发布版本取各包文件名版本 max）")
+    parser.add_argument("--from-version",
+                        help="发版正文区间起点版本（如 3.26.090820）；缺省时自动从 git tag 推断"
+                             "（取小于当前版本的最大 tag）。发版正文=起点到当前版本的全部更新日志")
     return parser.parse_args()
 
 
@@ -267,43 +298,277 @@ def collect_latest_artifacts(config: dict) -> Tuple[str, Dict[str, Path]]:
     return version, result
 
 
-def read_update_log(log_path: Path, version: str) -> str:
-    """读取更新日志，提取对应日期的条目。
+def list_git_tags() -> List[str]:
+    """读取本地 git tag 列表（失败返回空列表，由调用方 fail-fast 提示传 --from-version）"""
+    try:
+        proc = subprocess.run(["git", "tag"], cwd=str(PROJECT_ROOT),
+                              capture_output=True, text=True, timeout=30, errors="ignore")
+        if proc.returncode != 0:
+            return []
+        return [t.strip() for t in proc.stdout.splitlines() if t.strip()]
+    except Exception:
+        return []
 
-    fail-fast（R2）：任何缺失场景直接 exit，废除"自动发布 {version}"静默回退——
-    updateLog 与发布产物的一致性是 version-delivery-sync 门禁的硬要求。
+
+def infer_prev_version(current: str) -> Optional[str]:
+    """区间起点推断：本地 git tag 中"小于当前版本且最大"者。
+
+    用 compare_versions（按 . 分段转 int）比较——裸字符串比较在段长不一致时会误判。
+    tag 命名非 `3.26.MMDDHH` 规范（无法解析为数字段）时跳过该 tag。
+    """
+    candidates: List[str] = []
+    for tag in list_git_tags():
+        norm = tag.lstrip("vV")  # 容错 v 前缀
+        if not re.fullmatch(r"\d+(\.\d+)+", norm):
+            continue
+        try:
+            if compare_versions(norm, current) < 0:
+                candidates.append(norm)
+        except (ValueError, IndexError):
+            continue
+    if not candidates:
+        return None
+    return max(candidates, key=lambda v: [int(p) for p in v.split(".")])
+
+
+def parse_update_log_blocks(content: str) -> List[Tuple[str, str]]:
+    """把 updateLog 拆为 [(日期, 块原文)]，块原文含标题行本身，按文件出现顺序"""
+    matches = list(re.finditer(r"\*\*(\d{4}/\d{2}/\d{2})", content))
+    blocks: List[Tuple[str, str]] = []
+    for i, m in enumerate(matches):
+        start = m.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
+        blocks.append((m.group(1), content[start:end].strip()))
+    return blocks
+
+
+def check_log_structure(blocks: List[Tuple[str, str]]):
+    """V1/V2 结构门禁：同日多条 / 日期非严格倒序 → fail-fast"""
+    dates = [d for d, _ in blocks]
+    seen = set()
+    for d in dates:
+        if d in seen:
+            log("CLEAN", f"同日存在多个日期条目: {d} —— 必须合并为一条"
+                         f"（一天多条会让发版正文丢失后续批次）", "ERROR")
+            sys.exit(1)
+        seen.add(d)
+    for i in range(1, len(dates)):
+        if dates[i] >= dates[i - 1]:
+            log("CLEAN", f"日期顺序错乱: {dates[i]} 出现在 {dates[i - 1]} 之后"
+                         f"（要求严格倒序，新在前）", "ERROR")
+            sys.exit(1)
+
+
+def day_char_count(block: str) -> int:
+    """单天字数：标题行 + 分节标题行 + 条目行，去空白合计"""
+    return len(strip_ws(block))
+
+
+def compress_item(item: str) -> str:
+    """C5 超长压缩：按标点就近截断至 ≤MAX_ITEM_CHARS；找不到标点则硬截断补 …"""
+    if len(item) <= MAX_ITEM_CHARS:
+        return item
+    for i in range(len(item) - 1, 0, -1):
+        if item[i] in "。；，、":
+            if i <= MAX_ITEM_CHARS:
+                return item[:i]
+    return item[:MAX_ITEM_CHARS - 1] + "…"
+
+
+def drop_contrast_head(text: str) -> str:
+    """C4 前后对比截断：含"此前/原来/原先/之前"且含"现在/现已/改为/调整为"时只留后半句"""
+    if not any(h in text for h in CONTRAST_HEAD_MARKS):
+        return text
+    best = -1
+    for mark in CONTRAST_TAIL_MARKS:
+        idx = text.find(mark)
+        if idx > 0 and (best < 0 or idx < best):
+            best = idx
+    return text[best:] if best > 0 else text
+
+
+def is_trivial_item(item: str) -> bool:
+    """C3 事务剔除：命中内部工程事务关键词"""
+    return any(kw in item for kw in TRIVIAL_KEYWORDS)
+
+
+def dedup_items(items: List[str]) -> Tuple[List[str], int]:
+    """C2 去重：相似度 ≥ DUP_SIMILARITY 视为重复，保留较长的一条"""
+    kept: List[str] = []
+    dropped = 0
+    for item in items:
+        plain = strip_ws(item)
+        dup_idx = -1
+        for i, k in enumerate(kept):
+            if difflib.SequenceMatcher(None, plain, strip_ws(k)).ratio() >= DUP_SIMILARITY:
+                dup_idx = i
+                break
+        if dup_idx >= 0:
+            if len(plain) > len(strip_ws(kept[dup_idx])):
+                kept[dup_idx] = item
+            dropped += 1
+        else:
+            kept.append(item)
+    return kept, dropped
+
+
+def clean_day_block(date_str: str, blocks: List[str]) -> Tuple[str, Dict[str, int]]:
+    """清洗单天：C3 事务剔除 → C2 去重 → C4 前后对比截断 → C5 超长压缩
+
+    返回 (清洗后块文本, 统计)。标题沿用该日首个块的原文（保留其括号说明）。
+    """
+    stats = {"dropped": 0, "deduped": 0, "truncated": 0}
+    title = blocks[0].splitlines()[0].strip()
+    # 收集该日全部分节（保持出现顺序）
+    section_order: List[str] = []
+    section_items: Dict[str, List[str]] = {}
+    for block in blocks:
+        for line in block.splitlines()[1:]:
+            s = line.strip()
+            if s.startswith("### "):
+                name = s
+                if name not in section_items:
+                    section_items[name] = []
+                    section_order.append(name)
+            elif s.startswith("- "):
+                if not section_order:  # 无分节的裸条目
+                    section_items.setdefault("### 其它", [])
+                    section_order.append("### 其它")
+                section_items[section_order[-1]].append(s[2:].strip())
+
+    lines = [title]
+    for name in section_order:
+        cleaned: List[str] = []
+        for item in section_items[name]:
+            if is_trivial_item(item):
+                stats["dropped"] += 1
+                continue
+            cleaned.append(item)
+        cleaned, deduped = dedup_items(cleaned)
+        stats["deduped"] += deduped
+        final: List[str] = []
+        for item in cleaned:
+            new = drop_contrast_head(item)
+            new2 = compress_item(new)
+            if new2 != item:
+                stats["truncated"] += 1
+            final.append(new2)
+        if final:
+            lines.append(name)
+            lines.extend(f"- {i}" for i in final)
+    return "\n".join(lines), stats
+
+
+def clean_release_notes(content: str, version: str,
+                        from_version: Optional[str]) -> Tuple[str, Dict[str, int]]:
+    """发版前置清洗加工（全自动，规则 C1~C6）——必须先于构建执行。
+
+    产出 Release body：版本区间标注 + 清洗后的区间内全部天条目。
+    任一残留（超长/结构违规/body 超限）→ fail-fast，不产出文件。
+    """
+    end_date = version_to_date(version)
+    if not end_date:
+        log("CLEAN", f"无法从版本号 {version} 解析日期（期望 3.YY.MMDDHH）", "ERROR")
+        sys.exit(1)
+
+    start_version = from_version or infer_prev_version(version)
+    if not start_version:
+        log("CLEAN", "无法推断区间起点：本地无可用 git tag，请显式传 --from-version <版本>", "ERROR")
+        sys.exit(1)
+    start_date = version_to_date(start_version)
+    if not start_date:
+        log("CLEAN", f"--from-version 非法（无法解析为日期）: {start_version}", "ERROR")
+        sys.exit(1)
+    if start_date > end_date:
+        log("CLEAN", f"区间起点 {start_version}({start_date}) 晚于当前版本 {version}({end_date})", "ERROR")
+        sys.exit(1)
+
+    blocks = parse_update_log_blocks(content)
+    if not blocks:
+        log("CLEAN", "updateLog 中未找到任何 **YYYY/MM/DD** 条目", "ERROR")
+        sys.exit(1)
+    check_log_structure(blocks)  # V1 同日多条 / V2 严格倒序
+
+    in_range = [(d, b) for d, b in blocks if start_date <= d <= end_date]
+    if not in_range:
+        log("CLEAN", f"区间 {start_date}~{end_date} 内无任何日志条目"
+                     f"（请按 version-delivery-sync 规范补写当日条目）", "ERROR")
+        sys.exit(1)
+
+    # C1 同日合并（结构门禁已保证区间内同日唯一，此处按日期分组以兼容历史）
+    grouped: Dict[str, List[str]] = {}
+    order: List[str] = []
+    for d, b in in_range:
+        if d not in grouped:
+            grouped[d] = []
+            order.append(d)
+        grouped[d].append(b)
+
+    total = {"dropped": 0, "deduped": 0, "truncated": 0}
+    rendered: List[str] = []
+    for d in order:  # order 已是倒序（结构门禁保证）
+        text, stats = clean_day_block(d, grouped[d])
+        for k in total:
+            total[k] += stats[k]
+        chars = day_char_count(text)
+        if chars > MAX_DAY_CHARS:
+            log("CLEAN", f"清洗后仍超长: {d} 实际{chars}字 限制{MAX_DAY_CHARS}字", "ERROR")
+            sys.exit(1)
+        for line in text.splitlines():
+            if line.startswith("- ") and len(strip_ws(line[2:])) > MAX_ITEM_CHARS:
+                log("CLEAN", f"清洗后仍有超长条目({d}): {strip_ws(line[2:])[:30]}...", "ERROR")
+                sys.exit(1)
+        rendered.append(text)
+
+    body = f"{start_version} → {version}\n\n" + "\n\n".join(rendered)
+    if len(body) > MAX_BODY_CHARS:
+        log("CLEAN", f"发版正文超长: {len(body)} 字符 限制{MAX_BODY_CHARS}"
+                     f"（请用更靠后的 --from-version 缩小覆盖区间）", "ERROR")
+        sys.exit(1)
+
+    before_items = sum(1 for _, b in in_range for line in b.splitlines() if line.strip().startswith("- "))
+    after_items = sum(1 for t in rendered for line in t.splitlines() if line.startswith("- "))
+    total["before_items"] = before_items
+    total["after_items"] = after_items
+    total["days"] = len(rendered)
+    total["chars"] = len(body)
+
+    log("CLEAN", f"区间 {start_version}({start_date}) → {version}({end_date})，覆盖 {len(rendered)} 天")
+    log("CLEAN", f"清洗统计: 条目 {before_items} → {after_items}"
+                 f"（剔除事务 {total['dropped']} / 去重 {total['deduped']} / 压缩 {total['truncated']}），"
+                 f"正文 {len(body)} 字符")
+    return body, total
+
+
+def write_release_notes(version: str, body: str, dry_run: bool) -> Optional[Path]:
+    """落盘发版信息产物 output/release-notes/{version}.md（供发版前审阅与事后追溯）"""
+    if dry_run:
+        log("CLEAN", f"[dry-run] 将写入 {RELEASE_NOTES_DIR}/{version}.md（{len(body)} 字符）")
+        return None
+    out_dir = PROJECT_ROOT / RELEASE_NOTES_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{version}.md"
+    out_path.write_text(body + "\n", encoding="utf-8")
+    log("CLEAN", f"发版信息已产出: {out_path}")
+    return out_path
+
+
+def read_update_log(log_path: Path, version: str,
+                    from_version: Optional[str] = None) -> str:
+    """读取更新日志并产出发版正文（区间全集 + 前置清洗）。
+
+    update-log-release-optimize：由"取版本号当天首条"改为"上一已发布版本→当前版本区间全集"，
+    并强制经 clean_release_notes 清洗（全自动 C1~C6）。
+
+    fail-fast（R2）：任何缺失/违规场景直接 exit，不静默回退。
     """
     if not log_path.exists():
         log("LOG", f"更新日志不存在: {log_path}", "ERROR")
         log("LOG", "发布中止：请先创建 updateLog.md 并补写当日条目", "ERROR")
         sys.exit(1)
 
-    date_str = version_to_date(version)
-    if not date_str:
-        log("LOG", f"无法从版本号 {version} 解析日期（期望 3.YY.MMDDHH）", "ERROR")
-        sys.exit(1)
-
     content = log_path.read_text(encoding="utf-8")
-    # 查找 **YYYY/MM/DD** 标题（兼容批量标题格式：**2026/09/08（第N批）**，
-    # 2026-09-07 起条目标题在日期后带批次名，旧正则要求日期后紧跟 ** 会匹配失败）
-    date_pattern = re.compile(r"\*\*(\d{4}/\d{2}/\d{2})")
-    matches = list(date_pattern.finditer(content))
-
-    target_idx = None
-    for i, m in enumerate(matches):
-        if m.group(1) == date_str:
-            target_idx = i
-            break
-
-    if target_idx is None:
-        log("LOG", f"updateLog.md 缺少 {date_str} 当日条目（R2 fail-fast）", "ERROR")
-        log("LOG", "发布中止：请先按 version-delivery-sync 规范补写当日条目再发版", "ERROR")
-        sys.exit(1)
-
-    start = matches[target_idx].start()
-    end = matches[target_idx + 1].start() if target_idx + 1 < len(matches) else len(content)
-    body = content[start:end].strip()
-    log("LOG", f"提取到 {date_str} 的日志条目（{len(body)} 字符）")
+    body, _stats = clean_release_notes(content, version, from_version)
     return body
 
 
@@ -486,7 +751,8 @@ def run_tool(tool: Path, tool_args: List[str]) -> Tuple[bool, str]:
 
 
 def stage3_verify(config: dict, version: str, dry_run: bool,
-                  skip_build: bool = False, pre_scanned: Optional[Dict[str, Path]] = None) -> Tuple[Dict[str, Path], str]:
+                  skip_build: bool = False, pre_scanned: Optional[Dict[str, Path]] = None,
+                  from_version: Optional[str] = None) -> Tuple[Dict[str, Path], str]:
     """Stage3 校验强化（R2-R5）：致命项 fail-fast exit，建议项 WARN 清单。
 
     skip_build=True：使用 pre_scanned 产物（collect_latest_artifacts 扫描结果），
@@ -507,9 +773,9 @@ def stage3_verify(config: dict, version: str, dry_run: bool,
             log("VERIFY", f"[dry-run] 产物缺失 {missing} —— 实际发布时将 fail-fast 拦截（模拟通过）")
         else:
             log("VERIFY", "[dry-run] 将执行: Cronet 动态下载双门禁检查 / apksigner 验签 / "
-                          "aapt2 包名版本一致性 / updateLog 当日条目")
+                          "aapt2 包名版本一致性 / updateLog 区间门禁")
         log_path = PROJECT_ROOT / config["update_log_path"]
-        body = read_update_log(log_path, version)
+        body = read_update_log(log_path, version, from_version)
         return apks, body
 
     if missing:
@@ -568,9 +834,9 @@ def stage3_verify(config: dict, version: str, dry_run: bool,
     if v_date != today:
         log("VERIFY", f"版本号日期 {v_date} 与今天 {today} 不一致（重发旧版本？仅提示）", "WARN")
 
-    # 致命项 5：updateLog 当日条目（R2 fail-fast）
+    # 致命项 5：updateLog 发版正文（区间全集 + 前置清洗，R2 fail-fast）
     log_path = PROJECT_ROOT / config["update_log_path"]
-    body = read_update_log(log_path, version)
+    body = read_update_log(log_path, version, from_version)
     return apks, body
 
 
@@ -844,17 +1110,32 @@ def main():
     # Stage1 版本确认
     version = stage1_confirm_version(args, config)
 
-    # Stage2 三包构建 / --skip-build 复用已有产物
+    # Stage2 产物来源确定（--skip-build 复用模式会以产物扫描结果覆盖 version）
     artifacts: Dict[str, Path] = {}
     if args.skip_build:
         version, artifacts = collect_latest_artifacts(config)
         log("MAIN", f"--skip-build 复用模式：发布版本 {version}（跳过构建，产物来自 output/apk/）")
-    else:
+
+    # ---------------- 发版前置：更新日志清洗加工（update-log-release-optimize REQ-5） ----------------
+    # 位置：版本最终确定之后、三包构建之前 —— 清洗不过即停，不浪费三包构建时间（约 20 分钟）。
+    # 产出 output/release-notes/{version}.md 供发版前审阅与事后追溯；
+    # Stage3 的 read_update_log 用同版本+同区间+同规则重新清洗，结果与产物文件确定性一致。
+    log_path = PROJECT_ROOT / config["update_log_path"]
+    if not log_path.exists():
+        log("CLEAN", f"更新日志不存在: {log_path} —— 发布中止", "ERROR")
+        sys.exit(1)
+    log_content = log_path.read_text(encoding="utf-8")
+    release_body, clean_stats = clean_release_notes(log_content, version, args.from_version)
+    write_release_notes(version, release_body, args.dry_run)
+
+    # Stage2 三包构建（非复用模式）
+    if not args.skip_build:
         stage2_build_three(version, args.dry_run)
 
-    # Stage3 校验强化（含 updateLog 当日条目 fail-fast）
+    # Stage3 校验强化（含更新日志区间门禁 fail-fast）
     apks, body = stage3_verify(config, version, args.dry_run,
-                               skip_build=args.skip_build, pre_scanned=artifacts)
+                               skip_build=args.skip_build, pre_scanned=artifacts,
+                               from_version=args.from_version)
     log("MAIN", f"Release body 预览（前 200 字符）:\n{body[:200]}...")
 
     # L2 真机门禁（不可跳过，无 flag 旁路）
