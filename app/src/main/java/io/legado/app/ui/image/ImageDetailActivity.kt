@@ -17,6 +17,7 @@ import io.legado.app.databinding.ActivityImageDetailBinding
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
+import io.legado.app.ui.file.FileManageActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.image.adapter.ImageDetailAdapter
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
@@ -333,9 +334,35 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding>(),
         }.onError {
             ACache.get().remove(AppConst.imagePathKey)
             AppLog.put("保存图片失败", it, true)
-            toastOnUi("保存图片失败:${it.localizedMessage}")
+            toastOnUi(getString(R.string.image_save_failed, it.localizedMessage.orEmpty()))
         }.onSuccess {
-            toastOnUi("保存成功")
+            // F179（ui-subpage-optimization）保存回执升级：原为一句 toast「保存成功」，
+            // 「存哪去了」全靠用户记忆。升级为回执条：落点说明 + 批次位置 + 「打开文件夹」直达。
+            // 落点 URI 本就持久化在 ACache（imagePathKey），回显零新存储；
+            // 「打开文件夹」走既有 FileManageActivity（不新建入口）。
+            val total = imageDetailAdapter?.getDataSize() ?: 0
+            val positionText = if (total > 1) {
+                getString(R.string.image_save_receipt_with_position, currentIndex + 1, total)
+            } else {
+                ""
+            }
+            val folderName = Uri.parse(uri.toString()).lastPathSegment?.substringAfterLast(':').orEmpty()
+            val message = getString(
+                R.string.image_save_receipt,
+                folderName.ifBlank { getString(R.string.image_save_receipt_folder_unknown) },
+                positionText
+            )
+            // 用既有 View.snackbar 家族形态（Snackbar.make + setAction），与项目 6 处 longSnackbar 调用同源
+            com.google.android.material.snackbar.Snackbar
+                .make(
+                    binding.root,
+                    message,
+                    com.google.android.material.snackbar.Snackbar.LENGTH_LONG
+                )
+                .setAction(getString(R.string.download_open_folder)) {
+                    startActivity(Intent(this@ImageDetailActivity, FileManageActivity::class.java))
+                }
+                .show()
         }
     }
 

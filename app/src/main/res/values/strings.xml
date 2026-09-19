@@ -78,6 +78,10 @@
     <string name="book_source_empty_title">No book sources yet</string>
     <string name="book_source_empty_subtitle">Create, import, or add book sources to get started</string>
     <string name="book_source_cover_fallback">Src</string>
+    <string name="image_save_failed">Failed to save image: %1$s</string>
+    <string name="image_save_receipt">Saved to %1$s%2$s</string>
+    <string name="image_save_receipt_with_position"> (image %1$d/%2$d)</string>
+    <string name="image_save_receipt_folder_unknown">selected folder</string>
     <string name="book_info_style_preview_note">Structure sketch only; actual layout follows the book detail page</string>
     <string name="book_info_style_back_to_classic">Back to classic style to edit components</string>
     <string name="toc_unread_chapters">%1$d unread</string>
