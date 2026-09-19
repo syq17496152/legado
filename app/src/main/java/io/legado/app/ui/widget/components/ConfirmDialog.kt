@@ -7,11 +7,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
+import io.legado.app.ui.widget.compose.AppUiTokens
 
 /**
  * 确认对话框（L2 Dialog 族）。
  * - 文案全部由调用方以字符串资源传入（§6.1 禁硬编码中文）
- * - destructive = true 时确认按钮用 error 色（删除/清空等危险操作）
+ * - destructive = true 时确认按钮用 danger 色（危险语义色单源 #D44848，AD-14）
  */
 @Composable
 fun ConfirmDialog(
@@ -42,7 +43,7 @@ fun ConfirmDialog(
                 Text(
                     text = confirmText,
                     color = if (destructive) {
-                        MaterialTheme.colorScheme.error
+                        AppUiTokens.dialogStyle().danger
                     } else {
                         MaterialTheme.colorScheme.primary
                     }
