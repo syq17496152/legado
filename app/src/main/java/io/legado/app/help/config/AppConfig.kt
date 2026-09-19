@@ -2130,15 +2130,19 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
 
     var uiFontColor: String
-        get() = appCtx.getPrefString(ThemeRuntimeKeys.uiFontColor(isNightTheme)).orEmpty()
+        // A3.4a：getter 返回「运行时派生生效值」（撞色防护后）；用户原值仍存 pref，禁止回写派生值
+        get() = ThemeConfig.effectiveUiFontColor(appCtx, isNightTheme)
         set(value) {
             appCtx.putPrefString(ThemeRuntimeKeys.uiFontColor(isNightTheme), value)
+            ThemeConfig.invalidateEffectiveFontColorCache()
         }
 
     var titleFontColor: String
-        get() = appCtx.getPrefString(ThemeRuntimeKeys.titleFontColor(isNightTheme)).orEmpty()
+        // A3.4a：getter 返回「运行时派生生效值」（撞色防护后）
+        get() = ThemeConfig.effectiveTitleFontColor(appCtx, isNightTheme)
         set(value) {
             appCtx.putPrefString(ThemeRuntimeKeys.titleFontColor(isNightTheme), value)
+            ThemeConfig.invalidateEffectiveFontColorCache()
         }
 
     var bookCoverShadow: Boolean

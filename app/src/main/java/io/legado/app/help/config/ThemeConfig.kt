@@ -428,6 +428,7 @@ object ThemeConfig {
             }
             context.putPrefString(ThemeRuntimeKeys.uiFontPath(isNightTheme), config.uiFontPath.orEmpty())
             context.putPrefString(ThemeRuntimeKeys.titleFontPath(isNightTheme), config.titleFontPath.orEmpty())
+            // A3.4a：pref 只写用户原值（禁止写 sanitize 派生值），派生值仅进内存缓存
             applyFontColorPrefs(context, config)
             if (backgroundPath != null && backgroundPath.startsWith("http")) {
                 val fileRoot = context.externalFiles
@@ -922,10 +923,27 @@ object ThemeConfig {
         }
     }
 
-    private fun applyFontColorPrefs(context: Context, config: Config) {
+    /**
+     * 生效字体色内存缓存（A3.4a 用户主题数据保护）。
+     *
+     * 🔴 sanitize 结果**只存内存、禁止写回 pref**：`ThemeRuntimeKeys.uiFontColor/titleFontColor`
+     * 与用户在设置界面自选字体色是**同一个 key**，写回会永久覆盖用户原值且不可恢复
+     * （改造前的 `applyFontColorPrefs` 每次 `applyConfig` 都写回，是数据破坏源）。
+     * null = 尚未计算，消费端会兜底现场推导（仅冷启动首帧前发生）。
+     */
+    @Volatile
+    private var effectiveUiFontColorCache: String? = null
+
+    @Volatile
+    private var effectiveTitleFontColorCache: String? = null
+
+    /**
+     * 主题变更唯一入口（[applyConfig]）调用：刷新生效字体色缓存（**不落盘**）。
+     * 文字主要落在主背景、卡片、底部背景上，字体色与这些表面撞色时文字会不可读；
+     * 设置了背景图时主背景色被图片遮盖，不参与判断以免误杀。
+     */
+    private fun refreshEffectiveFontColorCache(config: Config) {
         val isNightTheme = config.isNightTheme
-        // 文字主要落在主背景、卡片、底部背景上，字体色与这些表面撞色时文字会不可读；
-        // 设置了背景图时主背景色被图片遮盖，不参与判断以免误杀
         val surfaces = listOfNotNull(
             config.backgroundColor.toSurfaceColorOrNull()
                 .takeIf { config.backgroundImgPath.isNullOrBlank() },
@@ -933,15 +951,60 @@ object ThemeConfig {
             config.bottomBackground.toSurfaceColorOrNull()
         )
         val defaultColor = defaultThemeTextColorHex(isNightTheme)
-        val uiColor = sanitizeFontColorAgainstSurfaces(
+        effectiveUiFontColorCache = sanitizeFontColorAgainstSurfaces(
             normalizeThemeColor(config.uiFontColor) ?: defaultColor, isNightTheme, surfaces
         )
-        val titleColor = sanitizeFontColorAgainstSurfaces(
+        effectiveTitleFontColorCache = sanitizeFontColorAgainstSurfaces(
             normalizeThemeColor(config.titleFontColor) ?: defaultColor, isNightTheme, surfaces
         )
-        context.putPrefString(ThemeRuntimeKeys.uiFontColor(isNightTheme), uiColor)
-        context.putPrefString(ThemeRuntimeKeys.titleFontColor(isNightTheme), titleColor)
     }
+
+    /** 用户自选字体色变更后使派生缓存失效（由 `AppConfig` 的字体色 setter 调用） */
+    fun invalidateEffectiveFontColorCache() {
+        effectiveUiFontColorCache = null
+        effectiveTitleFontColorCache = null
+    }
+
+    /**
+     * 字体色 pref 维护 + 生效值缓存刷新（A3.4a 用户主题数据保护）。
+     *
+     * 🔴 关键口径：pref **只写用户原值**（`config.uiFontColor` normalize 后），
+     * **禁止写 sanitize 派生值**——派生值与用户自选字体色**同 key**，写回会永久覆盖用户原值
+     * 且不可恢复（改造前正是如此，是数据破坏源）。派生值只进内存缓存。
+     *
+     * 为何仍要维护 pref（而非完全不写）：`getDayTheme/getNightTheme` 的字体色 fallback、
+     * `ThemeManageActivity` 编辑态回显与 `currentConfig()`、`ThemeUiPalette` 状态签名
+     * 均以该 pref 为数据源；完全不写会导致这些读取点拿到过时值。
+     */
+    private fun applyFontColorPrefs(context: Context, config: Config) {
+        val isNightTheme = config.isNightTheme
+        val defaultColor = defaultThemeTextColorHex(isNightTheme)
+        // 1) pref 只写用户原值（不做撞色 sanitize）
+        context.putPrefString(
+            ThemeRuntimeKeys.uiFontColor(isNightTheme),
+            normalizeThemeColor(config.uiFontColor) ?: defaultColor
+        )
+        context.putPrefString(
+            ThemeRuntimeKeys.titleFontColor(isNightTheme),
+            normalizeThemeColor(config.titleFontColor) ?: defaultColor
+        )
+        // 2) 运行时生效值（撞色防护后）只刷内存缓存，不落盘
+        refreshEffectiveFontColorCache(config)
+    }
+
+    /** 运行时生效的用户文字色（撞色防护后），供 AppConfig / ThemeStore 单源消费 */
+    fun effectiveUiFontColor(context: Context, isNightTheme: Boolean): String =
+        effectiveUiFontColorCache ?: run {
+            refreshEffectiveFontColorCache(getThemeConfig(context, isNightTheme))
+            effectiveUiFontColorCache.orEmpty()
+        }
+
+    /** 运行时生效的标题文字色（撞色防护后） */
+    fun effectiveTitleFontColor(context: Context, isNightTheme: Boolean): String =
+        effectiveTitleFontColorCache ?: run {
+            refreshEffectiveFontColorCache(getThemeConfig(context, isNightTheme))
+            effectiveTitleFontColorCache.orEmpty()
+        }
 
     private const val MIN_FONT_SURFACE_CONTRAST = 1.3
 
@@ -1001,7 +1064,9 @@ object ThemeConfig {
     }
 
     private fun ThemeStore.applyUiFontColor(context: Context, isNightTheme: Boolean): ThemeStore {
-        val color = normalizeThemeColor(context.getPrefString(ThemeRuntimeKeys.uiFontColor(isNightTheme)))
+        // A3.4a：读运行时派生生效值（撞色防护后），不再读 raw pref ——
+        // 删除写回后 raw 可能是与背景撞色的用户自选色，直接进 ThemeStore 会导致文字不可读
+        val color = normalizeThemeColor(effectiveUiFontColor(context, isNightTheme))
             ?.toColorInt()
             ?: defaultThemeTextColor(isNightTheme)
         textColorPrimary(color)
