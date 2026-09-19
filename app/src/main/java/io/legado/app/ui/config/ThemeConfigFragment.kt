@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.config
+package io.legado.app.ui.config
 
 import android.os.Build
 import android.os.Bundle
@@ -48,7 +48,10 @@ class ThemeConfigFragment : ComposeSettingFragment() {
         return SettingPageSpec(
             titleRes = titleRes,
             sections = listOf(
+                // A3.6 主题设置组织：原 12 项单列平铺 → 三分区（外观与沉浸 / 主题与导航栏 / 界面元素与分享）
+                // 分区 1：外观与沉浸
                 SettingSectionSpec(
+                    title = getString(R.string.theme_section_appearance),
                     items = listOf(
                         SettingChoiceSpec(
                             key = PreferKey.launcherIcon,
@@ -98,7 +101,13 @@ class ThemeConfigFragment : ComposeSettingFragment() {
                                 refreshSettings()
                                 recreateActivities()
                             }
-                        ),
+                        )
+                    )
+                ),
+                // 分区 2：主题与系统导航
+                SettingSectionSpec(
+                    title = getString(R.string.theme_section_theme_nav),
+                    items = listOf(
                         SettingActionSpec(
                             key = KEY_THEME_MANAGE,
                             title = getString(R.string.theme_list),
@@ -138,7 +147,13 @@ class ThemeConfigFragment : ComposeSettingFragment() {
                             title = getString(R.string.bubble_manage),
                             summary = getString(R.string.bubble_manage_summary),
                             onClick = { startActivity<BubbleManageActivity>() }
-                        ),
+                        )
+                    )
+                ),
+                // 分区 3：模板与封面
+                SettingSectionSpec(
+                    title = getString(R.string.theme_section_elements),
+                    items = listOf(
                         SettingActionSpec(
                             key = KEY_SHARE_NOTE_TEMPLATE_MANAGE,
                             title = "摘录分享模板",

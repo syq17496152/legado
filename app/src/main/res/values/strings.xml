@@ -86,6 +86,9 @@
     <string name="service">Services</string>
     <string name="setting">Settings</string>
     <string name="theme_setting">Theme settings</string>
+    <string name="theme_section_appearance">Appearance &amp; immersion</string>
+    <string name="theme_section_theme_nav">Theme &amp; system UI</string>
+    <string name="theme_section_elements">Templates &amp; covers</string>
     <string name="theme_saved_pending_mode">Saved. It will take effect after switching to %1$s mode</string>
     <string name="color_hue">Hue</string>
     <string name="color_saturation">Saturation</string>

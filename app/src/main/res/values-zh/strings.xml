@@ -85,6 +85,9 @@
     <string name="service">服务</string>
     <string name="setting">设置</string>
     <string name="theme_setting">主题设置</string>
+    <string name="theme_section_appearance">外观与沉浸</string>
+    <string name="theme_section_theme_nav">主题与系统界面</string>
+    <string name="theme_section_elements">模板与封面</string>
     <string name="theme_saved_pending_mode">已保存，将在切换到%1$s模式后生效</string>
     <string name="color_hue">色相</string>
     <string name="color_saturation">饱和度</string>
