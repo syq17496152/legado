@@ -294,6 +294,15 @@ dependencies {
     // TTS 选角模板/路由解析单测需真实 org.json（returnDefaultValues 桩无法提供 JSONObject）
     testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.bundles.androidTest)
+    // Compose UI 测试（A2.1.3）：createComposeRule 走宿主 Activity 渲染，故
+    // ui-test-manifest 必须进 debug 变体清单（Google 官方推荐组合）
+    // 注意：androidTest 配置不继承 implementation，需单独引入 compose-bom 约束版本
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
+    // 测试进程需独立 kotlin 运行时：主 debug APK 开启 R8（isMinifyEnabled=true）会裁掉
+    // kotlin.LazyKt 等未用类，但 instrumentation 绑定应用进程仍需其可见 → 测试 APK 显式携带
+    androidTestImplementation(libs.kotlin.stdlib)
     //kotlin
     //noinspection GradleDependency,DifferentStdlibGradleVersion
     implementation(libs.kotlin.stdlib)
