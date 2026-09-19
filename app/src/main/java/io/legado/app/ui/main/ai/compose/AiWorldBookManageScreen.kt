@@ -53,6 +53,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -389,30 +390,41 @@ private fun WorldBookMainScreen(
         )
         SearchField(query, style, onQueryChange)
         Spacer(modifier = Modifier.height(10.dp))
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(filtered, key = { it.id }) { book ->
-                WorldBookCard(
-                    book = book,
-                    expanded = expandedBookId == book.id,
-                    style = style,
-                    onExpand = {
-                        onExpandedChange(if (expandedBookId == book.id) "" else book.id)
-                    },
-                    onEdit = { onEditBook(book) },
-                    onCopy = { onCopyBook(book) },
-                    onDelete = { onDeleteBook(book) },
-                    onExport = { onExportBook(book) },
-                    onToggle = { onToggleBook(book) },
-                    onAddEntry = { onAddEntry(book) },
-                    onEditEntry = { onEditEntry(book, it) },
-                    onDeleteEntry = { onDeleteEntry(book, it) },
-                    onToggleEntry = { onToggleEntry(book, it) }
-                )
+        // F93（ui-subpage-optimization）搜索空结果闭环：搜索覆盖「书名/描述/条目内容/关键词」，
+        // 「没搜到」高频发生；原实现直接空白，用户可能误以为世界书被删（叠加本页曾有删除无确认问题，恐慌成本高）。
+        // 现给空结果卡：说明搜索覆盖范围 + 建议更短关键词 + 「清除搜索」CTA（一步退路）。
+        if (query.isNotBlank() && filtered.isEmpty()) {
+            WorldBookSearchEmpty(
+                style = style,
+                onClear = { onQueryChange("") },
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(filtered, key = { it.id }) { book ->
+                    WorldBookCard(
+                        book = book,
+                        expanded = expandedBookId == book.id,
+                        style = style,
+                        onExpand = {
+                            onExpandedChange(if (expandedBookId == book.id) "" else book.id)
+                        },
+                        onEdit = { onEditBook(book) },
+                        onCopy = { onCopyBook(book) },
+                        onDelete = { onDeleteBook(book) },
+                        onExport = { onExportBook(book) },
+                        onToggle = { onToggleBook(book) },
+                        onAddEntry = { onAddEntry(book) },
+                        onEditEntry = { onEditEntry(book, it) },
+                        onDeleteEntry = { onDeleteEntry(book, it) },
+                        onToggleEntry = { onToggleEntry(book, it) }
+                    )
+                }
+                item { Spacer(modifier = Modifier.height(16.dp)) }
             }
-            item { Spacer(modifier = Modifier.height(16.dp)) }
         }
     }
 }
@@ -875,33 +887,38 @@ private fun WorldBookEntryEditor(
         )
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
+                // F92（ui-subpage-optimization）字段分组：原 16 字段单列顺序滚，
+                // 「写什么（内容）」与「什么时候注入（关键词/深度）」混排，高频微调每次都要全程滚。
+                // 按真实工作流「改内容 → 调触发词 → 压权重」分三组（基础 / 关键词 / 注入），
+                // 高频基础组置顶；不折叠（正则校验状态需常显）、不减字段、SaveBar 位置不动。
+                EntryGroupTitle("基础", style)
                 LabeledSwitch("启用条目", enabled, style) { enabled = it }
                 LabeledSwitch("常驻注入", constant, style) { constant = it }
-                LabeledSwitch("关键词按正则匹配", regexEnabled, style) { regexEnabled = it }
-                LabeledSwitch("区分大小写", caseSensitive, style) { caseSensitive = it }
                 LabeledField("条目名称", title, style, onValueChange = { title = it })
                 LabeledField("内容", content, style, minLines = 6, onValueChange = { content = it })
+                LabeledSelect(
+                    label = "插入位置",
+                    value = position,
+                    options = worldBookPositionOptions,
+                    style = style,
+                    onValueChange = { position = it }
+                )
+                LabeledSelect(
+                    label = "消息角色",
+                    value = role,
+                    options = worldBookRoleOptions,
+                    style = style,
+                    onValueChange = { role = it }
+                )
+
+                EntryGroupTitle("关键词", style)
+                LabeledSwitch("关键词按正则匹配", regexEnabled, style) { regexEnabled = it }
+                LabeledSwitch("区分大小写", caseSensitive, style) { caseSensitive = it }
                 LabeledField("关键词，逗号或换行分隔", keys, style, minLines = 2, onValueChange = { keys = it })
                 LabeledField("二级关键词", secondaryKeys, style, minLines = 2, onValueChange = { secondaryKeys = it })
                 LabeledField("排除关键词", excludeKeys, style, minLines = 2, onValueChange = { excludeKeys = it })
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    LabeledSelect(
-                        label = "插入位置",
-                        value = position,
-                        options = worldBookPositionOptions,
-                        style = style,
-                        modifier = Modifier.weight(1f),
-                        onValueChange = { position = it }
-                    )
-                    LabeledSelect(
-                        label = "消息角色",
-                        value = role,
-                        options = worldBookRoleOptions,
-                        style = style,
-                        modifier = Modifier.weight(1f),
-                        onValueChange = { role = it }
-                    )
-                }
+
+                EntryGroupTitle("注入", style)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     LabeledField(
                         label = "优先级",
@@ -974,6 +991,48 @@ private fun WorldBookEntryEditor(
             }
         }
     }
+}
+
+/** 搜索空结果卡（F93）：说明覆盖范围 + 建议更短关键词 + 「清除搜索」CTA。 */
+@Composable
+private fun WorldBookSearchEmpty(
+    style: AiComposeStyle,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "没有匹配的世界书",
+            color = style.colors.primaryText,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "搜索范围含书名、描述、条目内容与关键词，试试更短的关键词",
+            color = style.colors.secondaryText,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 32.dp)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        SmallAction("清除搜索", style, onClick = onClear)
+    }
+}
+
+/** 条目编辑器分组标题（F92）：分组用位置表达语义分层，不折叠（正则校验状态需常显）。 */
+@Composable
+private fun EntryGroupTitle(text: String, style: AiComposeStyle) {
+    Text(
+        text = text,
+        color = style.colors.accent,
+        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier.padding(top = 14.dp, bottom = 2.dp)
+    )
 }
 
 @Composable
