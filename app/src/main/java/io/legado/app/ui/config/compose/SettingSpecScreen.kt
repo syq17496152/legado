@@ -206,6 +206,12 @@ fun SettingSpecScreen(
                             onItemClick = onItemClick
                         )
                     }
+                    // 页脚槽（About 页优化 6）：仅在非检索态渲染，避免污染检索结果列表
+                    if (!filtering) {
+                        page.footer?.let { footer ->
+                            item(key = "__footer__") { footer() }
+                        }
+                    }
                 }
             }
         }

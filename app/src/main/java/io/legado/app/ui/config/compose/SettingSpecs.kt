@@ -1,10 +1,16 @@
 package io.legado.app.ui.config.compose
 
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
 
 data class SettingPageSpec(
     @param:StringRes val titleRes: Int,
-    val sections: List<SettingSectionSpec>
+    val sections: List<SettingSectionSpec>,
+    /**
+     * 页脚槽（About 页优化 6：构建信息灰字）。默认 null 时与旧结构等价，
+     * 存量子类零改动。渲染在全部 section 之后、不参与页内检索过滤。
+     */
+    val footer: (@Composable () -> Unit)? = null
 )
 
 data class SettingSectionSpec(

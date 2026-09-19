@@ -21,7 +21,13 @@ class VerificationCodeActivity :
             val sourceName = intent.getStringExtra("sourceName")
             val sourceType = intent.getIntExtra("sourceType", SourceType.book)
             showDialogFragment(
-                VerificationCodeDialog(it, sourceOrigin, sourceName, sourceType)
+                VerificationCodeDialog(
+                    imageUrl = it,
+                    sourceOrigin = sourceOrigin,
+                    sourceName = sourceName,
+                    sourceType = sourceType,
+                    attempt = intent.getIntExtra("attempt", 1)
+                )
             )
         } ?: finish()
     }

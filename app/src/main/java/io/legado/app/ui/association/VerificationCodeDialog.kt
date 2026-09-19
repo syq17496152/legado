@@ -10,6 +10,7 @@ import android.widget.ImageView
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
@@ -66,13 +68,16 @@ class VerificationCodeDialog() : ComposeDialogFragment() {
         imageUrl: String,
         sourceOrigin: String? = null,
         sourceName: String? = null,
-        sourceType: Int
+        sourceType: Int,
+        /** F169：本进程内该源累计发起的验证次数（1 = 首次），用于连续失败升级引导 */
+        attempt: Int = 1
     ) : this() {
         arguments = Bundle().apply {
             putString("imageUrl", imageUrl)
             putString("sourceOrigin", sourceOrigin)
             putString("sourceName", sourceName)
             putInt("sourceType", sourceType)
+            putInt("attempt", attempt)
         }
     }
 
@@ -108,6 +113,8 @@ class VerificationCodeDialog() : ComposeDialogFragment() {
         val style = rememberAppDialogStyle()
         val palette = style.toMiuixPalette()
         var verificationCode by rememberSaveable { mutableStateOf("") }
+        // F169：本进程内该源累计验证次数（1 = 首次）；≥2 视为"上一次输入未被接受"
+        val attempt = arguments?.getInt("attempt", 1) ?: 1
         AppDialogFrame(
             title = stringResource(R.string.input_verification_code),
             message = sourceName?.takeIf { it.isNotBlank() },
@@ -118,17 +125,37 @@ class VerificationCodeDialog() : ComposeDialogFragment() {
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = stringResource(R.string.verification_code),
-                        color = style.secondaryText,
-                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = stringResource(R.string.verification_code),
+                            color = style.secondaryText,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        // 优化 6：常驻「区分大小写」微标签（验证码区分大小写是高频误输原因）
+                        Text(
+                            text = stringResource(R.string.verification_code_case_sensitive),
+                            color = style.secondaryText,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize
+                        )
+                    }
                     OutlinedTextField(
                         value = verificationCode,
                         onValueChange = { verificationCode = it },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        // 优化 6：长按粘贴提示（图片验证码多为从相册/其它应用复制后粘贴）
+                        placeholder = {
+                            Text(
+                                text = stringResource(R.string.verification_code_paste_hint),
+                                color = style.secondaryText,
+                                fontSize = MaterialTheme.typography.bodySmall.fontSize
+                            )
+                        },
                         shape = RoundedCornerShape(style.actionRadius),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = style.primaryText,
@@ -149,6 +176,18 @@ class VerificationCodeDialog() : ComposeDialogFragment() {
                             fontFamily = style.bodyFontFamily
                         )
                     )
+                    // F169 连续失败升级引导：同源第 2 次起在弹窗内直说"可禁用/删除"，
+                    // 免去用户反复试错——动作入口即下方既有「禁用源 / 删除源」按钮，不新增按钮
+                    if (attempt >= 2) {
+                        Text(
+                            text = stringResource(
+                                R.string.verification_code_repeated_hint,
+                                attempt - 1
+                            ),
+                            color = style.danger,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize
+                        )
+                    }
                 }
             },
             actions = {

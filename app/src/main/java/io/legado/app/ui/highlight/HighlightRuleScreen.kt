@@ -1,64 +1,46 @@
 package io.legado.app.ui.highlight
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import io.legado.app.ui.widget.compose.rememberAppSettingPalette
-import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.widget.components.AppMenuSheet
+import io.legado.app.ui.widget.components.EmptyStateAction
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.compose.AppManagementAction
+import io.legado.app.ui.widget.compose.AppManagementListRow
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
+import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.AppManagementScaffold
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 
 /**
  * 高亮规则管理页 Compose 受控组件（L-C5 枝叶页，S2 列表管理样板）。
  * 状态由宿主（Activity）传入，事件全部上抛；统一壳 AppManagementScaffold（顶栏+搜索）+
- * 规则列表（Checkbox 启停/编辑/更多菜单）+ 空态 + 条目操作 AppMenuSheet。
+ * 规则列表（Switch 启停/编辑/更多菜单）+ 空态 + 条目操作 AppMenuSheet。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -145,12 +127,23 @@ fun HighlightRuleScreen(
                 }
             )
         )
-    ) { _ ->
+    ) { palette ->
         if (filtered.isEmpty()) {
             EmptyStatePlaceholder(
                 icon = Icons.Default.List,
                 title = stringResource(R.string.highlight_rule_empty_title),
                 subtitle = stringResource(R.string.highlight_rule_empty_subtitle),
+                // F51 空态引导强化：保留原文案，补「预设规则 / 恢复默认」两个可立即脱困的次操作
+                secondaryActions = listOf(
+                    EmptyStateAction(
+                        label = stringResource(R.string.highlight_rule_preset),
+                        onClick = onPreset
+                    ),
+                    EmptyStateAction(
+                        label = stringResource(R.string.highlight_rule_restore_default),
+                        onClick = onRestoreDefault
+                    )
+                ),
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -163,6 +156,7 @@ fun HighlightRuleScreen(
                 items(filtered, key = { it.id }) { rule ->
                     HighlightRuleItem(
                         rule = rule,
+                        palette = palette,
                         onClick = { onItemClick(rule) },
                         onEnableToggle = { onEnableToggle(rule, it) },
                         onMore = { menuRule = rule }
@@ -197,54 +191,27 @@ fun HighlightRuleScreen(
     }
 }
 
+/**
+ * F49：启停控件由 M3 `Checkbox` 收敛为管理族行组件 [AppManagementListRow] + Switch，
+ * 与书源/订阅源管理页的启停形态统一（复选框语义=多选，开关语义=启停，此前语义错配）。
+ * 触控目标由 40dp 提升到行级 56dp，整行可点（编辑）。
+ */
 @Composable
 private fun HighlightRuleItem(
     rule: HighlightRule,
+    palette: AppManagementPalette,
     onClick: () -> Unit,
     onEnableToggle: (Boolean) -> Unit,
     onMore: () -> Unit
 ) {
-    val palette = rememberAppSettingPalette()
-            Surface(
-                color = Color(palette.row),
-        shape = AppShapes.Chip,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 2.dp)
-        ) {
-            Checkbox(
-                checked = rule.enabled,
-                onCheckedChange = onEnableToggle,
-                modifier = Modifier.heightIn(min = 40.dp)
-            )
-            Text(
-                text = rule.getDisplayName(),
-                style = MaterialTheme.typography.bodyLarge,
-                color = palette.primaryText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable(onClick = onClick)
-                    .padding(vertical = 12.dp)
-            )
-            IconButton(onClick = onClick) {
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = stringResource(R.string.edit)
-                )
-            }
-            IconButton(onClick = onMore) {
-                Icon(
-                    Icons.Default.MoreVert,
-                    contentDescription = stringResource(R.string.more_menu)
-                )
-            }
-        }
-    }
+    AppManagementListRow(
+        title = rule.getDisplayName(),
+        palette = palette,
+        switchChecked = rule.enabled,
+        onSwitchChange = onEnableToggle,
+        onClick = onClick,
+        onEdit = onClick,
+        onMore = onMore,
+        minHeight = 56.dp
+    )
 }

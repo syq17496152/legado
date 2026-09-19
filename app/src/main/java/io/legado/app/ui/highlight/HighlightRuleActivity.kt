@@ -172,8 +172,20 @@ class HighlightRuleActivity :
             toastOnUi(R.string.highlight_rule_export_empty)
             return
         }
-        sendToClip(GSON.toJson(rules))
-        toastOnUi(getString(R.string.highlight_rule_export_done, rules.size))
+        val json = GSON.toJson(rules)
+        // F50 导出回执可视化：原实现"静默写剪贴板 + 一句 toast"，用户无法核对导出了什么内容；
+        // 改为弹框展示可核对内容（messageInContent 走可滚动内容区，长规则集不撑破弹框）+ 显式复制动作
+        showComposeConfirmDialog(
+            title = getString(R.string.export_success),
+            message = json,
+            positiveText = getString(R.string.copy_text),
+            negativeText = getString(R.string.close),
+            messageInContent = true,
+            onPositive = {
+                sendToClip(json)
+                toastOnUi(getString(R.string.highlight_rule_export_done, rules.size))
+            }
+        )
     }
 
     override fun onDestroy() {

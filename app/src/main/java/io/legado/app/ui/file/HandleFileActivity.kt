@@ -102,9 +102,14 @@ class HandleFileActivity :
                 else -> return@let getString(R.string.select_file)
             }
         }
+        // F178 动作列表分组说明：showComposeActionListDialog 以并行 descriptions 渲染每项右缘 hint，
+        // 让用户在选择前就清楚每个入口的来源（系统/应用内/手动输入）与能力（http 直链）。
+        // 分组头（云端/系统/应用内/手动输入四类）需组件层支持 group header，超出本页范围 → 用 hint 收敛到"每项右缘说明"。
+        val hints = selectList.map { hintOf(it.value) }
         showComposeActionListDialog(
             title = title,
-            labels = selectList.map { it.title }
+            labels = selectList.map { it.title },
+            descriptions = hints
         ) { index ->
             when (selectList[index].value) {
                 HandleFileContract.DIR -> kotlin.runCatching {
@@ -307,6 +312,19 @@ class HandleFileActivity :
             SelectItem(getString(R.string.sys_file_picker), HandleFileContract.FILE),
             SelectItem(getString(R.string.app_file_picker), 11)
         )
+    }
+
+    /**
+     * F178：动作项右缘能力说明。未知 value（`otherActions` 由调用方注入）返回空串，
+     * 由 [LegadoMiuixChoiceRow] 的 `isNotBlank` 守卫跳过渲染，不产生空白行。
+     */
+    private fun hintOf(value: Int): String = when (value) {
+        HandleFileContract.DIR, HandleFileContract.FILE -> getString(R.string.handle_file_hint_sys_picker)
+        HandleFileContract.IMAGE -> getString(R.string.handle_file_hint_sys_image)
+        10, 11 -> getString(R.string.handle_file_hint_app_picker)
+        111 -> getString(R.string.handle_file_hint_upload)
+        112, 113 -> getString(R.string.handle_file_hint_manual_input)
+        else -> ""
     }
 
     private fun getImageActions(): ArrayList<SelectItem<Int>> {

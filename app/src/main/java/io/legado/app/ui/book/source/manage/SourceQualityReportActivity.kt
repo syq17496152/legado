@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -28,7 +30,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -49,7 +53,10 @@ import io.legado.app.ui.widget.compose.AppManagementScaffold
 import io.legado.app.ui.widget.components.AppConfirmDialog
 import io.legado.app.ui.widget.compose.AppSettingPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
+import io.legado.app.ui.widget.compose.LegadoMiuixPalette
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.launch
 
@@ -97,6 +104,24 @@ class SourceQualityReportActivity : AppCompatActivity() {
         val selected = remember { mutableStateOf(setOf<String>()) }
         // "应用结果"确认框（quality-check-unify：体检报告→失效分组/weight 落库）
         var showApplyConfirm by remember { mutableStateOf(false) }
+        // F70 删除回执条：删除后页内展示（条数 to 备份路径），替代一次性 toast
+        var deleteReceipt by remember { mutableStateOf<Pair<Int, String>?>(null) }
+        // F69 结论卡计数：基于全部结果（非筛选后）统计，筛选时数字不跳动
+        val summary = remember(state.results) {
+            var usable = 0
+            var suspect = 0
+            var failed = 0
+            var untested = 0
+            state.results.forEach { (_, report) ->
+                when (SourceQualityScorer.toUserState(report)) {
+                    SourceQualityScorer.UserState.USABLE -> usable++
+                    SourceQualityScorer.UserState.SUSPECT -> suspect++
+                    SourceQualityScorer.UserState.FAILED -> failed++
+                    SourceQualityScorer.UserState.UNTESTED -> untested++
+                }
+            }
+            listOf(usable, suspect, failed, untested)
+        }
         // 结果行 URL 键（稳定主键，删除/刷新后映射不漂移）
         val keyOf: (Any?) -> String = { s ->
             (s as? BookSource)?.bookSourceUrl ?: ((s as? RssSource)?.sourceUrl ?: "")
@@ -164,23 +189,27 @@ class SourceQualityReportActivity : AppCompatActivity() {
                         val keys = selected.value
                         if (keys.isEmpty()) return@AppManagementAction
                         // S6：确认框明示"先备份再删除"
-                        androidx.appcompat.app.AlertDialog.Builder(this@SourceQualityReportActivity)
-                            .setTitle(R.string.quality_report_delete)
-                            .setMessage(getString(R.string.quality_report_delete_confirm, keys.size))
-                            .setPositiveButton(R.string.ok) { _, _ ->
+                        // 弹窗族收口（B2.1 M1 弹窗收尾）：原 androidx.appcompat AlertDialog.Builder
+                        // 改走 Compose 弹窗族，destructive 语义由 dangerPositive 统一到 AppSemanticColors.Danger
+                        showComposeConfirmDialog(
+                            title = getString(R.string.quality_report_delete),
+                            message = getString(R.string.quality_report_delete_confirm, keys.size),
+                            positiveText = getString(R.string.ok),
+                            negativeText = getString(R.string.cancel),
+                            dangerPositive = true,
+                            onPositive = {
                                 AppLog.putDebugWithTag(
                                     QualityCheckSession.LOG_TAG,
                                     "UI 删除确认: count=${keys.size}",
                                     level = AppLog.Level.INFO
                                 )
                                 viewModel.deleteSelected(this@SourceQualityReportActivity, session, keys, keyOf) { path ->
-                                    // 删除反馈闭环：toast 明示删除数+备份路径
-                                    toastOnUi(getString(R.string.quality_report_deleted_toast, keys.size, path))
+                                    // F70：删除回执由 toast 升级为页内结果条（路径可复制）
+                                    deleteReceipt = keys.size to path
                                     selected.value = emptySet()
                                 }
                             }
-                            .setNegativeButton(R.string.cancel, null)
-                            .show()
+                        )
                     }
                 )
             ),
@@ -270,13 +299,22 @@ class SourceQualityReportActivity : AppCompatActivity() {
                     }
                 }
 
-                // 四态筛选 chips（P5 白话）
+                // F69 一次性结论卡（顶部）：可用/可疑/失败/未校验 四态计数，点按复用筛选
+                SummaryCard(summary = summary, filter = filter, settings = settings) {
+                    filter = if (filter == it) null else it
+                }
+
+                // 四态筛选 chips（P5 白话；含 F69 复用的"可用"chip，横向可滚动防溢出）
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
                 ) {
+                    FilterChip(stringResource(R.string.import_check_state_usable), filter == SourceQualityScorer.UserState.USABLE, settings) {
+                        filter = if (filter == SourceQualityScorer.UserState.USABLE) null else SourceQualityScorer.UserState.USABLE
+                    }
                     FilterChip(stringResource(R.string.import_check_state_failed), filter == SourceQualityScorer.UserState.FAILED, settings) {
                         filter = if (filter == SourceQualityScorer.UserState.FAILED) null else SourceQualityScorer.UserState.FAILED
                     }
@@ -289,6 +327,21 @@ class SourceQualityReportActivity : AppCompatActivity() {
                     FilterChip(stringResource(R.string.import_check_low_score), showLowScoreOnly, settings) {
                         showLowScoreOnly = !showLowScoreOnly
                     }
+                }
+
+                // F70 删除回执条：页内结果条（替代一次性 toast），路径只读 + 一键复制
+                deleteReceipt?.let { (count, path) ->
+                    ResultReceiptBar(
+                        count = count,
+                        path = path,
+                        settings = settings,
+                        miuixPalette = palette.miuix,
+                        onCopy = {
+                            sendToClip(path)
+                            toastOnUi(getString(R.string.quality_report_path_copied))
+                        },
+                        onDismiss = { deleteReceipt = null }
+                    )
                 }
 
                 LazyColumn(modifier = Modifier.weight(1f)) {
@@ -339,6 +392,156 @@ class SourceQualityReportActivity : AppCompatActivity() {
                 },
                 onDismiss = { showApplyConfirm = false }
             )
+        }
+    }
+
+    /**
+     * F69 体检完成结论卡：一次性给出「可用/可疑/失败/未校验」四态计数，
+     * 免去用户逐行点数。点按某一态复用下方筛选 chips 的同一 filter 状态。
+     */
+    @Composable
+    private fun SummaryCard(
+        summary: List<Int>,
+        filter: SourceQualityScorer.UserState?,
+        settings: AppSettingPalette,
+        onStateClick: (SourceQualityScorer.UserState) -> Unit
+    ) {
+        if (summary.sum() == 0) return
+        val successColor = colorResource(R.color.success)
+        Surface(
+            color = Color(settings.row),
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+            ) {
+                SummaryStat(
+                    label = stringResource(R.string.import_check_state_usable),
+                    count = summary[0],
+                    color = successColor,
+                    selected = filter == SourceQualityScorer.UserState.USABLE,
+                    settings = settings
+                ) { onStateClick(SourceQualityScorer.UserState.USABLE) }
+                SummaryStat(
+                    label = stringResource(R.string.import_check_state_suspect),
+                    count = summary[1],
+                    color = settings.secondaryText,
+                    selected = filter == SourceQualityScorer.UserState.SUSPECT,
+                    settings = settings
+                ) { onStateClick(SourceQualityScorer.UserState.SUSPECT) }
+                SummaryStat(
+                    label = stringResource(R.string.import_check_state_failed),
+                    count = summary[2],
+                    color = settings.danger,
+                    selected = filter == SourceQualityScorer.UserState.FAILED,
+                    settings = settings
+                ) { onStateClick(SourceQualityScorer.UserState.FAILED) }
+                SummaryStat(
+                    label = stringResource(R.string.import_check_state_untested),
+                    count = summary[3],
+                    color = settings.disabledText,
+                    selected = filter == SourceQualityScorer.UserState.UNTESTED,
+                    settings = settings
+                ) { onStateClick(SourceQualityScorer.UserState.UNTESTED) }
+            }
+        }
+    }
+
+    @Composable
+    private fun SummaryStat(
+        label: String,
+        count: Int,
+        color: Color,
+        selected: Boolean,
+        settings: AppSettingPalette,
+        onClick: () -> Unit
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .clip(MaterialTheme.shapes.small)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = count.toString(),
+                style = MaterialTheme.typography.titleMedium,
+                color = color
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (selected) settings.accent else settings.secondaryText,
+                maxLines = 1
+            )
+        }
+    }
+
+    /**
+     * F70 删除备份回执条：替代一次性 toast（易错过、路径无法复制），
+     * 页内常驻直到用户关闭；路径只读展示 + 一键复制。
+     */
+    @Composable
+    private fun ResultReceiptBar(
+        count: Int,
+        path: String,
+        settings: AppSettingPalette,
+        miuixPalette: LegadoMiuixPalette,
+        onCopy: () -> Unit,
+        onDismiss: () -> Unit
+    ) {
+        Surface(
+            color = Color(settings.row),
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+        ) {
+            Column(modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(R.string.quality_report_deleted_title, count),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = settings.primaryText,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = stringResource(R.string.close),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = settings.secondaryText,
+                        modifier = Modifier
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable(onClick = onDismiss)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = path,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = settings.secondaryText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    LegadoMiuixActionButton(
+                        text = stringResource(R.string.quality_report_copy_path),
+                        palette = miuixPalette,
+                        onClick = onCopy,
+                        minWidth = 64.dp,
+                        minHeight = 30.dp,
+                        insidePadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+            }
         }
     }
 

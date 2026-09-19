@@ -10,6 +10,7 @@ import io.legado.app.ui.browser.WebViewActivity
 import io.legado.app.utils.isMainThread
 import io.legado.app.utils.startActivity
 import splitties.init.appCtx
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.LockSupport
 import kotlin.time.Duration.Companion.minutes
 
@@ -20,10 +21,22 @@ object SourceVerificationHelp {
 
     private val waitTime = 1.minutes.inWholeNanoseconds
 
+    /**
+     * 进程内每个源已发起的验证次数（含进行中的一次）。
+     *
+     * 用途：验证码弹窗的「连续失败升级引导」（F169）——同源被再次要求验证，
+     * 即说明上一次输入未被接受，累计 ≥2 次时在弹窗内给出禁用/删除该源的引导。
+     * 口径说明：源验证是否被接受无法在本层观测，故按"进程内累计"计；进程重启清零。
+     */
+    private val verificationAttempts = ConcurrentHashMap<String, Int>()
+
     private fun getVerificationResultKey(source: BaseSource) =
         getVerificationResultKey(source.getKey())
 
     private fun getVerificationResultKey(sourceKey: String) = "${sourceKey}_verificationResult"
+
+    /** 本进程内该源累计发起的验证次数（供弹窗侧读取，见 [verificationAttempts] 口径说明） */
+    fun verificationAttemptCount(sourceKey: String): Int = verificationAttempts[sourceKey] ?: 0
 
     /**
      * 获取书源验证结果
@@ -44,6 +57,9 @@ object SourceVerificationHelp {
         check(!isMainThread) { "getVerificationResult must be called on a background thread" }
 
         clearResult(source.getKey())
+        // F169：先累计本次，再把序号透传给弹窗（弹窗据 attempt >= 2 渲染升级引导行）
+        val attempt = (verificationAttempts[source.getKey()] ?: 0) + 1
+        verificationAttempts[source.getKey()] = attempt
 
         if (!useBrowser) {
             appCtx.startActivity<VerificationCodeActivity> {
@@ -51,6 +67,7 @@ object SourceVerificationHelp {
                 putExtra("sourceOrigin", source.getKey())
                 putExtra("sourceName", source.getTag())
                 putExtra("sourceType", source.getSourceType())
+                putExtra("attempt", attempt)
                 IntentData.put(getVerificationResultKey(source), Thread.currentThread())
             }
         } else {
