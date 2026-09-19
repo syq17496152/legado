@@ -287,7 +287,12 @@ object TtsCastingStore {
         val imported: Int = 0,
         val keptBoth: Int = 0,
         val pendingBinding: Int = 0,
-        val error: String? = null
+        val error: String? = null,
+        /**
+         * 待绑定模板 id（B1.4 优化 2 / F79）：
+         * 导入存在缺声源规则时非空，供 UI「去绑定」直达编辑器，把未完成态接上续接出口。
+         */
+        val pendingBindingTemplateId: String? = null
     )
 
     /**
@@ -349,7 +354,11 @@ object TtsCastingStore {
         )
         appDb.ttsCastingTemplateDao.insert(entity)
         invalidateSnapshot()
-        return ImportResult(imported = 1, pendingBinding = pendingBinding)
+        return ImportResult(
+            imported = 1,
+            pendingBinding = pendingBinding,
+            pendingBindingTemplateId = templateId.takeIf { pendingBinding > 0 }
+        )
     }
 
     /** pattern 限长（ReDoS 防护第一道，§3.2-15） */

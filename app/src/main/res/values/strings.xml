@@ -79,6 +79,10 @@
     <string name="book_source_empty_subtitle">Create, import, or add book sources to get started</string>
     <string name="book_source_cover_fallback">Src</string>
     <string name="settings_search">Search settings</string>
+    <string name="settings_search_match_count">%1$d matches</string>
+    <string name="settings_search_no_result">No matching settings</string>
+    <string name="settings_target_not_found">Target setting not found</string>
+    <string name="ai_image_role_unavailable">Image generation unavailable (not configured)</string>
     <string name="book_cover_fallback">B</string>
     <string name="read_count">Books read</string>
     <string name="total_read_time">Total reading time</string>
@@ -3353,6 +3357,11 @@ function login() {
     <string name="tts_casting_rule_source">声源</string>
     <string name="tts_casting_fallback_source">兜底声源</string>
     <string name="tts_casting_pick_source">选择声源（规则 %1$d）</string>
+    <string name="tts_casting_add_rule">＋ 添加规则</string>
+    <string name="tts_casting_active_tag">使用中</string>
+    <string name="tts_casting_go_bind">去绑定 ›</string>
+    <string name="tts_casting_rule_order_hint">规则自上而下，首条命中即生效</string>
+    <string name="tts_casting_move_top">置顶</string>
     <string name="tts_casting_discard_confirm">放弃当前修改？</string>
     <string name="tts_casting_discard_confirm_desc">模板内容已修改，返回将丢失未保存的更改</string>
     <string name="tts_casting_source_default">跟随当前引擎</string>

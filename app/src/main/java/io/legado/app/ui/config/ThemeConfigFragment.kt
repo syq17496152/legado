@@ -1,8 +1,6 @@
 package io.legado.app.ui.config
 
 import android.os.Build
-import android.os.Bundle
-import android.view.View
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import io.legado.app.R
@@ -30,19 +28,15 @@ class ThemeConfigFragment : ComposeSettingFragment() {
     // 透明度滑条拖动中间值回显（红队 R1-P1-10：渲染层 spec.value 驱动，无宿主会松手弹回）
     private var manageBgAlphaDraft: Int? = null
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        // H6: 三点菜单改由 ConfigActivity 顶栏 AppDropdownMenu 承载（替代 MenuProvider 系统菜单）
-        // topbar-icon-semantics-fix 3.1：DarkMode 恢复一级亮度图标（对齐原版 theme_config.xml showAsAction=always）
-        (activity as? ConfigActivity)?.setConfigMenuActions(
-            listOf(
-                MenuAction(Icons.Default.DarkMode, getString(R.string.theme_mode), alwaysShow = true) {
-                    AppConfig.isNightTheme = !AppConfig.isNightTheme
-                    ThemeConfig.applyDayNight(requireContext())
-                }
-            )
-        )
-    }
+    // H6: 三点菜单改由 ConfigActivity 顶栏 AppDropdownMenu 承载（替代 MenuProvider 系统菜单）
+    // topbar-icon-semantics-fix 3.1：DarkMode 恢复一级亮度图标（对齐原版 theme_config.xml showAsAction=always）
+    // ui-subpage-optimization B1.2：改经 extraMenuActions 上报，避免覆盖基类的页内检索入口
+    override fun extraMenuActions(): List<MenuAction> = listOf(
+        MenuAction(Icons.Default.DarkMode, getString(R.string.theme_mode), alwaysShow = true) {
+            AppConfig.isNightTheme = !AppConfig.isNightTheme
+            ThemeConfig.applyDayNight(requireContext())
+        }
+    )
 
     override fun buildPageSpec(): SettingPageSpec {
         return SettingPageSpec(

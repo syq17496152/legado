@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.book.read.config.casting
+package io.legado.app.ui.book.read.config.casting
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Icon
@@ -26,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,6 +45,7 @@ import io.legado.app.ui.widget.compose.toMiuixPalette
 @Composable
 fun TtsCastingListScreen(
     templates: List<TtsCastingTemplate>,
+    activeTemplateId: String?,
     onDismiss: () -> Unit,
     onOpenEditor: (TtsCastingTemplate) -> Unit,
     onCopyToCustom: (TtsCastingTemplate) -> Unit,
@@ -116,6 +119,7 @@ fun TtsCastingListScreen(
                 items(templates, key = { it.id }) { template ->
                     TtsCastingListRow(
                         template = template,
+                        isActive = template.id == activeTemplateId,
                         onOpen = { onOpenEditor(template) },
                         onCopy = { onCopyToCustom(template) },
                         onDelete = { onDelete(template) },
@@ -130,6 +134,7 @@ fun TtsCastingListScreen(
 @Composable
 private fun TtsCastingListRow(
     template: TtsCastingTemplate,
+    isActive: Boolean,
     onOpen: () -> Unit,
     onCopy: () -> Unit,
     onDelete: () -> Unit,
@@ -140,73 +145,97 @@ private fun TtsCastingListRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .clickable(onClick = onOpen),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = template.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = style.primaryText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-                if (template.builtin) {
-                    Spacer(Modifier.size(6.dp))
-                    Text(
-                        text = stringResource(R.string.tts_casting_builtin_tag),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = style.secondaryText
-                    )
-                }
-            }
-            Text(
-                text = ruleSummary(template),
-                style = MaterialTheme.typography.bodySmall,
-                color = style.secondaryText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+        // B1.4 优化 1（F78）：使用中模板左侧 3dp accent 竖条——「启用」≠「使用中」，
+        // 真正生效的模板原先完全不可辨（activeTemplateId 数据现成、列表零消费）
+        if (isActive) {
+            Box(
+                Modifier
+                    .width(3.dp)
+                    .height(32.dp)
+                    .background(style.accent)
             )
         }
-        LegadoMiuixSwitch(
-            checked = template.enabled,
-            onCheckedChange = { onToggle() },
-            palette = style.toMiuixPalette()
-        )
-        Box {
-            TextButton(onClick = { expanded = true }) {
-                Text(stringResource(R.string.more), color = style.secondaryText)
-            }
-            io.legado.app.ui.widget.components.AppDropdownMenu(
-                expanded = expanded,
-                onDismiss = { expanded = false },
-                actions = buildList {
-                    add(
-                        io.legado.app.ui.widget.components.MenuAction(
-                            title = stringResource(R.string.tts_casting_edit),
-                            onClick = onOpen
-                        )
+        Row(
+            Modifier
+                .weight(1f)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = template.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = style.primaryText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     if (template.builtin) {
-                        add(
-                            io.legado.app.ui.widget.components.MenuAction(
-                                title = stringResource(R.string.tts_casting_copy_custom),
-                                onClick = onCopy
-                            )
+                        Spacer(Modifier.size(6.dp))
+                        Text(
+                            text = stringResource(R.string.tts_casting_builtin_tag),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = style.secondaryText
                         )
-                    } else {
-                        add(
-                            io.legado.app.ui.widget.components.MenuAction(
-                                title = stringResource(R.string.tts_casting_delete),
-                                onClick = onDelete
-                            )
+                    }
+                    if (isActive) {
+                        Spacer(Modifier.size(6.dp))
+                        Text(
+                            text = stringResource(R.string.tts_casting_active_tag),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colorResource(R.color.success)
                         )
                     }
                 }
+                Text(
+                    text = ruleSummary(template),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = style.secondaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            LegadoMiuixSwitch(
+                checked = template.enabled,
+                onCheckedChange = { onToggle() },
+                palette = style.toMiuixPalette()
             )
+            Box {
+                TextButton(onClick = { expanded = true }) {
+                    Text(stringResource(R.string.more), color = style.secondaryText)
+                }
+                io.legado.app.ui.widget.components.AppDropdownMenu(
+                    expanded = expanded,
+                    onDismiss = { expanded = false },
+                    actions = buildList {
+                        add(
+                            io.legado.app.ui.widget.components.MenuAction(
+                                title = stringResource(R.string.tts_casting_edit),
+                                onClick = onOpen
+                            )
+                        )
+                        if (template.builtin) {
+                            add(
+                                io.legado.app.ui.widget.components.MenuAction(
+                                    title = stringResource(R.string.tts_casting_copy_custom),
+                                    onClick = onCopy
+                                )
+                            )
+                        } else {
+                            add(
+                                io.legado.app.ui.widget.components.MenuAction(
+                                    title = stringResource(R.string.tts_casting_delete),
+                                    onClick = onDelete
+                                )
+                            )
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -232,7 +261,8 @@ fun TtsCastingImportScreen(
     onImport: (json: String, name: String) -> Unit,
     onExport: () -> Unit,
     onBack: () -> Unit,
-    onCopyExport: (String) -> Unit
+    onCopyExport: (String) -> Unit,
+    onGoBind: (() -> Unit)? = null
 ) {
     val style = rememberAppDialogStyle()
     var importJson by remember { mutableStateOf("") }
@@ -290,6 +320,13 @@ fun TtsCastingImportScreen(
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+            // B1.4 优化 2（F79）：导入「待绑定」未完成态给续接出口——原先只告知不续接，
+            // 用户需自行去列表找到模板再点行进编辑器（多级跳转无引导）
+            onGoBind?.let { goBind ->
+                TextButton(onClick = goBind) {
+                    Text(stringResource(R.string.tts_casting_go_bind), color = style.accent)
+                }
             }
             TextButton(onClick = { onImport(importJson, importName) }, enabled = !busy && importJson.isNotBlank()) {
                 Text(

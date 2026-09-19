@@ -127,20 +127,20 @@ class BackupConfigFragment : ComposeSettingFragment() {
         migrateCloudStoragePreferenceTypes()
     }
 
+    // H6: 三点菜单改由 ConfigActivity 顶栏 AppDropdownMenu 承载（替代 MenuProvider 系统菜单）
+    // topbar-icon-semantics-fix 3.1：Help 恢复一级问号图标（对齐原版 backup_restore.xml showAsAction=always）
+    // ui-subpage-optimization B1.2：改经 extraMenuActions 上报，避免覆盖基类的页内检索入口
+    override fun extraMenuActions(): List<MenuAction> = listOf(
+        MenuAction(Icons.AutoMirrored.Filled.Help, getString(R.string.help), alwaysShow = true) {
+            showHelp("webDavHelp")
+        },
+        MenuAction(Icons.Default.List, getString(R.string.log)) {
+            showDialogFragment<AppLogDialog>()
+        }
+    )
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        // H6: 三点菜单改由 ConfigActivity 顶栏 AppDropdownMenu 承载（替代 MenuProvider 系统菜单）
-        // topbar-icon-semantics-fix 3.1：Help 恢复一级问号图标（对齐原版 backup_restore.xml showAsAction=always）
-        (activity as? ConfigActivity)?.setConfigMenuActions(
-            listOf(
-                MenuAction(Icons.AutoMirrored.Filled.Help, getString(R.string.help), alwaysShow = true) {
-                    showHelp("webDavHelp")
-                },
-                MenuAction(Icons.Default.List, getString(R.string.log)) {
-                    showDialogFragment<AppLogDialog>()
-                }
-            )
-        )
         if (!LocalConfig.backupHelpVersionIsLast) {
             showHelp("webDavHelp")
         }

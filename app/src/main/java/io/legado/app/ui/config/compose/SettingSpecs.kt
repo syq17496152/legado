@@ -82,3 +82,16 @@ data class SettingActionSpec(
     override val enabled: Boolean = true,
     override val searchKeys: List<String> = emptyList()
 ) : SettingItemSpec
+
+/**
+ * 页内检索匹配判据（B1.2 优化 1）：key / searchKeys / 标题 / 摘要，忽略大小写。
+ *
+ * 放在 spec 模型层（而非渲染层）以便 JVM 单测直接覆盖；空查询恒命中（不构成过滤）。
+ */
+internal fun SettingItemSpec.matchesQuery(query: String): Boolean {
+    if (query.isEmpty()) return true
+    return title.contains(query, ignoreCase = true) ||
+        summary?.contains(query, ignoreCase = true) == true ||
+        key.contains(query, ignoreCase = true) ||
+        searchKeys.any { it.contains(query, ignoreCase = true) }
+}

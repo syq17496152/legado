@@ -93,6 +93,12 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
     private var importMessage by mutableStateOf<String?>(null)
     private var importBusy by mutableStateOf(false)
 
+    /** 导入产生的待绑定模板 id（B1.4 优化 2：非空时 IMPORT 态给「去绑定」直达入口） */
+    private var importPendingTemplateId by mutableStateOf<String?>(null)
+
+    /** 当前使用中模板 id（B1.4 优化 1：LIST 态「使用中」标识依据；随模板列表刷新同步） */
+    private var activeTemplateId by mutableStateOf<String?>(null)
+
     /** 导出内容（剪贴板/文件双通道承接） */
     private var exportText by mutableStateOf<String?>(null)
 
@@ -115,6 +121,7 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
                     when (route) {
                         Route.LIST -> TtsCastingListScreen(
                             templates = templates,
+                            activeTemplateId = activeTemplateId,
                             onDismiss = { dismissAllowingStateLoss() },
                             onOpenEditor = { openEditor(it) },
                             onCopyToCustom = { copyToCustom(it) },
@@ -141,18 +148,26 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
                             )
                         }
 
-                        Route.IMPORT -> TtsCastingImportScreen(
-                            message = importMessage,
-                            busy = importBusy,
-                            exportText = exportText,
-                            onImport = { json, name -> importJson(json, name) },
-                            onExport = { exportActiveTemplate() },
-                            onBack = { route = Route.LIST },
-                            onCopyExport = { text ->
-                                requireContext().sendToClip(text)
-                                requireContext().toastOnUi(R.string.tts_casting_copied)
-                            }
-                        )
+                        Route.IMPORT -> {
+                            val pendingId = importPendingTemplateId
+                            TtsCastingImportScreen(
+                                message = importMessage,
+                                busy = importBusy,
+                                exportText = exportText,
+                                onImport = { json, name -> importJson(json, name) },
+                                onExport = { exportActiveTemplate() },
+                                onBack = { route = Route.LIST },
+                                onCopyExport = { text ->
+                                    requireContext().sendToClip(text)
+                                    requireContext().toastOnUi(R.string.tts_casting_copied)
+                                },
+                                onGoBind = if (pendingId != null) {
+                                    ({ openPendingBinding(pendingId) })
+                                } else {
+                                    null
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -164,7 +179,12 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
         lifecycleScope.launch {
             appDb.ttsCastingTemplateDao.observeAll()
                 .catch { AppLog.put("选角模板列表获取失败：${it.message}") }
-                .collect { templates = it }
+                .collect {
+                    templates = it
+                    // B1.4 优化 1：使用中模板标识——激活 id 由阅读页等外部入口设置，
+                    // 随模板列表刷新一并同步，避免标识与列表数据错代
+                    activeTemplateId = TtsCastingStore.activeTemplateId()
+                }
         }
         lifecycleScope.launch(Dispatchers.IO) {
             httpTtsList = appDb.httpTTSDao.all
@@ -358,7 +378,21 @@ class TtsCastingManageFragment : ComposeDialogFragment() {
                 importBusy = false
                 importMessage = result.error
                     ?: getString(R.string.tts_casting_import_done, result.imported, result.pendingBinding)
+                importPendingTemplateId = result.pendingBindingTemplateId
             }
+        }
+    }
+
+    /**
+     * B1.4 优化 2（F79）：待绑定续接直达——从导入结果直接进该模板编辑器绑声源，
+     * 把「导入 → 绑定」链路从 3 步寻路缩到 1 步（复用既有 openEditor 路由）。
+     */
+    private fun openPendingBinding(templateId: String) {
+        lifecycleScope.launch {
+            val template = TtsCastingStore.get(templateId) ?: return@launch
+            importMessage = null
+            importPendingTemplateId = null
+            openEditor(template)
         }
     }
 

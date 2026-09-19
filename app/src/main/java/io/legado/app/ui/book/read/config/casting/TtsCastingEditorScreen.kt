@@ -151,6 +151,16 @@ fun TtsCastingEditorScreen(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
         )
         LazyColumn(Modifier.fillMaxWidth()) {
+            // B1.5 优化 2（F77）：首命中语义外显——数组顺序=首命中优先级原仅存于代码注释，
+            // 页内不可见，用户配错顺序导致对白被旁白规则抢先命中且无从排查
+            item {
+                Text(
+                    text = stringResource(R.string.tts_casting_rule_order_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = style.secondaryText,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
             itemsIndexed(state.rules, key = { index, rule -> "${rule.matchType}_${rule.tag}_$index" }) { index, rule ->
                 TtsCastingRuleRow(
                     index = index,
@@ -188,10 +198,38 @@ fun TtsCastingEditorScreen(
                             )
                         }
                     },
+                    onMoveTop = {
+                        if (index > 0) {
+                            onRulesChange(
+                                state.rules.toMutableList().apply {
+                                    val tmp = removeAt(index)
+                                    add(0, tmp)
+                                }
+                            )
+                        }
+                    },
                     onPickSource = { pickerRuleIndex = index },
                     onPreview = onPreview,
                     onStopPreview = onStopPreview
                 )
+            }
+            // B1.5 优化 1（F76 · P0）：添加规则入口——原实现全文件无任何新增规则路径
+            // （仅 onDelete/onMoveUp/onMoveDown），多角色模板（旁白/男角/女角分声源）在编辑器内
+            // 造不出第 2 条规则，"选角"退化为"全局换声"。追加默认旁白规则，复用新建默认值构造。
+            if (!state.readOnly) {
+                item {
+                    Text(
+                        text = stringResource(R.string.tts_casting_add_rule),
+                        color = style.accent,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onRulesChange(state.rules + CastingRule(tag = CastingTag.NARRATION))
+                            }
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
+                }
             }
             // fallbackSource 行（全局兜底声源）
             item {
@@ -262,6 +300,7 @@ private fun TtsCastingRuleRow(
     onDelete: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
+    onMoveTop: () -> Unit,
     onPickSource: () -> Unit,
     onPreview: (SpeechRoute) -> Unit,
     onStopPreview: () -> Unit
@@ -326,6 +365,18 @@ private fun TtsCastingRuleRow(
             }
             Spacer(Modifier.weight(1f))
             if (!readOnly) {
+                // B1.5 优化 2（F77）：置顶——覆盖「把最重要的角色规则提到最前」最高频诉求，
+                // 比 ↑ 逐格移动高效；不引入长按拖拽（与 Prosody 折叠面板手势冲突）
+                if (index > 0) {
+                    Text(
+                        text = stringResource(R.string.tts_casting_move_top),
+                        color = style.secondaryText,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier
+                            .clickable(onClick = onMoveTop)
+                            .padding(4.dp)
+                    )
+                }
                 Text(
                     text = "↑",
                     color = style.secondaryText,

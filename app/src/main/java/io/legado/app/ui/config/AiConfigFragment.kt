@@ -1,6 +1,9 @@
 package io.legado.app.ui.config
 
 import android.content.Intent
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.constant.EventBus
@@ -14,6 +17,7 @@ import io.legado.app.ui.config.compose.SettingActionSpec
 import io.legado.app.ui.config.compose.SettingPageSpec
 import io.legado.app.ui.config.compose.SettingSectionSpec
 import io.legado.app.ui.config.compose.SettingSwitchSpec
+import io.legado.app.ui.widget.compose.AppSemanticColors
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeMultiChoiceDialog
@@ -48,6 +52,12 @@ class AiConfigFragment : ComposeSettingFragment() {
         const val KEY_CONTEXT_COMPRESSION = "aiContextCompression"
         const val KEY_WORLD_BOOK_MANAGE = "aiWorldBookManage"
         const val KEY_DEFAULT_MODEL_SETTINGS = "aiDefaultModelSettings"
+
+        /** 未配置模型的占位文案（B1.3：摘要分行与 danger 判定共用同一真值，避免多处硬编码漂移） */
+        private const val UNCONFIGURED_LABEL = "未配置"
+
+        /** 摘要中的生图角色短标签（B1.3：未配置时需附「生图将不可用」提示） */
+        private const val IMAGE_ROLE_LABEL = "生图"
         const val KEY_IMAGE_GALLERY = "aiImageGallery"
         const val KEY_IMAGE_PROVIDER_MANAGE = "aiImageProviderManage"
         const val KEY_MANAGE_PROVIDERS = "aiManageProviders"
@@ -179,7 +189,7 @@ class AiConfigFragment : ComposeSettingFragment() {
                         SettingActionSpec(
                             key = KEY_DEFAULT_MODEL_SETTINGS,
                             title = "默认模型",
-                            summary = "问AI ${modelLabel(AppConfig.aiAskModelConfig)} / 总结 ${modelLabel(AppConfig.aiSummaryModelConfig)} / 多角色 ${modelLabel(AppConfig.aiReadAloudRoleModelConfig)} / 生图 ${imageProviderLabel()}",
+                            summary = defaultModelSummary(),
                             onClick = ::showDefaultModelSettingsDialog
                         ),
                         SettingActionSpec(
@@ -479,7 +489,7 @@ class AiConfigFragment : ComposeSettingFragment() {
     }
 
     private fun modelLabel(model: AiModelConfig?): String {
-        model ?: return "未配置"
+        model ?: return UNCONFIGURED_LABEL
         val providerName = AppConfig.aiProviderList.firstOrNull { it.id == model.providerId }
             ?.name
             ?.takeIf { it.isNotBlank() }
@@ -487,7 +497,42 @@ class AiConfigFragment : ComposeSettingFragment() {
     }
 
     private fun imageProviderLabel(): String {
-        return AppConfig.aiCurrentImageProvider?.displayName() ?: "未配置"
+        return AppConfig.aiCurrentImageProvider?.displayName() ?: UNCONFIGURED_LABEL
+    }
+
+    /**
+     * 默认模型摘要（B1.3 优化 2）：按角色**分行**展示，未配置角色 danger 着色并显性提示后果。
+     *
+     * 原实现把 4 段模型文案用 ` / ` 单行拼接，窄屏下被 2 行截断 ⇒ 后段角色（多角色/生图）
+     * 永远不可见，且「生图 未配置」这一功能不可用关键态无任何视觉权重。
+     * 分行后 4 行封顶（[SettingSpecScreen] 摘要 maxLines=4），每角色状态可扫读。
+     */
+    private fun defaultModelSummary(): CharSequence {
+        val danger = AppSemanticColors.Danger
+        // 角色短标签沿用原摘要措辞（不改文案语义，仅拆行）
+        val roles = listOf(
+            "问AI" to modelLabel(AppConfig.aiAskModelConfig),
+            "总结" to modelLabel(AppConfig.aiSummaryModelConfig),
+            "多角色" to modelLabel(AppConfig.aiReadAloudRoleModelConfig),
+            "生图" to imageProviderLabel()
+        )
+        return buildAnnotatedString {
+            roles.forEachIndexed { index, (role, label) ->
+                if (index > 0) append("\n")
+                append("$role ")
+                if (label == UNCONFIGURED_LABEL) {
+                    // 生图未配置会直接导致生图功能不可用，额外显性化后果（新增文案）
+                    val text = if (role == IMAGE_ROLE_LABEL) {
+                        getString(R.string.ai_image_role_unavailable)
+                    } else {
+                        UNCONFIGURED_LABEL
+                    }
+                    withStyle(SpanStyle(color = danger)) { append(text) }
+                } else {
+                    append(label)
+                }
+            }
+        }
     }
 
     private fun showEditMcpServerDialog(server: AiMcpServerConfig? = null) {
