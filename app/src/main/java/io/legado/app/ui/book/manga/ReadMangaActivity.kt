@@ -449,7 +449,8 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                 binding.tvRetry.isVisible = retry
                 binding.tvMsg.text = msg
             } else {
-                loadMoreView.error(null, "加载失败，点击重试")
+                // F142：页脚错误态统一为「摘要 + 点击提示」结构，摘要只给结论，重试提示由组件按语义补齐
+                loadMoreView.error(null, getString(R.string.load_failed))
             }
         }
     }

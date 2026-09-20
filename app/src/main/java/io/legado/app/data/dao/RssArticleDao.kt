@@ -62,6 +62,22 @@ interface RssArticleDao {
     )
     suspend fun getUnreadOrigins(): List<String>
 
+    /**
+     * F143（ui-subpage-optimization）：按分类聚合未读数，供分类 Tab 未读徽标使用。
+     *
+     * 未读口径与列表主查询 [flowByOriginSort] 完全一致——rssArticles.read 列无写入方，
+     * 真实已读态由 rssReadRecords（record = link）承担，故「无对应阅读记录」即未读。
+     * 聚合在库内完成（group by sort，命中 idx_origin_sort 索引），返回量级 = 分类数，
+     * 不逐分类查询、不拉整表。Flow 版：文章入库/已读记录变化时自动重算，徽标无陈旧窗口。
+     */
+    @Query(
+        """select t1.sort as sort, count(*) as unreadCount from rssArticles as t1
+        left join rssReadRecords as t2 on t1.link = t2.record
+        where t1.origin = :origin and t2.record is null
+        group by t1.sort"""
+    )
+    fun flowUnreadCountBySort(origin: String): Flow<List<RssUnreadSortCount>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(vararg rssArticle: RssArticle)
 
@@ -81,3 +97,9 @@ interface RssArticleDao {
     fun delete(origin: String)
 
 }
+
+/** F143：分类未读聚合投影（sort 与 rssArticles.sort 同口径，即分类 Tab 名） */
+data class RssUnreadSortCount(
+    val sort: String,
+    val unreadCount: Int
+)

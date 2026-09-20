@@ -44,13 +44,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentStatePagerAdapter
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.constant.AppLog
+import io.legado.app.data.appDb
 import io.legado.app.databinding.ActivityRssArtivlesBinding
 import io.legado.app.help.source.getSearchUrl
 import io.legado.app.help.source.sortUrls
@@ -63,12 +68,17 @@ import io.legado.app.ui.widget.components.AppEditDialog
 import io.legado.app.ui.widget.components.EditField
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.compose.AppSemanticColors
 import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.dialog.VariableDialog
+import io.legado.app.ui.widget.text.CountBadgeDrawable
 import io.legado.app.utils.*
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.viewpager.widget.ViewPager
@@ -115,12 +125,68 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
     private val tabScrollViews = mutableListOf<HorizontalScrollView>() // 添加滚动视图列表
     // F210：多行分类默认收敛为一行（超出首行容量时才出现「全部/收起」切换）；跨重建保留用户选择
     private var tabsExpanded = false
+    // F143：分类未读计数（sort 名 → 未读数）与已落到 Tab 上的计数（仅数值变化才重建徽标 drawable）
+    private val unreadCounts = hashMapOf<String, Int>()
+    private val appliedBadgeCounts = hashMapOf<Int, Int>()
+    private var unreadCountJob: Job? = null
+
+    /**
+     * F143：订阅分类 Tab 未读徽标。
+     *
+     * 计数走 `flowUnreadCountBySort`（聚合查询命中 idx_origin_sort），在页面 RESUMED 期间订阅：
+     * 文章入库或产生已读记录即可自动重算，徽标不会陈旧到「下次重进页面」才刷新。
+     */
+    private fun observeUnreadCounts() {
+        val origin = viewModel.rssSource?.sourceUrl ?: return
+        unreadCountJob?.cancel()
+        unreadCountJob = lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                appDb.rssArticleDao.flowUnreadCountBySort(origin)
+                    .catch { AppLog.put("订阅分类未读计数查询失败\n${it.localizedMessage}", it) }
+                    .flowOn(Dispatchers.IO)
+                    .collect { counts ->
+                        unreadCounts.clear()
+                        counts.forEach { unreadCounts[it.sort] = it.unreadCount }
+                        applyUnreadBadges()
+                    }
+            }
+        }
+    }
+
+    /** 把未读计数落到各分类 Tab 右侧；计数为 0 的分类不显示徽标 */
+    private fun applyUnreadBadges() {
+        tabRows.forEachIndexed { rowIndex, row ->
+            for (i in 0 until row.childCount) {
+                val tabIndex = rowIndex * maxTagsPerRow + i
+                val tabView = row.getChildAt(i) as? TextView ?: continue
+                val count = sortList.getOrNull(tabIndex)?.first?.let { unreadCounts[it] } ?: 0
+                if (appliedBadgeCounts[tabIndex] == count) continue
+                appliedBadgeCounts[tabIndex] = count
+                if (count > 0) {
+                    tabView.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                        null,
+                        null,
+                        CountBadgeDrawable(
+                            this, count,
+                            AppSemanticColors.Danger.toArgb(),
+                            getCompatColor(R.color.white)
+                        ),
+                        null
+                    )
+                } else {
+                    tabView.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, 0, 0)
+                }
+            }
+        }
+    }
 
     private fun setupMultiLineTabs() {
         val tabsContainer = binding.tabsContainer
         tabsContainer.removeAllViews()
         tabRows.clear()
         tabScrollViews.clear()
+        // F143：Tab 视图整体重建 ⇒ 已应用徽标记录失效，必须清空后重新落徽标
+        appliedBadgeCounts.clear()
         if (sortList.isEmpty()) {
             tabsContainer.gone()
             return
@@ -185,6 +251,8 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
         if (collapsible) {
             tabsContainer.addView(buildTabsToggleRow())
         }
+        // F143：Tab 重建后把既有未读计数补回（切换行不参与索引映射，故不受影响）
+        applyUnreadBadges()
     }
 
     /** F210：收敛态「全部 ▾」/ 展开态「收起 ▴」切换行（独立成行，不参与索引映射） */
@@ -226,6 +294,8 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
             textSize = 14f
             background = createTabBackground(accentColor, context)
             setPadding(12.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())
+            // F143：未读徽标以右侧 compound drawable 呈现，此处预留文字与徽标间距
+            compoundDrawablePadding = 6.dpToPx()
             tag = position
             setTextColor(context.getCompatColor( R.color.primaryText))
             // 宽度自适应内容
@@ -613,6 +683,10 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
         adapter.notifyDataSetChanged()
         if (sortList.isNotEmpty()) {
             updateTabSelection(binding.viewPager.currentItem)
+        }
+        // F143：分类 Tab 存在时才需要未读计数（单分类态 Tab 整体隐藏，无需查询）
+        if (sortList.size > 1) {
+            observeUnreadCounts()
         }
     }
 

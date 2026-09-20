@@ -621,6 +621,8 @@
     <string name="error_load_toc">加载目录失败</string>
     <string name="error_get_data">获取数据失败！</string>
     <string name="error_load_msg">加载失败\n%s</string>
+    <string name="error_view_detail">点击查看详情</string>
+    <string name="load_failed">加载失败</string>
     <string name="net_error_10001">没有网络</string>
     <string name="net_error_10002">网络连接超时</string>
     <string name="net_error_10003">数据解析失败</string>

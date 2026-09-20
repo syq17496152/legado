@@ -14,6 +14,53 @@
         android:visibility="invisible"
         app:loading_width="2dp" />
 
+    <!-- F142：错误态三层结构（danger 圆点 + 首行摘要 + 可点击提示），整体可点（前景 ripple） -->
+    <LinearLayout
+        android:id="@+id/error_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginTop="7dp"
+        android:layout_marginBottom="7dp"
+        android:foreground="?attr/selectableItemBackground"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="9dp"
+        android:paddingBottom="9dp"
+        android:visibility="invisible">
+
+        <View
+            android:id="@+id/error_dot"
+            android:layout_width="8dp"
+            android:layout_height="8dp" />
+
+        <TextView
+            android:id="@+id/tv_error_summary"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="@dimen/text_13sp"
+            tools:text="加载失败\njava.net.SocketTimeoutException: 连接超时" />
+
+        <TextView
+            android:id="@+id/tv_error_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:singleLine="true"
+            android:textSize="@dimen/text_12sp"
+            android:textStyle="bold"
+            tools:text="点击查看详情" />
+    </LinearLayout>
+
     <TextView
         android:id="@+id/tv_text"
         android:layout_width="match_parent"

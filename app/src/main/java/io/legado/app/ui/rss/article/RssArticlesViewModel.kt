@@ -60,6 +60,9 @@ class RssArticlesViewModel(application: Application) : BaseViewModel(application
             loadFinallyLiveData.postValue(hasMore)
             isLoading = false
         }.onError {
+            // 失败必须复位在途标记：isLoading 是「有加载在飞」的闸，漏复位会让
+            // scrollToBottom() 的首行守卫恒真 ⇒ 页脚重试与触底翻页**永久失效**（既有缺陷）
+            isLoading = false
             loadFinallyLiveData.postValue(false)
             AppLog.put("rss获取内容失败", it)
             loadErrorLiveData.postValue(it.stackTraceStr)
@@ -71,6 +74,7 @@ class RssArticlesViewModel(application: Application) : BaseViewModel(application
         page++
         val pageUrl = nextPageUrl
         if (pageUrl.isNullOrEmpty()) {
+            isLoading = false
             loadFinallyLiveData.postValue(false)
             return
         }
@@ -79,6 +83,7 @@ class RssArticlesViewModel(application: Application) : BaseViewModel(application
             loadMoreSuccess(it.first)
             isLoading = false
         }.onError {
+            isLoading = false
             loadFinallyLiveData.postValue(false)
             AppLog.put("rss获取内容失败", it)
             loadErrorLiveData.postValue(it.stackTraceStr)

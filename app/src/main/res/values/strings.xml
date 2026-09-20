@@ -652,6 +652,8 @@
     <string name="error_load_toc">Failed to load chapters list</string>
     <string name="error_get_data">Failed to get data</string>
     <string name="error_load_msg">Failed to load\n%s</string>
+    <string name="error_view_detail">Tap for details</string>
+    <string name="load_failed">Load failed</string>
     <string name="net_error_10001">No network</string>
     <string name="net_error_10002">Network connection timeout</string>
     <string name="net_error_10003">Data parsing failed</string>

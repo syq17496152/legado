@@ -467,6 +467,17 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
     private fun scrollToBottom(forceLoad: Boolean = false) {
         if (viewModel.isLoading) return
         fullRefresh = false
+        // F142：页脚重试走 forceLoad 通道。首页加载失败时 nextPageUrl 恒为 null，原实现直接交给
+        // loadMore ⇒ 立即判「没有下一页」把页脚退化成「我是有底线的」，重试其实没有重新拉取。
+        // 取不到下一页地址时改按当前页重拉（真正的可恢复），并先切加载态给即时反馈。
+        if (forceLoad && viewModel.nextPageUrl.isNullOrEmpty()) {
+            loadMoreView.hasMore()
+            fullRefresh = true
+            activityViewModel.rssSource?.let {
+                viewModel.loadArticles(it, viewModel.page)
+            }
+            return
+        }
         if ((loadMoreView.hasMore && adapter.getActualItemCount() > 0) || forceLoad) {
             loadMoreView.hasMore()
             activityViewModel.rssSource?.let {
