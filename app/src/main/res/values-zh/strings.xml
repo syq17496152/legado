@@ -1404,6 +1404,13 @@
     <string name="rss_all_sources">全部来源</string>
     <string name="rss_tag_all_count">全部 · %1$d 源</string>
     <string name="rss_source_unread">有未读文章</string>
+    <string name="rss_sort_clear_confirm">确认清除已缓存的文章？清除后将重新从订阅源加载。</string>
+    <string name="rss_sort_tabs_all">全部 ▾</string>
+    <string name="rss_sort_tabs_collapse">收起 ▴</string>
+    <string name="rss_sort_group_sort">分类</string>
+    <string name="rss_sort_group_source">订阅源</string>
+    <string name="rss_sort_group_record">记录</string>
+    <string name="rss_sort_group_danger">危险操作</string>
     <string name="rss_source_selected">已选源</string>
     <string name="replace_state_change">替换(启用/禁用)</string>
     <string name="show_last_update_time">显示上次更新时间</string>

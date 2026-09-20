@@ -1473,6 +1473,13 @@
     <string name="rss_all_sources">All Sources</string>
     <string name="rss_tag_all_count">All · %1$d sources</string>
     <string name="rss_source_unread">Unread articles</string>
+    <string name="rss_sort_clear_confirm">Clear cached articles? They will be reloaded from the source.</string>
+    <string name="rss_sort_tabs_all">All ▾</string>
+    <string name="rss_sort_tabs_collapse">Collapse ▴</string>
+    <string name="rss_sort_group_sort">Categories</string>
+    <string name="rss_sort_group_source">Source</string>
+    <string name="rss_sort_group_record">Records</string>
+    <string name="rss_sort_group_danger">Danger zone</string>
     <string name="rss_source_selected">Selected source</string>
     <string name="replace_state_change">Replace (enable / disable)</string>
     <string name="show_last_update_time">Show last updated time</string>
