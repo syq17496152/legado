@@ -152,6 +152,8 @@
     <dimen name="bookshelf_tag_item_min_width">36dp</dimen>
     <dimen name="bookshelf_tag_item_max_width">96dp</dimen>
     <dimen name="bookshelf_tag_item_padding_horizontal">12dp</dimen>
+    <!-- F28 源卡未读圆点直径（layout 与 RssAdapter 圆角半径共用此单源） -->
+    <dimen name="rss_unread_dot_size">8dp</dimen>
     <dimen name="bookshelf_content_margin_top">12dp</dimen>
     <dimen name="bookshelf_top_overlay_gap">6dp</dimen>
     <dimen name="top_bar_regular_action_size">36dp</dimen>

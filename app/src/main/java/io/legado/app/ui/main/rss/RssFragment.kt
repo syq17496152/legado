@@ -404,6 +404,9 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         binding.tvEmptyMsg.isGone = true
         initComposeTopBar()
         initTabLayout()  // D1: 初始化分组胶囊标签
+        // F29（ui-subpage-optimization）：经典订阅是「一级分组/类型 → 二级源标签」两级导航，
+        // 二级源标签降为小号 accent 描边弱底 chip，与一级实心胶囊形成层级差（一级样式零改动）
+        binding.topBar.tagsBar.setTagLevel(RoundedTagBarView.TagLevel.SECONDARY)
         initFolderComposeView()  // folder-compose-refactor: 初始化 Compose 文件夹目录
         // F-P1-8 初始化运行时状态：跟随用户偏好
         isShowingFolder = isFolderViewMode
@@ -440,6 +443,8 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         // bugfix-0908 T2：经典模式"文件夹"展示样式的视图随模式切换一并隐藏，
         // 否则切新版订阅后残留并叠在加载完的订阅页下面（回归自 e706bae53 只修了反向残留）
         binding.folderComposeView.gone()
+        // F29：新版订阅的 tagsBar 承载当前源的分类标签（该形态下即顶层导航，无上一级），恢复一级样式
+        binding.topBar.tagsBar.setTagLevel(RoundedTagBarView.TagLevel.PRIMARY)
         initModernRssView()
         observeRssSources()
     }
@@ -1294,6 +1299,11 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
                 AppLog.put("订阅界面更新数据出错", it)
             }.flowOn(IO).collect { list ->
                 val sorted = sortSources(list)
+                // F28：源卡未读标记集合（一次性查询，避免逐项查询）；失败按「无未读」降级不阻断列表
+                val unreadOrigins = kotlin.runCatching { appDb.rssArticleDao.getUnreadOrigins() }
+                    .onFailure { AppLog.put("订阅源未读标记查询失败", it) }
+                    .getOrDefault(emptyList()).toHashSet()
+                adapter.unreadOrigins = unreadOrigins
                 // D1: 二级源标签过滤到单个源（选中标签）/ 全部
                 adapter.setItems(
                     if (selectedRssTag.isNullOrBlank()) sorted
@@ -1316,7 +1326,10 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
             binding.topBar.showTags(false)
             return
         }
-        rssTags.add(RoundedTagBarView.Item(getString(R.string.all_groups), tag = null))
+        rssTags.add(
+            // F29：一级「全部」胶囊带当前筛选范围内的源数（规模信息前置到标签本身）
+            RoundedTagBarView.Item(getString(R.string.rss_tag_all_count, sources.size), tag = null)
+        )
         sources.forEach { src ->
             rssTags.add(RoundedTagBarView.Item(src.sourceName, tag = src.sourceName))
         }

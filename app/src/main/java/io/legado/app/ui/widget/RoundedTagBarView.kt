@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.util.AttributeSet
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.widget.FrameLayout
 import android.widget.TextView
@@ -16,6 +17,7 @@ import io.legado.app.help.config.TopBarConfig
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.lib.theme.themeColorOrNull
 import io.legado.app.lib.theme.themeMutedColorOrDefault
@@ -28,6 +30,14 @@ class RoundedTagBarView @JvmOverloads constructor(
 ) : FrameLayout(context, attrs) {
 
     enum class DisplayMode { CHIP, LIGHT, TEXT }
+
+    /**
+     * 标签层级（F29 两级导航视觉分层）：
+     * - [PRIMARY] 一级胶囊：现状（实心选中底 + 主文字色），用于分组/类型等主导航层级；
+     * - [SECONDARY] 二级 chip：小字号 + accent 细描边弱底，用于挂在层级下的源/类目标签。
+     * 默认 PRIMARY ⇒ 未显式设置的调用方行为完全不变（零回归面）。
+     */
+    enum class TagLevel { PRIMARY, SECONDARY }
 
     data class Item(
         val text: CharSequence,
@@ -57,6 +67,7 @@ class RoundedTagBarView @JvmOverloads constructor(
     private var styleSignature: String? = null
     private var selectedBackgroundVisible = true
     private var displayMode = DisplayMode.CHIP
+    private var tagLevel = TagLevel.PRIMARY
     private var backgroundOverrideColor: Int? = null
 
     init {
@@ -141,6 +152,13 @@ class RoundedTagBarView @JvmOverloads constructor(
     fun setSelectedBackgroundVisible(visible: Boolean) {
         if (selectedBackgroundVisible == visible) return
         selectedBackgroundVisible = visible
+        adapter.notifyDataSetChanged()
+    }
+
+    /** 设置标签层级（F29）；同值幂等，仅触发条目重绘，不影响顶栏包背景/间距等既有单源样式 */
+    fun setTagLevel(level: TagLevel) {
+        if (tagLevel == level) return
+        tagLevel = level
         adapter.notifyDataSetChanged()
     }
 
@@ -243,29 +261,57 @@ class RoundedTagBarView @JvmOverloads constructor(
                     intArrayOf(selectedTextColor, normalTextColor)
                 )
             )
-            return TagViewHolder(textView)
+            return TagViewHolder(textView, textView.textSize)
         }
 
         override fun onBindViewHolder(holder: TagViewHolder, position: Int) {
             val item = items[position]
-            holder.textView.background = UiCorner.actionSelector(
-                android.graphics.Color.TRANSPARENT,
-                when {
-                    !selectedBackgroundVisible -> android.graphics.Color.TRANSPARENT
-                    displayMode == DisplayMode.TEXT -> android.graphics.Color.TRANSPARENT
-                    else -> selectedBackgroundColor
-                },
-                UiCorner.actionRadius(holder.textView.context)
-            )
+            val tagContext = holder.textView.context
+            // F29：二级层级只在 CHIP 形态生效（TEXT 形态本就是无底纯文字，无需再降级）
+            val secondary = tagLevel == TagLevel.SECONDARY && displayMode != DisplayMode.TEXT
+            val accent = tagContext.accentColor
+            holder.textView.background = if (secondary) {
+                UiCorner.actionStrokeSelector(
+                    android.graphics.Color.TRANSPARENT,
+                    ColorUtils.adjustAlpha(accent, SECONDARY_SELECTED_FILL_ALPHA),
+                    UiCorner.actionRadius(tagContext),
+                    1.dp,
+                    ColorUtils.adjustAlpha(accent, SECONDARY_STROKE_ALPHA)
+                )
+            } else {
+                UiCorner.actionSelector(
+                    android.graphics.Color.TRANSPARENT,
+                    when {
+                        !selectedBackgroundVisible -> android.graphics.Color.TRANSPARENT
+                        displayMode == DisplayMode.TEXT -> android.graphics.Color.TRANSPARENT
+                        else -> selectedBackgroundColor
+                    },
+                    UiCorner.actionRadius(tagContext)
+                )
+            }
             val verticalPadding = if (displayMode == DisplayMode.TEXT) 0 else resources.getDimensionPixelSize(R.dimen.bookshelf_tag_recycler_padding_vertical)
             val horizontalPadding = if (displayMode == DisplayMode.TEXT) 8.dp else resources.getDimensionPixelSize(R.dimen.bookshelf_tag_item_padding_horizontal)
             holder.textView.setPadding(horizontalPadding, verticalPadding, horizontalPadding, verticalPadding)
             holder.textView.setTextColor(
                 ColorStateList(
                     arrayOf(intArrayOf(android.R.attr.state_selected), intArrayOf()),
-                    intArrayOf(selectedTextColor, normalTextColor)
+                    if (secondary) {
+                        // 二级：未选中=次级文字色（弱），选中=accent（描边弱底上仍可读）
+                        intArrayOf(accent, tagContext.secondaryTextColor)
+                    } else {
+                        intArrayOf(selectedTextColor, normalTextColor)
+                    }
                 )
             )
+            if (secondary) {
+                // 二级字号单源：以 XML 默认字号为一级基准，二级按其比例缩一档（避免双处硬编码字号）
+                holder.textView.setTextSize(
+                    TypedValue.COMPLEX_UNIT_PX,
+                    holder.defaultTextSizePx * SECONDARY_TEXT_SCALE
+                )
+            } else {
+                holder.textView.setTextSize(TypedValue.COMPLEX_UNIT_PX, holder.defaultTextSizePx)
+            }
             holder.textView.text = item.text
             holder.textView.typeface = holder.textView.context.uiTypeface()
             holder.textView.alpha = item.alpha
@@ -289,7 +335,17 @@ class RoundedTagBarView @JvmOverloads constructor(
         override fun getItemCount(): Int = items.size
     }
 
-    private class TagViewHolder(val textView: TextView) : RecyclerView.ViewHolder(textView)
+    private class TagViewHolder(val textView: TextView, val defaultTextSizePx: Float) :
+        RecyclerView.ViewHolder(textView)
 
     private val Int.dp: Int get() = (this * resources.displayMetrics.density).toInt()
+
+    private companion object {
+        /** 二级层级相对一级的字号比例（一级字号取自 XML，见 TagViewHolder.defaultTextSizePx） */
+        const val SECONDARY_TEXT_SCALE = 0.86f
+        /** 二级描边透明度 */
+        const val SECONDARY_STROKE_ALPHA = 0.45f
+        /** 二级选中弱底透明度 */
+        const val SECONDARY_SELECTED_FILL_ALPHA = 0.18f
+    }
 }

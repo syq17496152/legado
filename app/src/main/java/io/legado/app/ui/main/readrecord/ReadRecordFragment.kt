@@ -531,6 +531,17 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             }.getOrNull()
         }.sortedByDescending { it.date }
         val dailyMap = dailyStats.associate { it.date to it.readTime }
+        // F162（ui-subpage-optimization）：热力图统计摘要的真值来源——最长连续天数与单日最高时长
+        // 均由既有日聚合数据现算（readRecordDailyDao.allDesc），不新增查询、不落库
+        val activeDatesAsc = dailyStats.filter { it.readTime > 0L }.map { it.date }.sorted()
+        var longestStreak = 0
+        var runningStreak = 0
+        activeDatesAsc.forEachIndexed { index, date ->
+            runningStreak =
+                if (index > 0 && date == activeDatesAsc[index - 1].plusDays(1)) runningStreak + 1 else 1
+            if (runningStreak > longestStreak) longestStreak = runningStreak
+        }
+        val maxDayTime = dailyStats.maxOfOrNull { it.readTime } ?: 0L
         val recentBooks = appDb.readRecentBookDao.recentBooks(6)
             .map { book ->
                 RecentReadBook(
@@ -557,7 +568,9 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             rankItems = ReadRecordWidgetStore.buildRankItems(),
             goalConfig = ReadRecordWidgetStore.loadGoalConfig(),
             readBookCount = appDb.readRecordDao.allShow.size,
-            latestRecentReadTime = appDb.readRecentBookDao.latestReadTime() ?: 0L
+            latestRecentReadTime = appDb.readRecentBookDao.latestReadTime() ?: 0L,
+            longestStreak = longestStreak,
+            maxDayTime = maxDayTime
         )
     }
 
@@ -582,6 +595,13 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
         binding.tvHeatmapMonthCenter.text = centerDate.format(monthFormatter)
         binding.tvHeatmapMonthEnd.text = endDate.format(monthFormatter)
         binding.tvHeatmapEmpty.isVisible = !dashboard.hasDailyStats
+        // F162：摘要行只在有日统计时出现（无数据时由既有空态文案承担，复用同一可见性口径）
+        binding.tvHeatmapSummary.isVisible = dashboard.hasDailyStats
+        binding.tvHeatmapSummary.text = getString(
+            R.string.read_record_heatmap_summary,
+            dashboard.longestStreak,
+            formatDuring(dashboard.maxDayTime)
+        )
         currentTodayTime = dashboard.todayTime
         currentTotalTime = dashboard.totalTime
         currentReadBookCount = dashboard.readBookCount
@@ -855,6 +875,9 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
         val totalText = formatDuring(totalTime)
         val goalMs = currentGoalConfig.dailyGoalMinutes * 60L * 1000L
         val percent = if (goalMs <= 0L) 0 else ((todayTime * 100) / goalMs).toInt().coerceIn(0, 100)
+        // F161（ui-subpage-optimization）：达成态用原始时长比较判定（percent 被钳到 100，
+        // 无法反推是否真的达标）；达成后仅切进度文案 + 静态徽标，不做动画/弹窗（克制定位）
+        val achieved = goalMs > 0L && todayTime >= goalMs
         goalUiState.value = ReadRecordGoalUi(
             userName = currentGoalConfig.userName.orEmpty(),
             avatar = currentGoalConfig.avatar,
@@ -862,11 +885,16 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             totalText = getString(R.string.read_record_goal_total, totalText),
             booksText = getString(R.string.read_record_goal_books, readBookCount),
             progressText = getString(
-                R.string.read_record_goal_target_progress,
+                if (achieved) {
+                    R.string.read_record_goal_achieved_hint
+                } else {
+                    R.string.read_record_goal_target_progress
+                },
                 todayText,
                 formatDuring(goalMs)
             ),
-            progressPercent = percent
+            progressPercent = percent,
+            achieved = achieved
         )
     }
 
@@ -879,7 +907,7 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
             R.string.read_record_last_open,
             lastOpenFormatter.format(Date(book.durChapterTime))
         )
-        return parts.joinToString(" 路 ")
+        return parts.joinToString(" · ")
     }
 
     private fun buildDaySubtitle(date: LocalDate): String {
@@ -905,6 +933,7 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
         binding.tvRecordDate.setTextColor(primaryTextColor)
         binding.tvRecordDateHint.setTextColor(secondaryTextColor)
         binding.tvHeatmapSubtitle.setTextColor(secondaryTextColor)
+        binding.tvHeatmapSummary.setTextColor(secondaryTextColor)
         binding.tvHeatmapEmpty.setTextColor(secondaryTextColor)
         binding.tvRecentBooksEmpty.setTextColor(secondaryTextColor)
         binding.tvDailyRecordsEmpty.setTextColor(secondaryTextColor)
@@ -985,7 +1014,11 @@ private data class ReadRecordDashboard(
     val rankItems: List<ReadRecordRankItem>,
     val goalConfig: ReadRecordGoalConfig,
     val readBookCount: Int,
-    val latestRecentReadTime: Long
+    val latestRecentReadTime: Long,
+    /** F162：热力图摘要——最长连续阅读天数 */
+    val longestStreak: Int,
+    /** F162：热力图摘要——单日最高阅读时长（毫秒） */
+    val maxDayTime: Long
 )
 
 private data class RecentReadBook(

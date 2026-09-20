@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,6 +51,7 @@ import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.widget.compose.appSettingPanelBackground
 import io.legado.app.ui.widget.compose.BookCoverImage
 import io.legado.app.ui.widget.compose.releaseComposeImage
+import io.legado.app.ui.widget.components.TagChip
 import io.legado.app.ui.widget.image.CircleImageView
 import io.legado.app.ui.widget.image.CoverImageView
 import androidx.compose.material3.MaterialTheme
@@ -107,7 +109,9 @@ data class ReadRecordGoalUi(
     val totalText: String,
     val booksText: String,
     val progressText: String,
-    val progressPercent: Int
+    val progressPercent: Int,
+    /** F161：今日目标达成态（达成时进度文案与徽标一并切换，见 ReadRecordFragment.renderGoalCard） */
+    val achieved: Boolean = false
 )
 
 @Immutable
@@ -389,16 +393,29 @@ fun ReadRecordGoalCardContent(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Text(
-                    text = ui.todayText,
-                    color = primaryText,
-                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = titleFont,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = if (ui.userName.isBlank()) 0.dp else 4.dp)
-                )
+                Row(
+                    modifier = Modifier.padding(top = if (ui.userName.isBlank()) 0.dp else 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = ui.todayText,
+                        color = primaryText,
+                        fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = titleFont,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    // F161：达成态静态徽标（复用全局 TagChip，不做动画/弹窗）
+                    if (ui.achieved) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        TagChip(
+                            text = stringResource(R.string.read_record_goal_achieved),
+                            color = accent.copy(alpha = 0.16f),
+                            contentColor = accent
+                        )
+                    }
+                }
                 Text(
                     text = ui.progressText,
                     color = secondaryText,
@@ -496,15 +513,29 @@ private fun ReadRecordRecentBookRow(
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
-        Text(
-            text = item.readTime,
-            color = colors.secondaryText,
-            fontSize = MaterialTheme.typography.bodySmall.fontSize,
-            fontFamily = bodyFont,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 12.dp)
-        )
+        Column(
+            modifier = Modifier.padding(start = 12.dp),
+            horizontalAlignment = Alignment.End
+        ) {
+            Text(
+                text = item.readTime,
+                color = colors.secondaryText,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                fontFamily = bodyFont,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            // F162：行尾「续读 ›」——复用整行点击的既有跳转，仅补行动暗示（成就 → 行动回路）
+            Text(
+                text = stringResource(R.string.read_record_continue_reading),
+                color = Color(context.accentColor),
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                fontFamily = bodyFont,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
     }
 }
 

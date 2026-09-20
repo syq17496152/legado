@@ -48,6 +48,20 @@ interface RssArticleDao {
     )
     fun flowByOriginSort(origin: String, sort: String): Flow<List<RssArticle>>
 
+    /**
+     * F28（ui-subpage-optimization）：存在未读文章的订阅源集合（sourceUrl 去重）。
+     *
+     * 未读口径与列表主查询 [flowByOriginSort] 完全一致——rssArticles.read 列无写入方，
+     * 真实已读态由 rssReadRecords（record = link）承担，故「无对应阅读记录」即未读。
+     * 返回量级 = 源数量级，供订阅页源卡未读标记一次性取用（不逐项查询）。
+     */
+    @Query(
+        """select distinct t1.origin from rssArticles as t1
+        left join rssReadRecords as t2 on t1.link = t2.record
+        where t2.record is null"""
+    )
+    suspend fun getUnreadOrigins(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insert(vararg rssArticle: RssArticle)
 

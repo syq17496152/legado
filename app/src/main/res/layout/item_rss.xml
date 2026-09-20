@@ -22,6 +22,18 @@
         app:layout_constraintTop_toTopOf="parent"
         app:radius="12dp" />
 
+    <!-- F28：源卡未读圆点（底色运行时按主题 accent 生成，见 RssAdapter.getViewBinding） -->
+    <View
+        android:id="@+id/dot_unread"
+        android:layout_width="@dimen/rss_unread_dot_size"
+        android:layout_height="@dimen/rss_unread_dot_size"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="4dp"
+        android:contentDescription="@string/rss_source_unread"
+        android:visibility="gone"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <TextView
         android:id="@+id/tv_name"
         android:layout_width="wrap_content"

@@ -1471,6 +1471,8 @@
     <string name="rss_source_count">Source count</string>
     <string name="rss_source_count_format">Total %1$d sources</string>
     <string name="rss_all_sources">All Sources</string>
+    <string name="rss_tag_all_count">All · %1$d sources</string>
+    <string name="rss_source_unread">Unread articles</string>
     <string name="rss_source_selected">Selected source</string>
     <string name="replace_state_change">Replace (enable / disable)</string>
     <string name="show_last_update_time">Show last updated time</string>
@@ -2241,10 +2243,12 @@
     <string name="read_record_empty_daily">No daily stats yet</string>
     <string name="read_record_last_open">Last open %1$s</string>
     <string name="read_record_current_chapter">Current %1$s</string>
+    <string name="read_record_continue_reading">Continue ›</string>
     <string name="read_record_active_days_value">%1$d days</string>
     <string name="read_record_clear_all">Clear all records</string>
     <string name="read_record_placeholder">--</string>
     <string name="read_record_heatmap_range">Last 16 weeks</string>
+    <string name="read_record_heatmap_summary">Longest streak %1$d d · Best day %2$s</string>
     <string name="read_record_today_word">Today</string>
     <string name="read_record_yesterday_word">Yesterday</string>
     <string name="read_record_select_date">Select date</string>
@@ -2274,6 +2278,8 @@
     <string name="read_record_goal_total">Total %1$s</string>
     <string name="read_record_goal_books">Books read %1$d</string>
     <string name="read_record_goal_progress">%1$s / %2$s · %3$d%%</string>
+    <string name="read_record_goal_achieved">Achieved</string>
+    <string name="read_record_goal_achieved_hint">Today\'s target done · %1$s / %2$s</string>
     <string name="read_record_goal_target">Daily goal</string>
     <string name="read_record_goal_minutes">Goal minutes</string>
     <string name="read_record_goal_user_name">User name</string>

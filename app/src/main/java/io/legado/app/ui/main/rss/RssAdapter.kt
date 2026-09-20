@@ -15,6 +15,7 @@ import io.legado.app.databinding.ItemRssBinding
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
 import io.legado.app.lib.theme.UiCorner
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.titleTypeface
 import splitties.views.onLongClick
 import io.legado.app.ui.widget.ModernActionPopup
@@ -28,8 +29,16 @@ class RssAdapter(
 
     private var menuPopup: ModernActionPopup.Handle? = null
 
+    /** F28：存在未读文章的源 URL 集合（由 RssFragment 统一查询后注入，避免逐项查询） */
+    var unreadOrigins: Set<String> = emptySet()
+
     override fun getViewBinding(parent: ViewGroup): ItemRssBinding {
-        return ItemRssBinding.inflate(inflater, parent, false)
+        return ItemRssBinding.inflate(inflater, parent, false).apply {
+            // F28：未读圆点底色（accent 单源 + 半径=尺寸一半，尺寸与布局同源 dimen）
+            val dotSize = context.resources.getDimensionPixelSize(R.dimen.rss_unread_dot_size)
+            dotUnread.background =
+                UiCorner.opaqueRounded(context.accentColor, dotSize / 2f)
+        }
     }
 
     override fun convert(
@@ -43,6 +52,9 @@ class RssAdapter(
             ivIcon.setCornerRadius(UiCorner.actionRadius(context).toInt())
             tvName.typeface = context.titleTypeface()
             tvName.text = item.sourceName
+            // F28：未读圆点（该源存在未读文章时显示；contentDescription 提供无障碍语义与真机可断言锚点）
+            dotUnread.visibility =
+                if (unreadOrigins.contains(item.sourceUrl)) View.VISIBLE else View.GONE
             val options = RequestOptions()
                 .set(OkHttpModelLoader.sourceOriginOption, item.sourceUrl)
             ImageLoader.load(fragment, lifecycle, item.sourceIcon)

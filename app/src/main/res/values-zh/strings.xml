@@ -1402,6 +1402,8 @@
     <string name="rss_source_count">来源数量</string>
     <string name="rss_source_count_format">共 %1$d 个来源</string>
     <string name="rss_all_sources">全部来源</string>
+    <string name="rss_tag_all_count">全部 · %1$d 源</string>
+    <string name="rss_source_unread">有未读文章</string>
     <string name="rss_source_selected">已选源</string>
     <string name="replace_state_change">替换(启用/禁用)</string>
     <string name="show_last_update_time">显示上次更新时间</string>
@@ -1825,10 +1827,12 @@
     <string name="read_record_empty_daily">暂无按日记录</string>
     <string name="read_record_last_open">上次打开 %1$s</string>
     <string name="read_record_current_chapter">当前 %1$s</string>
+    <string name="read_record_continue_reading">续读 ›</string>
     <string name="read_record_active_days_value">%1$d 天</string>
     <string name="read_record_clear_all">清空全部记录</string>
     <string name="read_record_placeholder">--</string>
     <string name="read_record_heatmap_range">最近 16 周</string>
+    <string name="read_record_heatmap_summary">最长连续 %1$d 天 · 单日最高 %2$s</string>
     <string name="read_record_today_word">今天</string>
     <string name="read_record_yesterday_word">昨天</string>
     <string name="read_record_select_date">选择日期</string>
@@ -1858,6 +1862,8 @@
     <string name="read_record_goal_total">累计 %1$s</string>
     <string name="read_record_goal_books">已读书籍 %1$d 本</string>
     <string name="read_record_goal_progress">%1$s / %2$s · %3$d%%</string>
+    <string name="read_record_goal_achieved">已达成</string>
+    <string name="read_record_goal_achieved_hint">今日目标已达成 · %1$s / %2$s</string>
     <string name="read_record_goal_target">每日目标</string>
     <string name="read_record_goal_minutes">目标分钟</string>
     <string name="read_record_goal_user_name">用户名</string>
