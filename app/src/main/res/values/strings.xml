@@ -3030,6 +3030,7 @@ function login() {
 <string name="navigation_bar_package_summary">Tap a bottom bar theme to apply, edit, export, or sync.</string>
 <string name="navigation_bar_package_empty">Only the built-in bottom bar theme is available.</string>
 <string name="navigation_bar_edit">Bottom bar theme</string>
+<string name="navigation_bar_preview">Bottom bar preview</string>
 <string name="navigation_bar_name">Bottom bar theme name</string>
 <string name="navigation_bar_download_first">Download the cloud bottom bar theme before editing.</string>
 <string name="navigation_bar_upload">Upload</string>

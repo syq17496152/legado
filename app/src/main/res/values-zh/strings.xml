@@ -2567,6 +2567,7 @@ bookUrl：%7$s
 <string name="navigation_bar_package_summary">点击底栏主题可应用、编辑、导出或同步。</string>
 <string name="navigation_bar_package_empty">当前只有内置底栏主题。</string>
 <string name="navigation_bar_edit">底栏主题</string>
+<string name="navigation_bar_preview">底栏预览</string>
 <string name="navigation_bar_name">底栏主题名称</string>
 <string name="navigation_bar_download_first">请先下载云端底栏主题再编辑。</string>
 <string name="navigation_bar_upload">上传</string>

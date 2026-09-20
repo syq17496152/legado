@@ -1,5 +1,6 @@
 package io.legado.app.ui.config
 
+import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
@@ -10,11 +11,18 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -46,15 +54,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import com.bumptech.glide.Glide
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import io.legado.app.R
@@ -78,6 +93,7 @@ import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.AppManagementListRow
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
+import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.AppPackageManageItemCard
 import io.legado.app.ui.widget.compose.AppPackageManageScreen
@@ -496,6 +512,7 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
                 initialName = pendingConfig?.name.orEmpty(),
                 rowsProvider = ::buildNavBarEditRows,
                 iconRowsProvider = ::buildNavBarIconRows,
+                previewProvider = ::buildNavBarPreviewState,
                 onSave = { name ->
                     saveEditingPackage(name)
                 }
@@ -504,6 +521,34 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
     }
 
     // W3.2：原 editDialogScrollContainer（ScrollView 高度限制壳）随 View 弹框废弃，滚动由 AppDialogFrame scrollContent 承担
+
+    // F115：迷你预览用的底栏图标（取当前可见项的内置图标，读 prefs 一次即缓存，避免组合期反复读盘）
+    private val previewIconRes: List<Int> by lazy {
+        val visibleKeys = MainBottomNavConfig.visibleItems().map { it.key }
+        MainBottomNavConfig.specs.filter { it.key in visibleKeys }.map { it.iconRes }
+    }
+
+    /**
+     * F115：编辑弹框内嵌迷你预览的数据源。
+     *
+     * 与 [buildNavBarEditRows] 同口径——显式读 `editVersion` 建立重组依赖，
+     * 任一配置行改动（布局/材质/不透明度/边框/壁纸）后 `refreshEditDialog()` 自增即刷新预览。
+     */
+    private fun buildNavBarPreviewState(): NavBarPreviewState {
+        val config = pendingConfig ?: return NavBarPreviewState(iconRes = previewIconRes)
+        editVersion
+        return NavBarPreviewState(
+            layoutMode = config.layoutMode,
+            sidebarGravity = config.sidebarGravity,
+            effectMode = config.effectMode,
+            opacity = config.opacity,
+            borderColor = config.borderColor,
+            borderAlpha = config.borderAlpha,
+            wallpaperPath = config.wallpaperPath,
+            sidebarBackgroundPath = config.sidebarBackgroundPath,
+            iconRes = previewIconRes
+        )
+    }
 
     // W3.2：原 buildEditView(View) 改为行数据构建器，由 NavigationBarEditDialog Compose 渲染。
     // 显式读取 editVersion 建立重组依赖：任意配置修改后 refreshEditDialog 自增即触发行数据重建。
@@ -1279,6 +1324,194 @@ data class NavBarIconRow(
     val previews: List<NavBarIconPreview>
 )
 
+/** F115：底栏迷你预览的渲染状态（纯展示，全部字段来自套装配置，零新增数据源）。 */
+data class NavBarPreviewState(
+    val layoutMode: String = "floating",
+    val sidebarGravity: String = "start",
+    val effectMode: String = "glass",
+    val opacity: Int = 72,
+    val borderColor: Int? = null,
+    val borderAlpha: Int = 100,
+    val wallpaperPath: String? = null,
+    val sidebarBackgroundPath: String? = null,
+    val iconRes: List<Int> = emptyList()
+)
+
+/**
+ * F115：底栏迷你预览条（编辑弹框内嵌，配置行改动即时联动）。
+ *
+ * 简化说明: 未实例化真实 `BottomNavigationView`（View 体系 + 玻璃采样链路，无法在弹框内缩放复用），
+ * 以 Compose 近似渲染蓝图列举的四要素（布局 / 材质 / 不透明度 / 边框）；壁纸按配置路径铺底（透明度透出）
+ * | 已知上限: 玻璃/磨砂以顶部高光渐变近似，非真实背景采样；选中态仅以首个图标 accent 示意；
+ * 「悬浮隐藏搜索键」开关未参与预览（底栏搜索键为独立控件）| 升级路径: 底栏整体 Compose 化后可换真实渲染实例。
+ *
+ * 底衬说明：预览条衬一片**页面底色**（非页面内容模拟）——底栏取色（管理族 row 色）与弹框面板色相近，
+ * 不衬底则不可辨；衬底后「透明度/材质/边框」的差异才可读，这也是本项优化（就地看效果）成立的前提。
+ */
+@Composable
+private fun NavBarMiniPreview(state: NavBarPreviewState, palette: AppManagementPalette) {
+    val previewLabel = stringResource(R.string.navigation_bar_preview)
+    val barAlpha = state.opacity.coerceIn(0, 100) / 100f
+    // 注意：AppSettingPalette.row 是 ARGB Int（非 Compose Color），需显式转换后再叠透明度
+    val baseColor = Color(palette.settings.row).copy(alpha = barAlpha)
+    val highlight = when (state.effectMode) {
+        "glass" -> Brush.verticalGradient(
+            listOf(Color.White.copy(alpha = 0.12f), Color.Transparent)
+        )
+        "frosted" -> Brush.verticalGradient(
+            listOf(Color.White.copy(alpha = 0.22f), Color.Transparent)
+        )
+        else -> null
+    }
+    val stroke = state.borderColor?.let {
+        BorderStroke(1.dp, Color(it).copy(alpha = state.borderAlpha.coerceIn(0, 100) / 100f))
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(84.dp)
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(palette.settings.page)
+            .semantics { contentDescription = previewLabel }
+    ) {
+        when (state.layoutMode) {
+            "sidebar" -> NavBarPreviewBar(
+                modifier = Modifier
+                    .align(
+                        if (state.sidebarGravity == "end") {
+                            Alignment.CenterEnd
+                        } else {
+                            Alignment.CenterStart
+                        }
+                    )
+                    .width(50.dp)
+                    .fillMaxHeight(),
+                shape = RoundedCornerShape(16.dp),
+                baseColor = baseColor,
+                highlight = highlight,
+                stroke = stroke,
+                wallpaperPath = state.sidebarBackgroundPath,
+                iconRes = state.iconRes,
+                vertical = true,
+                palette = palette
+            )
+
+            "standard" -> NavBarPreviewBar(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(palette.miuix.actionRadius ?: 12.dp),
+                baseColor = baseColor,
+                highlight = highlight,
+                stroke = stroke,
+                wallpaperPath = state.wallpaperPath,
+                iconRes = state.iconRes,
+                vertical = false,
+                palette = palette
+            )
+
+            else -> NavBarPreviewBar(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp)
+                    .height(52.dp),
+                shape = RoundedCornerShape(26.dp),
+                baseColor = baseColor,
+                highlight = highlight,
+                stroke = stroke,
+                wallpaperPath = state.wallpaperPath,
+                iconRes = state.iconRes,
+                vertical = false,
+                palette = palette
+            )
+        }
+    }
+}
+
+@Composable
+private fun NavBarPreviewBar(
+    modifier: Modifier,
+    shape: RoundedCornerShape,
+    baseColor: Color,
+    highlight: Brush?,
+    stroke: BorderStroke?,
+    wallpaperPath: String?,
+    iconRes: List<Int>,
+    vertical: Boolean,
+    palette: AppManagementPalette
+) {
+    Box(modifier = modifier.clip(shape)) {
+        // 壁纸铺底：底色带透明度叠加其上，与「底栏不透明度」语义一致
+        wallpaperPath?.takeIf { it.isNotBlank() && File(it).exists() }?.let { path ->
+            AndroidView(
+                factory = { ctx ->
+                    ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+                },
+                update = { iv -> Glide.with(iv).load(File(path)).centerCrop().into(iv) },
+                modifier = Modifier.matchParentSize()
+            )
+        }
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(baseColor)
+                .then(if (highlight != null) Modifier.background(highlight) else Modifier)
+        )
+        if (iconRes.isNotEmpty()) {
+            if (vertical) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.SpaceEvenly,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    iconRes.forEachIndexed { index, res ->
+                        NavBarPreviewIcon(res, index == 0, palette)
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .fillMaxWidth()
+                        .padding(horizontal = 26.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    iconRes.forEachIndexed { index, res ->
+                        NavBarPreviewIcon(res, index == 0, palette)
+                    }
+                }
+            }
+        }
+        if (stroke != null) {
+            Box(modifier = Modifier.matchParentSize().border(stroke, shape))
+        }
+    }
+}
+
+@Composable
+private fun NavBarPreviewIcon(@DrawableRes res: Int, active: Boolean, palette: AppManagementPalette) {
+    // 底栏图标资产含非矢量类型（bitmap/复合 drawable），painterResource 会抛
+    // 「Only VectorDrawables and rasterized asset types are supported」⇒ 走 ImageView 通道
+    // （与页内 NavBarIconPreview 同源做法），并按选中态着色
+    val tint = (if (active) palette.settings.accent else palette.settings.secondaryText).toArgb()
+    AndroidView(
+        factory = { ctx ->
+            ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_INSIDE }
+        },
+        update = { iv ->
+            iv.setImageResource(res)
+            iv.imageTintList = ColorStateList.valueOf(tint)
+        },
+        modifier = Modifier.size(19.dp)
+    )
+}
+
 /**
  * W3.2：底栏主题编辑弹框（替代原 alert{customView=ScrollView 包 buildEditView}，MC-7 合规）
  * 纯壳设计：行数据/图标数据由 Activity provider 提供（读取 Activity.editVersion 建立重组依赖），
@@ -1292,6 +1525,7 @@ class NavigationBarEditDialog : ComposeDialogFragment() {
     private var initialName: String = ""
     private var rowsProvider: (() -> List<NavBarEditRow>)? = null
     private var iconRowsProvider: (() -> List<NavBarIconRow>)? = null
+    private var previewProvider: (() -> NavBarPreviewState)? = null
     private var onSave: ((String) -> Unit)? = null
 
     override fun onCreateView(
@@ -1307,10 +1541,13 @@ class NavigationBarEditDialog : ComposeDialogFragment() {
                     LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
                 ) {
                     var name by rememberSaveable { mutableStateOf(initialName) }
+                    val palette = rememberAppManagementPalette()
                     AppDialogFrame(
                         title = dialogTitle,
                         content = {
                             Column {
+                                // F115：配置行之上先看效果——标题下固定迷你底栏预览条
+                                previewProvider?.invoke()?.let { NavBarMiniPreview(it, palette) }
                                 OutlinedTextField(
                                     value = name,
                                     onValueChange = { name = it },
@@ -1321,7 +1558,6 @@ class NavigationBarEditDialog : ComposeDialogFragment() {
                                         .padding(horizontal = 16.dp, vertical = 4.dp)
                                 )
                                 val rows = rowsProvider?.invoke().orEmpty()
-                                val palette = rememberAppManagementPalette()
                                 rows.forEach { row ->
                                     AppManagementListRow(
                                         title = row.title,
@@ -1400,6 +1636,7 @@ class NavigationBarEditDialog : ComposeDialogFragment() {
             initialName: String,
             rowsProvider: () -> List<NavBarEditRow>,
             iconRowsProvider: () -> List<NavBarIconRow>,
+            previewProvider: (() -> NavBarPreviewState)? = null,
             onSave: (String) -> Unit
         ): NavigationBarEditDialog {
             return NavigationBarEditDialog().apply {
@@ -1407,6 +1644,7 @@ class NavigationBarEditDialog : ComposeDialogFragment() {
                 this.initialName = initialName
                 this.rowsProvider = rowsProvider
                 this.iconRowsProvider = iconRowsProvider
+                this.previewProvider = previewProvider
                 this.onSave = onSave
             }
         }
