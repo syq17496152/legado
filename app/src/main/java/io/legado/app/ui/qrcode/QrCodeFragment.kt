@@ -1,8 +1,10 @@
 package io.legado.app.ui.qrcode
 
+import android.Manifest
 import com.google.zxing.Result
 import com.king.camera.scan.AnalyzeResult
 import com.king.camera.scan.CameraScan
+import com.king.camera.scan.util.PermissionUtils
 import com.king.zxing.BarcodeCameraScanFragment
 import com.king.zxing.DecodeConfig
 import com.king.zxing.DecodeFormatManager
@@ -28,6 +30,32 @@ class QrCodeFragment : BarcodeCameraScanFragment() {
     override fun onScanResultCallback(result: AnalyzeResult<Result>) {
         cameraScan.setAnalyzeImage(false)
         (activity as? QrCodeActivity)?.onScanResultCallback(result.result)
+    }
+
+    /**
+     * 相机权限结果分流。
+     *
+     * 库默认实现：授权失败直接 `requireActivity().finish()` —— 用户被静默抛回调用方，
+     * 既不知道原因也不知道还有相册识别这条替代路径（F189 死态）。
+     * 本页改为把「受限态」上抛给 Activity 显示兜底引导卡；授权成功仍走库原生 [startCamera]。
+     */
+    override fun requestCameraPermissionResult(
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        if (PermissionUtils.requestPermissionsResult(
+                Manifest.permission.CAMERA, permissions, grantResults
+            )
+        ) {
+            startCamera()
+        } else {
+            (activity as? QrCodeActivity)?.onCameraPermissionDenied()
+        }
+    }
+
+    /** F189 授权闭环：用户跳系统设置授权后返回、权限已授予时由 Activity 调用恢复预览 */
+    fun resumeCameraAfterPermissionGranted() {
+        startCamera()
     }
 
 }

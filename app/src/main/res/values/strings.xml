@@ -659,6 +659,17 @@
     <string name="import_by_qr_code">Import from QR code</string>
     <string name="share_selected_source">Share selected sources</string>
     <string name="scan_qr_code">Scan QR code</string>
+    <string name="qr_scan_hint">Align the QR code within the frame to scan automatically</string>
+    <string name="qr_scan_full_area">Full-screen scanning, no need to align the frame</string>
+    <string name="qr_gallery_entry">Pick from gallery</string>
+    <string name="qr_decoding">Recognizing image…</string>
+    <string name="qr_decoding_note">Returns automatically once recognized</string>
+    <string name="qr_decode_succeeded">Recognized</string>
+    <string name="qr_decode_failed_title">No QR code found</string>
+    <string name="qr_decode_failed_desc">The selected image contains no QR code. Try a clearer image.</string>
+    <string name="qr_camera_blocked_title">Camera permission is required to scan</string>
+    <string name="qr_camera_blocked_desc">You can also skip the permission and pick an image containing a QR code from the gallery</string>
+    <string name="qr_camera_blocked_grant">Grant</string>
     <string name="click_on_selected_show_menu">Tap to display Menu when selected </string>
     <string name="theme">Theme</string>
     <string name="theme_mode">Theme mode</string>

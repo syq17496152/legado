@@ -628,6 +628,17 @@
     <string name="import_by_qr_code">二维码导入</string>
     <string name="share_selected_source">分享选中源</string>
     <string name="scan_qr_code">扫描二维码</string>
+    <string name="qr_scan_hint">将二维码对准取景框即可自动识别</string>
+    <string name="qr_scan_full_area">支持全屏识别，无需对齐边框</string>
+    <string name="qr_gallery_entry">从相册识别</string>
+    <string name="qr_decoding">正在识别图片…</string>
+    <string name="qr_decoding_note">识别成功后自动返回</string>
+    <string name="qr_decode_succeeded">已识别</string>
+    <string name="qr_decode_failed_title">未识别到二维码</string>
+    <string name="qr_decode_failed_desc">所选图片中没有二维码，请更换更清晰的图片后重试</string>
+    <string name="qr_camera_blocked_title">需要相机权限才能扫码</string>
+    <string name="qr_camera_blocked_desc">也可以不授权限，直接从相册选择包含二维码的图片进行识别</string>
+    <string name="qr_camera_blocked_grant">去授权</string>
     <string name="click_on_selected_show_menu">选中时点击可弹出菜单</string>
     <string name="theme">主题</string>
     <string name="theme_mode">主题模式</string>
