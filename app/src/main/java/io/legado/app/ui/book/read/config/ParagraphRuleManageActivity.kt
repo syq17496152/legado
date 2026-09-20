@@ -2,9 +2,13 @@ package io.legado.app.ui.book.read.config
 
 import android.graphics.Color
 import android.os.Bundle
+import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.LinearLayout
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -42,6 +46,7 @@ import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.utils.GSON
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.readText
@@ -63,6 +68,9 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
     private var book: Book? = null
     private var enabledIds: Set<Long> = emptySet()
     private var refreshOnResume = false
+
+    /** F51：排序手柄与「长按卡片」共用的拖拽控制器（手柄按下即 startDrag） */
+    private var itemTouchHelper: ItemTouchHelper? = null
 
     private val importDoc = registerForActivityResult(HandleFileContract()) { result ->
         result.uri?.let { uri ->
@@ -161,9 +169,10 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
         recyclerView.layoutManager = LinearLayoutManager(this@ParagraphRuleManageActivity)
         recyclerView.adapter = adapter
         (recyclerView.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
-        ItemTouchHelper(ItemTouchCallback(this@ParagraphRuleManageActivity).apply {
+        // F51：手柄起拖与「长按卡片」共用同一个 ItemTouchHelper（两条入口通向同一排序通道）
+        itemTouchHelper = ItemTouchHelper(ItemTouchCallback(this@ParagraphRuleManageActivity).apply {
             isCanDrag = true
-        }).attachToRecyclerView(recyclerView)
+        }).also { it.attachToRecyclerView(recyclerView) }
         root.applyUiBodyTypefaceDeep(this@ParagraphRuleManageActivity.uiTypeface())
     }
 
@@ -212,6 +221,10 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
     }
 
     private fun importRulesFromUrl(url: String) {
+        // F52 导入进度闭环：慢网络/大文件原先零反馈（用户以为卡死会重复触发）⇒ 摘要位即时切「正在导入规则…」
+        // 并禁用「添加」按钮，结束后按真实状态重写摘要（成功另给「已导入 N 条」计数）
+        binding.tvSummary.text = getString(R.string.paragraph_rule_importing)
+        binding.btnAdd.isEnabled = false
         lifecycleScope.launch {
             kotlin.runCatching {
                 val text = withContext(Dispatchers.IO) {
@@ -219,14 +232,18 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
                 }
                 parseImportedRules(text)
             }.onSuccess { rules ->
+                binding.btnAdd.isEnabled = true
                 if (rules.isEmpty()) {
+                    load()
                     toastOnUi(R.string.wrong_format)
                 } else {
                     withContext(Dispatchers.IO) { insertImportedRules(rules) }
                     load()
-                    toastOnUi(R.string.success)
+                    toastOnUi(getString(R.string.paragraph_rule_imported_count, rules.size))
                 }
             }.onFailure {
+                binding.btnAdd.isEnabled = true
+                load()
                 toastOnUi(it.localizedMessage ?: getString(R.string.wrong_format))
             }
         }
@@ -239,9 +256,12 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
                 appDb.paragraphRuleDao.all()
             }
             adapter.items = rules
+            // F50 空态操作化：两种空态都补「下一步该做什么」的引导（主操作由底部「添加」承担）
             binding.tvSummary.text = when {
-                bookUrl == null -> getString(R.string.paragraph_rule_no_book_hint)
-                rules.isEmpty() -> getString(R.string.paragraph_rule_empty)
+                bookUrl == null -> getString(R.string.paragraph_rule_no_book_hint) + "\n" +
+                        getString(R.string.paragraph_rule_no_book_guide)
+                rules.isEmpty() -> getString(R.string.paragraph_rule_empty) + "\n" +
+                        getString(R.string.paragraph_rule_empty_guide)
                 else -> getString(R.string.paragraph_rule_manage_summary)
             }
         }
@@ -476,6 +496,36 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
                 btnEdit.setOnClickListener { login(rule) }
                 btnMore.setOnClickListener { showActions(rule) }
                 root.setOnClickListener { showActions(rule) }
+                // F51：卡右侧常驻拖拽手柄——「可排序」从隐藏态变可见态；按下手柄即起拖
+                ensureDragHandle().setOnTouchListener { _, event ->
+                    if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                        itemTouchHelper?.startDrag(this@Holder)
+                    }
+                    false
+                }
+            }
+
+            /**
+             * F51：按需把拖拽手柄插到卡右侧（`ic_drag_handle` 为全站既有排序资产）。
+             *
+             * 插入而非改 `item_theme_package.xml`：该布局被多个管理页共用，改布局会外溢；
+             * 插入到本页 Holder 的复用视图上同样只做一次（按 tag 去重）。
+             */
+            private fun ensureDragHandle(): ImageView {
+                val parent = itemBinding.root as LinearLayout
+                parent.findViewWithTag<ImageView>(DRAG_HANDLE_TAG)?.let { return it }
+                return ImageView(this@ParagraphRuleManageActivity).apply {
+                    tag = DRAG_HANDLE_TAG
+                    setImageResource(R.drawable.ic_drag_handle)
+                    setColorFilter(secondaryTextColor)
+                    contentDescription = getString(R.string.paragraph_rule_drag_handle)
+                    setPadding(10.dpToPx(), 0, 2.dpToPx(), 0)
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    ).apply { gravity = Gravity.CENTER_VERTICAL }
+                    parent.addView(this)
+                }
             }
         }
     }
@@ -486,5 +536,10 @@ class ParagraphRuleManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
         COPY(R.string.copy_rule),
         VARS(R.string.paragraph_rule_vars),
         DELETE(R.string.delete)
+    }
+
+    companion object {
+        /** F51：拖拽手柄在复用视图上的去重 tag（同一 Holder 多次 bind 只插一次） */
+        private const val DRAG_HANDLE_TAG = "paragraph_rule_drag_handle"
     }
 }
