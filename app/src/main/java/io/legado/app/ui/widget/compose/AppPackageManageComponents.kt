@@ -14,12 +14,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -58,6 +61,7 @@ fun AppPackageManageScreen(
     modifier: Modifier = Modifier,
     showDayNightTabs: Boolean = true,
     headerContent: LazyListScope.(AppManagementPalette) -> Unit = {},
+    bannerContent: (@Composable () -> Unit)? = null,
     listContent: LazyListScope.(AppManagementPalette) -> Unit
 ) {
     val palette = rememberAppManagementPalette()
@@ -92,6 +96,8 @@ fun AppPackageManageScreen(
                             .padding(start = 16.dp, top = 10.dp, end = 16.dp)
                     )
                 }
+                // F136②：页内回执条（固定位，不随列表滚动；无回执时零占位）
+                bannerContent?.invoke()
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
@@ -178,6 +184,9 @@ fun AppPackageManageItemCard(
     onApply: () -> Unit,
     onEdit: () -> Unit,
     modifier: Modifier = Modifier,
+    applyLoading: Boolean = false,
+    editLoading: Boolean = false,
+    busyText: String = "",
     leadingContent: (@Composable () -> Unit)? = null
 ) {
     AppManagementCard(
@@ -185,6 +194,17 @@ fun AppPackageManageItemCard(
         modifier = modifier.fillMaxWidth(),
         insidePadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
     ) {
+        // F136①：远端套装下载期间的卡片顶部细进度条（阶段态，无需百分比）
+        if (applyLoading || editLoading) {
+            LinearProgressIndicator(
+                color = palette.miuix.accent,
+                trackColor = palette.miuix.surfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -219,15 +239,19 @@ fun AppPackageManageItemCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     AppPackageManageActionButton(
-                        text = applyText,
+                        text = if (applyLoading) busyText else applyText,
                         palette = palette.miuix,
                         selected = isActive,
+                        enabled = !applyLoading && !editLoading,
+                        loading = applyLoading,
                         onClick = onApply
                     )
                     if (canEdit) {
                         AppPackageManageActionButton(
-                            text = editText,
+                            text = if (editLoading) busyText else editText,
                             palette = palette.miuix,
+                            enabled = !applyLoading && !editLoading,
+                            loading = editLoading,
                             onClick = onEdit
                         )
                     }
@@ -248,6 +272,8 @@ fun AppPackageManageActionButton(
     palette: LegadoMiuixPalette,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
+    enabled: Boolean = true,
+    loading: Boolean = false,
     onClick: () -> Unit
 ) {
     val radius = palette.actionRadius ?: 12.dp
@@ -261,7 +287,7 @@ fun AppPackageManageActionButton(
         modifier = modifier
             .widthIn(min = 72.dp)
             .height(34.dp)
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         shape = RoundedCornerShape(radius),
         color = background,
         contentColor = content,
@@ -275,9 +301,18 @@ fun AppPackageManageActionButton(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // F136①：忙态按钮自带转圈，避免「点了没反应」的重复点击
+            if (loading) {
+                CircularProgressIndicator(
+                    color = content,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+            }
             Text(
                 text = text,
-                color = content,
+                color = content.copy(alpha = if (enabled) 1f else 0.45f),
                 fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 maxLines = 1,

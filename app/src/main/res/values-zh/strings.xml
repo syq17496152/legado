@@ -2743,6 +2743,8 @@ bookUrl：%7$s
 <string name="bottom_bar_layout_standard">常规底栏</string>
 <string name="top_bar_manage">顶栏管理</string>
 <string name="top_bar_manage_summary">管理主页面顶栏的日间和夜间样式</string>
+<string name="top_bar_downloading">下载中…</string>
+<string name="top_bar_saved_applied">已保存并应用到当前顶栏 · 全局生效</string>
 <string name="top_bar_edit">编辑顶栏</string>
 <string name="top_bar_name">顶栏名称</string>
 <string name="top_bar_custom_name">自定义顶栏</string>

@@ -3136,6 +3136,8 @@ function login() {
 <string name="bottom_bar_layout_standard">Bottom navigation bar</string>
 <string name="top_bar_manage">Top bar manager</string>
 <string name="top_bar_manage_summary">Manage main page top bar day and night styles</string>
+<string name="top_bar_downloading">Downloading…</string>
+<string name="top_bar_saved_applied">Saved and applied to current top bar · Global</string>
 <string name="top_bar_edit">Edit top bar</string>
 <string name="top_bar_name">Top bar name</string>
 <string name="top_bar_custom_name">Custom top bar</string>

@@ -8,17 +8,25 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
@@ -36,11 +44,13 @@ import io.legado.app.ui.book.cache.WebDavTaskStatus
 import io.legado.app.ui.book.cache.WebDavTaskType
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.image.ImageCropContract
+import io.legado.app.ui.theme.bodyTertiary
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppPackageManageItemCard
 import io.legado.app.ui.widget.compose.AppPackageManageScreen
+import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeNumberPickerDialog
@@ -56,6 +66,7 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -83,6 +94,10 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private var cloudContainerId: String? = null
     // W3.1：S3 容器按钮动态显隐改为 Compose 状态驱动（原 AppCompatImageButton isVisible 方式随顶栏迁移废弃）
     private var containerActionVisible by mutableStateOf(false)
+    // F136①：远端套装下载期间的卡片忙态（key = dirName_isNightMode，值 = 触发该次下载的动作）
+    private var busyStates by mutableStateOf<Map<String, TopBarBusyAction>>(emptyMap())
+    // F136②：保存回执（分级：已保存 / 已保存并全局生效）
+    private var receiptState by mutableStateOf<TopBarSaveReceipt?>(null)
     private val dateFormat by lazy { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
 
     private val importPackage = registerForActivityResult(HandleFileContract()) {
@@ -162,7 +177,11 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     onAdd = ::showAddDialog,
                     onApply = ::applyPackage,
                     onEdit = { entry -> showEditDialog(entry) },
-                    entryActions = ::entryActions
+                    entryActions = ::entryActions,
+                    entryBusy = { entry -> busyStates[entryKey(entry)] },
+                    busyText = stringResource(R.string.top_bar_downloading),
+                    receipt = receiptState,
+                    onReceiptDismiss = { receiptState = null }
                 )
             }
         }
@@ -290,6 +309,18 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         }
     }
 
+    // F136①：卡片忙态 key 与列表 key 同口径（dirName_isNightMode）
+    private fun entryKey(entry: TopBarConfig.Entry): String =
+        "${entry.dirName}_${entry.config.isNightMode}"
+
+    private fun beginBusy(entry: TopBarConfig.Entry, action: TopBarBusyAction) {
+        busyStates = busyStates + (entryKey(entry) to action)
+    }
+
+    private fun endBusy(entry: TopBarConfig.Entry) {
+        busyStates = busyStates - entryKey(entry)
+    }
+
     private fun showEditDialog(entry: TopBarConfig.Entry?) {
         val base = entry ?: TopBarConfig.Entry(
             TopBarConfig.defaultConfig(this, isNightMode).copy(name = nextPackageName()),
@@ -301,6 +332,9 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             return
         }
         if (base.localDir == null && entry != null && base.source == TopBarConfig.Source.REMOTE) {
+            // F136①：远端套装下载期间按钮转忙态，避免无反馈导致连点重复下载
+            if (busyStates.containsKey(entryKey(base))) return
+            beginBusy(base, TopBarBusyAction.EDIT)
             lifecycleScope.launch {
                 kotlin.runCatching {
                     withContext(Dispatchers.IO) {
@@ -311,6 +345,7 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                 }.onFailure {
                     toastOnUi(it.localizedMessage)
                 }
+                endBusy(base)
             }
             return
         }
@@ -629,10 +664,16 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }
 
     private fun applyPackage(entry: TopBarConfig.Entry) {
+        // F136①：仅远端套装需先下载，此期间「应用」按钮转忙态
+        val needsDownload = entry.source == TopBarConfig.Source.REMOTE
+        if (needsDownload) {
+            if (busyStates.containsKey(entryKey(entry))) return
+            beginBusy(entry, TopBarBusyAction.APPLY)
+        }
         lifecycleScope.launch {
             kotlin.runCatching {
                 withContext(Dispatchers.IO) {
-                    if (entry.source == TopBarConfig.Source.REMOTE) {
+                    if (needsDownload) {
                         TopBarConfig.download(entry, cloudContainerId, CLOUD_SCOPE)
                     } else {
                         entry
@@ -646,6 +687,7 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             }.onFailure {
                 toastOnUi(it.localizedMessage)
             }
+            if (needsDownload) endBusy(entry)
         }
     }
 
@@ -796,14 +838,21 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     )
                 }
             }.onSuccess {
-                if (oldEntry?.dirName == TopBarConfig.DEFAULT_DIR_NAME ||
+                // F136②：回执分级——仅当本次保存会即时生效（默认套装 / 当前应用套装）才提示「全局生效」
+                val applied = oldEntry?.dirName == TopBarConfig.DEFAULT_DIR_NAME ||
                     it.dirName == TopBarConfig.activeDirName(it.config.isNightMode)
-                ) {
+                if (applied) {
                     TopBarConfig.apply(it)
                     AppearanceKitManager.syncCurrentTopBarRef(it.config.isNightMode, it)
                     postEvent(EventBus.TOP_BAR_CHANGED, it.config.isNightMode)
                 }
-                toastOnUi(R.string.theme_saved_local)
+                receiptState = TopBarSaveReceipt(
+                    id = System.currentTimeMillis(),
+                    text = getString(
+                        if (applied) R.string.top_bar_saved_applied else R.string.theme_saved_local
+                    ),
+                    applied = applied
+                )
                 loadPackages()
                 if (enqueueUploadIfNeeded(it)) {
                     showTopBarSyncTasks()
@@ -850,6 +899,12 @@ class TopBarManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
 // Compose screen
 
+/** F136①：卡片忙态来源动作（远端套装下载由「应用」还是「编辑」触发）。 */
+private enum class TopBarBusyAction { APPLY, EDIT }
+
+/** F136②：保存回执（[applied] = 保存后是否即时全局生效，决定强调层级）。 */
+private data class TopBarSaveReceipt(val id: Long, val text: String, val applied: Boolean)
+
 @Composable
 private fun TopBarManageScreen(
     entries: List<TopBarConfig.Entry>,
@@ -861,7 +916,11 @@ private fun TopBarManageScreen(
     onAdd: () -> Unit,
     onApply: (TopBarConfig.Entry) -> Unit,
     onEdit: (TopBarConfig.Entry) -> Unit,
-    entryActions: (TopBarConfig.Entry) -> List<AppManagementMenuAction>
+    entryActions: (TopBarConfig.Entry) -> List<AppManagementMenuAction>,
+    entryBusy: (TopBarConfig.Entry) -> TopBarBusyAction?,
+    busyText: String,
+    receipt: TopBarSaveReceipt?,
+    onReceiptDismiss: () -> Unit
 ) {
     val applyText = stringResource(R.string.theme_apply)
     val appliedText = stringResource(R.string.theme_applied_state)
@@ -872,12 +931,18 @@ private fun TopBarManageScreen(
         addText = stringResource(R.string.theme_add),
         onSwitchDayNight = onSwitchDayNight,
         onAdd = onAdd,
+        bannerContent = if (receipt != null) {
+            { TopBarSaveReceiptBanner(receipt, onReceiptDismiss) }
+        } else {
+            null
+        }
     ) { palette ->
         items(
             entries,
             key = { "${it.dirName}_${it.config.isNightMode}" }
         ) { entry ->
             val isActive = entry.dirName == activeDirName
+            val busy = entryBusy(entry)
             AppPackageManageItemCard(
                 title = entry.config.name,
                 info = topBarPackageInfo(entry, dateFormat),
@@ -888,10 +953,36 @@ private fun TopBarManageScreen(
                 moreActions = entryActions(entry),
                 palette = palette,
                 onApply = { onApply(entry) },
-                onEdit = { onEdit(entry) }
+                onEdit = { onEdit(entry) },
+                applyLoading = busy == TopBarBusyAction.APPLY,
+                editLoading = busy == TopBarBusyAction.EDIT,
+                busyText = busyText
             )
         }
     }
+}
+
+/** F136②：保存回执条——应用中套装用 accent 强调，非应用套装走次级文字；3.6s 自动消退。 */
+@Composable
+private fun TopBarSaveReceiptBanner(
+    receipt: TopBarSaveReceipt,
+    onDismiss: () -> Unit
+) {
+    val palette = rememberAppManagementPalette()
+    LaunchedEffect(receipt.id) {
+        delay(3600)
+        onDismiss()
+    }
+    Text(
+        text = receipt.text,
+        color = if (receipt.applied) palette.settings.accent else palette.settings.secondaryText,
+        fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+        fontWeight = if (receipt.applied) FontWeight.SemiBold else FontWeight.Normal,
+        maxLines = 1,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, top = 6.dp, end = 16.dp)
+    )
 }
 
 @Composable
