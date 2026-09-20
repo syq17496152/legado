@@ -143,7 +143,8 @@ class RssSourceEditActivity :
                 positiveText = getString(R.string.yes),
                 negativeText = getString(R.string.no),
                 onPositive = {
-                    viewModel.save(source) { super.finish() }
+                    // F155：退出保存同样走必填校验 + 字段定位（校验不过则留在本页并高亮字段）
+                    saveSource { super.finish() }
                 },
                 onNegative = {
                     super.finish()
@@ -184,7 +185,7 @@ class RssSourceEditActivity :
                             )
                         }
                         IconButton(onClick = {
-                            viewModel.save(getRssSource()) {
+                            saveSource {
                                 setResult(RESULT_OK)
                                 finish()
                             }
@@ -195,7 +196,7 @@ class RssSourceEditActivity :
                             )
                         }
                         IconButton(onClick = {
-                            viewModel.save(getRssSource()) { source ->
+                            saveSource { source ->
                                 startActivity<RssSourceDebugActivity> {
                                     putExtra("key", source.sourceUrl)
                                 }
@@ -225,15 +226,30 @@ class RssSourceEditActivity :
         }
     }
 
+    /**
+     * 溢出菜单（F2 落地第 3 处）：11 项按「用户心智」分四组 + 组标题。
+     *
+     * 分组依据：账户与变量（要登录/要变量的操作）→ 编辑辅助（写规则时的即时开关）→
+     * 导入 · 导出（成对的进出通道，二维码导入与二维码分享相邻）→ 工具（日志/帮助）。
+     */
     private fun buildMenuActions(): List<MenuAction> {
         val actions = mutableListOf<MenuAction>()
+        fun addGroup(@androidx.annotation.StringRes titleRes: Int) {
+            actions += MenuAction(
+                title = getString(titleRes),
+                header = true,
+                onClick = {}
+            )
+        }
+        // 组 1：账户与变量
+        addGroup(R.string.source_menu_group_account)
         // 代码/保存/调试已恢复为一级图标（3.2），不再进入溢出菜单
         if (!getRssSource().loginUrl.isNullOrBlank()) {
             actions += MenuAction(
                 Icons.Filled.Login,
                 getString(R.string.login),
                 onClick = {
-                    viewModel.save(getRssSource()) {
+                    saveSource {
                         startActivity<SourceLoginActivity> {
                             putExtra("type", "rssSource")
                             putExtra("key", it.sourceUrl)
@@ -252,12 +268,16 @@ class RssSourceEditActivity :
             getString(R.string.cookie),
             onClick = { viewModel.clearCookie(getRssSource().sourceUrl) }
         )
+        // 组 2：编辑辅助
+        addGroup(R.string.source_menu_group_edit)
         actions += MenuAction(
             Icons.Filled.ToggleOn,
             getString(R.string.auto_complete),
             checked = viewModel.autoComplete,
             onClick = { viewModel.autoComplete = !viewModel.autoComplete }
         )
+        // 组 3：导入 · 导出（拷贝/粘贴成对，二维码导入/分享成对）
+        addGroup(R.string.source_menu_group_io)
         actions += MenuAction(
             Icons.Filled.ContentCopy,
             getString(R.string.copy_source),
@@ -289,6 +309,8 @@ class RssSourceEditActivity :
                 )
             }
         )
+        // 组 4：工具
+        addGroup(R.string.source_menu_group_tools)
         actions += MenuAction(
             Icons.Filled.History,
             getString(R.string.log),
@@ -299,7 +321,49 @@ class RssSourceEditActivity :
             getString(R.string.help),
             onClick = { showHelp("rssRuleHelp") }
         )
-        return actions.filterNotNull().toList()
+        return actions.toList()
+    }
+
+    /**
+     * F155：保存前必填校验 + 失败定位（返回 false 时已把错误落到字段并切到对应 Tab）。
+     *
+     * 原实现把校验放在 ViewModel（`sourceUrl/sourceName` 空即抛异常）→ 只弹一句 toast，
+     * 用户需自己在 4 个 Tab 数十个字段里找错字段；此处把「定位」补在页面上，校验口径不变。
+     */
+    private fun saveSource(onSaved: (RssSource) -> Unit) {
+        val source = getRssSource()
+        val blankKey = when {
+            source.sourceName.isBlank() -> "sourceName"
+            source.sourceUrl.isBlank() -> "sourceUrl"
+            else -> null
+        }
+        if (blankKey == null) {
+            clearFieldErrors()
+            viewModel.save(source, onSaved)
+            return
+        }
+        locateField(blankKey)
+    }
+
+    /** F155：把错误落到指定字段并滚动到可见位置（必填字段均在「基本」Tab）。 */
+    private fun locateField(key: String) {
+        val entity = sourceEntities.firstOrNull { it.key == key } ?: return
+        sourceEntities.forEach { it.error = null }
+        entity.error = getString(R.string.source_required_hint)
+        binding.tabLayout.selectTab(binding.tabLayout.getTabAt(0))
+        setEditEntities(0)
+        val index = adapter.indexOfKey(key)
+        if (index >= 0) {
+            adapter.notifyItemChanged(index)
+            binding.recyclerView.post { binding.recyclerView.scrollToPosition(index) }
+        }
+    }
+
+    /** F155：清除全部字段错误态（校验通过后再保存，避免红框残留）。 */
+    private fun clearFieldErrors() {
+        if (sourceEntities.none { it.error != null }) return
+        sourceEntities.forEach { it.error = null }
+        adapter.notifyDataSetChanged()
     }
 
     private val textEditLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -442,8 +506,9 @@ class RssSourceEditActivity :
         }
         sourceEntities.clear()
         sourceEntities.apply {
-            add(EditEntity("sourceName", rs.sourceName, R.string.source_name))
-            add(EditEntity("sourceUrl", rs.sourceUrl, R.string.source_url))
+            // F155：sourceName/sourceUrl 是保存校验的必填项（ViewModel.save 口径），label 显式标注
+            add(EditEntity("sourceName", rs.sourceName, R.string.source_name, required = true))
+            add(EditEntity("sourceUrl", rs.sourceUrl, R.string.source_url, required = true))
             add(EditEntity("sourceIcon", rs.sourceIcon, R.string.source_icon))
             add(EditEntity("sourceGroup", rs.sourceGroup, R.string.source_group))
             add(EditEntity("sourceComment", rs.sourceComment, R.string.comment))

@@ -2974,4 +2974,23 @@ bookUrl：%7$s
     <string name="theme_preview">实时预览</string>
     <string name="theme_editor_suggest_palette">壁纸提取配色</string>
     <string name="theme_editor_hex_color">十六进制色值</string><string name="manage_bg_alpha">管理页背景透明度</string>
-    <string name="manage_bg_alpha_summary">0 为不透明（默认原状），100 为完全透明（透出背景底图）；对全部管理页与设置页生效</string></resources>
+    <string name="manage_bg_alpha_summary">0 为不透明（默认原状），100 为完全透明（透出背景底图）；对全部管理页与设置页生效</string>
+    <!-- image/image-gallery 页面优化（M4） -->
+    <string name="image_refresh_running">正在刷新图片…</string>
+    <string name="image_refresh_done">已刷新</string>
+    <string name="image_refresh_failed">刷新失败</string>
+    <string name="image_load_error_network">网络连接失败</string>
+    <string name="image_load_error_parse">图片解析失败</string>
+    <string name="image_load_error_source">订阅源配置异常</string>
+    <string name="image_load_error_hint_network">请检查网络后重试</string>
+    <string name="image_load_error_hint_parse">规则可能已失效，可改用网页模式查看</string>
+    <string name="image_load_error_hint_source">请在编辑订阅源中检查规则</string>
+    <string name="image_back_to_top">返回顶部</string>
+    <string name="image_no_article_link">无文章链接</string>
+    <string name="image_no_current_article">无当前文章</string>
+    <!-- rss/source-edit 页面优化（M4） -->
+    <string name="source_menu_group_account">账户与变量</string>
+    <string name="source_menu_group_edit">编辑辅助</string>
+    <string name="source_menu_group_io">导入 · 导出</string>
+    <string name="source_menu_group_tools">工具</string>
+    <string name="source_required_hint">必填项，不能为空</string></resources>

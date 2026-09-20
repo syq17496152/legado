@@ -5,6 +5,7 @@ import android.graphics.drawable.Drawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.ui.graphics.toArgb
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.Priority
@@ -16,6 +17,7 @@ import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.RequestOptions
 import com.bumptech.glide.request.target.Target
 import com.bumptech.glide.signature.ObjectKey
+import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.databinding.ItemImageCanvasBinding
 import io.legado.app.databinding.ItemImageCanvasDividerBinding
@@ -24,6 +26,7 @@ import io.legado.app.help.glide.OkHttpModelLoader
 import io.legado.app.ui.image.ImageCanvasItem
 import io.legado.app.ui.image.ImagePlay
 import io.legado.app.ui.image.ImagePyramidLoader
+import io.legado.app.ui.widget.compose.AppSemanticColors
 import java.io.File
 
 /**
@@ -53,7 +56,9 @@ class ImageCanvasAdapter(
     /** 降级3 回调：WebView 即时预热（V4 6.1.3） */
     private val onWebViewFallback: (url: String, position: Int) -> Unit = { _, _ -> },
     /** 降级4 回调：网页模式回退（V4 6.1.4） */
-    private val onWebModeFallback: (articleIndex: Int) -> Unit = {}
+    private val onWebModeFallback: (articleIndex: Int) -> Unit = {},
+    /** F179：footer 失败态「返回顶部」逃生口（长画布失败点在最底部） */
+    private val onBackToTop: () -> Unit = {}
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
@@ -65,6 +70,42 @@ class ImageCanvasAdapter(
 
         /** 分页加载触发阈值（剩余未可见项数 ≤ 3 时触发下一篇加载） */
         const val PAGINATION_THRESHOLD = 3
+    }
+
+    /**
+     * F179：footer 失败原因分类。
+     *
+     * 原实现直接把 `Throwable.message` 抛给用户（如「ImageUrlExtractor returned empty list」），
+     * 既不可读也可能带出内部路径。分类后 footer 只呈现「类别 + 下一步」。
+     */
+    enum class ErrorCategory { NETWORK, PARSE, SOURCE }
+
+    /**
+     * F179：按异常链判定失败类别。
+     *
+     * 先沿 cause 链找网络类异常（Glide 会把 OkHttp 异常包在 GlideException.rootCauses 里），
+     * 再按消息语义区分「解析不出图片」与「源本身有问题」。
+     */
+    fun classifyError(error: Throwable): ErrorCategory {
+        var cur: Throwable? = error
+        var depth = 0
+        while (cur != null && depth < 8) {
+            when (cur) {
+                is java.net.UnknownHostException,
+                is java.net.ConnectException,
+                is java.net.SocketTimeoutException,
+                is java.net.NoRouteToHostException,
+                is javax.net.ssl.SSLException,
+                is com.bumptech.glide.load.HttpException -> return ErrorCategory.NETWORK
+            }
+            cur = cur.cause
+            depth++
+        }
+        val msg = error.message.orEmpty()
+        if (msg.contains("empty list", ignoreCase = true) || msg.contains("解析")) {
+            return ErrorCategory.PARSE
+        }
+        return ErrorCategory.SOURCE
     }
 
     /**
@@ -271,7 +312,9 @@ class ImageCanvasAdapter(
             }
             TYPE_LOADING, TYPE_ERROR, TYPE_NO_MORE -> FooterViewHolder(
                 ItemImageCanvasFooterBinding.inflate(inflater, parent, false),
-                onRetryClick
+                onRetryClick,
+                onBackToTop,
+                ::classifyError
             )
             TYPE_ARTICLE_DIVIDER -> ArticleDividerViewHolder(
                 ItemImageCanvasDividerBinding.inflate(inflater, parent, false)
@@ -991,21 +1034,28 @@ class ImageCanvasAdapter(
      * Footer ViewHolder（加载中 / 加载失败 / 没有更多了）
      *
      * 根据 LoadState 切换子 View 可见性
+     *
+     * F179：失败态呈现「类别 + 下一步 + 原地重试 + 返回顶部」，不再直接抛 `Throwable.message`。
      */
     class FooterViewHolder(
         val binding: ItemImageCanvasFooterBinding,
-        private val onRetryClick: () -> Unit
+        private val onRetryClick: () -> Unit,
+        private val onBackToTop: () -> Unit,
+        private val classify: (Throwable) -> ErrorCategory
     ) : RecyclerView.ViewHolder(binding.root) {
 
         init {
             binding.btnRetry.setOnClickListener { onRetryClick() }
+            binding.btnBackToTop.setOnClickListener { onBackToTop() }
         }
 
         fun bind(state: LoadState) {
             // 重置所有子 View 可见性
             binding.progressLoading.visibility = View.GONE
             binding.tvError.visibility = View.GONE
+            binding.tvErrorHint.visibility = View.GONE
             binding.btnRetry.visibility = View.GONE
+            binding.btnBackToTop.visibility = View.GONE
             binding.tvNoMore.visibility = View.GONE
 
             when (state) {
@@ -1013,9 +1063,28 @@ class ImageCanvasAdapter(
                     binding.progressLoading.visibility = View.VISIBLE
                 }
                 is LoadState.ERROR -> {
+                    val ctx = binding.root.context
+                    val category = classify(state.error)
                     binding.tvError.visibility = View.VISIBLE
-                    binding.tvError.text = state.error.message ?: "加载失败"
+                    binding.tvError.text = ctx.getString(
+                        when (category) {
+                            ErrorCategory.NETWORK -> R.string.image_load_error_network
+                            ErrorCategory.PARSE -> R.string.image_load_error_parse
+                            ErrorCategory.SOURCE -> R.string.image_load_error_source
+                        }
+                    )
+                    // 语义色单源（AD-14）：danger 真值只从 AppSemanticColors 取，禁止页内写死色值
+                    binding.tvError.setTextColor(AppSemanticColors.Danger.toArgb())
+                    binding.tvErrorHint.text = ctx.getString(
+                        when (category) {
+                            ErrorCategory.NETWORK -> R.string.image_load_error_hint_network
+                            ErrorCategory.PARSE -> R.string.image_load_error_hint_parse
+                            ErrorCategory.SOURCE -> R.string.image_load_error_hint_source
+                        }
+                    )
+                    binding.tvErrorHint.visibility = View.VISIBLE
                     binding.btnRetry.visibility = View.VISIBLE
+                    binding.btnBackToTop.visibility = View.VISIBLE
                 }
                 is LoadState.NO_MORE -> {
                     binding.tvNoMore.visibility = View.VISIBLE

@@ -54,6 +54,8 @@ import androidx.compose.runtime.setValue
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.InlineTaskBar
+import io.legado.app.ui.widget.components.InlineTaskState
 import io.legado.app.ui.widget.components.MenuAction
 
 /**
@@ -102,6 +104,16 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
 
     /** Compose 顶栏「更多」菜单展开态（L-C15 S5 改造） */
     private var menuExpanded by mutableStateOf(false)
+
+    // ==================== F179：刷新回执任务条 ====================
+    /** 任务条状态（Idle 零占位；Running 转圈；Done 短暂显示后自动消退） */
+    private var refreshTaskState by mutableStateOf(InlineTaskState.Idle)
+    /** 任务条文案（Activity 侧取字符串，避免 Compose 内再拼资源） */
+    private var refreshTaskText by mutableStateOf("")
+    /** 刷新进行中标记：用于把随后的 loadState 结果回执到任务条 */
+    private var isRefreshing = false
+    /** 任务条自动消退任务（重复刷新时先取消上一个，避免提前消退） */
+    private var refreshDismissRunnable: Runnable? = null
 
     // ==================== Phase 3.4: 智能预加载（滚动速度判断） ====================
     /** 上次滚动时间戳（用于计算滚动速度） */
@@ -195,6 +207,11 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
 
     /**
      * Compose 顶栏（L-C15 S5 改造）：GlassTopAppBar + 收藏/刷新图标按钮 + MoreVert 下拉菜单
+     *
+     * F179：刷新回执走顶栏 `secondRow`（**栏内第二行**，随栏底色）——
+     * 本页画布是纯黑沉浸底色，若把任务条挂在栏外会落到黑底上（`InlineTaskBar` 用
+     * `settings.secondaryText/accent` 取色，黑底上不可读）。Idle 时 `InlineTaskBar` 零高度输出，
+     * 顶栏高度口径不变（RecyclerView 的 paddingTop 一次性测量结果不受影响）。
      */
     private fun initComposeTopBar() {
         val title = intent.getStringExtra("title") ?: getString(R.string.image_browse)
@@ -236,6 +253,12 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
                                 actions = buildMenuActions()
                             )
                         }
+                    },
+                    secondRow = {
+                        InlineTaskBar(
+                            state = refreshTaskState,
+                            text = refreshTaskText
+                        )
                     }
                 )
             }
@@ -256,7 +279,7 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
                 if (!link.isNullOrBlank()) {
                     openUrl(link)
                 } else {
-                    toastOnUi("无文章链接")
+                    toastOnUi(getString(R.string.image_no_article_link))
                 }
             }
         )
@@ -276,21 +299,54 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
         if (article != null) {
             showDialogFragment(RssFavoritesDialog(article))
         } else {
-            toastOnUi("无当前文章")
+            toastOnUi(getString(R.string.image_no_current_article))
         }
     }
 
+    /**
+     * 刷新：清 Glide 内存缓存 + 回到首篇重新加载，并以任务条给出全程回执。
+     *
+     * 修复（既有缺陷，非本页优化引入）：原实现只 `notifyDataSetChanged()` + `loadInitialArticle()`，
+     * **未清理画布状态**——`loadArticleInternal` 走 `ImagePlay.appendItems`，在旧列表上继续追加
+     * ⇒ 刷新后同一批图片在画布中重复出现，且 `loadedArticleIndices` 保留导致分页序号错乱。
+     * 现改为：先 `clearImageCanvasState()` 复位数据源与已加载索引，再整体重载。
+     *
+     * F179：原「已刷新」硬编码 toast 且在任何结果前就报成功 ⇒ 改任务条（进行中 → 结果 → 自动消退）。
+     */
     private fun refreshImages() {
-        // 刷新：清 Glide 内存缓存 + 重新加载
         AppLog.putDebugWithTag(
             AppLog.TAG_IMAGE_CANVAS,
             "menu_refresh: clear cache and reload",
             level = AppLog.Level.INFO
         )
         com.bumptech.glide.Glide.get(this).clearMemory()
+        // 复位画布数据源（修复重复追加）+ 允许重新执行「首次插入后回到顶部」
+        ImagePlay.clearImageCanvasState()
+        isInitialScrollDone = false
         canvasAdapter?.notifyDataSetChanged()
+        // 任务条：进行中
+        isRefreshing = true
+        refreshDismissRunnable?.let { binding.composeTopBar.removeCallbacks(it) }
+        refreshDismissRunnable = null
+        refreshTaskText = getString(R.string.image_refresh_running)
+        refreshTaskState = InlineTaskState.Running
         viewModel.loadInitialArticle()
-        toastOnUi("已刷新")
+    }
+
+    /**
+     * F179：刷新结束回执（由 loadState 结果驱动，避免「未完成就报成功」）。
+     *
+     * @param text 结果文案（已刷新 / 刷新失败）
+     */
+    private fun finishRefresh(text: String) {
+        isRefreshing = false
+        refreshTaskText = text
+        refreshTaskState = InlineTaskState.Done
+        refreshDismissRunnable?.let { binding.composeTopBar.removeCallbacks(it) }
+        refreshDismissRunnable = Runnable {
+            refreshTaskState = InlineTaskState.Idle
+            refreshTaskText = ""
+        }.also { binding.composeTopBar.postDelayed(it, 2500) }
     }
 
     /**
@@ -391,7 +447,9 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
                         }
                     }
                 )
-            }
+            },
+            // F179：长画布失败点在最底部，footer 提供原地「返回顶部」逃生口
+            onBackToTop = { binding.recyclerView.smoothScrollToPosition(0) }
         )
         binding.recyclerView.apply {
             // BUG1 fix V2: 使用 OnGlobalLayoutListener 确保在布局完成后获取准确高度
@@ -758,6 +816,18 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
     private fun observeLoadState() {
         viewModel.loadState.observe(this) { state ->
             canvasAdapter?.setLoadState(state)
+            // F179：刷新回执由真实加载结果驱动（LOADING 不结案，成功/失败才结案）
+            if (isRefreshing) {
+                when (state) {
+                    is ImageCanvasAdapter.LoadState.SUCCESS ->
+                        finishRefresh(getString(R.string.image_refresh_done))
+
+                    is ImageCanvasAdapter.LoadState.ERROR ->
+                        finishRefresh(getString(R.string.image_refresh_failed))
+
+                    else -> Unit
+                }
+            }
             // W11: 首次加载成功后触发 WebView 预热（提取图片 URL 域名）
             if (state is ImageCanvasAdapter.LoadState.SUCCESS && !isFirstPreheatCompleted) {
                 val imageUrls = ImagePlay.allImageUrls.value
@@ -1038,6 +1108,9 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
         // Phase 3.4: 清理预加载任务（避免 Activity 销毁后执行）
         preloadRunnable?.let { binding.recyclerView.removeCallbacks(it) }
         preloadRunnable = null
+        // F179: 清理任务条自动消退任务
+        refreshDismissRunnable?.let { binding.composeTopBar.removeCallbacks(it) }
+        refreshDismissRunnable = null
         // V2 O-3: 清理垂直画布状态（避免 Activity 销毁后再次进入继承上次 allImageUrls）
         val clearedSize = ImagePlay.allImageUrls.value.size
         ImagePlay.clearImageCanvasState()

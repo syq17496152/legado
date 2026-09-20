@@ -33,13 +33,36 @@
         android:textSize="@dimen/text_14sp"
         android:visibility="gone" />
 
+    <!-- F179：失败原因分类后的下一步提示（与摘要同源，避免只报错不给路） -->
+    <TextView
+        android:id="@+id/tv_error_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:maxWidth="280dp"
+        android:maxLines="2"
+        android:textColor="@android:color/white"
+        android:textSize="@dimen/text_12sp"
+        android:visibility="gone" />
+
     <Button
         android:id="@+id/btn_retry"
         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:text="重试"
+        android:text="@string/retry"
+        android:textColor="@android:color/white"
+        android:visibility="gone" />
+
+    <!-- F179：长画布失败点在最底部，「返回顶部」是原地逃生口 -->
+    <Button
+        android:id="@+id/btn_back_to_top"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/image_back_to_top"
         android:textColor="@android:color/white"
         android:visibility="gone" />
 
