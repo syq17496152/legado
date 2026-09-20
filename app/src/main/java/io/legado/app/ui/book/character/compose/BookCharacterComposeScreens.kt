@@ -37,7 +37,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -59,6 +58,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -101,6 +101,7 @@ import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.ui.book.read.config.SpeechVoiceRoutePickerDialog
 import io.legado.app.ui.book.read.config.speechRouteSummary
 import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppManagementAction
 import io.legado.app.ui.widget.compose.AppManagementScaffold
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
@@ -290,6 +291,26 @@ fun CharacterManageScreen(
                 ?: BookCharacter.ROLE_MAIN
         )
     }
+    // 引用 F37 常驻搜索：跨三组按「名称 / 身份 / 技能」实时过滤，命中数与总数并列可见。
+    // 复用 AppManagementScaffold 的 secondRow 常驻搜索槽（管理族既有组件，非页内私有实现）。
+    var searchQuery by remember { mutableStateOf("") }
+    val trimmedQuery = searchQuery.trim()
+    val searching = trimmedQuery.isNotEmpty()
+    val searchResults = remember(characters, trimmedQuery) {
+        if (trimmedQuery.isEmpty()) {
+            emptyList()
+        } else {
+            characters.filter { it.matchesQuery(trimmedQuery) }
+        }
+    }
+    // 关系网拦截升级：toast 改为页内可操作提示条（可直达"添加角色"）
+    var showRelationsHint by remember { mutableStateOf(false) }
+    LaunchedEffect(showRelationsHint) {
+        if (showRelationsHint) {
+            delay(4000)
+            showRelationsHint = false
+        }
+    }
     val selectedSection = roleSections.firstOrNull { it.roleLevel == selectedRoleLevel }
         ?: roleSections.first()
     // followup F5：统一管理族壳（AppManagementScaffold 平移；CharacterScaffold 保留供 Card/Edit 页复用）
@@ -299,12 +320,17 @@ fun CharacterManageScreen(
         selectedCount = 0,
         totalCount = characters.size,
         palette = palette,
+        searchQuery = searchQuery,
+        searchHint = "搜索角色名称 / 身份 / 技能",
+        onSearchChange = { searchQuery = it },
         onBack = onBack,
         topActions = listOf(
             AppManagementAction(
                 text = "关系网",
                 iconRes = R.drawable.ic_groups,
-                onClick = onOpenRelations
+                onClick = {
+                    if (characters.size < 2) showRelationsHint = true else onOpenRelations()
+                }
             )
         )
     ) { _ ->
@@ -314,39 +340,128 @@ fun CharacterManageScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp, 10.dp, 18.dp, 112.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
+                if (showRelationsHint) {
+                    item(key = "relations_hint") {
+                        CharacterInlineHint(
+                            text = "至少需要两个角色才能编辑关系网",
+                            actionLabel = "去添加",
+                            onAction = {
+                                showRelationsHint = false
+                                onAdd()
+                            }
+                        )
+                    }
+                }
                 item {
                     CharacterSummaryHeader(
                         count = characters.size,
                         onAdd = onAdd
                     )
                 }
-                if (characters.isEmpty()) {
-                    item { EmptyCharacterCard("还没有角色，先添加主角或重要角色。") }
-                } else if (selectedSection.items.isEmpty()) {
-                    item(key = "section_${selectedSection.roleLevel}") {
-                        CharacterRoleSectionHeader(selectedSection.title, 0)
+                when {
+                    characters.isEmpty() -> {
+                        item {
+                            EmptyCharacterCard(
+                                text = "还没有角色，先添加主角或重要角色。",
+                                actionLabel = "＋ 添加角色",
+                                onAction = onAdd
+                            )
+                        }
                     }
-                    item { EmptyCharacterCard("这个分类还没有角色。") }
-                } else {
-                    item(key = "section_${selectedSection.roleLevel}") {
-                        CharacterRoleSectionHeader(selectedSection.title, selectedSection.items.size)
+                    // 搜索态：跨三组平铺命中结果（不再受当前 Tab 限制），并显式给出命中/总数
+                    searching -> {
+                        item(key = "search_header") {
+                            CharacterRoleSectionHeader(
+                                title = "搜索结果",
+                                count = searchResults.size
+                            )
+                        }
+                        if (searchResults.isEmpty()) {
+                            item {
+                                EmptyCharacterCard("没有匹配「$trimmedQuery」的角色。")
+                            }
+                        } else {
+                            items(searchResults, key = { it.id }) { character ->
+                                CharacterListCard(
+                                    character = character,
+                                    onClick = { onOpenCard(character) },
+                                    onEdit = { onEdit(character) },
+                                    onDelete = { onDelete(character) }
+                                )
+                            }
+                        }
                     }
-                    items(selectedSection.items, key = { it.id }) { character ->
-                        CharacterListCard(
-                            character = character,
-                            onClick = { onOpenCard(character) },
-                            onEdit = { onEdit(character) },
-                            onDelete = { onDelete(character) }
-                        )
+                    selectedSection.items.isEmpty() -> {
+                        item(key = "section_${selectedSection.roleLevel}") {
+                            CharacterRoleSectionHeader(selectedSection.title, 0)
+                        }
+                        item {
+                            EmptyCharacterCard(
+                                text = "这个分类还没有角色。",
+                                actionLabel = "＋ 添加角色",
+                                onAction = onAdd
+                            )
+                        }
+                    }
+                    else -> {
+                        item(key = "section_${selectedSection.roleLevel}") {
+                            CharacterRoleSectionHeader(selectedSection.title, selectedSection.items.size)
+                        }
+                        items(selectedSection.items, key = { it.id }) { character ->
+                            CharacterListCard(
+                                character = character,
+                                onClick = { onOpenCard(character) },
+                                onEdit = { onEdit(character) },
+                                onDelete = { onDelete(character) }
+                            )
+                        }
                     }
                 }
             }
-            CharacterRoleBottomTabs(
-                sections = roleSections,
-                selectedRoleLevel = selectedRoleLevel,
-                onSelect = { selectedRoleLevel = it },
-                modifier = Modifier.align(Alignment.BottomCenter)
+            // 搜索态下角色分组 Tab 无意义（结果已跨组平铺），隐藏以免误导
+            if (!searching) {
+                CharacterRoleBottomTabs(
+                    sections = roleSections,
+                    selectedRoleLevel = selectedRoleLevel,
+                    onSelect = { selectedRoleLevel = it },
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
+            }
+        }
+    }
+}
+
+/** 角色搜索匹配判据（名称 / 身份 / 技能，忽略大小写） */
+private fun BookCharacter.matchesQuery(query: String): Boolean {
+    return displayName().contains(query, ignoreCase = true) ||
+        identity.contains(query, ignoreCase = true) ||
+        skills.contains(query, ignoreCase = true)
+}
+
+/** 页内可操作提示条（替代一次性 toast）：文案 + 一个直达动作，自动消退 */
+@Composable
+private fun CharacterInlineHint(
+    text: String,
+    actionLabel: String,
+    onAction: () -> Unit
+) {
+    val style = rememberCharacterStyle()
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = style.colors.accent.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(style.smallRadius)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = text,
+                color = style.colors.accent,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                modifier = Modifier.weight(1f)
             )
+            SmallAction(text = actionLabel, onClick = onAction)
         }
     }
 }
@@ -580,18 +695,23 @@ private fun CharacterMoreDialog(
     onDelete: () -> Unit
 ) {
     val style = rememberCharacterStyle()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(style.radius),
-        containerColor = style.colors.card,
-        title = { Text(character.displayName(), color = style.colors.text) },
-        text = {
+    val palette = style.toCharacterMiuixPalette()
+    // 弹框族收口（B2.2 M2）：裸 M3 AlertDialog → AppDialogFrame（统一遮罩/层级/无障碍壳）
+    AppDialogFrame(
+        title = character.displayName(),
+        content = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 MoreActionRow("编辑角色", "修改头像、身份、技能和生平", onEdit)
                 MoreActionRow("删除角色", "同时删除与此角色相关的关系", onDelete, danger = true)
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭", color = style.colors.accent) } }
+        actions = {
+            LegadoMiuixActionButton(
+                text = "关闭",
+                palette = palette,
+                onClick = onDismiss
+            )
+        }
     )
 }
 
@@ -623,7 +743,10 @@ fun CharacterCardScreen(
     onBack: () -> Unit,
     onEdit: () -> Unit,
     speechEngines: List<CharacterSpeechEngineUi> = emptyList(),
-    onSpeechRouteChange: (String) -> Unit = {}
+    onSpeechRouteChange: (String) -> Unit = {},
+    /** F50 角色关系跨页直达：本角色直接关系数（0 也保留入口，作为"去建关系"的动线） */
+    relationCount: Int = 0,
+    onOpenRelations: () -> Unit = {}
 ) {
     val style = rememberCharacterStyle()
     CharacterScaffold(
@@ -647,13 +770,22 @@ fun CharacterCardScreen(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(18.dp, 10.dp, 18.dp, 24.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            item { CharacterHeroCard(character, speechEngines, onSpeechRouteChange) }
-            item { CharacterSection("身份", character.identity) }
-            item { CharacterSection("技能", character.skills, minHeight = 112.dp) }
-            item { CharacterSection("属性", character.attributes, minHeight = 112.dp) }
-            item { CharacterSection("形象描述", character.appearance) }
-            item { CharacterSection("性格描述", character.personality) }
-            item { CharacterSection("角色生平", character.biography) }
+            item { CharacterHeroCard(character, speechEngines, onSpeechRouteChange, relationCount, onOpenRelations) }
+            // F49 空区块折叠收纳：把"未填写"从三倍噪音收成一张收纳条，点按展开
+            item {
+                val emptySections = listOf(
+                    "身份" to character.identity,
+                    "技能" to character.skills,
+                    "属性" to character.attributes,
+                    "形象描述" to character.appearance,
+                    "性格描述" to character.personality,
+                    "角色生平" to character.biography
+                ).filter { it.second.isBlank() }.map { it.first }
+                CollapsibleCharacterSections(
+                    character = character,
+                    emptySectionNames = emptySections
+                )
+            }
         }
     }
 }
@@ -662,7 +794,9 @@ fun CharacterCardScreen(
 private fun CharacterHeroCard(
     character: BookCharacter,
     speechEngines: List<CharacterSpeechEngineUi>,
-    onSpeechRouteChange: (String) -> Unit
+    onSpeechRouteChange: (String) -> Unit,
+    relationCount: Int = 0,
+    onOpenRelations: () -> Unit = {}
 ) {
     val style = rememberCharacterStyle()
     Box(
@@ -757,6 +891,53 @@ private fun CharacterHeroCard(
                 speechRouteJson = character.speechRouteJson,
                 speechEngines = speechEngines,
                 onChange = onSpeechRouteChange
+            )
+            // F50 角色关系跨页直达：从"看角色"到"看这个角色的关系"一步可达，
+            // 且关系网以本角色为中心打开（不再落到默认主角视角）
+            CharacterRelationEntry(
+                relationCount = relationCount,
+                onClick = onOpenRelations
+            )
+        }
+    }
+}
+
+@Composable
+private fun CharacterRelationEntry(
+    relationCount: Int,
+    onClick: () -> Unit
+) {
+    val style = rememberCharacterStyle()
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        color = style.colors.page.copy(alpha = 0.58f),
+        shape = RoundedCornerShape(style.smallRadius),
+        border = androidx.compose.foundation.BorderStroke(1.dp, style.colors.stroke)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "角色关系",
+                color = style.colors.text,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = if (relationCount > 0) "$relationCount 条直接关系" else "还没有关系",
+                color = style.colors.subText,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize
+            )
+            Text(
+                text = "›",
+                color = style.colors.accent,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                modifier = Modifier.padding(start = 8.dp)
             )
         }
     }
@@ -858,6 +1039,76 @@ private fun CharacterSection(
     }
 }
 
+/**
+ * F49 空区块折叠收纳：非空区块照常展示；空区块默认收成一张「N 个区块未填写」收纳条，
+ * 点按展开为原 [CharacterSection]（保持原呈现与字段语义，仅改变"未填写"的默认噪音占比）。
+ */
+@Composable
+private fun CollapsibleCharacterSections(
+    character: BookCharacter,
+    emptySectionNames: List<String>
+) {
+    var expanded by remember(character.id) { mutableStateOf(false) }
+    val sections = listOf(
+        Triple("身份", character.identity, 0.dp),
+        Triple("技能", character.skills, 112.dp),
+        Triple("属性", character.attributes, 112.dp),
+        Triple("形象描述", character.appearance, 0.dp),
+        Triple("性格描述", character.personality, 0.dp),
+        Triple("角色生平", character.biography, 0.dp)
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        sections.filter { it.second.isNotBlank() }.forEach { (label, value, minHeight) ->
+            CharacterSection(label, value, minHeight)
+        }
+        if (emptySectionNames.isNotEmpty()) {
+            if (expanded) {
+                sections.filter { it.second.isBlank() }.forEach { (label, value, minHeight) ->
+                    CharacterSection(label, value, minHeight)
+                }
+            }
+            EmptySectionCollapseBar(
+                count = emptySectionNames.size,
+                expanded = expanded,
+                onToggle = { expanded = !expanded }
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptySectionCollapseBar(
+    count: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    val style = rememberCharacterStyle()
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle),
+        color = style.colors.card.copy(alpha = 0.6f),
+        shape = RoundedCornerShape(style.radius)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = "$count 个区块未填写",
+                color = style.colors.subText,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = if (expanded) "收起 ▴" else "展开 ▾",
+                color = style.colors.accent,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize
+            )
+        }
+    }
+}
+
 @Composable
 fun CharacterEditScreen(
     title: String,
@@ -870,14 +1121,21 @@ fun CharacterEditScreen(
     onPickOnlineAvatar: () -> Unit,
     onPickGalleryAvatar: () -> Unit,
     onRegenerateAvatar: () -> Unit,
-    onClearAvatar: () -> Unit
+    onClearAvatar: () -> Unit,
+    /** F52 保存中：按钮转「保存…」并禁用，避免重复提交（in-flight 由宿主持有） */
+    saving: Boolean = false
 ) {
     val style = rememberCharacterStyle()
     CharacterScaffold(
         title = title,
         onBack = onBack,
         actions = {
-            TextButton(onClick = onSave) { Text("保存", color = style.colors.accent) }
+            TextButton(onClick = onSave, enabled = !saving) {
+                Text(
+                    text = if (saving) "保存…" else "保存",
+                    color = if (saving) style.colors.subText else style.colors.accent
+                )
+            }
         }
     ) {
         LazyColumn(
@@ -913,16 +1171,21 @@ fun CharacterEditScreen(
                     }
                 }
             }
-            item { CharacterTextField("角色名称", draft.name, { onDraftChange(draft.copy(name = it)) }, singleLine = true) }
+            // F51 长表单分区收纳：把 11 个字段按「改什么」分三节，长表单可扫读；
+            // 唯一必填项（角色名称）加「必填」徽标，免去保存后才知道哪里没填
+            item { CharacterFormSectionTitle("基础信息") }
+            item { CharacterTextField("角色名称", draft.name, { onDraftChange(draft.copy(name = it)) }, singleLine = true, required = true) }
             item { RoleSelector(draft.roleLevel) { onDraftChange(draft.copy(roleLevel = it)) } }
             item { GenderSelector(draft.gender) { onDraftChange(draft.copy(gender = it)) } }
             item { CharacterTextField("角色年纪", draft.age, { onDraftChange(draft.copy(age = it)) }, singleLine = true) }
             item { CharacterTextField("角色身份", draft.identity, { onDraftChange(draft.copy(identity = it)) }, singleLine = true) }
+            item { CharacterFormSectionTitle("人物设定") }
             item { CharacterTextField("角色技能", draft.skills, { onDraftChange(draft.copy(skills = it)) }) }
             item { CharacterTextField("角色属性", draft.attributes, { onDraftChange(draft.copy(attributes = it)) }) }
             item { CharacterTextField("角色形象描述", draft.appearance, { onDraftChange(draft.copy(appearance = it)) }) }
             item { CharacterTextField("角色性格描述", draft.personality, { onDraftChange(draft.copy(personality = it)) }) }
             item { CharacterTextField("角色生平", draft.biography, { onDraftChange(draft.copy(biography = it)) }, minLines = 5) }
+            item { CharacterFormSectionTitle("朗读配置") }
             item {
                 CharacterSpeechRouteEditor(
                     speechRouteJson = draft.speechRouteJson,
@@ -932,6 +1195,19 @@ fun CharacterEditScreen(
             }
         }
     }
+}
+
+/** F51 表单分区标题（长表单分节用，非折叠——正则/校验状态需常显） */
+@Composable
+private fun CharacterFormSectionTitle(text: String) {
+    val style = rememberCharacterStyle()
+    Text(
+        text = text,
+        color = style.colors.accent,
+        fontSize = MaterialTheme.typography.bodySmall.fontSize,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+    )
 }
 
 @Composable
@@ -1090,13 +1366,33 @@ private fun CharacterTextField(
     value: String,
     onChange: (String) -> Unit,
     singleLine: Boolean = false,
-    minLines: Int = 2
+    minLines: Int = 2,
+    /** F51 必填标识：字段标签后追加「必填」徽标（本页唯一必填项 = 角色名称） */
+    required: Boolean = false
 ) {
     val style = rememberCharacterStyle()
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
-        label = { Text(label) },
+        label = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(label)
+                if (required) {
+                    Surface(
+                        color = style.colors.danger.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(style.smallRadius),
+                        modifier = Modifier.padding(start = 6.dp)
+                    ) {
+                        Text(
+                            text = "必填",
+                            color = style.colors.danger,
+                            fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+            }
+        },
         singleLine = singleLine,
         minLines = if (singleLine) 1 else minLines,
         modifier = Modifier.fillMaxWidth(),
@@ -1858,26 +2154,37 @@ private fun RelationDetailDialog(
     onEdit: () -> Unit
 ) {
     val style = rememberCharacterStyle()
+    val palette = style.toCharacterMiuixPalette()
     val from = characters.firstOrNull { it.id == relation.fromCharacterId }?.displayName().orEmpty()
     val to = characters.firstOrNull { it.id == relation.toCharacterId }?.displayName().orEmpty()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(style.radius),
-        containerColor = style.colors.card,
-        title = { Text(relation.displayName()) },
-        text = {
-            Column {
-                Text("$from → $to")
-                Text("属性：${relation.relationType.ifBlank { "未填写" }}")
-                Text("强度：${relation.strength}")
+    // 弹框族收口（B2.2 M2）：裸 M3 AlertDialog → AppDialogFrame（统一遮罩/层级/无障碍壳）
+    AppDialogFrame(
+        title = relation.displayName(),
+        content = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("$from → $to", color = style.colors.text)
+                Text("属性：${relation.relationType.ifBlank { "未填写" }}", color = style.colors.subText)
+                Text("强度：${relation.strength}", color = style.colors.subText)
                 if (relation.description.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
-                    Text(relation.description)
+                    Text(relation.description, color = style.colors.text)
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onEdit) { Text("编辑") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
+        actions = {
+            LegadoMiuixActionButton(
+                text = "关闭",
+                palette = palette,
+                onClick = onDismiss
+            )
+            Spacer(Modifier.width(8.dp))
+            LegadoMiuixActionButton(
+                text = "编辑",
+                palette = palette,
+                onClick = onEdit,
+                primary = true
+            )
+        }
     )
 }
 
@@ -1945,6 +2252,10 @@ private fun RelationEditSheet(
                     }
                 }
                 item { CharacterTextField("关系名称", editing.relationName, { editing = editing.copy(relationName = it) }, singleLine = true) }
+                // F53 关系名称快捷词：常见关系一键填入，填入后仍可继续编辑（不锁死取值）
+                item {
+                    RelationNameSuggestions { editing = editing.copy(relationName = it) }
+                }
                 item { CharacterTextField("关系属性", editing.relationType, { editing = editing.copy(relationType = it) }, singleLine = true) }
                 item {
                     Column {
@@ -2016,6 +2327,35 @@ private fun CharacterBackHandler(onBack: () -> Unit) {
 }
 
 @Composable
+private fun RelationNameSuggestions(onPick: (String) -> Unit) {
+    val style = rememberCharacterStyle()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        RelationNamePresets.forEach { name ->
+            Surface(
+                modifier = Modifier.clickable { onPick(name) },
+                color = style.colors.accent.copy(alpha = 0.12f),
+                shape = RoundedCornerShape(style.smallRadius)
+            ) {
+                Text(
+                    text = name,
+                    color = style.colors.accent,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
+                )
+            }
+        }
+    }
+}
+
+/** F53 关系名称快捷词（原型指定 6 个；填入后仍可编辑） */
+private val RelationNamePresets = listOf("亲子", "师徒", "兄弟", "敌对", "同门", "恋人")
+
+@Composable
 private fun CharacterSelectField(
     label: String,
     selected: BookCharacter?,
@@ -2076,12 +2416,11 @@ private fun CharacterSelectDialog(
     onSelect: (Long) -> Unit
 ) {
     val style = rememberCharacterStyle()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(style.radius),
-        containerColor = style.colors.card,
-        title = { Text(title, color = style.colors.text) },
-        text = {
+    val palette = style.toCharacterMiuixPalette()
+    // 弹框族收口（B2.2 M2）：裸 M3 AlertDialog → AppDialogFrame（统一遮罩/层级/无障碍壳）
+    AppDialogFrame(
+        title = title,
+        content = {
             LazyColumn(
                 modifier = Modifier.heightIn(max = 420.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -2132,7 +2471,13 @@ private fun CharacterSelectDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭", color = style.colors.accent) } }
+        actions = {
+            LegadoMiuixActionButton(
+                text = "关闭",
+                palette = palette,
+                onClick = onDismiss
+            )
+        }
     )
 }
 
@@ -2172,7 +2517,11 @@ private fun SmallAction(text: String, onClick: () -> Unit, danger: Boolean = fal
 }
 
 @Composable
-fun EmptyCharacterCard(text: String) {
+fun EmptyCharacterCard(
+    text: String,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null
+) {
     val style = rememberCharacterStyle()
     Surface(
         modifier = Modifier
@@ -2181,12 +2530,21 @@ fun EmptyCharacterCard(text: String) {
         color = style.colors.card,
         shape = RoundedCornerShape(style.radius)
     ) {
-        Text(
-            text = text,
-            color = style.colors.subText,
-            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(22.dp)
-        )
+        ) {
+            Text(
+                text = text,
+                color = style.colors.subText,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                modifier = Modifier.weight(1f)
+            )
+            // 空分组就地引导（引用 F1）：把"死胡同"变成可立即脱困的入口
+            if (actionLabel != null && onAction != null) {
+                SmallAction(text = actionLabel, onClick = onAction)
+            }
+        }
     }
 }
 

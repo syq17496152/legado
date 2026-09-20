@@ -11,6 +11,7 @@ import androidx.viewbinding.ViewBinding
 import io.legado.app.base.BaseActivity
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookCharacter
+import io.legado.app.help.character.BookCharacterIdentityMigrator
 import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
 import io.legado.app.help.readaloud.speech.SpeechVoiceCatalogRepository
 import io.legado.app.ui.book.character.compose.CharacterCardScreen
@@ -37,6 +38,8 @@ class BookCharacterCardActivity : BaseActivity<ViewBinding>(
     private var characterId: Long = 0L
     private var character by mutableStateOf<BookCharacter?>(null)
     private var speechEngines by mutableStateOf<List<CharacterSpeechEngineUi>>(emptyList())
+    /** F50：本角色直接关系数（关系网入口徽标；从既有 relations 查询派生，零新增存储） */
+    private var directRelationCount by mutableStateOf(0)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         bookUrl = intent.getStringExtra(BookCharacterManageActivity.EXTRA_BOOK_URL).orEmpty()
@@ -49,7 +52,9 @@ class BookCharacterCardActivity : BaseActivity<ViewBinding>(
                 onBack = ::finish,
                 onEdit = ::openEdit,
                 speechEngines = speechEngines,
-                onSpeechRouteChange = ::updateSpeechRoute
+                onSpeechRouteChange = ::updateSpeechRoute,
+                relationCount = directRelationCount,
+                onOpenRelations = ::openRelations
             )
         }
         load()
@@ -68,10 +73,20 @@ class BookCharacterCardActivity : BaseActivity<ViewBinding>(
         }
         lifecycleScope.launch {
             val data = withContext(IO) {
-                appDb.bookCharacterDao.getCharacter(characterId) to
+                val key = characterBookKey.ifBlank {
+                    BookCharacterIdentityMigrator.migrate(appDb.bookDao.getBook(bookUrl))
+                }
+                characterBookKey = key
+                val relations = appDb.bookCharacterDao.relations(key)
+                Triple(
+                    appDb.bookCharacterDao.getCharacter(characterId),
                     SpeechVoiceCatalogRepository
                         .allGroups(applicationContext, appDb.httpTTSDao.all)
-                        .map { CharacterSpeechEngineUi(it) }
+                        .map { CharacterSpeechEngineUi(it) },
+                    relations.count {
+                        it.fromCharacterId == characterId || it.toCharacterId == characterId
+                    }
+                )
             }
             val item = data.first
             if (item == null) {
@@ -81,6 +96,17 @@ class BookCharacterCardActivity : BaseActivity<ViewBinding>(
             }
             character = item
             speechEngines = data.second
+            directRelationCount = data.third
+        }
+    }
+
+    /** F50 角色关系跨页直达：直达关系网并以本角色为中心（复用既有 EXTRA_CENTER_ID 通道） */
+    private fun openRelations() {
+        if (characterId <= 0L) return
+        startActivity<BookCharacterRelationActivity> {
+            putExtra(BookCharacterManageActivity.EXTRA_BOOK_URL, bookUrl.ifBlank { character?.bookUrl.orEmpty() })
+            putExtra(BookCharacterManageActivity.EXTRA_CHARACTER_BOOK_KEY, characterBookKey)
+            putExtra(BookCharacterRelationActivity.EXTRA_CENTER_ID, characterId)
         }
     }
 

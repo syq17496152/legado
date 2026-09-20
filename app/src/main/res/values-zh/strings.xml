@@ -1899,6 +1899,7 @@
     <string name="theme_manual_add">手动添加主题</string>
     <string name="theme_edit">编辑主题</string>
     <string name="theme_package_summary_default">主题包独立保存，可同步到 WebDAV themes 目录。</string>
+    <string name="theme_package_grid_load_failed">主题包加载失败</string>
     <string name="theme_package_empty">暂无主题。添加会保存当前%s主题。</string>
     <string name="theme_package_load_failed">读取失败：%s</string>
     <string name="theme_package_cloud_load_failed">云端读取失败：%s</string>

@@ -17,6 +17,7 @@ import io.legado.app.help.character.BookCharacterIdentityMigrator
 import io.legado.app.ui.book.character.compose.CharacterRelationScreen
 import io.legado.app.ui.book.character.compose.RelationEditDraft
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
+import io.legado.app.utils.ACache
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
@@ -42,9 +43,31 @@ class BookCharacterRelationActivity : BaseActivity<ViewBinding>(
     private var selectedRelation by mutableStateOf<BookCharacterRelation?>(null)
     private var editingRelation by mutableStateOf<RelationEditDraft?>(null)
 
+    /** F50：跨页直达时指定的中心角色（一次性生效，不覆盖用户后续切换） */
+    private var requestedCenterId: Long = 0L
+
+    /** F54 中心视角记忆键：按书（characterBookKey）隔离 */
+    private fun centerMemoryKey(): String = "character_relation_center_$characterBookKey"
+
+    /** F54：切换中心时落盘，下次进页恢复（ACache 为项目既有的页面态持久化通道） */
+    private fun selectCenter(centerId: Long) {
+        selectedCenterId = centerId
+        if (characterBookKey.isNotBlank() && centerId > 0L) {
+            ACache.get().put(centerMemoryKey(), centerId.toString())
+        }
+    }
+
+    /** F54：读回上次中心（无记录返回 0） */
+    private fun rememberedCenterId(): Long {
+        if (characterBookKey.isBlank()) return 0L
+        return ACache.get().getAsString(centerMemoryKey())?.toLongOrNull() ?: 0L
+    }
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         bookUrl = intent.getStringExtra(BookCharacterManageActivity.EXTRA_BOOK_URL).orEmpty()
         characterBookKey = intent.getStringExtra(BookCharacterManageActivity.EXTRA_CHARACTER_BOOK_KEY).orEmpty()
+        // F50：由角色卡片页带入的中心角色（跨页直达时以该角色为中心）
+        requestedCenterId = intent.getLongExtra(EXTRA_CENTER_ID, 0L)
         composeView.setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         composeView.setContent {
             CharacterRelationScreen(
@@ -59,7 +82,7 @@ class BookCharacterRelationActivity : BaseActivity<ViewBinding>(
                 onDeleteRelation = ::confirmDeleteRelation,
                 onSaveRelation = ::saveRelation,
                 onDismissEdit = { editingRelation = null },
-                onSelectCenter = { selectedCenterId = it },
+                onSelectCenter = ::selectCenter,
                 onOpenCard = ::openCharacterCard,
                 onSelectRelation = { selectedRelation = it }
             )
@@ -102,10 +125,21 @@ class BookCharacterRelationActivity : BaseActivity<ViewBinding>(
                 emptyList()
             }
             if (selectedCenterId !in relatedIds) {
-                selectedCenterId = centerCandidates.firstOrNull { it.roleLevel == BookCharacter.ROLE_MAIN }?.id
+                // 优先级：F50 跨页直达指定 → F54 上次记忆 → 主角优先 → 重要角色 → 首个
+                val fallback = centerCandidates.firstOrNull { it.roleLevel == BookCharacter.ROLE_MAIN }?.id
                     ?: centerCandidates.firstOrNull { it.roleLevel == BookCharacter.ROLE_IMPORTANT }?.id
                     ?: centerCandidates.firstOrNull()?.id
                     ?: 0L
+                val target = when {
+                    requestedCenterId > 0L && requestedCenterId in relatedIds -> {
+                        requestedCenterId.also { requestedCenterId = 0L }
+                    }
+                    rememberedCenterId().takeIf { it > 0L && it in relatedIds } != null -> {
+                        rememberedCenterId()
+                    }
+                    else -> fallback
+                }
+                selectCenter(target)
             }
         }
     }
@@ -197,4 +231,9 @@ class BookCharacterRelationActivity : BaseActivity<ViewBinding>(
         strength = strength,
         sortOrder = sortOrder
     )
+
+    companion object {
+        /** F50：跨页直达时指定关系网中心角色 */
+        const val EXTRA_CENTER_ID = "characterCenterId"
+    }
 }

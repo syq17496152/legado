@@ -2315,6 +2315,7 @@
     <string name="theme_manual_add">Add theme manually</string>
     <string name="theme_edit">Edit theme</string>
     <string name="theme_package_summary_default">Theme packages are saved separately and can sync to the WebDAV themes directory.</string>
+    <string name="theme_package_grid_load_failed">Failed to load theme packages</string>
     <string name="theme_package_empty">No theme yet. Adding one saves the current %s theme.</string>
     <string name="theme_package_load_failed">Load failed: %s</string>
     <string name="theme_package_cloud_load_failed">Cloud load failed: %s</string>

@@ -84,6 +84,9 @@ class BookCharacterEditActivity : BaseActivity<ViewBinding>(
     private var character = BookCharacter()
     private var draft by mutableStateOf(CharacterEditDraft())
     private var speechEngines by mutableStateOf<List<CharacterSpeechEngineUi>>(emptyList())
+
+    /** F52 保存中标志（in-flight 防重 + 顶栏按钮禁用态） */
+    private var saving by mutableStateOf(false)
     private val waitDialog by lazy { WaitDialog(this) }
 
     private val selectAvatar = registerForActivityResult(HandleFileContract()) { result ->
@@ -111,7 +114,8 @@ class BookCharacterEditActivity : BaseActivity<ViewBinding>(
                 onPickOnlineAvatar = ::showOnlineAvatarDialog,
                 onPickGalleryAvatar = ::showGalleryAvatarSelector,
                 onRegenerateAvatar = ::showRegenerateAvatarDialog,
-                onClearAvatar = { draft = draft.copy(avatar = "") }
+                onClearAvatar = { draft = draft.copy(avatar = "") },
+                saving = saving
             )
         }
         load()
@@ -137,6 +141,9 @@ class BookCharacterEditActivity : BaseActivity<ViewBinding>(
     }
 
     private fun save() {
+        // F52 保存防重：in-flight 标志收口 TOCTOU 竞态（连点两次会并发走"查重 + 插入"，
+        // 唯一索引冲突或产生两条记录）；同时驱动顶栏按钮转「保存…」禁用态
+        if (saving) return
         val name = draft.name.trim()
         if (characterBookKey.isBlank()) {
             toastOnUi("当前书籍不存在")
@@ -146,52 +153,57 @@ class BookCharacterEditActivity : BaseActivity<ViewBinding>(
             toastOnUi("角色名称不能为空")
             return
         }
+        saving = true
         lifecycleScope.launch {
-            val now = System.currentTimeMillis()
-            val result = withContext(IO) {
-                val duplicated = appDb.bookCharacterDao.getCharacter(characterBookKey, name)
-                    ?.takeIf { it.id != character.id }
-                if (duplicated != null) {
-                    return@withContext false
+            try {
+                val now = System.currentTimeMillis()
+                val result = withContext(IO) {
+                    val duplicated = appDb.bookCharacterDao.getCharacter(characterBookKey, name)
+                        ?.takeIf { it.id != character.id }
+                    if (duplicated != null) {
+                        return@withContext false
+                    }
+                    val savingCharacter = character.copy(
+                        bookUrl = characterBookKey,
+                        name = name,
+                        avatar = draft.avatar.trim(),
+                        gender = BookCharacter.normalizeGender(draft.gender),
+                        roleLevel = draft.roleLevel.coerceIn(
+                            BookCharacter.ROLE_NORMAL,
+                            BookCharacter.ROLE_MAIN
+                        ),
+                        identity = draft.identity.trim(),
+                        skills = draft.skills.trim(),
+                        attributes = BookCharacterProfileMeta.mergeAgeIntoAttributes(
+                            draft.age,
+                            draft.attributes
+                        ),
+                        appearance = draft.appearance.trim(),
+                        personality = draft.personality.trim(),
+                        biography = draft.biography.trim(),
+                        speechRouteJson = draft.speechRouteJson.trim(),
+                        sortOrder = character.sortOrder.takeIf { it > 0 }
+                            ?: ((appDb.bookCharacterDao.maxCharacterOrder(characterBookKey) ?: -1) + 1),
+                        createdAt = character.createdAt.takeIf { it > 0 } ?: now,
+                        updatedAt = now
+                    )
+                    if (savingCharacter.id > 0) {
+                        appDb.bookCharacterDao.updateCharacter(savingCharacter)
+                    } else {
+                        appDb.bookCharacterDao.insertCharacter(savingCharacter)
+                    }
+                    true
                 }
-                val saving = character.copy(
-                    bookUrl = characterBookKey,
-                    name = name,
-                    avatar = draft.avatar.trim(),
-                    gender = BookCharacter.normalizeGender(draft.gender),
-                    roleLevel = draft.roleLevel.coerceIn(
-                        BookCharacter.ROLE_NORMAL,
-                        BookCharacter.ROLE_MAIN
-                    ),
-                    identity = draft.identity.trim(),
-                    skills = draft.skills.trim(),
-                    attributes = BookCharacterProfileMeta.mergeAgeIntoAttributes(
-                        draft.age,
-                        draft.attributes
-                    ),
-                    appearance = draft.appearance.trim(),
-                    personality = draft.personality.trim(),
-                    biography = draft.biography.trim(),
-                    speechRouteJson = draft.speechRouteJson.trim(),
-                    sortOrder = character.sortOrder.takeIf { it > 0 }
-                        ?: ((appDb.bookCharacterDao.maxCharacterOrder(characterBookKey) ?: -1) + 1),
-                    createdAt = character.createdAt.takeIf { it > 0 } ?: now,
-                    updatedAt = now
-                )
-                if (saving.id > 0) {
-                    appDb.bookCharacterDao.updateCharacter(saving)
-                } else {
-                    appDb.bookCharacterDao.insertCharacter(saving)
+                if (!result) {
+                    toastOnUi("已存在同名角色")
+                    return@launch
                 }
-                true
+                ReadAloudConfigChangeNotifier.notifySpeech()
+                setResult(RESULT_OK)
+                finish()
+            } finally {
+                saving = false
             }
-            if (!result) {
-                toastOnUi("已存在同名角色")
-                return@launch
-            }
-            ReadAloudConfigChangeNotifier.notifySpeech()
-            setResult(RESULT_OK)
-            finish()
         }
     }
 

@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.config
+package io.legado.app.ui.config
 
 import io.legado.app.ui.widget.components.AppShapes
 import android.graphics.Color
@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
@@ -163,6 +164,10 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     override val binding by viewBinding(ActivityThemeManageBinding::inflate)
 
     private var entriesState by mutableStateOf<List<ThemePackageManager.Entry>>(emptyList())
+
+    /** F131 网格加载反馈层：加载中铺骨架卡、失败给可重试的失败卡（均为网格内占位，不遮挡） */
+    private var entriesLoading by mutableStateOf(false)
+    private var entriesLoadError by mutableStateOf<String?>(null)
     private var summaryTextState by mutableStateOf("")
     internal var isNightTheme by mutableStateOf(false)
     // W5 专项（1.3 收官）：编辑弹框状态 Compose 化——原 DialogThemePackageEditBinding 显示层删除，
@@ -310,7 +315,10 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     isApplied = ::isApplied,
                     entryInfo = ::entryInfo,
                     entryActions = ::entryActions,
-                    previewData = ::previewData
+                    previewData = ::previewData,
+                    loading = entriesLoading,
+                    loadError = entriesLoadError,
+                    onRetryLoad = ::loadThemes
                 )
             }
         }
@@ -393,6 +401,8 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     internal fun loadThemes() {
         val version = ++loadVersion
         val useCloud = AppConfig.syncThemePackages
+        entriesLoading = true
+        entriesLoadError = null
         summaryTextState = appendPendingRemoteSummary(getString(R.string.theme_package_summary_default))
         lifecycleScope.launch {
             kotlin.runCatching {
@@ -400,6 +410,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             }.onSuccess {
                 if (version != loadVersion) return@onSuccess
                 if (isFinishing || isDestroyed) return@onSuccess
+                entriesLoading = false
                 entriesState = it
                 summaryTextState = appendPendingRemoteSummary(
                     if (it.isEmpty()) {
@@ -415,6 +426,8 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                 if (it.isJobCancellation()) return@onFailure
                 if (version != loadVersion) return@onFailure
                 if (isFinishing || isDestroyed) return@onFailure
+                entriesLoading = false
+                entriesLoadError = it.localizedMessage
                 summaryTextState = if (useCloud) {
                     getString(R.string.theme_package_cloud_load_failed, it.localizedMessage)
                 } else {
@@ -1614,7 +1627,11 @@ private fun ThemePackageManageScreen(
     isApplied: (ThemePackageManager.Entry) -> Boolean,
     entryInfo: (ThemePackageManager.Entry) -> String,
     entryActions: (ThemePackageManager.Entry) -> List<AppManagementMenuAction>,
-    previewData: (ThemePackageManager.Entry) -> ThemePreviewData
+    previewData: (ThemePackageManager.Entry) -> ThemePreviewData,
+    /** F131：加载中铺骨架卡；失败给可重试失败卡（均为网格内占位） */
+    loading: Boolean = false,
+    loadError: String? = null,
+    onRetryLoad: () -> Unit = {}
 ) {
     val palette = rememberAppManagementPalette()
     CompositionLocalProvider(
@@ -1653,26 +1670,41 @@ private fun ThemePackageManageScreen(
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    items(
-                        entries,
-                        key = { "${it.packageInfo.isNightTheme}_${it.dirName}" }
-                    ) { entry ->
-                        val active = isApplied(entry)
-                        val editable = entry.source != ThemePackageManager.Source.BUILTIN &&
-                            entry.source != ThemePackageManager.Source.REMOTE
-                        ThemePackageGridCard(
-                            entry = entry,
-                            info = entryInfo(entry),
-                            preview = previewData(entry),
-                            isActive = active,
-                            canEdit = editable,
-                            actionsProvider = { entryActions(entry) },
-                            palette = palette,
-                            onApply = {
-                                if (!active) onApply(entry)
-                            },
-                            onEdit = { onEdit(entry) }
-                        )
+                    // F131 加载骨架：数据未到前铺 2 列占位卡（不遮挡、不闪烁替换真实卡）
+                    if (loading) {
+                        items(count = 4, key = { "skeleton_$it" }) { index ->
+                            ThemeExpandSkeleton(palette = palette, index = index)
+                        }
+                    } else if (loadError != null) {
+                        item(key = "load_error", span = { GridItemSpan(maxLineSpan) }) {
+                            ThemeLoadFailedCard(
+                                errorSummary = loadError,
+                                palette = palette,
+                                onRetry = onRetryLoad
+                            )
+                        }
+                    } else {
+                        items(
+                            entries,
+                            key = { "${it.packageInfo.isNightTheme}_${it.dirName}" }
+                        ) { entry ->
+                            val active = isApplied(entry)
+                            val editable = entry.source != ThemePackageManager.Source.BUILTIN &&
+                                entry.source != ThemePackageManager.Source.REMOTE
+                            ThemePackageGridCard(
+                                entry = entry,
+                                info = entryInfo(entry),
+                                preview = previewData(entry),
+                                isActive = active,
+                                canEdit = editable,
+                                actionsProvider = { entryActions(entry) },
+                                palette = palette,
+                                onApply = {
+                                    if (!active) onApply(entry)
+                                },
+                                onEdit = { onEdit(entry) }
+                            )
+                        }
                     }
                 }
                 LegadoMiuixActionButton(
@@ -1687,6 +1719,83 @@ private fun ThemePackageManageScreen(
                     minHeight = 46.dp
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ThemeExpandSkeleton(
+    palette: AppManagementPalette,
+    index: Int
+) {
+    // 骨架与真实卡同高（198dp），保证数据到达时布局不跳动
+    AppManagementCard(
+        palette = palette,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(198.dp),
+        insidePadding = PaddingValues(8.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(96.dp)
+                    .clip(RoundedCornerShape(palette.miuix.panelRadius ?: 12.dp))
+                    .background(ComposeColor(palette.settings.rowPressed))
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(if (index % 2 == 0) 0.72f else 0.56f)
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(ComposeColor(palette.settings.rowPressed))
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.4f)
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(ComposeColor(palette.settings.rowPressed))
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeLoadFailedCard(
+    errorSummary: String?,
+    palette: AppManagementPalette,
+    onRetry: () -> Unit
+) {
+    AppManagementCard(
+        palette = palette,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 6.dp, vertical = 8.dp),
+        insidePadding = PaddingValues(16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = stringResource(R.string.theme_package_grid_load_failed),
+                color = palette.settings.primaryText,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = errorSummary.orEmpty().take(160),
+                color = palette.settings.secondaryText,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                lineHeight = 18.sp
+            )
+            LegadoMiuixActionButton(
+                text = stringResource(R.string.retry),
+                palette = palette.miuix,
+                onClick = onRetry,
+                primary = true,
+                minHeight = 40.dp,
+                insidePadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+            )
         }
     }
 }
@@ -1794,15 +1903,20 @@ private fun ThemePackageGridCard(
             verticalAlignment = Alignment.Top
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = entry.packageInfo.name,
-                    color = palette.settings.primaryText,
-                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-                    lineHeight = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = entry.packageInfo.name,
+                        color = palette.settings.primaryText,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                        lineHeight = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    // F132 主题来源徽标：把"删了会怎样"的决策上下文前置到卡片名称行
+                    ThemeSourceBadge(entry = entry, palette = palette)
+                }
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
                     text = info,
@@ -1833,6 +1947,36 @@ private fun ThemePackageGridCard(
                 ThemeColorDot(color = ComposeColor(color))
             }
         }
+    }
+}
+
+/**
+ * F132 主题来源徽标：内置 / 本地 / 云端 / 本地+云端。
+ * 取值直接来自既有 [ThemePackageManager.Source] 四态，零新增数据源。
+ */
+@Composable
+private fun ThemeSourceBadge(
+    entry: ThemePackageManager.Entry,
+    palette: AppManagementPalette
+) {
+    val label = when (entry.source) {
+        ThemePackageManager.Source.BUILTIN -> stringResource(R.string.theme_source_builtin)
+        ThemePackageManager.Source.BOTH -> stringResource(R.string.theme_source_both)
+        ThemePackageManager.Source.REMOTE -> stringResource(R.string.theme_source_remote)
+        else -> stringResource(R.string.theme_source_local)
+    }
+    Surface(
+        color = palette.settings.accent.copy(alpha = 0.13f),
+        shape = RoundedCornerShape(4.dp),
+        modifier = Modifier.padding(start = 6.dp)
+    ) {
+        Text(
+            text = label,
+            color = palette.settings.accent,
+            fontSize = MaterialTheme.typography.labelSmall.fontSize,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+        )
     }
 }
 
