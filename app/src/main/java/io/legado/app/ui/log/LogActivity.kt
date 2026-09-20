@@ -203,11 +203,29 @@ class LogActivity : BaseActivity<ActivityLogManageBinding>() {
         }
     }
 
-    /** 应用日志详情：完整消息 + Throwable 堆栈 */
+    /**
+     * 应用日志详情：完整消息 + Throwable 堆栈。
+     * F191：详情弹窗支持 ‹› 逐条翻阅（位置指示），翻阅范围为**当前筛选结果**（与列表同口径）。
+     */
     private fun viewAppLog(entry: AppLog.LogEntry) {
-        val text = entry.message + (entry.throwable?.let { "\n\n${it.stackTraceToString()}" } ?: "")
-        showDialogFragment(TextDialog(entry.level.name, text))
+        val list = state.filteredAppLogs()
+        val index = list.indexOfFirst { it === entry }.takeIf { it >= 0 } ?: 0
+        val current = list.getOrNull(index) ?: entry
+        val dialog = TextDialog(current.level.name, formatAppLogContent(current))
+        if (list.size > 1) {
+            dialog.setPaging(
+                total = list.size,
+                startIndex = index,
+                titleProvider = { list.getOrNull(it)?.level?.name.orEmpty() },
+                contentProvider = { list.getOrNull(it)?.let(::formatAppLogContent).orEmpty() }
+            )
+        }
+        showDialogFragment(dialog)
     }
+
+    /** 应用日志正文（消息 + 堆栈文本）：详情与翻阅共用同一构造口径 */
+    private fun formatAppLogContent(entry: AppLog.LogEntry): String =
+        entry.message + (entry.throwable?.let { "\n\n${it.stackTraceToString()}" } ?: "")
 
     /** 文件查看：尾部 TAIL_LINES 行截断（AD-05），防大文件 OOM */
     private fun viewFile(item: LogFileItem) {

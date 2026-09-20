@@ -1589,6 +1589,10 @@
     <string name="log_search_hint">Search logs</string>
     <string name="log_select">Select</string>
     <string name="log_empty">No logs yet</string>
+    <string name="log_filter_count">%1$d of %2$d matched</string>
+    <string name="log_filter_clear">Clear filters</string>
+    <!-- Generic: position indicator for entry-by-entry browsing inside a dialog (e.g. log detail ‹2/17›) -->
+    <string name="dialog_page_position">%1$d/%2$d</string>
     <string name="log_empty_files">No files yet</string>
     <string name="log_truncated">Showing last %1$d lines only, export logs for full content</string>
     <string name="log_confirm_clear">Clear all logs?\nApp logs, log files, crash logs and heap dumps will be removed.</string>

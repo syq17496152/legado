@@ -45,8 +45,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
@@ -61,6 +66,7 @@ import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.utils.FileDoc
 import java.io.File
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -97,6 +103,22 @@ class LogManageState {
     var searchKey by mutableStateOf("")
     var levelFilter by mutableStateOf<AppLog.Level?>(null)
     var showClearConfirm by mutableStateOf(false)
+
+    /**
+     * F190：应用日志过滤结果（关键词 + 级别，**单一口径**）。
+     * Screen 用 remember 缓存渲染，Activity 的详情翻阅用同一函数定位相邻条目——禁止两处各写一份条件。
+     */
+    fun filteredAppLogs(): List<AppLog.LogEntry> {
+        val key = searchKey
+        val level = levelFilter
+        return appLogs.filter { entry ->
+            (level == null || entry.level == level) &&
+                (key.isBlank() ||
+                    entry.message.contains(key, ignoreCase = true) ||
+                    entry.throwable?.stackTraceToString()
+                        ?.contains(key, ignoreCase = true) == true)
+        }
+    }
 }
 
 @Composable
@@ -317,15 +339,11 @@ private fun AppLogsContent(
     onViewAppLog: (AppLog.LogEntry) -> Unit,
     onCopyAppLog: (AppLog.LogEntry) -> Unit
 ) {
+    // F190：过滤口径单源（LogManageState.filteredAppLogs）——Screen 展示与 Activity 详情翻阅共用同一结果
     val filtered = remember(state.appLogs, state.searchKey, state.levelFilter) {
-        state.appLogs.filter { entry ->
-            (state.levelFilter == null || entry.level == state.levelFilter) &&
-                (state.searchKey.isBlank() ||
-                    entry.message.contains(state.searchKey, ignoreCase = true) ||
-                    entry.throwable?.stackTraceToString()
-                        ?.contains(state.searchKey, ignoreCase = true) == true)
-        }
+        state.filteredAppLogs()
     }
+    val filterActive = state.searchKey.isNotBlank() || state.levelFilter != null
     Column(Modifier.fillMaxSize()) {
         // 搜索框 + 级别筛选
         Row(
@@ -396,6 +414,35 @@ private fun AppLogsContent(
                 )
             }
         }
+        if (filterActive) {
+            // F190：命中计数 + 一键清除筛选（原先只有「×」清单个关键词，级别筛选无法一并复位）
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(
+                        R.string.log_filter_count, filtered.size, state.appLogs.size
+                    ),
+                    color = palette.secondaryText,
+                    fontSize = 12.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = stringResource(R.string.log_filter_clear),
+                    color = palette.accent,
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .clickable {
+                            state.searchKey = ""
+                            state.levelFilter = null
+                        }
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+        }
         if (filtered.isEmpty()) {
             EmptyStatePlaceholder(
                 icon = Icons.Default.BugReport,
@@ -412,6 +459,7 @@ private fun AppLogsContent(
                         selecting = state.selecting,
                         rowColor = rowColor,
                         palette = palette,
+                        highlight = state.searchKey,
                         onClick = {
                             if (state.selecting) {
                                 state.selectedAppLogs =
@@ -445,6 +493,7 @@ private fun AppLogRow(
     selecting: Boolean,
     rowColor: Color,
     palette: AppSettingPalette,
+    highlight: String,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onCopy: () -> Unit
@@ -482,13 +531,15 @@ private fun AppLogRow(
                 )
                 Spacer(Modifier.size(8.dp))
                 Text(
-                    text = logTimeFormat.format(Date(entry.time)),
+                    text = formatLogTime(entry.time),
                     color = palette.secondaryText,
                     fontSize = 11.sp
                 )
             }
             Text(
-                text = entry.message,
+                text = remember(entry.message, highlight) {
+                    buildHighlightedMessage(entry.message, highlight, palette.accent)
+                },
                 color = palette.primaryText,
                 fontSize = 13.sp,
                 maxLines = 1,
@@ -612,6 +663,52 @@ private fun FilesContent(
 }
 
 private val logTimeFormat = SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault())
+private val logTimeFormatWithYear = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+
+/** 高亮匹配上限：超长日志 + 高频关键词时避免逐字符扫全篇（单行展示下超出部分本就不可见） */
+private const val MAX_HIGHLIGHT_HITS = 20
+
+/**
+ * F190：把命中关键词包进 accent 高亮段（与计数器同一口径：不区分大小写的子串匹配）。
+ * 未开启搜索（keyword 为空）时直接返回原文，零开销。
+ */
+private fun buildHighlightedMessage(
+    message: String,
+    keyword: String,
+    highlightColor: Color
+): AnnotatedString {
+    if (keyword.isBlank()) return AnnotatedString(message)
+    return buildAnnotatedString {
+        var start = 0
+        var hits = 0
+        while (hits < MAX_HIGHLIGHT_HITS) {
+            val index = message.indexOf(keyword, start, ignoreCase = true)
+            if (index < 0) break
+            append(message.substring(start, index))
+            withStyle(SpanStyle(color = highlightColor, fontWeight = FontWeight.SemiBold)) {
+                append(message.substring(index, index + keyword.length))
+            }
+            start = index + keyword.length
+            hits++
+        }
+        append(message.substring(start))
+    }
+}
+
+/**
+ * F192：日志时间补年份 —— 同年日志保持 `MM-dd HH:mm:ss` 紧凑写法，**跨年**才升位为 `yyyy-MM-dd HH:mm:ss`，
+ * 避免「去年 12-31 与今年 01-01」在列表里无法区分。
+ */
+private fun formatLogTime(time: Long): String {
+    val date = Date(time)
+    val entryYear = Calendar.getInstance().apply { this.time = date }.get(Calendar.YEAR)
+    val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+    return if (entryYear == currentYear) {
+        logTimeFormat.format(date)
+    } else {
+        logTimeFormatWithYear.format(date)
+    }
+}
 
 private fun formatSize(bytes: Long): String = when {
     bytes >= 1 shl 20 -> String.format(Locale.US, "%.1f MB", bytes / 1048576f)
