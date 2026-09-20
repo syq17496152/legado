@@ -2993,4 +2993,22 @@ bookUrl：%7$s
     <string name="source_menu_group_edit">编辑辅助</string>
     <string name="source_menu_group_io">导入 · 导出</string>
     <string name="source_menu_group_tools">工具</string>
-    <string name="source_required_hint">必填项，不能为空</string></resources>
+    <string name="source_required_hint">必填项，不能为空</string>
+    <!-- main/settings-search 页面优化（M4） -->
+    <string name="settings_search_exact_group">精确匹配</string>
+    <string name="settings_search_sub_item_count">含 %1$d 项</string>
+    <!-- book/replace-edit 页面优化（M4） -->
+    <string name="replace_advanced_group">高级配置</string>
+    <string name="replace_advanced_group_hint">低频字段，默认收起</string>
+    <string name="replace_sample_group">样本试运行</string>
+    <string name="replace_sample_group_hint">不保存，不影响阅读页</string>
+    <string name="replace_sample_input_hint">粘贴一段正文样本</string>
+    <string name="replace_sample_run">试运行</string>
+    <string name="replace_sample_hit">命中 %1$d 处</string>
+    <string name="replace_sample_miss">0 处命中，请检查匹配式</string>
+    <string name="replace_sample_result_label">替换结果</string>
+    <string name="replace_sample_empty_input">请先粘贴样本正文</string>
+    <string name="replace_paste_diff_title">粘贴将覆盖 %1$d 项字段</string>
+    <string name="replace_paste_diff_confirm">覆盖粘贴</string>
+    <string name="replace_paste_diff_none">粘贴内容与当前表单一致，未做改动</string>
+    <string name="replace_timeout_invalid">请输入大于 0 的毫秒数</string></resources>
