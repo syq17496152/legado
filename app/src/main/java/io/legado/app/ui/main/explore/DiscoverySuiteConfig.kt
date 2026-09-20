@@ -1,5 +1,7 @@
 package io.legado.app.ui.main.explore
 
+import androidx.annotation.Keep
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.utils.GSON
 import io.legado.app.utils.getPrefString
@@ -7,10 +9,15 @@ import io.legado.app.utils.putPrefString
 import splitties.init.appCtx
 import java.util.UUID
 
+// @Keep 铁律（Gson 反射模型）：R8 收窄后泛型签名丢失会使 List<DiscoverySuite> 反序列化成
+// LinkedTreeMap ⇒ sanitize() 抛 ClassCastException、整份配置被静默丢弃（曾致「新建套件已落盘但列表读不出」）。
+// 项目内所有 Gson 持久化模型（TopBarConfig.Config / MainBottomNavConfig.ItemState 等）一律 @Keep。
+@Keep
 data class DiscoverySuiteConfig(
     val suites: List<DiscoverySuite> = emptyList()
 )
 
+@Keep
 data class DiscoverySuite(
     val id: String = "",
     val name: String = "",
@@ -23,6 +30,7 @@ data class DiscoverySuite(
         get() = alias.ifBlank { name }
 }
 
+@Keep
 data class DiscoverySuiteWidget(
     val id: String = "",
     val type: String = DiscoverySuiteWidgetType.BookList.value,
@@ -34,6 +42,7 @@ data class DiscoverySuiteWidget(
     val order: Int = 0
 )
 
+@Keep
 data class DiscoverySuiteWidgetTarget(
     val sourceUrl: String = "",
     val tagUrl: String = "",
@@ -80,8 +89,11 @@ object DiscoverySuiteStore {
         if (raw.isBlank() || raw.length > MAX_CONFIG_CHARS) {
             return DiscoverySuiteConfig()
         }
-        return runCatching {
+        return kotlin.runCatching {
             GSON.fromJson(raw, DiscoverySuiteConfig::class.java)?.sanitize()
+        }.onFailure {
+            // 失败即记（无噪声）：此前 runCatching 静默吞异常，导致「配置落盘但读不出」长期无迹可查
+            AppLog.put("套件配置解析失败: ${it.localizedMessage}", it)
         }.getOrNull()
             ?: DiscoverySuiteConfig()
     }

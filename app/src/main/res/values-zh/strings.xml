@@ -2483,6 +2483,10 @@ bookUrl：%7$s
 <string name="discovery_suite_rename">重命名套件</string>
 <string name="discovery_suite_alias">设置别名</string>
 <string name="discovery_suite_delete">删除套件</string>
+<string name="discovery_suite_set_current">设为当前</string>
+<string name="discovery_suite_delete_with_widgets">%1$s · 含 %2$d 个控件将一并删除</string>
+<string name="discovery_suite_widget_targets_empty">请先选择要展示的 Tag 或书源目标</string>
+<string name="discovery_suite_widget_rank_targets_range">排行榜控件需要选择 3-9 个 Tag</string>
 <string name="discovery_suite_name">套件名称</string>
 <string name="discovery_suite_widget_title">控件标题</string>
 <string name="discovery_suite_widget_type">控件样式</string>

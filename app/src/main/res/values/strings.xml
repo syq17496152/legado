@@ -2910,6 +2910,10 @@ Selected text or question:
 <string name="discovery_suite_rename">Rename suite</string>
 <string name="discovery_suite_alias">Set alias</string>
 <string name="discovery_suite_delete">Delete suite</string>
+<string name="discovery_suite_set_current">Set as current</string>
+<string name="discovery_suite_delete_with_widgets">%1$s · %2$d widgets will be deleted too</string>
+<string name="discovery_suite_widget_targets_empty">Select at least one Tag or source target first</string>
+<string name="discovery_suite_widget_rank_targets_range">Rank widgets need 3-9 tags</string>
 <string name="discovery_suite_name">Suite name</string>
 <string name="discovery_suite_widget_title">Widget title</string>
 <string name="discovery_suite_widget_type">Widget style</string>

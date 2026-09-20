@@ -1296,7 +1296,9 @@ private fun BookshelfListRenderConfig.withSuiteOpacityMultiplier(
     )
 }
 
-private fun Int.withAlphaMultiplier(multiplier: Float): Int {
+/** 面板透明度倍率语义（单源）：仅对已有透明度的面板生效（alpha>=255 原样返回）。
+ *  F20 起被发现套件管理页复用（倍率即时预览样例），故去 private 保持单一判据。 */
+internal fun Int.withAlphaMultiplier(multiplier: Float): Int {
     val alpha = android.graphics.Color.alpha(this)
     if (alpha >= 255) return this
     val nextAlpha = (alpha * multiplier).roundToInt().coerceIn(alpha, 255)

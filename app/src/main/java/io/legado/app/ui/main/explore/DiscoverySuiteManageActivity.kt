@@ -14,6 +14,8 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.addCallback
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -53,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -81,12 +84,14 @@ import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.uiTypeface
+import io.legado.app.lib.theme.UiCorner
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.ui.main.bookshelf.compose.BookshelfListRenderConfig
 import io.legado.app.ui.main.bookshelf.compose.rememberBookshelfListRenderConfig
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
+import io.legado.app.ui.widget.compose.AppManagementIconAction
 import io.legado.app.ui.widget.compose.AppManagementListRow
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppSemanticColors
@@ -176,6 +181,7 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
                                 loadingSourceUrls = loadingSourceTagUrlsState,
                                 loadedSourceUrls = loadedSourceTagUrlsState,
                                 onLoadSourceTags = ::loadSourceTags,
+                                validateTargets = ::widgetTargetsError,
                                 onSave = { title, type, targets ->
                                     saveWidget(mode.suiteId, widget, title, type, targets)
                                 },
@@ -448,7 +454,12 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
     private fun confirmDeleteSuite(suite: DiscoverySuite) {
         showComposeConfirmDialog(
             title = getString(R.string.discovery_suite_delete),
-            message = suite.displayName,
+            // 删除影响范围：套件删除会连带其全部控件，必须在确认前说清（原仅显示套件名）
+            message = getString(
+                R.string.discovery_suite_delete_with_widgets,
+                suite.displayName,
+                suite.widgets.size
+            ),
             dangerPositive = true,
             onPositive = {
                 if (screenModeState.belongsToSuite(suite.id)) {
@@ -473,6 +484,26 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
         setScreenMode(DiscoverySuiteManageMode.Detail(suiteId))
     }
 
+    /**
+     * 控件保存校验（单一判据）：编辑器的**内联错误**与 Activity 的**保存兜底 toast** 共用本函数，
+     * 避免规则漂移（原先只有 Activity 侧 toast，编辑器中滚动后易错过）。
+     * 返回 null = 通过。
+     */
+    private fun widgetTargetsError(
+        type: String,
+        targets: List<DiscoverySuiteWidgetTarget>
+    ): String? {
+        if (targets.isEmpty()) return getString(R.string.discovery_suite_widget_targets_empty)
+        val cleanType = DiscoverySuiteWidgetType.sanitize(type)
+        if (cleanType == DiscoverySuiteWidgetType.RankButtons.value ||
+            cleanType == DiscoverySuiteWidgetType.RankedList.value
+        ) {
+            val count = targets.take(9).size
+            if (count !in 3..9) return getString(R.string.discovery_suite_widget_rank_targets_range)
+        }
+        return null
+    }
+
     private fun saveWidget(
         suiteId: String,
         oldWidget: DiscoverySuiteWidget?,
@@ -480,8 +511,8 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
         type: String,
         targets: List<DiscoverySuiteWidgetTarget>
     ) {
-        if (targets.isEmpty()) {
-            toastOnUi(R.string.find_empty)
+        widgetTargetsError(type, targets)?.let {
+            toastOnUi(it)
             return
         }
         val cleanType = DiscoverySuiteWidgetType.sanitize(type)
@@ -498,14 +529,6 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
             DiscoverySuiteWidgetType.RankButtons.value,
             DiscoverySuiteWidgetType.RankedList.value -> targets.take(9)
             else -> targets
-        }
-        if (cleanType in setOf(
-                DiscoverySuiteWidgetType.RankButtons.value,
-                DiscoverySuiteWidgetType.RankedList.value
-            ) && cleanTargets.size !in 3..9
-        ) {
-            toastOnUi("排行榜控件需要选择 3-9 个 Tag")
-            return
         }
         val submittedTitle = title.trim()
         val finalTitle = when {
@@ -691,25 +714,64 @@ private fun DiscoverySuiteListScreen(
         }
         items(config.suites, key = { it.id }) { suite ->
             val isCurrent = suite.id == selectedSuiteId
+            // 副标题类型摘要：控件类型去重后取前 2 项（超过补省略号），零新增数据源
+            val typeLabels = suite.widgets.map { it.typeLabel() }.distinct()
+            val typeSummary = typeLabels.take(2).joinToString("/") +
+                if (typeLabels.size > 2) "\u2026" else ""
             AppManagementListRow(
                 title = suite.displayName,
-                subtitle = if (isCurrent) {
-                    "当前套件 · ${suite.widgets.size} 个控件"
-                } else {
-                    "${suite.widgets.size} 个控件"
+                subtitle = buildString {
+                    if (isCurrent) append("当前套件 · ")
+                    append("${suite.widgets.size} 个控件")
+                    if (typeSummary.isNotBlank()) {
+                        append(" · ")
+                        append(typeSummary)
+                    }
                 },
                 selected = isCurrent,
                 selectionVisible = false,
                 palette = managementPalette,
                 minHeight = 58.dp,
-                moreActions = buildList {
-                    add(AppManagementMenuAction(text = stringResource(R.string.edit), onClick = { onOpenSuite(suite) }))
-                    if (!isCurrent) {
-                        add(AppManagementMenuAction(text = "设为当前", onClick = { onSetCurrentSuite(suite) }))
+                // F21：最高频单动作前置——非当前套件行常驻一枚「设为当前」（accent 勾选图标），
+                // 编辑/重命名/别名/删除仍收 ⋮（克制度：只前置 1 项，避免行变操作条与误触 danger）
+                trailingBeforeSwitch = if (isCurrent) {
+                    null
+                } else {
+                    {
+                        AppManagementIconAction(
+                            iconRes = R.drawable.ic_check,
+                            contentDescription = stringResource(R.string.discovery_suite_set_current),
+                            tint = managementPalette.settings.accent,
+                            onClick = { onSetCurrentSuite(suite) }
+                        )
                     }
-                    add(AppManagementMenuAction(text = "重命名", onClick = { onRenameSuite(suite) }))
-                    add(AppManagementMenuAction(text = "别名", onClick = { onAliasSuite(suite) }))
-                    add(AppManagementMenuAction(text = "删除", danger = true, onClick = { onDeleteSuite(suite) }))
+                },
+                moreActions = buildList {
+                    add(
+                        AppManagementMenuAction(
+                            text = stringResource(R.string.edit),
+                            onClick = { onOpenSuite(suite) }
+                        )
+                    )
+                    add(
+                        AppManagementMenuAction(
+                            text = stringResource(R.string.discovery_suite_rename),
+                            onClick = { onRenameSuite(suite) }
+                        )
+                    )
+                    add(
+                        AppManagementMenuAction(
+                            text = stringResource(R.string.discovery_suite_alias),
+                            onClick = { onAliasSuite(suite) }
+                        )
+                    )
+                    add(
+                        AppManagementMenuAction(
+                            text = stringResource(R.string.delete),
+                            danger = true,
+                            onClick = { onDeleteSuite(suite) }
+                        )
+                    )
                 },
                 onClick = { onOpenSuite(suite) }
             )
@@ -885,6 +947,30 @@ private fun SuiteOpacityMultiplierRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
+        // F20：调节即预览——mini 面板样例与真实面板**同源构建**（同 rowColor/贴图/边框/圆角），
+        // 倍率通过 withAlphaMultiplier 与 panelImageDrawable(alphaMultiplier) 即时反映在本样例上
+        val context = LocalContext.current
+        val samplePanelImage = remember(context, palette.panelRadiusPx, value) {
+            UiCorner.panelImageDrawable(context, palette.panelRadiusPx, alphaMultiplier = value)
+        }
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(palette.panelRadius))
+                .appSettingPanelBackground(
+                    normalColor = palette.rowColor.withAlphaMultiplier(value),
+                    panelImage = samplePanelImage,
+                    borderColor = palette.borderColor?.withAlphaMultiplier(value),
+                    radiusPx = palette.panelRadiusPx
+                )
+                // 样例轮廓：不透明纯色主题下样例填充与行面板同色（该主题本就不受倍率影响），
+                // 描 1dp 次级文字色轮廓使样例可见、位置可辨（取色仍走主题 palette，不新增色值）
+                .border(
+                    1.dp,
+                    palette.secondaryText.copy(alpha = 0.35f),
+                    RoundedCornerShape(palette.panelRadius)
+                )
+        )
         CompactAction(text = "-0.25", renderConfig = renderConfig) {
             onValueChange((value - 0.25f).coerceAtLeast(1f))
         }
@@ -903,11 +989,14 @@ private fun DiscoverySuiteWidgetEditorScreen(
     loadingSourceUrls: Set<String>,
     loadedSourceUrls: Set<String>,
     onLoadSourceTags: (String) -> Unit,
+    validateTargets: ((String, List<DiscoverySuiteWidgetTarget>) -> String?)? = null,
     onSave: (String, String, List<DiscoverySuiteWidgetTarget>) -> Unit,
     onCancel: () -> Unit
 ) {
     val renderConfig = rememberBookshelfListRenderConfig()
     val palette = renderConfig.palette
+    // 内联校验错误（原为保存时 toast，编辑器中滚动后易错过）
+    var inlineError by remember { mutableStateOf<String?>(null) }
     val initialType = widget?.type?.let(DiscoverySuiteWidgetType::sanitize)
         ?: DiscoverySuiteWidgetType.RandomBooks.value
     var title by remember(widget?.id) {
@@ -1174,13 +1263,27 @@ private fun DiscoverySuiteWidgetEditorScreen(
                 }
             }
         }
+        // 内联校验错误条（danger 语义色；无错误时零占位）
+        inlineError?.let { error ->
+            Text(
+                text = error,
+                color = AppSemanticColors.Danger,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                fontFamily = palette.bodyFontFamily,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, top = 8.dp, end = 18.dp)
+            )
+        }
         EditorBottomBar(
             renderConfig = renderConfig,
             onCancel = onCancel,
             onSave = {
                 val targets = selectedKeys
                     .mapNotNull { targetByKey[it] }
-                onSave(title, type, targets)
+                val error = validateTargets?.invoke(type, targets)
+                inlineError = error
+                if (error == null) onSave(title, type, targets)
             }
         )
     }
