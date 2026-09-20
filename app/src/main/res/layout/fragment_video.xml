@@ -132,6 +132,24 @@
                 android:paddingEnd="12dp"
                 android:visibility="gone" />
 
+            <!-- F181：沉浸式播放位置感知「第X集 · 共Y集」/「第X篇 · 共Y篇」
+                 （与传统布局信息区同源同值，复用 video_playlist_position_* 真值；无多集/多篇时 gone） -->
+            <TextView
+                android:id="@+id/tv_position_indicator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="#FFFFFF"
+                android:textSize="@dimen/text_12sp"
+                android:background="@drawable/bg_overlay_button"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:visibility="gone" />
+
             <!-- 集数选择器（横向滚动，多集时显示） -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rv_episodes"
@@ -140,6 +158,69 @@
                 android:layout_marginTop="8dp"
                 android:overScrollMode="never"
                 android:visibility="gone" />
+
+        </LinearLayout>
+
+        <!-- F180：首次进入沉浸式播放的一次性手势引导卡（控件层之上；点击「知道了」后写偏好不再出现）
+             四条手势全部对应已有实现：双击暂停 / 长按倍速 / 左右滑 seek / 双指缩放全屏 -->
+        <LinearLayout
+            android:id="@+id/gesture_guide_card"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="20dp"
+            android:layout_marginEnd="20dp"
+            android:background="@drawable/bg_overlay_button"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="14dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="14dp"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <TextView
+                android:id="@+id/tv_guide_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFF"
+                android:textSize="@dimen/text_15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_guide_items"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:lineSpacingExtra="4dp"
+                android:textColor="#FFFFFF"
+                android:textSize="@dimen/text_13sp" />
+
+            <TextView
+                android:id="@+id/btn_guide_confirm"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_overlay_button"
+                android:gravity="center"
+                android:minWidth="112dp"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:textColor="#FFFFFF"
+                android:textSize="@dimen/text_14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_guide_footnote"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center"
+                android:textColor="#FFFFFF"
+                android:textSize="@dimen/text_11sp" />
 
         </LinearLayout>
 

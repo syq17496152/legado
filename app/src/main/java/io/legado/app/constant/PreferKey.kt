@@ -546,4 +546,6 @@ object PreferKey {
     // 默认拦截会把大量源直接判死；故默认放行（历史行为）。关闭后每一次证书校验失败都需用户知情确认。
     // 全局单 key、不按源存储：登录页（WebViewLoginFragment）与内嵌浏览器（WebViewActivity）共用同一策略。
     const val sslCertPassThrough = "sslCertPassThrough"
+    // F180：沉浸式播放器首次手势引导卡是否已展示（一次性；展示并点「知道了」后置 true）
+    const val videoGestureGuideShown = "videoGestureGuideShown"
 }

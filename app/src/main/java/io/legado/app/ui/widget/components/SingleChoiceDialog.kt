@@ -1,9 +1,11 @@
 package io.legado.app.ui.widget.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
@@ -48,6 +50,11 @@ fun SingleChoiceDialog(
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * 每项的可选说明文案（F182）：下标与 [options] 对齐；缺项/空串不渲染。
+     * 默认 null ⇒ 既有调用点零改动（纯可选扩展）。
+     */
+    optionSummaries: List<String>? = null,
 ) {
     var currentIndex by remember(selectedIndex) { mutableStateOf(selectedIndex) }
     val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.7f
@@ -71,13 +78,14 @@ fun SingleChoiceDialog(
             ) {
                 itemsIndexed(options, key = { index, _ -> index }) { index, option ->
                     val selected = index == currentIndex
+                    val summary = optionSummaries?.getOrNull(index)?.takeIf { it.isNotBlank() }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
                             .sizeIn(minHeight = 48.dp)
                             .clickable { currentIndex = index }
-                            .padding(horizontal = 16.dp)
+                            .padding(horizontal = 16.dp, vertical = if (summary != null) 10.dp else 0.dp)
                     ) {
                         // 取色纳管（ui-theme-governance-polish §8）
                         RadioButton(
@@ -89,15 +97,25 @@ fun SingleChoiceDialog(
                             )
                         )
                         Spacer(Modifier.width(16.dp))
-                        Text(
-                            text = option,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (selected) {
-                                style.accent
-                            } else {
-                                style.primaryText
-                            },
-                        )
+                        Column {
+                            Text(
+                                text = option,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (selected) {
+                                    style.accent
+                                } else {
+                                    style.primaryText
+                                },
+                            )
+                            if (summary != null) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = summary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = style.secondaryText,
+                                )
+                            }
+                        }
                     }
                 }
             }

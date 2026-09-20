@@ -557,10 +557,17 @@ fun VideoSettingsPanelContent(
                 stringResource(R.string.video_layout_mode_immersive),
                 stringResource(R.string.video_layout_mode_traditional)
             )
+            // F182：把已有的 video_layout_mode_summary 透出到选择面板（原先该资源零消费，用户无从
+            // 得知两种模式长什么样、切换后会发生什么——低频但重代价（Activity 级重建）的操作需要预期管理）
+            val summaries = listOf(
+                stringResource(R.string.video_layout_mode_summary),
+                stringResource(R.string.video_layout_mode_traditional_summary)
+            )
             SingleChoiceDialog(
                 title = stringResource(R.string.video_layout_mode),
                 options = options,
                 selectedIndex = layoutMode.coerceIn(0, 1),
+                optionSummaries = summaries,
                 onSelect = {
                     layoutMode = it
                     VideoPlay.layoutMode = it

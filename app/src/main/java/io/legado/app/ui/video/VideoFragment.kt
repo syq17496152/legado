@@ -22,6 +22,7 @@ import com.shuyu.gsyvideoplayer.listener.GSYSampleCallBack
 import com.shuyu.gsyvideoplayer.video.base.GSYVideoView
 import io.legado.app.R
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssEpisode
 import io.legado.app.help.gsyVideo.VideoPlayer
@@ -32,6 +33,8 @@ import io.legado.app.service.DownloadTaskType
 import io.legado.app.data.PlayHistoryStore
 import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.utils.gone
+import io.legado.app.utils.getPrefBoolean
+import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.visible
 import androidx.lifecycle.lifecycleScope
@@ -109,6 +112,10 @@ class VideoFragment : Fragment() {
     private var tvRouteSelector: TextView? = null
     private var routeMenuPopup: ModernActionPopup.Handle? = null
     private var rvEpisodes: RecyclerView? = null
+    /** F181：沉浸式播放位置感知「第X集 · 共Y集」（与传统布局信息区同源同值） */
+    private var tvPositionIndicator: TextView? = null
+    /** F180：一次性手势引导卡（首次进入沉浸式播放时展示） */
+    private var gestureGuideCard: LinearLayout? = null
     private var rightButtons: LinearLayout? = null
     private var btnStar: ImageButton? = null
     private var btnSettings: ImageButton? = null
@@ -216,6 +223,8 @@ class VideoFragment : Fragment() {
         tvVideoTitle = null
         tvTitleFullscreen = null
         tvRouteSelector = null
+        tvPositionIndicator = null
+        gestureGuideCard = null
         rvEpisodes = null
         rightButtons = null
         btnStar = null
@@ -524,6 +533,66 @@ class VideoFragment : Fragment() {
         val value = text ?: ""
         tvVideoTitle?.text = value
         tvTitleFullscreen?.text = value
+        // F181：标题与位置指示同源刷新（集数/文章切换都会经过 setTitle）
+        updatePositionIndicator()
+    }
+
+    /**
+     * F181：沉浸式播放位置感知「第X集 · 共Y集」（订阅源文章模式为「第X篇 · 共Y篇」）。
+     *
+     * 真值与传统布局信息区（`VideoPlayerActivity.showRssLegacyInfo`）**同源同串**（复用
+     * `video_playlist_position_episode/_article`），避免双布局信息架构分叉；
+     * 单集/单篇或非订阅源场景不显示（避免无信息量的噪声）。
+     */
+    private fun updatePositionIndicator() {
+        val tv = tvPositionIndicator ?: return
+        val articles = VideoPlay.rssArticles
+        val episodes = VideoPlay.rssEpisodes
+        val text = when {
+            !articles.isNullOrEmpty() && articles.size > 1 ->
+                getString(R.string.video_playlist_position_article, VideoPlay.rssArticleIndex + 1, articles.size)
+            !episodes.isNullOrEmpty() && episodes.size > 1 ->
+                getString(R.string.video_playlist_position_episode, VideoPlay.rssEpisodeIndex + 1, episodes.size)
+            else -> ""
+        }
+        if (text.isNotBlank()) {
+            tv.text = text
+            tv.visible()
+        } else {
+            tv.gone()
+        }
+    }
+
+    /**
+     * F180：首次进入沉浸式播放时展示一次性手势引导卡。
+     *
+     * 沉浸式把交互全部收进手势，可发现性即功能开关——四条手势（双击暂停 / 长按倍速 /
+     * 左右滑 seek / 双指外扩全屏）全部已有实现，本卡只做「把功能存在翻译成功能可用」；
+     * 一次性（点「知道了」写 `PreferKey.videoGestureGuideShown`），不做二次弹出与常驻入口。
+     */
+    private fun maybeShowGestureGuide() {
+        val card = gestureGuideCard ?: return
+        if (getPrefBoolean(PreferKey.videoGestureGuideShown)) return
+        card.findViewById<TextView>(R.id.tv_guide_title)?.setText(R.string.video_gesture_guide_title)
+        val speed = VideoPlay.longPressSpeed / 10.0f
+        val items = listOf(
+            getString(R.string.video_gesture_guide_double_tap),
+            getString(R.string.video_gesture_guide_long_press, speed.toString()),
+            getString(R.string.video_gesture_guide_swipe),
+            getString(R.string.video_gesture_guide_pinch)
+        ).joinToString("\n")
+        card.findViewById<TextView>(R.id.tv_guide_items)?.text = items
+        card.findViewById<TextView>(R.id.btn_guide_confirm)
+            ?.setText(R.string.video_gesture_guide_confirm)
+        card.findViewById<TextView>(R.id.tv_guide_footnote)
+            ?.setText(R.string.video_gesture_guide_footnote)
+        card.findViewById<TextView>(R.id.btn_guide_confirm)?.setOnClickListener {
+            putPrefBoolean(PreferKey.videoGestureGuideShown, true)
+            card.gone()
+        }
+        // 引导期间手势照常穿透可用：卡本身只消费自身区域的点击（按钮），其余区域不拦截
+        card.isClickable = false
+        card.visible()
     }
 
     /**
@@ -685,6 +754,8 @@ class VideoFragment : Fragment() {
         // video-player-ux-fixes P4: 绑定全屏态标题
         tvTitleFullscreen = view.findViewById(R.id.tv_title_fullscreen)
         tvRouteSelector = view.findViewById(R.id.tv_route_selector)
+        tvPositionIndicator = view.findViewById(R.id.tv_position_indicator)
+        gestureGuideCard = view.findViewById(R.id.gesture_guide_card)
         rvEpisodes = view.findViewById(R.id.rv_episodes)
         rightButtons = view.findViewById(R.id.right_buttons)
         btnStar = view.findViewById(R.id.btn_star)
@@ -728,6 +799,12 @@ class VideoFragment : Fragment() {
 
         // R3 REQ-18 集数选择器（多集时显示，线路下方横向滚动）
         initEpisodeSelector()
+
+        // F181：位置指示初始化（后续由 setTitle 统一刷新）
+        updatePositionIndicator()
+
+        // F180：首次进入沉浸式播放的一次性手势引导卡
+        maybeShowGestureGuide()
 
         // video-gesture-overhaul: 快退/快进按钮已移除，改为左右滑动 seek（R2/R3）
 
