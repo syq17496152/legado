@@ -2110,13 +2110,25 @@ private fun BookInfoRichIntro(
                     }
                 }
             }
-            // 溢出探测（折叠态）：末行有省略号即说明被截断；展开态不反向清除标记
+            // 溢出探测（折叠态）：判据 = 「第 maxLines 行末尾字符位置 < 全文长度」。
+            // 两个错误判据的实证排除（2026-09-20 真机，日志 lineCount=7 / maxLines=5 / textLen=224）：
+            //  ① getEllipsisCount(末行)：本 TextView 为支持长按复制简介启用 setTextIsSelectable(true)，
+            //     该状态下省略号不参与渲染 ⇒ 恒为 0。
+            //  ② getLineEnd(末行) < text.length：**Android 的 maxLines 只影响绘制裁剪，Layout 仍按
+            //     全文计算行数**（实测 lineCount=7 而 maxLines=5）⇒ 末行末位恒等于全文长度，判据恒假。
+            // 正确判据取「折叠可见的最后一行」（第 maxLines 行）的结束位置与全文比较，与绘制裁剪口径一致。
+            // 折叠态被硬裁且无省略号，内容未尽由「展开全文 ▾」入口承担提示。展开态不反向清除标记。
             if (!expanded) {
                 textView.post {
                     val layout = textView.layout ?: return@post
-                    val lastLine = layout.lineCount - 1
-                    val truncated = lastLine >= 0 && layout.getEllipsisCount(lastLine) > 0
-                    if (truncated) onOverflowChange(true)
+                    if (layout.lineCount > 0) {
+                        val lastVisibleLine = minOf(CollapsedIntroLines, layout.lineCount) - 1
+                        if (lastVisibleLine >= 0 &&
+                            layout.getLineEnd(lastVisibleLine) < textView.text.length
+                        ) {
+                            onOverflowChange(true)
+                        }
+                    }
                 }
             }
         }
