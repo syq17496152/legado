@@ -13,8 +13,10 @@ import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.widget.ImageView
 import android.widget.FrameLayout
+import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
@@ -23,8 +25,11 @@ import io.legado.app.databinding.ActivityImageCropBinding
 import io.legado.app.help.http.addHeaders
 import io.legado.app.help.http.newCallResponse
 import io.legado.app.help.http.okHttpClient
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.model.analyzeRule.AnalyzeUrl
+import io.legado.app.ui.widget.compose.AppSemanticColors
 import io.legado.app.utils.ImageProcessUtils
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.setLightStatusBar
 import io.legado.app.utils.setNavigationBarColorAuto
@@ -67,6 +72,8 @@ class ImageCropActivity : BaseActivity<ActivityImageCropBinding>(
     private var targetWidth = 1600
     private var outputPath: String? = null
     private var viewportOnly = false
+    // 优化 2：可恢复失败的页内错误条 —— 重试动作就地登记（按失败阶段决定重载图片还是重跑裁剪）
+    private var retryAction: (() -> Unit)? = null
 
     override fun setupSystemBar() {
         super.setupSystemBar()
@@ -87,10 +94,56 @@ class ImageCropActivity : BaseActivity<ActivityImageCropBinding>(
         binding.photoView.setMaxScale(6f)
         binding.btnCancel.setOnClickListener { finish() }
         binding.btnConfirm.setOnClickListener { saveCrop() }
+        // 优化 1a：比例徽标要跟随取景框（setAspect / 尺寸变化都会重算 cropRect）
+        binding.cropOverlay.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateAspectBadge()
+        }
+        // 优化 2：错误条重试入口（动作由失败点登记）
+        binding.btnRetry.setTextColor(accentColor)
+        binding.btnRetry.setOnClickListener { retryAction?.invoke() }
+        binding.tvError.setTextColor(AppSemanticColors.Danger.toArgb())
         binding.cropOverlay.post {
             updatePhotoViewport()
+            updateAspectBadge()
         }
         loadImage()
+    }
+
+    /** 优化 1a：取景框左上角常驻比例徽标（蓝图 preview-optimized.html 帧 3） */
+    private fun updateAspectBadge() {
+        val cropRect = binding.cropOverlay.getCropRect()
+        if (cropRect.isEmpty) return
+        binding.tvAspectBadge.text = "$aspectWidth:$aspectHeight"
+        binding.tvAspectBadge.post {
+            val layoutParams = binding.tvAspectBadge.layoutParams as FrameLayout.LayoutParams
+            layoutParams.leftMargin = (cropRect.left + 8.dpToPx()).roundToInt()
+            layoutParams.topMargin = (cropRect.top + 8.dpToPx()).roundToInt()
+            binding.tvAspectBadge.layoutParams = layoutParams
+            binding.tvAspectBadge.visibility = View.VISIBLE
+        }
+    }
+
+    /**
+     * 优化 2：可恢复失败改为页内错误条（danger 语义 + 重试）。
+     * 不可恢复错误（如「图片链接为空」）仍走 toast + finish，不进此条。
+     */
+    private fun showCropError(reason: String, retry: () -> Unit) {
+        retryAction = retry
+        binding.tvError.text = getString(R.string.image_crop_failed, reason)
+        binding.errorBar.visibility = View.VISIBLE
+    }
+
+    private fun hideCropError() {
+        retryAction = null
+        binding.errorBar.visibility = View.GONE
+    }
+
+    /** 优化 1b：确认键保存中态（spinner 顶替确认键 + 禁用 + 文案切换） */
+    private fun setSavingState(saving: Boolean) {
+        binding.btnConfirm.visibility = if (saving) View.GONE else View.VISIBLE
+        binding.btnConfirm.isEnabled = !saving
+        binding.progressSave.visibility = if (saving) View.VISIBLE else View.GONE
+        binding.tvHint.setText(if (saving) R.string.image_crop_saving else R.string.image_crop_hint)
     }
 
     override fun onDestroy() {
@@ -102,10 +155,12 @@ class ImageCropActivity : BaseActivity<ActivityImageCropBinding>(
     private fun loadImage() {
         val uri = intent.getStringExtra(EXTRA_URI)?.let { Uri.parse(it) }
         if (uri == null) {
+            // 不可恢复（调用方未传图片）：保留原 toast + finish 语义
             toastOnUi(getString(R.string.image_crop_failed, getString(R.string.error_image_url_empty)))
             finish()
             return
         }
+        hideCropError()
         lifecycleScope.launch {
             val bitmap = withContext(Dispatchers.IO) {
                 kotlin.runCatching {
@@ -115,8 +170,8 @@ class ImageCropActivity : BaseActivity<ActivityImageCropBinding>(
                 }.getOrNull()
             }
             if (bitmap == null) {
-                toastOnUi(getString(R.string.image_crop_failed, getString(R.string.error_decode_bitmap)))
-                finish()
+                // 可恢复（远端 403/格式不支持等）：页内错误条 + 重试，不再关页
+                showCropError(getString(R.string.error_decode_bitmap)) { loadImage() }
                 return@launch
             }
             sourceBitmap = bitmap
@@ -285,6 +340,7 @@ class ImageCropActivity : BaseActivity<ActivityImageCropBinding>(
             return
         }
         lifecycleScope.launch {
+            setSavingState(true)
             val resultPath = withContext(Dispatchers.IO) {
                 kotlin.runCatching {
                     val cropped = cropVisibleBitmap(bitmap, cropRect, matrix) ?: return@runCatching null
@@ -307,8 +363,9 @@ class ImageCropActivity : BaseActivity<ActivityImageCropBinding>(
                 }.getOrNull()
             }
             if (resultPath.isNullOrBlank()) {
-                binding.btnConfirm.isEnabled = true
-                toastOnUi(getString(R.string.image_crop_failed, getString(R.string.unknown)))
+                // 可恢复：恢复按钮态 + 页内错误条（重试直接重跑本次裁剪）
+                setSavingState(false)
+                showCropError(getString(R.string.unknown)) { saveCrop() }
                 return@launch
             }
             setResult(Activity.RESULT_OK, Intent().putExtra(EXTRA_RESULT_PATH, resultPath))

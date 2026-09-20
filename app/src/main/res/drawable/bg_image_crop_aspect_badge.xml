@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 裁剪页私有：取景框比例徽标底（沉浸页黑底，色值走本页既有沉浸口径；蓝图 preview-optimized.html 帧 3） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#8C000000" />
+    <corners android:radius="6dp" />
+</shape>

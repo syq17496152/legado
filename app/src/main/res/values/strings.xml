@@ -2341,6 +2341,7 @@
     <string name="image_crop_title">Crop image</string>
     <string name="image_crop_failed">Image crop failed: %1$s</string>
     <string name="image_crop_hint">Move or pinch the image, then confirm</string>
+    <string name="image_crop_saving">Saving, please wait…</string>
     <string name="read_goal_widget_description">Reading goal card</string>
     <string name="theme_day">Day theme</string>
     <string name="theme_night">Night theme</string>

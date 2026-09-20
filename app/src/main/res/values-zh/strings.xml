@@ -1925,6 +1925,7 @@
     <string name="image_crop_title">裁剪图片</string>
     <string name="image_crop_failed">图片裁剪失败：%1$s</string>
     <string name="image_crop_hint">拖动或双指缩放图片后确认裁剪</string>
+    <string name="image_crop_saving">保存中，请稍候…</string>
     <string name="read_goal_widget_description">阅读目标卡片</string>
     <string name="theme_day">日间主题</string>
     <string name="theme_night">夜间主题</string>
