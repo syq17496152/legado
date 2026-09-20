@@ -261,7 +261,9 @@ fun ReadRecordRankLazyList(
     LazyColumn(modifier = modifier.fillMaxWidth()) {
         itemsIndexed(
             items = items,
-            key = { index, item -> item.snapshot?.bookUrl ?: item.book?.bookUrl ?: "${item.name}-$index" }
+            // key 含书名：同一 bookUrl 可能对应多条不同书名的阅读记录（改名/多设备回灌），
+            // 仅用 bookUrl 会触发 LazyColumn「Key was already used」崩溃
+            key = { index, item -> "${item.name}|${item.snapshot?.bookUrl ?: item.book?.bookUrl ?: index}" }
         ) { index, item ->
             ReadRecordRankRow(
                 item = item,
@@ -333,7 +335,8 @@ fun ReadRecordCoverRow(
     ) {
         itemsIndexed(
             items = items,
-            key = { _, item -> item.snapshot.bookUrl }
+            // key 含书名：快照列表按「书名+作者」去重，同 bookUrl 可存在不同书名的快照，单用 bookUrl 会重复
+            key = { _, item -> "${item.snapshot.name}|${item.snapshot.bookUrl}" }
         ) { index, item ->
             ReadRecordCoverItem(
                 item = item,

@@ -133,6 +133,7 @@ scripts/publish_config.json
 !/ai_tests/scripts/l2_verify_bugfix_0908.py
 !/ai_tests/scripts/l2_verify_replace_edit.py
 !/ai_tests/scripts/l2_verify_highlight_palette_scope.py
+!/ai_tests/scripts/l2_verify_changesource_dupkey.py
 # opencode 运行时产物
 .opencode/goals/
 /docs/specs/rss-image-decrypt-optimization/*.md

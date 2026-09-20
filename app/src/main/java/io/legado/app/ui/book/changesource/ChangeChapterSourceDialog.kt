@@ -576,7 +576,9 @@ class ChangeChapterSourceDialog() : ComposeDialogFragment(),
                     .fillMaxWidth()
                     .heightIn(max = 420.dp)
             ) {
-                items(items = searchBooks, key = { it.bookUrl }) { item ->
+                // key 必须含 origin：多个书源可返回同一 bookUrl（镜像源），仅用 bookUrl 会触发
+                // LazyColumn「Key was already used」崩溃（口径同 ChangeBookSourceDialog）
+                items(items = searchBooks, key = { "${it.origin}|${it.bookUrl}" }) { item ->
                     val score = remember(item.bookUrl, scoreTick) { getBookScore(item) }
                     SearchBookRow(
                         item = item,

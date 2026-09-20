@@ -111,8 +111,8 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 searchBook.releaseHtmlData()
                 appDb.searchBookDao.insert(searchBook)
                 when {
-                    screenKey.isEmpty() -> searchBooks.add(searchBook)
-                    searchBook.name.contains(screenKey) -> searchBooks.add(searchBook)
+                    screenKey.isEmpty() -> addSearchBook(searchBook)
+                    searchBook.name.contains(screenKey) -> addSearchBook(searchBook)
                     else -> return
                 }
                 trySend(arrayOf(searchBooks))
@@ -149,6 +149,26 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             AppLog.put("换源排序出错\n${it.localizedMessage}", it)
         }.getOrDefault(searchBooks)
     }.flowOn(IO)
+
+    /**
+     * 按 (origin, bookUrl) 去重写入搜索结果内存列表。
+     *
+     * 背景：searchBooks 表以 bookUrl 为唯一主键，但多个书源可能返回同一个 bookUrl（镜像源/同站多源），
+     * 内存列表按源逐条 add 不做去重时会出现「同 bookUrl 多源并存」，换源弹窗以 bookUrl 作 LazyColumn
+     * key 会抛 IllegalArgumentException: Key ... was already used 崩溃。
+     * 去重维度必须是 (origin, bookUrl)：同书不同源是换源的正常候选，不可按 bookUrl 单字段抹掉。
+     * 搜索由线程池并发回调，判断与插入需在同一锁内完成。
+     */
+    private fun addSearchBook(searchBook: SearchBook) {
+        synchronized(searchBooks) {
+            val exists = searchBooks.any {
+                it.origin == searchBook.origin && it.bookUrl == searchBook.bookUrl
+            }
+            if (!exists) {
+                searchBooks.add(searchBook)
+            }
+        }
+    }
 
     override fun onCleared() {
         super.onCleared()
