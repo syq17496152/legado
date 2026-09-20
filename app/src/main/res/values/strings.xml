@@ -1202,6 +1202,15 @@
     <string name="unknown_state">unknown</string>
     <string name="disable_source">disable source</string>
     <string name="delete_source">delete source</string>
+    <string name="disable_source_confirm">\"%1$s\" will stop working and its saved verification result will be discarded. You can re-enable it in source management later.</string>
+    <string name="ssl_error_title">Certificate verification failed</string>
+    <string name="ssl_error_message">Certificate verification failed. Continue anyway?\n\nTarget: %1$s\nCertificate: %2$s\n\nThe site\'s certificate cannot be verified and may indicate a man-in-the-middle attack. Continuing may expose account and cookie data.</string>
+    <string name="ssl_error_continue">Continue anyway</string>
+    <string name="ssl_error_cert_info">%1$s (valid until %2$s)</string>
+    <string name="ssl_error_cert_unknown">unknown</string>
+    <string name="source_verification_guide">After finishing web verification, tap ✓ at the top right to save and go back</string>
+    <string name="source_verification_checking">Passing the site\'s security check…</string>
+    <string name="webview_back_again_exit">Press back again to exit</string>
     <string name="chapter_pay">pay</string>
     <string name="double_page_horizontal">Tablet/Landscape Dual Page</string>
     <string name="open_in_browser">open in browser</string>

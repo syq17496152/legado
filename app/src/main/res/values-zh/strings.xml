@@ -1145,6 +1145,15 @@
     <string name="unknown_state">未知状态</string>
     <string name="disable_source">禁用源</string>
     <string name="delete_source">删除源</string>
+    <string name="disable_source_confirm">将停止「%1$s」的服务，已保存的验证结果会失效。之后可在源管理中重新启用。</string>
+    <string name="ssl_error_title">证书校验失败</string>
+    <string name="ssl_error_message">证书校验失败，是否继续访问？\n\n目标地址：%1$s\n证书信息：%2$s\n\n该网站的安全证书无法验证，可能是中间人攻击。继续访问可能导致账号、Cookie 等敏感数据被截获。</string>
+    <string name="ssl_error_continue">仍要继续访问</string>
+    <string name="ssl_error_cert_info">%1$s（有效期至 %2$s）</string>
+    <string name="ssl_error_cert_unknown">未知</string>
+    <string name="source_verification_guide">完成网页验证后，点右上角 ✓ 保存并返回</string>
+    <string name="source_verification_checking">正在通过站点安全检查…</string>
+    <string name="webview_back_again_exit">再按一次返回键退出</string>
     <string name="chapter_pay">购买</string>
     <string name="double_page_horizontal">平板/横屏双页</string>
     <string name="open_in_browser">浏览器打开</string>

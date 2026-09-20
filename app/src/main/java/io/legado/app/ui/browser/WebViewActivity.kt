@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
@@ -35,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppConst.imagePathKey
@@ -47,17 +49,23 @@ import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.help.http.CookieStore
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.theme.accentColor
+import io.legado.app.lib.theme.bottomBackground
+import io.legado.app.lib.theme.primaryTextColor
+import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.ui.association.OnLineImportActivity
+import io.legado.app.ui.widget.compose.AppUiTokens
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.ACache
+import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
 import io.legado.app.utils.keepScreenOn
 import io.legado.app.utils.longSnackbar
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.sendToClip
+import io.legado.app.utils.snackbar
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toggleSystemBar
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -75,11 +83,12 @@ import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.webView.PooledWebView
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.help.webView.WebViewPool.BLANK_HTML
-import io.legado.app.help.webView.WebViewPool.DATA_HTML
 import io.legado.app.model.Download
 import splitties.systemservices.powerManager
 import java.lang.ref.WeakReference
 import java.net.URLDecoder
+import java.text.SimpleDateFormat
+import java.util.Locale
 import androidx.core.graphics.createBitmap
 import io.legado.app.help.WebCacheManager
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameCache
@@ -88,6 +97,15 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     companion object {
         // 是否输出日志
         var sessionShowWebLog = false
+
+        // F215 一次性引导条的页面本地记忆位（来源类型为源验证，属低频关键路径）
+        private const val GUIDE_PREFS = "web_view_guide"
+        private const val KEY_VERIFICATION_GUIDE_SHOWN = "source_verification_guide_shown"
+        // 引导条「本次已显示」状态的实例态键（配置变更重建时恢复，避免重建后引导条消失）
+        private const val KEY_GUIDE_BAR_VISIBLE = "guide_bar_visible"
+
+        // F214 栈顶退出二次确认窗口（毫秒）
+        private const val BACK_EXIT_INTERVAL = 2000L
     }
 
     private lateinit var pooledWebView: PooledWebView
@@ -106,6 +124,14 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     private var titleState by mutableStateOf("")
     private var subtitleState by mutableStateOf<String?>(null)
     private var webLogChecked by mutableStateOf(sessionShowWebLog)
+    // F215：验证模式一次性引导条可见性（显示即记忆）
+    private var guideBarVisible by mutableStateOf(false)
+    // F215：Cloudflare 挑战期状态提示（挑战页加载完成时置位，非挑战页复位）
+    private var challengeChecking by mutableStateOf(false)
+    // 验证模式取自 Intent（viewModel 侧字段在 initData 协程内赋值，早于它读取会拿到默认值）
+    private var verificationMode = false
+    // F214：上次返回键按下时刻（栈顶二次确认窗口）
+    private var lastBackPressedTime = 0L
     private val saveImage = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
             ACache.get().put(imagePathKey, uri.toString())
@@ -126,7 +152,18 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         }
         titleState = intent.getStringExtra("title") ?: getString(R.string.loading)
         subtitleState = intent.getStringExtra("sourceName")
+        verificationMode = intent.getBooleanExtra("sourceVerificationEnable", false)
+        // 配置变更（日夜/密度等）会让本页重建：此时必须**恢复**引导条的显隐，
+        // 否则重建后的实例读到刚写入的一次性记忆位 ⇒ 引导条凭空消失（真机实测）
+        if (savedInstanceState != null &&
+            savedInstanceState.containsKey(KEY_GUIDE_BAR_VISIBLE)
+        ) {
+            guideBarVisible = savedInstanceState.getBoolean(KEY_GUIDE_BAR_VISIBLE)
+        } else {
+            initVerificationGuide()
+        }
         initComposeTopBar()
+        initNoticeBar()
         viewModel.initData(intent) {
             val url = viewModel.baseUrl
             val headerMap = viewModel.headerMap
@@ -155,41 +192,47 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
                 toggleFullScreen()
                 return@addCallback
             }
+            // F214 返回可预期化：可回退时**一律一次一页**——`goBack()` 单步后退，替代原实现
+            // 「按 URL 或标题变化才计步」的合并启发式（SPA/重定向站点 URL 常不变 ⇒ steps 一路
+            // 累加到 steps==size 直接 finish，用户按一次返回整站消失）。
+            // 可回退判定用标准 API `canGoBack()`：实测个别 ROM（MEmu+Chrome116）即使
+            // copyBackForwardList 里仍有后退项，canGoBack() 也恒 false 且 goBack() 无效——
+            // 那种环境下本分支不可达，行为自然落到下面的「栈顶二次确认」，不会卡死。
             if (currentWebView.canGoBack()) {
                 val list = currentWebView.copyBackForwardList()
-                val size = list.size
-                if (size == 1) {
+                val target = list.currentIndex - 1
+                val targetUrl = if (target >= 0) list.getItemAtIndex(target)?.originalUrl else null
+                if (targetUrl == BLANK_HTML) {
+                    // 保留原 BLANK_HTML 终止语义：后退落点是复用池的空白预载页 ⇒ 直接关闭，
+                    // 不让用户看到一张空白页
                     finish()
                     return@addCallback
                 }
-                val currentIndex = list.currentIndex
-                val currentItem = list.currentItem
-                val currentUrl = currentItem?.originalUrl ?: BLANK_HTML
-                val currentTitle = currentItem?.title
-                var steps = 1
-                for (i in currentIndex - 1 downTo 0) {
-                    val item = list.getItemAtIndex(i)
-                    val itemUrl = item.originalUrl
-                    if (itemUrl == BLANK_HTML) {
-                        finish()
-                        return@addCallback
-                    }
-                    if (itemUrl != currentUrl || currentTitle != item.title) {
-                        break
-                    }
-                    if (currentUrl == DATA_HTML) {
-                        break
-                    }
-                    steps++
-                }
-                if (steps == size) {
-                    finish()
-                    return@addCallback
-                }
-                currentWebView.goBackOrForward(-steps)
+                currentWebView.goBack()
                 return@addCallback
             }
-            finish()
+            // F214 栈顶二次确认：退出不可逆，需要缓冲（2 秒内再按一次才关闭）
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastBackPressedTime < BACK_EXIT_INTERVAL) {
+                finish()
+                return@addCallback
+            }
+            lastBackPressedTime = now
+            binding.root.snackbar(getString(R.string.webview_back_again_exit))
+        }
+    }
+
+    /**
+     * F215 验证模式一次性引导条：验证模式下 ✓ 的语义与平时不同（保存验证结果并关闭），
+     * 页面本身无任何在场说明 ⇒ 首次进入显示引导条，**显示即记忆**（不重复出现）。
+     * 克制度：不做常驻模式徽标（会挤占本就局促的顶栏，且验证一屏内即可完成）。
+     */
+    private fun initVerificationGuide() {
+        if (!verificationMode) return
+        val guidePrefs = getSharedPreferences(GUIDE_PREFS, MODE_PRIVATE)
+        if (!guidePrefs.getBoolean(KEY_VERIFICATION_GUIDE_SHOWN, false)) {
+            guidePrefs.edit().putBoolean(KEY_VERIFICATION_GUIDE_SHOWN, true).apply()
+            guideBarVisible = true
         }
     }
 
@@ -216,13 +259,60 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
                             AppDropdownMenu(
                                 expanded = menuExpanded,
                                 onDismiss = { menuExpanded = false },
-                                actions = buildMenuActions()
+                                actions = buildMenuActions(AppUiTokens.danger)
                             )
                         }
                     }
                 )
             }
         }
+    }
+
+    /**
+     * F215 顶栏下引导/状态条（**纯 View 实现**）：文案与可见性都走 View API。
+     * 用 Compose 实现时 ComposeView 处于 `gone` 不参与遍历，组合内容与其内的可见性写入在
+     * 「初始即应显示」路径上不可靠（真机多轮实测：挑战期条会出现、初始引导条不出现）；
+     * View 可见性变化本身即可靠触发父容器重排，网页区随之让位。
+     */
+    private fun initNoticeBar() {
+        val accent = accentColor
+        binding.noticeBar.setBackgroundColor(
+            ColorUtils.blendColors(this.bottomBackground, accent, 0.12f)
+        )
+        binding.noticeText.setTextColor(this.primaryTextColor)
+        binding.noticeIcon.setColorFilter(accent)
+        binding.noticeClose.setColorFilter(this.secondaryTextColor)
+        binding.noticeClose.setOnClickListener { onNoticeClose() }
+        updateNoticeBar()
+    }
+
+    private fun updateNoticeBar() {
+        val text = when {
+            challengeChecking -> getString(R.string.source_verification_checking)
+            guideBarVisible -> getString(R.string.source_verification_guide)
+            else -> null
+        }
+        if (text == null) {
+            binding.noticeBar.gone()
+            return
+        }
+        binding.noticeText.text = text
+        if (challengeChecking) {
+            binding.noticeClose.gone()          // 挑战期条不可关闭（瞬态系统状态，给关闭是假选择）
+        } else {
+            binding.noticeClose.visible()
+        }
+        binding.noticeBar.visible()
+    }
+
+    private fun onNoticeClose() {
+        guideBarVisible = false
+        updateNoticeBar()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(KEY_GUIDE_BAR_VISIBLE, guideBarVisible)
     }
 
     private fun onClickOk() {
@@ -235,7 +325,8 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         }
     }
 
-    private fun buildMenuActions(): List<MenuAction> = buildList {
+    /** [danger] 为菜单**破坏性项**的语义色（单源 [AppUiTokens.danger]，禁止在此写色值） */
+    private fun buildMenuActions(danger: Color): List<MenuAction> = buildList {
         // 浏览器打开 / 复制 URL
         add(
             MenuAction(
@@ -273,20 +364,36 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         )
         // 源操作（仅源验证模式可见）
         if (viewModel.sourceOrigin.isNotEmpty()) {
+            // 修复2/3（合规缺口·原「禁用源」与「删除源」同菜单且无确认直接执行、无危险标识）：
+            // 破坏性梯度对齐——两者补 danger tint；禁用源补二次确认（影响面说明 + 红色确认键）
             add(
                 MenuAction(
                     icon = Icons.Outlined.Delete,
+                    tint = danger,
                     title = getString(R.string.disable_source),
                     onClick = {
-                        viewModel.disableSource {
-                            finish()
-                        }
+                        showComposeConfirmDialog(
+                            title = getString(R.string.disable_source),
+                            message = getString(
+                                R.string.disable_source_confirm,
+                                viewModel.sourceName
+                            ),
+                            positiveText = getString(R.string.yes),
+                            negativeText = getString(R.string.no),
+                            dangerPositive = true,
+                            onPositive = {
+                                viewModel.disableSource {
+                                    finish()
+                                }
+                            }
+                        )
                     }
                 )
             )
             add(
                 MenuAction(
                     icon = Icons.Outlined.DeleteForever,
+                    tint = danger,
                     title = getString(R.string.delete_source),
                     onClick = {
                         showComposeConfirmDialog(
@@ -568,7 +675,15 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
                 view.evaluateJavascript("!!window._cf_chl_opt") {
                     if (it == "true") {
                         isCloudflareChallenge = true
-                    } else if (isCloudflareChallenge && viewModel.sourceVerificationEnable) {
+                        // F215：把「正在过站点安全检查」的 5-15 秒无反馈黑盒变成在场说明
+                        // （evaluateJavascript 回调在主线程，可直接写 Compose 状态）
+                        challengeChecking = true
+                    } else {
+                        // 本次加载已无挑战标记 ⇒ 状态条复位（isCloudflareChallenge 语义保持原样，见 close()）
+                        challengeChecking = false
+                    }
+                    updateNoticeBar()
+                    if (it != "true" && isCloudflareChallenge && viewModel.sourceVerificationEnable) {
                         viewModel.saveVerificationResult(currentWebView) {
                             finish()
                         }
@@ -602,7 +717,43 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
             handler: SslErrorHandler?,
             error: SslError?
         ) {
-            handler?.proceed()
+            // 修复1（合规缺口·原实现无条件放行所有证书错误）：
+            // 默认**拒绝**——放行决定必须逐次知情确认（不做站点白名单记忆，安全边界不可静默降级）。
+            // 三个出口都要落定 handler（proceed / cancel 只能调一次）：确认→proceed；
+            // 取消→cancel；点外关闭/返回→onDismissAction→cancel。
+            handler ?: return
+            val host = error?.url?.let { runCatching { Uri.parse(it).host }.getOrNull() }
+                ?: view?.url
+                ?: getString(R.string.ssl_error_cert_unknown)
+            showComposeConfirmDialog(
+                title = getString(R.string.ssl_error_title),
+                message = getString(
+                    R.string.ssl_error_message,
+                    host,
+                    sslCertSummary(error)
+                ),
+                positiveText = getString(R.string.ssl_error_continue),
+                negativeText = getString(R.string.cancel),
+                dangerPositive = true,
+                onPositive = { handler.proceed() },
+                onNegative = { handler.cancel() },
+                onDismissAction = { handler.cancel() }
+            )
+        }
+
+        /**
+         * 证书摘要（替代原型的「查看证书详情」展开卡）：颁发对象 + 有效期在确认文案内直接给出，
+         * 避免为一次性披露新增共享对话框组件；信息不折叠也就不会被用户错过。
+         */
+        @Suppress("DEPRECATION")
+        private fun sslCertSummary(error: SslError?): String {
+            val cert = error?.certificate ?: return getString(R.string.ssl_error_cert_unknown)
+            val subject = cert.issuedTo?.cName?.takeIf { it.isNotBlank() }
+                ?: getString(R.string.ssl_error_cert_unknown)
+            val notAfter = cert.validNotAfterDate
+                ?.let { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it) }
+                ?: return subject
+            return getString(R.string.ssl_error_cert_info, subject, notAfter)
         }
 
     }
