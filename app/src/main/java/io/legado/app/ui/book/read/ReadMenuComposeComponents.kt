@@ -63,7 +63,8 @@ import io.legado.app.utils.dpToPx
 import androidx.compose.material3.MaterialTheme
 import io.legado.app.ui.theme.subtitleLarge
 
-private const val MENU_BUTTONS_PER_PAGE = 4
+/** 阅读菜单每行每页最多展示的按钮数（F60：管理页预览条须与阅读菜单同口径 ⇒ 改为模块内可见，禁止各自写死） */
+internal const val MENU_BUTTONS_PER_PAGE = 4
 private val READ_MENU_BUTTON_MIN_HEIGHT = 52.dp
 private val READ_MENU_TITLE_ICON_SIZE = 22.dp
 private val READ_MENU_TITLE_TOUCH_SIZE = 44.dp

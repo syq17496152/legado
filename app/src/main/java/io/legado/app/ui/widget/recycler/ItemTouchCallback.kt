@@ -108,6 +108,7 @@ class ItemTouchCallback(private val callback: Callback) : ItemTouchHelper.Callba
         super.onSelectedChanged(viewHolder, actionState)
         val swiping = actionState == ItemTouchHelper.ACTION_STATE_DRAG
         swipeRefreshLayout?.isEnabled = !swiping
+        callback.onDragStateChanged(viewHolder, actionState)
     }
 
     override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
@@ -141,6 +142,16 @@ class ItemTouchCallback(private val callback: Callback) : ItemTouchHelper.Callba
          * 手指松开
          */
         fun onClearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
+
+        }
+
+        /**
+         * 拖拽/滑动状态变化（F51：页面据此做「拖拽中」视觉反馈，如卡片抬升 + accent 描边）。
+         *
+         * 由 `ItemTouchHelper.onSelectedChanged` 原样转发；`actionState` 取 `ItemTouchHelper.ACTION_STATE_*`。
+         * 注意：**手势结束不保证回调到本方法**（平台收起拖拽时可能不回调）⇒ 视觉复位请放 [onClearView]。
+         */
+        fun onDragStateChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
 
         }
 

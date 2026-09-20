@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.read
 
 import android.content.Context
+import androidx.annotation.Keep
 import io.legado.app.constant.PreferKey
 import io.legado.app.utils.GSON
 import io.legado.app.utils.getPrefString
@@ -43,6 +44,11 @@ object ReadMenuButtonConfig {
         )
     }
 
+    // @Keep 铁律（Gson 反射模型，proguard-rules.pro:10 铁证）：R8 收窄后泛型签名丢失会使
+    // List<ButtonRef> 反序列化成 List<LinkedTreeMap> ⇒ sanitizeRow 取 .type 时抛
+    // ClassCastException ⇒ **打开本页即崩**（真机复现：拖动排序落盘后下次进入必崩）。
+    // 项目内所有 Gson 持久化模型一律 @Keep（同 DiscoverySuiteConfig 口径）。
+    @Keep
     data class ButtonRef(
         val type: String = TYPE_BUILTIN,
         val id: String = "",
@@ -51,6 +57,7 @@ object ReadMenuButtonConfig {
         val nightIconPath: String = ""
     )
 
+    @Keep
     data class ButtonLayout(
         val firstRow: List<ButtonRef> = emptyList(),
         val secondRow: List<ButtonRef> = emptyList()
@@ -61,7 +68,12 @@ object ReadMenuButtonConfig {
         val parsed = if (raw.isBlank()) null else runCatching {
             GSON.fromJson(raw, ButtonLayout::class.java)
         }.getOrNull()
-        val layout = sanitize(parsed ?: defaultLayout())
+        val sanitized = sanitize(parsed ?: defaultLayout())
+        // 兜底：解析出的元素被**整体丢弃**（R8 泛型退化/脏数据，见类上 @Keep 注释）⇒ 回落默认布局。
+        // 不这么做会得到「两排皆空」的静默数据丢失（菜单按钮区整个消失，比崩页更难排查）。
+        val parsedCount = (parsed?.firstRow?.size ?: 0) + (parsed?.secondRow?.size ?: 0)
+        val keptCount = sanitized.firstRow.size + sanitized.secondRow.size
+        val layout = if (parsedCount > 0 && keptCount == 0) defaultLayout() else sanitized
         return when {
             layout.isMisplacedAiDefault() -> defaultLayout()
             parsed != null && layout.isLegacyDefaultBeforeBubble() -> defaultLayout()
@@ -111,8 +123,15 @@ object ReadMenuButtonConfig {
         return ButtonLayout(first, second)
     }
 
+    /**
+     * 行清洗。
+     *
+     * `filterIsInstance` 是**崩溃兜底**（同 ExploreFragment 读旧缓存的口径）：即便拿到的是
+     * R8 退化后的 `LinkedTreeMap` 元素（见类上 @Keep 注释），`is` 判断不触发 checkcast ⇒
+     * 脏元素被直接丢弃、回落默认布局，**不会让整页崩在 onActivityCreated**。
+     */
     private fun sanitizeRow(row: List<ButtonRef>): List<ButtonRef> {
-        return row.filter { ref ->
+        return row.filterIsInstance<ButtonRef>().filter { ref ->
             when (ref.type) {
                 TYPE_BUILTIN -> ref.id in Builtin.ids
                 TYPE_CUSTOM -> ref.id.toLongOrNull() != null

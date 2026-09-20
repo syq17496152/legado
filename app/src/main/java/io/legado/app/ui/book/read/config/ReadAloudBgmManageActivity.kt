@@ -1,12 +1,14 @@
 package io.legado.app.ui.book.read.config
 
 import android.media.MediaMetadataRetriever
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -65,6 +67,13 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     private var importing = false
     private var importingText = ""
     private lateinit var batchActionBar: LinearLayout
+
+    /** F55：分组区顶部的「全部展开 / 全部折叠」快捷（运行时插入，见 [ensureGroupActionBar]） */
+    private var groupActionBar: LinearLayout? = null
+
+    /** F54：音轨试听播放器——页面级单实例（同时只允许试听一条，避免多路混音） */
+    private var previewPlayer: MediaPlayer? = null
+    private var previewTrackId: Long = 0L
 
     private val currentAssetLabel: String
         get() = assetLabel(currentAssetType)
@@ -141,6 +150,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     }
 
     override fun onDestroy() {
+        stopPreview()
         pendingExportPackageFile?.delete()
         pendingExportPackageFile = null
         super.onDestroy()
@@ -196,6 +206,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
         recyclerView.adapter = adapter
         (recyclerView.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
         root.applyUiBodyTypefaceDeep(uiTypeface())
+        ensureGroupActionBar()
         updateAssetTabs()
     }
 
@@ -242,6 +253,158 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                 leftMargin = 4.dpToPx()
                 rightMargin = 4.dpToPx()
             }
+        }
+    }
+
+    // ==================== F55 分组折叠快捷 ====================
+
+    /**
+     * F55：分组区顶部的「全部展开 / 全部折叠」快捷。
+     *
+     * 分组折叠能力本来就有，但**默认全展开**等于没用（首屏要滚很久才到目标分组）；
+     * 把默认态改对（只展开「默认分组」，见 [buildRows]）之后，还需要一个
+     * 「一键看全部 / 一键收干净」的出口，否则逐个展开同样费事。
+     *
+     * 插入位置=摘要与列表之间（`activity_theme_manage.xml` 被 14 个管理页共用 ⇒ 不改 XML）。
+     */
+    private fun ensureGroupActionBar(): LinearLayout? {
+        groupActionBar?.let { return it }
+        val parent = binding.root as? LinearLayout ?: return null
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            addView(groupActionChip(getString(R.string.read_aloud_bgm_expand_all)) { setAllGroupsExpanded(true) })
+            addView(groupActionChip(getString(R.string.read_aloud_bgm_collapse_all)) { setAllGroupsExpanded(false) })
+        }
+        val params = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            leftMargin = 18.dpToPx()
+            rightMargin = 18.dpToPx()
+            topMargin = 4.dpToPx()
+        }
+        val index = parent.indexOfChild(binding.tvSummary).takeIf { it >= 0 }?.plus(1)
+            ?: parent.childCount
+        parent.addView(bar, index, params)
+        groupActionBar = bar
+        return bar
+    }
+
+    private fun groupActionChip(text: String, action: () -> Unit): TextView {
+        return TextView(this).apply {
+            this.text = text
+            textSize = 12f
+            gravity = Gravity.CENTER
+            typeface = uiTypeface()
+            setTextColor(accentColor)
+            setPadding(10.dpToPx(), 6.dpToPx(), 10.dpToPx(), 6.dpToPx())
+            background = UiCorner.actionSelector(
+                themeMutedColorOrDefault(),
+                themeCardColorOrDefault(),
+                UiCorner.actionRadius(this@ReadAloudBgmManageActivity)
+            )
+            setOnClickListener { action() }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { leftMargin = 6.dpToPx() }
+        }
+    }
+
+    /**
+     * F55：一键展开 / 收起全部分组。
+     *
+     * 属**会话内视图状态**（与既有 `expandedGroupIds` 一致，不落盘）：离开页面再回来仍是
+     * 「只展开默认分组」的默认态，符合「首屏只呈现当前在用的资产」的取向。
+     */
+    private fun setAllGroupsExpanded(expanded: Boolean) {
+        expandedGroupsInitialized = true
+        expandedGroupIds.clear()
+        if (expanded) {
+            expandedGroupIds.addAll(rowGroups().map { it.id })
+        }
+        adapter.submit(buildRows())
+    }
+
+    /**
+     * F50：空态操作化——把「下一步在哪导入」从纯文本提示升级为可点主操作。
+     *
+     * 复用共用布局里本页已 `GONE` 的 `btn_add` 槽位（不新增视图、不改共用 XML）：
+     * 空库时它显示「导入音频」并复用既有 [showImportActions]（与顶栏 ⬇ 同一入口，不新造通道）；
+     * 有数据时保持隐藏（导入入口已由顶栏承担，避免重复入口）。
+     */
+    private fun updateEmptyAction() {
+        val empty = tracks.isEmpty()
+        binding.btnAdd.visibility = if (empty) View.VISIBLE else View.GONE
+        if (empty) {
+            binding.btnAdd.text = getString(R.string.read_aloud_bgm_import_audio)
+            binding.btnAdd.setOnClickListener { showImportActions() }
+        } else {
+            binding.btnAdd.setOnClickListener(null)
+        }
+    }
+
+    // ==================== F54 音轨试听 ====================
+
+    /**
+     * F54：音轨卡试听——播放/停止切换。
+     *
+     * 音频资产的核心决策是「这段声音对不对味」，试听是最高频的验证动作；
+     * 原先只能「退出页 → 朗读 → 回页」间接听，验证路径长、试错成本高。
+     * 克制点：只做播放/停止，不做波形编辑/裁剪（管理页定位是资产归类非编辑）。
+     */
+    private fun togglePreview(track: ReadAloudBgmTrack) {
+        if (previewPlayer != null && previewTrackId == track.id) {
+            stopPreview()
+            return
+        }
+        stopPreview()
+        val file = File(track.filePath)
+        if (!file.exists() || file.length() <= 0L) {
+            toastOnUi(R.string.read_aloud_bgm_preview_missing)
+            return
+        }
+        val player = MediaPlayer()
+        val started = kotlin.runCatching {
+            player.setDataSource(file.absolutePath)
+            player.prepare()
+            player.start()
+        }
+        if (started.isFailure) {
+            player.release()
+            toastOnUi(started.exceptionOrNull()?.localizedMessage ?: getString(R.string.read_aloud_bgm_preview_failed))
+            return
+        }
+        previewPlayer = player
+        previewTrackId = track.id
+        player.setOnCompletionListener { stopPreview() }
+        refreshPreviewButton(track.id, true)
+    }
+
+    /** 停止并释放试听播放器，同时把按钮复位为「播放」态（幂等，未在试听时是空操作） */
+    private fun stopPreview() {
+        previewPlayer?.let { player ->
+            runCatching { player.stop() }
+            player.release()
+        }
+        previewPlayer = null
+        val stoppedId = previewTrackId
+        previewTrackId = 0L
+        if (stoppedId != 0L) refreshPreviewButton(stoppedId, false)
+    }
+
+    /**
+     * 刷新某音轨卡的试听按钮态。
+     *
+     * 播放/停止都由本页驱动，按钮引用只在 [activePreviewButton] 上 ⇒ 其余卡按 id 反查
+     * （列表规模 ≤ 几十，直接遍历绑定中的 Holder 最省事且无陈旧引用风险）。
+     */
+    private fun refreshPreviewButton(trackId: Long, playing: Boolean) {
+        val recycler = binding.recyclerView
+        for (index in 0 until recycler.childCount) {
+            val holder = recycler.getChildViewHolder(recycler.getChildAt(index)) as? TrackHolder ?: continue
+            if (holder.boundTrackId == trackId) holder.applyPreviewState(playing)
         }
     }
 
@@ -301,7 +464,15 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                 setImporting(true, "正在导入${label} ZIP…")
                 kotlin.runCatching {
                     withContext(Dispatchers.IO) {
-                        importAudioPackage(uri, normalized, replaceOld = replaceOld)
+                        importAudioPackage(uri, normalized, replaceOld = replaceOld) { count ->
+                            // F52：ZIP 循环在 IO 线程 ⇒ 进度回主线程刷摘要（`View.post` 线程安全且不阻塞循环）
+                            binding.tvSummary.post {
+                                if (importing) {
+                                    binding.tvSummary.text =
+                                        getString(R.string.read_aloud_bgm_import_progress, count)
+                                }
+                            }
+                        }
                     }
                 }.onSuccess { count ->
                     currentAssetType = normalized
@@ -311,7 +482,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                     updateAssetTabs()
                     notifyAudioChanged()
                     finishImportingAndLoad()
-                    toastOnUi("已导入 $count 个${label}")
+                    toastOnUi(getString(R.string.read_aloud_bgm_import_done, count, label))
                 }.onFailure {
                     finishImportingAndLoad()
                     toastOnUi(it.localizedMessage ?: "音频包导入失败")
@@ -361,6 +532,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
             selectedIds.retainAll(tracks.map { it.id }.toSet())
             adapter.submit(buildRows())
             updateBatchActionBar()
+            updateEmptyAction()
             binding.tvSummary.text = if (importing) {
                 importingText.ifBlank { "正在导入…" }
             } else if (tracks.isEmpty()) {
@@ -378,6 +550,8 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     private fun switchAssetType(assetType: String) {
         val normalized = ReadAloudBgmTrack.normalizeAssetType(assetType)
         if (currentAssetType == normalized) return
+        // F54：切换资产类型后原音轨已不在列表里 ⇒ 先停掉试听，避免「看不见的播放」
+        stopPreview()
         currentAssetType = normalized
         selectedIds.clear()
         expandedGroupIds.clear()
@@ -538,10 +712,18 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
         )
     }
 
+    /**
+     * 导入 ZIP 音频包。
+     *
+     * @param onProgress 每成功导入 1 条回调一次（F52：导入进度闭环，大 ZIP 长等待时给出确定感）。
+     *   **在 IO 线程回调**，调用方自行切主线程；不提供总数——取总数需为统计条目再解压一遍整包，
+     *   成本与收益不匹配（进度按已导入条数递增已足够传达「没卡死」）。
+     */
     private suspend fun importAudioPackage(
         uri: Uri,
         assetType: String,
-        replaceOld: Boolean
+        replaceOld: Boolean,
+        onProgress: (Int) -> Unit = {}
     ): Int {
         val normalizedType = ReadAloudBgmTrack.normalizeAssetType(assetType)
         val metadata = readAudioPackageMetadata(uri)
@@ -601,6 +783,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                             )
                         )
                         imported += 1
+                        onProgress(imported)
                     }
                     zip.closeEntry()
                     entry = zip.nextEntry
@@ -1003,15 +1186,34 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
         return id == 0L || name == "默认分组"
     }
 
-    private fun buildRows(): List<AudioRow> {
+    /**
+     * 当前资产类型下的分组行序（含合成的「默认分组」）。
+     *
+     * `buildRows` 与「全部展开」共用本函数，避免两处各自推导导致口径分叉。
+     */
+    private fun rowGroups(): List<ReadAloudBgmGroup> {
         val tracksByGroup = tracks.groupBy { it.groupId }
-        val rowGroups = (listOf(ReadAloudBgmGroup(id = 0L, name = "默认分组", assetType = currentAssetType, sortOrder = Int.MIN_VALUE)) + groups)
+        return (listOf(
+            ReadAloudBgmGroup(
+                id = 0L,
+                name = "默认分组",
+                assetType = currentAssetType,
+                sortOrder = Int.MIN_VALUE
+            )
+        ) + groups)
             .distinctBy { it.id }
             .filter { group -> group.id != 0L || tracksByGroup.containsKey(0L) || tracks.isEmpty() }
             .sortedWith(compareBy<ReadAloudBgmGroup> { it.sortOrder }.thenBy { it.id })
+    }
+
+    private fun buildRows(): List<AudioRow> {
+        val tracksByGroup = tracks.groupBy { it.groupId }
+        val rowGroups = rowGroups()
         if (!expandedGroupsInitialized) {
             expandedGroupIds.clear()
-            expandedGroupIds.addAll(rowGroups.filterNot { it.isDefaultGroup() }.map { it.id })
+            // F55：首屏只展开「默认分组」——原先默认展开全部非默认分组，分组/音轨一多首屏即信息过载
+            // （默认分组不存在时首屏为全折叠的总览态，「全部展开」快捷承担一次性看全的需求）
+            expandedGroupIds.addAll(rowGroups.filter { it.isDefaultGroup() }.map { it.id })
             expandedGroupsInitialized = true
         } else {
             expandedGroupIds.retainAll(rowGroups.map { it.id }.toSet())
@@ -1115,7 +1317,8 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                 return GroupHolder(root, title, sub)
             }
             val root = LinearLayout(parent.context).apply {
-                orientation = LinearLayout.VERTICAL
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
                 setPadding(18.dpToPx(), 12.dpToPx(), 14.dpToPx(), 12.dpToPx())
                 background = UiCorner.actionSelector(
                     parent.context.themeCardColorOrDefault(),
@@ -1134,10 +1337,25 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                 typeface = uiTypeface()
                 gravity = Gravity.START
             }
-            root.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            root.addView(sub, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = 4.dpToPx()
-            })
+            val info = LinearLayout(parent.context).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                addView(sub, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = 4.dpToPx()
+                })
+            }
+            // F54：卡右侧试听键（原先音轨卡只有信息展示，验证音色必须回朗读流程间接听）
+            val previewButton = ImageView(parent.context).apply {
+                setPadding(8.dpToPx(), 8.dpToPx(), 8.dpToPx(), 8.dpToPx())
+            }
+            root.addView(
+                info,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            )
+            root.addView(
+                previewButton,
+                LinearLayout.LayoutParams(40.dpToPx(), 40.dpToPx())
+            )
             root.layoutParams = RecyclerView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -1145,7 +1363,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                 leftMargin = 16.dpToPx()
                 bottomMargin = 10.dpToPx()
             }
-            return TrackHolder(root, title, sub)
+            return TrackHolder(root, title, sub, previewButton)
         }
 
         override fun getItemCount(): Int = items.size
@@ -1182,10 +1400,16 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     private inner class TrackHolder(
         itemView: View,
         private val title: TextView,
-        private val sub: TextView
+        private val sub: TextView,
+        private val previewButton: ImageView
     ) : RecyclerView.ViewHolder(itemView) {
 
+        /** 当前绑定的音轨 id（F54：试听态刷新要按 id 反查卡，不能靠闭包里的旧值） */
+        var boundTrackId: Long = 0L
+            private set
+
         fun bind(track: ReadAloudBgmTrack) {
+            boundTrackId = track.id
             val selected = track.id in selectedIds
             title.text = if (selected) "✓ ${track.displayName()}" else track.displayName()
             sub.text = buildList {
@@ -1206,6 +1430,19 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                 toggle(track.id)
                 true
             }
+            applyPreviewState(previewPlayer != null && previewTrackId == track.id)
+            previewButton.setOnClickListener { togglePreview(track) }
+        }
+
+        /** F54：按钮态与真实播放状态同源（`previewTrackId` + 播放器存活），避免出现「假暂停」 */
+        fun applyPreviewState(playing: Boolean) {
+            previewButton.setImageResource(
+                if (playing) R.drawable.ic_pause_24dp else R.drawable.ic_play_24dp
+            )
+            previewButton.setColorFilter(if (playing) accentColor else primaryTextColor)
+            previewButton.contentDescription = getString(
+                if (playing) R.string.read_aloud_bgm_preview_stop else R.string.read_aloud_bgm_preview_play
+            )
         }
 
         private fun toggle(id: Long) {

@@ -31,6 +31,22 @@ object ReadMenuButtonIconHelper {
             ?: ContextCompat.getDrawable(context, fallbackRes)
     }
 
+    /**
+     * F61：按**显式路径**取图标，不走主题相关的自动选路。
+     *
+     * 用于夜间按钮的「日间 / 夜间」双缩略位——两个位必须各自显示自己的图标，
+     * 而 [drawable] 会按当前日/夜主题在两条路径间自动取舍，故另开此入口。
+     */
+    fun drawableFromPath(
+        context: Context,
+        path: String?,
+        @DrawableRes fallbackRes: Int,
+        targetSize: Int = 96
+    ): Drawable? {
+        return loadDrawable(context, path, targetSize)
+            ?: ContextCompat.getDrawable(context, fallbackRes)
+    }
+
     fun saveIcon(context: Context, uri: Uri, oldPath: String? = null, targetSize: Int = 96): String {
         val dir = iconDir(context).apply { mkdirs() }
         val extension = uri.lastPathSegment

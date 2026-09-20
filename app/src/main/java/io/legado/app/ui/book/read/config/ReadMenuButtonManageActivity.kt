@@ -4,9 +4,15 @@ import android.graphics.Color
 import android.content.Intent
 import android.app.Activity
 import android.os.Bundle
+import android.text.TextUtils
+import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
@@ -22,6 +28,7 @@ import io.legado.app.databinding.ActivityThemeManageBinding
 import io.legado.app.databinding.ItemThemePackageBinding
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
+import io.legado.app.ui.book.read.MENU_BUTTONS_PER_PAGE
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
@@ -42,6 +49,7 @@ import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.utils.GSON
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.postEvent
@@ -63,6 +71,12 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private var customButtons: Map<Long, ReadMenuCustomButton> = emptyMap()
     private var rowOrderDirty = false
     private var pendingIconRequest: IconRequest? = null
+
+    /** F51：拖拽控制器提升为字段——卡片右侧手柄按下时要能主动起拖（`startDrag`） */
+    private lateinit var itemTouchHelper: ItemTouchHelper
+
+    /** F60：列表底部「阅读页实际效果」预览条（只读，运行时插入，见 [ensurePreviewBar]） */
+    private var previewBar: LinearLayout? = null
 
     private val editCustomButton = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -182,9 +196,9 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         recyclerView.layoutManager = LinearLayoutManager(this@ReadMenuButtonManageActivity)
         recyclerView.adapter = adapter
         (recyclerView.itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
-        ItemTouchHelper(ItemTouchCallback(this@ReadMenuButtonManageActivity).apply {
+        itemTouchHelper = ItemTouchHelper(ItemTouchCallback(this@ReadMenuButtonManageActivity).apply {
             isCanDrag = true
-        }).attachToRecyclerView(recyclerView)
+        }).also { it.attachToRecyclerView(recyclerView) }
         btnDay.setOnClickListener {
             if (rowIndex != 0) {
                 rowIndex = 0
@@ -198,6 +212,7 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             }
         }
         root.applyUiBodyTypefaceDeep(this@ReadMenuButtonManageActivity.uiTypeface())
+        ensurePreviewBar()
         updateTabs()
     }
 
@@ -207,6 +222,7 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         adapter.items = currentRow()
         binding.tvSummary.text = getString(R.string.read_menu_button_summary)
         updateTabs()
+        refreshPreview()
     }
 
     private fun updateTabs() = binding.run {
@@ -218,6 +234,147 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     private fun currentRow(): List<ReadMenuButtonConfig.ButtonRef> {
         return if (rowIndex == 0) layout.firstRow else layout.secondRow
+    }
+
+    // ==================== F60 实机预览条 ====================
+
+    /**
+     * F60：列表底部常驻一条「阅读页实际效果」预览条（只读）。
+     *
+     * 本页的核心产出是「阅读菜单长什么样」，但管理视图（卡片列表）与结果视图（菜单 2×4 网格）
+     * 分属两个 Tab、完全割裂 ⇒ 每次调序/换行都要「返回阅读页 → 调出菜单 → 看 → 回来再改」。
+     * 预览条把这条反馈回路缩成「改 → 瞄一眼」。
+     *
+     * 两条既有铁律决定实现形态：
+     * ① 不新增 View 布局页（`ui_gate` 禁 `R.layout.*`）⇒ 全部代码构建；
+     * ② `activity_theme_manage.xml` 被 14 个管理页共用 ⇒ **不改 XML**，只在本页运行时插到
+     *    「添加」按钮之前（该布局里 `recycler_view` 带 `weight=1`，插在它之后不会挤列表）。
+     *
+     * 只读：不挂任何点击/长按监听——避免出现第二处编辑入口（与列表编辑职责分离）。
+     */
+    private fun ensurePreviewBar(): LinearLayout? {
+        previewBar?.let { return it }
+        val parent = binding.root as? LinearLayout ?: return null
+        val title = TextView(this).apply {
+            text = getString(R.string.read_menu_preview_title)
+            textSize = 12f
+            setTextColor(secondaryTextColor)
+            typeface = uiTypeface()
+        }
+        val rows = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            isClickable = false
+            isFocusable = false
+            addView(
+                title,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+            addView(
+                rows,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = 4.dpToPx() }
+            )
+        }
+        val params = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            leftMargin = 16.dpToPx()
+            rightMargin = 16.dpToPx()
+            topMargin = 4.dpToPx()
+            bottomMargin = 8.dpToPx()
+        }
+        val addIndex = parent.indexOfChild(binding.btnAdd).takeIf { it >= 0 } ?: parent.childCount
+        parent.addView(bar, addIndex, params)
+        previewBar = bar
+        return bar
+    }
+
+    /** 预览条内容随 `layout` 重建（每次 [load] 调用；数据源与阅读菜单同为 `ReadMenuButtonConfig`） */
+    private fun refreshPreview() {
+        val rows = previewBar?.getChildAt(1) as? LinearLayout ?: return
+        rows.removeAllViews()
+        addPreviewRow(rows, layout.firstRow)
+        addPreviewRow(rows, layout.secondRow)
+    }
+
+    private fun addPreviewRow(container: LinearLayout, row: List<ReadMenuButtonConfig.ButtonRef>) {
+        if (row.isEmpty()) return
+        val rowView = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        row.take(MENU_BUTTONS_PER_PAGE).forEach { ref ->
+            rowView.addView(
+                previewCell(ref),
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            )
+        }
+        container.addView(
+            rowView,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 4.dpToPx() }
+        )
+        // 超出每页上限的部分在阅读菜单里是「左右翻页」而非折叠 ⇒ 提示口径按真实行为写（蓝图原文「折叠」失实）
+        if (row.size > MENU_BUTTONS_PER_PAGE) {
+            container.addView(
+                TextView(this).apply {
+                    text = getString(R.string.read_menu_preview_more, row.size - MENU_BUTTONS_PER_PAGE)
+                    textSize = 11f
+                    setTextColor(secondaryTextColor)
+                    gravity = Gravity.END
+                    typeface = uiTypeface()
+                },
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+    }
+
+    private fun previewCell(ref: ReadMenuButtonConfig.ButtonRef): LinearLayout {
+        val iconSize = 20.dpToPx()
+        val icon = ImageView(this).apply {
+            setImageDrawable(
+                ReadMenuButtonIconHelper.drawable(
+                    this@ReadMenuButtonManageActivity,
+                    ref,
+                    buttonIconRes(ref),
+                    ref.id.toLongOrNull()?.let { customButtons[it]?.iconPath }
+                )
+            )
+            setColorFilter(primaryTextColor)
+        }
+        val label = TextView(this).apply {
+            text = buttonTitle(ref)
+            textSize = 10f
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER
+            setTextColor(secondaryTextColor)
+            typeface = uiTypeface()
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            addView(icon, LinearLayout.LayoutParams(iconSize, iconSize))
+            addView(
+                label,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
     }
 
     private fun saveCurrentRow(row: List<ReadMenuButtonConfig.ButtonRef>) {
@@ -524,7 +681,31 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         return moved
     }
 
+    /**
+     * F51：拖拽中给被拖卡片抬升 + accent 描边（由 `ItemTouchHelper.onSelectedChanged` 转发）。
+     *
+     * 复位**不能**放这里——平台收起拖拽时不保证再回调本方法，故复位统一放 [onClearView]。
+     */
+    override fun onDragStateChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
+        if (actionState != ItemTouchHelper.ACTION_STATE_DRAG) return
+        viewHolder?.itemView?.apply {
+            elevation = 6.dpToPx().toFloat()
+            background = UiCorner.opaqueRoundedStroke(
+                themeCardColorOrDefault(),
+                UiCorner.panelRadius(this@ReadMenuButtonManageActivity),
+                2.dpToPx(),
+                accentColor
+            )
+        }
+    }
+
     override fun onClearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
+        // F51：无论是否发生位移都要复位拖拽视觉（下面「未位移即 return」的分支不会重建卡片）
+        viewHolder.itemView.elevation = 0f
+        viewHolder.itemView.background = UiCorner.opaqueRounded(
+            themeCardColorOrDefault(),
+            UiCorner.panelRadius(this)
+        )
         if (!rowOrderDirty) return
         rowOrderDirty = false
         saveCurrentRow(adapter.items)
@@ -668,7 +849,13 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         private val itemBinding: ItemThemePackageBinding
     ) : RecyclerView.ViewHolder(itemBinding.root) {
 
+        /**
+         * 复用视图会换绑 ⇒ 手柄/图标位的监听必须读「当前绑定的 ref」，不能闭包捕获 bind 时的旧 ref。
+         */
+        private var boundRef: ReadMenuButtonConfig.ButtonRef? = null
+
         fun bind(ref: ReadMenuButtonConfig.ButtonRef) = itemBinding.run {
+            boundRef = ref
             root.background = UiCorner.opaqueRounded(
                 themeCardColorOrDefault(),
                 UiCorner.panelRadius(this@ReadMenuButtonManageActivity)
@@ -721,6 +908,135 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                 ref.id.toLongOrNull()?.let { openCustomButtonEdit(it) }
             }
             btnMore.setOnClickListener { deleteButton(ref) }
+            // F51：卡右侧常驻拖拽手柄——「可排序」从隐藏态变可见态；按下手柄即起拖
+            ensureDragHandle().setOnTouchListener { _, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    itemTouchHelper.startDrag(this@ButtonViewHolder)
+                }
+                false
+            }
+            // F61：夜间按钮的日/夜双图标状态浮到卡上
+            bindNightIconSlots(ref)
+        }
+
+        /**
+         * F51：按需把拖拽手柄插到卡右侧（`ic_drag_handle` 为全站既有排序资产）。
+         *
+         * 插入而非改 `item_theme_package.xml`：该布局被多个管理页共用，改布局会外溢；
+         * 插到本页 Holder 的复用视图上同样只做一次（按 tag 去重）。
+         */
+        private fun ensureDragHandle(): ImageView {
+            val parent = itemBinding.root as LinearLayout
+            parent.findViewWithTag<ImageView>(DRAG_HANDLE_TAG)?.let { return it }
+            return ImageView(this@ReadMenuButtonManageActivity).apply {
+                tag = DRAG_HANDLE_TAG
+                setImageResource(R.drawable.ic_drag_handle)
+                setColorFilter(secondaryTextColor)
+                contentDescription = getString(R.string.read_menu_drag_handle)
+                setPadding(10.dpToPx(), 0, 2.dpToPx(), 0)
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                ).apply { gravity = Gravity.CENTER_VERTICAL }
+                parent.addView(this)
+            }
+        }
+
+        /**
+         * F61：把「夜间按钮配了哪几个图标」从「逐个点开图标菜单才知道」浮到卡上。
+         *
+         * 「配了几个图标」是本页独有的状态维度，不可见会让人误以为没配置成功、或反复进菜单确认；
+         * 只对**具备日/夜双图标能力**的按钮（内置夜间按钮）展示，普通卡不加信息（保持信息密度）。
+         * 同样不改共用卡布局 ⇒ 运行时插到 `lay_info` 的「行信息」之后。
+         */
+        private fun bindNightIconSlots(ref: ReadMenuButtonConfig.ButtonRef) {
+            val layInfo = itemBinding.layInfo
+            val isNightButton = ref.type == ReadMenuButtonConfig.TYPE_BUILTIN &&
+                    ref.id == ReadMenuButtonConfig.Builtin.NIGHT_THEME
+            val slotRow = layInfo.findViewWithTag<LinearLayout>(NIGHT_ICON_ROW_TAG)
+            if (!isNightButton) {
+                slotRow?.visibility = View.GONE
+                return
+            }
+            val row = slotRow ?: buildNightIconRow()
+            row.visibility = View.VISIBLE
+            (row.getChildAt(1) as? ImageView)?.refreshNightIconSlot(ref, nightIcon = false)
+            (row.getChildAt(2) as? ImageView)?.refreshNightIconSlot(ref, nightIcon = true)
+        }
+
+        private fun buildNightIconRow(): LinearLayout = itemBinding.run {
+            val slotSize = 24.dpToPx()
+            val label = TextView(this@ReadMenuButtonManageActivity).apply {
+                text = getString(R.string.read_menu_night_icons)
+                textSize = 12f
+                setTextColor(secondaryTextColor)
+                typeface = uiTypeface()
+            }
+            val daySlot = ImageView(this@ReadMenuButtonManageActivity).apply {
+                contentDescription = getString(R.string.read_menu_night_icon_day)
+                setOnClickListener { boundRef?.let { selectIcon(it, nightIcon = false) } }
+            }
+            val nightSlot = ImageView(this@ReadMenuButtonManageActivity).apply {
+                contentDescription = getString(R.string.read_menu_night_icon_night)
+                setOnClickListener { boundRef?.let { selectIcon(it, nightIcon = true) } }
+            }
+            val row = LinearLayout(this@ReadMenuButtonManageActivity).apply {
+                tag = NIGHT_ICON_ROW_TAG
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(
+                    label,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                )
+                addView(
+                    daySlot,
+                    LinearLayout.LayoutParams(slotSize, slotSize).apply { leftMargin = 10.dpToPx() }
+                )
+                addView(
+                    nightSlot,
+                    LinearLayout.LayoutParams(slotSize, slotSize).apply { leftMargin = 6.dpToPx() }
+                )
+            }
+            val insertIndex = layInfo.indexOfChild(tvInfo).takeIf { it >= 0 }?.plus(1) ?: layInfo.childCount
+            layInfo.addView(
+                row,
+                insertIndex,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = 4.dpToPx() }
+            )
+            row
+        }
+
+        /** 已配置 ⇒ 显示该图标的真实缩略；未配置 ⇒ 显示「＋」占位并降透明度（点即去设置） */
+        private fun ImageView.refreshNightIconSlot(
+            ref: ReadMenuButtonConfig.ButtonRef,
+            nightIcon: Boolean
+        ) {
+            val path = if (nightIcon) ref.nightIconPath else ref.iconPath
+            val configured = path.isNotBlank()
+            setImageDrawable(
+                ReadMenuButtonIconHelper.drawableFromPath(
+                    this@ReadMenuButtonManageActivity,
+                    path.takeIf { configured },
+                    if (configured) buttonIconRes(ref) else R.drawable.ic_add
+                )
+            )
+            setColorFilter(if (configured) primaryTextColor else secondaryTextColor)
+            alpha = if (configured) 1f else 0.6f
+            contentDescription = buildString {
+                append(
+                    getString(
+                        if (nightIcon) R.string.read_menu_night_icon_night
+                        else R.string.read_menu_night_icon_day
+                    )
+                )
+                if (!configured) append("：").append(getString(R.string.read_menu_night_icon_unset))
+            }
         }
     }
 
@@ -746,6 +1062,12 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
 
     companion object {
         private const val ICON_REQUEST = 1001
+
+        /** F51：拖拽手柄在复用视图上的去重 tag（同一 Holder 多次 bind 只插一次） */
+        private const val DRAG_HANDLE_TAG = "read_menu_button_drag_handle"
+
+        /** F61：日/夜双图标位在复用卡上的去重 tag */
+        private const val NIGHT_ICON_ROW_TAG = "read_menu_button_night_icon_row"
     }
 }
 
