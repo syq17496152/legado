@@ -137,6 +137,7 @@ scripts/publish_config.json
 !/ai_tests/scripts/l2_verify_m2_pages.py
 !/ai_tests/scripts/l2_verify_p0_pages.py
 !/ai_tests/scripts/l2_verify_m1_rest_pages.py
+!/ai_tests/scripts/l2_verify_b1_tts_casting.py
 # opencode 运行时产物
 .opencode/goals/
 /docs/specs/rss-image-decrypt-optimization/*.md
