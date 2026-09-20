@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Web
@@ -65,7 +66,11 @@ import io.legado.app.utils.keepScreenOn
 import io.legado.app.utils.longSnackbar
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.sendToClip
+import io.legado.app.constant.PreferKey
+import io.legado.app.help.config.AppConfig
+import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.snackbar
+import splitties.init.appCtx
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toggleSystemBar
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -124,6 +129,8 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     private var titleState by mutableStateOf("")
     private var subtitleState by mutableStateOf<String?>(null)
     private var webLogChecked by mutableStateOf(sessionShowWebLog)
+    // 证书放行策略勾选态（默认放行）：与登录页共用同一全局策略，见 AppConfig.sslCertPassThrough
+    private var sslPassThroughChecked by mutableStateOf(AppConfig.sslCertPassThrough)
     // F215：验证模式一次性引导条可见性（显示即记忆）
     private var guideBarVisible by mutableStateOf(false)
     // F215：Cloudflare 挑战期状态提示（挑战页加载完成时置位，非挑战页复位）
@@ -359,6 +366,26 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
                 onClick = {
                     webLogChecked = !webLogChecked
                     sessionShowWebLog = webLogChecked
+                }
+            )
+        )
+        // 证书放行策略（勾选态，**默认放行**）：类爬虫场景源站自签名/过期证书极常见，
+        // 默认拦截会把大量源直接判死；此处提供关闭入口，关闭后证书失败改为逐次知情确认。
+        add(
+            MenuAction(
+                icon = Icons.Outlined.Lock,
+                title = getString(R.string.ssl_passthrough),
+                checked = sslPassThroughChecked,
+                onClick = {
+                    sslPassThroughChecked = !sslPassThroughChecked
+                    appCtx.putPrefBoolean(PreferKey.sslCertPassThrough, sslPassThroughChecked)
+                    binding.root.snackbar(
+                        if (sslPassThroughChecked) {
+                            R.string.ssl_passthrough_on_hint
+                        } else {
+                            R.string.ssl_passthrough_off_hint
+                        }
+                    )
                 }
             )
         )
@@ -717,11 +744,16 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
             handler: SslErrorHandler?,
             error: SslError?
         ) {
-            // 修复1（合规缺口·原实现无条件放行所有证书错误）：
-            // 默认**拒绝**——放行决定必须逐次知情确认（不做站点白名单记忆，安全边界不可静默降级）。
-            // 三个出口都要落定 handler（proceed / cancel 只能调一次）：确认→proceed；
+            // 证书放行策略（AppConfig.sslCertPassThrough，**默认放行**，用户可关）：
+            // 本应用主体是类爬虫的书源/订阅源引擎，源站自签名/过期证书极常见，默认拦截会把大量源判死；
+            // 故默认放行（历史行为）。策略关闭后才走下面的逐次知情确认（不做站点白名单记忆）。
+            // 确认分支的三个出口都要落定 handler（proceed / cancel 只能调一次）：确认→proceed；
             // 取消→cancel；点外关闭/返回→onDismissAction→cancel。
             handler ?: return
+            if (AppConfig.sslCertPassThrough) {
+                handler.proceed()
+                return
+            }
             val host = error?.url?.let { runCatching { Uri.parse(it).host }.getOrNull() }
                 ?: view?.url
                 ?: getString(R.string.ssl_error_cert_unknown)

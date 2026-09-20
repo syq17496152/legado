@@ -542,4 +542,8 @@ object PreferKey {
     // 管理页背景透明度（ui-theme-governance-polish P6）：单 key 不分日夜（管理页日夜同源背景，
     // 显式决策非静默偏离 dialogAlpha 的分 key 范式），get/set 双向 coerceIn(0,100)
     const val manageBgAlpha = "manageBgAlpha"
+    // 证书放行策略（**默认放行**）：本应用主体是类爬虫的书源/订阅源引擎，源站自签名/过期证书极常见，
+    // 默认拦截会把大量源直接判死；故默认放行（历史行为）。关闭后每一次证书校验失败都需用户知情确认。
+    // 全局单 key、不按源存储：登录页（WebViewLoginFragment）与内嵌浏览器（WebViewActivity）共用同一策略。
+    const val sslCertPassThrough = "sslCertPassThrough"
 }

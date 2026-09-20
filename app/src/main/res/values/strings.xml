@@ -50,6 +50,9 @@
     <string name="replace_purify_search">Search Replacement</string>
     <string name="bookshelf">Bookshelf</string>
     <string name="favorites">Favorites</string>
+    <string name="favorites_empty_title">No favorites in this group yet</string>
+    <string name="favorites_empty_desc">Tap the star on an article to save it into this group</string>
+    <string name="favorites_empty_browse_rss">Browse RSS feeds</string>
     <string name="favorite">Favorite</string>
     <string name="in_favorites">in Favorites</string>
     <string name="out_favorites">Not in Favorites</string>
@@ -1219,6 +1222,15 @@
     <string name="ssl_error_continue">Continue anyway</string>
     <string name="ssl_error_cert_info">%1$s (valid until %2$s)</string>
     <string name="ssl_error_cert_unknown">unknown</string>
+    <string name="ssl_passthrough">Certificate pass-through</string>
+    <string name="ssl_passthrough_on_hint">Certificate pass-through is ON: failed checks are let through without asking</string>
+    <string name="ssl_passthrough_off_hint">Certificate pass-through is OFF: failed checks need your confirmation</string>
+    <string name="finish_login">Finish login</string>
+    <string name="logging_in">Logging in…</string>
+    <string name="login_error">Login failed</string>
+    <string name="copy_error_detail">Copy error detail</string>
+    <string name="password_show">Show password</string>
+    <string name="password_hide">Hide password</string>
     <string name="source_verification_guide">After finishing web verification, tap ✓ at the top right to save and go back</string>
     <string name="source_verification_checking">Passing the site\'s security check…</string>
     <string name="webview_back_again_exit">Press back again to exit</string>
@@ -1232,6 +1244,7 @@
     <string name="see">see</string>
     <string name="open">open</string>
     <string name="del_login_header">del login header</string>
+    <string name="del_login_header_confirm">Saved login info (username, password, cookies) of %1$s will be cleared. This cannot be undone.</string>
     <string name="show_login_header">show login header</string>
     <string name="login_header">login header</string>
     <string name="font_scale">font scale</string>

@@ -198,10 +198,21 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     companion object {
         private const val EXTRA_TARGET_PAGE = "targetPage"
         private const val TARGET_BOOKSHELF = "bookshelf"
+        private const val TARGET_RSS = "rss"
 
         fun openBookshelf(context: Context) {
             context.startActivity(Intent(context, MainActivity::class.java).apply {
                 putExtra(EXTRA_TARGET_PAGE, TARGET_BOOKSHELF)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        }
+
+        /** 收藏夹空态出口（F1 空态操作化）：直达主界面订阅流，便于用户从文章里点星标收藏 */
+        fun openRss(context: Context) {
+            context.startActivity(Intent(context, MainActivity::class.java).apply {
+                putExtra(EXTRA_TARGET_PAGE, TARGET_RSS)
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -578,10 +589,37 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     private fun handleTargetIntent(intent: Intent?) {
-        if (intent?.getStringExtra(EXTRA_TARGET_PAGE) != TARGET_BOOKSHELF) return
-        intent.removeExtra(EXTRA_TARGET_PAGE)
-        binding.viewPagerMain.post {
-            openBookshelfPage()
+        when (intent?.getStringExtra(EXTRA_TARGET_PAGE)) {
+            TARGET_BOOKSHELF -> {
+                intent.removeExtra(EXTRA_TARGET_PAGE)
+                binding.viewPagerMain.post {
+                    openBookshelfPage()
+                }
+            }
+
+            TARGET_RSS -> {
+                intent.removeExtra(EXTRA_TARGET_PAGE)
+                binding.viewPagerMain.post {
+                    openRssPage()
+                }
+            }
+        }
+    }
+
+    /**
+     * 切到订阅页（F1 空态出口用）：底栏勾选按**槽位归属**判定——
+     * RSS 可能承载在「发现」槽位（`resolveDiscoveryNavTarget()`），直接勾 `menu_rss` 会与槽位不符。
+     */
+    private fun openRssPage() = binding.run {
+        val position = realPositions.take(bottomMenuCount).indexOf(idRss).takeIf { it >= 0 }
+            ?: return@run
+        pagePosition = position
+        viewPagerMain.setCurrentItem(position, false)
+        val menuId = if (resolveDiscoveryNavTarget() == idRss) R.id.menu_discovery else R.id.menu_rss
+        bottomNavigationView.menu.findItem(menuId)?.isChecked = true
+        updateSideNavigationItems()
+        if (isSidebarMode() && sideNavigationOpen) {
+            closeSideNavigation()
         }
     }
 

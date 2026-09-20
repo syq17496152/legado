@@ -19,10 +19,26 @@
         android:layout_height="wrap_content"
         app:tabMode="scrollable" />
 
-    <androidx.viewpager.widget.ViewPager
-        android:id="@+id/view_pager"
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        tools:ignore="SpeakableTextPresentCheck" />
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.viewpager.widget.ViewPager
+            android:id="@+id/view_pager"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            tools:ignore="SpeakableTextPresentCheck" />
+
+        <!-- F1 空态（全库无任何收藏 ⇒ 无分组可展示）：内容由 composeGroups 状态**条件渲染**
+             （见 initEmptyState()）——与顶栏标题同源，避免「View 可见性切换」的时序不确定；
+             空态内容自身无 pointer-input ⇒ 不消费触摸，不遮挡下层列表（qrcode 覆盖层同款口径）。
+             ⚠️ 口径：分组清单由 rssStars 派生（flowGroups group by）⇒ **空分组不可持久存在**，
+             真正可达的空态是「一条收藏都没有」，故空态落在 Activity 层而非分组 Fragment 层 -->
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/empty_overlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
 
 </LinearLayout>

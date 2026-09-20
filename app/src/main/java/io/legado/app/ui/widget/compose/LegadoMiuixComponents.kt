@@ -32,6 +32,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Slider
@@ -204,6 +205,8 @@ fun LegadoMiuixActionButton(
     modifier: Modifier = Modifier,
     primary: Boolean = false,
     danger: Boolean = false,
+    enabled: Boolean = true,
+    loading: Boolean = false,
     cornerRadius: Dp? = null,
     minWidth: Dp = 76.dp,
     minHeight: Dp = 40.dp,
@@ -222,10 +225,32 @@ fun LegadoMiuixActionButton(
         danger -> palette.danger
         else -> palette.primaryText
     }
+    // 忙态自带转圈（对齐 AppPackageManageActionButton 的 F136① 范式）：长任务期间点击无视觉反馈
+    // 会诱发重复提交；loading 与 enabled 由调用方成对传入（loading=true 时按禁用态渲染）。
+    val buttonContent: @Composable () -> Unit = {
+        if (loading) {
+            CircularProgressIndicator(
+                color = content,
+                strokeWidth = 2.dp,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+        Text(
+            text = text,
+            color = content,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+            lineHeight = 20.sp,
+            fontWeight = if (primary) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
     if (canUseRealMiuix()) {
         MiuixButton(
             onClick = onClick,
             modifier = modifier,
+            enabled = enabled,
             cornerRadius = resolvedCornerRadius,
             minWidth = minWidth,
             minHeight = effectiveMinHeight,
@@ -237,22 +262,14 @@ fun LegadoMiuixActionButton(
                 disabledContentColor = content.copy(alpha = 0.38f)
             )
         ) {
-            Text(
-                text = text,
-                color = content,
-                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-                lineHeight = 20.sp,
-                fontWeight = if (primary) FontWeight.SemiBold else FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            buttonContent()
         }
         return
     }
     Surface(
         modifier = modifier
             .defaultMinSize(minWidth = minWidth, minHeight = effectiveMinHeight)
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         shape = RoundedCornerShape(resolvedCornerRadius),
         color = background,
         contentColor = content,
@@ -267,15 +284,7 @@ fun LegadoMiuixActionButton(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Text(
-                text = text,
-                color = content,
-                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-                lineHeight = 20.sp,
-                fontWeight = if (primary) FontWeight.SemiBold else FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            buttonContent()
         }
     }
 }

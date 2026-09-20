@@ -12,11 +12,18 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -24,6 +31,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -45,6 +53,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -72,6 +81,7 @@ import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixSelectField
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.MenuAction
@@ -84,6 +94,7 @@ import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
@@ -110,6 +121,10 @@ class SourceLoginDialog() : ComposeDialogFragment(), SourceLoginJsExtensions.Cal
     private var loginInfoState by mutableStateOf<Map<String, String>>(emptyMap())
     private var evaluatedNames by mutableStateOf<Map<String, String>>(emptyMap())
     private var formGeneration by mutableIntStateOf(0)
+
+    /** 优化4（F165）：登录执行态与失败详情——执行期按钮转圈禁点，失败留在表单内可复制/重试 */
+    private var loginRunning by mutableStateOf(false)
+    private var loginError by mutableStateOf<String?>(null)
 
     private val sourceLoginJsExtensions by lazy {
         SourceLoginJsExtensions(
@@ -261,8 +276,9 @@ class SourceLoginDialog() : ComposeDialogFragment(), SourceLoginJsExtensions.Cal
                         ),
                         MenuAction(
                             icon = Icons.Filled.Delete,
+                            tint = palette.danger,
                             title = stringResource(R.string.del_login_header),
-                            onClick = { source?.removeLoginHeader() }
+                            onClick = { confirmRemoveLoginHeader(source) }
                         ),
                         MenuAction(
                             icon = Icons.Filled.Description,
@@ -303,11 +319,29 @@ class SourceLoginDialog() : ComposeDialogFragment(), SourceLoginJsExtensions.Cal
                             },
                             content = {
                                 LoginRowsContent(source, style)
+                                // 优化4（F165）：失败不再只弹 2 秒 toast——错误卡留在表单内，
+                                // 异常全文可滚动可复制，处理完（或重试成功）才消失
+                                loginError?.let { detail ->
+                                    LoginErrorCard(
+                                        detail = detail,
+                                        style = style,
+                                        onRetry = {
+                                            loginError = null
+                                            source?.let(::login)
+                                        }
+                                    )
+                                }
                             },
                             actions = {
                                 LegadoMiuixActionButton(
-                                    text = stringResource(R.string.ok),
+                                    text = if (loginRunning) {
+                                        stringResource(R.string.logging_in)
+                                    } else {
+                                        stringResource(R.string.ok)
+                                    },
                                     palette = palette,
+                                    enabled = !loginRunning,
+                                    loading = loginRunning,
                                     onClick = {
                                         oKToClose = true
                                         source?.let(::login)
@@ -495,6 +529,22 @@ class SourceLoginDialog() : ComposeDialogFragment(), SourceLoginJsExtensions.Cal
         }
     }
 
+    /**
+     * 修复2（A1-2 破坏性操作三要素）：删除登录头会一并清掉用户名/密码/Cookie（源站会话失效，不可撤销），
+     * 原实现菜单一点即删；补二次确认（对象名 + 影响面 + 红色确认键），确认文案复用菜单项标题真值。
+     */
+    private fun confirmRemoveLoginHeader(source: BaseSource?) {
+        source ?: return
+        showComposeConfirmDialog(
+            title = getString(R.string.del_login_header),
+            message = getString(R.string.del_login_header_confirm, source.getTag()),
+            positiveText = getString(R.string.delete),
+            negativeText = getString(R.string.cancel),
+            dangerPositive = true,
+            onPositive = { source.removeLoginHeader() }
+        )
+    }
+
     private fun showLoginHeaderDialog(source: BaseSource?) {
         alert {
             setTitle(R.string.login_header)
@@ -575,15 +625,18 @@ class SourceLoginDialog() : ComposeDialogFragment(), SourceLoginJsExtensions.Cal
 
     private fun login(source: BaseSource) {
         val currentRows = rowUis
+        if (loginRunning) return
+        loginRunning = true
+        loginError = null
         lifecycleScope.launch(IO) {
-            val loginData = getLoginData(currentRows)
-            if (loginData.isEmpty()) {
-                source.removeLoginInfo()
-                withContext(Main) {
-                    dismiss()
-                }
-            } else if (source.putLoginInfo(GSON.toJson(loginData))) {
-                try {
+            try {
+                val loginData = getLoginData(currentRows)
+                if (loginData.isEmpty()) {
+                    source.removeLoginInfo()
+                    withContext(Main) {
+                        dismiss()
+                    }
+                } else if (source.putLoginInfo(GSON.toJson(loginData))) {
                     val buttonFunctionJS = "if (typeof login=='function'){ login.apply(this); } else { throw('Function login not implements!!!') }"
                     val loginJS = loginUrl ?: return@launch
                     runScriptWithContext {
@@ -595,14 +648,25 @@ class SourceLoginDialog() : ComposeDialogFragment(), SourceLoginJsExtensions.Cal
                             put("isLongClick", false)
                         }
                     }
+                    // 先提示后关窗（原序）：dismiss 内部会 finish 宿主 Activity，toast 需在窗口销毁前发出
                     context?.toastOnUi(R.string.success)
                     withContext(Main) {
                         dismiss()
                     }
-                } catch (e: Exception) {
-                    AppLog.put("登录出错\n${e.localizedMessage}", e)
-                    context?.toastOnUi("登录出错\n${e.localizedMessage}")
-                    e.printOnDebug()
+                }
+            } catch (e: CancellationException) {
+                // 协程取消不是登录失败（宿主销毁/弹窗关闭），必须原样抛出，否则会误报错误卡
+                throw e
+            } catch (e: Exception) {
+                AppLog.put("登录出错\n${e.localizedMessage}", e)
+                e.printOnDebug()
+                // 优化4（F165）：失败升级为表单内错误卡（完整堆栈可复制 + 重试），不再 2 秒即逝
+                withContext(Main) {
+                    loginError = e.stackTraceToString()
+                }
+            } finally {
+                withContext(Main) {
+                    loginRunning = false
                 }
             }
         }
@@ -620,14 +684,35 @@ class SourceLoginDialog() : ComposeDialogFragment(), SourceLoginJsExtensions.Cal
         if (initHandler) {
             handler.removeCallbacksAndMessages(null)
         }
+        // 保留：弹窗销毁前清理执行态，避免重建实例读到上一次的进行中状态
+        loginRunning = false
         super.onDismiss(dialog)
-        activity?.finish()
+        // 真机实证缺陷修复（2026-09-20）：宿主因配置变更/主题事件**重建**时弹窗会被一起销毁，
+        // 此处若仍 finish 宿主 ⇒ 一次重建就整页消失（冷启动即命中原生 RECREATE 事件：书源登录表单
+        // 分支一进就被关掉；WEB 分支无弹窗故无此现象）。故只在「用户主动关闭」时结束宿主页。
+        if (userClosed) {
+            activity?.finish()
+        }
     }
 
     private fun <T> execute(
         context: CoroutineContext = Dispatchers.IO,
         block: suspend CoroutineScope.() -> T
     ) = Coroutine.async(lifecycleScope, context) { block() }
+
+    /** 用户主动关闭标记（见 [onDismiss]）：点外部/返回键/成功路径都会置位，宿主重建销毁不会 */
+    private var userClosed = false
+
+    override fun dismiss() {
+        userClosed = true
+        super.dismiss()
+    }
+
+    override fun onCancel(dialog: DialogInterface) {
+        // 返回键 / 系统取消同属「用户主动关闭」
+        userClosed = true
+        super.onCancel(dialog)
+    }
 
 }
 
@@ -718,6 +803,8 @@ private fun LoginTextFieldRow(
     debouncedAction: (() -> Unit)?
 ) {
     var armed by remember(rowUi.name, generation) { mutableStateOf(false) }
+    // 优化5（F166）：密码行默认掩码，可在行内切换明文逐位核对（状态只在本次弹窗内记忆，不落盘）
+    var passwordVisible by remember(rowUi.name, generation) { mutableStateOf(false) }
     LaunchedEffect(value) {
         if (debouncedAction == null) return@LaunchedEffect
         if (!armed) {
@@ -727,16 +814,35 @@ private fun LoginTextFieldRow(
         delay(600)
         debouncedAction.invoke()
     }
+    val passwordTrailingIcon: (@Composable () -> Unit)? = if (isPassword) {
+        {
+            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                Icon(
+                    imageVector = if (passwordVisible) {
+                        Icons.Filled.VisibilityOff
+                    } else {
+                        Icons.Filled.Visibility
+                    },
+                    contentDescription = stringResource(
+                        if (passwordVisible) R.string.password_hide else R.string.password_show
+                    )
+                )
+            }
+        }
+    } else {
+        null
+    }
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
         singleLine = isPassword,
-        visualTransformation = if (isPassword) {
+        visualTransformation = if (isPassword && !passwordVisible) {
             PasswordVisualTransformation()
         } else {
             VisualTransformation.None
         },
+        trailingIcon = passwordTrailingIcon,
         keyboardOptions = KeyboardOptions(
             keyboardType = if (isPassword) KeyboardType.Password else KeyboardType.Text
         ),
@@ -813,5 +919,67 @@ private fun LoginPressRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+/**
+ * 优化4（F165）登录失败错误卡：标题沿用源码真值文案「登录出错」，正文为完整异常堆栈
+ * （等宽字体 + 限高滚动，不外溢撑破弹窗），动作「复制错误详情 / 重试」——
+ * 书源排障的第一句对话永远是「把报错发我」，复制按钮直接服务这个流程。
+ */
+@Composable
+private fun LoginErrorCard(
+    detail: String,
+    style: AppDialogStyle,
+    onRetry: () -> Unit
+) {
+    val palette = style.toMiuixPalette()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp)
+            .clip(RoundedCornerShape(style.actionRadius))
+            .background(style.danger.copy(alpha = 0.13f))
+            .padding(12.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.login_error),
+            color = style.danger,
+            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
+        )
+        Text(
+            text = detail,
+            color = style.primaryText,
+            fontFamily = FontFamily.Monospace,
+            fontSize = MaterialTheme.typography.labelSmall.fontSize,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 160.dp)
+                .padding(top = 6.dp)
+                .verticalScroll(rememberScrollState())
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.End
+        ) {
+            LegadoMiuixActionButton(
+                text = stringResource(R.string.copy_error_detail),
+                palette = palette,
+                onClick = { appCtx.sendToClip(detail) },
+                cornerRadius = style.actionRadius
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            LegadoMiuixActionButton(
+                text = stringResource(R.string.retry),
+                palette = palette,
+                onClick = onRetry,
+                primary = true,
+                cornerRadius = style.actionRadius
+            )
+        }
     }
 }
