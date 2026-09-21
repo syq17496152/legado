@@ -71,6 +71,8 @@ import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeMultiChoiceDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.widget.image.CoverImageView
+import io.legado.app.utils.longSnackbar
+import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
@@ -164,7 +166,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
         if (content.isBlank() || viewModel.isRequesting) return false
         val provider = AppConfig.aiCurrentProvider
         if (provider?.baseUrl.isNullOrBlank() || AppConfig.aiCurrentModelConfig == null) {
-            toastOnUi(R.string.ai_missing_config)
+            showMissingAiConfigHint()
             return false
         }
         viewModel.startRequest(
@@ -174,6 +176,21 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
             failureMessage = { getString(R.string.ai_request_failed, it) }
         )
         return true
+    }
+
+    /**
+     * F11：配置缺失从「死胡同 toast」升级为可操作回执——同类守卫（发送 / 重试）共用同一出口，
+     * 右侧「去配置」一步直达 AI 配置页（复用既有 ConfigActivity(AI_CONFIG) 路由）。
+     */
+    private fun showMissingAiConfigHint() {
+        binding.root.longSnackbar(
+            R.string.ai_missing_config,
+            R.string.ai_missing_config_action
+        ) {
+            startActivity<ConfigActivity> {
+                putExtra("configTag", ConfigTag.AI_CONFIG)
+            }
+        }
     }
 
     private fun cancelCurrentRequest() {
@@ -216,7 +233,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
         }
         val provider = AppConfig.aiCurrentProvider
         if (provider?.baseUrl.isNullOrBlank() || AppConfig.aiCurrentModelConfig == null) {
-            toastOnUi(R.string.ai_missing_config)
+            showMissingAiConfigHint()
             return
         }
         val started = viewModel.retryFromMessage(

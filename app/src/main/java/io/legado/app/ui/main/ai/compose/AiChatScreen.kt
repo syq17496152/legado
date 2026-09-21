@@ -91,6 +91,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import io.legado.app.ui.widget.compose.AppUiTokens
 import io.legado.app.ui.widget.compose.releaseComposeImage
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -504,7 +505,11 @@ fun AiChatScreen(
                     .imePadding()
             ) {
                 if (uiItems.isEmpty()) {
-                    AiEmptyState(style = style)
+                    AiEmptyState(
+                        style = style,
+                        onSendSuggestion = { actions.onSend(it) },
+                        onPickCompanion = actions.onAddCompanion
+                    )
                 } else {
                     LazyColumn(
                         state = listState,
@@ -1262,35 +1267,88 @@ private fun displayBookKeyLabel(bookKey: String): String {
 }
 
 @Composable
-private fun AiEmptyState(style: AiComposeStyle) {
+private fun AiEmptyState(
+    style: AiComposeStyle,
+    onSendSuggestion: (String) -> Unit,
+    onPickCompanion: (() -> Unit)?
+) {
+    // F10 空态首启引导：原文案/图标卡原样保留，其下新增 ≤3 条示例（点按即发送，
+    // 复用既有 onSend 链路）+ 「选择角色卡开始」主按钮（复用既有角色卡选择弹框）。
+    val suggestions = listOf(
+        stringResource(R.string.ai_chat_suggestion_book),
+        stringResource(R.string.ai_chat_suggestion_context),
+        stringResource(R.string.ai_chat_suggestion_note)
+    )
     Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 24.dp),
         contentAlignment = Alignment.Center
     ) {
-        Surface(
-            shape = RoundedCornerShape(style.metrics.cardRadius),
-            color = style.colors.cardSurface,
-            tonalElevation = 0.dp,
-            shadowElevation = 2.dp
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp)
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Surface(
+                shape = RoundedCornerShape(style.metrics.cardRadius),
+                color = style.colors.cardSurface,
+                tonalElevation = 0.dp,
+                shadowElevation = 2.dp
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_bottom_ai_e),
-                    contentDescription = stringResource(R.string.ai),
-                    tint = style.colors.secondaryText,
-                    modifier = Modifier.size(24.dp)
-                )
-                Text(
-                    text = stringResource(R.string.ai_chat_empty),
-                    color = style.colors.secondaryText,
-                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_bottom_ai_e),
+                        contentDescription = stringResource(R.string.ai),
+                        tint = style.colors.secondaryText,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.ai_chat_empty),
+                        color = style.colors.secondaryText,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(14.dp))
+            suggestions.forEach { suggestion ->
+                Surface(
+                    onClick = { onSendSuggestion(suggestion) },
+                    shape = RoundedCornerShape(style.metrics.chipRadius),
+                    color = style.colors.composerSurface,
+                    contentColor = style.colors.primaryText,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    Text(
+                        text = suggestion,
+                        color = style.colors.primaryText,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                    )
+                }
+            }
+            if (onPickCompanion != null) {
+                Spacer(modifier = Modifier.height(14.dp))
+                Surface(
+                    onClick = onPickCompanion,
+                    shape = RoundedCornerShape(style.metrics.chipRadius),
+                    color = style.colors.accent,
+                    contentColor = AppUiTokens.onAccent(style.colors.accent),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Text(
+                        text = stringResource(R.string.ai_chat_empty_pick_companion),
+                        color = AppUiTokens.onAccent(style.colors.accent),
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 11.dp)
+                    )
+                }
             }
         }
     }
