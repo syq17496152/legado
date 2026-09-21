@@ -3,6 +3,7 @@ package io.legado.app.ui.association
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.MutableLiveData
+import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.constant.AppPattern.bookFileRegex
@@ -51,7 +52,10 @@ class FileAssociationViewModel(application: Application) : BaseAssociationViewMo
             }
         }.onError {
             it.printOnDebug()
-            val msg = "无法打开文件\n${it.localizedMessage}"
+            // M6-4（修复 3）：壳内失败文案资源化（原硬编码中文）
+            val msg = getApplication<Application>().getString(
+                R.string.association_open_file_failed, it.localizedMessage
+            )
             errorLive.postValue(msg)
             AppLog.put(msg, it)
         }

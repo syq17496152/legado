@@ -2,7 +2,27 @@ package io.legado.app.ui.association
 
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.core.os.postDelayed
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
@@ -14,9 +34,13 @@ import io.legado.app.exception.InvalidBooksDirException
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.BubblePackageManager
 import io.legado.app.lib.permission.Permissions
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppShapes
+import io.legado.app.ui.widget.compose.AppUiTokens
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.lib.permission.PermissionsCompat
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.utils.ConvertUtils
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.canRead
@@ -64,6 +88,7 @@ class FileAssociationActivity :
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         binding.rotateLoading.visible()
+        initResultCard()
         viewModel.importBookLiveData.observe(this) { uri ->
             importBook(uri)
         }
@@ -93,11 +118,8 @@ class FileAssociationActivity :
             }
         }
         viewModel.errorLive.observe(this) {
-            binding.rotateLoading.gone()
-            toastOnUi(it)
-            handler.postDelayed(2000) {
-                finish()
-            }
+            // F351：壳自有失败反馈从裸 toast 升为结果卡（文案随卡留档，2s 后沿用既有自动 finish）
+            showResult(AssociationResult.Fail(it), finishAfterDelay = true)
         }
         viewModel.openBookLiveData.observe(this) {
             binding.rotateLoading.gone()
@@ -126,13 +148,36 @@ class FileAssociationActivity :
                     .onGranted {
                         viewModel.dispatchIntent(data)
                     }.onDenied {
-                        toastOnUi("请求存储权限失败。")
+                        toastOnUi(getString(R.string.tip_perm_request_storage_failed))
                         handler.postDelayed(2000) {
                             finish()
                         }
                     }.request()
             }
         } ?: finish()
+    }
+
+    /** F351：壳自有路径的完成/失败反馈（结果卡原位呈现，替代裸 toast；2s 后随既有自动 finish 收场） */
+    private var resultState by mutableStateOf<AssociationResult?>(null)
+
+    private fun initResultCard() {
+        binding.cvResultCard.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        binding.cvResultCard.visibility = View.VISIBLE
+        binding.cvResultCard.setContent {
+            LegadoTheme {
+                AssociationResultCard(resultState)
+            }
+        }
+    }
+
+    private fun showResult(result: AssociationResult, finishAfterDelay: Boolean) {
+        binding.rotateLoading.gone()
+        resultState = result
+        if (finishAfterDelay) {
+            handler.postDelayed(2000) { finish() }
+        }
     }
 
     private fun importBubble(uri: Uri) {
@@ -150,34 +195,75 @@ class FileAssociationActivity :
                     BubblePackageManager.importZip(file)
                 }
             }.onSuccess {
-                binding.rotateLoading.gone()
-                toastOnUi(R.string.success)
-                finish()
+                // F351：成功反馈从裸 toast 升为结果卡（保留既有 2s 自动 finish 习惯，结果已确认在场）
+                showResult(
+                    AssociationResult.Ok(getString(R.string.association_result_hint)),
+                    finishAfterDelay = true
+                )
             }.onFailure {
-                binding.rotateLoading.gone()
-                val msg = "导入气泡失败\n${it.localizedMessage}"
+                val msg = getString(R.string.import_bubble_failed, it.localizedMessage)
                 AppLog.put(msg, it)
-                toastOnUi(msg)
-                handler.postDelayed(2000) {
-                    finish()
-                }
+                showResult(AssociationResult.Fail(msg), finishAfterDelay = true)
             }
         }
     }
 
+    /**
+     * F350（优化 6）：书籍导入「先看货，再选仓」。
+     *
+     * 首次导入（`defaultBookTreeUri` 为空）时，原实现**直接拉起**系统 SAF 目录选择器——用户在不知道
+     * 「要导入的是哪本书、多大、什么格式」的状态下先做目录授权决策（顺序反了，取消即 finish，
+     * 重来只能从外部应用再打开一次）。改为先出摘要确认卡，确认后才拉起目录选择器；
+     * **已持久化 treeUri 的老用户不看到此卡**（零打断）。
+     */
     private fun importBook(uri: Uri) {
         if (uri.isContentScheme()) {
             val treeUriStr = AppConfig.defaultBookTreeUri
             if (treeUriStr.isNullOrEmpty()) {
-                localBookTreeSelect.launch {
-                    title = getString(R.string.select_book_folder)
-                    mode = HandleFileContract.DIR_SYS
-                }
+                confirmBookImport(uri)
             } else {
                 importBook(Uri.parse(treeUriStr), uri)
             }
         } else {
             importBook(null, uri)
+        }
+    }
+
+    private fun launchBookTreeSelect() {
+        localBookTreeSelect.launch {
+            title = getString(R.string.select_book_folder)
+            mode = HandleFileContract.DIR_SYS
+        }
+    }
+
+    /** F350：摘要确认卡（文件名 / 格式 / 大小 + 去向说明，全部为 intent 元数据级信息，不读文件内容） */
+    private fun confirmBookImport(uri: Uri) {
+        lifecycleScope.launch {
+            val summary = withContext(IO) { describeBookUri(uri) }
+            showComposeConfirmDialog(
+                title = getString(R.string.book_import_summary_title),
+                message = summary,
+                positiveText = getString(R.string.select_book_folder),
+                negativeText = getString(R.string.cancel),
+                messageInContent = true,
+                onPositive = { launchBookTreeSelect() },
+                onNegative = { finish() },
+                onDismissAction = { finish() }
+            )
+        }
+    }
+
+    private fun describeBookUri(uri: Uri): String {
+        val doc = DocumentFile.fromSingleUri(this, uri)
+        val name = doc?.name?.takeIf { it.isNotBlank() }
+            ?: uri.lastPathSegment.orEmpty().substringAfterLast('/')
+        val format = name.substringAfterLast('.', "").uppercase().ifBlank { "?" }
+        val size = ConvertUtils.formatFileSize(doc?.length() ?: 0L)
+        return buildString {
+            append(getString(R.string.book_import_summary_file, name)).append('\n')
+            append(getString(R.string.book_import_summary_format, format)).append('\n')
+            append(getString(R.string.book_import_summary_size, size)).append('\n')
+            append(getString(R.string.book_import_summary_hint))
         }
     }
 
@@ -191,9 +277,7 @@ class FileAssociationActivity :
                         val treeDoc =
                             DocumentFile.fromTreeUri(this@FileAssociationActivity, treeUri)
                         if (!treeDoc!!.checkWrite()) {
-                            throw InvalidBooksDirException(
-                                "请重新设置书籍保存位置\nPermission Denial"
-                            )
+                            throw InvalidBooksDirException(getString(R.string.books_dir_permission_denied))
                         }
                         readUri(uri) { fileDoc, inputStream ->
                             val name = fileDoc.name
@@ -202,7 +286,7 @@ class FileAssociationActivity :
                                 if (doc == null) {
                                     doc = treeDoc.createFile(FileUtils.getMimeType(name), name)
                                         ?: throw InvalidBooksDirException(
-                                            "请重新设置书籍保存位置\nPermission Denial"
+                                            getString(R.string.books_dir_permission_denied)
                                         )
                                 }
                                 contentResolver.openOutputStream(doc.uri)!!.use { oStream ->
@@ -215,9 +299,7 @@ class FileAssociationActivity :
                     } else {
                         val treeFile = File(treeUri.path ?: treeUri.toString())
                         if (!treeFile.checkWrite()) {
-                            throw InvalidBooksDirException(
-                                "请重新设置书籍保存位置\nPermission Denial"
-                            )
+                            throw InvalidBooksDirException(getString(R.string.books_dir_permission_denied))
                         }
                         readUri(uri) { fileDoc, inputStream ->
                             val name = fileDoc.name
@@ -234,22 +316,62 @@ class FileAssociationActivity :
                 }
             }.onFailure {
                 when (it) {
-                    is InvalidBooksDirException -> localBookTreeSelect.launch {
-                        title = getString(R.string.select_book_folder)
-                        mode = HandleFileContract.DIR_SYS
-                    }
+                    is InvalidBooksDirException -> launchBookTreeSelect()
 
                     else -> {
-                        val msg = "导入书籍失败\n${it.localizedMessage}"
+                        val msg = getString(R.string.import_book_failed, it.localizedMessage)
                         AppLog.put(msg, it)
-                        toastOnUi(msg)
-                        handler.postDelayed(2000) {
-                            finish()
-                        }
+                        showResult(AssociationResult.Fail(msg), finishAfterDelay = true)
                     }
                 }
             }
         }
     }
 
+}
+
+/** F351：壳自有路径的结果态（成功 / 失败，副文案随卡留档） */
+private sealed interface AssociationResult {
+    val message: String
+
+    data class Ok(override val message: String) : AssociationResult
+    data class Fail(override val message: String) : AssociationResult
+}
+
+/**
+ * F351：透明壳结果卡。
+ *
+ * 透明壳一切 UI 都叠加在 scrim 上（弹层叠弹层会碎）⇒ 结果反馈复用**壳自身**的居中槽位原位呈现
+ * （替代原裸 toast）：状态徽标（成功 ✓ / 失败 ✗）+ 标题 + 副文案；结果态由调用方持用
+ * （2s 自动 finish 的既有习惯不变）。取色走 [AppUiTokens.settingPalette]（禁止页内自建取色链）。
+ */
+@Composable
+private fun AssociationResultCard(result: AssociationResult?) {
+    if (result == null) return
+    val palette = AppUiTokens.settingPalette()
+    val ok = result is AssociationResult.Ok
+    Surface(
+        color = palette.row.let { Color(it) },
+        shape = AppShapes.Card,
+        modifier = Modifier.padding(horizontal = 32.dp)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Text(
+                text = (if (ok) "✓ " else "✗ ") + stringResource(
+                    if (ok) R.string.association_result_ok else R.string.association_result_fail
+                ),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = if (ok) colorResource(R.color.success) else palette.danger
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = result.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.primaryText,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
 }
