@@ -6,18 +6,36 @@ import android.os.Bundle
 import android.view.View.GONE
 import android.view.View.VISIBLE
 import androidx.activity.viewModels
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
@@ -37,9 +55,13 @@ import io.legado.app.ui.book.search.SearchInputHelpScreen
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.AppShapes
 import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.InlineTaskBar
+import io.legado.app.ui.widget.components.InlineTaskState
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsSearchBar
+import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyNavigationBarMargin
 import io.legado.app.utils.gone
@@ -90,6 +112,8 @@ class RssSearchActivity :
     private var historyKeywords by mutableStateOf(listOf<SearchKeyword>())
     private var hasSearched by mutableStateOf(false)
     private var resultScrollToTopSignal by mutableIntStateOf(0)
+    // F199：搜索进行中状态（由 isSearchLiveData 驱动，进行中任务条与结果空态共用同一信号源）
+    private var isSearching by mutableStateOf(false)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initResultsCompose()
@@ -141,6 +165,20 @@ class RssSearchActivity :
                         placeholder = getString(R.string.rss_search_key),
                         onSearch = { submitSearch(composeSearchQuery) }
                     )
+                    // F200（M4）：类型筛选外显——「全部类型/网页/图片/视频」原藏在「更多」二级菜单，
+                    // 切换需 3 步；「搜视频/图集」是订阅域高频意图 ⇒ 上浮为搜索框下一行 chips
+                    RssSearchTypeChipsRow(
+                        selectedType = composeTypeChecked,
+                        onSelect = { updateSearchType(it) }
+                    )
+                    // F199（M4）：多源搜索是本页耗时最长的操作，进行中给「已得 N 条」正反馈 + 停止出口。
+                    // 复用共享 InlineTaskBar（F253：页内长任务条统一载体），Idle 时零高度不占位
+                    InlineTaskBar(
+                        state = if (isSearching) InlineTaskState.Running else InlineTaskState.Idle,
+                        text = stringResource(R.string.rss_search_running, searchResults.size),
+                        onCancel = { stopSearch() },
+                        actionLabel = getString(R.string.rss_search_stop)
+                    )
                 }
             }
         }
@@ -154,9 +192,11 @@ class RssSearchActivity :
         binding.composeResults.setContent {
             RssSearchResultScreen(
                 articles = searchResults,
-                isLoading = viewModel.isSearchLiveData.value == true,
+                isLoading = isSearching,
                 hasSearched = hasSearched,
                 scrollToTopSignal = resultScrollToTopSignal,
+                // 修复 4：结果标题/摘要按当前关键词高亮（复用共享 highlightMatches，口径与设置搜索一致）
+                highlightQuery = composeSearchQuery.trim(),
                 onArticleClick = { showArticleInfo(it) }
             )
         }
@@ -179,36 +219,11 @@ class RssSearchActivity :
         }
     }
 
-    // rss-search-compose 壳层化：更多菜单数据（类型筛选 + 分组筛选 + 管理）
+    // rss-search-compose 壳层化：更多菜单数据（分组筛选 + 管理）
+    // F200（M4）：类型筛选组已上浮为搜索框下的 chips 行，菜单内不再保留同一状态的第二入口
     private fun buildMenuActions(): List<MenuAction> {
         val searchScopeNames = viewModel.searchScope.displayNames
         return buildList {
-            // 类型筛选分组
-            add(MenuAction(Icons.Default.Category, getString(R.string.rss_search_type), header = true) {})
-            add(MenuAction(
-                Icons.Default.AllInclusive,
-                getString(R.string.rss_search_type_all),
-                checked = composeTypeChecked == -1,
-                onClick = { handleMenuAction(R.id.menu_type_all) }
-            ))
-            add(MenuAction(
-                Icons.Default.Language,
-                getString(R.string.rss_article_type_web),
-                checked = composeTypeChecked == 0,
-                onClick = { handleMenuAction(R.id.menu_type_web) }
-            ))
-            add(MenuAction(
-                Icons.Default.Image,
-                getString(R.string.rss_article_type_image),
-                checked = composeTypeChecked == 1,
-                onClick = { handleMenuAction(R.id.menu_type_image) }
-            ))
-            add(MenuAction(
-                Icons.Default.VideoLibrary,
-                getString(R.string.rss_article_type_video),
-                checked = composeTypeChecked == 2,
-                onClick = { handleMenuAction(R.id.menu_type_video) }
-            ))
             // 分组筛选分组
             add(MenuAction(Icons.Default.Folder, getString(R.string.groups_or_source), header = true) {})
             if (!viewModel.searchScope.isAll()) {
@@ -260,15 +275,10 @@ class RssSearchActivity :
                 viewModel.searchScope.update("")
                 reSearchIfNeeded()
             }
-            // 类型筛选选项处理
-            R.id.menu_type_all -> updateSearchType(-1)
-            R.id.menu_type_web -> updateSearchType(0)
-            R.id.menu_type_image -> updateSearchType(1)
-            R.id.menu_type_video -> updateSearchType(2)
         }
     }
 
-    // 类型筛选：更新状态并同步 ViewModel
+    // 类型筛选（F200：由搜索框下 chips 行触发）：更新状态并同步 ViewModel
     private fun updateSearchType(type: Int) {
         composeTypeChecked = type
         viewModel.updateSearchType(type)
@@ -311,15 +321,23 @@ class RssSearchActivity :
                 .setPressedColor(ColorUtils.darkenColor(accentColor))
                 .create()
         binding.fbStartStop.setOnClickListener {
-            if (viewModel.isSearchLiveData.value == true) {
-                isManualStopSearch = true
-                viewModel.stop()
-                binding.refreshProgressBar.isAutoLoading = false
+            if (isSearching) {
+                stopSearch()
             } else {
                 viewModel.search("")
             }
         }
         binding.fbStartStop.applyNavigationBarMargin(true)
+    }
+
+    /**
+     * F199（M4）：停止搜索的唯一出口——FAB 与进行中任务条的「停止」共用，
+     * 避免两处各写一份状态复位逻辑后漂移（手动停止标记 + 进度条回位）。
+     */
+    private fun stopSearch() {
+        isManualStopSearch = true
+        viewModel.stop()
+        binding.refreshProgressBar.isAutoLoading = false
     }
 
     private fun initData() {
@@ -333,7 +351,8 @@ class RssSearchActivity :
             }
         }
         viewModel.isSearchLiveData.observe(this) {
-            if (it) {
+            isSearching = it == true
+            if (isSearching) {
                 startSearch()
             } else {
                 searchFinally()
@@ -429,8 +448,8 @@ class RssSearchActivity :
             if (!isEmpty || viewModel.searchScope.isAll()) return@observe
             val displayScope = viewModel.searchScope.display
             showComposeConfirmDialog(
-                title = "搜索结果为空",
-                message = "${displayScope}分组搜索结果为空，是否切换到全部分组？",
+                title = getString(R.string.rss_search_empty_title),
+                message = getString(R.string.rss_search_empty_switch, displayScope),
                 positiveText = getString(R.string.yes),
                 negativeText = getString(R.string.no),
                 onPositive = {
@@ -471,10 +490,20 @@ class RssSearchActivity :
     }
 
     /**
-     * 删除搜索记录
+     * 删除搜索记录（长按历史标签触发）
+     *
+     * 修复 2（M4）：原实现长按即直达删库、无任何确认，而「清空全部历史」却有 dangerPositive
+     * 二次确认 ⇒ 防护梯度倒挂。现补同口径确认（文案含关键词，明确影响范围）。
      */
     private fun deleteHistory(searchKeyword: SearchKeyword) {
-        viewModel.deleteHistory(searchKeyword)
+        showComposeConfirmDialog(
+            title = getString(R.string.search_history_delete_title),
+            message = getString(R.string.search_history_delete_message, searchKeyword.word),
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = { viewModel.deleteHistory(searchKeyword) }
+        )
     }
 
     private fun alertClearHistory() {
@@ -502,5 +531,59 @@ class RssSearchActivity :
             }
         }
 
+    }
+}
+
+/**
+ * F200（M4）：搜索结果类型筛选 chips 行（搜索框正下方，与菜单里的分组筛选叠加生效）。
+ *
+ * 取色与书源搜索页 `createSourceGroupChip` 同口径——未选中 = 次级表面 + 描边，选中 = accent
+ * 16%（夜间 28%）叠加 + accent 描边与字色；避免同一「范围 chip」语义出现两套视觉。
+ */
+@Composable
+private fun RssSearchTypeChipsRow(
+    selectedType: Int,
+    onSelect: (Int) -> Unit
+) {
+    val palette = rememberAppSettingPalette()
+    val options = listOf(
+        -1 to stringResource(R.string.rss_search_type_all),
+        0 to stringResource(R.string.rss_article_type_web),
+        1 to stringResource(R.string.rss_article_type_image),
+        2 to stringResource(R.string.rss_article_type_video)
+    )
+    val selectedAlpha = if (AppConfig.isNightTheme) 0.28f else 0.16f
+    // 未选中底/描边取「次级表面 + 面板描边」token（border 为可空 Int，缺省退化为透明描边）
+    val idleBg = Color(palette.rowPressed)
+    val idleBorder = palette.border?.let { Color(it) } ?: Color.Transparent
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        options.forEach { (type, label) ->
+            val selected = selectedType == type
+            Text(
+                text = label,
+                color = if (selected) palette.accent else palette.primaryText,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                maxLines = 1,
+                modifier = Modifier
+                    .clip(AppShapes.Capsule)
+                    .background(
+                        if (selected) palette.accent.copy(alpha = selectedAlpha) else idleBg
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = if (selected) palette.accent else idleBorder,
+                        shape = AppShapes.Capsule
+                    )
+                    .clickable { onSelect(type) }
+                    .padding(horizontal = 12.dp, vertical = 5.dp)
+            )
+        }
     }
 }

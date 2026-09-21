@@ -35,6 +35,7 @@ import io.legado.app.R
 import io.legado.app.data.entities.SearchRssArticle
 import io.legado.app.ui.theme.bodySecondary
 import io.legado.app.ui.widget.components.AppShapes
+import io.legado.app.ui.widget.components.highlightMatches
 import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.BookCoverImage
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
@@ -57,6 +58,8 @@ fun RssSearchResultScreen(
     hasSearched: Boolean,
     scrollToTopSignal: Int,
     onArticleClick: (SearchRssArticle) -> Unit,
+    /** 命中高亮关键词（空串 = 不高亮，渲染与原来逐字一致） */
+    highlightQuery: String = "",
     modifier: Modifier = Modifier
 ) {
     LegadoComposeTheme {
@@ -80,6 +83,7 @@ fun RssSearchResultScreen(
                     RssSearchArticleListItem(
                         item = item,
                         palette = palette,
+                        highlightQuery = highlightQuery,
                         onClick = { onArticleClick(item) }
                     )
                 }
@@ -101,6 +105,7 @@ fun RssSearchResultScreen(
 private fun RssSearchArticleListItem(
     item: SearchRssArticle,
     palette: AppManagementPalette,
+    highlightQuery: String,
     onClick: () -> Unit
 ) {
     Row(
@@ -138,7 +143,7 @@ private fun RssSearchArticleListItem(
                     Spacer(modifier = Modifier.width(6.dp))
                 }
                 Text(
-                    text = item.title,
+                    text = highlightMatches(item.title, highlightQuery, palette.settings.accent),
                     color = if (item.isRead) palette.settings.secondaryText else palette.settings.primaryText,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
@@ -179,7 +184,7 @@ private fun RssSearchArticleListItem(
             if (!description.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text = description,
+                    text = highlightMatches(description, highlightQuery, palette.settings.accent),
                     color = palette.settings.secondaryText,
                     fontSize = 12.sp,
                     fontFamily = palette.settings.bodyFontFamily,

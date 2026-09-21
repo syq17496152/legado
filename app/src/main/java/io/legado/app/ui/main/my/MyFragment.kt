@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseFragment
+import io.legado.app.constant.AppConst
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.databinding.FragmentMyConfigBinding
@@ -94,9 +96,9 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
         super.onResume()
         requireContext().defaultSharedPreferences.registerOnSharedPreferenceChangeListener(this)
         updateSettingsState()
-        // 用户反馈（2026-08-22）："我的"页头部四框统计信息（书架/书源/订阅源/累计阅读）隐藏
-        // 代码保留（loadMetrics/buildMetricItems/MetricItem 完整存在），后期优化时恢复调用即可
-        // loadMetrics()
+        // F26（M4 我的页优化）：恢复头部资产概览——2026-08-22 用户反馈隐藏的四框统计现按
+        // 「头像 + 名称/版本 + ≤4 枚指标胶囊」形态回归；每次可见时刷新，随书源/订阅源增删自然更新
+        loadMetrics()
     }
 
     override fun onPause() {
@@ -132,6 +134,9 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
                 subSearchItems = subSearchItems,
                 searchQuery = "",
                 metrics = metricItemsState.value,
+                // F26：身份行用真实品牌名 + 版本号（本地账户无登录态，不写「已登录设备」类不实文案）
+                profileName = getString(R.string.app_name),
+                profileSubtitle = "${getString(R.string.version)} ${AppConst.appInfo.versionName}",
                 themeModeLabel = currentThemeModeLabel(
                     requireContext(),
                     themeOptions,
@@ -171,16 +176,25 @@ class MyFragment() : BaseFragment(R.layout.fragment_my_config),
     private fun loadMetrics() {
         viewLifecycleOwner.lifecycleScope.launch {
             val context = requireContext()
-            val metrics = withContext(Dispatchers.IO) {
+            val result = withContext(Dispatchers.IO) {
                 runCatching {
                     val shelfCount = appDb.bookDao.flowShelfAll().first().size
                     val sourceCount = appDb.bookSourceDao.allCount()
                     val rssCount = appDb.rssSourceDao.size
                     val totalReadMs = appDb.readRecordDao.allTime
                     buildMetricItems(context, shelfCount, sourceCount, rssCount, totalReadMs)
-                }.getOrDefault(emptyList())
+                }
             }
-            metricItemsState.value = metrics
+            // 头部指标为空会让「资产概览」整块消失（静默降级），失败原因必须可回溯
+            result.exceptionOrNull()?.let {
+                AppLog.putDebugWithTag(
+                    "MyProfileHeader",
+                    "头部指标加载失败: ${it.javaClass.name} / ${it.localizedMessage}",
+                    it,
+                    AppLog.Level.ERROR
+                )
+            }
+            metricItemsState.value = result.getOrDefault(emptyList())
         }
     }
 

@@ -47,15 +47,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.ui.widget.components.SettingsSearchBar
+import io.legado.app.ui.widget.components.highlightMatches
 import io.legado.app.ui.widget.compose.AppSettingPalette
 import io.legado.app.ui.widget.compose.AppSettingSectionTitle
 import io.legado.app.ui.widget.compose.AppThemedStepperSlider
@@ -256,27 +254,6 @@ private fun SettingSearchHeader(
                 fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
                 modifier = Modifier.padding(start = 16.dp, bottom = 6.dp)
             )
-        }
-    }
-}
-
-/** 命中关键词高亮（accent + 加粗），无查询时原样返回。 */
-private fun highlightMatches(text: CharSequence, query: String, color: Color): AnnotatedString {
-    if (query.isEmpty()) return AnnotatedString(text.toString())
-    val source = text.toString()
-    return buildAnnotatedString {
-        var cursor = 0
-        while (cursor < source.length) {
-            val index = source.indexOf(query, cursor, ignoreCase = true)
-            if (index < 0) {
-                append(source.substring(cursor))
-                break
-            }
-            append(source.substring(cursor, index))
-            withStyle(SpanStyle(color = color, fontWeight = FontWeight.Bold)) {
-                append(source.substring(index, index + query.length))
-            }
-            cursor = index + query.length
         }
     }
 }
@@ -565,7 +542,7 @@ private fun SettingText(
         val titleText: AnnotatedString = if (highlightQuery.isEmpty()) {
             AnnotatedString(item.title.toString())
         } else {
-            highlightMatches(item.title, highlightQuery, colors.accent)
+            highlightMatches(item.title, highlightQuery, colors.accent, FontWeight.Bold)
         }
         Text(
             text = titleText,
@@ -578,7 +555,12 @@ private fun SettingText(
             Spacer(modifier = Modifier.height(8.dp))
             // 已是 AnnotatedString（如 AI 设置的角色分行摘要）直接复用，保留其分段着色
             val summaryText: AnnotatedString = when {
-                highlightQuery.isNotEmpty() -> highlightMatches(summary, highlightQuery, colors.accent)
+                highlightQuery.isNotEmpty() -> highlightMatches(
+                    summary,
+                    highlightQuery,
+                    colors.accent,
+                    FontWeight.Bold
+                )
                 summary is AnnotatedString -> summary
                 else -> AnnotatedString(summary.toString())
             }

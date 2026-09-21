@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,10 +15,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,12 +36,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
@@ -48,8 +49,9 @@ import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.appSettingPanelBackground
 import io.legado.app.ui.widget.compose.appSettingRowDecoration
 import io.legado.app.ui.widget.compose.rememberAppSettingPalette
-import io.legado.app.ui.widget.components.MetricGrid
+import io.legado.app.ui.widget.components.AppShapes
 import io.legado.app.ui.widget.components.MetricItem
+import io.legado.app.ui.widget.components.highlightMatches
 import androidx.compose.material3.MaterialTheme
 import splitties.init.appCtx
 
@@ -118,6 +120,8 @@ internal fun MySettingsScreen(
     subSearchItems: List<MySettingsSubSearchItem>,
     searchQuery: String,
     metrics: List<MetricItem> = emptyList(),
+    profileName: String = "",
+    profileSubtitle: String = "",
     themeModeLabel: String,
     webServiceState: MyWebServiceUiState,
     onThemeModeClick: () -> Unit,
@@ -151,20 +155,18 @@ internal fun MySettingsScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // 用户反馈（2026-08-22）：隐藏头部四框统计信息，代码保留（metrics/MetricGrid 完整存在），后期优化恢复
-                // if (metrics.isNotEmpty()) {
-                //     item("metrics") {
-                //         MetricGrid(
-                //             metrics = metrics,
-                //             modifier = Modifier.padding(horizontal = SettingsHorizontalPadding)
-                //         )
-                //     }
-                // }
-                if (false) {
-                    item("metrics") {
-                        MetricGrid(
+                // F26：恢复个性化头部（原 if(false) 隐藏）。
+                // ⚠️ 必须「项常驻 + 内容门控」：把 if 写在 item 注册处会**永久不出现**——
+                // LazyColumn 的 item 列表在首次组合后不再重算（实测 metrics 0→4 时组合已重跑，
+                // 但条件注册的 item 始终缺席）；而 item **内容**的重组是可靠的（同 Web 服务徽章）。
+                item("profile") {
+                    if (searchQuery.isBlank() && metrics.isNotEmpty()) {
+                        MyProfileHeader(
                             metrics = metrics,
-                            modifier = Modifier.padding(horizontal = SettingsHorizontalPadding)
+                            userName = profileName,
+                            userSubtitle = profileSubtitle,
+                            colors = colors,
+                            panelRadiusPx = panelRadiusPx
                         )
                     }
                 }
@@ -189,6 +191,109 @@ internal fun MySettingsScreen(
                             panelRadiusPx = panelRadiusPx
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 我的页个性化头部（F26）：头像 + 名称/版本 + 资产指标胶囊。
+ *
+ * 指标严格 ≤4 枚（书架书籍 / 使用书源 / 订阅源 / 累计阅读，口径见 MyFragment.buildMetricItems），
+ * 不混运营推荐流（私人领地原则）；数据未就绪时由调用方跳过整块渲染，不出现空壳。
+ */
+@Composable
+private fun MyProfileHeader(
+    metrics: List<MetricItem>,
+    userName: String,
+    userSubtitle: String,
+    colors: AppSettingPalette,
+    panelRadiusPx: Float
+) {
+    val context = LocalContext.current
+    val panelImage = remember(context, panelRadiusPx, colors.themeSignature) {
+        UiCorner.panelImageDrawable(context, panelRadiusPx)
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = SettingsHorizontalPadding)
+            .appSettingPanelBackground(
+                normalColor = colors.row,
+                panelImage = panelImage,
+                borderColor = colors.border,
+                radiusPx = panelRadiusPx
+            )
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(AppShapes.Circle)
+                    .background(colors.accent),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.MenuBook,
+                    contentDescription = null,
+                    tint = colors.onAccent,
+                    modifier = Modifier.size(26.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = userName,
+                    color = colors.primaryText,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (userSubtitle.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = userSubtitle,
+                        color = colors.secondaryText,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            metrics.take(4).forEach { metric ->
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(AppShapes.Button)
+                        .background(Color(colors.rowPressed))
+                        .padding(vertical = 9.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = metric.value,
+                        color = colors.accent,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = metric.label,
+                        color = colors.secondaryText,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
@@ -378,13 +483,21 @@ private fun WebServiceRow(
             .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = highlightMatches(item.row.title, highlightQuery, colors.accent),
-                color = colors.primaryText,
-                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = highlightMatches(item.row.title, highlightQuery, colors.accent),
+                    color = colors.primaryText,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                // 状态双通道：开关之外再给「● 运行中」徽章（仅靠开关变色时，运行态一眼认不出）
+                if (state.checked) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    RunningBadge(colors)
+                }
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = highlightMatches(state.summary, highlightQuery, colors.accent),
@@ -399,6 +512,31 @@ private fun WebServiceRow(
             checked = state.checked,
             onCheckedChange = onCheckedChange,
             palette = colors.toMiuixPalette()
+        )
+    }
+}
+
+@Composable
+private fun RunningBadge(colors: AppSettingPalette) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(AppShapes.Capsule)
+            .background(colors.accent.copy(alpha = 0.12f))
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .clip(AppShapes.Circle)
+                .background(colors.accent)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = stringResource(R.string.web_service_running),
+            color = colors.accent,
+            fontSize = MaterialTheme.typography.labelMedium.fontSize,
+            maxLines = 1
         )
     }
 }
@@ -514,31 +652,6 @@ private fun pinExactTitleMatches(
 private fun VisibleRow.isExactTitleMatch(query: String): Boolean {
     val title = row.title.lowercase()
     return title == query || title.startsWith(query)
-}
-
-/**
- * F30：把 [query] 在 [text] 中的命中片段标为 accent + SemiBold（大小写不敏感，逐段高亮）。
- *
- * 用 `indexOf(..., ignoreCase = true)` 而非「先 lowercase 再取下标」——大小写转换在部分语言下
- * 会改变字符数，按下标套 span 会越界。query 为空（未搜索）时返回原文本 ⇒ 渲染与原来逐字一致。
- */
-private fun highlightMatches(text: String, query: String, highlight: Color): AnnotatedString {
-    if (query.isBlank() || text.isEmpty()) return AnnotatedString(text)
-    return buildAnnotatedString {
-        var cursor = 0
-        while (cursor < text.length) {
-            val hit = text.indexOf(query, cursor, ignoreCase = true)
-            if (hit < 0) {
-                append(text.substring(cursor))
-                break
-            }
-            append(text.substring(cursor, hit))
-            withStyle(SpanStyle(color = highlight, fontWeight = FontWeight.SemiBold)) {
-                append(text.substring(hit, hit + query.length))
-            }
-            cursor = hit + query.length
-        }
-    }
 }
 
 private fun MySettingsRowModel.effectiveSummary(
