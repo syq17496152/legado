@@ -31,8 +31,13 @@ import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.main.MainViewModel
 import io.legado.app.ui.widget.components.EmptyStateAction
 import androidx.annotation.StringRes
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.ModernActionPopup
+import io.legado.app.ui.widget.components.InlineTaskState
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.utils.applyStatusBarPadding
@@ -43,6 +48,7 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfViewModel>(layoutId),
@@ -209,6 +215,48 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
             MainActivity.openDiscovery(requireContext())
         }
     )
+
+    /**
+     * 优化 5 / F5（2026-09-21）：更新目录页内任务条状态。
+     * 会话状态源在 `MainViewModel.upTocProgress`（用户发起的 upToc 才开启），
+     * 本层只做文案映射；结束态由 VM 在 5s 后清理会话 ⇒ 页内条自动消退，无本地计时器。
+     */
+    protected var upTocTaskState by mutableStateOf(InlineTaskState.Idle)
+        private set
+    protected var upTocTaskText by mutableStateOf("")
+        private set
+
+    /** 订阅 upToc 进度会话（随视图生命周期；视图重建即重新订阅，不泄漏） */
+    protected fun initUpTocTaskBar() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            activityViewModel.upTocProgress.collect { progress ->
+                when {
+                    progress == null -> {
+                        upTocTaskState = InlineTaskState.Idle
+                        upTocTaskText = ""
+                    }
+                    // 进行中：条数与 done/total 由 VM 单调推进
+                    progress.running -> {
+                        upTocTaskState = InlineTaskState.Running
+                        upTocTaskText = getString(R.string.bookshelf_updating_toc, progress.total)
+                    }
+                    // 结束态：取消 / 有新章 / 无新章 三选一（结果不因结束而丢失）
+                    else -> {
+                        upTocTaskState = InlineTaskState.Done
+                        upTocTaskText = when {
+                            progress.cancelled -> getString(
+                                R.string.bookshelf_up_toc_cancelled, progress.done, progress.total
+                            )
+                            progress.newChapters > 0 -> getString(
+                                R.string.bookshelf_up_toc_result, progress.newChapters
+                            )
+                            else -> getString(R.string.bookshelf_up_toc_none)
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     protected fun initBookGroupData() {
         groupsLiveData?.removeObservers(viewLifecycleOwner)

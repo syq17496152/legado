@@ -113,6 +113,10 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
             // 优化 3（F1 空态操作化）：空书架引导动作（既有菜单同源流程）
             emptyPrimaryAction = emptyPrimaryAction(),
             emptySecondaryActions = emptySecondaryActions(),
+            // 优化 5（F5 更新目录页内任务条）：进行中可取消，结束态保留结果回执
+            taskState = upTocTaskState,
+            taskText = upTocTaskText,
+            onTaskCancel = { activityViewModel.cancelUpToc() },
             onRefresh = {
                 // 对齐 archive：转圈已由 SwipeRefreshContainer 触发即收，
                 // 这里仅触发后台目录更新，列表由 DB flow 静默刷新
@@ -145,6 +149,7 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
         migrateLegacyShowBookname()
         refreshShelfRenderConfig()
         initComposeTopBar()
+        initUpTocTaskBar()
         initBookGroupData()
         initBooksData()
         // REFRESH + STRUCTURE 双监听（对齐 archive Fragment2:607-615，config-needs-restart-fix 实锤 2）

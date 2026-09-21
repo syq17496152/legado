@@ -1,6 +1,7 @@
 package io.legado.app.ui.main.bookshelf
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -81,10 +82,13 @@ import io.legado.app.lib.theme.titleTypeface
 import io.legado.app.model.BookCover
 import io.legado.app.ui.widget.components.EmptyStateAction
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
+import io.legado.app.ui.widget.components.InlineTaskBar
+import io.legado.app.ui.widget.components.InlineTaskState
 import io.legado.app.ui.widget.components.ShelfGridSkeleton
 import io.legado.app.ui.widget.components.ShelfListSkeleton
 import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.utils.toTimeAgo
+import kotlin.math.roundToInt
 
 /**
  * 书架 Compose 渲染（Phase 3 + config-needs-restart-fix 参数化改造）。
@@ -116,6 +120,13 @@ fun BookshelfScreen(
     /** F1（2026-09-21 空态操作化）：空书架时的引导动作；默认不传 ⇒ 既有调用点零改动（仍为空态无操作） */
     emptyPrimaryAction: EmptyStateAction? = null,
     emptySecondaryActions: List<EmptyStateAction> = emptyList(),
+    /**
+     * F5（2026-09-21 优化 5）：更新目录页内任务条（进行中可取消 / 完成与取消有结果回执）。
+     * 默认 Idle ⇒ `InlineTaskBar` 零高度输出，既有调用点零改动。
+     */
+    taskState: InlineTaskState = InlineTaskState.Idle,
+    taskText: String = "",
+    onTaskCancel: (() -> Unit)? = null,
     onRefresh: () -> Unit = {},
     onRetry: () -> Unit = {},
     onGroupSelected: (Long) -> Unit = {},
@@ -124,6 +135,8 @@ fun BookshelfScreen(
     onBookLongClick: (Book) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
+        // F5：更新目录任务条置顶栏下（Idle 零占位；原 upToc 直发后台无页内反馈）
+        InlineTaskBar(state = taskState, text = taskText, onCancel = onTaskCancel)
         if (isFolder) {
             if (groupId == BookGroup.IdRoot) {
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -211,12 +224,62 @@ fun BookshelfScreen(
             // 对齐 archive BooksFragment.setOnChildScrollUpCallback 行为：
             // 仅当列表/网格处于顶部 (canScrollBackward == false) 时允许下拉刷新，
             // 避免非顶部下拉误触发刷新，且刷新指示器正确显示/隐藏。
-            SwipeRefreshContainer(
-                onRefresh = onRefresh,
-                canScrollBackward = if (layout >= 2) gridState.canScrollBackward else listState.canScrollBackward,
-                content = content
-            )
+            // F4（优化 4）：网格布局在列表下方补一条续读条（把「回到上次阅读」缩到 1 次点击）
+            val continueBook = if (layout >= 2) remember(books) { books.continueReadingBook() } else null
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.weight(1f)) {
+                    SwipeRefreshContainer(
+                        onRefresh = onRefresh,
+                        canScrollBackward = if (layout >= 2) gridState.canScrollBackward else listState.canScrollBackward,
+                        content = content
+                    )
+                }
+                if (continueBook != null) {
+                    ContinueReadingBar(
+                        book = continueBook,
+                        onClick = { onBookClick(continueBook) },
+                    )
+                }
+            }
         }
+    }
+}
+
+/** F4（优化 4）续读候选：已开始阅读（readProgress 非空）且最近阅读的书籍；无则 null */
+private fun List<Book>.continueReadingBook(): Book? =
+    filter { it.readProgress() != null }.maxByOrNull { it.durChapterTime }
+
+/**
+ * F4（优化 4）：续读条——书架最高频路径（回到上次阅读）由 2-3 次点击缩到 1 次。
+ * 单行条（占位 ≤44dp），数据全部现成（bookName/durChapterIndex），纯展示层。
+ */
+@Composable
+private fun ContinueReadingBar(book: Book, onClick: () -> Unit) {
+    val palette = rememberAppSettingPalette()
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(palette.row))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.History,
+            contentDescription = null,
+            tint = palette.accent,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            // 章节号按用户可见口径（索引 0 基 ⇒ +1）
+            text = stringResource(R.string.bookshelf_continue_reading, book.name, book.durChapterIndex + 1),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontSize = 13.sp,
+            color = palette.primaryText,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -657,7 +720,24 @@ private fun BookGridItem(
                 color = palette.primaryText,
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
             )
-            if (book.author.isNotBlank()) {
+            val progress = book.readProgress()
+            if (showReadProgress && progress != null && progress > 0f) {
+                // F4（优化 4）：卡下第二行改「62% · 第812章」——章节位置是书架场景下最高频的定位信息；
+                // 未开始阅读的书保留作者行（信息不因新增行而丢失，卡片仍以两行为限）
+                Text(
+                    text = stringResource(
+                        R.string.bookshelf_card_progress_chapter,
+                        (progress * 100).roundToInt(),
+                        book.durChapterIndex + 1,
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontSize = 12.sp,
+                    color = palette.secondaryText,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else if (book.author.isNotBlank()) {
                 Text(
                     text = book.author,
                     maxLines = 1,
@@ -917,6 +997,14 @@ private fun ShelfStatusBadge(
     modifier: Modifier = Modifier,
 ) {
     val badgeBg = if (hasNew) accent else scrim
+    // F4（优化 4）：有新章时角标文案升级为「更新 N 章」（danger/accent 底），无新章沿用裸计数（原状）；
+    // 计数超上限统一折叠为 99+，避免四/五列网格上角标被封面裁切
+    val countText = if (count > BADGE_COUNT_CAP) "$BADGE_COUNT_CAP+" else count.toString()
+    val label = if (hasNew) {
+        stringResource(R.string.bookshelf_badge_update_chapters, countText)
+    } else {
+        countText
+    }
     Box(
         modifier = modifier
             .padding(5.dp)
@@ -924,10 +1012,13 @@ private fun ShelfStatusBadge(
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         Text(
-            text = count.toString(),
+            text = label,
             color = Color(LocalContext.current.onAccentFor(badgeBg.toArgb())),
             fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold,
         )
     }
 }
+
+/** F4：角标计数折叠上限（超过则显示 99+） */
+private const val BADGE_COUNT_CAP = 99

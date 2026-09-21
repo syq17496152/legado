@@ -171,6 +171,9 @@ class MainTopBarView @JvmOverloads constructor(
         filterToggleButton.isVisible = false
         selectsBar.isVisible = false
         tagsBar.isVisible = false
+        // F3（优化 2，2026-09-21）：主 Tab 横向标签行开启溢出渐隐——分组/源/类目标签超宽时可滚动性
+        // 由右缘渐隐暗示（仅在确有溢出方向时绘制，无溢出零视觉变化）
+        listOf(primaryBar, selectsBar, tagsBar).forEach { it.setOverflowFadeEnabled(true) }
         filterToggleButton.setOnClickListener {
             filtersExpanded = !filtersExpanded
             updateFilterBarsVisibility()

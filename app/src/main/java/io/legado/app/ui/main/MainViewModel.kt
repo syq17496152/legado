@@ -70,6 +70,24 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
      */
     private val _upTocIdle = MutableStateFlow(true)
     val upTocIdle: StateFlow<Boolean> = _upTocIdle.asStateFlow()
+
+    /**
+     * F5（优化 5，2026-09-21）：书架「更新目录」页内任务条进度。
+     *
+     * 会话由**用户发起的** [upToc]（书架菜单「更新目录」/ 下拉刷新）开启，`null` = 无会话
+     * （页内条零占位）。`total` 随队列补货单调不减，`newChapters` 只统计本次会话内
+     * 目录章节数真的变多的书；`running=false` 为结束态（完成或已取消）。
+     */
+    data class UpTocProgress(
+        val total: Int = 0,
+        val done: Int = 0,
+        val newChapters: Int = 0,
+        val running: Boolean = true,
+        val cancelled: Boolean = false,
+    )
+
+    private val _upTocProgress = MutableStateFlow<UpTocProgress?>(null)
+    val upTocProgress: StateFlow<UpTocProgress?> = _upTocProgress.asStateFlow()
     private var cacheBookJob: Job? = null
     val booksListRecycledViewPool = RecycledViewPool().apply {
         setMaxRecycledViews(0, 30)
@@ -133,6 +151,11 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
         // 修复（刷新转圈秒收圈竞态）：execute 异步入队，复位协程可能先读到 upTocIdle 初始 true
         // → 入队前同步置 false，保证复位协程等待真实排空信号
         _upTocIdle.value = false
+        // F5：确有可更新书籍且当前无进行中会话时才开启页内任务条（避免「正在更新 0 本」空闪，
+        // 也避免重复触发把已完成计数清零）
+        if (_upTocProgress.value?.running != true && books.any { !it.isLocal && it.canUpdate }) {
+            _upTocProgress.value = UpTocProgress()
+        }
         execute(context = upTocPool) {
             books.filter {
                 !it.isLocal && it.canUpdate
@@ -172,6 +195,7 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
     private fun startUpTocJob() {
         upPool()
         postUpBooksLiveData()
+        syncUpTocProgress()
         _upTocIdle.value = false
         upTocJob = viewModelScope.launch(upTocPool) {
             flow {
@@ -186,12 +210,16 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
                 onUpTocBooks.remove(it)
                 postEvent(EventBus.UP_BOOKSHELF, it)
                 postUpBooksLiveData()
+                syncUpTocProgress(1)
             }.onCompletion {
                 upTocJob = null
                 // 队列排空判定与重启判定同源：非空重启前保持 false，防虚假空闲信号
                 _upTocIdle.value = waitUpTocBooks.isEmpty()
                 if (waitUpTocBooks.isNotEmpty()) {
                     startUpTocJob()
+                } else {
+                    // F5：排空即落地页内任务条结束态（保留计数，稍后自动消退）
+                    finishUpTocProgress()
                 }
                 if (it == null && cacheBookJob == null && !CacheBookService.isRun) {
                     //所有目录更新完再开始缓存章节
@@ -229,6 +257,10 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
             }
             val toc = WebBook.getChapterListAwait(source, book).getOrThrow()
             book.sync(oldBook)
+            // F5：目录章节数真的变多 = 本书有新章（仅书架任务条会话进行中累计，其他更新路径不统计）
+            if (book.totalChapterNum > oldBook.totalChapterNum) {
+                markUpTocNewChapter()
+            }
             book.removeType(BookType.updateError)
             if (book.bookUrl == bookUrl) {
                 appDb.bookDao.update(book)
@@ -249,6 +281,61 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
                 appDb.bookDao.update(book)
             }
         }
+    }
+
+    /**
+     * F5：同步页内任务条进度。
+     * @param doneDelta 本次完成的书籍数（排队入口传 0，仅刷新 total）
+     * total 取「已完成 + 当前队列在途」与会话已有 total 的较大值 ⇒ 队列中途补货时不会倒退。
+     */
+    @Synchronized
+    private fun syncUpTocProgress(doneDelta: Int = 0) {
+        val session = _upTocProgress.value ?: return
+        val done = session.done + doneDelta
+        val total = maxOf(session.total, done + waitUpTocBooks.size + onUpTocBooks.size)
+        if (done != session.done || total != session.total) {
+            _upTocProgress.value = session.copy(done = done, total = total)
+        }
+    }
+
+    /** F5：累计「有新章」书籍数（仅会话进行中生效，其他更新路径无会话不统计） */
+    @Synchronized
+    private fun markUpTocNewChapter() {
+        val session = _upTocProgress.value ?: return
+        if (!session.running) return
+        _upTocProgress.value = session.copy(newChapters = session.newChapters + 1)
+    }
+
+    /**
+     * F5：任务落地——保留最终计数供页内任务条展示结果态，[UP_TOC_RESULT_HOLD_MS] 后清理会话
+     * （页内条自动消退）。已落地（running=false）时幂等返回，保证取消态不被完成态覆盖。
+     */
+    private fun finishUpTocProgress(cancelled: Boolean = false) {
+        val session = _upTocProgress.value ?: return
+        if (!session.running) return
+        val finalized = session.copy(running = false, cancelled = cancelled)
+        _upTocProgress.value = finalized
+        viewModelScope.launch {
+            delay(UP_TOC_RESULT_HOLD_MS)
+            // 期间若已开启新会话（对象不同）则不清除
+            if (_upTocProgress.value == finalized) {
+                _upTocProgress.value = null
+            }
+        }
+    }
+
+    /**
+     * F5：取消书架目录更新（页内任务条「取消」）。语义对齐 AD-09：停止发起新请求，
+     * 已完成结果保留不回滚（计数落在结束态文案「已取消（N/M 本已完成）」）。
+     */
+    fun cancelUpToc() {
+        val session = _upTocProgress.value ?: return
+        if (!session.running) return
+        synchronized(this) { waitUpTocBooks.clear() }
+        finishUpTocProgress(cancelled = true)
+        upTocJob?.cancel()
+        onUpTocBooks.clear()
+        _upTocIdle.value = true
     }
 
     fun postUpBooksLiveData(reset: Boolean = false) {
@@ -329,6 +416,11 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
         execute {
             appDb.bookDao.deleteNotShelfBook()
         }
+    }
+
+    private companion object {
+        /** F5：更新目录结束态在页内任务条上的停留时长（到时自动消退，避免常驻占位） */
+        const val UP_TOC_RESULT_HOLD_MS = 5000L
     }
 
     interface CallBack {

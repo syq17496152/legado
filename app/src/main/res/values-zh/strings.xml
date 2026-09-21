@@ -69,6 +69,15 @@
     <!-- 优化 3（F1 空态操作化，2026-09-21）：空书架「去发现看看」跨 Tab 引流 -->
     <string name="bookshelf_empty_go_discovery">去发现看看</string>
     <string name="bookshelf_empty">书架还空着，先去搜索书籍或从发现里添加吧！</string>
+    <!-- 优化 4（F4 书籍卡信息架构，2026-09-21）：更新角标 / 卡下进度章节行 / 续读条 -->
+    <string name="bookshelf_badge_update_chapters">更新 %1$s 章</string>
+    <string name="bookshelf_card_progress_chapter">%1$d%% · 第%2$d章</string>
+    <string name="bookshelf_continue_reading">继续阅读《%1$s》第%2$d章</string>
+    <!-- 优化 5（F5 更新目录页内任务条，2026-09-21）：进行中 / 三种结束态文案（完成·无新章·已取消） -->
+    <string name="bookshelf_updating_toc">正在更新 %1$d 本书目录…</string>
+    <string name="bookshelf_up_toc_result">已更新，%1$d 本有新章</string>
+    <string name="bookshelf_up_toc_none">目录已更新，暂无新章节</string>
+    <string name="bookshelf_up_toc_cancelled">已取消（%1$d/%2$d 本已完成）</string>
     <string name="action_search">搜索</string>
     <string name="action_download">下载</string>
     <string name="layout_list">列表</string>

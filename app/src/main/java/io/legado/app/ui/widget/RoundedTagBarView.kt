@@ -2,10 +2,15 @@ package io.legado.app.ui.widget
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.LayoutInflater
+import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -69,6 +74,15 @@ class RoundedTagBarView @JvmOverloads constructor(
     private var displayMode = DisplayMode.CHIP
     private var tagLevel = TagLevel.PRIMARY
     private var backgroundOverrideColor: Int? = null
+    /** F3（优化 2，2026-09-21）：横向溢出渐隐开关。默认关 ⇒ 既有调用点行为零改动（共享件只做可选扩展）。 */
+    private var overflowFadeEnabled = false
+    /** 渐隐收敛色 = 本栏解析后的底色（与 background 同源），保证渐隐融入栏底而非露出异色块 */
+    private var fadeColor: Int = 0
+    private var fadeLeftActive = false
+    private var fadeRightActive = false
+    private val fadePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    /** 渐隐遮罩宽度（F3）：取 30dp，与设计稿「右缘 30px 渐隐」一致 */
+    private val fadeWidth: Float get() = 30.dp.toFloat()
 
     init {
         clipToOutline = true
@@ -80,6 +94,74 @@ class RoundedTagBarView @JvmOverloads constructor(
             recyclerView,
             LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         )
+        // 溢出方向随滚动变化 ⇒ 监听滚动刷新渐隐侧
+        recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
+                updateFadeEdges()
+            }
+        })
+    }
+
+    /**
+     * F3（优化 2）：开启横向溢出渐隐（可滚动性的视觉暗示，仅在确有溢出方向时绘制）。
+     * 默认关闭：只有显式开启的宿主（主 Tab 顶栏标签行）生效，其他调用点零影响。
+     */
+    fun setOverflowFadeEnabled(enabled: Boolean) {
+        if (overflowFadeEnabled == enabled) return
+        overflowFadeEnabled = enabled
+        updateFadeEdges()
+        invalidate()
+    }
+
+    /** 依当前溢出方向刷新左右渐隐侧；无变化时不重绘 */
+    private fun updateFadeEdges() {
+        val active = overflowFadeEnabled && fadeColor != 0
+        val left = active && recyclerView.canScrollHorizontally(-1)
+        val right = active && recyclerView.canScrollHorizontally(1)
+        if (left == fadeLeftActive && right == fadeRightActive) return
+        fadeLeftActive = left
+        fadeRightActive = right
+        invalidate()
+    }
+
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        // 宿主显隐切换后需在布局完成时重算（隐藏态 canScrollHorizontally 恒为 false）
+        recyclerView.post { updateFadeEdges() }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        updateFadeEdges()
+    }
+
+    /**
+     * 渐隐遮罩：绘制在子视图（标签）之上，用栏底色由透明渐变收敛到实色。
+     * 不拦截触摸（纯绘制，无子 View），圆角由 clipToOutline 自动裁剪。
+     */
+    override fun dispatchDraw(canvas: Canvas) {
+        super.dispatchDraw(canvas)
+        if (!fadeLeftActive && !fadeRightActive) return
+        val top = paddingTop.toFloat()
+        val bottom = (height - paddingBottom).toFloat()
+        if (bottom <= top) return
+        val leftEdge = paddingLeft.toFloat()
+        val rightEdge = (width - paddingRight).toFloat()
+        if (fadeRightActive) {
+            fadePaint.shader = LinearGradient(
+                rightEdge - fadeWidth, 0f, rightEdge, 0f,
+                intArrayOf(Color.TRANSPARENT, fadeColor), null, Shader.TileMode.CLAMP
+            )
+            canvas.drawRect(rightEdge - fadeWidth, top, rightEdge, bottom, fadePaint)
+        }
+        if (fadeLeftActive) {
+            fadePaint.shader = LinearGradient(
+                leftEdge, 0f, leftEdge + fadeWidth, 0f,
+                intArrayOf(fadeColor, Color.TRANSPARENT), null, Shader.TileMode.CLAMP
+            )
+            canvas.drawRect(leftEdge, top, leftEdge + fadeWidth, bottom, fadePaint)
+        }
+        fadePaint.shader = null
     }
 
     override fun onAttachedToWindow() {
@@ -101,12 +183,18 @@ class RoundedTagBarView @JvmOverloads constructor(
             }
         val selectedColor = config.tagSelectedColor
             ?: context.themeCardColorOrDefault()
+        val barColor = backgroundOverrideColor ?: TopBarConfig.withOpacity(tagBarColor, config.tagBarAlpha)
         background = when (displayMode) {
             DisplayMode.TEXT -> null
-            else -> UiCorner.opaqueRounded(
-                backgroundOverrideColor ?: TopBarConfig.withOpacity(tagBarColor, config.tagBarAlpha),
-                UiCorner.panelRadius(context)
-            )
+            else -> UiCorner.opaqueRounded(barColor, UiCorner.panelRadius(context))
+        }
+        // F3：渐隐收敛色必须等于"肉眼可见的栏底"——regular 风格 tagBarAlpha=0（栏底完全透明、标签浮在
+        // 顶栏底色/壁纸上），若仍按透明色渐隐则整条渐隐不可见（真机实测 delta≈0）⇒ 回落到该顶栏的
+        // 页面底色（与 MainTopBarView 背景层同源 resolvePageBarColorWithAlpha）；TEXT 形态无底色则不绘
+        fadeColor = when {
+            displayMode == DisplayMode.TEXT -> 0
+            Color.alpha(barColor) >= FADE_MIN_BAR_ALPHA -> barColor
+            else -> TopBarConfig.resolvePageBarColorWithAlpha(context, config)
         }
         val horizontalPadding = resources.getDimensionPixelSize(R.dimen.bookshelf_tag_bar_padding_horizontal)
         val verticalPadding = resources.getDimensionPixelSize(R.dimen.bookshelf_tag_bar_padding_vertical)
@@ -120,6 +208,8 @@ class RoundedTagBarView @JvmOverloads constructor(
         adapter.selectedTextColor = readableTagTextColor(context.accentColor, adapter.selectedBackgroundColor)
         adapter.normalTextColor = context.primaryTextColor
         adapter.notifyDataSetChanged()
+        // 底色/内边距变更会影响溢出方向 ⇒ 布局完成后重算渐隐侧
+        recyclerView.post { updateFadeEdges() }
     }
 
     private fun readableTagTextColor(preferredColor: Int, backgroundColor: Int): Int {
@@ -174,6 +264,8 @@ class RoundedTagBarView @JvmOverloads constructor(
         if (this.selectedIndex != RecyclerView.NO_POSITION) {
             scrollToIndex(this.selectedIndex, smooth = false)
         }
+        // 条目变更决定是否溢出 ⇒ 布局完成后重算渐隐侧
+        recyclerView.post { updateFadeEdges() }
     }
 
     fun setSelectedIndex(index: Int, smooth: Boolean = true) {
@@ -347,5 +439,7 @@ class RoundedTagBarView @JvmOverloads constructor(
         const val SECONDARY_STROKE_ALPHA = 0.45f
         /** 二级选中弱底透明度 */
         const val SECONDARY_SELECTED_FILL_ALPHA = 0.18f
+        /** F3：栏底透明度低于此值视为"无可见底色"，渐隐收敛色回落到顶栏页面底色 */
+        const val FADE_MIN_BAR_ALPHA = 40
     }
 }

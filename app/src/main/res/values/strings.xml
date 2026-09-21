@@ -70,6 +70,15 @@
     <!-- 优化 3（F1 空态操作化）：空书架「去发现看看」跨 Tab 引流 -->
     <string name="bookshelf_empty_go_discovery">Explore</string>
     <string name="bookshelf_empty">The bookshelf is still empty. Search for books or add them from discovery!</string>
+    <!-- 优化 4（F4 书籍卡信息架构）：更新角标 / 卡下进度章节行 / 续读条 -->
+    <string name="bookshelf_badge_update_chapters">Update %1$s</string>
+    <string name="bookshelf_card_progress_chapter">%1$d%% · Ch.%2$d</string>
+    <string name="bookshelf_continue_reading">Continue %1$s · Ch.%2$d</string>
+    <!-- 优化 5（F5 更新目录页内任务条） -->
+    <string name="bookshelf_updating_toc">Updating chapters for %1$d books…</string>
+    <string name="bookshelf_up_toc_result">Updated, %1$d with new chapters</string>
+    <string name="bookshelf_up_toc_none">Chapters updated, no new chapters</string>
+    <string name="bookshelf_up_toc_cancelled">Cancelled (%1$d/%2$d done)</string>
     <string name="action_search">Search</string>
     <string name="action_download">Download</string>
     <string name="layout_list">List</string>
