@@ -11,6 +11,12 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
 
+    <!-- 优化 2（F）：一次性规则帮助引导条槽——替代进页即弹全屏帮助；仅在「帮助机制尚未消费」时渲染（否则零高度） -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/cv_rule_help_guide"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
     <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

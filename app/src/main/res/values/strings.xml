@@ -3698,6 +3698,13 @@ function login() {
     <string name="source_menu_group_edit">编辑辅助</string>
     <string name="source_menu_group_io">导入 · 导出</string>
     <string name="source_menu_group_tools">工具</string>
+    <!-- book/source-edit（M6-3）：溢出菜单三组标题 + 规则帮助引导条 + 退出拦截动词式按钮 -->
+    <string name="book_source_menu_group_ops">源操作</string>
+    <string name="book_source_menu_group_share">导入 · 导出 · 分享</string>
+    <string name="book_source_menu_group_diag">诊断与帮助</string>
+    <string name="book_source_rule_help_guide">查看书源规则帮助</string>
+    <string name="edit_continue">继续编辑</string>
+    <string name="edit_discard">放弃修改</string>
     <!-- rss/read 页面优化（M4） -->
     <string name="rss_read_menu_group_content">内容</string>
     <string name="rss_read_menu_group_reading">阅读工具</string>

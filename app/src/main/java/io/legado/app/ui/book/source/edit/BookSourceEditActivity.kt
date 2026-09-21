@@ -7,6 +7,10 @@ import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.tabs.TabLayout
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
@@ -37,6 +41,8 @@ import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.InlineGuideBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.dialog.UrlOptionDialog
@@ -105,16 +111,49 @@ class BookSourceEditActivity :
         softKeyboardTool.attachToWindow(window)
         initTopBar()
         initView()
+        initRuleHelpGuide()
         viewModel.initData(intent) {
             upSourceView(viewModel.bookSource)
         }
     }
 
-    override fun onPostCreate(savedInstanceState: Bundle?) {
-        super.onPostCreate(savedInstanceState)
-        if (!LocalConfig.ruleHelpVersionIsLast) {
-            showHelp("ruleHelp")
+    /** 优化 2（F）：规则帮助首显形态——一次性引导条（替代进页即弹全屏帮助，教育入口保留、编辑流不被打断） */
+    private var ruleHelpGuideVisible by mutableStateOf(false)
+
+    /**
+     * 优化 2：引导条显隐判定。
+     *
+     * 「一次性」由既有 `LocalConfig.ruleHelpVersionIsLast` 承担（`isLastVersion` **读时写入** ⇒ 只能读一次，
+     * 不新增偏好键）。⚠️ 正因为是「读时写入」：冷启动期 App 会发 `EventBus.RECREATE` 令本页在**出帧前重建**，
+     * 新实例再读该旗标已成 true（首实例已消费）⇒ 直接重读恒为 false（实测引导槽高恒 0、永不出现）。
+     * 故判定落在**进程内单例** [RuleHelpGuideOnce] 上：重建按已定状态复原，进程结束即释放
+     * （下次冷启动旗标已消费 ⇒ 自然不再打扰）。
+     */
+    private fun initRuleHelpGuide() {
+        RuleHelpGuideOnce.armed = RuleHelpGuideOnce.armed ?: !LocalConfig.ruleHelpVersionIsLast
+        ruleHelpGuideVisible = RuleHelpGuideOnce.armed == true
+        binding.cvRuleHelpGuide.setViewCompositionStrategy(
+            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
+        )
+        binding.cvRuleHelpGuide.setContent {
+            LegadoTheme {
+                if (ruleHelpGuideVisible) {
+                    InlineGuideBar(
+                        text = getString(R.string.book_source_rule_help_guide),
+                        onAction = {
+                            showHelp("ruleHelp")
+                            dismissRuleHelpGuide()
+                        },
+                        onDismiss = { dismissRuleHelpGuide() },
+                    )
+                }
+            }
         }
+    }
+
+    private fun dismissRuleHelpGuide() {
+        RuleHelpGuideOnce.armed = false
+        ruleHelpGuideVisible = false
     }
 
     // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar——代码/保存/调试一级图标 + 溢出菜单
@@ -157,6 +196,13 @@ class BookSourceEditActivity :
                             }
                         }
                     )
+                    // 优化 1（F）：12 项平铺 → 三组 + 组标题。分组按「用户心智（对源的操作 / 进出通道 /
+                    // 诊断与帮助）」而非代码顺序；12 项文案逐字沿用 R.string 现值，零文案改动。
+                    fun addGroup(@androidx.annotation.StringRes titleRes: Int) {
+                        add(MenuAction(title = getString(titleRes), header = true, onClick = {}))
+                    }
+                    // 组 1：源操作
+                    addGroup(R.string.book_source_menu_group_ops)
                     // 登录入口条件显隐（原 prepare 中 menu_login.isVisible 逻辑平移）
                     if (!getSource().loginUrl.isNullOrBlank()) {
                         add(
@@ -173,12 +219,16 @@ class BookSourceEditActivity :
                             checked = viewModel.autoComplete
                         ) { handleSourceEditMenuAction(R.id.menu_auto_complete) }
                     )
+                    // 组 2：导入 · 导出 · 分享（拷贝/粘贴成对，二维码导入/二维码分享/字符串分享相邻）
+                    addGroup(R.string.book_source_menu_group_share)
                     add(MenuAction(title = getString(R.string.copy_source)) { handleSourceEditMenuAction(R.id.menu_copy_source) })
                     add(MenuAction(title = getString(R.string.paste_source)) { handleSourceEditMenuAction(R.id.menu_paste_source) })
-                    add(MenuAction(title = getString(R.string.set_source_variable)) { handleSourceEditMenuAction(R.id.menu_set_source_variable) })
                     add(MenuAction(title = getString(R.string.import_by_qr_code)) { handleSourceEditMenuAction(R.id.menu_qr_code_camera) })
                     add(MenuAction(title = getString(R.string.qr_share)) { handleSourceEditMenuAction(R.id.menu_share_qr) })
                     add(MenuAction(title = getString(R.string.str_share)) { handleSourceEditMenuAction(R.id.menu_share_str) })
+                    // 组 3：诊断与帮助
+                    addGroup(R.string.book_source_menu_group_diag)
+                    add(MenuAction(title = getString(R.string.set_source_variable)) { handleSourceEditMenuAction(R.id.menu_set_source_variable) })
                     add(MenuAction(title = getString(R.string.log)) { handleSourceEditMenuAction(R.id.menu_log) })
                     add(MenuAction(title = getString(R.string.help)) { handleSourceEditMenuAction(R.id.menu_help) })
                 }
@@ -321,11 +371,13 @@ class BookSourceEditActivity :
     override fun finish() {
         val source = getSource()
         if (!source.equal(viewModel.bookSource ?: BookSource())) {
+            // 既有缺陷修复（本页 §0 记录的「文案语义错位」）：原「是 / 否」两键对不上「继续编辑 / 退出」两种意图，
+            // 改为动词式按钮「继续编辑 / 放弃修改」，标题与正文沿用现值（标题=退出，正文=尚未保存，是否继续编辑）
             showComposeConfirmDialog(
                 title = getString(R.string.exit),
                 message = getString(R.string.exit_no_save),
-                positiveText = getString(R.string.yes),
-                negativeText = getString(R.string.no),
+                positiveText = getString(R.string.edit_continue),
+                negativeText = getString(R.string.edit_discard),
                 onPositive = { /* 停留当前页，不退出 */ },
                 onNegative = { super.finish() }
             )
@@ -876,4 +928,9 @@ class BookSourceEditActivity :
         }
     }
 
+}
+
+/** 优化 2：引导条显隐的**进程内**一次性判定（版本旗标「读时写入」，重建后不可再读；进程结束即释放） */
+private object RuleHelpGuideOnce {
+    var armed: Boolean? = null
 }
