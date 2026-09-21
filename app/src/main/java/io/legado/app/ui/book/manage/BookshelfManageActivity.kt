@@ -10,6 +10,7 @@ import androidx.activity.viewModels
 import androidx.appcompat.widget.PopupMenu
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Description
@@ -20,10 +21,14 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -54,6 +59,7 @@ import io.legado.app.ui.widget.components.EditField
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsSearchBar
+import io.legado.app.ui.widget.compose.AppUiTokens
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
@@ -103,6 +109,8 @@ class BookshelfManageActivity :
     private var composeSearchQuery by mutableStateOf("")
     private var searchVisible by mutableStateOf(false)
     private var menuExpanded by mutableStateOf(false)
+    /** F41：排序模式（可拖拽）状态——驱动顶栏模式提示条 */
+    private var dragModeState by mutableStateOf(false)
     private var openBookInfoByClickTitle by mutableStateOf(AppConfig.openBookInfoByClickTitle)
     private var composeGroupNames by mutableStateOf(listOf<String>())
     private val waitDialog by lazy { WaitDialog(this) }
@@ -180,6 +188,19 @@ class BookshelfManageActivity :
                         title = composeTitle,
                         navIcon = Icons.AutoMirrored.Filled.ArrowBack,
                         onNavClick = { finish() },
+                        // F41：排序模式下常显模式提示（第二行必须走 secondRow——NORM F317：subtitle 会被固定栏高裁掉）
+                        secondRow = if (dragModeState) {
+                            {
+                                Text(
+                                    text = stringResource(R.string.bookshelf_drag_mode_hint),
+                                    color = AppUiTokens.settingPalette().accent,
+                                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                                )
+                            }
+                        } else {
+                            null
+                        },
                         actions = {
                             IconButton(onClick = { searchVisible = !searchVisible }) {
                                 Icon(
@@ -278,19 +299,35 @@ class BookshelfManageActivity :
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.addItemDecoration(VerticalDivider(this))
         binding.recyclerView.adapter = adapter
-        itemTouchCallback.isCanDrag = AppConfig.bookshelfSort == 3
+        // F41：可拖拽态（排序模式）——同时驱动「行尾手柄可见」与「顶栏模式提示条」
+        dragModeState = AppConfig.bookshelfSort == 3
+        itemTouchCallback.isCanDrag = dragModeState
+        adapter.dragHandleVisible = dragModeState
         val dragSelectTouchHelper: DragSelectTouchHelper =
             DragSelectTouchHelper(adapter.dragSelectCallback).setSlideArea(16, 50)
         dragSelectTouchHelper.attachToRecyclerView(binding.recyclerView)
         // When this page is opened, it is in selection mode
         dragSelectTouchHelper.activeSlideSelect()
         // Note: need judge selection first, so add ItemTouchHelper after it.
-        ItemTouchHelper(itemTouchCallback).attachToRecyclerView(binding.recyclerView)
+        val touchHelper = ItemTouchHelper(itemTouchCallback)
+        touchHelper.attachToRecyclerView(binding.recyclerView)
+        adapter.onStartDrag = { holder -> touchHelper.startDrag(holder) }
     }
 
     private fun initOtherView() {
         binding.selectActionBar.setMainActionText(R.string.move_to_group)
-        binding.selectActionBar.inflateMenu(R.menu.bookshelf_menage_sel)
+        // F39：批量操作菜单按用途分组（常用 → 更新管理 → 分组管理 → 数据清理）；
+        // 删除/换源为批量管理最高频动作 ⇒ 置首组「常用」，避免埋在长菜单中（蓝图原意「就近可达」，
+        // 差异：底栏共享件只有单个主操作槽位，未把两项移出菜单，已登记）
+        binding.selectActionBar.inflateMenu(
+            R.menu.bookshelf_menage_sel,
+            linkedMapOf(
+                R.id.menu_del_selection to getString(R.string.bookshelf_menu_group_common),
+                R.id.menu_update_enable to getString(R.string.bookshelf_menu_group_update),
+                R.id.menu_add_to_group to getString(R.string.bookshelf_menu_group_group),
+                R.id.menu_clear_cache to getString(R.string.bookshelf_menu_group_clean)
+            )
+        )
         binding.selectActionBar.setOnMenuItemClickListener(this)
         binding.selectActionBar.setCallBack(this)
         waitDialog.setOnCancelListener {

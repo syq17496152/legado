@@ -96,7 +96,23 @@
         android:text="@string/delete"
         android:textColor="@color/secondaryText"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintRight_toLeftOf="@+id/tv_drag_handle"
         app:layout_constraintTop_toBottomOf="@id/tv_author" />
+
+    <!-- F41 拖拽手柄：仅排序模式（bookshelfSort==3）可见；GONE 时 tv_delete 仍贴右（GONE 的引用视图位置保留） -->
+    <TextView
+        android:id="@+id/tv_drag_handle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:padding="10dp"
+        android:text="@string/drag_handle"
+        android:textColor="@color/secondaryText"
+        android:textSize="@dimen/text_15sp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/tv_author"
+        tools:visibility="visible" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

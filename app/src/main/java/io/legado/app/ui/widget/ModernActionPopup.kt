@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -28,7 +29,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -48,6 +51,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -74,6 +78,9 @@ object ModernActionPopup {
         val checked: Boolean = false,
         val enabled: Boolean = true,
         val persistent: Boolean = false,  // true = 点击不关闭弹窗，就地更新状态
+        // F39（2026-09-21）：分组标题行——仅作视觉分组标签，不可点、无选中态；
+        // 默认 false ⇒ 全部既有调用点零改动（组件层只做可选参数扩展）。
+        val header: Boolean = false,
         val invoke: () -> Unit
     )
 
@@ -493,6 +500,18 @@ object ModernActionPopup {
                             items = actions,
                             key = { index, action -> "${action.title}#$index" }
                         ) { index, action ->
+                            if (action.header) {
+                                // 分组标题（F39）：非交互标签行，无选中态、不响应点击
+                                Text(
+                                    text = action.title,
+                                    color = style.secondaryText,
+                                    fontSize = MaterialTheme.typography.labelMedium.fontSize,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 2.dp)
+                                )
+                            } else {
                             val isChecked = if (action.persistent) {
                                 checkedStates.getOrElse(index) { action.checked }
                             } else {
@@ -522,6 +541,7 @@ object ModernActionPopup {
                                 leadingIconName = action.iconName,
                                 textAlign = TextAlign.Start
                             )
+                            }
                         }
                     }
                 }

@@ -2,6 +2,7 @@ package io.legado.app.ui.book.manage
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.os.bundleOf
@@ -26,6 +27,18 @@ class BookAdapter(context: Context, val callBack: CallBack) :
     val groupRequestCode = 12
     private val selectedBooks: HashSet<Book> = hashSetOf()
     var actionItem: Book? = null
+
+    /** F41：排序模式下行尾拖拽手柄可见（默认 false ⇒ 非排序模式零视觉变化） */
+    var dragHandleVisible: Boolean = false
+        set(value) {
+            if (field != value) {
+                field = value
+                if (itemCount > 0) notifyItemRangeChanged(0, itemCount)
+            }
+        }
+
+    /** F41：手柄按下即起拖（由宿主注入 `ItemTouchHelper::startDrag`） */
+    var onStartDrag: ((RecyclerView.ViewHolder) -> Unit)? = null
 
     val selection: List<Book>
         get() {
@@ -55,6 +68,8 @@ class BookAdapter(context: Context, val callBack: CallBack) :
             tvAuthor.visibility = if (item.author.isEmpty()) View.GONE else View.VISIBLE
             tvGroupS.text = getGroupName(item.group)
             checkbox.isChecked = selectedBooks.contains(item)
+            // F41：仅排序模式露出拖拽手柄（非排序模式保持 GONE，行内布局与既有一致）
+            tvDragHandle.visibility = if (dragHandleVisible) View.VISIBLE else View.GONE
             if (item.isLocal) {
                 tvOrigin.setText(R.string.local_book)
             } else {
@@ -103,6 +118,13 @@ class BookAdapter(context: Context, val callBack: CallBack) :
                     actionItem = it
                     callBack.selectGroup(groupRequestCode, it.group)
                 }
+            }
+            // F41：手柄按下即起拖（返回 false ⇒ 后续 MOVE 事件仍交回 RecyclerView 由 ItemTouchHelper 接管）
+            tvDragHandle.setOnTouchListener { _, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    onStartDrag?.invoke(holder)
+                }
+                false
             }
         }
     }

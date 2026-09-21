@@ -2823,6 +2823,12 @@ Selected text or question:
     <string name="code_edit_unsaved">未保存</string>
     <string name="code_edit_readonly_bar">只读模式：查看源码内容，编辑不会保存</string>
     <string name="code_edit_readonly_badge">只读</string>
+    <string name="bookshelf_drag_mode_hint">拖拽排序模式：长按可调整顺序</string>
+    <string name="bookshelf_menu_group_common">常用</string>
+    <string name="bookshelf_menu_group_update">更新管理</string>
+    <string name="bookshelf_menu_group_group">分组管理</string>
+    <string name="bookshelf_menu_group_clean">数据清理</string>
+    <string name="drag_handle">⠿</string>
     <string name="ai_provider_mode_chat">Chat Completions</string>
     <string name="ai_provider_mode_responses">Responses</string>
     <string name="ai_api_mode">接口模式</string>

@@ -39,6 +39,8 @@ class SelectActionBar @JvmOverloads constructor(
     private var selMenu: PopupMenu? = null
     private var selMenuListener: PopupMenu.OnMenuItemClickListener? = null
     private var selMenuPopup: ModernActionPopup.Handle? = null
+    /** F39：菜单分组标题（key = 菜单项 id，value = 该项之前插入的组标题）；null = 不分组（既有行为） */
+    private var selMenuGroupTitles: Map<Int, String>? = null
     private val binding = ViewSelectActionBarBinding
         .inflate(LayoutInflater.from(context), this, true)
 
@@ -74,9 +76,10 @@ class SelectActionBar @JvmOverloads constructor(
         btnSelectActionMain.visible()
     }
 
-    fun inflateMenu(@MenuRes resId: Int): Menu? {
+    fun inflateMenu(@MenuRes resId: Int, groupTitles: Map<Int, String>? = null): Menu? {
         selMenu = PopupMenu(context, binding.ivMenuMore)
         selMenu?.inflate(resId)
+        selMenuGroupTitles = groupTitles
         binding.ivMenuMore.visible()
         return selMenu?.menu
     }
@@ -96,6 +99,10 @@ class SelectActionBar @JvmOverloads constructor(
         for (i in 0 until menu.size()) {
             val item = menu.getItem(i)
             if (item.isVisible) {
+                // F39：命中分组起点则先插入组标题行（header 行不可点、无选中态）
+                selMenuGroupTitles?.get(item.itemId)?.let { groupTitle ->
+                    items.add(ModernActionPopup.Action(title = groupTitle, header = true) {})
+                }
                 items.add(
                     ModernActionPopup.Action(
                         title = item.title.toString(),
