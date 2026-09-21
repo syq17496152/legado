@@ -2985,6 +2985,11 @@ bookUrl：%7$s
     <string name="source_menu_group_edit">编辑辅助</string>
     <string name="source_menu_group_io">导入 · 导出</string>
     <string name="source_menu_group_tools">工具</string>
+    <!-- rss/read 页面优化（M4） -->
+    <string name="rss_read_menu_group_content">内容</string>
+    <string name="rss_read_menu_group_reading">阅读工具</string>
+    <string name="rss_read_menu_group_source">源</string>
+    <string name="rss_read_tts_running">朗读中</string>
     <string name="source_required_hint">必填项，不能为空</string>
     <!-- main/settings-search 页面优化（M4） -->
     <string name="settings_search_exact_group">精确匹配</string>

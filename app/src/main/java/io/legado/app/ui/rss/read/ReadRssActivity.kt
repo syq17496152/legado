@@ -1,6 +1,9 @@
 package io.legado.app.ui.rss.read
 
 import android.annotation.SuppressLint
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
+import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
@@ -10,11 +13,14 @@ import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import androidx.lifecycle.lifecycleScope
+import kotlin.math.abs
 import kotlinx.coroutines.launch
 import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
@@ -127,6 +133,8 @@ import androidx.compose.runtime.setValue
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.InlineTaskBar
+import io.legado.app.ui.widget.components.InlineTaskState
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 
@@ -150,6 +158,12 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     private var starVisible by mutableStateOf(false)
     private var starChecked by mutableStateOf(false)
     private var ttsPlaying by mutableStateOf(false)
+    // F146：顶栏收起态 / 完整高度 / 动画句柄（沉浸阅读）
+    private var topBarCollapsed = false
+    private var topBarFullHeight = 0
+    private var topBarAnimator: ValueAnimator? = null
+    private var immersiveStartY = 0f
+    private var immersiveFired = false
     private var wasScreenOff = false
     private var customWebViewCallback: WebChromeClient.CustomViewCallback? = null
     private var interfaceInjected: String? = null
@@ -317,77 +331,118 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
                                 actions = buildMenuActions()
                             )
                         }
+                    },
+                    secondRow = {
+                        // F147：朗读是长任务，原实现的状态信号只有「菜单里图标 Stop 化」——
+                        // 菜单不展开就看不见「还在读 / 从哪停」。改用共享 InlineTaskBar 常驻页内。
+                        InlineTaskBar(
+                            state = if (ttsPlaying) InlineTaskState.Running else InlineTaskState.Idle,
+                            text = getString(R.string.rss_read_tts_running),
+                            onCancel = { readAloud() },
+                            actionLabel = getString(R.string.aloud_stop)
+                        )
                     }
                 )
             }
         }
     }
 
-    private fun buildMenuActions(): List<MenuAction> {
-        val actions = mutableListOf<MenuAction>()
-        actions += MenuAction(
-            icon = Icons.Filled.Share,
-            title = getString(R.string.share),
-            onClick = {
-                currentWebView.url?.let { share(it) }
-                    ?: viewModel.rssArticle?.let { share(it.link) }
-                    ?: toastOnUi(R.string.null_url)
-            }
-        )
-        actions += MenuAction(
-            icon = if (ttsPlaying) Icons.Filled.Stop else Icons.Filled.VolumeUp,
-            title = getString(if (ttsPlaying) R.string.aloud_stop else R.string.read_aloud),
-            onClick = { readAloud() }
-        )
-        if (!viewModel.rssSource?.loginUrl.isNullOrBlank()) {
-            actions += MenuAction(
-                icon = Icons.Filled.Login,
-                title = getString(R.string.login),
+    /**
+     * F2 落地第 4 处：8 项平铺 → 四组 + 组标题（`MenuAction(header = true)`）。
+     *
+     * 分组口径按**动作对象**而不是代码顺序：内容（对文章本身）/ 阅读工具（对阅读位置）/ 源（对来源）
+     * / 工具（开发者入口）。本页是高频沉浸页，菜单出现即打断阅读，分组把扫视成本从 8 次降到 4+组内。
+     */
+    private fun buildMenuActions(): List<MenuAction> = buildList {
+        fun addGroup(@androidx.annotation.StringRes titleRes: Int) {
+            add(MenuAction(title = getString(titleRes), header = true, onClick = {}))
+        }
+
+        addGroup(R.string.rss_read_menu_group_content)
+        add(
+            MenuAction(
+                icon = Icons.Filled.Share,
+                title = getString(R.string.share),
                 onClick = {
-                    startActivity<SourceLoginActivity> {
-                        putExtra("type", "rssSource")
-                        putExtra("key", viewModel.rssSource?.sourceUrl)
-                    }
+                    currentWebView.url?.let { share(it) }
+                        ?: viewModel.rssArticle?.let { share(it.link) }
+                        ?: toastOnUi(R.string.null_url)
                 }
             )
-        }
-        actions += MenuAction(
-            icon = Icons.Filled.OpenInBrowser,
-            title = getString(R.string.open_in_browser),
-            onClick = {
-                currentWebView.url?.let { openUrl(it) } ?: toastOnUi("url null")
-            }
         )
-        actions += MenuAction(
-            icon = Icons.Filled.History,
-            title = getString(R.string.read_record),
-            onClick = {
-                showDialogFragment(ReadRecordDialog(viewModel.rssSource?.sourceUrl))
-            }
+        add(
+            MenuAction(
+                icon = if (ttsPlaying) Icons.Filled.Stop else Icons.Filled.VolumeUp,
+                title = getString(if (ttsPlaying) R.string.aloud_stop else R.string.read_aloud),
+                onClick = { readAloud() }
+            )
+        )
+        add(
+            MenuAction(
+                icon = Icons.Filled.OpenInBrowser,
+                title = getString(R.string.open_in_browser),
+                onClick = {
+                    currentWebView.url?.let { openUrl(it) } ?: toastOnUi(R.string.null_url)
+                }
+            )
+        )
+
+        addGroup(R.string.rss_read_menu_group_reading)
+        add(
+            MenuAction(
+                icon = Icons.Filled.History,
+                title = getString(R.string.read_record),
+                onClick = {
+                    showDialogFragment(ReadRecordDialog(viewModel.rssSource?.sourceUrl))
+                }
+            )
         )
         // rss-unified-search: 仅当搜索结果多源场景（RssSearchSourceHolder.articles.size > 1）显示换源菜单
         if ((RssSearchSourceHolder.articles?.size ?: 0) > 1) {
-            actions += MenuAction(
-                icon = Icons.Filled.SwapVert,
-                title = getString(R.string.change_source),
-                onClick = { showDialogFragment(ChangeRssArticleSourceDialog()) }
+            add(
+                MenuAction(
+                    icon = Icons.Filled.SwapVert,
+                    title = getString(R.string.change_source),
+                    onClick = { showDialogFragment(ChangeRssArticleSourceDialog()) }
+                )
             )
         }
-        actions += MenuAction(
-            icon = Icons.Filled.Edit,
-            title = getString(R.string.edit_source),
-            onClick = {
-                viewModel.rssSource?.sourceUrl?.let {
-                    editSourceResult.launch { putExtra("sourceUrl", it) }
+
+        addGroup(R.string.rss_read_menu_group_source)
+        if (!viewModel.rssSource?.loginUrl.isNullOrBlank()) {
+            add(
+                MenuAction(
+                    icon = Icons.Filled.Login,
+                    title = getString(R.string.login),
+                    onClick = {
+                        startActivity<SourceLoginActivity> {
+                            putExtra("type", "rssSource")
+                            putExtra("key", viewModel.rssSource?.sourceUrl)
+                        }
+                    }
+                )
+            )
+        }
+        add(
+            MenuAction(
+                icon = Icons.Filled.Edit,
+                title = getString(R.string.edit_source),
+                onClick = {
+                    viewModel.rssSource?.sourceUrl?.let {
+                        editSourceResult.launch { putExtra("sourceUrl", it) }
+                    }
                 }
-            }
+            )
         )
-        actions += MenuAction(
-            icon = Icons.Filled.Info,
-            title = getString(R.string.log),
-            onClick = { showDialogFragment<AppLogDialog>() }
+
+        addGroup(R.string.source_menu_group_tools)
+        add(
+            MenuAction(
+                icon = Icons.Filled.Info,
+                title = getString(R.string.log),
+                onClick = { showDialogFragment<AppLogDialog>() }
+            )
         )
-        return actions
     }
 
     override fun updateFavorite(title: String?, group: String?) {
@@ -415,6 +470,104 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
         }
     }
 
+    /**
+     * F146：沉浸阅读——正文滚动收起/展开顶栏。
+     *
+     * 做法：**先动画 `translationY`、动画结束再落高度**（收起：0→-h 位移后把高度置 0；展开：先恢复
+     * 高度并把位移摆到 -h，再动画回 0）。不逐帧改高度是因为 `compose_top_bar` 里是 ComposeView，
+     * 逐帧测量会有掉帧风险；位移与高度在动画终态**视觉等价**（位移量恰等于高度），故落高度无跳变。
+     * 布局零改动：`web_view_container` 是 `height=0dp` + 上下约束 ⇒ 顶栏高度变化时容器自动补位，
+     * 不会出现底部空隙（这比整体平移 `ll_view` 更稳）。
+     */
+    private fun setTopBarCollapsed(collapsed: Boolean, animate: Boolean = true) {
+        if (topBarCollapsed == collapsed) return
+        val bar = binding.composeTopBar
+        if (topBarFullHeight <= 0) topBarFullHeight = bar.height
+        val h = topBarFullHeight.toFloat()
+        if (h <= 0f) return
+        // 沉浸联动是「只有真机能观察」的行为，保留低量级（仅状态跃迁）诊断日志便于现场定位
+        AppLog.putDebugWithTag(
+            TAG_RSS_IMMERSIVE,
+            "topBar collapsed=$collapsed h=${topBarFullHeight}px",
+            level = AppLog.Level.INFO
+        )
+        topBarCollapsed = collapsed
+        topBarAnimator?.cancel()
+        if (collapsed) {
+            bar.visibility = View.VISIBLE
+            bar.translationY = 0f
+            if (!animate) {
+                bar.visibility = View.GONE
+                return
+            }
+            topBarAnimator = ValueAnimator.ofFloat(0f, -h).apply {
+                duration = TOP_BAR_ANIM_MS
+                addUpdateListener { bar.translationY = it.animatedValue as Float }
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        if (!topBarCollapsed) return
+                        bar.translationY = 0f
+                        // 「收起」用 GONE 表达而非高度置 0：ConstraintLayout 下 `height=0` 是
+                        // **match_constraint** 语义，会被 Compose 内容重新撑开（真机实测仍为 132px）；
+                        // GONE 则让下邻居按约束自然补位到顶（页面下方不留空隙）。
+                        bar.visibility = View.GONE
+                    }
+                })
+                start()
+            }
+        } else {
+            bar.visibility = View.VISIBLE
+            bar.translationY = -h
+            if (!animate) {
+                bar.translationY = 0f
+                return
+            }
+            topBarAnimator = ValueAnimator.ofFloat(-h, 0f).apply {
+                duration = TOP_BAR_ANIM_MS
+                addUpdateListener { bar.translationY = it.animatedValue as Float }
+                start()
+            }
+        }
+    }
+
+    /**
+     * F146：正文滚动联动顶栏（下滚收起 / 上滚唤回）。
+     *
+     * 为什么用**触摸方向**而不是滚动监听：①WebView 的文档滚动在内部合成层完成，
+     * `View.setOnScrollChangeListener`／`webView.scrollY` 恒不回调（真机实测：正文确实滚了、顶栏不动）
+     * ②页面内 JS 钩子（`evaluateJavascript` + JS 桥）在**源关闭 JS**（`enableJs=0`）时静默失效，
+     * 而本页正是「源站页面」——不能为了收顶栏去擅自打开 JS（会改变源站页面行为，实测桥接零回调）。
+     * 触摸监听只**观察**事件（返回 false，WebView 行为零影响），按拖动位移方向决定收起/展开。
+     */
+    private fun initImmersiveScroll() {
+        val slop = ViewConfiguration.get(this).scaledTouchSlop * 2f
+        currentWebView.setOnTouchListener { _, ev ->
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    immersiveStartY = ev.y
+                    immersiveFired = false
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> immersiveFired = false
+
+                MotionEvent.ACTION_MOVE -> {
+                    // 一次手势**只作一次判定**（用「相对 ACTION_DOWN 的净位移」而非逐事件增量）：
+                    // 逐事件判向会被滑动抖动反复触发（真机实测一次滑动顶栏来回切换 628 次）；
+                    // 净位移在拖动过程中即可越阈 ⇒ 仍是实时反馈，但同一手势内不再反复。
+                    val total = immersiveStartY - ev.y
+                    if (!immersiveFired && total > slop) {
+                        setTopBarCollapsed(true)
+                        immersiveFired = true
+                    } else if (!immersiveFired && total < -slop) {
+                        setTopBarCollapsed(false)
+                        immersiveFired = true
+                    }
+                }
+            }
+            false
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun initWebView() {
         binding.progressBar.fontColor = accentColor
@@ -422,6 +575,8 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
         //添加屏幕方向控制，网页关闭，openUI
         currentWebView.addJavascriptInterface(JSInterface(this), nameBasic)
         currentWebView.webViewClient = CustomWebViewClient()
+        // F146：沉浸滚动（触摸方向观察，不消费事件）
+        initImmersiveScroll()
         currentWebView.setOnLongClickListener {
             val hitTestResult = currentWebView.hitTestResult
             if (hitTestResult.type == WebView.HitTestResult.IMAGE_TYPE ||
@@ -643,6 +798,8 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             keepScreenOn(false)
             toggleSystemBar(true)
+            // F146：全屏视频退出后顶栏必须复位（否则「看不到工具栏」会被当成页面卡住）
+            setTopBarCollapsed(false, animate = false)
         }
 
         /* 覆盖window.close() */
@@ -683,6 +840,8 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
                 needClearHistory = false
                 currentWebView.clearHistory() //清除历史
             }
+            // F146：新页面从顶部开始 ⇒ 顶栏复位，避免带着上一页的收起态进入新文章
+            setTopBarCollapsed(false, animate = false)
             super.onPageStarted(view, url, favicon)
             currentWebView.evaluateJavascript(basicJs, null)
         }
@@ -839,6 +998,10 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     }
 
     companion object {
+        // F146：顶栏收起动画时长与诊断 tag
+        private const val TOP_BAR_ANIM_MS = 180L
+        private const val TAG_RSS_IMMERSIVE = "RssReadImmersive"
+
         fun start(context: Context, singleTop: Boolean, origin: String, title: String? = null, url: String? = null, startHtml: String? = null) {
             context.startActivity<ReadRssActivity> {
                 putExtra("origin", origin)
