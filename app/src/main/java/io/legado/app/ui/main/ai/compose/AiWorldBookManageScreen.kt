@@ -51,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -66,6 +67,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.main.ai.AiWorldBookBinding
 import io.legado.app.ui.main.ai.AiWorldBookConfig
 import io.legado.app.ui.main.ai.AiWorldBookEntry
+import io.legado.app.ui.widget.components.AppConfirmDialog
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.compose.LegadoMiuixActionRow
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
@@ -153,6 +155,12 @@ fun AiWorldBookManageRoute(
     var editingBook by remember { mutableStateOf<WorldBookEditState?>(null) }
     var editingEntry by remember { mutableStateOf<WorldBookEntryEditState?>(null) }
     var jsonEditor by remember { mutableStateOf<WorldBookJsonState?>(null) }
+    // 🔴 P0 修复（2026-09-21）：删除世界书 / 删除条目原为「一步直接落盘」——整本世界书（含全部条目）
+    // 一个误触即不可恢复。改为「待确认态 + AppConfirmDialog」两步，与共享弹框族一致。
+    var pendingDeleteBook by remember { mutableStateOf<AiWorldBookConfig?>(null) }
+    var pendingDeleteEntry by remember {
+        mutableStateOf<Pair<AiWorldBookConfig, AiWorldBookEntry>?>(null)
+    }
 
     fun persist(updated: List<AiWorldBookConfig>) {
         AppConfig.aiWorldBookList = updated
@@ -275,7 +283,7 @@ fun AiWorldBookManageRoute(
                     persist(books + copy)
                     expandedBookId = copy.id
                 },
-                onDeleteBook = { book -> persist(books.filterNot { it.id == book.id }) },
+                onDeleteBook = { book -> pendingDeleteBook = book },
                 onExportBook = { book ->
                     jsonEditor = WorldBookJsonState(
                         title = "${book.name} · 导出 JSON",
@@ -308,12 +316,7 @@ fun AiWorldBookManageRoute(
                     )
                 },
                 onEditEntry = { book, entry -> editingEntry = entry.toEditState(book.id) },
-                onDeleteEntry = { book, entry ->
-                    persist(books.map {
-                        if (it.id == book.id) it.copy(entries = it.entries.filterNot { item -> item.id == entry.id })
-                        else it
-                    })
-                },
+                onDeleteEntry = { book, entry -> pendingDeleteEntry = book to entry },
                 onToggleEntry = { book, entry ->
                     persist(books.map {
                         if (it.id == book.id) {
@@ -325,6 +328,44 @@ fun AiWorldBookManageRoute(
                         }
                     })
                 }
+            )
+        }
+        // 删除确认（P0）：世界书与条目两条删除路径都必须先确认
+        pendingDeleteBook?.let { book ->
+            AppConfirmDialog(
+                title = book.name,
+                body = stringResource(
+                    R.string.ai_world_book_delete_confirm,
+                    book.entries.size
+                ),
+                confirmText = stringResource(R.string.delete),
+                dismissText = stringResource(R.string.cancel),
+                destructive = true,
+                onConfirm = {
+                    persist(books.filterNot { it.id == book.id })
+                    pendingDeleteBook = null
+                },
+                onDismiss = { pendingDeleteBook = null }
+            )
+        }
+        pendingDeleteEntry?.let { (book, entry) ->
+            AppConfirmDialog(
+                title = entry.title.ifBlank { entry.name },
+                body = stringResource(R.string.ai_world_book_delete_entry_confirm),
+                confirmText = stringResource(R.string.delete),
+                dismissText = stringResource(R.string.cancel),
+                destructive = true,
+                onConfirm = {
+                    persist(books.map {
+                        if (it.id == book.id) {
+                            it.copy(entries = it.entries.filterNot { item -> item.id == entry.id })
+                        } else {
+                            it
+                        }
+                    })
+                    pendingDeleteEntry = null
+                },
+                onDismiss = { pendingDeleteEntry = null }
             )
         }
     }
@@ -1006,20 +1047,20 @@ private fun WorldBookSearchEmpty(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "没有匹配的世界书",
+            text = stringResource(R.string.ai_world_book_search_empty_title),
             color = style.colors.primaryText,
             fontSize = MaterialTheme.typography.bodyMedium.fontSize
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "搜索范围含书名、描述、条目内容与关键词，试试更短的关键词",
+            text = stringResource(R.string.ai_world_book_search_empty_hint),
             color = style.colors.secondaryText,
             fontSize = MaterialTheme.typography.bodySmall.fontSize,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 32.dp)
         )
         Spacer(modifier = Modifier.height(12.dp))
-        SmallAction("清除搜索", style, onClick = onClear)
+        SmallAction(stringResource(R.string.ai_world_book_search_empty_clear), style, onClick = onClear)
     }
 }
 

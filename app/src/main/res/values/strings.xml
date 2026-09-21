@@ -2810,6 +2810,11 @@ Selected text or question:
     <string name="ai_provider_search_empty_title">没有匹配「%1$s」的提供商</string>
     <string name="ai_provider_search_empty_hint">检查拼写，或点下方按钮新增</string>
     <string name="ai_provider_search_empty_clear">清除搜索，查看全部 %1$d 个</string>
+    <string name="ai_world_book_delete_confirm">确定删除这本世界书吗？关联的 %1$d 条条目也会一起删除。</string>
+    <string name="ai_world_book_delete_entry_confirm">确定删除这条条目吗？</string>
+    <string name="ai_world_book_search_empty_title">没有匹配的世界书</string>
+    <string name="ai_world_book_search_empty_hint">搜索范围含书名、描述、条目内容与关键词，试试更短的关键词</string>
+    <string name="ai_world_book_search_empty_clear">清除搜索</string>
     <string name="ai_provider_mode_chat">Chat Completions</string>
     <string name="ai_provider_mode_responses">Responses</string>
     <string name="ai_api_mode">接口模式</string>
