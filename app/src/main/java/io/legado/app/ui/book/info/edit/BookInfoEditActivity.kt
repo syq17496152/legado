@@ -11,7 +11,9 @@ import androidx.lifecycle.Observer
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.BookType
 import io.legado.app.data.entities.Book
-import io.legado.app.databinding.ActivityBookInfoEditBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.isLocal
@@ -26,7 +28,6 @@ import io.legado.app.utils.inputStream
 import io.legado.app.utils.readUri
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import splitties.init.appCtx
 import java.io.FileOutputStream
 
@@ -35,7 +36,7 @@ import java.io.FileOutputStream
  * 保存/换封面（本地选图/换源/刷新）逻辑保留 Activity，View 状态由 Screen 上抛。
  */
 class BookInfoEditActivity :
-    VMBaseActivity<ActivityBookInfoEditBinding, BookInfoEditViewModel>(),
+    VMBaseActivity<ViewBinding, BookInfoEditViewModel>(),
     ChangeCoverDialog.CallBack {
 
     private val selectCover = registerForActivityResult(HandleFileContract()) {
@@ -44,14 +45,14 @@ class BookInfoEditActivity :
         }
     }
 
-    override val binding by viewBinding(ActivityBookInfoEditBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<BookInfoEditViewModel>()
 
     // Compose 桥接状态（数据经 VM 加载后驱动 Screen）
     private var composeBook by mutableStateOf<Book?>(null)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 BookInfoEditScreen(
                     book = composeBook,

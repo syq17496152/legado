@@ -17,7 +17,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
-import io.legado.app.databinding.ActivityAutoTaskBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.model.AutoTaskRule
 import io.legado.app.ui.about.AppLogDialog
@@ -36,7 +38,6 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -47,10 +48,10 @@ import java.util.Locale
  * 自动任务列表页（S2 列表族）
  * Compose 化：S2 列表族壳层 AutoTaskScreen，数据观察/搜索过滤/选择状态/导入导出/日志/编辑跳转逻辑保留 Activity
  */
-class AutoTaskActivity : VMBaseActivity<ActivityAutoTaskBinding, AutoTaskViewModel>() {
+class AutoTaskActivity : VMBaseActivity<ViewBinding, AutoTaskViewModel>() {
 
     override val viewModel: AutoTaskViewModel by viewModels()
-    override val binding: ActivityAutoTaskBinding by viewBinding(ActivityAutoTaskBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     private val importRecordKey = "autoTaskRecordKey"
@@ -97,7 +98,7 @@ class AutoTaskActivity : VMBaseActivity<ActivityAutoTaskBinding, AutoTaskViewMod
     }
 
     private fun initComposeHost() {
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 AutoTaskScreen(
                     items = composeItems,

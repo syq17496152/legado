@@ -10,7 +10,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
-import io.legado.app.databinding.ActivityHighlightRuleBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.config.HighlightRule
 import io.legado.app.ui.book.read.config.HighlightRuleStore
@@ -22,7 +24,6 @@ import io.legado.app.utils.getClipText
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.fromJsonArray
 
 /**
@@ -32,9 +33,9 @@ import io.legado.app.utils.fromJsonArray
  * L-C5 枝叶页：全 Compose 接管（HighlightRuleScreen），弹框已全部迁移 showCompose 系（W5.1 MC-7）。
  */
 class HighlightRuleActivity :
-    VMBaseActivity<ActivityHighlightRuleBinding, HighlightRuleViewModel>() {
+    VMBaseActivity<ViewBinding, HighlightRuleViewModel>() {
 
-    override val binding by viewBinding(ActivityHighlightRuleBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<HighlightRuleViewModel>()
 
     // Compose 桥接状态（双轨过渡：列表/搜索在 Compose 侧渲染）
@@ -45,7 +46,7 @@ class HighlightRuleActivity :
     override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 HighlightRuleScreen(
                     rules = composeRules,

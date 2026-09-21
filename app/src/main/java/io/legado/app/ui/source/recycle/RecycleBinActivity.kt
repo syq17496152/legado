@@ -10,11 +10,12 @@ import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.SourceRecycleBin
-import io.legado.app.databinding.ActivityRecycleBinBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.source.SourceRecycleBinHelp
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.showHelp
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOn
@@ -25,10 +26,10 @@ import kotlinx.coroutines.withContext
  * 源回收站页（precise-manage：sourceRecycleBinDao 数据）
  * Compose 化：S2 列表族壳层 RecycleBinScreen，数据观察/选择状态/恢复冲突检测/删除/清空逻辑保留 Activity
  */
-class RecycleBinActivity : VMBaseActivity<ActivityRecycleBinBinding, RecycleBinViewModel>() {
+class RecycleBinActivity : VMBaseActivity<ViewBinding, RecycleBinViewModel>() {
 
     override val viewModel by viewModels<RecycleBinViewModel>()
-    override val binding by viewBinding(ActivityRecycleBinBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     // 原始实体列表（删除/恢复需完整实体）
     private var currentItems = listOf<SourceRecycleBin>()
@@ -46,7 +47,7 @@ class RecycleBinActivity : VMBaseActivity<ActivityRecycleBinBinding, RecycleBinV
     }
 
     private fun initComposeHost() {
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 RecycleBinScreen(
                     items = composeItems,

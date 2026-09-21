@@ -13,7 +13,9 @@ import io.legado.app.R
 import io.legado.app.base.BaseActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.IntentAction
-import io.legado.app.databinding.ActivityDownloadManageBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.download.DOWNLOAD_VIDEO_EXTS
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
@@ -30,7 +32,6 @@ import io.legado.app.utils.putPrefString
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.startService
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,13 +48,13 @@ import java.io.File
  * C2：onResume 校准 RUNNING 残留（幂等合并恢复）。
  * C5：DB 读写全部下沉 IO 线程。
  */
-class DownloadManageActivity : BaseActivity<ActivityDownloadManageBinding>() {
+class DownloadManageActivity : BaseActivity<ViewBinding>() {
 
     companion object {
         private const val KEY_ONLY_WIFI = "downloadOnlyWifi"
     }
 
-    override val binding by viewBinding(ActivityDownloadManageBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     // Compose 桥接状态
     private var composeItems by mutableStateOf(listOf<DownloadDisplayItem>())
@@ -81,7 +82,7 @@ class DownloadManageActivity : BaseActivity<ActivityDownloadManageBinding>() {
     }
 
     private fun initComposeHost() {
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 DownloadManageScreen(
                     items = composeItems,

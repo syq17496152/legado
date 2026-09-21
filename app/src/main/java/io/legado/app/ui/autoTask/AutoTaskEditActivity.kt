@@ -16,7 +16,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
-import io.legado.app.databinding.ActivityAutoTaskEditBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.model.AutoTask
 import io.legado.app.model.AutoTaskRule
 import io.legado.app.ui.login.SourceLoginActivity
@@ -29,14 +31,13 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 /**
  * 自动任务编辑页（S3 表单编辑页，简化版）
  * Compose 化：S3 表单族壳层 AutoTaskEditScreen，构建/保存校验/未保存拦截/登录/复制粘贴逻辑保留 Activity
  */
 class AutoTaskEditActivity :
-    VMBaseActivity<ActivityAutoTaskEditBinding, AutoTaskEditViewModel>() {
+    VMBaseActivity<ViewBinding, AutoTaskEditViewModel>() {
 
     companion object {
         // Cron 频率预设值
@@ -52,7 +53,7 @@ class AutoTaskEditActivity :
         }
     }
 
-    override val binding by viewBinding(ActivityAutoTaskEditBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<AutoTaskEditViewModel>()
 
     private var task: AutoTaskRule? = null
@@ -70,7 +71,7 @@ class AutoTaskEditActivity :
     }
 
     private fun initComposeHost() {
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 AutoTaskEditScreen(
                     state = editState,

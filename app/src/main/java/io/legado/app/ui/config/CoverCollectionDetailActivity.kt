@@ -5,25 +5,25 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
-import io.legado.app.databinding.ActivityCoverCollectionDetailBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.config.CoverCollectionManager
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.launch
 
 /**
  * 封面图集详情页（my-compose-full W4.2：composeHost + CoverCollectionDetailScreen 全量重写，
  * 原 View Grid+RecyclerAdapter 删除；删除链路保留确认弹框，数据经 CoverCollectionManager 原路径）。
  */
-class CoverCollectionDetailActivity : BaseActivity<ActivityCoverCollectionDetailBinding>() {
+class CoverCollectionDetailActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityCoverCollectionDetailBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private var isNight = false
     private var collectionId: String? = null
@@ -55,10 +55,7 @@ class CoverCollectionDetailActivity : BaseActivity<ActivityCoverCollectionDetail
 
     // W4.2：全页 Compose 渲染（顶栏 AppManagementScaffold+导入动作+3 列图片墙）
     private fun initComposeHost() {
-        binding.composeHost.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 CoverCollectionDetailScreen(
                     collectionName = collectionName,

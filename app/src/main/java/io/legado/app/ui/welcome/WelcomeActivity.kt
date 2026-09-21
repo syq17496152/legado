@@ -12,7 +12,9 @@ import io.legado.app.base.BaseActivity
 import io.legado.app.constant.PreferKey
 import io.legado.app.constant.Theme
 import io.legado.app.data.appDb
-import io.legado.app.databinding.ActivityWelcomeBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.theme.backgroundColor
@@ -26,7 +28,6 @@ import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.setStatusBarColorAuto
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.windowSize
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
@@ -37,9 +38,9 @@ import kotlinx.coroutines.withContext
  * Compose 化：S6 展示族壳层 WelcomeScreen，欢迎图背景/导航（startMainActivity+defaultToRead）/
  * FLAG_ACTIVITY_BROUGHT_TO_FRONT 防重复/文字图标显隐（日/夜）逻辑保留 Activity
  */
-open class WelcomeActivity : BaseActivity<ActivityWelcomeBinding>() {
+open class WelcomeActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityWelcomeBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     // Compose 桥接状态：文字/图标显隐（日/夜两套）
     private var showTitle by mutableStateOf(true)
@@ -63,7 +64,7 @@ open class WelcomeActivity : BaseActivity<ActivityWelcomeBinding>() {
     }
 
     private fun initComposeHost() {
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 WelcomeScreen(
                     showTitle = showTitle,

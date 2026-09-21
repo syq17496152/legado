@@ -8,14 +8,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
-import io.legado.app.databinding.ActivityCacheManageBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.AppCloudStorage
 import io.legado.app.lib.cloud.CloudStorageType
 import io.legado.app.lib.cloud.S3ContainerScope
@@ -27,7 +28,6 @@ import io.legado.app.utils.cnCompare
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -43,14 +43,14 @@ import kotlinx.coroutines.withContext
  * 数据安全边界：删除/上传/恢复链路（含确认弹框与锁定任务门禁）逻辑原样保留在本 Activity。
  */
 class CacheManageActivity :
-    VMBaseActivity<ActivityCacheManageBinding, CacheManageActivityViewModel>(),
+    VMBaseActivity<ViewBinding, CacheManageActivityViewModel>(),
     CacheChapterDialog.Callback {
 
     companion object {
         const val EXTRA_INITIAL_SEARCH_KEY = "initialSearchKey"
     }
 
-    override val binding by viewBinding(ActivityCacheManageBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<CacheManageActivityViewModel>()
 
     private var audioTaskReloadJob: Job? = null
@@ -91,10 +91,7 @@ class CacheManageActivity :
 
     // W4.1：全页 Compose 渲染（顶栏 AppManagementScaffold+tab/列表/批量按钮均在 Screen 内）
     private fun initComposeHost() {
-        binding.composeHost.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 CacheManageScreen(
                     mode = modeState,

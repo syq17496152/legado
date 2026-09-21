@@ -8,13 +8,14 @@ import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
 import io.legado.app.data.appDb
-import io.legado.app.databinding.ActivityUrlRecordBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -27,9 +28,9 @@ import java.util.Locale
  * URL 访问记录页（precise-manage：UrlRecord Room DAO 数据）
  * Compose 化：S2 列表族壳层 UrlRecordScreen，搜索/四维过滤/清除/详情逻辑保留 Activity
  */
-class UrlRecordActivity : BaseActivity<ActivityUrlRecordBinding>() {
+class UrlRecordActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityUrlRecordBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private var filterDomain: String? = null
     private var filterSourceName: String? = null
@@ -48,7 +49,7 @@ class UrlRecordActivity : BaseActivity<ActivityUrlRecordBinding>() {
     }
 
     private fun initComposeHost() {
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 UrlRecordScreen(
                     items = composeItems,

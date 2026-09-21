@@ -7,12 +7,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
-import io.legado.app.databinding.ActivityStorageManageBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.ui.book.cache.CacheStorageDetail
 import io.legado.app.ui.book.cache.formatBytes
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 /**
  * 书库存储管理页（L-B15，S2 列表族 + 统计卡）。
@@ -21,9 +22,9 @@ import io.legado.app.utils.viewbindingdelegate.viewBinding
  * 清空全部、视频播放中删除保护（CacheManageViewModel 内置）业务逻辑保留，
  * UI 收敛到受控组件（GlassTopAppBar / MetricGrid / SettingsClickRow 风格分项行 / 弹窗族）。
  */
-class StorageManageActivity : BaseActivity<ActivityStorageManageBinding>() {
+class StorageManageActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityStorageManageBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
     private val viewModel by viewModels<StorageManageViewModel>()
 
     // Compose 桥接状态
@@ -43,7 +44,7 @@ class StorageManageActivity : BaseActivity<ActivityStorageManageBinding>() {
     }
 
     private fun initComposeHost() {
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 StorageManageScreen(
                     items = composeItems,

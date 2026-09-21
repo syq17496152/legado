@@ -10,20 +10,21 @@ import androidx.core.content.FileProvider
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppConst
 import io.legado.app.R
-import io.legado.app.databinding.ActivityFileManageBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.openFileUri
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import java.io.File
 
-class FileManageActivity : VMBaseActivity<ActivityFileManageBinding, FileManageViewModel>() {
+class FileManageActivity : VMBaseActivity<ViewBinding, FileManageViewModel>() {
 
     companion object {
         const val EXTRA_ROOT_PATH = "rootPath"
         const val EXTRA_TITLE = "title"
     }
 
-    override val binding by viewBinding(ActivityFileManageBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<FileManageViewModel>()
     private val dirParent = ".."
 
@@ -55,7 +56,7 @@ class FileManageActivity : VMBaseActivity<ActivityFileManageBinding, FileManageV
     }
 
     private fun initComposeHost() {
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 FileManageScreen(
                     items = composeItems,

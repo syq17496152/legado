@@ -7,7 +7,9 @@ import androidx.core.content.FileProvider
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
 import io.legado.app.constant.AppLog
-import io.legado.app.databinding.ActivityLogManageBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.CrashHandler
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
@@ -22,7 +24,6 @@ import io.legado.app.utils.openInputStream
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.delay
 import splitties.init.appCtx
 import java.io.File
@@ -34,7 +35,7 @@ import java.io.FileFilter
  * 文件类扫描/删除/清除走 Coroutine.async IO 线程，应用日志删除为同步内存操作（AppLog.removeLogs）；
  * 查看走尾部截断（AD-05）；文件删除逐文件容错（AD-06）。
  */
-class LogActivity : BaseActivity<ActivityLogManageBinding>() {
+class LogActivity : BaseActivity<ViewBinding>() {
 
     companion object {
         // 跨页跳转直达指定 Tab（ordinal：0 应用/1 崩溃/2 文件/3 堆转储）；原精准管理页「崩溃日志」入口
@@ -46,14 +47,14 @@ class LogActivity : BaseActivity<ActivityLogManageBinding>() {
         private const val TAIL_LINES = 500
     }
 
-    override val binding by viewBinding(ActivityLogManageBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private val state = LogManageState()
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         state.tab = LogTab.entries[intent.getIntExtra(EXTRA_INITIAL_TAB, 0)
             .coerceIn(0, LogTab.entries.lastIndex)]
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 LogManageScreen(
                     state = state,

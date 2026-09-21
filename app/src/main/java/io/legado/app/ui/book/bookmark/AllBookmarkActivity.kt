@@ -10,12 +10,13 @@ import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Bookmark
-import io.legado.app.databinding.ActivityAllBookmarkBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivityForBook
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOn
@@ -26,10 +27,10 @@ import kotlinx.coroutines.withContext
  * 所有书签（L-B5 枝叶页）：全 Compose 接管（AllBookmarkScreen），
  * 导出逻辑保留 ViewModel，点击/长按回抛宿主处理。
  */
-class AllBookmarkActivity : VMBaseActivity<ActivityAllBookmarkBinding, AllBookmarkViewModel>() {
+class AllBookmarkActivity : VMBaseActivity<ViewBinding, AllBookmarkViewModel>() {
 
     override val viewModel by viewModels<AllBookmarkViewModel>()
-    override val binding by viewBinding(ActivityAllBookmarkBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     // Compose 桥接状态（列表/顶栏/分组在 Compose 侧渲染）
     private var composeBookmarks by mutableStateOf(listOf<Bookmark>())
@@ -44,7 +45,7 @@ class AllBookmarkActivity : VMBaseActivity<ActivityAllBookmarkBinding, AllBookma
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 AllBookmarkScreen(
                     bookmarks = composeBookmarks,

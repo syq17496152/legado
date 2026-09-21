@@ -24,7 +24,9 @@ import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.TxtTocRule
-import io.legado.app.databinding.ActivityTxtTocRuleBinding
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.ui.association.ImportTxtTocRuleDialog
 import io.legado.app.ui.file.HandleFileContract
@@ -42,18 +44,17 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
-class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleViewModel>(),
+class TxtTocRuleActivity : VMBaseActivity<ViewBinding, TxtTocRuleViewModel>(),
     TxtTocRuleEditComposeDialog.Callback {
 
     override val viewModel by viewModels<TxtTocRuleViewModel>()
-    override val binding by viewBinding(ActivityTxtTocRuleBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private val importTocRuleKey = "tocRuleUrl"
 
@@ -97,7 +98,7 @@ class TxtTocRuleActivity : VMBaseActivity<ActivityTxtTocRuleBinding, TxtTocRuleV
     }
 
     private fun initComposeHost() {
-        binding.composeHost.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 TxtTocRuleScreen(
                     items = composeItems,
