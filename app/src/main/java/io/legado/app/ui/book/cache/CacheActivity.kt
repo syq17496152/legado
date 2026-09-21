@@ -5,10 +5,10 @@ import android.os.Bundle
 import android.text.InputType
 import android.view.View
 import android.widget.EditText
-import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BubbleChart
@@ -25,10 +25,14 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import com.google.android.material.textfield.TextInputLayout
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppConst.charsets
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
@@ -38,7 +42,6 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookGroup
-import io.legado.app.databinding.ActivityCacheBookBinding
 import io.legado.app.databinding.DialogSelectSectionExportBinding
 import io.legado.app.help.ConcurrentRateLimiter
 import io.legado.app.help.book.getExportFileName
@@ -70,7 +73,6 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startService
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.verificationField
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
@@ -85,9 +87,10 @@ import kotlin.math.max
 /**
  * cache/download 缓存界面
  */
-class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>() {
+class CacheActivity : VMBaseActivity<ViewBinding, CacheViewModel>() {
 
-    override val binding by viewBinding(ActivityCacheBookBinding::inflate)
+    // M7 清壳：原 activity_cache_book.xml 仅含两个 ComposeView（无 View 语义）
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<CacheViewModel>()
     private val cacheManageViewModel by viewModels<CacheManageViewModel>()
 
@@ -164,17 +167,20 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                     ?: getString(R.string.no_group)
             }
         }
-        initComposeTopBar()
-        initComposeList()
+        initComposeContent()
         initGroupData()
         initBookData()
     }
 
     // L-B10 顶栏 Compose 化：GlassTopAppBar + 下载子菜单/分组/更多菜单全量下沉 AppDropdownMenu
-    private fun initComposeTopBar() {
-        binding.composeTopBar.setContent {
+    // M7 清壳（2026-09-22）：原 `activity_cache_book.xml` 是「LinearLayout 竖排 + compose_top_bar(wrap)
+    // + recycler_view(match_parent)」两个 ComposeView ⇒ 合并为**单一 Compose 树**
+    // `Column { GlassTopAppBar(); CacheScreen(weight(1f)) }`，与旧布局逐项等价
+    // （竖排 LinearLayout 中第二个 match_parent 子项即"占满剩余高度"；CacheScreen 根为 Column(fillMaxSize)）。
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
             LegadoTheme {
-                Box {
+                Column {
                     GlassTopAppBar(
                         title = if (composeSubtitle.isBlank()) composeTitle
                         else "$composeTitle • $composeSubtitle",
@@ -224,6 +230,25 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
                                 )
                             }
                         }
+                    )
+                    CacheScreen(
+                        books = booksCache,
+                        refreshTickOf = { refreshTicks[it] ?: 0L },
+                        cacheChaptersOf = { viewModel.cacheChapters[it] },
+                        exportMsgOf = { ExportBookService.exportMsg[it] },
+                        exportProgressOf = { ExportBookService.exportProgress[it] },
+                        onDownloadToggle = {
+                            // M7 合并后 `this` 被 ColumnScope 遮蔽 ⇒ 显式限定 Activity 接收者
+                            if (CacheBook.cacheBookMap[it.bookUrl]?.isStop() == false) {
+                                CacheBook.remove(this@CacheActivity, it.bookUrl)
+                            } else {
+                                CacheBook.start(this@CacheActivity, it, 0, it.lastChapterIndex)
+                            }
+                        },
+                        onExport = { export(it) },
+                        taskSummary = cacheTaskSummary,
+                        onCancelTask = { CacheBook.stop(this@CacheActivity) },
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
@@ -356,30 +381,6 @@ class CacheActivity : VMBaseActivity<ActivityCacheBookBinding, CacheViewModel>()
             MenuAction(Icons.Filled.List, getString(R.string.log), onClick = { showDialogFragment<AppLogDialog>() }),
             MenuAction(Icons.Filled.List, getString(R.string.cache_stats), onClick = { showCacheStatsDialog() })
         )
-    }
-
-    private fun initComposeList() {
-        binding.recyclerView.setContent {
-            LegadoTheme {
-                CacheScreen(
-                    books = booksCache,
-                    refreshTickOf = { refreshTicks[it] ?: 0L },
-                    cacheChaptersOf = { viewModel.cacheChapters[it] },
-                    exportMsgOf = { ExportBookService.exportMsg[it] },
-                    exportProgressOf = { ExportBookService.exportProgress[it] },
-                    onDownloadToggle = {
-                        if (CacheBook.cacheBookMap[it.bookUrl]?.isStop() == false) {
-                            CacheBook.remove(this, it.bookUrl)
-                        } else {
-                            CacheBook.start(this, it, 0, it.lastChapterIndex)
-                        }
-                    },
-                    onExport = { export(it) },
-                    taskSummary = cacheTaskSummary,
-                    onCancelTask = { CacheBook.stop(this) }
-                )
-            }
-        }
     }
 
     private fun initBookData() {

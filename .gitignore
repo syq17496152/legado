@@ -242,3 +242,5 @@ git_log.txt
 /trae_token_export4
 # 本地产出的一次性分析报告（不入库）
 /*追踪报告*.md
+# 本地产出的一次性分析截图（不入库）
+/*-after-fix.png

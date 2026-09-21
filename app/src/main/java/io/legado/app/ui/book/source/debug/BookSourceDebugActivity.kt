@@ -1,15 +1,18 @@
 package io.legado.app.ui.book.source.debug
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.Modifier
 import androidx.core.content.FileProvider
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
-import io.legado.app.databinding.ActivitySourceDebugBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.model.Debug
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.widget.components.GlassTopAppBar
@@ -21,7 +24,6 @@ import io.legado.app.ui.widget.dialog.TextDialog
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -32,9 +34,10 @@ import java.util.Locale
  * 保留能力：intent 传源 key、扫码选关键字（QrCodeResult，扫码即按搜索调试——与旧版行为一致）、
  * 弹框全文（TextDialog TEXT 模式）、导出日志（log-compliance-cleanup 批次E 成果并入顶栏菜单）。
  */
-class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookSourceDebugModel>() {
+class BookSourceDebugActivity : VMBaseActivity<ViewBinding, BookSourceDebugModel>() {
 
-    override val binding by viewBinding(ActivitySourceDebugBinding::inflate)
+    // M7 清壳：原 activity_source_debug.xml 仅含两个 ComposeView（无 View 语义）
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<BookSourceDebugModel>()
 
     private val qrCodeResult = registerForActivityResult(QrCodeResult()) {
@@ -43,43 +46,45 @@ class BookSourceDebugActivity : VMBaseActivity<ActivitySourceDebugBinding, BookS
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initTopBar()
-        initComposeHost()
+        initComposeContent()
         viewModel.init(intent.getStringExtra("key")) {}
     }
 
-    private fun initTopBar() {
-        binding.composeTopBar.setContent {
+    /**
+     * M7 清壳（2026-09-22）：原 `activity_source_debug.xml` 是「ConstraintLayout + compose_top_bar(wrap)
+     * + compose_host(0dp 占满剩余)」两个 ComposeView ⇒ 合并为**单一 Compose 树**
+     * `Column { GlassTopAppBar(); Screen(weight(1f)) }`，与旧布局逐项等价
+     * （顶栏 wrap_content；Screen 根为 `Box(fillMaxSize)` ⇒ 加 weight(1f) 即"占满剩余高度"）。
+     * 换装后代码侧不再引用 R.layout，壳布局成为死资源。
+     */
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
             LegadoTheme {
-                GlassTopAppBar(
-                    title = getString(R.string.debug_source),
-                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                    onNavClick = { finish() },
-                    actions = {
-                        TopBarActionRow(
-                            listOf(
-                                MenuAction(title = "清空日志") { viewModel.clearLogs() },
-                                MenuAction(title = getString(R.string.log_export_logs)) { exportDebugLog() },
+                Column {
+                    GlassTopAppBar(
+                        title = getString(R.string.debug_source),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = {
+                            TopBarActionRow(
+                                listOf(
+                                    MenuAction(title = "清空日志") { viewModel.clearLogs() },
+                                    MenuAction(title = getString(R.string.log_export_logs)) { exportDebugLog() },
+                                )
                             )
-                        )
-                    },
-                )
-            }
-        }
-    }
-
-    private fun initComposeHost() {
-        binding.composeHost.setContent {
-            LegadoTheme {
-                BookSourceDebugScreen(
-                    sourceName = viewModel.sourceName,
-                    examples = viewModel.examples,
-                    onStart = { key -> viewModel.startDebug(key) { toastOnUi("未获取到书源") } },
-                    onCancel = { viewModel.stopDebug() },
-                    onShowFull = { title, content ->
-                        showDialogFragment(TextDialog(title, content, TextDialog.Mode.TEXT))
-                    },
-                )
+                        },
+                    )
+                    BookSourceDebugScreen(
+                        sourceName = viewModel.sourceName,
+                        examples = viewModel.examples,
+                        onStart = { key -> viewModel.startDebug(key) { toastOnUi("未获取到书源") } },
+                        onCancel = { viewModel.stopDebug() },
+                        onShowFull = { title, content ->
+                            showDialogFragment(TextDialog(title, content, TextDialog.Mode.TEXT))
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
