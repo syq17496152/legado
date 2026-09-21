@@ -3654,4 +3654,15 @@ function login() {
     <string name="rss_search_empty_switch">%1$s分组搜索结果为空，是否切换到全部分组？</string>
     <string name="search_history_delete_title">删除搜索记录</string>
     <string name="search_history_delete_message">确定删除「%1$s」这条搜索记录吗？</string>
+    <!-- book/search-content 页面优化（M4） -->
+    <string name="search_content_progress">已搜 %1$d/%2$d 章 · 命中 %3$d</string>
+    <string name="search_content_coverage">命中 %1$d 处 · 分布于 %2$d 章</string>
+    <string name="search_content_coverage_scanned">命中 %1$d 处 · 分布于 %2$d 章 · 已搜 %3$d 章</string>
+    <string name="search_content_coverage_uncached">；%1$d 章未缓存未参与搜索，缓存后重搜可提升覆盖</string>
+    <string name="search_content_distribution">命中分布 · %1$d 章</string>
+    <string name="search_content_distribution_label">命中分布</string>
+    <string name="search_content_distribution_item">%1$s · %2$d 处</string>
+    <!-- book/explore-show 页面优化（M4） -->
+    <string name="explore_show_preview_hint">长按书籍可预览简介与目录，不用先打开</string>
+    <string name="add_to_bookshelf_success">已放入书架：%1$s</string>
 </resources>

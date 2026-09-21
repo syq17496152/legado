@@ -7,10 +7,12 @@ import androidx.lifecycle.viewModelScope
 import io.legado.app.BuildConfig
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.BookType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.help.book.isNotShelf
+import io.legado.app.help.book.removeType
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.stackTraceStr
@@ -122,6 +124,35 @@ class ExploreShowViewModel(application: Application) : BaseViewModel(application
         val bookUrl = book.bookUrl
         val key = if (author.isNotBlank()) "$name-$author" else name
         return bookshelf.contains(key) || bookshelf.contains(bookUrl)
+    }
+
+    /**
+     * F46：发现列表就地「放入书架」。
+     *
+     * 与 [io.legado.app.ui.book.info.BookInfoViewModel.addToBookshelf] 同口径：清 notShelf 位、
+     * 落最小 order、**带上同名同作者书的既有阅读进度**（否则「加入书架」会把进度抹成 0）；
+     * 差异是本方法**不预加载目录**——目录在真正打开阅读时按需拉取，符合「浏览即收藏」的轻量语义。
+     *
+     * 书架集合由 `flowAll()` 观察流自动刷新 ⇒ 列表「已在书架」圆点无需手工触发。
+     */
+    fun addToBookshelf(book: SearchBook, success: (() -> Unit)? = null) {
+        execute {
+            val target = book.toBook()
+            target.removeType(BookType.notShelf)
+            if (target.order == 0) {
+                target.order = appDb.bookDao.minOrder - 1
+            }
+            appDb.bookDao.getBook(target.name, target.author)?.let {
+                target.durChapterIndex = it.durChapterIndex
+                target.durChapterPos = it.durChapterPos
+                target.durChapterTitle = it.durChapterTitle
+            }
+            target.save()
+        }.onSuccess {
+            success?.invoke()
+        }.onError {
+            AppLog.put("发现列表放入书架失败\n${it.localizedMessage}", it)
+        }
     }
 
     fun sourceTypeHint(): Int? {

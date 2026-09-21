@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -32,6 +33,7 @@ import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppDropdownMenu
+import io.legado.app.ui.widget.components.AppMenuSheet
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsSearchBar
@@ -51,6 +53,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import splitties.systemservices.inputMethodManager
 
+/**
+ * 命中分布条目（F77）：一章的命中聚合，供「按章直达」列表消费。
+ *
+ * [firstIndex] 是本章第一条命中在结果列表中的下标（列表按章节顺序追加 ⇒ 与 adapter 下标一致）。
+ */
+private data class ChapterHit(
+    val chapterIndex: Int,
+    val chapterTitle: String,
+    val count: Int,
+    val firstIndex: Int
+)
+
 
 class SearchContentActivity :
     VMBaseActivity<ActivitySearchContentBinding, SearchContentViewModel>(),
@@ -67,6 +81,9 @@ class SearchContentActivity :
     private var composeSearchQuery by mutableStateOf("")
     private var menuExpanded by mutableStateOf(false)
     private val searchFocusRequester = FocusRequester()
+    // F77：命中分布（≥2 章时顶栏出现「分布」入口 → 按章直达）
+    private var hitDistribution by mutableStateOf<List<ChapterHit>>(emptyList())
+    private var distSheetExpanded by mutableStateOf(false)
 
     // search-content-compose 壳层化：菜单动作 ID（原 R.id.menu_xxx，菜单资源已删除）
     private object MenuId {
@@ -96,6 +113,7 @@ class SearchContentActivity :
     }
 
     // search-content-compose 壳层化：顶栏（GlassTopAppBar 标题 + 搜索 SettingsSearchBar + 更多菜单 AppDropdownMenu）
+    @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
     private fun initComposeTopBar() {
         binding.composeTopBar.setContent {
             LegadoTheme {
@@ -105,6 +123,15 @@ class SearchContentActivity :
                         navIcon = Icons.AutoMirrored.Filled.ArrowBack,
                         onNavClick = { finish() },
                         actions = {
+                            // F77：命中跨 ≥2 章时才给「按章直达」入口（单章命中时列表本身就一眼看完，加了是仪式感）
+                            if (hitDistribution.size >= 2) {
+                                IconButton(onClick = { distSheetExpanded = true }) {
+                                    Icon(
+                                        Icons.Default.PieChart,
+                                        contentDescription = stringResource(R.string.search_content_distribution_label)
+                                    )
+                                }
+                            }
                             Box {
                                 IconButton(onClick = { menuExpanded = true }) {
                                     Icon(Icons.Default.MoreVert, contentDescription = null)
@@ -124,8 +151,35 @@ class SearchContentActivity :
                         onSearch = { startContentSearch(composeSearchQuery.trim()) },
                         focusRequester = searchFocusRequester
                     )
+                    if (distSheetExpanded) {
+                        AppMenuSheet(
+                            title = getString(
+                                R.string.search_content_distribution,
+                                hitDistribution.size
+                            ),
+                            actions = hitDistribution.map { hit ->
+                                MenuAction(
+                                    Icons.Default.Article,
+                                    getString(
+                                        R.string.search_content_distribution_item,
+                                        hit.chapterTitle,
+                                        hit.count
+                                    )
+                                ) { scrollToChapter(hit) }
+                            },
+                            onDismiss = { distSheetExpanded = false }
+                        )
+                    }
                 }
             }
+        }
+    }
+
+    /** F77：跳到某章的第一条命中（列表按章节顺序追加 ⇒ 下标与 adapter 一致） */
+    private fun scrollToChapter(hit: ChapterHit) {
+        distSheetExpanded = false
+        if (hit.firstIndex in 0 until adapter.itemCount) {
+            mLayoutManager.scrollToPositionWithOffset(hit.firstIndex, 0)
         }
     }
 
@@ -170,6 +224,8 @@ class SearchContentActivity :
         viewModel.searchResultCounts = list.size
         adapter.setItems(list)
         binding.recyclerView.scrollToPosition(position)
+        // F77：既有结果也陈述分布（不重搜也能按章直达）
+        renderCoverage()
     }
 
     private fun initRecyclerView() {
@@ -198,10 +254,9 @@ class SearchContentActivity :
         }
     }
 
-    @SuppressLint("SetTextI18n")
     private fun initBook(submit: Boolean = true) {
-        binding.tvCurrentSearchInfo.text =
-            this.getString(R.string.search_content_size) + ": ${viewModel.searchResultCounts}"
+        // 初始/恢复态：先陈述既有结果的命中与分布（若随后提交新搜索，会被进度文案接替）
+        renderCoverage()
         viewModel.book?.let {
             initCacheFileNames(it)
             durChapterIndex = it.durChapterIndex
@@ -232,7 +287,6 @@ class SearchContentActivity :
         }
     }
 
-    @SuppressLint("SetTextI18n")
     fun startContentSearch(query: String) {
         // 按章节搜索内容
         if (query.isBlank()) return
@@ -241,28 +295,43 @@ class SearchContentActivity :
         viewModel.searchResultList.clear()
         viewModel.searchResultCounts = 0
         viewModel.lastQuery = query
+        hitDistribution = emptyList()
+        distSheetExpanded = false
         binding.refreshProgressBar.isAutoLoading = true
         binding.fbStop.visible()
         searchJob = lifecycleScope.launch(IO) {
             initJob?.join()
+            // F76：把「搜了哪些章、跳过了多少章」变成可陈述的事实——本页只搜**已缓存**章节，
+            // 不告知覆盖率时「没搜到」会被误读为「书里没有」（错误的负结论，危害远大于搜得慢）
+            val chapters = appDb.bookChapterDao.getChapterList(viewModel.bookUrl)
+            val totalChapters = chapters.size
+            var searchedChapters = 0
+            var skippedChapters = 0
+            var lastPostedChapters = 0
             kotlin.runCatching {
-                appDb.bookChapterDao.getChapterList(viewModel.bookUrl).forEach { bookChapter ->
+                chapters.forEach { bookChapter ->
                     ensureActive()
-                    val searchResults = if (isLocalBook
-                        || viewModel.cacheChapterNames.contains(bookChapter.getFileName())
+                    if (!isLocalBook
+                        && !viewModel.cacheChapterNames.contains(bookChapter.getFileName())
                     ) {
-                        viewModel.searchChapter(query, bookChapter)
-                    } else {
+                        skippedChapters++
                         return@forEach
                     }
+                    val searchResults = viewModel.searchChapter(query, bookChapter)
+                    searchedChapters++
                     ensureActive()
                     if (searchResults.isNotEmpty()) {
                         viewModel.searchResultList.addAll(searchResults)
                         binding.tvCurrentSearchInfo.post {
-                            binding.tvCurrentSearchInfo.text =
-                                this@SearchContentActivity.getString(R.string.search_content_size) + ": ${viewModel.searchResultCounts}"
                             adapter.addItems(searchResults)
                         }
+                    }
+                    // 进度节流：首章即刻出态（让用户马上看到「在搜了」），其后每 10 章刷一次
+                    if (searchedChapters == 1
+                        || searchedChapters - lastPostedChapters >= PROGRESS_STEP_CHAPTERS
+                    ) {
+                        lastPostedChapters = searchedChapters
+                        renderProgress(searchedChapters, totalChapters)
                     }
                 }
                 if (viewModel.searchResultCounts == 0) {
@@ -278,8 +347,64 @@ class SearchContentActivity :
             binding.tvCurrentSearchInfo.post {
                 binding.fbStop.invisible()
                 binding.refreshProgressBar.isAutoLoading = false
+                // 结果与覆盖率一并落定：命中数 / 分布章数 / 已搜章数（+被跳过的未缓存章）
+                renderCoverage(searchedChapters, skippedChapters)
             }
         }
+    }
+
+    /** F76：搜索进行中的确定性进度（已搜 N/M 章 + 实时命中数） */
+    private fun renderProgress(searched: Int, total: Int) {
+        val text = getString(
+            R.string.search_content_progress, searched, total, viewModel.searchResultCounts
+        )
+        binding.tvCurrentSearchInfo.post {
+            binding.tvCurrentSearchInfo.text = text
+        }
+    }
+
+    /**
+     * F76/F77：搜索落定后的覆盖率摘要 + 命中分布重算。
+     *
+     * [searched] / [skipped] 为本次搜索的实况；从阅读页带回既有结果（未重新搜索）时传 -1，
+     * 此时只陈述「命中 + 分布」而不编造覆盖率。
+     */
+    private fun renderCoverage(searched: Int = -1, skipped: Int = -1) {
+        updateDistribution()
+        val hitCount = viewModel.searchResultList.size
+        val chapterCount = hitDistribution.size
+        val text = if (searched >= 0) {
+            val base = getString(
+                R.string.search_content_coverage_scanned, hitCount, chapterCount, searched
+            )
+            // 有跳过才提「边界 + 出路」，全覆盖时不提（不给用户制造无谓焦虑）
+            if (skipped > 0) base + getString(R.string.search_content_coverage_uncached, skipped)
+            else base
+        } else {
+            getString(R.string.search_content_coverage, hitCount, chapterCount)
+        }
+        binding.tvCurrentSearchInfo.post {
+            binding.tvCurrentSearchInfo.text = text
+        }
+    }
+
+    /**
+     * F77：按章聚合命中（章节升序 = 阅读顺序；同章内下标连续 ⇒ 取首条即滚动锚点）。
+     *
+     * 纯展示层聚合，零数据层改动；`searchResultList` 按章追加 ⇒ 分组后天然有序，不再排序。
+     */
+    private fun updateDistribution() {
+        hitDistribution = viewModel.searchResultList
+            .withIndex()
+            .groupBy { it.value.chapterIndex }
+            .map { (chapterIndex, items) ->
+                ChapterHit(
+                    chapterIndex = chapterIndex,
+                    chapterTitle = items.first().value.chapterTitle,
+                    count = items.size,
+                    firstIndex = items.first().index
+                )
+            }
     }
 
     private val isLocalBook: Boolean
@@ -300,6 +425,11 @@ class SearchContentActivity :
 
     override fun durChapterIndex(): Int {
         return durChapterIndex
+    }
+
+    private companion object {
+        /** F76：进度刷新步长（每搜过这么多章刷新一次底部信息栏） */
+        const val PROGRESS_STEP_CHAPTERS = 10
     }
 
 }

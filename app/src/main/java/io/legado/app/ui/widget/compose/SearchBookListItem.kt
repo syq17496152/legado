@@ -2,6 +2,7 @@ package io.legado.app.ui.widget.compose
 
 import io.legado.app.ui.widget.components.AppShapes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +17,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
@@ -24,7 +28,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -54,9 +61,15 @@ fun SearchBookListItem(
     onPreview: (Rect?) -> Unit,
     modifier: Modifier = Modifier,
     fragment: Fragment? = null,
-    showOriginCount: Boolean = false
+    showOriginCount: Boolean = false,
+    /**
+     * F46：行尾「更多动作」入口（可选）。非空时行尾渲染一个 ⋮ 触控区（40dp），
+     * 点击回传由调用方弹上下文菜单。**默认 null ⇒ 既有调用点零改动**（发现分类页首次启用）。
+     */
+    onMore: (() -> Unit)? = null
 ) {
     val palette = renderConfig.palette
+    val haptic = LocalHapticFeedback.current
     val coverBounds = remember(book.bookUrl, book.origin, book.coverUrl) {
         mutableStateOf<Rect?>(null)
     }
@@ -66,7 +79,11 @@ fun SearchBookListItem(
         renderConfig = renderConfig,
         modifier = if (rounded) modifier else modifier.heightIn(min = NormalSearchBookListItemHeight),
         onClick = onClick,
-        onLongClick = { onPreview(coverBounds.value) }
+        onLongClick = {
+            // F48：长按弹预览前给触觉确认（预览是「先看后决定」的隐性能力，无反馈时用户不知是否触发成功）
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onPreview(coverBounds.value)
+        }
     ) { metrics ->
         Box(modifier = Modifier.width(metrics.coverWidth)) {
             BookCoverImage(
@@ -99,6 +116,23 @@ fun SearchBookListItem(
             showOriginCount = showOriginCount,
             modifier = Modifier.weight(1f)
         )
+        if (onMore != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterVertically)
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onMore),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = stringResource(R.string.more),
+                    tint = palette.secondaryText,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
     }
 }
 

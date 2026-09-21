@@ -548,4 +548,6 @@ object PreferKey {
     const val sslCertPassThrough = "sslCertPassThrough"
     // F180：沉浸式播放器首次手势引导卡是否已展示（一次性；展示并点「知道了」后置 true）
     const val videoGestureGuideShown = "videoGestureGuideShown"
+    // F48：发现分类页「长按书籍可预览」一次性提示是否已展示（展示后关闭或首次成功长按即置 true）
+    const val exploreShowPreviewHintShown = "exploreShowPreviewHintShown"
 }

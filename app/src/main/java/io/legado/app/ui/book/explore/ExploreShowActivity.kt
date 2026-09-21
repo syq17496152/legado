@@ -9,20 +9,28 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.constant.PreferKey
 import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.databinding.ActivityExploreShowBinding
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.ui.book.SearchBookOpenHelper
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.AppMenuSheet
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.TopBarActionRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Preview
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.number.NumberPickerDialog
+import io.legado.app.utils.getPrefBoolean
+import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.stableSearchBookKey
+import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
@@ -46,6 +54,12 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
     private val bookshelfTick = mutableIntStateOf(0)
     private var oldPage = -1
     private var isClearAll = false
+    // F46：行尾 ⋮ 的上下文菜单（放入书架 / 预览 / 打开详情）
+    private val moreSheetBook = mutableStateOf<SearchBook?>(null)
+    /** F46：⋮ 菜单选「预览」的一次性请求（消费后由列表屏复位） */
+    private val previewRequestBook = mutableStateOf<SearchBook?>(null)
+    // F48：一次性预览提示（首次进入分类时展示，关闭或长按成功后不再出现）
+    private val previewHintVisible = mutableStateOf(false)
 
     // W7.2：原 moreMenuPopup 随 ModernActionPopup 链删除（跳页入口迁 GlassTopAppBar 溢出菜单）
 
@@ -96,6 +110,8 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        // F48：仅首次（或从未关闭过提示）展示「长按可预览」——存量用户升级后看一次，关闭即永久置位
+        previewHintVisible.value = !getPrefBoolean(PreferKey.exploreShowPreviewHintShown)
         initTopBar()
         initComposeList()
         viewModel.booksData.observe(this) { upData(it) }
@@ -115,6 +131,7 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
         viewModel.initData(intent)
     }
 
+    @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
     private fun initComposeList() {
         composeBottomLoading.value = true
         binding.composeList.setViewCompositionStrategy(
@@ -137,11 +154,59 @@ class ExploreShowActivity : VMBaseActivity<ActivityExploreShowBinding, ExploreSh
                     isInBookshelf = { book -> isInBookshelf(book) },
                     lifecycle = lifecycle,
                     onBookClick = { book -> showBookInfo(book) },
+                    onBookMore = { book -> moreSheetBook.value = book },
+                    showPreviewHint = previewHintVisible.value,
+                    onPreviewHintDismiss = { dismissPreviewHint() },
+                    previewRequest = previewRequestBook.value,
+                    onPreviewRequestHandled = { previewRequestBook.value = null },
                     onLoadMore = { scrollToBottom(forceLoad = composeBottomError.value != null) },
                     onLoadPrevious = { scrollToTop(forceLoad = composeTopError.value != null) }
                 )
+                moreSheetBook.value?.let { book ->
+                    AppMenuSheet(
+                        title = book.name,
+                        actions = buildBookActions(book),
+                        onDismiss = { moreSheetBook.value = null }
+                    )
+                }
             }
         }
+    }
+
+    /**
+     * F46：列表项「更多动作」菜单。
+     *
+     * 「放入书架」置于首位（发现页最高价值路径是「看到中意的书 → 加入书架」，原本要进详情页才有的动作）；
+     * 已在书架时不再显示该项（避免无意义点击），保留预览与打开详情。
+     */
+    private fun buildBookActions(book: SearchBook): List<MenuAction> = buildList {
+        if (!isInBookshelf(book)) {
+            add(MenuAction(Icons.Default.Add, getString(R.string.add_to_bookshelf)) {
+                moreSheetBook.value = null
+                addToBookshelf(book)
+            })
+        }
+        add(MenuAction(Icons.Default.Preview, getString(R.string.preview)) {
+            moreSheetBook.value = null
+            previewRequestBook.value = book
+        })
+        add(MenuAction(Icons.Default.Info, getString(R.string.book_info)) {
+            moreSheetBook.value = null
+            showBookInfo(book)
+        })
+    }
+
+    /** F46：就地放入书架（口径与 BookInfoViewModel.addToBookshelf 一致，进度不归零） */
+    private fun addToBookshelf(book: SearchBook) {
+        viewModel.addToBookshelf(book) {
+            toastOnUi(getString(R.string.add_to_bookshelf_success, book.name))
+        }
+    }
+
+    /** F48：关闭一次性提示并落位（本页内不再展示） */
+    private fun dismissPreviewHint() {
+        previewHintVisible.value = false
+        putPrefBoolean(PreferKey.exploreShowPreviewHintShown, true)
     }
 
     private fun scrollToBottom(forceLoad: Boolean = false) {
