@@ -91,6 +91,10 @@ class AiProviderEditActivity : BaseActivity<ViewBinding>() {
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         providerId = intent.getStringExtra(EXTRA_PROVIDER_ID)
+        // F4：管理页「模型数」行直达模型 Tab（缺省仍是配置 Tab，既有调用点零改动）
+        if (intent.getBooleanExtra(EXTRA_TAB_MODEL, false)) {
+            currentTab = TAB_MODEL
+        }
         val provider = currentProvider()
         apiMode = normalizeApiMode(provider?.apiMode)
         bindProvider(provider)
@@ -454,6 +458,9 @@ class AiProviderEditActivity : BaseActivity<ViewBinding>() {
 
     companion object {
         const val EXTRA_PROVIDER_ID = "providerId"
+
+        /** F4：置 true 时直接落到「模型管理」Tab（管理页模型数行直达入口） */
+        const val EXTRA_TAB_MODEL = "openModelTab"
         private const val TAB_CONFIG = "config"
         private const val TAB_MODEL = "model"
     }

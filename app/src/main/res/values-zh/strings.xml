@@ -2394,6 +2394,14 @@ bookUrl：%7$s
     <string name="ai_current_provider_summary_empty">请先添加提供商</string>
     <string name="ai_add_provider">添加提供商</string>
     <string name="ai_add_provider_summary">新增一个兼容 OpenAI 的接口提供商</string>
+    <string name="ai_provider_stat_usable">可用</string>
+    <string name="ai_provider_stat_models">模型总数</string>
+    <string name="ai_provider_stat_current">当前使用</string>
+    <string name="ai_provider_stat_current_none">未设置</string>
+    <string name="ai_provider_search_hint">搜索提供商</string>
+    <string name="ai_provider_search_empty_title">没有匹配「%1$s」的提供商</string>
+    <string name="ai_provider_search_empty_hint">检查拼写，或点下方按钮新增</string>
+    <string name="ai_provider_search_empty_clear">清除搜索，查看全部 %1$d 个</string>
     <string name="ai_manage_providers">管理提供商</string>
     <string name="ai_manage_providers_summary">已添加 %1$d 个提供商</string>
     <string name="ai_provider_name">提供商名称</string>
