@@ -86,6 +86,7 @@ import io.legado.app.help.exoplayer.FirstFramePreloader
 import io.legado.app.help.gsyVideo.VideoPlayer
 import io.legado.app.help.player.ErrorMapper
 import io.legado.app.help.webView.PooledWebView
+import io.legado.app.help.webView.SilentSslWebViewClient
 import io.legado.app.help.webView.WebJsExtensions
 import io.legado.app.help.webView.WebJsExtensions.Companion.getInjectionString
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameCache
@@ -1467,7 +1468,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         }
     }
 
-    inner class CustomWebViewClient : WebViewClient() {
+    inner class CustomWebViewClient : SilentSslWebViewClient() {
         private val jsStr = getInjectionString
         override fun shouldOverrideUrlLoading(
             view: WebView?,

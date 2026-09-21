@@ -84,6 +84,7 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.webView.PooledWebView
+import io.legado.app.help.webView.SilentSslWebViewClient
 import io.legado.app.help.webView.WebJsExtensions
 import io.legado.app.help.webView.WebJsExtensions.Companion.getInjectionString
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameCache
@@ -680,7 +681,7 @@ class BookInfoActivity :
         upGroup(book.group)
     }
 
-    inner class CustomWebViewClient : WebViewClient() {
+    inner class CustomWebViewClient : SilentSslWebViewClient() {
         private val jsStr = getInjectionString
         override fun shouldOverrideUrlLoading(
             view: WebView?,

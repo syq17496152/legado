@@ -46,6 +46,7 @@ import io.legado.app.help.source.SourceContentFilter
 import io.legado.app.help.source.SourceWebViewController
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.webView.PooledWebView
+import io.legado.app.help.webView.SilentSslWebViewClient
 import io.legado.app.help.webView.WebViewHtmlStore
 import io.legado.app.help.webView.WebJsExtensions
 import io.legado.app.help.webView.WebJsExtensions.Companion.JS_INJECTION
@@ -808,7 +809,7 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
         }
     }
 
-    inner class CustomWebViewClient : WebViewClient() {
+    inner class CustomWebViewClient : SilentSslWebViewClient() {
         override fun shouldOverrideUrlLoading(
             view: WebView?, request: WebResourceRequest?
         ): Boolean {
@@ -864,13 +865,6 @@ class BottomWebViewDialog() : BottomSheetDialogFragment(R.layout.dialog_web_view
                     true
                 }
             }
-        }
-
-        @SuppressLint("WebViewClientOnReceivedSslError")
-        override fun onReceivedSslError(
-            view: WebView?, handler: SslErrorHandler?, error: SslError?
-        ) {
-            handler?.proceed()
         }
 
         private var jsInjected = false

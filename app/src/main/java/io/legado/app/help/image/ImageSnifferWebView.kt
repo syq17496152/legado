@@ -13,6 +13,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import io.legado.app.constant.AppLog
 import io.legado.app.help.webView.PooledWebView
+import io.legado.app.help.webView.SilentSslWebViewClient
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonArray
@@ -147,7 +148,7 @@ class ImageSnifferWebView(
 
     private inner class ImageSnifferWebClient(
         private val block: kotlin.coroutines.Continuation<List<String>>
-    ) : WebViewClient() {
+    ) : SilentSslWebViewClient() {
 
         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
             super.onPageStarted(view, url, favicon)
@@ -196,15 +197,6 @@ class ImageSnifferWebView(
                 if (closed) return@postDelayed
                 readJsCollectedUrls(view)
             }, delayTime)
-        }
-
-        @SuppressLint("WebViewClientOnReceivedSslError")
-        override fun onReceivedSslError(
-            view: WebView?,
-            handler: SslErrorHandler?,
-            error: SslError?
-        ) {
-            handler?.proceed()
         }
 
         private fun readJsCollectedUrls(view: WebView) {

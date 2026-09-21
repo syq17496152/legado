@@ -13,6 +13,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.webView.PooledWebView
+import io.legado.app.help.webView.SilentSslWebViewClient
 import io.legado.app.help.webView.WebJsExtensions
 import io.legado.app.ui.rss.read.VisibleWebView
 import io.legado.app.utils.setDarkeningAllowed
@@ -179,7 +180,7 @@ class CommentWebViewSession {
                 loadWithOverviewMode = false
                 textZoom = 100
             }
-            webViewClient = object : WebViewClient() {
+            webViewClient = object : SilentSslWebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     if (url != BLANK_HTML || resetTokens[pooled.id] != resetToken || pooled.isInUse) {
                         return

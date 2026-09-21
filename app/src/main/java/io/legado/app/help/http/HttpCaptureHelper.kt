@@ -12,6 +12,7 @@ import io.legado.app.constant.AppConst
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.webView.PooledWebView
+import io.legado.app.help.webView.SilentSslWebViewClient
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.utils.get
 import io.legado.app.utils.runOnUI
@@ -95,7 +96,7 @@ object HttpCaptureHelper {
                                 return@runOnUI
                             }
                             initWebView(webView, config)
-                            webView.webViewClient = object : WebViewClient() {
+                            webView.webViewClient = object : SilentSslWebViewClient() {
                                 override fun shouldInterceptRequest(
                                     view: WebView,
                                     request: WebResourceRequest

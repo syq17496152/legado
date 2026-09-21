@@ -19,6 +19,7 @@ import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.databinding.ActivityImageGalleryBinding
+import io.legado.app.help.webView.SilentSslWebViewClient
 import io.legado.app.R
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.ui.file.HandleFileContract
@@ -973,7 +974,7 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(binding.webviewPreheat, true)
         }
-        binding.webviewPreheat.webViewClient = object : WebViewClient() {
+        binding.webviewPreheat.webViewClient = object : SilentSslWebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 return false
             }

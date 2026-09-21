@@ -1162,14 +1162,6 @@
     <string name="disable_source">禁用源</string>
     <string name="delete_source">删除源</string>
     <string name="disable_source_confirm">将停止「%1$s」的服务，已保存的验证结果会失效。之后可在源管理中重新启用。</string>
-    <string name="ssl_error_title">证书校验失败</string>
-    <string name="ssl_error_message">证书校验失败，是否继续访问？\n\n目标地址：%1$s\n证书信息：%2$s\n\n该网站的安全证书无法验证，可能是中间人攻击。继续访问可能导致账号、Cookie 等敏感数据被截获。</string>
-    <string name="ssl_error_continue">仍要继续访问</string>
-    <string name="ssl_error_cert_info">%1$s（有效期至 %2$s）</string>
-    <string name="ssl_error_cert_unknown">未知</string>
-    <string name="ssl_passthrough">证书放行策略</string>
-    <string name="ssl_passthrough_on_hint">证书放行已开启：证书校验失败直接放行，不再询问</string>
-    <string name="ssl_passthrough_off_hint">证书放行已关闭：证书校验失败需确认后才能继续</string>
     <string name="finish_login">完成登录</string>
     <string name="logging_in">正在登录…</string>
     <string name="login_error">登录出错</string>
@@ -3031,4 +3023,13 @@ bookUrl：%7$s
     <string name="search_content_distribution_item">%1$s · %2$d 处</string>
     <!-- book/explore-show 页面优化（M4） -->
     <string name="explore_show_preview_hint">长按书籍可预览简介与目录，不用先打开</string>
-    <string name="add_to_bookshelf_success">已放入书架：%1$s</string></resources>
+    <string name="add_to_bookshelf_success">已放入书架：%1$s</string>
+    <!-- book/search 页面优化（M4） -->
+    <string name="search_result_counting">搜索中 · 已命中 %1$d 本</string>
+    <string name="search_result_count_done">共命中 %1$d 本</string>
+    <string name="search_result_aggregated">%1$d 本多源聚合</string>
+    <string name="search_result_compact">紧凑</string>
+    <string name="search_book_empty_title">搜索结果为空</string>
+    <string name="search_book_empty_precision">%1$s分组搜索结果为空，是否关闭精准搜索？</string>
+    <string name="search_book_empty_switch">%1$s分组搜索结果为空，是否切换到全部分组？</string>
+</resources>

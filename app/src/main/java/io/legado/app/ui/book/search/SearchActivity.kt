@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.book.search
+package io.legado.app.ui.book.search
 
 import android.content.Context
 import android.content.Intent
@@ -14,8 +14,11 @@ import android.widget.TextView
 import android.widget.LinearLayout
 import androidx.activity.viewModels
 import androidx.appcompat.widget.SearchView
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
@@ -88,6 +91,17 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
     private val searchResults = mutableStateListOf<SearchBook>()
     private val bookshelfTick = mutableIntStateOf(0)
     private val resultScrollToTopSignal = mutableIntStateOf(0)
+    // F73：状态条可见性（搜索开始置位、用户改动关键词复位），避免空结果时「搜过了」这一事实无表达
+    private var resultSummaryVisible by mutableStateOf(false)
+    // F73：搜索进行中快照态。**不能用 `viewModel.isSearchLiveData.value` 直读做 Compose 入参**——
+    // LiveData 在组合中直读不建立订阅，结束后不会触发重组 ⇒ 状态条永远停在「搜索中」（真机实测）。
+    // 由 observe 回调写入快照态，组合随状态变更重组。
+    private var searchRunning by mutableStateOf(false)
+    // F74/F75：状态条上的两个开关状态。**初值不能在这里读偏好**——属性初始化在 Activity
+    // 构造期执行，早于 `attachBaseContext()`，此时 `ContextWrapper.getPackageName()` 为 null
+    // ⇒ getPrefBoolean 直接 NPE 崩进程（真机实测）。故先给安全默认值，在 onActivityCreated 里读盘。
+    private var precisionSearchEnabled by mutableStateOf(false)
+    private var compactSearchResult by mutableStateOf(false)
     // 输入帮助区(书架命中 + 搜索历史)已 Compose 化，用快照状态驱动，替代原 BookAdapter/HistoryKeyAdapter。
     private val bookshelfHintBooks = mutableStateListOf<Book>()
     private val historyKeywords = mutableStateListOf<SearchKeyword>()
@@ -106,6 +120,9 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         get() = searchView.findViewById(androidx.appcompat.R.id.search_src_text)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        // F74/F75：读盘取两个开关的持久化初值（构造期读会 NPE，见字段注释）
+        precisionSearchEnabled = getPrefBoolean(PreferKey.precisionSearch)
+        compactSearchResult = getPrefBoolean(PreferKey.searchResultCompact)
         initTopBar()
         initRecyclerView()
         initSearchView()
@@ -121,16 +138,6 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
 
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.menu_precision_search -> {
-                putPrefBoolean(
-                    PreferKey.precisionSearch,
-                    !getPrefBoolean(PreferKey.precisionSearch)
-                )
-                searchView.query?.toString()?.trim()?.let {
-                    searchView.setQuery(it, true)
-                }
-            }
-
             R.id.menu_search_scope -> alertSearchScope()
             R.id.menu_source_manage -> startActivity<BookSourceActivity>()
             R.id.menu_log -> showDialogFragment(AppLogDialog())
@@ -170,7 +177,6 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
     }
 
     private fun prepareSearchMenu(menu: Menu) {
-        menu.findItem(R.id.menu_precision_search)?.isChecked = getPrefBoolean(PreferKey.precisionSearch)
         menu.removeGroup(R.id.menu_group_1)
         menu.removeGroup(R.id.menu_group_2)
         var hasChecked = false
@@ -240,6 +246,8 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
 
             override fun onQueryTextChange(newText: String): Boolean {
                 viewModel.stop()
+                // F73：关键词被改动 ⇒ 旧计数已失效，收起状态条（提交新搜索时会重新亮起）
+                resultSummaryVisible = false
                 binding.fbStartStop.invisible()
                 searchEditText?.apply {
                     setTextColor(primaryTextColor)
@@ -272,16 +280,44 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         binding.composeResults.setContent {
             SearchResultScreen(
                 books = searchResults,
-                isLoading = viewModel.isSearchLiveData.value == true,
+                isLoading = searchRunning,
                 hasMore = viewModel.hasMore,
                 scrollToTopSignal = resultScrollToTopSignal.intValue,
                 bookshelfTick = bookshelfTick.intValue,
                 isInBookshelf = { isInBookshelf(it) },
                 lifecycle = lifecycle,
                 onBookClick = { showBookInfo(it) },
-                onLoadMore = { scrollToBottom() }
+                onLoadMore = { scrollToBottom() },
+                // F73/F74/F75：结果状态条（计数 / 精准搜索 / 紧凑密度）
+                showSummary = resultSummaryVisible,
+                precisionSearch = precisionSearchEnabled,
+                compactMode = compactSearchResult,
+                onTogglePrecisionSearch = { togglePrecisionSearch() },
+                onToggleCompactMode = { toggleCompactSearchResult() }
             )
         }
+    }
+
+    /**
+     * F74：切精准搜索（原 ⋮ 菜单勾选项上浮为常驻 chip，见 NORM-FEEDBACK F288 单入口原则）。
+     *
+     * 切换后按当前关键词重搜，让结果集立即反映新口径；关键词为空时只落偏好，不触发空搜索。
+     */
+    private fun togglePrecisionSearch() {
+        val enabled = !precisionSearchEnabled
+        precisionSearchEnabled = enabled
+        putPrefBoolean(PreferKey.precisionSearch, enabled)
+        searchView.query?.toString()?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            isManualStopSearch = false
+            searchView.setQuery(it, true)
+        }
+    }
+
+    /** F75：切结果卡紧凑密度（本页私有偏好，不动全局书架样式） */
+    private fun toggleCompactSearchResult() {
+        val compact = !compactSearchResult
+        compactSearchResult = compact
+        putPrefBoolean(PreferKey.searchResultCompact, compact)
     }
 
     private fun initInputHelpCompose() {
@@ -350,6 +386,7 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
             updateKeyboardGroupBarVisible()
         }
         viewModel.isSearchLiveData.observe(this) {
+            searchRunning = it
             if (it) {
                 startSearch()
             } else {
@@ -560,6 +597,8 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
      * 开始搜索
      */
     private fun startSearch() {
+        // F73：搜索一开始就亮状态条（含最终 0 命中的情况），让「搜过了」这件事始终有落点
+        resultSummaryVisible = true
         binding.refreshProgressBar.visible()
         binding.refreshProgressBar.isAutoLoading = true
         binding.fbStartStop.setImageResource(R.drawable.ic_stop_black_24dp)
@@ -589,17 +628,19 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
             val precisionSearch = appCtx.getPrefBoolean(PreferKey.precisionSearch)
             val displayScope = viewModel.searchScope.display
             showComposeConfirmDialog(
-                title = "搜索结果为空",
+                title = getString(R.string.search_book_empty_title),
                 message = if (precisionSearch) {
-                    "${displayScope}分组搜索结果为空，是否关闭精准搜索？"
+                    getString(R.string.search_book_empty_precision, displayScope)
                 } else {
-                    "${displayScope}分组搜索结果为空，是否切换到全部分组？"
+                    getString(R.string.search_book_empty_switch, displayScope)
                 },
                 positiveText = getString(R.string.yes),
                 negativeText = getString(R.string.no),
                 onPositive = {
                     if (precisionSearch) {
+                        // 弹窗链路也要同步状态条上的 chip（否则出现「偏好已关、chip 仍高亮」）
                         appCtx.putPrefBoolean(PreferKey.precisionSearch, false)
+                        precisionSearchEnabled = false
                         viewModel.searchKey = ""
                         viewModel.search(searchView.query.toString())
                     } else {

@@ -1219,14 +1219,6 @@
     <string name="disable_source">disable source</string>
     <string name="delete_source">delete source</string>
     <string name="disable_source_confirm">\"%1$s\" will stop working and its saved verification result will be discarded. You can re-enable it in source management later.</string>
-    <string name="ssl_error_title">Certificate verification failed</string>
-    <string name="ssl_error_message">Certificate verification failed. Continue anyway?\n\nTarget: %1$s\nCertificate: %2$s\n\nThe site\'s certificate cannot be verified and may indicate a man-in-the-middle attack. Continuing may expose account and cookie data.</string>
-    <string name="ssl_error_continue">Continue anyway</string>
-    <string name="ssl_error_cert_info">%1$s (valid until %2$s)</string>
-    <string name="ssl_error_cert_unknown">unknown</string>
-    <string name="ssl_passthrough">Certificate pass-through</string>
-    <string name="ssl_passthrough_on_hint">Certificate pass-through is ON: failed checks are let through without asking</string>
-    <string name="ssl_passthrough_off_hint">Certificate pass-through is OFF: failed checks need your confirmation</string>
     <string name="finish_login">Finish login</string>
     <string name="logging_in">Logging in…</string>
     <string name="login_error">Login failed</string>
@@ -3665,4 +3657,12 @@ function login() {
     <!-- book/explore-show 页面优化（M4） -->
     <string name="explore_show_preview_hint">长按书籍可预览简介与目录，不用先打开</string>
     <string name="add_to_bookshelf_success">已放入书架：%1$s</string>
+    <!-- book/search 页面优化（M4） -->
+    <string name="search_result_counting">搜索中 · 已命中 %1$d 本</string>
+    <string name="search_result_count_done">共命中 %1$d 本</string>
+    <string name="search_result_aggregated">%1$d 本多源聚合</string>
+    <string name="search_result_compact">紧凑</string>
+    <string name="search_book_empty_title">搜索结果为空</string>
+    <string name="search_book_empty_precision">%1$s分组搜索结果为空，是否关闭精准搜索？</string>
+    <string name="search_book_empty_switch">%1$s分组搜索结果为空，是否切换到全部分组？</string>
 </resources>

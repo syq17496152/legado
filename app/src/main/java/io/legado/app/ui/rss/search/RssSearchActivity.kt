@@ -6,9 +6,6 @@ import android.os.Bundle
 import android.view.View.GONE
 import android.view.View.VISIBLE
 import androidx.activity.viewModels
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,8 +19,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -31,8 +26,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -55,13 +48,12 @@ import io.legado.app.ui.book.search.SearchInputHelpScreen
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppDropdownMenu
-import io.legado.app.ui.widget.components.AppShapes
+import io.legado.app.ui.widget.components.AppFilterChip
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.InlineTaskBar
 import io.legado.app.ui.widget.components.InlineTaskState
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsSearchBar
-import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyNavigationBarMargin
 import io.legado.app.utils.gone
@@ -537,25 +529,20 @@ class RssSearchActivity :
 /**
  * F200（M4）：搜索结果类型筛选 chips 行（搜索框正下方，与菜单里的分组筛选叠加生效）。
  *
- * 取色与书源搜索页 `createSourceGroupChip` 同口径——未选中 = 次级表面 + 描边，选中 = accent
- * 16%（夜间 28%）叠加 + accent 描边与字色；避免同一「范围 chip」语义出现两套视觉。
+ * 取色/形状全部走共享 [AppFilterChip]（与书源搜索页 `createSourceGroupChip` 同口径）——
+ * 同一「范围/筛选 chip」语义不允许多套视觉，见 NORM-FEEDBACK F286 单源原则。
  */
 @Composable
 private fun RssSearchTypeChipsRow(
     selectedType: Int,
     onSelect: (Int) -> Unit
 ) {
-    val palette = rememberAppSettingPalette()
     val options = listOf(
         -1 to stringResource(R.string.rss_search_type_all),
         0 to stringResource(R.string.rss_article_type_web),
         1 to stringResource(R.string.rss_article_type_image),
         2 to stringResource(R.string.rss_article_type_video)
     )
-    val selectedAlpha = if (AppConfig.isNightTheme) 0.28f else 0.16f
-    // 未选中底/描边取「次级表面 + 面板描边」token（border 为可空 Int，缺省退化为透明描边）
-    val idleBg = Color(palette.rowPressed)
-    val idleBorder = palette.border?.let { Color(it) } ?: Color.Transparent
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -565,24 +552,10 @@ private fun RssSearchTypeChipsRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         options.forEach { (type, label) ->
-            val selected = selectedType == type
-            Text(
+            AppFilterChip(
                 text = label,
-                color = if (selected) palette.accent else palette.primaryText,
-                fontSize = MaterialTheme.typography.bodySmall.fontSize,
-                maxLines = 1,
-                modifier = Modifier
-                    .clip(AppShapes.Capsule)
-                    .background(
-                        if (selected) palette.accent.copy(alpha = selectedAlpha) else idleBg
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = if (selected) palette.accent else idleBorder,
-                        shape = AppShapes.Capsule
-                    )
-                    .clickable { onSelect(type) }
-                    .padding(horizontal = 12.dp, vertical = 5.dp)
+                selected = selectedType == type,
+                onClick = { onSelect(type) }
             )
         }
     }

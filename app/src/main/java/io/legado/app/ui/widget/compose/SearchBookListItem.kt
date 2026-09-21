@@ -66,7 +66,13 @@ fun SearchBookListItem(
      * F46：行尾「更多动作」入口（可选）。非空时行尾渲染一个 ⋮ 触控区（40dp），
      * 点击回传由调用方弹上下文菜单。**默认 null ⇒ 既有调用点零改动**（发现分类页首次启用）。
      */
-    onMore: (() -> Unit)? = null
+    onMore: (() -> Unit)? = null,
+    /**
+     * F75：紧凑密度（可选）。开启后隐藏简介行并切换到共享紧凑卡度量
+     * （`classicCompactMinHeight` / `roundedCompactMinHeight`，见 BookListCardComponents）。
+     * **默认 false ⇒ 既有调用点零改动**（搜书页首次启用）。
+     */
+    compact: Boolean = false
 ) {
     val palette = renderConfig.palette
     val haptic = LocalHapticFeedback.current
@@ -75,9 +81,11 @@ fun SearchBookListItem(
     }
     BookListCardSurface(
         rounded = rounded,
-        compact = false,
+        compact = compact,
         renderConfig = renderConfig,
-        modifier = if (rounded) modifier else modifier.heightIn(min = NormalSearchBookListItemHeight),
+        // 紧凑态不叠加本页最小高度（136dp），交由共享紧凑度量
+        // （classicCompactMinHeight / roundedCompactMinHeight）决定，避免两处高度口径打架
+        modifier = if (rounded || compact) modifier else modifier.heightIn(min = NormalSearchBookListItemHeight),
         onClick = onClick,
         onLongClick = {
             // F48：长按弹预览前给触觉确认（预览是「先看后决定」的隐性能力，无反馈时用户不知是否触发成功）
@@ -112,6 +120,7 @@ fun SearchBookListItem(
         SearchBookListText(
             book = book,
             rounded = rounded,
+            compact = compact,
             palette = palette,
             showOriginCount = showOriginCount,
             modifier = Modifier.weight(1f)
@@ -140,6 +149,7 @@ fun SearchBookListItem(
 private fun SearchBookListText(
     book: SearchBook,
     rounded: Boolean,
+    compact: Boolean,
     palette: BookshelfListPalette,
     showOriginCount: Boolean,
     modifier: Modifier = Modifier
@@ -214,7 +224,8 @@ private fun SearchBookListText(
             )
         }
         val intro = remember(book.intro) { BookIntroUtils.listIntro(book.intro) }
-        if (!intro.isNullOrBlank()) {
+        // F75：紧凑密度隐藏简介行（扫书名+源数决策，简介是噪音），标题/作者/分类/最新章节保留
+        if (!compact && !intro.isNullOrBlank()) {
             Spacer(modifier = Modifier.size(if (rounded) 7.dp else 2.dp))
             Text(
                 text = intro,

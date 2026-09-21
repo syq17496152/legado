@@ -89,16 +89,6 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.immersiveManageBar, true)
 
     /**
-     * 证书放行策略：**默认放行**（与历史行为一致）。
-     *
-     * 本应用主体是类爬虫的书源/订阅源引擎，源站自签名/过期证书极常见——默认拦截会把大量源直接判死，
-     * 因此默认放行；用户可在登录页/内嵌浏览器的菜单中选择关闭，关闭后改为逐次知情确认（默认拒绝）。
-     * 写入走 `appCtx.putPrefBoolean`（见 PreferKey.sslCertPassThrough），登录页与内嵌浏览器共用同一策略。
-     */
-    val sslCertPassThrough: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.sslCertPassThrough, true)
-
-    /**
      * 管理页背景透明度 fraction（followup F4 v3 最终语义）：0f=不透明（默认，原状），
      * 1f=全透明（透出 decorView 底图/背景）。E-Ink 强制 0f（不透明契约）。
      * 消费点：内容层根/顶栏 backgroundColor.copy(alpha=fraction) 半透明叠加，可透出底图；

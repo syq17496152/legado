@@ -163,7 +163,7 @@ object WebViewPool {
                 destroyOnMainThread(pooledWebView.realWebView)
                 return
             }
-            webViewClient = object: WebViewClient() {
+            webViewClient = object: SilentSslWebViewClient() {
                 @SuppressLint("SetJavaScriptEnabled")
                 override fun onPageFinished(view: WebView?, url: String?) {
                     if (url != BLANK_HTML) return

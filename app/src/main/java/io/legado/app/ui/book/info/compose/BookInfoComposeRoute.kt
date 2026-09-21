@@ -111,6 +111,7 @@ import io.legado.app.help.config.BookInfoQuickActionItem
 import io.legado.app.help.config.BookInfoQuickActionType
 import io.legado.app.help.book.BookCloudEntryMode
 import io.legado.app.help.glide.ImageLoader
+import io.legado.app.help.webView.SilentSslWebViewClient
 import io.legado.app.help.webView.WebJsExtensions.Companion.getInjectionString
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.composeActionRadius
@@ -2388,7 +2389,7 @@ private class BookInfoIntroWebViewClient(
     private val currentToken: () -> Long,
     private val isTokenActive: (Long) -> Boolean,
     private val onContentHeight: (Long, Int) -> Unit
-) : WebViewClient() {
+) : SilentSslWebViewClient() {
     private val jsStr = getInjectionString
 
     override fun shouldOverrideUrlLoading(

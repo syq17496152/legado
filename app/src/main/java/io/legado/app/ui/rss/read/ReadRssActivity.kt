@@ -89,6 +89,7 @@ import io.legado.app.help.webView.WebJsExtensions.Companion.nameJava
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameSource
 import io.legado.app.help.http.newCallResponse
 import io.legado.app.help.webView.PooledWebView
+import io.legado.app.help.webView.SilentSslWebViewClient
 import io.legado.app.help.webView.WebJsExtensions.Companion.JS_INJECTION
 import io.legado.app.help.webView.WebJsExtensions.Companion.JS_URL
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameUrl
@@ -664,7 +665,7 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
         }
     }
 
-    inner class CustomWebViewClient : WebViewClient() {
+    inner class CustomWebViewClient : SilentSslWebViewClient() {
 
         override fun shouldOverrideUrlLoading(
             view: WebView, request: WebResourceRequest
@@ -835,14 +836,6 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
                 }
             }
         }
-
-        @SuppressLint("WebViewClientOnReceivedSslError")
-        override fun onReceivedSslError(
-            view: WebView?, handler: SslErrorHandler?, error: SslError?
-        ) {
-            handler?.proceed()
-        }
-
     }
 
     companion object {

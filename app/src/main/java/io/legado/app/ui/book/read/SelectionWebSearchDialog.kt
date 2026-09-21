@@ -35,6 +35,7 @@ import io.legado.app.databinding.DialogSelectionWebSearchBinding
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.text
 import io.legado.app.help.webView.PooledWebView
+import io.legado.app.help.webView.SilentSslWebViewClient
 import io.legado.app.help.webView.WebViewPool
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
@@ -125,7 +126,7 @@ class SelectionWebSearchDialog() : BottomSheetDialogFragment(R.layout.dialog_sel
             )
         )
         prepareWebView()
-        webView.webViewClient = object : WebViewClient() {
+        webView.webViewClient = object : SilentSslWebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 pendingShowAfterLoad = true
                 hideWebViewWhileLoading()

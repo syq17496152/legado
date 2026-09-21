@@ -26,6 +26,7 @@ import io.legado.app.help.WebCacheManager
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.webView.PooledWebView
+import io.legado.app.help.webView.SilentSslWebViewClient
 import io.legado.app.help.webView.WebJsExtensions
 import io.legado.app.help.webView.WebJsExtensions.Companion.getInjectionString
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameCache
@@ -345,7 +346,7 @@ class BackstageWebView(
         }
     }
 
-    private inner class HtmlWebViewClient : WebViewClient() {
+    private inner class HtmlWebViewClient : SilentSslWebViewClient() {
 
         private var runnable: EvalJsRunnable? = null
         private var isRedirect = false
@@ -372,15 +373,6 @@ class BackstageWebView(
             }
             mHandler.removeCallbacks(runnable)
             mHandler.postDelayed(runnable, 100L + delayTime)
-        }
-
-        @SuppressLint("WebViewClientOnReceivedSslError")
-        override fun onReceivedSslError(
-            view: WebView?,
-            handler: SslErrorHandler?,
-            error: SslError?
-        ) {
-            handler?.proceed()
         }
 
         private inner class EvalJsRunnable(
@@ -457,7 +449,7 @@ class BackstageWebView(
 
     }
 
-    private inner class SnifferWebClient : WebViewClient() {
+    private inner class SnifferWebClient : SilentSslWebViewClient() {
 
         // 新增：拦截所有网络请求（包括 fetch/XHR），这是 onLoadResource 无法捕获的
         // 参考 Fongmi/TV Sniffer.java 的 shouldInterceptRequest + isVideoFormat 多层判断
@@ -621,15 +613,6 @@ class BackstageWebView(
                 val readRunnable = ReadVideoUrlsRunnable(webView, sourceRegex)
                 mHandler.postDelayed(readRunnable, 200L + delayTime)  // 200L 确保 JS hook 已执行
             }
-        }
-
-        @SuppressLint("WebViewClientOnReceivedSslError")
-        override fun onReceivedSslError(
-            view: WebView?,
-            handler: SslErrorHandler?,
-            error: SslError?
-        ) {
-            handler?.proceed()
         }
 
         private inner class LoadJsRunnable(

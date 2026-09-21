@@ -16,6 +16,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import io.legado.app.R
+import io.legado.app.help.webView.SilentSslWebViewClient
 import io.legado.app.help.webView.WebJsExtensions.Companion.getInjectionString
 import io.legado.app.ui.association.OnLineImportActivity
 import io.legado.app.utils.openUrl
@@ -167,7 +168,7 @@ internal object BookInfoUseWebHost {
 
     private class PopupWebViewClient(
         private val context: Context
-    ) : WebViewClient() {
+    ) : SilentSslWebViewClient() {
 
         private val jsStr = getInjectionString
 
