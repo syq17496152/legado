@@ -190,6 +190,9 @@ class DictRuleEditDialog() : ComposeDialogFragment() {
                 message = getString(R.string.exit_no_save),
                 positiveText = getString(R.string.yes),
                 negativeText = getString(R.string.no),
+                // C6 复核（2026-09-22）：本处**不改**——文案 `exit_no_save` 实为「尚未保存，是否继续编辑」，
+                // 问的是"是否继续编辑" ⇒ 是=留在编辑框（空实现即可，弹窗自身已 dismiss）、否=退出。
+                // 原实现与此语义一致（曾疑为"正反倒置"，核对文案后确认属误判，避免误改引入 BUG）。
                 onPositive = {},
                 onNegative = {
                     forceDismiss = true

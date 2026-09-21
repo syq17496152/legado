@@ -30,8 +30,11 @@ import io.legado.app.ui.widget.number.NumberPickerDialog
  *
  * 使用场景：
  * - [io.legado.app.ui.video.VideoPlayerActivity] 设置菜单
- *   （video-player-dual-layout：OtherConfig 入口已改跳转全局设置页 ConfigTag.VIDEO_PLAYER，
- *    本弹框收编为仅播放页宿主 PanelHost.PLAYER_PAGE，布局模式切换经 onLayoutModeSelected 重建续播）
+ *   （video-player-dual-layout：OtherConfig 入口已改跳转全局设置页 ConfigTag.VIDEO_PLAYER；
+ *    C6 审计（2026-09-22）后宿主收窄为 **PanelHost.GLOBAL** —— 本弹框语义是「配置设置」，
+ *    只渲染布局模式 / 播放设置 / 画质增强；**播放控制区（快进快退·比例·音轨·复制地址·悬浮窗等）
+ *    不在此渲染**，该能力统一走播放页 [io.legado.app.ui.video.VideoSettingsPanel]（BottomSheet，回调全接线）。
+ *    布局模式切换仍经 onLayoutModeSelected 重建续播）
  */
 class SettingsDialog() : ComposeDialogFragment() {
 
@@ -59,7 +62,6 @@ class SettingsDialog() : ComposeDialogFragment() {
                                 showLogin = false,
                                 debugLog = "",
                                 pressSpeedSummary = getString(R.string.press_speed_summary, VideoPlay.longPressSpeed / 10.0f),
-                                onDismissRequest = { dismiss() },
                                 onSkip = {},
                                 onRatio = {},
                                 onAudioTrack = {},
@@ -71,7 +73,13 @@ class SettingsDialog() : ComposeDialogFragment() {
                                 onLog = {},
                                 onPickPressSpeed = ::pickPressSpeed,
                                 showDragHandle = false,
-                                host = PanelHost.PLAYER_PAGE,
+                                // C6 审计修复（2026-09-22）：原 host = PLAYER_PAGE 会让「配置设置」弹框
+                                // 渲染播放控制区（←30s/10s→、画面比例、音轨、复制地址、悬浮窗…），
+                                // 但本弹框的 9 个播放回调**全部为空实现** ⇒ 按钮点了无反应（真机可感知）。
+                                // 修法取「收窄宿主」而非「补接线」：本弹框语义是**设置**（布局模式/播放设置/
+                                // 画质增强，均由自身状态直读写回 VideoPlay），播放控制已有播放页 BottomSheet
+                                // 完整入口（VideoSettingsPanel，回调全接线）⇒ 避免同一功能双入口其一静默失效。
+                                host = PanelHost.GLOBAL,
                                 onLayoutModeSelected = { target ->
                                     onLayoutModeSelected?.invoke(target)
                                     dismiss()

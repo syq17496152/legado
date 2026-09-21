@@ -197,7 +197,10 @@ internal fun buildSettingsSubSearchItems(context: Context): List<MySettingsSubSe
             ownerKey = "videoPlayerSetting",
             title = context.getString(R.string.cache_play),
             summary = "",
-            key = "cachePlay",
+            // C6 审计修复（2026-09-22）：原 key = "cachePlay" 指向已 @Deprecated 的 VideoPlay.cachePlay
+            // （getter 恒 false、setter 仅写死键），实际生效开关是 VideoPlay.videoCache（videoPrefs "videoCache"）
+            // ⇒ 搜索索引键与生效键对齐，避免命中后跳到的开关与索引项不是同一个。
+            key = "videoCache",
             ownerConfigTag = ConfigTag.VIDEO_PLAYER
         ),
         MySettingsSubSearchItem(

@@ -71,7 +71,9 @@ fun VideoSettingsPanelContent(
     showLogin: Boolean,
     debugLog: String,
     pressSpeedSummary: String,
-    onDismissRequest: () -> Unit,
+    // C6 审计修复（2026-09-22）：原 `onDismissRequest: () -> Unit` 形参在函数体内**零引用**
+    // （3 个调用方都在传值，形成「传了但收不到」的静默失联）；面板关闭由外层壳
+    // （AppDialogFrame / AppModalBottomSheet / Dialog）自行承担 ⇒ 移除该失联形参。
     onSkip: (Long) -> Unit,
     onRatio: () -> Unit,
     onAudioTrack: () -> Unit,

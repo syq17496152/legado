@@ -16,24 +16,8 @@ import splitties.init.appCtx
 
 class OnLineImportViewModel(app: Application) : BaseAssociationViewModel(app) {
 
-    fun getText(url: String, success: (text: String) -> Unit) {
-        execute {
-            okHttpClient.newCallResponseBody {
-                if (url.endsWith("#requestWithoutUA")) {
-                    url(url.substringBeforeLast("#requestWithoutUA"))
-                    header(AppConst.UA_NAME, "null")
-                } else {
-                    url(url)
-                }
-            }.decompressed().text("utf-8")
-        }.onSuccess {
-            success.invoke(it)
-        }.onError {
-            errorLive.postValue(
-                it.localizedMessage ?: context.getString(R.string.unknown_error)
-            )
-        }
-    }
+    // C6 审计修复（2026-09-22）：原 `getText(url, success)` 全仓**零调用点**（`viewModel.getText(` 0 命中，
+    // 姊妹方法 getBytes 有真实调用形成对照）⇒ 删除死件，避免误导后续维护。
 
     fun getBytes(url: String, success: (bytes: ByteArray) -> Unit) {
         execute {

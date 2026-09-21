@@ -80,7 +80,6 @@ class VideoSettingsPanel : BottomSheetDialogFragment() {
                         showLogin = !VideoPlay.source?.loginUrl.isNullOrBlank(),
                         debugLog = debugLog,
                         pressSpeedSummary = getString(R.string.press_speed_summary, pressSpeedDisplay),
-                        onDismissRequest = { dismiss() },
                         onSkip = ::skipVideo,
                         onRatio = { playerView?.showRatioDialogPublic() },
                         onAudioTrack = { playerView?.showAudioTrackDialogPublic() },

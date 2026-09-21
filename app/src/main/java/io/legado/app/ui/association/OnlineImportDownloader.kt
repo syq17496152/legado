@@ -37,7 +37,6 @@ data class OnlineImportDownload(
     val file: File,
     val sourceUrl: String,
     val finalUrl: String,
-    val contentType: String?,
     val size: Long,
     val privateNetwork: Boolean
 ) : Closeable {
@@ -369,7 +368,6 @@ class OnlineImportDownloader(
                 file = target,
                 sourceUrl = sourceUrl,
                 finalUrl = finalUrl.toString(),
-                contentType = body.contentType()?.toString(),
                 size = size,
                 privateNetwork = privateNetwork
             )

@@ -59,7 +59,6 @@ class VideoPlayerConfigFragment : Fragment() {
                                 R.string.press_speed_summary,
                                 VideoPlay.longPressSpeed / 10.0f
                             ),
-                            onDismissRequest = {},
                             onSkip = {},
                             onRatio = {},
                             onAudioTrack = {},

@@ -234,6 +234,8 @@ class TxtTocRuleEditDialog() : ComposeDialogFragment() {
                 message = getString(R.string.exit_no_save),
                 positiveText = getString(R.string.yes),
                 negativeText = getString(R.string.no),
+                // C6 复核（2026-09-22）：同 DictRuleEditDialog —— 文案 `exit_no_save` 实为
+                // 「尚未保存，是否继续编辑」⇒ 是=继续编辑（留在编辑框）、否=退出；原实现正确，不改。
                 onPositive = {},
                 onNegative = { super.dismiss() }
             )
