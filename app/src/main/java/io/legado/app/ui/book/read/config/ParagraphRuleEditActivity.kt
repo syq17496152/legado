@@ -27,6 +27,7 @@ import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -129,6 +130,14 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
 
     override val binding by viewBinding(ActivityParagraphRuleEditBinding::inflate)
     private var rule = ParagraphRule()
+
+    /**
+     * **DB 侧基线**（F155 同构，2026-09-22）：仅在两处刷新——①进页从库加载 ②保存成功落盘后。
+     *
+     * 不能拿 `rule` 当基线：粘贴导入会把 `rule` 替换成导入内容（表单模型随之更新），
+     * 若基线跟着走，则「粘贴后未保存就退出」不会弹确认 ⇒ 粘贴内容**静默丢失**。
+     */
+    private var dbSnapshot = ParagraphRule()
     private var focusedEditText: EditText? = null
     private var bindToken = 0
     private var bindingLargeRuleFields = false
@@ -146,10 +155,12 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initTopBar()
         initView()
+        bindRequiredErrorClear()
         initScriptTemplates()
         val id = intent.getLongExtra("id", 0L)
         lifecycleScope.launch {
             rule = withContext(Dispatchers.IO) { appDb.paragraphRuleDao.get(id) } ?: ParagraphRule()
+            dbSnapshot = rule
             bindRule()
         }
     }
@@ -427,21 +438,76 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
         )
     }
 
-    private fun save() {
-        val edited = getRule()
-        if (edited.name.isBlank() || edited.script.isBlank()) {
-            toastOnUi(R.string.paragraph_rule_save_invalid)
+    /**
+     * F155 同构（段落规则编辑页，2026-09-22）：保存前必填校验 + 失败定位。
+     *
+     * 原实现只 `toastOnUi(paragraph_rule_save_invalid)`——不告诉用户是「名称」还是「脚本」为空，
+     * 而脚本是多行大字段、常滚出视口 ⇒ 补字段级 error + 滚动到可见（与书源/订阅源编辑页同构）。
+     * **校验口径不变**（仍是 name / script 判空），仅把「报错」从 toast 升级为「定位」。
+     */
+    private fun locateRequiredField(key: String) = binding.run {
+        tilName.error = null
+        tilScript.error = null
+        val target = if (key == "name") tilName else tilScript
+        target.error = getString(R.string.source_required_hint)
+        nestedScroll.post { nestedScroll.smoothScrollTo(0, target.top) }
+    }
+
+    /** 用户开始修正即撤下错误态（与书源/订阅源编辑页同构，避免红框一直挂着）。 */
+    private fun bindRequiredErrorClear() = binding.run {
+        etName.doAfterTextChanged { if (tilName.error != null) tilName.error = null }
+        etScript.doAfterTextChanged { if (tilScript.error != null) tilScript.error = null }
+    }
+
+    /**
+     * 未保存拦截（F155 同构，2026-09-22）：原 `onBack = { finish() }` **直退**——
+     * 脚本是多行大字段，误触返回会**静默丢失**全部输入。改为动词式二选一
+     * （标题/正文沿用既有 `R.string.exit` / `exit_no_save`，按钮用与书源编辑页同一对
+     * `edit_continue` / `edit_discard`，语义：是=继续编辑 / 否=放弃修改）。
+     */
+    override fun finish() {
+        if (getRule().equal(dbSnapshot)) {
+            super.finish()
             return
         }
+        showComposeConfirmDialog(
+            title = getString(R.string.exit),
+            message = getString(R.string.exit_no_save),
+            positiveText = getString(R.string.edit_continue),
+            negativeText = getString(R.string.edit_discard),
+            onPositive = { /* 停留当前页，不退出 */ },
+            onNegative = { super.finish() }
+        )
+    }
+
+    private fun save() {
+        val edited = getRule()
+        when {
+            edited.name.isBlank() -> {
+                locateRequiredField("name")
+                return
+            }
+
+            edited.script.isBlank() -> {
+                locateRequiredField("script")
+                return
+            }
+        }
+        binding.tilName.error = null
+        binding.tilScript.error = null
         lifecycleScope.launch {
-            withContext(Dispatchers.IO) {
+            val saved = withContext(Dispatchers.IO) {
                 if (edited.id == 0L) {
                     val order = (appDb.paragraphRuleDao.maxOrder() ?: 0) + 1
-                    appDb.paragraphRuleDao.insert(edited.copy(order = order))
+                    edited.copy(order = order).also { appDb.paragraphRuleDao.insert(it) }
                 } else {
                     appDb.paragraphRuleDao.update(edited)
+                    edited
                 }
             }
+            // 落盘后同步「表单模型 + DB 基线」⇒ 退出拦截不会把「刚保存」误判为未保存（否则每次保存完都会弹确认）
+            rule = saved
+            dbSnapshot = saved
             setResult(Activity.RESULT_OK)
             finish()
         }

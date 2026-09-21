@@ -7,6 +7,7 @@ import android.view.View
 import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.AppCompatImageButton
+import androidx.core.widget.doAfterTextChanged
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -78,6 +79,14 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
 
     override val binding by viewBinding(ActivityParagraphRuleEditBinding::inflate)
     private var button = ReadMenuCustomButton()
+
+    /**
+     * **DB 侧基线**（F155 同构，2026-09-22）：仅在两处刷新——①进页从库加载 ②保存成功落盘后。
+     *
+     * 不能拿 `button` 当基线：粘贴导入会把 `button` 替换成导入内容（表单模型随之更新），
+     * 若基线跟着走，则「粘贴后未保存就退出」不会弹确认 ⇒ 粘贴内容**静默丢失**。
+     */
+    private var dbSnapshot = ReadMenuCustomButton()
     private var focusedEditText: EditText? = null
     // W7.2：原 5 个 AppCompatImageButton handle 为死写链（仅赋值无消费），随迁移删除
 
@@ -104,11 +113,13 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initTopBar()
         initView()
+        bindRequiredErrorClear()
         val id = intent.getLongExtra("id", 0L)
         lifecycleScope.launch {
             button = withContext(Dispatchers.IO) {
                 appDb.readMenuCustomButtonDao.get(id)
             } ?: ReadMenuCustomButton()
+            dbSnapshot = button
             bindButton()
         }
     }
@@ -369,24 +380,78 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
         )
     }
 
-    private fun save() {
-        val edited = getButton()
-        if (edited.name.isBlank() || edited.script.isBlank()) {
-            toastOnUi(R.string.read_menu_custom_button_save_invalid)
+    /**
+     * F155 同构（自定义按键编辑页，2026-09-22）：保存前必填校验 + 失败定位。
+     *
+     * 原实现只 `toastOnUi(read_menu_custom_button_save_invalid)`——不告诉用户是「名称」还是「脚本」为空，
+     * 而脚本是多行大字段、常滚出视口 ⇒ 补字段级 error + 滚动到可见（与书源/订阅源/段落规则编辑页同构）。
+     * **校验口径不变**（仍是 name / script 判空）。
+     */
+    private fun locateRequiredField(key: String) = binding.run {
+        tilName.error = null
+        tilScript.error = null
+        val target = if (key == "name") tilName else tilScript
+        target.error = getString(R.string.source_required_hint)
+        nestedScroll.post { nestedScroll.smoothScrollTo(0, target.top) }
+    }
+
+    /** 用户开始修正即撤下错误态（与书源/订阅源编辑页同构，避免红框一直挂着）。 */
+    private fun bindRequiredErrorClear() = binding.run {
+        etName.doAfterTextChanged { if (tilName.error != null) tilName.error = null }
+        etScript.doAfterTextChanged { if (tilScript.error != null) tilScript.error = null }
+    }
+
+    /**
+     * 未保存拦截（F155 同构，2026-09-22）：原 `onBack = { finish() }` **直退**——
+     * 脚本是多行大字段，误触返回会**静默丢失**全部输入。改为动词式二选一
+     * （标题/正文沿用既有 `R.string.exit` / `exit_no_save`，按钮用与书源编辑页同一对
+     * `edit_continue` / `edit_discard`，语义：是=继续编辑 / 否=放弃修改）。
+     */
+    override fun finish() {
+        if (getButton().equal(dbSnapshot)) {
+            super.finish()
             return
         }
+        showComposeConfirmDialog(
+            title = getString(R.string.exit),
+            message = getString(R.string.exit_no_save),
+            positiveText = getString(R.string.edit_continue),
+            negativeText = getString(R.string.edit_discard),
+            onPositive = { /* 停留当前页，不退出 */ },
+            onNegative = { super.finish() }
+        )
+    }
+
+    private fun save() {
+        val edited = getButton()
+        when {
+            edited.name.isBlank() -> {
+                locateRequiredField("name")
+                return
+            }
+
+            edited.script.isBlank() -> {
+                locateRequiredField("script")
+                return
+            }
+        }
+        binding.tilName.error = null
+        binding.tilScript.error = null
         lifecycleScope.launch {
-            val id = withContext(Dispatchers.IO) {
+            val saved = withContext(Dispatchers.IO) {
                 if (edited.id == 0L) {
                     val order = (appDb.readMenuCustomButtonDao.maxOrder() ?: 0) + 1
-                    appDb.readMenuCustomButtonDao.insert(edited.copy(order = order))
+                    edited.copy(order = order).also { appDb.readMenuCustomButtonDao.insert(it) }
                 } else {
                     appDb.readMenuCustomButtonDao.update(edited)
-                    edited.id
+                    edited
                 }
             }
+            // 落盘后同步「表单模型 + DB 基线」⇒ 退出拦截不会把「刚保存」误判为未保存（否则每次保存完都会弹确认）
+            button = saved
+            dbSnapshot = saved
             postEvent(EventBus.READ_MENU_BUTTON_CHANGED, true)
-            setResult(Activity.RESULT_OK, Intent().putExtra("id", id))
+            setResult(Activity.RESULT_OK, Intent().putExtra("id", saved.id))
             finish()
         }
     }
