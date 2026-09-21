@@ -1,34 +1,35 @@
-﻿package io.legado.app.ui.main.bookshelf
+package io.legado.app.ui.main.bookshelf
 
 import android.os.Bundle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import androidx.room.withTransaction
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.BookType
 import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
 import io.legado.app.data.dao.BookTagInfo
 import io.legado.app.data.entities.BookGroup
-import io.legado.app.databinding.ActivityBookshelfTagManageBinding
 import io.legado.app.help.book.BookTagManagement
 import io.legado.app.help.book.BookTagHelper
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.utils.postEvent
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class BookshelfTagManageActivity : BaseActivity<ActivityBookshelfTagManageBinding>() {
+class BookshelfTagManageActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityBookshelfTagManageBinding::inflate)
+    // M7 清壳：原 activity_bookshelf_tag_manage.xml 根就是一个 ComposeView（无 View 语义）
+    override val binding: ViewBinding by lazy { composeShell(this) }
     private val focusGroupId by lazy { intent.getLongExtra("groupId", BookGroup.IdAll) }
     private var groupsState by mutableStateOf<List<BookshelfTagGroupUi>>(emptyList())
     private var loadingState by mutableStateOf(true)
@@ -38,10 +39,7 @@ class BookshelfTagManageActivity : BaseActivity<ActivityBookshelfTagManageBindin
     override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.composeRoot.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.composeRoot.setContent {
+        binding.root.attachComposeContent {
             LegadoComposeTheme {
                 BookshelfTagManageScreen(
                     groups = groupsState,

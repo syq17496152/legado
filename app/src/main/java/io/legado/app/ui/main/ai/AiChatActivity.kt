@@ -39,7 +39,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,11 +46,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookCharacter
-import io.legado.app.databinding.ActivityAiChatBinding
 import io.legado.app.help.ai.AiImageGalleryManager
 import io.legado.app.help.book.characterBookKey
 import io.legado.app.help.character.BookCharacterProfileMeta
@@ -74,7 +75,6 @@ import io.legado.app.ui.widget.image.CoverImageView
 import io.legado.app.utils.longSnackbar
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -86,12 +86,14 @@ import io.legado.app.ui.theme.bodyTertiary
 import io.legado.app.ui.theme.bodySecondary
 import io.legado.app.ui.theme.subtitleLarge
 
-class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
+class AiChatActivity : BaseActivity<ViewBinding>(
     fullScreen = false,
     imageBg = false
 ) {
 
-    override val binding by viewBinding(ActivityAiChatBinding::inflate)
+    // M7 清壳：原 activity_ai_chat.xml 根就是一个 ComposeView（无 View 语义）⇒
+    // 合成壳 + attachComposeContent；root 仍为 ViewGroup，`binding.root.longSnackbar(...)` 锚点不变
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private val viewModel by viewModels<AiChatViewModel>()
     private val historyTimeFormat by lazy { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
@@ -100,10 +102,7 @@ class AiChatActivity : BaseActivity<ActivityAiChatBinding>(
     private var characterPickerVisible by mutableStateOf(false)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.composeRoot.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.composeRoot.setContent {
+        binding.root.attachComposeContent {
             AiChatRoute(
                 viewModel = viewModel,
                 lifecycleOwner = this,

@@ -4,6 +4,9 @@ import android.content.Context
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.viewbinding.ViewBinding
 
 /**
@@ -28,4 +31,31 @@ fun composeShell(context: Context): ViewBinding {
     return object : ViewBinding {
         override fun getRoot(): View = root
     }
+}
+
+/**
+ * 清壳（M7，2026-09-22）：给合成壳挂上全屏 ComposeView。
+ *
+ * 用于替换历史「**根布局就是一个 ComposeView**」的壳布局——这类 XML 只是 Compose 的载体、
+ * 没有任何 View 语义（`activity_ai_provider_manage` / `activity_ai_chat` /
+ * `activity_ai_world_book_manage` / `activity_bookshelf_tag_manage` / `activity_chapter_list` /
+ * `activity_settings_search` 等）。换装后代码侧不再引用 `R.layout`，壳布局随之成为死资源。
+ *
+ * 与 [composeShell] 的关系：`composeShell` 提供空的 FrameLayout 根，本函数把内容挂上去；
+ * 沿用 `AiImageProviderEditActivity`（W5.2 首次清壳）建立的既有写法，避免每页重复三行样板。
+ * 行为等价性：策略仍是 `DisposeOnViewTreeLifecycleDestroyed`、`layoutParams` 仍是全屏 MATCH_PARENT，
+ * 与旧壳布局中 ComposeView 的声明属性一一对应。
+ */
+fun View.attachComposeContent(content: @Composable () -> Unit) {
+    val container = this as? ViewGroup ?: return
+    container.removeAllViews()
+    val composeView = ComposeView(context).apply {
+        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+        setContent(content)
+    }
+    container.addView(composeView)
 }

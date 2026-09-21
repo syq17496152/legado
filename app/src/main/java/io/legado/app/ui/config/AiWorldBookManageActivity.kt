@@ -1,13 +1,14 @@
-﻿package io.legado.app.ui.config
+package io.legado.app.ui.config
 
 import android.os.Bundle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import io.legado.app.base.BaseActivity
-import io.legado.app.databinding.ActivityAiWorldBookManageBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.ui.file.HandleFileContract
@@ -16,17 +17,17 @@ import io.legado.app.ui.main.ai.compose.AiWorldBookManageRoute
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.utils.readText
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class AiWorldBookManageActivity : BaseActivity<ActivityAiWorldBookManageBinding>(
+class AiWorldBookManageActivity : BaseActivity<ViewBinding>(
     fullScreen = false,
     imageBg = false
 ) {
 
-    override val binding by viewBinding(ActivityAiWorldBookManageBinding::inflate)
+    // M7 清壳：原 activity_ai_world_book_manage.xml 根就是一个 ComposeView（无 View 语义）
+    override val binding: ViewBinding by lazy { composeShell(this) }
     private var importPayload by mutableStateOf<AiWorldBookImportPayload?>(null)
     private var importRequestId = 0L
     private val importWorldBook = registerForActivityResult(HandleFileContract()) { result ->
@@ -46,10 +47,7 @@ class AiWorldBookManageActivity : BaseActivity<ActivityAiWorldBookManageBinding>
     override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.composeRoot.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.composeRoot.setContent {
+        binding.root.attachComposeContent {
             AiWorldBookManageRoute(
                 initialTargetType = intent.getStringExtra(EXTRA_TARGET_TYPE).orEmpty(),
                 initialTargetKey = intent.getStringExtra(EXTRA_TARGET_KEY).orEmpty(),

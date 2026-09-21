@@ -9,11 +9,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
-import io.legado.app.databinding.ActivitySettingsSearchBinding
 import io.legado.app.service.WebService
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.GlassTopAppBar
@@ -23,7 +25,6 @@ import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.observeEventSticky
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 /**
  * 我的页全屏设置搜索页（header-search-unify 新增）
@@ -34,10 +35,11 @@ import io.legado.app.utils.viewbindingdelegate.viewBinding
  * 数据构建 + 行点击路由 + 主题模式/Web 服务交互复用 MySettingsData 共享顶层函数/扩展（AD-03）。
  * 状态刷新（AD-05）：PrefKey.themeMode/webService 监听 + EventBus.WEB_SERVICE，与 MyFragment 恒等。
  */
-class SettingsSearchActivity : BaseActivity<ActivitySettingsSearchBinding>(),
+class SettingsSearchActivity : BaseActivity<ViewBinding>(),
     SharedPreferences.OnSharedPreferenceChangeListener {
 
-    override val binding by viewBinding(ActivitySettingsSearchBinding::inflate)
+    // M7 清壳：原 activity_settings_search.xml 根就是一个 ComposeView（无 View 语义）
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private var searchQuery by mutableStateOf("")
     private val themeModeState = mutableStateOf("0")
@@ -49,7 +51,7 @@ class SettingsSearchActivity : BaseActivity<ActivitySettingsSearchBinding>(),
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         themeModeState.value = getPrefString(PreferKey.themeMode, "0") ?: "0"
         updateWebServiceState()
-        binding.composeRoot.setContent {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 Column {
                     GlassTopAppBar(

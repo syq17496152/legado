@@ -1,14 +1,15 @@
-﻿package io.legado.app.ui.config
+package io.legado.app.ui.config
 
 import android.content.Intent
 import android.os.Bundle
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.EventBus
-import io.legado.app.databinding.ActivityAiProviderManageBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
@@ -23,7 +24,6 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.readText
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,9 +31,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-class AiImageProviderManageActivity : BaseActivity<ActivityAiProviderManageBinding>() {
+class AiImageProviderManageActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityAiProviderManageBinding::inflate)
+    // M7 清壳：与 AiProviderManageActivity 共用 activity_ai_provider_manage.xml（根仅一个 ComposeView）
+    override val binding: ViewBinding by lazy { composeShell(this) }
     private val providersState = mutableStateOf<List<AiImageProviderConfig>>(emptyList())
     private val currentProviderIdState = mutableStateOf("")
     private val importRule = registerForActivityResult(HandleFileContract()) { result ->
@@ -73,10 +74,7 @@ class AiImageProviderManageActivity : BaseActivity<ActivityAiProviderManageBindi
     override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.composeRoot.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.composeRoot.setContent {
+        binding.root.attachComposeContent {
             AiImageProviderManageScreen(
                 providers = providersState.value,
                 currentProviderId = currentProviderIdState.value,

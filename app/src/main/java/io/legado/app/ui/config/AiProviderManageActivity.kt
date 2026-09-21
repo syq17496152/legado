@@ -32,16 +32,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.EventBus
-import io.legado.app.databinding.ActivityAiProviderManageBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.main.ai.AiProviderConfig
 import io.legado.app.ui.widget.components.EmptyStateAction
@@ -58,14 +59,15 @@ import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import androidx.compose.material3.MaterialTheme
 import io.legado.app.ui.theme.bodyTertiary
 import io.legado.app.ui.theme.bodySecondary
 
-class AiProviderManageActivity : BaseActivity<ActivityAiProviderManageBinding>() {
+class AiProviderManageActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityAiProviderManageBinding::inflate)
+    // M7 清壳：原 activity_ai_provider_manage.xml 根就是一个 ComposeView（无 View 语义）⇒
+    // 改合成壳 + attachComposeContent，代码侧不再引用 R.layout（壳布局随之成为死资源）
+    override val binding: ViewBinding by lazy { composeShell(this) }
     private var providersState by mutableStateOf<List<AiProviderConfig>>(emptyList())
     private var modelCountsState by mutableStateOf<Map<String, Int>>(emptyMap())
     private var currentProviderIdState by mutableStateOf<String?>(null)
@@ -74,10 +76,7 @@ class AiProviderManageActivity : BaseActivity<ActivityAiProviderManageBinding>()
     override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.composeRoot.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.composeRoot.setContent {
+        binding.root.attachComposeContent {
             AiProviderManageScreen(
                 providers = providersState,
                 modelCounts = modelCountsState,

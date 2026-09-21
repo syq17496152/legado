@@ -4,13 +4,14 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.viewModels
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.viewbinding.ViewBinding
 import io.legado.app.constant.EventBus
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.Bookmark
-import io.legado.app.databinding.ActivityChapterListBinding
 import io.legado.app.help.book.isVideo
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.about.AppLogDialog
@@ -20,15 +21,15 @@ import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 /**
  * 目录
  */
-class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(),
+class TocActivity : VMBaseActivity<ViewBinding, TocViewModel>(),
     TxtTocRuleDialog.CallBack {
 
-    override val binding by viewBinding(ActivityChapterListBinding::inflate)
+    // M7 清壳：原 activity_chapter_list.xml 根就是一个 ComposeView（无 View 语义）
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<TocViewModel>()
 
     private val waitDialog by lazy { WaitDialog(this) }
@@ -48,10 +49,7 @@ class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(),
         if (bookUrl.isNotBlank()) {
             viewModel.initBook(bookUrl)
         }
-        binding.composeView.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.composeView.setContent {
+        binding.root.attachComposeContent {
             TocComposeScreen(
                 bookUrl = bookUrl,
                 contentRefreshTick = contentRefreshTick.intValue,
