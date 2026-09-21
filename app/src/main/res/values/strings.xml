@@ -3013,6 +3013,7 @@ Selected text or question:
 <string name="discovery_suite_widget_loading">Loading widget content...</string>
 <string name="discovery_suite_widget_pending">Widget source and tag selection will be configured in the suite editor.</string>
 <string name="discovery_suite_manage">Edit suite</string>
+    <string name="discovery_suite_chip_arrow">▾</string>
 <string name="discovery_suite_rename">Rename suite</string>
 <string name="discovery_suite_alias">Set alias</string>
 <string name="discovery_suite_delete">Delete suite</string>

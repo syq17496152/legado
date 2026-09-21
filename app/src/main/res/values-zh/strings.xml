@@ -2586,6 +2586,7 @@ bookUrl：%7$s
 <string name="discovery_suite_widget_loading">正在加载控件内容...</string>
 <string name="discovery_suite_widget_pending">控件的书源和标签将在套件编辑中配置。</string>
 <string name="discovery_suite_manage">编辑套件</string>
+    <string name="discovery_suite_chip_arrow">▾</string>
 <string name="discovery_suite_rename">重命名套件</string>
 <string name="discovery_suite_alias">设置别名</string>
 <string name="discovery_suite_delete">删除套件</string>

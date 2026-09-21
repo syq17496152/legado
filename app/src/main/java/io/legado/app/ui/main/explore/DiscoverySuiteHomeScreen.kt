@@ -1,6 +1,8 @@
 package io.legado.app.ui.main.explore
 
+import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.AppShapes
+import io.legado.app.ui.widget.components.MenuAction
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -25,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -260,7 +263,6 @@ private fun DiscoverySuiteSearchBar(
 ) {
     val context = LocalContext.current
     val palette = renderConfig.palette
-    val managementPalette = rememberAppManagementPalette()
     val radiusPx = with(LocalDensity.current) { 22.dp.toPx() }
     Row(
         modifier = Modifier
@@ -303,40 +305,61 @@ private fun DiscoverySuiteSearchBar(
                         ?: palette.secondaryText.copy(alpha = 0.18f)
                 )
         )
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(50.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            AppManagementMoreActionButton(
-                actionsProvider = {
-                    buildList {
+        // F22（2026-09-21）：⋮ 图标 →「套件名 ▾」胶囊。
+        // 当前套件是「这是我配的发现页」的心智锚点，原先首页常态不显示套件名、切换能力只藏在
+        // 无语义图标里 ⇒ 用户不知道能切。此处只把入口从图标提升为常驻文本胶囊，
+        // **菜单项文案与行为完全不变**（「编辑套件」+ 套件列表 + 当前项前缀/选中标记）。
+        val currentSuiteName = suites.firstOrNull { it.id == selectedSuiteId }?.displayName.orEmpty()
+        var suiteMenuExpanded by remember { mutableStateOf(false) }
+        Box(contentAlignment = Alignment.Center) {
+            Row(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .clickable { suiteMenuExpanded = true }
+                    .padding(start = 10.dp, end = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = currentSuiteName.ifBlank {
+                        context.getString(R.string.discovery_suite_manage)
+                    },
+                    modifier = Modifier.widthIn(max = 120.dp),
+                    color = palette.primaryText,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = palette.bodyFontFamily,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = context.getString(R.string.discovery_suite_chip_arrow),
+                    color = palette.secondaryText,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                    fontFamily = palette.bodyFontFamily
+                )
+            }
+            AppDropdownMenu(
+                expanded = suiteMenuExpanded,
+                onDismiss = { suiteMenuExpanded = false },
+                actions = buildList {
+                    add(
+                        MenuAction(
+                            title = context.getString(R.string.discovery_suite_manage),
+                            onClick = onSuiteClick
+                        )
+                    )
+                    suites.forEach { suite ->
+                        val isCurrent = suite.id == selectedSuiteId
                         add(
-                            AppManagementMenuAction(
-                                text = context.getString(R.string.discovery_suite_manage),
-                                onClick = onSuiteClick
+                            MenuAction(
+                                title = if (isCurrent) "当前 ${suite.displayName}" else suite.displayName,
+                                checked = if (isCurrent) true else null,
+                                onClick = { onSuiteSelect(suite) }
                             )
                         )
-                        suites.forEach { suite ->
-                            add(
-                                AppManagementMenuAction(
-                                    text = if (suite.id == selectedSuiteId) {
-                                        "当前 ${suite.displayName}"
-                                    } else {
-                                        suite.displayName
-                                    },
-                                    onClick = { onSuiteSelect(suite) }
-                                )
-                            )
-                        }
                     }
-                },
-                palette = managementPalette,
-                contentDescription = context.getString(R.string.more_menu),
-                tint = palette.primaryText,
-                modifier = Modifier
-                    .fillMaxSize()
+                }
             )
         }
     }
@@ -531,6 +554,7 @@ private fun DiscoverySuiteWidgetSection(
                 onBookClick = onBookClick,
                 onBookPreview = onBookPreview,
                 onLoadMore = { onHorizontalLoadMore(widget) },
+                onRefreshClick = { onRefreshWidget(widget) },
                 fragment = fragment,
                 lifecycle = lifecycle
             )
@@ -540,6 +564,7 @@ private fun DiscoverySuiteWidgetSection(
                 renderConfig = renderConfig,
                 onBookClick = onBookClick,
                 onBookPreview = onBookPreview,
+                onRefreshClick = { onRefreshWidget(widget) },
                 fragment = fragment,
                 lifecycle = lifecycle
             )
@@ -564,6 +589,7 @@ private fun DiscoverySuiteWaterfallBooksWidget(
     renderConfig: BookshelfListRenderConfig,
     onBookClick: (SearchBook) -> Unit,
     onBookPreview: (SearchBook, Rect?) -> Unit,
+    onRefreshClick: () -> Unit,
     fragment: Fragment,
     lifecycle: Lifecycle
 ) {
@@ -575,27 +601,34 @@ private fun DiscoverySuiteWaterfallBooksWidget(
             listOf(left.map { it.value }, right.map { it.value })
         }
     }
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        columns.forEach { columnBooks ->
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                columnBooks.forEach { book ->
-                    DiscoverySuiteWaterfallBookCard(
-                        book = book,
-                        renderConfig = renderConfig,
-                        onBookClick = onBookClick,
-                        onBookPreview = onBookPreview,
-                        fragment = fragment,
-                        lifecycle = lifecycle
-                    )
+    Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            columns.forEach { columnBooks ->
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    columnBooks.forEach { book ->
+                        DiscoverySuiteWaterfallBookCard(
+                            book = book,
+                            renderConfig = renderConfig,
+                            onBookClick = onBookClick,
+                            onBookPreview = onBookPreview,
+                            fragment = fragment,
+                            lifecycle = lifecycle
+                        )
+                    }
                 }
             }
         }
+        // F23（2026-09-21）：瀑布流补「换一批」——与横排/随机推荐同款（原该控件无任何手动刷新）
+        DiscoverySuiteRefreshButton(
+            renderConfig = renderConfig,
+            onClick = onRefreshClick
+        )
     }
 }
 
@@ -674,6 +707,7 @@ private fun DiscoverySuiteHorizontalBooksWidget(
     onBookClick: (SearchBook) -> Unit,
     onBookPreview: (SearchBook, Rect?) -> Unit,
     onLoadMore: () -> Unit,
+    onRefreshClick: () -> Unit,
     fragment: Fragment,
     lifecycle: Lifecycle
 ) {
@@ -692,27 +726,35 @@ private fun DiscoverySuiteHorizontalBooksWidget(
             onLoadMore()
         }
     }
-    LazyRow(
-        state = rowState,
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(start = 0.dp, end = 8.dp)
-    ) {
-        itemsIndexed(
-            items = displayBooks,
-            key = { _, book -> "${widget.id}|${book.suiteStableKey()}" }
-        ) { _, book ->
-            DiscoverySuiteCoverBookItem(
-                book = book,
-                rank = null,
-                modifier = Modifier.width(74.dp),
-                renderConfig = renderConfig,
-                onBookClick = onBookClick,
-                onBookPreview = onBookPreview,
-                fragment = fragment,
-                lifecycle = lifecycle
-            )
+    Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        LazyRow(
+            state = rowState,
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(start = 0.dp, end = 8.dp)
+        ) {
+            itemsIndexed(
+                items = displayBooks,
+                key = { _, book -> "${widget.id}|${book.suiteStableKey()}" }
+            ) { _, book ->
+                DiscoverySuiteCoverBookItem(
+                    book = book,
+                    rank = null,
+                    modifier = Modifier.width(74.dp),
+                    renderConfig = renderConfig,
+                    onBookClick = onBookClick,
+                    onBookPreview = onBookPreview,
+                    fragment = fragment,
+                    lifecycle = lifecycle
+                )
+            }
         }
+        // F23（2026-09-21）：横排补「换一批」——复用随机推荐同款按钮/链路/文案（原仅随机推荐有，
+        // 同页同动词能力不一致：用户想换掉这批只能整页下拉全刷，或滑动只能追加不能替换）
+        DiscoverySuiteRefreshButton(
+            renderConfig = renderConfig,
+            onClick = onRefreshClick
+        )
     }
 }
 
