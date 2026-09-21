@@ -2412,6 +2412,9 @@ bookUrl：%7$s
     <string name="ai_chat_suggestion_book">概括我正在读的这本书</string>
     <string name="ai_chat_suggestion_context">解释一下这段内容的背景</string>
     <string name="ai_chat_suggestion_note">帮我写一段读书笔记</string>
+    <string name="code_edit_unsaved">未保存</string>
+    <string name="code_edit_readonly_bar">只读模式：查看源码内容，编辑不会保存</string>
+    <string name="code_edit_readonly_badge">只读</string>
     <string name="ai_manage_providers">管理提供商</string>
     <string name="ai_manage_providers_summary">已添加 %1$d 个提供商</string>
     <string name="ai_provider_name">提供商名称</string>

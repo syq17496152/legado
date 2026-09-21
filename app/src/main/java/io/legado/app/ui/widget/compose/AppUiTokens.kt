@@ -38,6 +38,13 @@ object AppListSpacing {
  */
 object AppSemanticColors {
     val Danger = Color(0xFFD44848)
+
+    /**
+     * 警示语义色（**新增单源**，2026-09-21，code-edit F197 只读警示条/徽章引入）。
+     * 真值取自原型帧 F 的 `--warning`（`preview-optimized.html` 内 `rgba(232,178,107,…)` ⇒ `#E8B26B`）：
+     * 原型以「状态说明」而非「错误」呈现只读态，故不得复用 danger。
+     */
+    val Warning = Color(0xFFE8B26B)
 }
 
 /**

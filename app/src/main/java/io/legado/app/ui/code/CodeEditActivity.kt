@@ -8,6 +8,7 @@ import android.view.View
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
@@ -20,14 +21,22 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.WrapText
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.textfield.TextInputEditText
+import io.github.rosemoe.sora.event.ContentChangeEvent
 import io.github.rosemoe.sora.event.PublishSearchResultEvent
 import io.github.rosemoe.sora.event.SelectionChangeEvent
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry
@@ -45,6 +54,8 @@ import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.code.config.ChangeThemeDialog
 import io.legado.app.ui.code.config.SettingsDialog
+import io.legado.app.ui.widget.compose.AppSemanticColors
+import io.legado.app.ui.widget.compose.AppUiTokens
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppDropdownMenu
@@ -78,6 +89,11 @@ class CodeEditActivity :
     private var menuExpanded by mutableStateOf(false)
     private var titleState by mutableStateOf("")
     private var saveVisible by mutableStateOf(false)
+    // F196：未保存（脏态）可视化；F197：只读模式显性化（原文案/行为不变，仅补状态层）
+    private var dirtyState by mutableStateOf(false)
+    private var readonlyState by mutableStateOf(false)
+    /** initData 回调内 setText 会触发内容变更事件，用该标记吞掉初始化自身产生的事件 */
+    private var editorInitDone = false
     private var autoWrapChecked by mutableStateOf(AppConfig.editAutoWrap)
 
     private val isDark
@@ -98,15 +114,28 @@ class CodeEditActivity :
                 setText(viewModel.initialText)
                 editable = viewModel.writable
                 saveVisible = viewModel.writable
+                readonlyState = !viewModel.writable
                 requestFocus()
                 postDelayed({
                     val pos = cursor.indexer.getCharPosition(viewModel.cursorPosition)
                     setSelection(pos.line, pos.column, true)
+                    // 光标跳转完成后才允许脏态跟踪，避免初始化/定位过程被误判为「已修改」
+                    editorInitDone = true
                 }, 360) // 进行延时,确保加载渲染完成,从而确保光标能显示跳转到长文本最后
             }
         }
         initView()
         initComposeTopBar()
+        initDirtyTracking()
+    }
+
+    /** F196：脏态跟踪——编辑器内容变更即置「未保存」（保存语义 = 携带结果退出，故无就地保存回执） */
+    private fun initDirtyTracking() {
+        editor.subscribeEvent(ContentChangeEvent::class.java) { _, _ ->
+            if (editorInitDone && !dirtyState) {
+                dirtyState = true
+            }
+        }
     }
 
     private fun initView() {
@@ -214,6 +243,32 @@ class CodeEditActivity :
                     title = titleState.ifBlank { getString(R.string.edit_code) },
                     navIcon = Icons.AutoMirrored.Filled.ArrowBack,
                     onNavClick = { finish() },
+                    // F196/F197 状态行：**必须挂 secondRow**——实测固定栏高下 `subtitle` 槽被裁掉不可见
+                    // （真机截图铁证：脏态时保存键已 accent 高亮，但 subtitle 未渲染），secondRow 为栏内第二行常显区。
+                    secondRow = when {
+                        readonlyState -> {
+                            {
+                                Text(
+                                    text = stringResource(R.string.code_edit_readonly_bar),
+                                    color = AppSemanticColors.Warning,
+                                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                        dirtyState -> {
+                            {
+                                Text(
+                                    text = stringResource(R.string.code_edit_unsaved),
+                                    color = AppUiTokens.settingPalette().accent,
+                                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                        else -> null
+                    },
                     actions = {
                         // 常驻快捷按钮：搜索 / 保存
                         IconButton(onClick = { search() }) {
@@ -221,8 +276,26 @@ class CodeEditActivity :
                         }
                         if (saveVisible) {
                             IconButton(onClick = { save(false) }) {
-                                Icon(Icons.Outlined.Save, contentDescription = null)
+                                // F196：脏态下保存键 accent 高亮（干净态保持既有前景色）
+                                Icon(
+                                    Icons.Outlined.Save,
+                                    contentDescription = null,
+                                    tint = if (dirtyState) {
+                                        AppUiTokens.settingPalette().accent
+                                    } else {
+                                        LocalContentColor.current
+                                    }
+                                )
                             }
+                        } else {
+                            // F197：只读态原保存位给「只读」徽章（告知能力缺失而非静默消失）
+                            Text(
+                                text = stringResource(R.string.code_edit_readonly_badge),
+                                color = AppSemanticColors.Warning,
+                                fontSize = MaterialTheme.typography.labelMedium.fontSize,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            )
                         }
                         // 溢出菜单
                         Box {
