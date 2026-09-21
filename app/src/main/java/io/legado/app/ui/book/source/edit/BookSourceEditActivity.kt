@@ -426,8 +426,10 @@ class BookSourceEditActivity :
         // 基本信息
         sourceEntities.clear()
         sourceEntities.apply {
-            add(EditEntity("bookSourceUrl", bs.bookSourceUrl, R.string.source_url))
-            add(EditEntity("bookSourceName", bs.bookSourceName, R.string.source_name))
+            // F155 同构（2026-09-22）：bookSourceUrl / bookSourceName 是 ViewModel.save 的保存校验
+            // 必填项 ⇒ label 显式标星号，避免「哪几个必填」靠记忆
+            add(EditEntity("bookSourceUrl", bs.bookSourceUrl, R.string.source_url, required = true))
+            add(EditEntity("bookSourceName", bs.bookSourceName, R.string.source_name, required = true))
             add(EditEntity("bookSourceGroup", bs.bookSourceGroup, R.string.source_group))
             add(EditEntity("bookSourceComment", bs.bookSourceComment, R.string.comment))
             add(EditEntity("loginUrl", bs.loginUrl, R.string.login_url))
@@ -844,10 +846,49 @@ class BookSourceEditActivity :
         }
     }
 
+    /**
+     * F155 同构（书源编辑页，2026-09-22）：把错误落到指定字段并滚动到可见位置。
+     *
+     * 必填字段均在「源」Tab（position 0）⇒ 先切 Tab 再定位；切 Tab 会触发
+     * `onTabSelected → setEditEntities(0)`，此处再显式调一次保证顺序确定。
+     */
+    private fun locateField(key: String) {
+        val entity = sourceEntities.firstOrNull { it.key == key } ?: return
+        sourceEntities.forEach { it.error = null }
+        entity.error = getString(R.string.source_required_hint)
+        binding.tabLayout.selectTab(binding.tabLayout.getTabAt(0))
+        setEditEntities(0)
+        val index = adapter.indexOfKey(key)
+        if (index >= 0) {
+            adapter.notifyItemChanged(index)
+            binding.recyclerView.post { binding.recyclerView.scrollToPosition(index) }
+        }
+    }
+
+    /** F155 同构：清除全部字段错误态（校验通过后再保存，避免红框残留）。 */
+    private fun clearFieldErrors() {
+        if (sourceEntities.none { it.error != null }) return
+        sourceEntities.forEach { it.error = null }
+        adapter.notifyDataSetChanged()
+    }
+
     private fun saveSource(
         source: BookSource,
         onSuccess: ((BookSource) -> Unit)? = null
     ) {
+        // F155 同构：保存前必填校验 + 失败定位——原实现把校验放在 ViewModel（bookSourceUrl/
+        // bookSourceName 空即抛 NoStackTraceException）⇒ 只弹一句 toast，用户需自己在 6 个 Tab
+        // 数十个字段里找错字段。此处把「定位」补在页面上，**校验口径不变**（与订阅源编辑页同构）。
+        val blankKey = when {
+            source.bookSourceUrl.isBlank() -> "bookSourceUrl"
+            source.bookSourceName.isBlank() -> "bookSourceName"
+            else -> null
+        }
+        if (blankKey != null) {
+            locateField(blankKey)
+            return
+        }
+        clearFieldErrors()
         val oldUrl = viewModel.bookSource?.bookSourceUrl
         val urlChanged = !oldUrl.isNullOrBlank() && oldUrl != source.bookSourceUrl
         viewModel.save(source) { savedSource ->
