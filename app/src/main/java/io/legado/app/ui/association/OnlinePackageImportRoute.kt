@@ -8,7 +8,8 @@ sealed interface OnlinePackageImportRoute {
 
     data class Bubble(val sourceUrl: String) : OnlinePackageImportRoute
 
-    data class Invalid(val reason: String) : OnlinePackageImportRoute
+    /** 非法路由：只带语义 kind（F353），文案在 UI 层按语言取资源，不再抛英文内部消息 */
+    data class Invalid(val kind: OnlineImportFailureKind) : OnlinePackageImportRoute
 
     data object Other : OnlinePackageImportRoute
 
@@ -31,11 +32,11 @@ sealed interface OnlinePackageImportRoute {
                 else -> return Other
             }
             if (target != Target.LEGACY_BUBBLE && !host.equals("import", ignoreCase = true)) {
-                return Invalid("Import link host must be import")
+                return Invalid(OnlineImportFailureKind.HOST_NOT_IMPORT)
             }
             val source = sourceUrl.orEmpty()
             if (source.isBlank()) {
-                return Invalid("Import link is missing src")
+                return Invalid(OnlineImportFailureKind.SRC_MISSING)
             }
             return when (target) {
                 Target.PARAGRAPH_RULE -> ParagraphRule(source)

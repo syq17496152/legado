@@ -28,4 +28,15 @@
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- F354（在线导入下载/校验进度）：透明壳进度卡槽——仅 OnLineImportActivity 接线（其余四页恒 gone 零占位） -->
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/cv_import_progress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -6,7 +6,6 @@ import com.google.gson.JsonParser
 import io.legado.app.data.entities.ParagraphRule
 import io.legado.app.utils.GSON
 import java.io.File
-import java.io.IOException
 
 object ParagraphRulePackageParser {
     const val FORMAT = "legado.paragraph-rules"
@@ -18,8 +17,18 @@ object ParagraphRulePackageParser {
     private const val MAX_VAR_VALUE_CHARS = 65_536
 
     fun parse(file: File): ParagraphRuleImportPackage {
-        val root = file.bufferedReader(Charsets.UTF_8).use { reader ->
-            JsonParser.parseReader(reader)
+        val root = try {
+            file.bufferedReader(Charsets.UTF_8).use { reader ->
+                JsonParser.parseReader(reader)
+            }
+        } catch (error: Throwable) {
+            // 非 JSON / 截断文件此前会漏出 Gson 原始异常（UI 只能展示英文栈信息），统一收口为结构非法
+            throw OnlineImportFailureException(
+                OnlineImportFailureKind.PACKAGE_MALFORMED,
+                null,
+                "Paragraph rule package is not valid JSON",
+                error
+            )
         }
         return parseElement(root)
     }
@@ -40,7 +49,7 @@ object ParagraphRulePackageParser {
         } else if (root.isJsonObject) {
             entries = listOf(ParagraphRuleImportEntry(parseRule(root)))
         } else {
-            throw IOException("Paragraph rule package must be a JSON object or array")
+            throw malformed("Paragraph rule package must be a JSON object or array")
         }
         validateEntries(entries)
         return ParagraphRuleImportPackage(entries)
@@ -49,22 +58,22 @@ object ParagraphRulePackageParser {
     private fun parseEnvelope(root: JsonObject): List<ParagraphRuleImportEntry> {
         val formatElement = root.get("format")
         val format = if (formatElement == null || formatElement.isJsonNull) null else formatElement.asString
-        if (format != FORMAT) throw IOException("Unsupported paragraph rule package format")
+        if (format != FORMAT) throw unsupported("Unsupported paragraph rule package format")
         val versionElement = root.get("schemaVersion")
         val schemaVersion = if (versionElement == null || versionElement.isJsonNull) null else versionElement.asInt
         if (schemaVersion != SCHEMA_VERSION) {
-            throw IOException("Unsupported paragraph rule schema version: $schemaVersion")
+            throw unsupported("Unsupported paragraph rule schema version: $schemaVersion")
         }
         val rules = root.get("rules")
         if (rules == null || !rules.isJsonArray) {
-            throw IOException("Paragraph rule package is missing rules")
+            throw malformed("Paragraph rule package is missing rules")
         }
         val parsed = ArrayList<ParagraphRuleImportEntry>(rules.asJsonArray.size())
         for (element in rules.asJsonArray) {
-            if (!element.isJsonObject) throw IOException("Paragraph rule entry must be an object")
+            if (!element.isJsonObject) throw malformed("Paragraph rule entry must be an object")
             val entry = element.asJsonObject
             val ruleElement = entry.get("rule")
-                ?: throw IOException("Paragraph rule entry is missing rule")
+                ?: throw malformed("Paragraph rule entry is missing rule")
             val varsIncluded = entry.has("vars")
             val varsElement = entry.get("vars")
             val vars = if (varsElement == null) emptyMap() else parseVars(varsElement)
@@ -81,20 +90,25 @@ object ParagraphRulePackageParser {
     private fun parseRule(element: JsonElement): ParagraphRule {
         try {
             return GSON.fromJson(element, ParagraphRule::class.java)
-                ?: throw IOException("Paragraph rule entry is empty")
-        } catch (error: IOException) {
+                ?: throw malformed("Paragraph rule entry is empty")
+        } catch (error: OnlineImportFailureException) {
             throw error
         } catch (error: Throwable) {
-            throw IOException("Invalid paragraph rule entry", error)
+            throw OnlineImportFailureException(
+                OnlineImportFailureKind.PACKAGE_RULE_INVALID,
+                null,
+                "Invalid paragraph rule entry",
+                error
+            )
         }
     }
 
     private fun parseVars(element: JsonElement): Map<String, String> {
-        if (!element.isJsonObject) throw IOException("Paragraph rule vars must be an object")
+        if (!element.isJsonObject) throw malformed("Paragraph rule vars must be an object")
         val parsed = LinkedHashMap<String, String>()
         for ((name, value) in element.asJsonObject.entrySet()) {
             if (!value.isJsonPrimitive || !value.asJsonPrimitive.isString) {
-                throw IOException("Paragraph rule var values must be strings")
+                throw malformed("Paragraph rule var values must be strings")
             }
             parsed[name] = value.asString
         }
@@ -102,8 +116,8 @@ object ParagraphRulePackageParser {
     }
 
     private fun validateEntries(entries: List<ParagraphRuleImportEntry>) {
-        if (entries.isEmpty()) throw IOException("Paragraph rule package is empty")
-        if (entries.size > MAX_RULES) throw IOException("Paragraph rule package contains too many rules")
+        if (entries.isEmpty()) throw malformed("Paragraph rule package is empty")
+        if (entries.size > MAX_RULES) throw limitExceeded("Paragraph rule package contains too many rules")
         for (entry in entries) {
             validateRule(entry)
         }
@@ -112,9 +126,9 @@ object ParagraphRulePackageParser {
     private fun validateRule(entry: ParagraphRuleImportEntry) {
         val rule = entry.rule
         rule.name = rule.name.trim()
-        if (rule.name.isEmpty()) throw IOException("Paragraph rule name must not be empty")
+        if (rule.name.isEmpty()) throw malformed("Paragraph rule name must not be empty")
         if (rule.name.length > MAX_PARAGRAPH_RULE_NAME_CHARS) {
-            throw IOException("Paragraph rule name is too long")
+            throw limitExceeded("Paragraph rule name is too long")
         }
         validateText("script", rule.script, MAX_SCRIPT_CHARS, true)
         validateText("jsLib", rule.jsLib, MAX_SCRIPT_CHARS, false)
@@ -123,29 +137,47 @@ object ParagraphRulePackageParser {
         // spaces, tabs and line breaks, so validate it as a script rather than as a network URL.
         validateText("loginUrl", rule.loginUrl, MAX_SCRIPT_CHARS, false)
         if (entry.vars.size > MAX_VARS_PER_RULE) {
-            throw IOException("Paragraph rule contains too many variables")
+            throw limitExceeded("Paragraph rule contains too many variables")
         }
         val exportId = entry.exportId
         if (exportId != null &&
             (exportId.length > MAX_PARAGRAPH_RULE_NAME_CHARS || exportId.any { it.isISOControl() })
         ) {
-            throw IOException("Paragraph rule exportId is invalid")
+            throw malformed("Paragraph rule exportId is invalid")
         }
         for ((name, value) in entry.vars) {
             if (name.length > MAX_VAR_NAME_CHARS || name.any { it == '\u0000' }) {
-                throw IOException("Paragraph rule variable name is invalid")
+                throw malformed("Paragraph rule variable name is invalid")
             }
             if (value.length > MAX_VAR_VALUE_CHARS || value.any { it == '\u0000' }) {
-                throw IOException("Paragraph rule variable value is invalid")
+                throw limitExceeded("Paragraph rule variable value is invalid")
             }
         }
     }
 
     private fun validateText(field: String, value: String, maxChars: Int, required: Boolean) {
-        if (required && value.isBlank()) throw IOException("Paragraph rule $field must not be empty")
-        if (value.length > maxChars) throw IOException("Paragraph rule $field is too long")
-        if (value.any { it == '\u0000' }) throw IOException("Paragraph rule $field contains invalid characters")
+        if (required && value.isBlank()) throw malformed("Paragraph rule $field must not be empty")
+        if (value.length > maxChars) throw limitExceeded("Paragraph rule $field is too long")
+        if (value.any { it == '\u0000' }) throw malformed("Paragraph rule $field contains invalid characters")
     }
+
+    private fun malformed(message: String) = OnlineImportFailureException(
+        OnlineImportFailureKind.PACKAGE_MALFORMED,
+        null,
+        message
+    )
+
+    private fun unsupported(message: String) = OnlineImportFailureException(
+        OnlineImportFailureKind.PACKAGE_UNSUPPORTED,
+        null,
+        message
+    )
+
+    private fun limitExceeded(message: String) = OnlineImportFailureException(
+        OnlineImportFailureKind.PACKAGE_LIMIT_EXCEEDED,
+        null,
+        message
+    )
 
     private fun isPackageEnvelope(root: JsonObject): Boolean =
         root.has("format") || root.has("schemaVersion") || root.has("rules")

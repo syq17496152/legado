@@ -54,28 +54,43 @@ class OnLineImportViewModel(app: Application) : BaseAssociationViewModel(app) {
         }
     }
 
-    fun importReadConfig(bytes: ByteArray, finally: (title: String, msg: String) -> Unit) {
+    /**
+     * 导入阅读排版配置。
+     *
+     * 既有缺陷修复（2026-09-21 复核）：
+     * ①原实现把「同名覆盖 / 追加」写在 `forEachIndexed` 首轮分支里并在首轮就 `return@execute`，
+     *   于是**空列表时一条都不会追加**（循环体不执行）却照样回调成功；列表非空时也**只比对第 0 条**，
+     *   同名项在更后面时会生成重复配置；
+     * ②原实现从不调用 [ReadBookConfig.save]（落盘由调用方显式触发）⇒ 导入的排版**重启即丢**。
+     * 现改为「按名查找：命中覆盖、未命中追加」+ 立即落盘，并回调真实配置名（导入的是哪个一目了然）。
+     */
+    fun importReadConfig(
+        bytes: ByteArray,
+        onSuccess: (configName: String) -> Unit,
+        onError: (message: String) -> Unit
+    ) {
         execute {
             val config = ReadBookConfig.import(bytes)
-            ReadBookConfig.configList.forEachIndexed { index, c ->
-                if (c.name == config.name) {
-                    ReadBookConfig.configList[index] = config
-                    return@execute config.name
-                }
+            val existIndex = ReadBookConfig.configList.indexOfFirst { it.name == config.name }
+            if (existIndex >= 0) {
+                ReadBookConfig.configList[existIndex] = config
+            } else {
                 ReadBookConfig.configList.add(config)
-                return@execute config.name
             }
+            ReadBookConfig.save()
+            config.name
         }.onSuccess {
-            finally.invoke(context.getString(R.string.success), "导入排版成功")
+            onSuccess.invoke(it)
         }.onError {
-            finally.invoke(
-                context.getString(R.string.error),
-                it.localizedMessage ?: context.getString(R.string.unknown_error)
-            )
+            onError.invoke(it.localizedMessage ?: context.getString(R.string.unknown_error))
         }
     }
 
-    fun determineType(url: String, finally: (title: String, msg: String) -> Unit) {
+    fun determineType(
+        url: String,
+        onReadConfigSuccess: (configName: String) -> Unit,
+        onError: (message: String) -> Unit
+    ) {
         execute {
             val rs = okHttpClient.newCallResponseBody {
                 if (url.endsWith("#requestWithoutUA")) {
@@ -88,7 +103,7 @@ class OnLineImportViewModel(app: Application) : BaseAssociationViewModel(app) {
             when (rs.contentType()) {
                 "application/zip".toMediaType(),
                 "application/octet-stream".toMediaType() -> {
-                    importReadConfig(rs.bytes(), finally)
+                    importReadConfig(rs.bytes(), onReadConfigSuccess, onError)
                 }
                 else -> {
                     val inputStream = rs.byteStream()
