@@ -130,6 +130,8 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
             binding,
             titleProvider = { getString(R.string.read_menu_custom_button_edit) },
             actionsProvider = {
+                // 顶栏动作分级（2026-09-22）：一级图标只留高频「代码编辑 / 保存」；拷贝规则、粘贴规则、
+                // 帮助下沉溢出菜单（与段落规则编辑页同构）。顶栏图标由 5 个降为 2 个（+ 溢出 ⋮）。
                 listOf(
                     MenuAction(
                         iconRes = R.drawable.ic_code,
@@ -143,18 +145,15 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
                     ) { save() },
                     MenuAction(
                         iconRes = R.drawable.ic_export,
-                        title = getString(R.string.copy_rule),
-                        alwaysShow = true
+                        title = getString(R.string.copy_rule)
                     ) { sendToClip(GSON.toJson(getButton())) },
                     MenuAction(
                         iconRes = R.drawable.ic_import,
-                        title = getString(R.string.paste_rule),
-                        alwaysShow = true
+                        title = getString(R.string.paste_rule)
                     ) { pasteButton() },
                     MenuAction(
                         iconRes = R.drawable.ic_help,
-                        title = getString(R.string.help),
-                        alwaysShow = true
+                        title = getString(R.string.help)
                     ) { showHelp("readMenuCustomButtonHelp") }
                 )
             },

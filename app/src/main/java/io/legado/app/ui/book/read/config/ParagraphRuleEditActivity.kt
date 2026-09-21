@@ -174,6 +174,9 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
             binding,
             titleProvider = { getString(R.string.paragraph_rule_edit) },
             actionsProvider = {
+                // 顶栏动作分级（2026-09-22）：一级图标只留本页核心工作流「写规则 → 调试 → 保存」
+                // （代码编辑 / 保存 / 调试）；拷贝规则、粘贴规则、帮助属低频进出通道与辅助入口 ⇒
+                // 下沉溢出菜单。顶栏图标由 6 个降为 3 个（+ 溢出 ⋮），标题不再被图标挤压。
                 listOf(
                     MenuAction(
                         iconRes = R.drawable.ic_code,
@@ -196,19 +199,16 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
                     MenuAction(
                         iconRes = R.drawable.ic_export,
                         title = getString(R.string.copy_rule),
-                        enabled = topActionsEnabled,
-                        alwaysShow = true
+                        enabled = topActionsEnabled
                     ) { sendToClip(GSON.toJson(getRule())) },
                     MenuAction(
                         iconRes = R.drawable.ic_import,
                         title = getString(R.string.paste_rule),
-                        enabled = topActionsEnabled,
-                        alwaysShow = true
+                        enabled = topActionsEnabled
                     ) { pasteRule() },
                     MenuAction(
                         iconRes = R.drawable.ic_help,
-                        title = getString(R.string.help),
-                        alwaysShow = true
+                        title = getString(R.string.help)
                     ) { showHelp("paragraphRuleHelp") }
                 )
             },

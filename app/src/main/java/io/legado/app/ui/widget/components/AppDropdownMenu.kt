@@ -67,6 +67,9 @@ fun AppDropdownMenu(
                     text = action.title,
                     selected = action.checked == true,
                     palette = palette,
+                    // 2026-09-22：补齐 MenuAction.enabled 透传（原实现忽略该字段）。顶栏动作分级后，
+                    // 「大字段绑定期禁用」类动作会落到溢出菜单里，若不透传则禁用态失效、可误触。
+                    enabled = action.enabled,
                     onClick = {
                         onDismiss()
                         action.onClick()
