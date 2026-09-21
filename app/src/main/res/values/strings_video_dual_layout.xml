@@ -22,4 +22,8 @@
     <string name="video_gesture_guide_pinch">双指外扩 · 全屏</string>
     <string name="video_gesture_guide_confirm">知道了</string>
     <string name="video_gesture_guide_footnote">设置中可切换 布局模式（沉浸式 / 传统布局）</string>
+    <!-- F182（2026-09-21）：布局切换过渡反馈（切换为 Activity 级容器重建 + 续播，期间无提示会被误判为黑屏故障） -->
+    <string name="video_layout_switching">正在切换布局…</string>
+    <!-- F183（2026-09-21）：选集「已看」角标（与当前集 accent 态、未看默认态并列成三态） -->
+    <string name="video_episode_watched_mark">" ✓"</string>
 </resources>

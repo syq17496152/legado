@@ -82,6 +82,26 @@ object PlayHistoryStore {
         }
 
     /**
+     * F183（2026-09-21）：查询某文章下**已看过**的集原始 URL 集合，供选集列表渲染「已看」态。
+     *
+     * 与 [load]/[save] 同口径：历史功能关闭或入参为空时返回空集（= 不标已看，不改变既有视觉）；
+     * 查询失败按 runCatching 兜底返回空集，不影响播放链路。
+     *
+     * @param articleUrl 文章链接
+     */
+    suspend fun watchedVideoUrls(articleUrl: String): Set<String> =
+        withContext(Dispatchers.IO) {
+            if (!VideoPlay.playerHistoryEnabled) return@withContext emptySet()
+            if (articleUrl.isBlank()) return@withContext emptySet()
+
+            kotlin.runCatching {
+                appDb.playHistoryDao.getWatchedVideoUrls(articleUrl).toSet()
+            }.onFailure { e ->
+                AppLog.put("PlayHistoryStore: watched list failed, error=${e.javaClass.simpleName}")
+            }.getOrDefault(emptySet())
+        }
+
+    /**
      * 异步清除指定播放历史
      */
     fun clear(articleUrl: String, videoUrl: String) {

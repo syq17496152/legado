@@ -24,6 +24,9 @@ import androidx.activity.viewModels
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cast
@@ -41,6 +44,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.getValue
@@ -101,6 +106,7 @@ import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.service.VideoPlayService
 import io.legado.app.service.DlnaCastService
 import io.legado.app.ui.video.cast.DlnaCastDialog
+import io.legado.app.ui.widget.compose.AppUiTokens
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.model.SourceCallBack
@@ -153,6 +159,16 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
     companion object {
         const val EXTRA_PREPARE_BOOK_INFO = "prepareBookInfo"
+
+        /**
+         * F182：布局切换提示的保持时长。
+         *
+         * 切换本身的同步段（释放旧容器 + 挂新容器）只有几百 ms，但**新容器起播是异步的**：
+         * `restorePlayHistory` 内含 2s 延迟 seek，且真实源多为网络流（prepare 时长随源波动）。
+         * 取 4s 覆盖「无画面 + 旧画面已释放」的整个窗口（过短用户来不及看清，等于没提示）；
+         * 代价是新画面已回来后提示还会滞留 1~2s——顶栏第二行属非侵入位，可接受。
+         */
+        private const val LAYOUT_SWITCH_NOTICE_MS = 4000L
     }
 
     override val binding by viewBinding(ActivityVideoPlayerBinding::inflate)
@@ -171,6 +187,8 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
     private var starChecked by mutableStateOf(false)
     private var starVisible by mutableStateOf(false)
     private var showCustomBtn by mutableStateOf(false)
+    // F182（2026-09-21）：布局切换过渡反馈状态（顶栏第二行「正在切换布局…」）
+    private var layoutSwitching by mutableStateOf(false)
     private var showRefresh by mutableStateOf(false)
     private var showLogin by mutableStateOf(false)
     private var showChangeSource by mutableStateOf(false)
@@ -922,11 +940,14 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      * 播放页内即时切换布局（AD-05 六步时序契约）：
      * 1 直读当前位置 → 2 互斥标记短路 saveRead/定时保存 → 3 主线程串行释放旧容器 →
      * 4 新容器 setUp → 5 PlayHistoryStore 权威恢复（双恢复点去重）→ 6 清标记
+     *
+     * @return true = 实际执行了切换；false = 目标模式与当前一致，未做任何事
+     *（供 F182 过渡反馈判断是否要亮提示，避免同模式点击也闪一条提示）
      */
-    internal fun switchLayoutMode(targetMode: Int) {
+    internal fun switchLayoutMode(targetMode: Int): Boolean {
         val normalized = if (targetMode == 1) 1 else 0
         val currentMode = if (useViewPagerMode) 0 else 1
-        if (normalized == currentMode) return
+        if (normalized == currentMode) return false
         VideoPlay.layoutMode = normalized
         AppLog.put("VideoPlayerActivity switchLayoutMode: $currentMode -> $normalized")
         // 2：互斥标记（savePlayHistory/内部链短路，防切换窗口串写）
@@ -971,6 +992,29 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         } finally {
             // 6：清互斥标记
             VideoPlay.layoutSwitchInProgress = false
+        }
+        return true
+    }
+
+    /**
+     * F182（2026-09-21）：带过渡反馈的布局切换入口。
+     *
+     * 布局切换是**重代价操作**（旧容器释放 + 新容器挂载 + 续播恢复，期间播放器区无画面），
+     * 原先无任何提示，用户会把 1~2 秒空窗误判为「黑屏/坏了」并重复点击。
+     *
+     * 时序：置位提示 → **让出一帧**（`post`，否则「提示刚提交就被同步切换覆盖」等于没显示）
+     * → 执行切换 → 保持 [LAYOUT_SWITCH_NOTICE_MS] 后自动消退（新容器起播是异步的：
+     * `restorePlayHistory` 内含 2s 延迟 seek，用上界时长覆盖该窗口）。
+     */
+    private fun requestLayoutModeSwitch(targetMode: Int) {
+        layoutSwitching = true
+        binding.root.post {
+            val switched = switchLayoutMode(targetMode)
+            if (!switched) {
+                layoutSwitching = false
+                return@post
+            }
+            binding.root.postDelayed({ layoutSwitching = false }, LAYOUT_SWITCH_NOTICE_MS)
         }
     }
 
@@ -1243,6 +1287,24 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                                 actions = buildMenuActions()
                             )
                         }
+                    },
+                    // F182（2026-09-21）：布局切换过渡反馈——状态类第二行必须走 secondRow
+                    //（F317：subtitle 槽在固定栏高下会被裁掉不可见）
+                    secondRow = when {
+                        layoutSwitching -> {
+                            {
+                                Text(
+                                    text = getString(R.string.video_layout_switching),
+                                    color = AppUiTokens.settingPalette().accent,
+                                    fontSize = MaterialTheme.typography.labelMedium.fontSize,
+                                    // 第二行无内建内边距（GlassTopAppBar 只给标题行加），
+                                    // 留 16dp 与标题左缘对齐，否则文字会贴屏边
+                                    modifier = Modifier.padding(start = 16.dp, end = 16.dp)
+                                )
+                            }
+                        }
+
+                        else -> null
                     }
                 )
             }
@@ -1285,7 +1347,7 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             onClick = {
                 // video-player-dual-layout：设置弹框内切换布局模式 → 即时重建续播（R7）
                 showDialogFragment(SettingsDialog(this).apply {
-                    onLayoutModeSelected = { target -> switchLayoutMode(target) }
+                    onLayoutModeSelected = { target -> requestLayoutModeSwitch(target) }
                 })
             }
         )        // 登录（源配置了登录地址才显示）
@@ -1734,16 +1796,50 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             }
         }
         recyclerView.adapter = adapter
+        // F183：区块标题补位置计数（与信息区 video_playlist_position_episode 同源同串）
+        upEpisodeLabelPosition(VideoPlay.rssEpisodeIndex, episodes.size)
+        loadWatchedEpisodes(adapter)
         scrollToDurChapter(recyclerView, VideoPlay.rssEpisodeIndex)
+    }
+
+    /**
+     * F183（2026-09-21）：选集区块标题的位置计数（「选集 · 第3集 · 共36集」）。
+     * 索引越界钳制后再拼串，避免异步列表变更期间出现「第 0 集 / 超出总数」的失真文案。
+     */
+    private fun upEpisodeLabelPosition(episodeIndex: Int, total: Int) {
+        if (total <= 0) return
+        val safeIndex = episodeIndex.coerceIn(0, total - 1)
+        binding.tvEpisodeLabel.text = getString(R.string.video_section_episodes) +
+            " · " + getString(R.string.video_playlist_position_episode, safeIndex + 1, total)
+    }
+
+    /**
+     * F183（2026-09-21）：异步补「已看」态。
+     *
+     * 键为 `PlayHistoryStore` 存的集原始 URL（= `VideoPlay.historyKeyUrl`，多线路多集模式下即
+     * `RssEpisode.url`）⇒ 可直接与选集列表的 `episode.url` 比对。查询失败/历史关闭时返回空集，
+     * 列表退回既有两态（当前 / 未看），不产生视觉回退。
+     */
+    private fun loadWatchedEpisodes(adapter: RssEpisodeAdapter) {
+        val articleUrl = getCurrentArticleUrl()
+        if (articleUrl.isBlank()) return
+        lifecycleScope.launch {
+            val watched = PlayHistoryStore.watchedVideoUrls(articleUrl)
+            if (watched.isEmpty()) return@launch
+            adapter.watchedUrls = watched
+        }
     }
 
     /**
      * R1 多集选择播放：更新订阅源多集列表选中位置
      */
     private fun upRssEpisodesView() {
-        if (!VideoPlay.rssEpisodes.isNullOrEmpty()) {
+        val episodes = VideoPlay.rssEpisodes
+        if (!episodes.isNullOrEmpty()) {
             val adapter = binding.chapters.adapter as? RssEpisodeAdapter
             adapter?.updateSelectedPosition(VideoPlay.rssEpisodeIndex)
+            // F183：切集同步刷新位置计数
+            upEpisodeLabelPosition(VideoPlay.rssEpisodeIndex, episodes.size)
             scrollToDurChapter(binding.chapters, VideoPlay.rssEpisodeIndex)
         }
     }
@@ -2134,9 +2230,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
     /**
      * video-player-dual-layout R7：设置面板（BottomSheet）内切换布局模式 → 容器重建续播（AD-05）
+     *
+     * F182（2026-09-21）：必须与「更多菜单 → 配置设置（SettingsDialog）」走**同一个**入口
+     * `requestLayoutModeSwitch`——本页有两个布局切换入口（浮动⌘设置 BottomSheet / 溢出菜单弹框），
+     * 只改一处会导致「一个入口有过渡反馈、另一个没有」的双入口不一致（首轮 s26 假失败真因）。
      */
     override fun onLayoutModeSelected(target: Int) {
-        switchLayoutMode(target)
+        requestLayoutModeSwitch(target)
     }
 
     override fun observeLiveBus() {
