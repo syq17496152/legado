@@ -1446,6 +1446,10 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
     private var onNeutral: (() -> Unit)? = null
     private var onDismissAction: (() -> Unit)? = null
     private var handledAction = false
+    // 可选勾选项（2026-09-21 M5 book/info 弹窗族收口）：用于「删除书籍 → 同时删除本地文件」这类二选一；
+    // 不传 label 时完全不渲染 ⇒ 既有调用点零改动。勾选值在「确认」时一次性回调（语义与旧 alert{} 一致）。
+    private var checkboxCheckedState = mutableStateOf(false)
+    private var onCheckboxConfirmed: ((Boolean) -> Unit)? = null
 
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
@@ -1474,6 +1478,8 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
                 val negativeRequiresCallback = args.getBoolean(ARG_NEGATIVE_REQUIRES_CALLBACK, false)
                 val messageInContent = args.getBoolean(ARG_MESSAGE_IN_CONTENT)
                 val showNegative = args.getBoolean(ARG_SHOW_NEGATIVE, true)
+                val checkboxLabel = args.getString(ARG_CHECKBOX_LABEL)?.takeIf { it.isNotBlank() }
+                checkboxCheckedState.value = args.getBoolean(ARG_CHECKBOX_CHECKED)
                 DismissWhenCallbackMissing(
                     missing = positiveRequiresCallback && onPositive == null ||
                         negativeRequiresCallback && onNegative == null,
@@ -1483,7 +1489,28 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
                     title = args.getString(ARG_TITLE).orEmpty(),
                     message = args.getString(ARG_MESSAGE),
                     messageInContent = messageInContent,
-                    content = {},
+                    content = {
+                        if (checkboxLabel != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        checkboxCheckedState.value = !checkboxCheckedState.value
+                                    }
+                            ) {
+                                Checkbox(
+                                    checked = checkboxCheckedState.value,
+                                    onCheckedChange = { checkboxCheckedState.value = it }
+                                )
+                                Text(
+                                    text = checkboxLabel,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = style.primaryText
+                                )
+                            }
+                        }
+                    },
                     actions = {
                         val palette = style.toMiuixPalette()
                         var hasPriorAction = false
@@ -1529,6 +1556,7 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
                                 onClick = {
                                     handledAction = true
                                     dismissAllowingStateLoss()
+                                    onCheckboxConfirmed?.invoke(checkboxCheckedState.value)
                                     positiveCallback?.invoke()
                                 },
                                 primary = !dangerPositive,
@@ -1558,10 +1586,15 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
             negativeRequiresCallback: Boolean = false,
             messageInContent: Boolean = false,
             showNegative: Boolean = true,
+            /** 可选勾选项文案（如「同时删除本地文件」）；null = 不渲染（既有调用点零改动） */
+            checkboxLabel: String? = null,
+            checkboxChecked: Boolean = false,
             onPositive: () -> Unit,
             onNegative: (() -> Unit)? = null,
             onNeutral: (() -> Unit)? = null,
-            onDismissAction: (() -> Unit)? = null
+            onDismissAction: (() -> Unit)? = null,
+            /** 勾选项在「确认」时一次性回调（与旧「弹框 DSL + customView」语义一致：非确认关闭不写偏好） */
+            onCheckboxConfirmed: ((Boolean) -> Unit)? = null
         ): ComposeConfirmDialog {
             return ComposeConfirmDialog().apply {
                 arguments = Bundle().apply {
@@ -1575,11 +1608,14 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
                     putBoolean(ARG_NEGATIVE_REQUIRES_CALLBACK, negativeRequiresCallback)
                     putBoolean(ARG_MESSAGE_IN_CONTENT, messageInContent)
                     putBoolean(ARG_SHOW_NEGATIVE, showNegative)
+                    putString(ARG_CHECKBOX_LABEL, checkboxLabel)
+                    putBoolean(ARG_CHECKBOX_CHECKED, checkboxChecked)
                 }
                 this.onPositive = onPositive
                 this.onNegative = onNegative
                 this.onNeutral = onNeutral
                 this.onDismissAction = onDismissAction
+                this.onCheckboxConfirmed = onCheckboxConfirmed
             }
         }
 
@@ -1593,6 +1629,8 @@ class ComposeConfirmDialog : ComposeDialogFragment() {
         private const val ARG_NEGATIVE_REQUIRES_CALLBACK = "negativeRequiresCallback"
         private const val ARG_MESSAGE_IN_CONTENT = "messageInContent"
         private const val ARG_SHOW_NEGATIVE = "showNegative"
+        private const val ARG_CHECKBOX_LABEL = "checkboxLabel"
+        private const val ARG_CHECKBOX_CHECKED = "checkboxChecked"
     }
 }
 

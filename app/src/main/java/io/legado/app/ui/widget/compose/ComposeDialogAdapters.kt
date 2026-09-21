@@ -19,7 +19,11 @@ fun Fragment.showComposeConfirmDialog(
     onPositive: () -> Unit,
     onNegative: (() -> Unit)? = null,
     onNeutral: (() -> Unit)? = null,
-    onDismissAction: (() -> Unit)? = null
+    onDismissAction: (() -> Unit)? = null,
+    /** 可选勾选项（如「同时删除本地文件」）；null = 不渲染 ⇒ 既有调用点零改动 */
+    checkboxLabel: CharSequence? = null,
+    checkboxChecked: Boolean = false,
+    onCheckboxConfirmed: ((Boolean) -> Unit)? = null
 ) {
     showDialogFragment(
         ComposeConfirmDialog.create(
@@ -33,10 +37,13 @@ fun Fragment.showComposeConfirmDialog(
             negativeRequiresCallback = false,
             messageInContent = messageInContent,
             showNegative = showNegative,
+            checkboxLabel = checkboxLabel?.toString(),
+            checkboxChecked = checkboxChecked,
             onPositive = onPositive,
             onNegative = onNegative,
             onNeutral = onNeutral,
-            onDismissAction = onDismissAction
+            onDismissAction = onDismissAction,
+            onCheckboxConfirmed = onCheckboxConfirmed
         )
     )
 }
@@ -297,7 +304,11 @@ fun AppCompatActivity.showComposeConfirmDialog(
     onPositive: () -> Unit,
     onNegative: (() -> Unit)? = null,
     onNeutral: (() -> Unit)? = null,
-    onDismissAction: (() -> Unit)? = null
+    onDismissAction: (() -> Unit)? = null,
+    /** 可选勾选项（如「同时删除本地文件」）；null = 不渲染 ⇒ 既有调用点零改动 */
+    checkboxLabel: CharSequence? = null,
+    checkboxChecked: Boolean = false,
+    onCheckboxConfirmed: ((Boolean) -> Unit)? = null
 ) {
     showDialogFragment(
         ComposeConfirmDialog.create(
@@ -311,10 +322,13 @@ fun AppCompatActivity.showComposeConfirmDialog(
             negativeRequiresCallback = false,
             messageInContent = messageInContent,
             showNegative = showNegative,
+            checkboxLabel = checkboxLabel?.toString(),
+            checkboxChecked = checkboxChecked,
             onPositive = onPositive,
             onNegative = onNegative,
             onNeutral = onNeutral,
-            onDismissAction = onDismissAction
+            onDismissAction = onDismissAction,
+            onCheckboxConfirmed = onCheckboxConfirmed
         )
     )
 }

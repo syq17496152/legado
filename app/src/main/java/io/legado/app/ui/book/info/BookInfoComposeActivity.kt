@@ -7,8 +7,6 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
-import android.widget.CheckBox
-import android.widget.LinearLayout
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
@@ -49,7 +47,6 @@ import io.legado.app.help.webView.WebJsExtensions
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameCache
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameJava
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameSource
-import io.legado.app.lib.dialogs.alert
 import io.legado.app.model.SourceCallBack
 import io.legado.app.model.remote.RemoteBookWebDav
 import io.legado.app.ui.book.audio.AudioPlayActivity
@@ -77,7 +74,6 @@ import io.legado.app.ui.widget.dialog.PhotoDialog
 import io.legado.app.ui.widget.dialog.VariableDialog
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.StartActivityContract
-import io.legado.app.utils.dpToPx
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.openFileUri
 import io.legado.app.utils.sendToClip
@@ -853,32 +849,30 @@ class BookInfoComposeActivity :
     private fun deleteBook() {
         viewModel.getBook()?.let { book ->
             if (LocalConfig.bookInfoDeleteAlert) {
-                alert(
-                    titleResource = R.string.draw,
-                    messageResource = R.string.sure_del
-                ) {
-                    var checkBox: CheckBox? = null
-                    if (book.isLocal) {
-                        checkBox = CheckBox(this@BookInfoComposeActivity).apply {
-                            setText(R.string.delete_book_file)
-                            isChecked = LocalConfig.deleteBookOriginal
-                        }
-                        val view = LinearLayout(this@BookInfoComposeActivity).apply {
-                            setPadding(16.dpToPx(), 0, 16.dpToPx(), 0)
-                            addView(checkBox)
-                        }
-                        customView { view }
-                    }
-                    yesButton {
-                        checkBox?.let { LocalConfig.deleteBookOriginal = it.isChecked }
-                        SourceCallBack.callBackBook(SourceCallBack.DEL_BOOK_SHELF, viewModel.bookSource, book)
+                // 弹窗族收口（2026-09-21 M5 book/info）：原 View 层 alert{}+customView(CheckBox) →
+                // 共享 Compose 确认框（本地书用可选勾选项承载「同时删除本地文件」，勾选值在确认时回调，
+                // 语义与旧实现一致：非确认关闭不写偏好）。
+                showComposeConfirmDialog(
+                    title = getString(R.string.draw),
+                    message = getString(R.string.sure_del),
+                    positiveText = getString(R.string.delete),
+                    negativeText = getString(R.string.cancel),
+                    dangerPositive = true,
+                    checkboxLabel = if (book.isLocal) getString(R.string.delete_book_file) else null,
+                    checkboxChecked = LocalConfig.deleteBookOriginal,
+                    onCheckboxConfirmed = { checked ->
+                        if (book.isLocal) LocalConfig.deleteBookOriginal = checked
+                    },
+                    onPositive = {
+                        SourceCallBack.callBackBook(
+                            SourceCallBack.DEL_BOOK_SHELF, viewModel.bookSource, book
+                        )
                         viewModel.delBook(LocalConfig.deleteBookOriginal) {
                             setResult(Activity.RESULT_OK)
                             finish()
                         }
                     }
-                    noButton()
-                }
+                )
             } else {
                 SourceCallBack.callBackBook(SourceCallBack.DEL_BOOK_SHELF, viewModel.bookSource, book)
                 viewModel.delBook(LocalConfig.deleteBookOriginal) {
