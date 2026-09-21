@@ -2190,19 +2190,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefInt(ThemeRuntimeKeys.dialogAlpha(isNightTheme), value.coerceIn(0, 100))
         }
 
-    @Deprecated("Use uiLayoutAlpha")
-    var uiCornerEffectMode: String
-        get() = "solid"
-        set(value) {
-            appCtx.putPrefString(PreferKey.uiCornerEffectMode, value)
-        }
-
-    @Deprecated("Use uiLayoutAlpha")
-    var uiCornerEffectLevel: Int
-        get() = uiLayoutAlpha
-        set(value) {
-            uiLayoutAlpha = value
-        }
+    // C6 审计（2026-09-22）：原两个 @Deprecated("Use uiLayoutAlpha") 属性
+    // `uiCornerEffectMode`（getter 恒返回 "solid"、setter 仅写死键）与
+    // `uiCornerEffectLevel`（转发 uiLayoutAlpha）在全仓（含 modules/）**零调用** ⇒ 删除死件。
+    // 保留的常量：`PreferKey.uiCornerEffectLevel` 仍被 ThemeConfig / ThemeUiPalette /
+    // ThemeManageActivity / 上方 uiLayoutAlpha 的旧值回落使用；`PreferKey.uiCornerEffectMode`
+    // 属偏好键数据契约（旧数据兼容），不随属性一并删。
 
     val uiCornerSearchFollow: Boolean
         get() = appCtx.getPrefBoolean(ThemeRuntimeKeys.uiCornerSearchFollow(isNightTheme), false)
