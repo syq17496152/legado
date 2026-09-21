@@ -14,11 +14,15 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -30,6 +34,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,8 +44,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect as ComposeRect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -58,6 +65,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.UiCorner
+import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.LegadoMiuixChoiceRow
 import io.legado.app.ui.widget.compose.installViewTreeOwnersFrom
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
@@ -70,6 +78,32 @@ object ModernActionPopup {
     private const val MIN_WIDTH_DP = 124
     private const val MAX_WIDTH_DP = 244
     private const val ROW_HEIGHT_DP = 44
+    // F35（2026-09-21）：滑杆行需要固定宽面板（滑杆手感 + 快捷档位并排）
+    private const val SLIDER_WIDTH_DP = 244
+    // F35：滑杆行估高（标题行 + 滑杆 + 档位行），用于首帧定位，避免与真实高度差过大而跳动
+    private const val SLIDER_ROW_HEIGHT_DP = 132
+
+    /**
+     * 滑杆行描述（F35，2026-09-21）——把传统 `PopupWindow` 滑杆收口进共享弹层族。
+     *
+     * 非空时该行渲染为「标题 + 当前值 + 滑杆 + 可选快捷档位」，不可点关闭；
+     * 行的 `invoke` 不参与（留空即可）。默认 `null` ⇒ 全部既有调用点零改动。
+     *
+     * @property value 当前值（打开瞬间的快照，滑动后由行内状态接管）
+     * @property valueRange 取值区间（`steps` 恒为连续，由调用方在 [onValueChange] 内自行量化）
+     * @property valueText 值文案格式化（随滑动实时刷新）
+     * @property presets 快捷档位（空 = 不渲染档位行）
+     * @property onValueChange 取值变化回调（滑杆拖动 / 档位点击都会触发）
+     */
+    data class SliderSpec(
+        val value: Float,
+        val valueRange: ClosedFloatingPointRange<Float>,
+        val valueText: (Float) -> String,
+        val presets: List<Preset> = emptyList(),
+        val onValueChange: (Float) -> Unit
+    ) {
+        data class Preset(val text: String, val value: Float)
+    }
 
     data class Action(
         val title: String,
@@ -81,7 +115,11 @@ object ModernActionPopup {
         // F39（2026-09-21）：分组标题行——仅作视觉分组标签，不可点、无选中态；
         // 默认 false ⇒ 全部既有调用点零改动（组件层只做可选参数扩展）。
         val header: Boolean = false,
-        val invoke: () -> Unit
+        // F35（2026-09-21）：滑杆行——非空时本行渲染滑杆（见 [SliderSpec]）；
+        // 默认 null ⇒ 全部既有调用点零改动。
+        val slider: SliderSpec? = null,
+        // 默认为空实现：滑杆行不需要点击回调，调用方可省略（既有尾随 lambda 写法不受影响）
+        val invoke: () -> Unit = {}
     )
 
     class Handle internal constructor(
@@ -400,10 +438,7 @@ object ModernActionPopup {
         val maxWidth = (hostWidth - gap * 2).coerceAtLeast(1)
         val fallbackWidth = estimatePanelWidthPx(actions, maxWidth)
         val rowHeight = ROW_HEIGHT_DP.dpToPx()
-        val fallbackHeight = minOf(
-            maxHeight,
-            (actions.size * rowHeight + 12.dpToPx()).coerceAtLeast(minimumHeight)
-        )
+        val fallbackHeight = estimatePanelHeightPx(actions, rowHeight, maxHeight, minimumHeight)
         return AnchorSnapshot(
             anchorLeft = anchorLeft,
             anchorTop = anchorTop,
@@ -500,7 +535,11 @@ object ModernActionPopup {
                             items = actions,
                             key = { index, action -> "${action.title}#$index" }
                         ) { index, action ->
-                            if (action.header) {
+                            val sliderSpec = action.slider
+                            if (sliderSpec != null) {
+                                // 滑杆行（F35）：标题 + 当前值 + 滑杆 + 可选快捷档位；不参与点击关闭
+                                ModernSliderRow(action.title, sliderSpec, style)
+                            } else if (action.header) {
                                 // 分组标题（F39）：非交互标签行，无选中态、不响应点击
                                 Text(
                                     text = action.title,
@@ -549,6 +588,88 @@ object ModernActionPopup {
         }
     }
 
+    /**
+     * 滑杆行（F35）：与弹层同源取色——标题行 + 连续滑杆 + 可选快捷档位 Chip。
+     * 滑动/点档位即时回调调用方（音频页据此实时设置定时/倍速），全程不关闭弹层。
+     */
+    @Composable
+    private fun ModernSliderRow(
+        title: String,
+        spec: SliderSpec,
+        style: AppDialogStyle
+    ) {
+        // 以打开瞬间的快照为初值；弹层存活期间由行内状态接管
+        var current by remember(spec) { mutableStateOf(spec.value) }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    color = style.primaryText,
+                    fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = spec.valueText(current),
+                    color = style.secondaryText,
+                    fontSize = MaterialTheme.typography.labelLarge.fontSize
+                )
+            }
+            Slider(
+                value = current,
+                onValueChange = {
+                    current = it
+                    spec.onValueChange(it)
+                },
+                valueRange = spec.valueRange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp)
+            )
+            if (spec.presets.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    spec.presets.forEach { preset ->
+                        val selected = kotlin.math.abs(preset.value - current) < 0.01f
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = if (selected) style.accent.copy(alpha = 0.14f) else Color.Transparent,
+                            contentColor = if (selected) style.accent else style.secondaryText,
+                            border = BorderStroke(1.dp, if (selected) style.accent else style.stroke),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    current = preset.value
+                                    spec.onValueChange(preset.value)
+                                }
+                        ) {
+                            Text(
+                                text = preset.text,
+                                fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private fun anchorPostAction(action: () -> Unit) {
         android.os.Handler(android.os.Looper.getMainLooper()).post(action)
     }
@@ -589,10 +710,7 @@ object ModernActionPopup {
         val maxWidth = (hostWidth - gap * 2).coerceAtLeast(1)
         val fallbackWidth = estimatePanelWidthPx(actions, maxWidth)
         val rowHeight = ROW_HEIGHT_DP.dpToPx()
-        val fallbackHeight = minOf(
-            maxHeight,
-            (actions.size * rowHeight + 12.dpToPx()).coerceAtLeast(minimumHeight)
-        )
+        val fallbackHeight = estimatePanelHeightPx(actions, rowHeight, maxHeight, minimumHeight)
         return AnchorSnapshot(
             anchorLeft = anchorLeft,
             anchorTop = anchorTop,
@@ -648,10 +766,27 @@ object ModernActionPopup {
     }
 
     private fun estimatePanelWidthPx(actions: List<Action>, maxWidthPx: Int): Int {
+        // F35：含滑杆行时按固定宽面板（滑杆长度 + 档位并排需要稳定宽度，不随标题长度抖动）
+        if (actions.any { it.slider != null }) {
+            return minOf(SLIDER_WIDTH_DP.dpToPx(), maxWidthPx).coerceAtLeast(1)
+        }
         val longest = actions.maxOfOrNull { it.title.length } ?: 0
         val estimatedDp = (56 + longest.coerceAtMost(14) * 13)
             .coerceIn(MIN_WIDTH_DP, MAX_WIDTH_DP)
         return minOf(estimatedDp.dpToPx(), maxWidthPx).coerceAtLeast(1)
+    }
+
+    /** 面板高度估算（F35 起把滑杆行按真实行高计入，避免首帧定位与实测高度差过大而跳动） */
+    private fun estimatePanelHeightPx(
+        actions: List<Action>,
+        rowHeightPx: Int,
+        maxHeight: Int,
+        minimumHeight: Int
+    ): Int {
+        val sliderCount = actions.count { it.slider != null }
+        val plainCount = actions.size - sliderCount
+        val contentPx = plainCount * rowHeightPx + sliderCount * SLIDER_ROW_HEIGHT_DP.dpToPx() + 12.dpToPx()
+        return minOf(maxHeight, contentPx.coerceAtLeast(minimumHeight))
     }
 
     private fun View.safePopupHostHeight(hostHeight: Int): Int {

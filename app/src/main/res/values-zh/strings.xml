@@ -1412,6 +1412,9 @@
     <string name="read_aloud_wake_lock_summary">开启朗读的时候启用唤醒锁,有些手机开启唤醒锁会被杀后台</string>
     <string name="audio_play_wake_lock">音频服务唤醒锁</string>
     <string name="audio_play_wake_lock_summary">播放音频的时候启用唤醒锁,有些手机开启唤醒锁会被杀后台</string>
+    <string name="audio_stop_play">停止播放</string>
+    <string name="audio_stop_play_confirm">停止后将关闭后台播报服务，且不可撤销。</string>
+    <string name="audio_continue_play">继续播放</string>
     <string name="change_search_scope">切换搜索范围</string>
     <string name="copy_rule">拷贝规则</string>
     <string name="paste_rule">粘贴规则</string>

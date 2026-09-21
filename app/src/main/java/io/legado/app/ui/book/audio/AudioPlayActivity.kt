@@ -2,7 +2,7 @@ package io.legado.app.ui.book.audio
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.Gravity
+import android.view.View
 import android.widget.SeekBar
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
@@ -22,6 +23,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.constraintlayout.widget.ConstraintSet
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
@@ -42,9 +44,11 @@ import io.legado.app.model.BookCover
 import io.legado.app.service.AudioPlayService
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.widget.compose.AppUiTokens
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
@@ -73,10 +77,9 @@ import java.util.Locale
 import io.legado.app.ui.book.audio.config.AudioSkipCredits
 import com.dirror.lyricviewx.OnPlayClickListener
 import io.legado.app.lib.theme.ThemeStore.Companion.accentColor
-import io.legado.app.ui.book.audio.SliderPopup.Companion.SPEED
-import io.legado.app.ui.book.audio.SliderPopup.Companion.TIMER
 import io.legado.app.model.SourceCallBack
 import io.legado.app.utils.gone
+import kotlin.math.roundToInt
 
 /**
  * 音频播放
@@ -93,13 +96,16 @@ class AudioPlayActivity :
     // T3（theme-arch-gap）核实：本页无 View 侧主题色消费，豁免+ThemeSync 覆盖完整（2026-08-28 审查）
     override val recreateOnThemeChange: Boolean
         get() = false
-    private val timerSliderPopup by lazy { SliderPopup(this, TIMER) }
-    private val speedControlPopup by lazy { SliderPopup(this, SPEED) }
     private var adjustProgress = false
     private var playMode = AudioPlay.PlayMode.LIST_END_STOP
     private val lyricViewX by lazy { binding.lyricViewX }
     private var lyricOn = false
     private var oldLyric: String? = null
+    // F35：定时/倍速滑杆已收口共享弹层族，各自持有句柄以便「再点即切换/关闭」
+    private var timerPopup: ModernActionPopup.Handle? = null
+    private var speedPopup: ModernActionPopup.Handle? = null
+    // 优化 2：歌词展开态封面缩图，避免重复改约束
+    private var lyricCoverMode = false
 
     // L-B13 S5 改造：Compose 顶栏状态
     private var composeTitle by mutableStateOf("")
@@ -252,6 +258,16 @@ class AudioPlayActivity :
             title = getString(R.string.log),
             onClick = { showDialogFragment<AppLogDialog>() }
         )
+        // F34（2026-09-21）：停止播放由「零发现的 FAB 长按」补一个可发现入口；
+        // 与长按同走确认弹框（停止会关闭后台播报服务且不可撤销，danger 语义）。
+        if (AudioPlay.book != null) {
+            actions += MenuAction(
+                icon = Icons.Filled.Stop,
+                title = getString(R.string.audio_stop_play),
+                tint = AppUiTokens.danger,
+                onClick = { confirmStopPlay() }
+            )
+        }
         return actions
     }
 
@@ -308,14 +324,77 @@ class AudioPlayActivity :
                 AudioPlay.adjustProgress(seekBar.progress)
             }
         })
-        binding.ivSpeedControl.setOnClickListener {
-            speedControlPopup.showAsDropDown(it, 0, (-100).dpToPx(), Gravity.TOP)
-        }
-
-        binding.ivTimer.setOnClickListener {
-            timerSliderPopup.showAsDropDown(it, 0, (-100).dpToPx(), Gravity.TOP)
-        }
+        // F35：滑杆迁共享弹层族（原 PopupWindow + (-100dp) 负偏移定位弃用）
+        binding.ivTimer.setOnClickListener { showTimerPanel(it) }
+        binding.ivSpeedControl.setOnClickListener { showSpeedPanel(it) }
         binding.llPlayMenu.applyNavigationBarPadding()
+    }
+
+    /**
+     * F35（2026-09-21）：定时滑杆收口共享弹层族 —— 卡片 token + 圆角描边 + 快捷档位。
+     * 档位取最常用的 15/30/60/90 分钟；滑杆保持连续（范围 0~180 分钟，按整分钟量化）。
+     */
+    private fun showTimerPanel(anchor: View) {
+        val spec = ModernActionPopup.SliderSpec(
+            value = AudioPlayService.timeMinute.toFloat(),
+            valueRange = 0f..180f,
+            valueText = { getString(R.string.timer_m, it.roundToInt()) },
+            presets = TIMER_PRESETS_MINUTES.map {
+                ModernActionPopup.SliderSpec.Preset(getString(R.string.timer_m, it), it.toFloat())
+            },
+            onValueChange = { AudioPlay.setTimer(it.roundToInt()) }
+        )
+        timerPopup = ModernActionPopup.show(
+            anchor = anchor,
+            actions = listOf(ModernActionPopup.Action(title = getString(R.string.set_timer), slider = spec)),
+            previousPopup = timerPopup,
+            maxHeightRatio = 0.4f
+        )
+    }
+
+    /**
+     * F35（2026-09-21）：倍速滑杆与定时同构（范围 0.5~3.0，按 0.1 量化）。
+     */
+    private fun showSpeedPanel(anchor: View) {
+        val spec = ModernActionPopup.SliderSpec(
+            value = AudioPlayService.playSpeed,
+            valueRange = 0.5f..3.0f,
+            valueText = { formatSpeed(it) },
+            presets = SPEED_PRESETS.map {
+                ModernActionPopup.SliderSpec.Preset(formatSpeed(it), it)
+            },
+            onValueChange = { AudioPlay.setSpeed((it * 10f).roundToInt() / 10f) }
+        )
+        speedPopup = ModernActionPopup.show(
+            anchor = anchor,
+            actions = listOf(ModernActionPopup.Action(title = getString(R.string.speed_control), slider = spec)),
+            previousPopup = speedPopup,
+            maxHeightRatio = 0.4f
+        )
+    }
+
+    /**
+     * 倍速文案：固定 2 位小数后去掉末尾 0（0.75X / 1.5X / 2.0X），
+     * 与滑杆值文案、旧 SeekBar 的 `%.1fX` 口径一致，避免档位与当前值两种写法。
+     */
+    private fun formatSpeed(speed: Float): String {
+        val text = String.format(Locale.ROOT, "%.2f", speed)
+        return (if (text.endsWith("0")) text.dropLast(1) else text) + "X"
+    }
+
+    /**
+     * F34（2026-09-21）：停止播放是破坏性且不可撤销的动作（关闭后台播报服务），
+     * 长按 FAB 与更多菜单入口共用本确认；动词式按钮「继续播放 / 停止」+ 影响范围说明。
+     */
+    private fun confirmStopPlay() {
+        showComposeConfirmDialog(
+            title = getString(R.string.audio_stop_play),
+            message = getString(R.string.audio_stop_play_confirm),
+            positiveText = getString(R.string.audio_stop_play),
+            negativeText = getString(R.string.audio_continue_play),
+            dangerPositive = true,
+            onPositive = { AudioPlay.stop() }
+        )
     }
 
     private fun initListener() {
@@ -326,7 +405,8 @@ class AudioPlayActivity :
             playButton()
         }
         binding.fabPlayStop.onLongClick {
-            AudioPlay.stop()
+            // F34：长按停止改为先确认（原为直接 AudioPlay.stop()）
+            confirmStopPlay()
         }
         binding.ivSkipNext.setOnClickListener {
             AudioPlay.next()
@@ -357,10 +437,13 @@ class AudioPlayActivity :
         oldLyric = lyric
         if(lyric.isNullOrBlank()) {
             binding.lyricViewX.gone()
+            applyLyricCoverMode(false)
             return
         }
         lyricViewX.loadLyric(lyric)
         binding.lyricViewX.visible()
+        // 优化 2：歌词展开 ⇒ 封面缩为小图，把纵向空间让给歌词区（歌词非空才切换）
+        applyLyricCoverMode(true)
         if (lyricOn) {
             upLyricP(AudioPlay.durChapterPos)
         } else {
@@ -384,6 +467,65 @@ class AudioPlayActivity :
     }
     override fun upLyricP(position: Int) {
         lyricViewX.updateTime(position.toLong(),false)
+    }
+
+    /**
+     * 优化 2（P1，2026-09-21）：歌词展开态封面缩为小图。
+     *
+     * 本来：`iv_cover` 固定 260dp 且上下双向约束（垂直居中），歌词区只能拿到剩余高度，小屏可读行数少。
+     * 优化后：歌词非空 ⇒ 封面 120dp 置顶靠左，歌词区上边界随之抬升约 140dp（`lyricViewX` 仍
+     * `top_toBottomOf=iv_cover`，无需改自身约束）；歌词为空 ⇒ 还原原 260dp 居中。
+     * 顺带把睡眠定时标签让位到小图右侧，避免与「置顶靠左」的封面重叠。
+     */
+    private fun applyLyricCoverMode(lyricMode: Boolean) {
+        if (lyricCoverMode == lyricMode) return
+        lyricCoverMode = lyricMode
+        val coverSize = if (lyricMode) LYRIC_COVER_SIZE_DP.dpToPx() else COVER_SIZE_DP.dpToPx()
+        val set = ConstraintSet().apply { clone(binding.root) }
+        set.constrainWidth(R.id.iv_cover, coverSize)
+        set.constrainHeight(R.id.iv_cover, coverSize)
+        if (lyricMode) {
+            set.clear(R.id.iv_cover, ConstraintSet.BOTTOM)
+            set.clear(R.id.iv_cover, ConstraintSet.RIGHT)
+            set.connect(
+                R.id.iv_cover, ConstraintSet.LEFT,
+                ConstraintSet.PARENT_ID, ConstraintSet.LEFT, 16.dpToPx()
+            )
+            set.connect(
+                R.id.iv_cover, ConstraintSet.TOP,
+                R.id.compose_top_bar, ConstraintSet.BOTTOM, 16.dpToPx()
+            )
+            set.clear(R.id.tv_timer, ConstraintSet.LEFT)
+            set.connect(R.id.tv_timer, ConstraintSet.LEFT, R.id.iv_cover, ConstraintSet.RIGHT, 0)
+        } else {
+            set.clear(R.id.iv_cover, ConstraintSet.LEFT)
+            set.connect(
+                R.id.iv_cover, ConstraintSet.LEFT,
+                ConstraintSet.PARENT_ID, ConstraintSet.LEFT, 0
+            )
+            set.connect(
+                R.id.iv_cover, ConstraintSet.RIGHT,
+                ConstraintSet.PARENT_ID, ConstraintSet.RIGHT, 0
+            )
+            set.connect(R.id.iv_cover, ConstraintSet.BOTTOM, R.id.lyricViewX, ConstraintSet.TOP, 0)
+            set.clear(R.id.tv_timer, ConstraintSet.LEFT)
+            set.connect(R.id.tv_timer, ConstraintSet.LEFT, ConstraintSet.PARENT_ID, ConstraintSet.LEFT, 0)
+        }
+        set.applyTo(binding.root)
+    }
+
+    companion object {
+        /** `iv_cover` 常规尺寸（与 activity_audio_play.xml 初值一致） */
+        private const val COVER_SIZE_DP = 260
+
+        /** 歌词展开态封面尺寸 */
+        private const val LYRIC_COVER_SIZE_DP = 120
+
+        /** 定时快捷档位（分钟） */
+        private val TIMER_PRESETS_MINUTES = listOf(15, 30, 60, 90)
+
+        /** 倍速快捷档位 */
+        private val SPEED_PRESETS = listOf(0.75f, 1.0f, 1.5f, 2.0f)
     }
 
     private fun playButton(noLyr: Boolean = true) {
