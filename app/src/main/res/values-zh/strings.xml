@@ -89,6 +89,21 @@
     <string name="paragraph_rule_template_remove_ads">去广告行</string>
     <string name="paragraph_rule_template_indent">缩进清理</string>
     <string name="paragraph_rule_template_blank">空模板骨架</string>
+    <!-- read-menu-custom-button-edit：F343 页内测试运行 / F344 粘贴差异预览 / F345 高级字段渐进披露 -->
+    <string name="read_menu_advanced_group">登录与高级配置</string>
+    <string name="read_menu_advanced_group_hint">已配置</string>
+    <string name="read_menu_button_run">▶ 测试运行</string>
+    <string name="read_menu_button_run_running">运行中…</string>
+    <string name="read_menu_button_run_ok">运行成功</string>
+    <string name="read_menu_button_run_fail">运行失败</string>
+    <string name="read_menu_button_run_type">返回类型</string>
+    <string name="read_menu_button_run_result">返回值</string>
+    <string name="read_menu_button_run_error">错误信息</string>
+    <string name="read_menu_button_run_empty">（无返回值）</string>
+    <string name="read_menu_button_run_clear">清空结果</string>
+    <string name="read_menu_button_paste_preview">粘贴将覆盖 %1$d 项已修改字段</string>
+    <string name="read_menu_button_paste_confirm">覆盖</string>
+    <string name="read_menu_button_paste_same">粘贴内容与当前表单一致</string>
     <string name="bookshelf_card_progress_chapter">%1$d%% · 第%2$d章</string>
     <string name="bookshelf_continue_reading">继续阅读《%1$s》第%2$d章</string>
     <!-- 优化 5（F5 更新目录页内任务条，2026-09-21）：进行中 / 三种结束态文案（完成·无新章·已取消） -->

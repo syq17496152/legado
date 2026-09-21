@@ -90,6 +90,21 @@
     <string name="paragraph_rule_template_remove_ads">Remove ads</string>
     <string name="paragraph_rule_template_indent">Clean indent</string>
     <string name="paragraph_rule_template_blank">Blank skeleton</string>
+    <!-- read-menu-custom-button-edit: F343 in-form test run / F344 paste diff preview / F345 advanced disclosure -->
+    <string name="read_menu_advanced_group">Login &amp; advanced</string>
+    <string name="read_menu_advanced_group_hint">Configured</string>
+    <string name="read_menu_button_run">▶ Test run</string>
+    <string name="read_menu_button_run_running">Running…</string>
+    <string name="read_menu_button_run_ok">Ran successfully</string>
+    <string name="read_menu_button_run_fail">Run failed</string>
+    <string name="read_menu_button_run_type">Return type</string>
+    <string name="read_menu_button_run_result">Return value</string>
+    <string name="read_menu_button_run_error">Error</string>
+    <string name="read_menu_button_run_empty">(no return value)</string>
+    <string name="read_menu_button_run_clear">Clear result</string>
+    <string name="read_menu_button_paste_preview">%1$d changed field(s) will be overwritten</string>
+    <string name="read_menu_button_paste_confirm">Overwrite</string>
+    <string name="read_menu_button_paste_same">Clipboard content matches the form</string>
     <string name="bookshelf_card_progress_chapter">%1$d%% · Ch.%2$d</string>
     <string name="bookshelf_continue_reading">Continue %1$s · Ch.%2$d</string>
     <!-- 优化 5（F5 更新目录页内任务条） -->

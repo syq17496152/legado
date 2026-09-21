@@ -11,6 +11,7 @@
         android:layout_height="wrap_content" />
 
     <io.legado.app.ui.widget.NoChildScrollNestedScrollView
+        android:id="@+id/nested_scroll"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
@@ -111,6 +112,20 @@
                     android:layout_height="wrap_content"
                     android:maxLines="12" />
             </io.legado.app.ui.widget.text.TextInputLayout>
+
+            <!-- F345（优化 3）：登录与高级字段的渐进披露组头——仅自定义按键编辑页接线（段落规则编辑页恒 gone） -->
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/cv_login_advanced"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="gone" />
+
+            <!-- F343（优化 1）：页内测试运行（运行按钮 + 结果面板就地展开）——同上仅自定义按键编辑页接线 -->
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/cv_script_test"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="gone" />
         </LinearLayout>
     </io.legado.app.ui.widget.NoChildScrollNestedScrollView>
 </LinearLayout>
