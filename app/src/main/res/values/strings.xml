@@ -62,6 +62,13 @@
     <string name="last_read">Last reading</string>
     <string name="update_log">What\'s new</string>
     <string name="bookshelf_empty_title">No books here</string>
+    <!-- 优化 1：书架更多菜单四组收纳的组标题（仅分组标签，不改任何菜单项文案） -->
+    <string name="bookshelf_menu_group_manage">Bookshelf</string>
+    <string name="bookshelf_menu_group_add">Add books</string>
+    <string name="bookshelf_menu_group_io">Import / Export</string>
+    <string name="bookshelf_menu_group_layout">Layout &amp; tools</string>
+    <!-- 优化 3（F1 空态操作化）：空书架「去发现看看」跨 Tab 引流 -->
+    <string name="bookshelf_empty_go_discovery">Explore</string>
     <string name="bookshelf_empty">The bookshelf is still empty. Search for books or add them from discovery!</string>
     <string name="action_search">Search</string>
     <string name="action_download">Download</string>

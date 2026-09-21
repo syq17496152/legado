@@ -26,8 +26,11 @@ import io.legado.app.ui.book.import.remote.RemoteBookActivity
 import io.legado.app.ui.book.manage.BookshelfManageActivity
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.main.MainActivity
 import io.legado.app.ui.main.MainFragmentInterface
 import io.legado.app.ui.main.MainViewModel
+import io.legado.app.ui.widget.components.EmptyStateAction
+import androidx.annotation.StringRes
 import io.legado.app.ui.widget.MainTopBarView
 import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.dialog.WaitDialog
@@ -123,11 +126,24 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
     }
 
     // 更多菜单数据（保留全部原菜单动作，顺序同 main_bookshelf.xml；图标经 ModernActionPopup 间接目录省略）
+    // 优化 1（2026-09-21）：12 项按四组收纳 + 组标题，高频组（书架管理）置顶。
+    // ⚠️ 只改**排列与分组标签**：12 项文案与回调逐字/逐流程沿用（零文案改动、零新增功能），
+    // header 行由 ModernActionPopup 渲染为不可点标签（默认 false ⇒ 其他调用点零影响）
     private fun buildMenuActions(): List<ModernActionPopup.Action> {
         return listOf(
+            groupHeader(R.string.bookshelf_menu_group_manage),
             ModernActionPopup.Action(getString(R.string.update_toc)) {
                 activityViewModel.upToc(books, onlyUpdateRead)
             },
+            ModernActionPopup.Action(getString(R.string.bookshelf_management)) {
+                startActivity<BookshelfManageActivity> {
+                    putExtra("groupId", groupId)
+                }
+            },
+            ModernActionPopup.Action(getString(R.string.group_manage)) {
+                showDialogFragment<GroupManageDialog>()
+            },
+            groupHeader(R.string.bookshelf_menu_group_add),
             ModernActionPopup.Action(getString(R.string.book_local)) {
                 startActivity<ImportBookActivity>()
             },
@@ -137,25 +153,9 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
             ModernActionPopup.Action(getString(R.string.add_url)) {
                 showAddBookByUrlAlert()
             },
-            ModernActionPopup.Action(getString(R.string.bookshelf_management)) {
-                startActivity<BookshelfManageActivity> {
-                    putExtra("groupId", groupId)
-                }
-            },
+            groupHeader(R.string.bookshelf_menu_group_io),
             ModernActionPopup.Action(getString(R.string.cache_export)) {
                 startActivity<CacheActivity> {
-                    putExtra("groupId", groupId)
-                }
-            },
-            ModernActionPopup.Action(getString(R.string.group_manage)) {
-                showDialogFragment<GroupManageDialog>()
-            },
-            ModernActionPopup.Action(getString(R.string.bookshelf_layout)) {
-                configBookshelf()
-            },
-            // 7.11i 书架标签管理入口（对齐 Archive menu_book_tag_manage）
-            ModernActionPopup.Action(getString(R.string.bookshelf_tag_manage)) {
-                startActivity<BookshelfTagManageActivity> {
                     putExtra("groupId", groupId)
                 }
             },
@@ -171,11 +171,44 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
             ModernActionPopup.Action(getString(R.string.import_bookshelf)) {
                 importBookshelfAlert(groupId)
             },
+            groupHeader(R.string.bookshelf_menu_group_layout),
+            ModernActionPopup.Action(getString(R.string.bookshelf_layout)) {
+                configBookshelf()
+            },
+            // 7.11i 书架标签管理入口（对齐 Archive menu_book_tag_manage）
+            ModernActionPopup.Action(getString(R.string.bookshelf_tag_manage)) {
+                startActivity<BookshelfTagManageActivity> {
+                    putExtra("groupId", groupId)
+                }
+            },
             ModernActionPopup.Action(getString(R.string.log)) {
                 showDialogFragment<AppLogDialog>()
             }
         )
     }
+
+    /** 菜单分组标签行（不可点、无选中态，仅视觉分组） */
+    private fun groupHeader(@StringRes resId: Int) =
+        ModernActionPopup.Action(title = getString(resId), header = true)
+
+    /**
+     * 优化 3 / F1 空态操作化（2026-09-21）：空书架主操作——复用菜单「添加本地」既有流程（同源跳转）。
+     * 新用户首启必然经过空态，原为零操作空白页；主操作取最短路径（本地导入）。
+     */
+    protected fun emptyPrimaryAction(): EmptyStateAction =
+        EmptyStateAction(getString(R.string.book_local)) { startActivity<ImportBookActivity>() }
+
+    /**
+     * 优化 3 / F1 空态操作化（2026-09-21）：空书架次操作——文案与流程全部沿用菜单既有项，
+     * 另补「去发现看看」跨 Tab 引流（走 `MainActivity.openDiscovery` 既有 TAB 出口机制，不新建跳转通道）。
+     */
+    protected fun emptySecondaryActions(): List<EmptyStateAction> = listOf(
+        EmptyStateAction(getString(R.string.add_url)) { showAddBookByUrlAlert() },
+        EmptyStateAction(getString(R.string.add_remote_book)) { startActivity<RemoteBookActivity>() },
+        EmptyStateAction(getString(R.string.bookshelf_empty_go_discovery)) {
+            MainActivity.openDiscovery(requireContext())
+        }
+    )
 
     protected fun initBookGroupData() {
         groupsLiveData?.removeObservers(viewLifecycleOwner)

@@ -110,6 +110,9 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
             showUnread = shelfShowUnread,
             showReadProgress = shelfShowReadProgress,
             showLastUpdateTime = shelfShowLastUpdateTime,
+            // 优化 3（F1 空态操作化）：空书架引导动作（既有菜单同源流程）
+            emptyPrimaryAction = emptyPrimaryAction(),
+            emptySecondaryActions = emptySecondaryActions(),
             onRefresh = {
                 // 对齐 archive：转圈已由 SwipeRefreshContainer 触发即收，
                 // 这里仅触发后台目录更新，列表由 DB flow 静默刷新

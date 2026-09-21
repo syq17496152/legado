@@ -199,6 +199,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         private const val EXTRA_TARGET_PAGE = "targetPage"
         private const val TARGET_BOOKSHELF = "bookshelf"
         private const val TARGET_RSS = "rss"
+        private const val TARGET_DISCOVERY = "discovery"
 
         fun openBookshelf(context: Context) {
             context.startActivity(Intent(context, MainActivity::class.java).apply {
@@ -213,6 +214,19 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         fun openRss(context: Context) {
             context.startActivity(Intent(context, MainActivity::class.java).apply {
                 putExtra(EXTRA_TARGET_PAGE, TARGET_RSS)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        }
+
+        /**
+         * 书架空态出口（F1 空态操作化）：直达主界面发现页。
+         * 空书架是必然首态，原为空态零操作 ⇒ 把「去发现看看」作为跨 Tab 引流，避免首启死胡同。
+         */
+        fun openDiscovery(context: Context) {
+            context.startActivity(Intent(context, MainActivity::class.java).apply {
+                putExtra(EXTRA_TARGET_PAGE, TARGET_DISCOVERY)
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -603,6 +617,31 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                     openRssPage()
                 }
             }
+
+            TARGET_DISCOVERY -> {
+                intent.removeExtra(EXTRA_TARGET_PAGE)
+                binding.viewPagerMain.post {
+                    openDiscoveryPage()
+                }
+            }
+        }
+    }
+
+    /**
+     * 切到发现页（F1 空态出口用）：与 [openRssPage] 同构——底栏勾选按**槽位归属**判定
+     * （发现槽位可能承载 RSS，见 `resolveDiscoveryNavTarget()`），直接勾 `menu_discovery` 会与槽位不符。
+     * 发现槽位未承载发现页（`indexOf == -1`）时静默返回，不做任何跳转。
+     */
+    private fun openDiscoveryPage() = binding.run {
+        val position = realPositions.take(bottomMenuCount).indexOf(idExplore).takeIf { it >= 0 }
+            ?: return@run
+        pagePosition = position
+        viewPagerMain.setCurrentItem(position, false)
+        val menuId = if (resolveDiscoveryNavTarget() == idExplore) R.id.menu_discovery else R.id.menu_rss
+        bottomNavigationView.menu.findItem(menuId)?.isChecked = true
+        updateSideNavigationItems()
+        if (isSidebarMode() && sideNavigationOpen) {
+            closeSideNavigation()
         }
     }
 

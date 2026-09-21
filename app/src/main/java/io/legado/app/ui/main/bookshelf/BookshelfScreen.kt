@@ -113,6 +113,9 @@ fun BookshelfScreen(
     showUnread: Boolean,
     showReadProgress: Boolean,
     showLastUpdateTime: Boolean,
+    /** F1（2026-09-21 空态操作化）：空书架时的引导动作；默认不传 ⇒ 既有调用点零改动（仍为空态无操作） */
+    emptyPrimaryAction: EmptyStateAction? = null,
+    emptySecondaryActions: List<EmptyStateAction> = emptyList(),
     onRefresh: () -> Unit = {},
     onRetry: () -> Unit = {},
     onGroupSelected: (Long) -> Unit = {},
@@ -170,6 +173,8 @@ fun BookshelfScreen(
                 icon = Icons.AutoMirrored.Filled.MenuBook,
                 title = stringResource(R.string.bookshelf_empty_title),
                 subtitle = stringResource(R.string.bookshelf_empty),
+                primaryAction = emptyPrimaryAction,
+                secondaryActions = emptySecondaryActions,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
