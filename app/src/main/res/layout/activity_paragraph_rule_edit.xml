@@ -80,6 +80,12 @@
                     android:inputType="number" />
             </io.legado.app.ui.widget.text.TextInputLayout>
 
+            <!-- F63（优化 2）：空脚本模板引导槽——脚本为空时渲染模板 chip 行（Compose），已编辑态零占位 -->
+            <androidx.compose.ui.platform.ComposeView
+                android:id="@+id/cv_script_templates"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
             <io.legado.app.ui.widget.text.TextInputLayout
                 android:id="@+id/til_script"
                 android:layout_width="match_parent"

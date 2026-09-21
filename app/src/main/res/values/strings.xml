@@ -72,6 +72,24 @@
     <string name="bookshelf_empty">The bookshelf is still empty. Search for books or add them from discovery!</string>
     <!-- 优化 4（F4 书籍卡信息架构）：更新角标 / 卡下进度章节行 / 续读条 -->
     <string name="bookshelf_badge_update_chapters">Update %1$s</string>
+    <!-- paragraph-rule-edit: F62 structured debug result / F63 empty-script templates -->
+    <string name="paragraph_rule_debug_status_ok">Processed</string>
+    <string name="paragraph_rule_debug_status_fail">Failed</string>
+    <string name="paragraph_rule_debug_book">Book</string>
+    <string name="paragraph_rule_debug_chapter">Chapter</string>
+    <string name="paragraph_rule_debug_paragraphs">Paragraphs</string>
+    <string name="paragraph_rule_debug_length">Length</string>
+    <string name="paragraph_rule_debug_image_tags">Image tags</string>
+    <string name="paragraph_rule_debug_logs">Logs</string>
+    <string name="paragraph_rule_debug_logs_empty">(no logs)</string>
+    <string name="paragraph_rule_debug_preview">Preview</string>
+    <string name="paragraph_rule_debug_copy">Copy result</string>
+    <string name="paragraph_rule_debug_copied">Result copied</string>
+    <string name="paragraph_rule_template_title">Insert template</string>
+    <string name="paragraph_rule_template_short_merge">Merge short lines</string>
+    <string name="paragraph_rule_template_remove_ads">Remove ads</string>
+    <string name="paragraph_rule_template_indent">Clean indent</string>
+    <string name="paragraph_rule_template_blank">Blank skeleton</string>
     <string name="bookshelf_card_progress_chapter">%1$d%% · Ch.%2$d</string>
     <string name="bookshelf_continue_reading">Continue %1$s · Ch.%2$d</string>
     <!-- 优化 5（F5 更新目录页内任务条） -->

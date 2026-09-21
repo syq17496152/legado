@@ -71,6 +71,24 @@
     <string name="bookshelf_empty">书架还空着，先去搜索书籍或从发现里添加吧！</string>
     <!-- 优化 4（F4 书籍卡信息架构，2026-09-21）：更新角标 / 卡下进度章节行 / 续读条 -->
     <string name="bookshelf_badge_update_chapters">更新 %1$s 章</string>
+    <!-- 段落规则编辑（F62 调试结果结构化 / F63 空脚本模板，2026-09-21） -->
+    <string name="paragraph_rule_debug_status_ok">处理成功</string>
+    <string name="paragraph_rule_debug_status_fail">处理失败</string>
+    <string name="paragraph_rule_debug_book">书籍</string>
+    <string name="paragraph_rule_debug_chapter">章节</string>
+    <string name="paragraph_rule_debug_paragraphs">段落数</string>
+    <string name="paragraph_rule_debug_length">总长度</string>
+    <string name="paragraph_rule_debug_image_tags">图片标签</string>
+    <string name="paragraph_rule_debug_logs">日志</string>
+    <string name="paragraph_rule_debug_logs_empty">（无日志）</string>
+    <string name="paragraph_rule_debug_preview">正文预览</string>
+    <string name="paragraph_rule_debug_copy">复制结果</string>
+    <string name="paragraph_rule_debug_copied">已复制结果</string>
+    <string name="paragraph_rule_template_title">插入模板</string>
+    <string name="paragraph_rule_template_short_merge">短行合并</string>
+    <string name="paragraph_rule_template_remove_ads">去广告行</string>
+    <string name="paragraph_rule_template_indent">缩进清理</string>
+    <string name="paragraph_rule_template_blank">空模板骨架</string>
     <string name="bookshelf_card_progress_chapter">%1$d%% · 第%2$d章</string>
     <string name="bookshelf_continue_reading">继续阅读《%1$s》第%2$d章</string>
     <!-- 优化 5（F5 更新目录页内任务条，2026-09-21）：进行中 / 三种结束态文案（完成·无新章·已取消） -->

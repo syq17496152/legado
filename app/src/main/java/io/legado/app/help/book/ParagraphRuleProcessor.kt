@@ -67,7 +67,12 @@ object ParagraphRuleProcessor {
 
     data class DebugResult(
         val content: String,
-        val logs: List<String>
+        val logs: List<String>,
+        /**
+         * 调试输入正文（F62）：规则执行**前**的规范化正文。
+         * 仅供调试结果"前→后"对比展示（段落数/总长度），不参与正式处理链路。
+         */
+        val inputContent: String = ""
     )
 
     fun isParagraphClick(click: String?): Boolean {
@@ -177,7 +182,7 @@ object ParagraphRuleProcessor {
                 Debug.log(debugSource, "paragraph debug finish")
             }
         }
-        return DebugResult(processed, logs)
+        return DebugResult(processed, logs, inputContent = normalizedContent)
     }
 
     fun evalClick(
