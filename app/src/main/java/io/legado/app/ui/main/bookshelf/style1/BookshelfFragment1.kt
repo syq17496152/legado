@@ -90,7 +90,13 @@ class BookshelfFragment1() : BaseBookshelfFragment(R.layout.fragment_bookshelf1)
     // 顶栏标签体系（与订阅同源一套 MainTopBarView/RoundedTagBarView）
     private var groupMenuPopup: ModernActionPopup.Handle? = null
     private var bookTags = emptyList<String>()
-    private var selectedBookTag = ""
+
+    /**
+     * 当前选中的书本标签（空串=全部）。
+     * 必须声明为 Compose 可观察状态：displayedBooks 依赖它过滤列表，
+     * 若用普通 var，点击标签只改字段不触发重组，会表现为"标签出现但筛选不生效"。
+     */
+    private var selectedBookTag by mutableStateOf("")
 
     override val groupId: Long get() = selectedGroupId
 
