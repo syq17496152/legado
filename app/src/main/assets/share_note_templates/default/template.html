@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="reeden-template-version" content="1">
+  <meta name="reeden-template-name" content="邮票摘录模板">
+  <meta name="reeden-template-type" content="note">
+  <meta name="reeden-template-canvas" content="long">
+  <meta name="reeden-template-width" content="375">
+  <meta name="reeden-template-radius" content="0">
+  <title>邮票摘录模板</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --stamp-backdrop: #e7dccf;
+      --stamp-paper: #fff8e9;
+      --stamp-paper-soft: #f8efd9;
+      --stamp-text: #332a22;
+      --stamp-muted: #846e56;
+      --stamp-accent: #9a3f35;
+      --stamp-line: #7f6143;
+      --stamp-line-soft: #d1ad74;
+      --stamp-divider: #d8bd8d;
+      --stamp-chip-bg: rgba(154, 63, 53, 0.06);
+      --stamp-shadow: rgba(42, 33, 24, 0.18);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+      background: var(--stamp-backdrop);
+      color: var(--stamp-text);
+    }
+    * { box-sizing: border-box; }
+    body {
+      width: 375px;
+      margin: 0;
+      padding: 18px;
+      background: var(--stamp-backdrop);
+      color: var(--stamp-text);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    .poster {
+      width: 100%;
+      padding: 0;
+      background: var(--stamp-backdrop);
+      color: var(--stamp-text);
+    }
+    .stamp {
+      display: grid;
+      grid-template-columns: 13px minmax(0, 1fr) 13px;
+      grid-template-rows: 13px auto 13px;
+      width: 100%;
+      background: var(--stamp-paper);
+      box-shadow: 7px 8px 0 var(--stamp-shadow);
+      overflow: hidden;
+    }
+    .teeth {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      justify-content: space-around;
+      background: var(--stamp-paper);
+      pointer-events: none;
+    }
+    .teeth.top { grid-column: 1 / 4; grid-row: 1; padding: 0 5px; }
+    .teeth.bottom { grid-column: 1 / 4; grid-row: 3; padding: 0 5px; }
+    .teeth.left {
+      grid-column: 1;
+      grid-row: 2;
+      flex-direction: column;
+      padding: 5px 0;
+    }
+    .teeth.right {
+      grid-column: 3;
+      grid-row: 2;
+      flex-direction: column;
+      padding: 5px 0;
+    }
+    .tooth {
+      width: 10px;
+      height: 10px;
+      flex: 0 0 10px;
+      border-radius: 999px;
+      background: var(--stamp-backdrop);
+    }
+    .stamp-paper {
+      grid-column: 2;
+      grid-row: 2;
+      min-width: 0;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.3), rgba(255,255,255,0) 18%, rgba(139,104,66,0.05) 100%),
+        var(--stamp-paper);
+      border: 2px solid var(--stamp-line);
+      padding: 9px;
+    }
+    .stamp-inner {
+      min-width: 0;
+      border: 1px solid var(--stamp-line-soft);
+      padding: 22px 20px 18px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.18), rgba(255,255,255,0));
+    }
+    .stamp-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: start;
+      margin-bottom: 22px;
+    }
+    .eyebrow {
+      color: var(--stamp-muted);
+      font-size: 12px;
+      line-height: 1.2;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .stamp-title {
+      margin-top: 3px;
+      color: var(--stamp-text);
+      font-size: 30px;
+      line-height: 1.12;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+    .stamp-value {
+      min-width: 58px;
+      text-align: center;
+      color: var(--stamp-accent);
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .stamp-value .number {
+      display: block;
+      font-size: 48px;
+      line-height: 0.92;
+    }
+    .stamp-value .label {
+      display: block;
+      margin-top: 5px;
+      font-size: 14px;
+      letter-spacing: 0.06em;
+    }
+    .book-card {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+      margin-bottom: 20px;
+    }
+    .book-card.no-cover { grid-template-columns: 1fr; }
+    .cover {
+      width: 92px;
+      aspect-ratio: 3 / 4;
+      object-fit: cover;
+      border: 2px solid var(--stamp-divider);
+      border-radius: 0;
+      background: linear-gradient(135deg, rgba(80,114,95,0.9), rgba(35,52,68,0.95));
+      display: block;
+    }
+    .book-info {
+      min-width: 0;
+      padding-top: 2px;
+    }
+    h1 {
+      margin: 0;
+      color: var(--stamp-text);
+      font-size: 21px;
+      line-height: 1.24;
+      font-weight: 760;
+      letter-spacing: 0;
+      overflow-wrap: anywhere;
+    }
+    .subtitle {
+      margin-top: 8px;
+      color: var(--stamp-muted);
+      font-size: 13px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    .meta-lines {
+      display: grid;
+      gap: 4px;
+      margin-top: 10px;
+      color: var(--stamp-muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .meta-line {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .postmark {
+      position: relative;
+      width: 106px;
+      height: 52px;
+      margin: 10px 0 0 auto;
+      color: var(--stamp-muted);
+      opacity: 0.68;
+    }
+    .postmark-ring,
+    .postmark-ring::after {
+      position: absolute;
+      border: 2px solid currentColor;
+      border-radius: 999px;
+      content: "";
+    }
+    .postmark-ring {
+      top: 1px;
+      right: 7px;
+      width: 51px;
+      height: 51px;
+    }
+    .postmark-ring::after {
+      top: 8px;
+      left: 8px;
+      width: 31px;
+      height: 31px;
+    }
+    .postmark-date {
+      position: absolute;
+      top: 17px;
+      right: 18px;
+      width: 60px;
+      transform: rotate(-12deg);
+      text-align: center;
+      font-size: 10px;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .postmark-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: currentColor;
+      transform: rotate(-12deg);
+      transform-origin: center;
+    }
+    .postmark-line.one { top: 26px; }
+    .postmark-line.two { top: 41px; }
+    .divider {
+      height: 1px;
+      margin: 0 0 18px;
+      background: var(--stamp-divider);
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 18px;
+    }
+    .chip {
+      max-width: 100%;
+      padding: 4px 8px;
+      border: 1px solid var(--stamp-line-soft);
+      border-radius: 999px;
+      color: var(--stamp-accent);
+      background: var(--stamp-chip-bg);
+      font-size: 10px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+    .content {
+      display: grid;
+      gap: 14px;
+    }
+    .section {
+      display: grid;
+      gap: 8px;
+    }
+    .section:not(:first-child) {
+      padding-top: 14px;
+      border-top: 1px solid var(--stamp-divider);
+    }
+    .section-title {
+      margin: 0;
+      color: var(--stamp-accent);
+      font-size: 12px;
+      line-height: 1.25;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+    blockquote {
+      margin: 0;
+      padding-left: 14px;
+      border-left: 4px solid var(--stamp-accent);
+      color: var(--stamp-text);
+      font-size: 22px;
+      line-height: 1.52;
+      font-weight: 760;
+      letter-spacing: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .body-text {
+      color: var(--stamp-muted);
+      font-size: 14px;
+      line-height: 1.68;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .info-list {
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+      line-height: 1.48;
+    }
+    .info-row {
+      display: grid;
+      grid-template-columns: 68px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+    }
+    .info-row b {
+      color: var(--stamp-muted);
+      font-weight: 600;
+    }
+    .info-row span {
+      color: var(--stamp-text);
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 18px;
+      padding-top: 13px;
+      border-top: 1px solid var(--stamp-divider);
+      color: var(--stamp-muted);
+      font-size: 10px;
+      line-height: 1.3;
+      letter-spacing: 0.04em;
+    }
+    .footer-left,
+    .footer-right {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .footer-right {
+      flex: 0 0 auto;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <main class="poster" data-reeden-capture>
+    <div class="stamp">
+      <div class="teeth top" data-stamp-teeth="horizontal"></div>
+      <div class="teeth left" data-stamp-teeth="vertical"></div>
+      <article class="stamp-paper">
+        <div class="stamp-inner">
+          <header class="stamp-header">
+            <div>
+              <div class="eyebrow">Book Note Postage</div>
+              <div class="stamp-title">阅读摘录</div>
+            </div>
+            <div class="stamp-value" aria-hidden="true">
+              <span class="number">26</span>
+              <span class="label">READ</span>
+            </div>
+          </header>
+
+          <section class="book-card">
+            <img class="cover" data-red-src="book.cover" alt="">
+            <div class="book-info">
+              <h1 data-red-text="title">邮票摘录模板</h1>
+              <div class="subtitle" data-red-text="subtitle"></div>
+              <div class="meta-lines" data-red-meta></div>
+              <div class="postmark" aria-hidden="true">
+                <div class="postmark-ring"></div>
+                <div class="postmark-date" data-red-text="postmarkDate"></div>
+                <div class="postmark-line one"></div>
+                <div class="postmark-line two"></div>
+              </div>
+            </div>
+          </section>
+
+          <div class="divider"></div>
+          <div class="chips" data-red-chips></div>
+          <div class="content" data-red-content></div>
+          <footer class="footer">
+            <span class="footer-left" data-red-text="footerLeft">BOOKMARKED MOMENT</span>
+            <span class="footer-right" data-red-text="footerRight">NO. 0000</span>
+          </footer>
+        </div>
+      </article>
+      <div class="teeth right" data-stamp-teeth="vertical"></div>
+      <div class="teeth bottom" data-stamp-teeth="horizontal"></div>
+    </div>
+  </main>
+
+  <script>
+    window.ReedenShareTemplateMock = {
+      type: "note",
+      generatedAt: "2026-07-03 20:26:00",
+      profile: { name: "读者", bio: "一段认真读过的文字", avatar: null },
+      appearance: { hideComment: false },
+      book: {
+        title: "清平乐",
+        author: "佚名",
+        description: "一本留给夜晚慢慢翻阅的书。",
+        cover: "",
+        type: "古典文学",
+        kind: "古典文学",
+        tags: "古典文学",
+        sizeText: "",
+        wordCountText: "13 万字",
+        readTimeText: "2小时18分钟",
+        readStatusText: "在读",
+        readProgressText: "72%",
+        readProgressPercent: 0.72,
+        lastReadTime: "2026-07-03 20:26:00"
+      },
+      note: {
+        createAt: "2026-07-03",
+        sectionName: "第一章",
+        description: "一段文字被认真读过以后，便不只是书中的句子，也会成为某一日的风声与光。",
+        comment: "这里记录当时的想法。卡片会随着文字内容自然变高，邮票齿孔不会被截图裁掉。"
+      }
+    };
+
+    const StampTemplate = (() => {
+      const compact = (value) => value != null && String(value).trim() !== "";
+      const text = (value) => compact(value) ? String(value).trim() : "";
+      const element = (tag, className, value) => {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (value != null) node.textContent = String(value);
+        return node;
+      };
+      const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+      const parseHex = (value) => {
+        const raw = text(value).replace("#", "");
+        if (!/^[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(raw)) return null;
+        const rgb = raw.length === 8 ? raw.slice(2) : raw;
+        return {
+          r: parseInt(rgb.slice(0, 2), 16),
+          g: parseInt(rgb.slice(2, 4), 16),
+          b: parseInt(rgb.slice(4, 6), 16)
+        };
+      };
+      const toHex = (rgb) => "#" + [rgb.r, rgb.g, rgb.b].map((value) => {
+        const next = clamp(Math.round(value), 0, 255).toString(16);
+        return next.length === 1 ? "0" + next : next;
+      }).join("");
+      const mix = (a, b, weight) => {
+        const left = parseHex(a);
+        const right = parseHex(b);
+        if (!left || !right) return a || b;
+        const w = clamp(Number(weight) || 0, 0, 1);
+        return toHex({
+          r: left.r * (1 - w) + right.r * w,
+          g: left.g * (1 - w) + right.g * w,
+          b: left.b * (1 - w) + right.b * w
+        });
+      };
+      const luminance = (value) => {
+        const rgb = parseHex(value);
+        if (!rgb) return 1;
+        return (rgb.r * 0.299 + rgb.g * 0.587 + rgb.b * 0.114) / 255;
+      };
+      const formatDate = (value) => {
+        const raw = text(value);
+        const match = raw.match(/(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})/);
+        if (!match) return raw;
+        const year = match[1];
+        const monthNum = String(Number(match[2]));
+        const dayNum = String(Number(match[3]));
+        const month = monthNum.length === 1 ? "0" + monthNum : monthNum;
+        const day = dayNum.length === 1 ? "0" + dayNum : dayNum;
+        return year + "." + month + "." + day;
+      };
+      const serial = (value) => {
+        const formatted = formatDate(value);
+        const match = formatted.match(/\d{4}\.(\d{2})\.(\d{2})/);
+        return match ? "NO. " + match[1] + match[2] : "NO. 0000";
+      };
+      const rgba = (hex, alpha) => {
+        const rgb = parseHex(hex);
+        if (!rgb) return "rgba(154, 63, 53, " + alpha + ")";
+        return "rgba(" + rgb.r + ", " + rgb.g + ", " + rgb.b + ", " + alpha + ")";
+      };
+      const fillTeeth = (box, count) => {
+        if (!box || box.childElementCount === count) return;
+        box.innerHTML = "";
+        for (let i = 0; i < count; i++) box.appendChild(element("span", "tooth"));
+      };
+      const buildTeeth = () => {
+        const stamp = document.querySelector(".stamp");
+        const width = Math.max(320, Math.round((stamp && stamp.clientWidth) || 375));
+        const height = Math.max(480, Math.round((stamp && stamp.clientHeight) || 900));
+        const horizontalCount = clamp(Math.round(width / 18), 14, 24);
+        const verticalCount = clamp(Math.round(height / 20), 22, 72);
+        document.querySelectorAll("[data-stamp-teeth]").forEach((box) => {
+          const vertical = box.getAttribute("data-stamp-teeth") === "vertical";
+          fillTeeth(box, vertical ? verticalCount : horizontalCount);
+        });
+      };
+      const applyTheme = (root, appearance) => {
+        const colors = (appearance && appearance.colorTheme) || {};
+        const paper = text(colors.surfaceColor) || "#fff8e9";
+        const bg = text(colors.backgroundColor) || "#e7dccf";
+        const textColor = text(colors.textColor) || "#332a22";
+        const muted = text(colors.secondaryTextColor || colors.mutedColor) || "#846e56";
+        const accent = text(colors.mutedColor) || "#9a3f35";
+        const dark = luminance(bg) < 0.45;
+        const backdrop = mix(bg, dark ? "#ffffff" : "#3b2f25", dark ? 0.08 : 0.12);
+        root.style.setProperty("--stamp-backdrop", backdrop);
+        root.style.setProperty("--stamp-paper", paper);
+        root.style.setProperty("--stamp-paper-soft", mix(paper, dark ? "#000000" : "#ffffff", 0.08));
+        root.style.setProperty("--stamp-text", textColor);
+        root.style.setProperty("--stamp-muted", muted);
+        root.style.setProperty("--stamp-accent", accent);
+        root.style.setProperty("--stamp-line", mix(textColor, paper, 0.42));
+        root.style.setProperty("--stamp-line-soft", mix(accent, paper, 0.56));
+        root.style.setProperty("--stamp-divider", mix(accent, paper, 0.68));
+        root.style.setProperty("--stamp-chip-bg", rgba(accent, 0.08));
+        root.style.setProperty("background", "var(--stamp-backdrop)", "important");
+        root.style.setProperty("color", "var(--stamp-text)", "important");
+      };
+      const page = (payload) => {
+        const root = document.querySelector("[data-reeden-capture]") || document.body;
+        applyTheme(root, payload.appearance || {});
+        buildTeeth();
+        const content = root.querySelector("[data-red-content]");
+        const chips = root.querySelector("[data-red-chips]");
+        const meta = root.querySelector("[data-red-meta]");
+        content.innerHTML = "";
+        chips.innerHTML = "";
+        meta.innerHTML = "";
+        return {
+          setText(key, value) {
+            const node = root.querySelector('[data-red-text="' + key + '"]');
+            if (node) node.textContent = text(value);
+          },
+          setHeroImage(value) {
+            const bookCard = root.querySelector(".book-card");
+            const image = root.querySelector('[data-red-src="book.cover"]');
+            if (bookCard) bookCard.classList.toggle("no-cover", !compact(value));
+            if (!image) return;
+            if (compact(value)) {
+              image.src = value;
+              image.style.display = "";
+            } else {
+              image.removeAttribute("src");
+              image.style.display = "none";
+            }
+          },
+          addMeta(value) {
+            const next = text(value);
+            if (next) meta.appendChild(element("div", "meta-line", next));
+          },
+          addChip(label) {
+            const value = text(label);
+            if (value) chips.appendChild(element("span", "chip", value));
+          },
+          quote(value) {
+            const next = text(value);
+            return next ? element("blockquote", "", next) : null;
+          },
+          paragraph(value) {
+            const next = text(value);
+            return next ? element("div", "body-text", next) : null;
+          },
+          infoRow(label, value) {
+            const next = text(value);
+            if (!next) return null;
+            const row = element("div", "info-row");
+            row.appendChild(element("b", "", label));
+            row.appendChild(element("span", "", next));
+            return row;
+          },
+          infoList(rows) {
+            const visible = rows.filter(Boolean);
+            if (!visible.length) return null;
+            const list = element("div", "info-list");
+            visible.forEach(row => list.appendChild(row));
+            return list;
+          },
+          section(title, children) {
+            const visible = children.filter(Boolean);
+            if (!visible.length) return;
+            const box = element("section", "section");
+            box.appendChild(element("div", "section-title", title));
+            visible.forEach(child => box.appendChild(child));
+            content.appendChild(box);
+          }
+        };
+      };
+      return { compact, text, formatDate, serial, buildTeeth, page };
+    })();
+
+    window.ReedenShareTemplate = {
+      render(payload) {
+        const data = payload || window.ReedenShareTemplateMock || {};
+        const book = data.book || {};
+        const note = data.note || {};
+        const profile = data.profile || {};
+        const page = StampTemplate.page(data);
+        const generatedDate = StampTemplate.formatDate(data.generatedAt);
+        page.setText("title", book.title || "阅读摘录");
+        page.setText("subtitle", [book.author, book.tags || book.kind || book.type].filter(StampTemplate.compact).join(" · "));
+        page.setText("postmarkDate", generatedDate);
+        page.setText("footerLeft", [profile.name || "读者", profile.bio || "BOOKMARKED MOMENT"].filter(StampTemplate.compact).join(" · "));
+        page.setText("footerRight", StampTemplate.serial(data.generatedAt || note.createAt));
+        page.setHeroImage(book.cover);
+        page.addMeta(book.readTimeText ? "阅读 " + book.readTimeText : book.readStatusText);
+        page.addMeta(book.readProgressText ? "进度 " + book.readProgressText : "");
+        page.addChip(book.readStatusText);
+        page.addChip(book.tags || book.kind || book.type);
+        page.addChip(book.wordCountText || book.sizeText);
+        page.section("摘录", [page.quote(note.description)]);
+        page.section("想法", data.appearance && data.appearance.hideComment ? [] : [page.paragraph(note.comment)]);
+        page.section("细节", [page.infoList([
+          page.infoRow("章节", note.sectionName),
+          page.infoRow("记录时间", note.createAt),
+          page.infoRow("分类", book.tags || book.kind || book.type),
+          page.infoRow("阅读时长", book.readTimeText),
+          page.infoRow("阅读进度", book.readProgressText),
+          page.infoRow("最后阅读", book.lastReadTime),
+          page.infoRow("书籍简介", book.description)
+        ])]);
+        StampTemplate.buildTeeth();
+        requestAnimationFrame(StampTemplate.buildTeeth);
+      }
+    };
+    window.ReedenShareTemplate.render(window.ReedenShareTemplateMock);
+  </script>
+</body>
+</html>
