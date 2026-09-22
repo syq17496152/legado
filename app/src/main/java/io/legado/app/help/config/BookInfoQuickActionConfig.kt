@@ -1,5 +1,6 @@
 package io.legado.app.help.config
 
+import androidx.annotation.Keep
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getPrefString
@@ -90,6 +91,10 @@ object BookInfoQuickActionConfig {
         return PREF_CUSTOM_ALIAS_PREFIX + key.hashCode().toString(16)
     }
 
+    /** GSON 反序列化目标：必须 @Keep —— actions 为 List<BookInfoQuickActionItem>，
+     * 泛型签名被 R8 剥离后元素退化为 LinkedTreeMap（2026-09-22 全量审计命中）
+     */
+    @Keep
     private data class Settings(
         val actions: List<BookInfoQuickActionItem> = emptyList()
     )

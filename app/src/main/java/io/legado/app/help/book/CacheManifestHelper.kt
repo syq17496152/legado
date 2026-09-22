@@ -1,5 +1,6 @@
 package io.legado.app.help.book
 
+import androidx.annotation.Keep
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.utils.GSON
@@ -189,6 +190,10 @@ object CacheManifestHelper {
     }
 }
 
+/** GSON 反序列化目标（缓存清单 manifest.json）：必须 @Keep —— chapters 为 List<CacheChapterManifest>，
+ * 泛型签名被 R8 剥离后元素退化为 LinkedTreeMap（2026-09-22 全量审计命中）
+ */
+@Keep
 data class CacheBookManifest(
     val version: Int = 1,
     val bookUrl: String = "",

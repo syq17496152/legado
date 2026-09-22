@@ -2,6 +2,7 @@
 
 import android.os.Bundle
 import android.view.ViewGroup
+import androidx.annotation.Keep
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -650,6 +651,10 @@ class LibraryContainerManageActivity : BaseActivity<ActivityS3ContainerManageBin
         val selectedId: String? = null
     )
 
+    /** GSON 反序列化目标（容器配置导入）：必须 @Keep —— containers 为 List<LibraryContainerConfig>，
+     * 泛型签名被 R8 剥离后元素退化为 LinkedTreeMap（2026-09-22 全量审计命中）
+     */
+    @Keep
     private data class LibraryContainerExport(
         val version: Int = 1,
         val selectedId: String? = null,

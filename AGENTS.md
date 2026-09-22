@@ -111,6 +111,14 @@ OpenSpec 步骤 5→6 之间必须真机/模拟器验证，禁止只改代码不
 - Kotlin daemon 缓存损坏（AccessDeniedException）时：先 `build-legado.bat daemon-stop`，再手动 `rd /s /q %LOCALAPPDATA%\kotlin\daemon`
 > 完整规范：`docs/project-flow/build-apk-guide.md` §4.10；设计文档：`docs/specs/local-build-speedup/`（含基线实测数据）
 
+### 7. R8 × Gson 泛型签名门禁（2026-09-22 铁证）
+**任何 Gson 反序列化模型（含 `List<Model>`/`Map<K,Model>` 字段）一律 `@Keep`**——R8 只对 keep/`@Keep` pin 的成员保留 `dalvik.annotation.Signature`，未 pin 的集合字段签名会被剥离 ⇒ Gson 元素类型回落 `Object` ⇒ `LinkedTreeMap` + `ClassCastException`（多人朗读曾因此崩溃）。注意 `**.data.entities.**` keep 规则只覆盖数据实体包，`help.*`/`ui.*`/`model.*` 的 Gson 模型必须自行 `@Keep`。
+交付前强制跑三包审计门禁（退出码 1 = 阻断交付）：
+```
+ai_tests\venv\Scripts\python.exe ai_tests/scripts/audit_gson_generic_signature.py <测试包> <正式包> <共存包>
+```
+> 完整规范：`docs/project-rules/package-naming.md` §R8 × Gson 泛型签名红线；设计文档：`docs/specs/fix-r8-gson-signature-loss/`
+
 ## 记忆系统（memory-mechanism-redesign，AD-11 已启用）
 | 配置项 | 值 |
 |--------|-----|

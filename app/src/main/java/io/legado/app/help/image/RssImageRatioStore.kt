@@ -324,11 +324,19 @@ object RssImageRatioStore {
 
     /**
      * 失败日志。**严禁输出域名 / 完整 URL**（输出安全规范），只保留 origin 前 2 字符 + 异常类名。
+     *
+     * O-2（2026-09-22 真机复核）：Glide 的 `Future.get()` 会把真实原因包成 `ExecutionException`，
+     * 原先只打包装类导致根因完全不可辨别（单会话 3014 条全是 `ExecutionException`）。
+     * 现沿 cause 链取最内层异常类名（仍不含域名/URL），并改为采样输出以消除日志噪音。
      */
     private fun logFailure(origin: String, error: Throwable) {
-        AppLog.put(
+        var root = error
+        while (root.cause != null && root.cause !== root) root = root.cause!!
+        AppLog.putSampled(
+            "RssImageRatio_prefetch_fail",
             "自由布局 ratio 预取失败：origin=${origin.take(2)}***, " +
-                "err=${error.javaClass.simpleName}"
+                "err=${error.javaClass.simpleName}, root=${root.javaClass.simpleName}",
+            level = AppLog.Level.WARN
         )
     }
 

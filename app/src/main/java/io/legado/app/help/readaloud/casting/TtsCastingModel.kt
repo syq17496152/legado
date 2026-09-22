@@ -1,5 +1,6 @@
 package io.legado.app.help.readaloud.casting
 
+import androidx.annotation.Keep
 import io.legado.app.data.entities.TtsCastingTemplate
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.utils.GSON
@@ -35,7 +36,9 @@ object CastingTag {
 
 /**
  * 韵律参数（§1.8-D-3/AD-07：0=跟随全局不下发，非 0 参与缓存键维度）
+ * GSON 反序列化目标（CastingRule.prosody 字段）：必须 @Keep（R8 会剥离未 pin 成员的泛型签名/移除反射成员）
  */
+@Keep
 data class CastingProsody(
     // 0=跟随全局；有效范围 0.5~2.0
     val rate: Float = 0f,
@@ -48,7 +51,10 @@ data class CastingProsody(
 
 /**
  * 单条分段规则：tag × 匹配器 × 声源 × 韵律
+ * GSON 反序列化目标（rulesJson.rules 元素）：必须 @Keep
+ * （R8 只对 pin 的成员保留 dalvik.annotation.Signature ⇒ 否则 List<CastingRule> 元素退化为 LinkedTreeMap，2026-09-22 铁证）
  */
+@Keep
 data class CastingRule(
     val tag: String = CastingTag.NARRATION,
     // builtin_quote（内置引号规则）/regex/keyword
@@ -85,7 +91,10 @@ data class CastingRule(
 /**
  * 选角模板运行时模型（§3.5.1）
  * schemaVersion：模型演进锚点（§1.8-D-2 定型项3），结构变更时递增
+ * GSON 反序列化目标（rulesJson 包装）：必须 @Keep —— rules 为 List<CastingRule>，
+ * 签名被 R8 剥离后退化为 List<Object>（LinkedTreeMap），2026-09-22 真机铁证
  */
+@Keep
 data class CastingRuleSet(
     val templateId: String = "",
     val name: String = "",
@@ -130,7 +139,8 @@ data class CastingRuleSet(
         }
     }
 
-    /** rulesJson 包装结构（含 schemaVersion，导入容错=忽略未知字段） */
+    /** rulesJson 包装结构（含 schemaVersion，导入容错=忽略未知字段）——GSON 反序列化目标：必须 @Keep（同上） */
+    @Keep
     data class CastingRulesWrapper(
         val schemaVersion: Int = SCHEMA_VERSION,
         val rules: List<CastingRule> = emptyList()

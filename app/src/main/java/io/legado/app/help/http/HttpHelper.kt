@@ -387,6 +387,9 @@ private object RetryableDns : Dns {
  */
 suspend fun warmUpConnection(url: String) = withContext(Dispatchers.IO) {
     if (url.isBlank()) return@withContext
+    // O-3（2026-09-22）：列表解析链路会把源规则里的相对路径（如 /book/xxx）传进来，
+    // 无 scheme 时 OkHttp 必抛 Expected URL scheme 'http' or 'https' ⇒ 预连接 100% 失败并刷日志，直接跳过
+    if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) return@withContext
     kotlin.runCatching {
         val request = okhttp3.Request.Builder()
             .url(url)

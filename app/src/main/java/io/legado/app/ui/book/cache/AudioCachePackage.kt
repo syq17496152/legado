@@ -1,5 +1,6 @@
 package io.legado.app.ui.book.cache
 
+import androidx.annotation.Keep
 import io.legado.app.data.entities.BookChapter
 import java.io.File
 import java.security.MessageDigest
@@ -12,6 +13,10 @@ private const val AUDIO_CACHE_MAX_SHORT_TEXT = 16 * 1024
 private const val AUDIO_CACHE_MAX_URL_TEXT = 64 * 1024
 private const val AUDIO_CACHE_MAX_VARIABLE_TEXT = 256 * 1024
 
+/** GSON 反序列化目标（缓存包 manifest.json）：必须 @Keep —— chapters 为 List<Chapter>，
+ * 泛型签名被 R8 剥离后元素退化为 LinkedTreeMap（2026-09-22 全量审计命中）
+ */
+@Keep
 internal data class AudioCacheManifest(
     val version: Int = 0,
     val catalogComplete: Boolean = false,

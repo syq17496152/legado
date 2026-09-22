@@ -1,5 +1,6 @@
 package io.legado.app.help.book
 
+import androidx.annotation.Keep
 import io.legado.app.data.entities.Book
 import io.legado.app.utils.GSON
 import io.legado.app.utils.MD5Utils
@@ -9,6 +10,10 @@ import io.legado.app.utils.getFile
 import splitties.init.appCtx
 import java.io.File
 
+/** GSON 反序列化目标：必须 @Keep —— items 为 List<CacheCloudIndexItem>，
+ * 泛型签名被 R8 剥离后元素退化为 LinkedTreeMap（2026-09-22 全量审计命中）
+ */
+@Keep
 data class CacheCloudIndex(
     val version: Int = 1,
     val items: List<CacheCloudIndexItem> = emptyList()
