@@ -2,7 +2,6 @@
 <resources>
     <!--App-->
     <string name="app_name">阅读M</string>
-    <string name="app_name_a">阅读M·A</string>
     <string name="app_name_s" translatable="false">LegadoPlus</string>
     <string name="receiving_shared_label">Legado·search</string>
     <string name="tip_perm_request_storage">Legado needs storage access to find and read books. please go "App Settings" to allow "Storage permission".</string>
@@ -11,17 +10,10 @@
     <string name="book_cloud_cache_package_mode">Cloud backup</string>
 
     <!--Other-->
-    <string name="menu_backup">Home</string>
-    <string name="menu_restore">Restore</string>
     <string name="menu_import_old">Import Legado data</string>
-    <string name="webdav_cache_backup">Offline cache book backup</string>
-    <string name="webdav_cache_backup_s">Export to local and back up to the exports directory under the legado folder</string>
     <string name="backup_path">Backup to</string>
     <string name="select_backup_path">Please select a backup path.</string>
     <string name="menu_import_old_version">Import legacy data</string>
-    <string name="menu_import_github">Import github data</string>
-    <string name="menu_replace_rule">Replacement</string>
-    <string name="menu_send">Send</string>
 
     <string name="dialog_title">Prompt</string>
     <string name="dialog_cancel">Cancel</string>
@@ -58,7 +50,6 @@
     <string name="out_favorites">Not in Favorites</string>
     <string name="rss">RSS feeds</string>
     <string name="all">All</string>
-    <string name="recent_reading">Recent reading</string>
     <string name="last_read">Last reading</string>
     <string name="update_log">What\'s new</string>
     <string name="bookshelf_empty_title">No books here</string>
@@ -122,14 +113,12 @@
     <string name="layout_grid6">Grid-6</string>
     <string name="bookshelf_layout">Layout</string>
     <string name="view">View</string>
-    <string name="book_library">Library</string>
     <string name="book_local">Import books</string>
     <string name="book_source">Book sources</string>
     <string name="book_source_manage">Sources management</string>
     <string name="book_source_manage_desc">Create/Import/Edit/Manage Book sources</string>
     <string name="book_source_empty_title">No book sources yet</string>
     <string name="book_source_empty_subtitle">Create, import, or add book sources to get started</string>
-    <string name="book_source_cover_fallback">Src</string>
     <string name="image_save_failed">Failed to save image: %1$s</string>
     <string name="image_save_receipt">Saved to %1$s%2$s</string>
     <string name="image_save_receipt_with_position"> (image %1$d/%2$d)</string>
@@ -144,32 +133,21 @@
     <string name="settings_search_no_result">No matching settings</string>
     <string name="settings_target_not_found">Target setting not found</string>
     <string name="ai_image_role_unavailable">Image generation unavailable (not configured)</string>
-    <string name="book_cover_fallback">B</string>
-    <string name="read_count">Books read</string>
-    <string name="total_read_time">Total reading time</string>
-    <string name="frequent">Frequently used</string>
     <string name="service">Services</string>
     <string name="setting">Settings</string>
     <string name="theme_setting">Theme settings</string>
     <string name="theme_section_appearance">Appearance &amp; immersion</string>
     <string name="theme_section_theme_nav">Theme &amp; system UI</string>
     <string name="theme_section_elements">Templates &amp; covers</string>
-    <string name="theme_saved_pending_mode">Saved. It will take effect after switching to %1$s mode</string>
     <string name="color_hue">Hue</string>
     <string name="color_saturation">Saturation</string>
     <string name="color_lightness">Lightness</string>
-    <string name="theme_list_section">Themes</string>
-    <string name="import_from_clipboard">Import from clipboard</string>
-    <string name="current_mode_suffix"> (current)</string>
-    <string name="theme_general_section">General</string>
     <string name="theme_setting_s">Some settings related to interface or color</string>
     <string name="other_setting">Other settings</string>
     <string name="other_setting_s">Some function-related settings</string>
     <string name="about">About</string>
-    <string name="donate">Donations</string>
     <string name="exit">Exit</string>
     <string name="exit_no_save">It has not been saved. Do you want to continue editing?</string>
-    <string name="read_style">Book styles</string>
     <string name="version">Version</string>
     <string name="local">Local</string>
     <string name="search">Search</string>
@@ -178,15 +156,10 @@
     <string name="book_name">Title</string>
     <string name="lasted_show">Latest: %s</string>
     <string name="check_add_bookshelf">Would you like to add %s to your Bookshelf?</string>
-    <string name="import_books_count">%s text file(s) in total</string>
-    <string name="is_loading">Loading…</string>
     <string name="retry">Retry</string>
     <string name="web_service">Web service</string>
     <string name="web_service_desc">Web edit source and read book</string>
-    <string name="web_edit_source">Edit book sources on the web</string>
     <string name="offline_cache">Offline cache</string>
-    <string name="offline_cache_t">Offline cache</string>
-    <string name="offline_cache_s">cache the selected chapter(s) to Storage</string>
     <string name="change_origin">Change Origin</string>
     <string name="about_description">
         \u3000\u3000 This is an open source reading software newly developed by Kotlin, welcome to join us.
@@ -194,52 +167,30 @@
     <string name="app_share_description">
         Legado (YueDu 3.0) download link：\n https://github.com/gedoor/legado/releases
     </string>
-    <string name="version_name">Version %s</string>
-    <string name="pt_background_verification">Background-verification</string>
-    <string name="ps_background_verification">you can operate freely when verifying the book source</string>
     <string name="pt_auto_refresh">Auto-refresh</string>
     <string name="ps_auto_refresh">Update books automatically when opening the software</string>
-    <string name="pt_auto_download">Auto-download</string>
-    <string name="ps_auto_download">Download the latest chapters automatically  when updating books</string>
     <string name="backup_restore">Backup and restore</string>
     <string name="web_dav_set">WebDav settings</string>
     <string name="web_dav_set_import_old">WebDav settings/Import legacy data</string>
     <string name="backup">Backup</string>
     <string name="restore">Restore</string>
-    <string name="backup_permission">Backup needs storage permission</string>
-    <string name="restore_permission">Restore needs storage permission</string>
     <string name="ok">OK</string>
     <string name="cancel">Cancel</string>
-    <string name="backup_confirmation">Backup confirmation</string>
-    <string name="backup_message">The new backup files will replace the original.\n Backup folder: YueDu</string>
-    <string name="restore_confirmation">Restore confirmation</string>
-    <string name="restore_message">Restoring the bookshelf data will overwrite the current Bookshelf.</string>
     <string name="backup_success">Backup succeed</string>
     <string name="backup_fail">Backup failed\n%s</string>
-    <string name="on_restore">Restoring</string>
     <string name="restore_success">Restore succeed</string>
-    <string name="restore_fail">Backup failed</string>
-    <string name="rename">Rename</string>
-    <string name="rename_backup">Rename backup</string>
-    <string name="input_new_name">Please enter a new file name</string>
-    <string name="rename_backup_success">Rename backup succeed</string>
-    <string name="rename_backup_fail">Rename failed: %s</string>
-    <string name="webdav_move_not_supported">WebDAV server does not support MOVE method, cannot rename</string>
-    <string name="delete_backup_success">Delete backup succeed</string>
     <string name="screen_direction">Screen orientation</string>
     <string name="screen_sensor">Auto(sensor)</string>
     <string name="screen_landscape">Landscape</string>
     <string name="screen_portrait">Portrait</string>
     <string name="screen_unspecified">Follow system</string>
     <string name="disclaimer">Disclaimer</string>
-    <string name="all_chapter_num">%d chapters</string>
     <string name="interface_setting">Interface</string>
     <string name="brightness">Brightness</string>
     <string name="chapter_list">Chapters</string>
     <string name="next_chapter">Next</string>
     <string name="previous_chapter">Prior</string>
     <string name="pt_hide_status_bar">Hide status bar</string>
-    <string name="ps_hide_status_bar">Hide system navigation bar when reading</string>
     <string name="read_aloud">Speech</string>
     <string name="read_aloud_t">Speaking</string>
     <string name="read_aloud_s">Click to open the Reading</string>
@@ -247,7 +198,6 @@
     <string name="audio_play_t">Playing</string>
     <string name="audio_play_s">Click to open the Playing</string>
     <string name="audio_pause">Pause</string>
-    <string name="text_return">Back</string>
     <string name="refresh">Refresh</string>
     <string name="start">Start</string>
     <string name="stop">Stop</string>
@@ -258,19 +208,9 @@
     <string name="read_aloud_timer">Speaking(%d min left)</string>
     <string name="read_aloud_timer_chapter">Speaking(stop after this chapter)</string>
     <string name="read_aloud_timer_chapters">Speaking(%d chapters left)</string>
-    <string name="timer_chapter_stop">Stop after chapter</string>
-    <string name="timer_chapters_m">%d chapters left</string>
-    <string name="tts_paragraph_pause_title">Pause between paragraphs</string>
-    <string name="tts_paragraph_pause_summary">Insert a silent pause between paragraphs while reading aloud. Applies to both system and online engines (takes effect from the next paragraph).</string>
-    <string name="pull_down_bookmark_title">Pull down to bookmark</string>
-    <string name="pull_down_bookmark_summary">In scroll reading mode, pull down at the top of a chapter to quickly bookmark the current position.</string>
     <string name="playing_timer">Playing(%d min left)</string>
-    <string name="ps_hide_navigation_bar">Hide virtual buttons when reading</string>
     <string name="pt_hide_navigation_bar">Hide navigation bar</string>
-    <string name="re_navigation_bar_color">Navigation bar color</string>
     <string name="scoring">Rating</string>
-    <string name="send_mail">Email</string>
-    <string name="can_not_open">Open failed</string>
     <string name="open_url_confirm_title">Open link?</string>
     <string name="open_url_confirm_message">An external link or app is being requested. Continue?</string>
     <string name="open_url_risk_plain_http">Plain http link — content is not encrypted</string>
@@ -279,7 +219,6 @@
     <string name="copy_link">Copy link</string>
     <string name="copy_link_done">Link copied</string>
     <string name="can_not_share">Share failed</string>
-    <string name="no_chapter">No chapters</string>
     <string name="add_url">Add url</string>
     <string name="add_book_url">Add book url</string>
     <string name="background">Background</string>
@@ -291,14 +230,9 @@
     <string name="action_save">Save</string>
     <string name="edit_source">Edit source</string>
     <string name="edit_book_source">Edit Book source</string>
-    <string name="disable_book_source">Disable Book source</string>
     <string name="add_book_source">Add Book source</string>
-    <string name="add_rss_source">Add RSS source</string>
-    <string name="book_file_selector">Add books</string>
-    <string name="scan_book_source">Scan</string>
     <string name="copy_source">Copy source</string>
     <string name="paste_source">Paste source</string>
-    <string name="source_rule_s">Source rules description</string>
     <string name="check_update">Check for Updates</string>
     <string name="about_update_no_new_inline">✓ Up to date · %1$s</string>
     <string name="about_update_just_now">just checked</string>
@@ -308,12 +242,7 @@
     <string name="about_license_summary">Open-source licenses of bundled libraries</string>
     <string name="about_disclaimer_summary">Scope of responsibility and usage risks</string>
     <string name="about_build_info">Version %1$s (%2$s) · %3$s build</string>
-    <string name="camera_scan">Scan QR code</string>
-    <string name="scan_image">Scan local images</string>
-    <string name="rule_summary">Rules description</string>
     <string name="share">Share</string>
-    <string name="share_log">Share logs</string>
-    <string name="share_app">Share to</string>
     <string name="flow_sys">Follow system</string>
     <string name="add">Add</string>
     <string name="import_book_source">Import book sources</string>
@@ -328,17 +257,12 @@
     <string name="book">Book</string>
     <string name="volume_key_page">Volume keys to turn page</string>
     <string name="mouse_wheel_page">Mouse wheel to turn page</string>
-    <string name="click_turn_page">Tap screen to turn page</string>
     <string name="page_anim">Flip animation</string>
     <string name="book_page_anim">Flip animation (book)</string>
-    <string name="disable_manga_page_anim">Disable flip animation</string>
     <string name="keep_light">Keep screen awake</string>
     <string name="back">Back</string>
     <string name="menu">Menu</string>
     <string name="adjust">Adjust</string>
-    <string name="scroll_bar">Scroll bar</string>
-    <string name="clear_all_content">Clearing the cache will delete all saved chapters. Are you sure to delete it?</string>
-    <string name="book_source_share_url">Book sources sharing</string>
     <string name="replace_rule_summary">Rule name</string>
     <string name="replace_rule_invalid">Pattern rule is empty or does not conform the regex specification.</string>
     <string name="select_action">Selection action</string>
@@ -351,8 +275,6 @@
     <string name="welcome_subtitle">Enjoy quality time</string>
     <string name="welcome_slogan">Read thousands of stories</string>
     <string name="download_start">Download start</string>
-    <string name="download_cancel">Download cancel</string>
-    <string name="no_download">No download</string>
     <string name="download_count">Downloaded %1$d/%2$d</string>
     <string name="import_select_book">Import selected book(s)</string>
     <string name="threads_num_title">Number of concurrent tasks</string>
@@ -371,24 +293,14 @@
     <string name="book_intro">Book description</string>
     <string name="intro_show">Description:%s</string>
     <string name="intro_show_null">Description: no introduction</string>
-    <string name="open_from_other">Open external book</string>
     <string name="origin_show">Origin: %s</string>
     <string name="import_replace_rule">Import replace rules</string>
-    <string name="import_replace_rule_on_line">Import online rules</string>
-    <string name="check_update_interval">Check interval for updates</string>
     <string name="bookshelf_px_0">By recent list</string>
     <string name="bookshelf_px_1">By update time</string>
     <string name="bookshelf_px_2">By book title</string>
     <string name="bookshelf_px_3">By sort manually</string>
-    <string name="read_type">Reading strategy</string>
-    <string name="compose_type">Typesetting</string>
-    <string name="del_select">Delete selected</string>
     <string name="del_msg">Are you sure to delete?</string>
-    <string name="clear_font">Default font</string>
-    <string name="find_on_www">Discovery</string>
-    <string name="find_source_manage">Discovery</string>
     <string name="find_empty">No content.Go to Sources management to add it!</string>
-    <string name="del_all">Delete all</string>
     <string name="searchHistory">Search history</string>
     <string name="search_history_empty">No search history yet</string>
     <string name="rss_search_result_empty">No results found</string>
@@ -399,23 +311,12 @@
     <string name="filter_warn">Warn</string>
     <string name="filter_info">Info</string>
     <string name="filter_debug">Debug</string>
-    <string name="showTitle">Display book title on text</string>
-    <string name="refresh_default">Book Sources sync</string>
-    <string name="no_last_chapter">No latest chapter.</string>
-    <string name="showTimeBattery">Display time and battery</string>
     <string name="showLine">Display divider</string>
     <string name="dark_status_icon">Darken the status bar\'s icon color</string>
     <string name="content">Content</string>
     <string name="copy_text">Copy</string>
-    <string name="download_all">Download all</string>
-    <string name="content_sl">This is a test text, \n\u3000\u3000 just to show you the effect</string>
-    <string name="text_bg_style">Color and background (long tap to customize)</string>
     <string name="immersion_status_bar">Immersive status bar</string>
-    <string name="un_download">%d chapter(s) left</string>
-    <string name="long_click_input_color">Long tap to input color value</string>
     <string name="loading">Loading…</string>
-    <string name="group_zg">Awaiting</string>
-    <string name="group_yf">Awaiting more</string>
     <string name="bookmark">Bookmarks</string>
     <string name="highlight">Highlights</string>
     <string name="highlight_not_supported_here">Highlighting is not supported for this selection</string>
@@ -424,16 +325,11 @@
     <string name="highlight_clear_chapter_empty">No highlights in this chapter</string>
     <string name="color_alpha">Opacity</string>
     <string name="bookmark_add">Add to Bookmarks</string>
-    <string name="action_del">Delete</string>
-    <string name="load_over_time">Loading timeout</string>
-    <string name="join_group">Follow:%s</string>
     <string name="copy_complete">Copied successfully</string>
     <string name="bookshelf_management">Bookshelf management</string>
     <!-- 7.11i 书架标签管理 -->
     <string name="bookshelf_tag_manage">管理标签</string>
     <string name="bookshelf_tag_all">全部</string>
-    <string name="bookshelf_tag_manage_hint">取消勾选会从当前书架分组的书籍中移除该标签。</string>
-    <string name="bookshelf_tag_edit">编辑标签</string>
     <string name="bookshelf_tag_none">未设置标签</string>
     <string name="bookshelf_tag_new_hint">新增标签，多个用空格或逗号分隔</string>
     <string name="bookshelf_tag_add_title">添加标签</string>
@@ -459,7 +355,6 @@
     <string name="bookshelf_tag_clear_results">清空结果</string>
     <string name="bookshelf_tag_no_matching_books">当前筛选条件下没有书籍</string>
     <string name="bookshelf_tag_save">保存</string>
-    <string name="clear_bookshelf_s">It will delete all books. Be careful,please.</string>
     <string name="search_book_source">Search book sources</string>
     <string name="select_book_source">Select book source</string>
     <string name="search_rss_source">Search RSS sources</string>
@@ -469,21 +364,13 @@
     <string name="rss_source_no_match_subtitle">No source matches \"%1$s\"</string>
     <string name="rss_source_clear_search">Clear search</string>
     <string name="rss_source_never_updated">Never updated</string>
-    <string name="search_book_source_num">Search( %d sources in total)</string>
-    <string name="chapter_list_size">Chapters(%d)</string>
-    <string name="text_bold">Bold</string>
     <string name="text_font">Font</string>
     <string name="text">Text</string>
-    <string name="home_page">Home page</string>
     <string name="right">Right</string>
     <string name="left">Left</string>
     <string name="bottom">Bottom</string>
     <string name="top">Top</string>
     <string name="padding">Padding</string>
-    <string name="padding_top">Top</string>
-    <string name="padding_bottom">Bottom</string>
-    <string name="padding_left">Left</string>
-    <string name="padding_right">Right</string>
     <string name="check_book_source">Check book sources</string>
     <string name="check_select_source">Check the selected source</string>
     <string name="source_health_healthy">Healthy %1$d</string>
@@ -494,19 +381,11 @@
     <string name="book_source_no_match_subtitle">No source matches \"%1$s\"</string>
     <string name="book_source_clear_search">Clear search</string>
     <string name="progress_show">%1$s      Progress %2$d/%3$d</string>
-    <string name="tts_fix">Please install and select Chinese TTS!</string>
     <string name="tts_init_failed">TTS initialization failed!</string>
     <string name="jf_convert">Simplified conversion</string>
     <string name="jf_convert_o">Off</string>
     <string name="jf_convert_f">Simplified to traditional</string>
     <string name="jf_convert_j">Traditional to simplified</string>
-    <string name="page_mode">Flipping mode</string>
-    <string name="nb_file_sub_count">%1$d items</string>
-    <string name="nb_file_path">Storage:</string>
-    <string name="nb_file_add_shelf">Add to Bookshelf</string>
-    <string name="nb_file_add_shelves">Add to Bookshelf(%1$d)</string>
-    <string name="nb_file_add_succeed">%1$d books added successfully</string>
-    <string name="fonts_folder">Please put the font files in the Fonts folder of the storage root directory and reselect</string>
     <string name="default_font">Default font</string>
     <string name="select_font">Select fonts</string>
     <string name="text_size">Text size</string>
@@ -516,25 +395,17 @@
     <string name="selection_to_top">Selection To Top</string>
     <string name="to_bottom">To Bottom</string>
     <string name="selection_to_bottom">Selection To Bottom</string>
-    <string name="auto_expand_find">Auto expand Discovery</string>
-    <string name="default_expand_first">Default expand the first Discovery.</string>
     <string name="threads_num">Current threads %s</string>
     <string name="read_aloud_speed">Speech rate</string>
     <string name="auto_next_page">Auto scroll</string>
-    <string name="auto_next_page_stop">Stop Auto scroll</string>
-    <string name="auto_next_page_speed">Auto scroll speed</string>
     <string name="book_info">Book information</string>
     <string name="book_info_edit">Edit book information</string>
     <string name="ps_default_read">Use Bookshelf as start page</string>
     <string name="pt_default_read">Auto jump to Recent list</string>
     <string name="replace_scope">Replacement object. Book name or source url is available</string>
     <string name="menu_action_group">Groups</string>
-    <string name="download_path">Cache path</string>
     <string name="sys_file_picker">System file picker</string>
-    <string name="new_version">New version</string>
-    <string name="download_update">Download updates</string>
     <string name="volume_key_page_on_play">Volume keys to turn page when reading</string>
-    <string name="tip_margin_change">Margin adjustment</string>
     <string name="allow_update">Enable update</string>
     <string name="disable_update">Disable update</string>
     <string name="split_long_chapter">Split extra-long chapters</string>
@@ -547,42 +418,19 @@
     <string name="rss_source_manage_summary">Manage RSS sources and source repositories.</string>
     <string name="rss_search_type">Search result type</string>
     <string name="rss_search_type_all">All types</string>
-    <string name="debug_hint">Book name,Author,URL</string>
     <!-- L-D3 订阅源调试页（12.5D Compose 化 i18n 清理） -->
-    <string name="rss_debug_search_hint">Search RSS keyword</string>
-    <string name="rss_debug_my">My</string>
-    <string name="rss_debug_system">System</string>
-    <string name="rss_debug_kind_default">System::http://xxx</string>
-    <string name="rss_debug_content_default">http://example.com/path</string>
-    <string name="debug_search_tip">Debug search&gt;&gt;Input keyword, e.g.:</string>
-    <string name="debug_kind_tip">Debug kind&gt;&gt;Input kind URL, e.g.:</string>
-    <string name="debug_content_tip">Debug content&gt;&gt;Input content URL, e.g.:</string>
-    <string name="get_explore_error">Failed to get explore</string>
-    <string name="select_kind">Select kind</string>
-    <string name="no_rss_source">No RSS source obtained</string>
-    <string name="faq">FAQ</string>
-    <string name="pt_show_all_find">Display all Discovery</string>
-    <string name="ps_show_all_find">Display the selected origin\'s Discovery if closed</string>
     <string name="update_toc">Update chapters</string>
     <string name="txt_toc_rule">Txt Catalog Rule</string>
     <string name="select_section_export">Choose some chapters to be exported</string>
     <string name="set_charset">Text encoding</string>
-    <string name="swap_sort">Ascending/Descending order</string>
     <string name="sort">Sort</string>
     <string name="sort_auto">Sort automatically</string>
     <string name="sort_manual">Sort manually</string>
-    <string name="sort_default">Sort default</string>
     <string name="sort_by_name">Sort by name</string>
     <string name="go_to_top">Scroll to the top</string>
     <string name="go_to_bottom">Scroll to the bottom</string>
-    <string name="read_y">Read: %s</string>
-    <string name="pursue_more">Awaiting update</string>
-    <string name="fattening">Awaiting more</string>
     <string name="finish">Finished</string>
     <string name="all_book">All</string>
-    <string name="pursue_more_book">Awaiting update books</string>
-    <string name="fattening_book">Awaiting more chapters books</string>
-    <string name="finish_book">Finished books</string>
     <string name="local_book">Local books</string>
     <string name="status_bar_immersion">The status bar color becomes transparent</string>
     <string name="imm_navigation_bar">immersion navigation bar</string>
@@ -595,10 +443,6 @@
     <string name="page_anim_simulation">Simulation</string>
     <string name="page_anim_scroll">Scroll</string>
     <string name="page_anim_none">None</string>
-    <string name="up_change_source_last_chapter_t">Update the latest chapter after changed origin in the background</string>
-    <string name="up_change_source_last_chapter_s">if enabled,the update will start 1 minute later when the software is run</string>
-    <string name="behavior_main_t">Auto hide ToolBar</string>
-    <string name="behavior_main_s">The toolbar will be hidden automatically when scroll the Bookshelf</string>
     <string name="login">Login</string>
     <string name="login_source">Login%s</string>
     <string name="success">Success</string>
@@ -630,7 +474,6 @@
     <string name="recycle_bin_type_highlight_rule">Highlight Rule</string>
     <string name="source_recycle_bin_enabled">Rule Recycle Bin</string>
     <string name="source_recycle_bin_enabled_s">When enabled, deleted sources and rules are kept in the recycle bin for 7 days</string>
-    <string name="menu_recycle_bin">Recycle Bin</string>
     <string name="source_group">Source group(sourceGroup)</string>
     <string name="diy_source_group">Custom source grouping</string>
     <string name="diy_edit_source_group">Enter the custom source group name</string>
@@ -675,9 +518,7 @@
     <string name="r_articles">Rule articles(ruleArticles)</string>
     <string name="r_next">Rule next articles(ruleNextArticles)</string>
     <string name="r_title">Rule title(ruleTitle)</string>
-    <string name="r_guid">Rule guid(ruleGuid)</string>
     <string name="r_date">Rule pub date(rulePubDate)</string>
-    <string name="r_categories">Rule categories(ruleCategories)</string>
     <string name="r_description">Rule description(ruleDescription)</string>
     <string name="r_image">Rule image(ruleImage)</string>
     <string name="r_content">Rule content(ruleContent)</string>
@@ -687,25 +528,18 @@
     <string name="r_link">Rule link(ruleLink)</string>
     <string name="r_inject_js">Inject js(injectJs)</string>
     <string name="check_key_word">Check key word(checkKeyWord)</string>
-    <string name="rule_actions">Actions(actions)</string>
     <string name="rule_is_pay">Is pay(isPay)</string>
     <!-- source end-->
 
     <!--error string start-->
     <string name="error_no_source">No source</string>
     <string name="error_get_book_info">Failed to obtain book information</string>
-    <string name="error_get_content">Failed to obtain content</string>
     <string name="error_get_chapter_list">Failed to obtain chapters list</string>
     <string name="error_get_web_content">Failed to access website:%s</string>
-    <string name="error_read_file">Failed to read file</string>
     <string name="error_load_toc">Failed to load chapters list</string>
-    <string name="error_get_data">Failed to get data</string>
     <string name="error_load_msg">Failed to load\n%s</string>
     <string name="error_view_detail">Tap for details</string>
     <string name="load_failed">Load failed</string>
-    <string name="net_error_10001">No network</string>
-    <string name="net_error_10002">Network connection timeout</string>
-    <string name="net_error_10003">Data parsing failed</string>
     <!--error string end-->
 
     <string name="source_http_header">HTTP Header</string>
@@ -724,49 +558,22 @@
     <string name="qr_camera_blocked_title">Camera permission is required to scan</string>
     <string name="qr_camera_blocked_desc">You can also skip the permission and pick an image containing a QR code from the gallery</string>
     <string name="qr_camera_blocked_grant">Grant</string>
-    <string name="click_on_selected_show_menu">Tap to display Menu when selected </string>
     <string name="theme">Theme</string>
     <string name="theme_mode">Theme mode</string>
     <string name="theme_mode_desc">Select a theme you want</string>
-    <string name="join_qq_group">Join QQ group</string>
-    <string name="bg_image_per">Set the background image requires storage permission</string>
-    <string name="input_book_source_url">Input book source address</string>
     <string name="del_file">Delete file</string>
     <string name="del_file_success">Deleted file</string>
-    <string name="sure_del_file">Are you sure to delete this file?</string>
-    <string name="files_tree">Directory</string>
-    <string name="intelligent_import">Intelligent import</string>
     <string name="discovery">Discovery</string>
-    <string name="switch_display_style">Switch display styles</string>
-    <string name="import_per">Import local books requires storage permission</string>
-    <string name="night_theme">Night Theme</string>
-    <string name="eink_theme">E-Ink</string>
-    <string name="eink_theme_desc">Optimization for E-ink devices</string>
     <string name="get_storage_per">requires storage permission</string>
     <string name="double_click_exit">Tap again to exit the program</string>
-    <string name="import_book_per">Import local books requires storage permission</string>
     <string name="network_connection_unavailable">Network connection is not available</string>
     <string name="yes">Yes</string>
     <string name="no">No</string>
     <string name="sure">OK</string>
     <string name="sure_del">Are you sure to delete it?</string>
     <string name="sure_del_any">Are you sure to delete %s?</string>
-    <string name="sure_del_all_book">Are you sure to delete all books？</string>
-    <string name="sure_del_download_book">Do you want to delete the downloaded book chapters at the same time?</string>
-    <string name="qr_per">Scan QR code requires Camera permissions</string>
-    <string name="aloud_can_not_auto_page">Speech is running, cannot turn pages automatically</string>
-    <string name="input_charset">Input encoding</string>
-    <string name="text_chapter_list_rule">Txt Chapters Regex</string>
-    <string name="open_local_book_per">Open local books requires storage permission</string>
-    <string name="no_book_name">No bookName</string>
-    <string name="input_replace_url">Input replacement rule URL</string>
-    <string name="get_book_list_success">Search list obtained successfully%d</string>
     <string name="non_null_name_url">name and URL cannot be empty</string>
-    <string name="gallery">Gallery</string>
-    <string name="get_ali_pay_hb">get AliPay red envelopes</string>
-    <string name="non_update_url">No update address</string>
     <string name="check_host_cookie">Opening the homepage, it will return to start page automatically after success</string>
-    <string name="click_check_after_success">After successful login, please tap the icon on the upper right corner to test the homepage access</string>
     <string name="chapter">Chapter</string>
     <string name="to">To</string>
     <string name="use_regex">Using Regex</string>
@@ -778,12 +585,8 @@
     <string name="indent_4">Indent with 4 chars</string>
     <string name="select_folder">Select a folder</string>
     <string name="select_file">Select a file</string>
-    <string name="no_find">No Discovery, you can add it in BookSource</string>
     <string name="restore_default">Restore default</string>
-    <string name="set_download_per">Custom cache path requires Storage permission</string>
-    <string name="black">Black</string>
     <string name="content_empty">No content</string>
-    <string name="on_change_source">Changing source, wait please</string>
     <string name="chapter_list_empty">Chapters is empty</string>
     <string name="text_letter_spacing">Word spacing</string>
 
@@ -794,28 +597,18 @@
     <string name="source_tab_toc">Chapters</string>
     <string name="source_tab_content">Content</string>
 
-    <string name="e_ink_mode">E-Ink mode</string>
-    <string name="e_ink_mode_detail">Remove animations and optimize the experience of using E-paper books</string>
-    <string name="web_menu">Web service</string>
     <string name="web_port_title">Web port</string>
     <string name="web_port_summary">Current port %s</string>
     <string name="qr_share">QR code sharing</string>
     <string name="str_share">Strings sharing</string>
-    <string name="wifi_share">Wifi sharing</string>
-    <string name="please_grant_storage_permission">Please grant Storage Permission</string>
-    <string name="fast_rewind">Speed down</string>
-    <string name="fast_forward">Speed up</string>
     <string name="skip_previous">Prior</string>
     <string name="skip_next">Next</string>
-    <string name="music">Music</string>
     <string name="audio">Audio</string>
     <string name="is_enable">Enable</string>
     <string name="enable_js">Enable js</string>
     <string name="load_with_base_url">Load BaseUrl</string>
     <string name="all_source">All Sources</string>
     <string name="cannot_empty">The input content cannot be empty</string>
-    <string name="clear_find_cache">Clear Discovery cache</string>
-    <string name="edit_find">Edit Discovery</string>
     <string name="change_icon_summary">Switch the software icon displayed on the desktop</string>
     <string name="help">Help</string>
     <string name="my">Me</string>
@@ -825,12 +618,7 @@
     <string name="book_info_read_progress">Ch. %1$d · %2$d%%</string>
     <string name="book_info_intro_expand">Read more ▾</string>
     <string name="book_info_intro_collapse">Collapse ▴</string>
-    <string name="battery_show">%d%%</string>
     <string name="timer_m">%d min</string>
-    <string name="brightness_auto">Auto-Brightness %s</string>
-    <string name="auto_brightness">Auto brightness</string>
-    <string name="expand_setting">More reading settings</string>
-    <string name="more_setting">More settings</string>
     <string name="read_aloud_by_page">Speak by pages</string>
     <string name="speak_engine">Speak Engine</string>
     <string name="bg_image">Background images</string>
@@ -852,8 +640,6 @@
     <string name="disable_explore">Disable Discovery</string>
     <string name="enable_selection">Enable selected</string>
     <string name="disable_selection">Disable selected</string>
-    <string name="group_header_enable_all">Enable all (%1$d)</string>
-    <string name="group_header_disable_all">Disable all (%1$d)</string>
     <string name="export_selection">Export selected</string>
     <string name="export">Export</string>
     <string name="load_toc">Load chapters</string>
@@ -869,28 +655,21 @@
     <string name="rss_source_edit">Edit RSS source</string>
     <string name="screen">Filter</string>
     <string name="screen_find">Search Discovery sources</string>
-    <string name="dur_pos">Current location：</string>
     <string name="precision_search">Precise search</string>
-    <string name="search_options">Search options</string>
     <string name="service_starting">Starting service</string>
     <string name="empty">Empty</string>
     <string name="file_chooser">File selection</string>
     <string name="folder_chooser">Folder selection</string>
     <string name="bottom_line">I AM OVER!</string>
-    <string name="uri_to_path_fail">Uri To Path failed</string>
     <string name="refresh_cover">Refresh cover</string>
     <string name="change_cover_source">Change origin</string>
     <string name="select_local_image">Local image</string>
     <string name="book_type">Type:</string>
     <string name="to_backstage">Background</string>
-    <string name="importing">Importing</string>
-    <string name="exporting">Exporting</string>
     <string name="custom_page_key">Set page-turning buttons</string>
     <string name="prev_page_key">Page up button</string>
     <string name="next_page_key">Page down button</string>
     <string name="no_group">Ungrouped</string>
-    <string name="view_mode">View mode</string>
-    <string name="list_view">List view</string>
     <string name="folder_view">Folder view</string>
     <string name="all_groups">All</string>
     <string name="prev_sentence">Prior sentence</string>
@@ -899,15 +678,9 @@
     <string name="text_too_long_qr_error">There are too many words to create a QR code</string>
     <string name="share_rss_source">RSS sources sharing</string>
     <string name="share_book_source">Book sources sharing</string>
-    <string name="auto_dark_mode">Automatic switching dark mode</string>
-    <string name="auto_dark_mode_s">Following system dark mode</string>
     <string name="go_back">Go back</string>
-    <string name="tone_colour">Online Speech tone</string>
-    <string name="select_count">(%1$d/%2$d)</string>
     <string name="show_rss">Show RSS feeds</string>
-    <string name="service_stop">Service stopped</string>
     <string name="service_start">Starting service\nChecking notification bar for details</string>
-    <string name="default_path">Default path</string>
     <string name="sys_folder_picker">System folder picker</string>
     <string name="app_folder_picker">App folder picker</string>
     <string name="app_file_picker">App file picker</string>
@@ -916,7 +689,6 @@
     <string name="handle_file_hint_app_picker">In-app browser</string>
     <string name="handle_file_hint_upload">Upload and return a direct link</string>
     <string name="handle_file_hint_manual_input">http(s) link or local path</string>
-    <string name="a10_permission_toast">Android 10+ unable to read and write file due to permission restrictions</string>
     <string name="add_to_text_context_menu_s">Long tap to display Legado·Search in the operation menu</string>
     <string name="add_to_text_context_menu_t">Text operation display Search</string>
     <string name="record_log">Record log</string>
@@ -934,7 +706,6 @@
     <string name="select_end">Select end</string>
     <string name="select_start">Select start</string>
     <string name="share_layout">Shared layout</string>
-    <string name="browser">Browser</string>
     <string name="import_default_rule">Import default rules</string>
     <string name="name">Name</string>
     <string name="regex">Regex</string>
@@ -946,44 +717,28 @@
     <string name="delete_book_file">Delete source file</string>
     <string name="text_default">Default</string>
     <string name="default1">Default-1</string>
-    <string name="default2">Default-2</string>
-    <string name="default3">Default-3</string>
     <string name="title">Title</string>
     <string name="title_left">Left</string>
     <string name="title_center">Center</string>
     <string name="title_hide">Hide</string>
     <string name="add_to_group">Add to Group</string>
-    <string name="save_image">Save image</string>
-    <string name="no_default_path">No default path</string>
     <string name="change_group">Group settings</string>
     <string name="view_toc">View Chapters</string>
     <string name="bar_elevation">Navigation bar shadow</string>
     <string name="bar_elevation_s">Current shadow size(elevation): %s</string>
     <string name="btn_default_s">Default</string>
     <string name="main_menu">Main menu</string>
-    <string name="request_permission">Tap to grant permission</string>
-    <string name="tip_local_perm_request_storage">Legado needs Storage permission, please tap the "Grant Permission" button below, or go to "Settings"-"Application Permissions"-to open the required permission. If the permission is still not work, please tap "Select Folder" in the upper right corner to use the system folder picker.</string>
-    <string name="alouding_disable">The selected text cannot be spoken in full text speech</string>
     <string name="read_body_to_lh">Extend to cutout</string>
     <string name="toc_updateing">Updating Chapters</string>
     <string name="media_button_on_exit_title">Headset buttons are always available</string>
     <string name="media_button_on_exit_summary">Headset buttons are available even exit the app.</string>
     <string name="contributors">Contributors</string>
-    <string name="contact">Contact</string>
     <string name="license">License</string>
     <string name="other">Other</string>
-    <string name="official_account">开源阅读</string>
-    <string name="follow_official_account">Follow WeChat Official Accounts</string>
-    <string name="wechat">WeChat</string>
-    <string name="thanks">Supporting me will be appreciated</string>
-    <string name="about_official_account">Official Accounts[开源阅读]</string>
     <string name="source_auto_changing">Changing source</string>
-    <string name="click_to_apply">Tap to join</string>
     <string name="middle">Middle</string>
     <string name="information">Information</string>
     <string name="switchLayout">Switch Layout</string>
-    <string name="text_font_weight_converter">Text font weight switching</string>
-    <string name="full_screen_gestures_support">Full screen gestures support</string>
     <string name="disable_return_key">Disable return key</string>
 
     <!--color-->
@@ -1013,17 +768,6 @@
     <string name="disabled">Disabled</string>
     <string name="enabled_explore">Discovery Enabled</string>
     <string name="disabled_explore">Discovery Disabled</string>
-    <string name="starting_download">Starting download</string>
-    <string name="already_in_download">This book is already in Download list</string>
-    <string name="click_to_open">Click to open</string>
-    <string name="follow_public_account_summary">Follow [开源阅读] to support me by clicking on ads</string>
-    <string name="weChat_appreciation_code">WeChat Tipping Code</string>
-    <string name="alipay">AliPay</string>
-    <string name="alipay_red_envelope_search_code">AliPay red envelope search code</string>
-    <string name="alipay_red_envelope_copy">537954522 Click to copy</string>
-    <string name="alipay_red_envelope_qr_code">AliPay red envelope QR code</string>
-    <string name="alipay_payment_qr_code">AliPay QR code</string>
-    <string name="qq_collection_qr_code">QQ Collection QR code</string>
     <string name="contributors_summary">gedoor,Invinciblelee,Xwite etc. Checking in github for details</string>
     <string name="clear_cache_summary">Clear the cache of the downloaded books and fonts</string>
     <string name="default_cover">Default cover</string>
@@ -1035,25 +779,14 @@
     <string name="replace_enable_default_t">Enable replace rule by default</string>
     <string name="replace_enable_default_s">For new added books</string>
     <string name="select_restore_file">Select restore file</string>
-    <string name="day_background_too_dark">Day background can not be too dark!</string>
-    <string name="day_bottom_bar_too_dark">Day bottom can not be too dark!</string>
-    <string name="night_background_too_light">Night background can not be too bright!</string>
-    <string name="night_bottom_bar_too_light">Night bottom can not be too bright!</string>
-    <string name="accent_background_diff">Need Difference between accent and background color </string>
-    <string name="accent_text_diff">Need Difference between accent and text color</string>
     <string name="wrong_format">Wrong format</string>
     <string name="error">Error</string>
     <string name="show_brightness_view">Show brightness widget</string>
     <string name="language">Language</string>
     <string name="import_rss_source">Import rss source</string>
-    <string name="donate_summary">Your donation makes this app better</string>
-    <string name="about_summary">Wechat official account [开源阅读软件]</string>
     <string name="read_record">Read record</string>
     <string name="read_record_empty">No reading records yet</string>
-    <string name="mail">Contact us</string>
-    <string name="del_read_record">Delete Read record</string>
     <string name="read_record_summary">Read record summary</string>
-    <string name="local_tts">Local TTS</string>
     <string name="thread_count">Thread count</string>
     <string name="search_thread_count">Search thread count</string>
     <string name="update_cache_thread_count">Update and cache thread count</string>
@@ -1074,7 +807,6 @@
     <string name="domain_check_socket">Socket quick check</string>
     <string name="domain_check_analyze_url">Analyze rule real request</string>
     <string name="all_read_time">Total read time</string>
-    <string name="un_select_all">Unselect all</string>
     <string name="import_str">Import</string>
     <string name="export_str">Export</string>
     <string name="save_theme_config">Save theme config</string>
@@ -1082,7 +814,6 @@
     <string name="save_night_theme_summary">Save night theme config</string>
     <string name="theme_list">Theme list</string>
     <string name="theme_list_summary">Save, Import, Share theme</string>
-    <string name="select_theme">Switch default theme</string>
     <string name="sort_by_lastUpdateTime">Sort by update time</string>
     <string name="sort_by_respondTime">Sort by respond time</string>
     <string name="search_content">Search content</string>
@@ -1105,9 +836,7 @@
     <string name="next_page">Next page</string>
     <string name="prev_page">Prior page</string>
     <string name="non_action">None</string>
-    <string name="body_title">Title</string>
     <string name="show_hide">Show/Hide</string>
-    <string name="header_footer">Footer <![CDATA[&]]> Header</string>
     <string name="rule_subscription">Rule Subscription</string>
     <string name="rule_sub_empty_msg">Add the rule import address provided by the bosses\nClick to import rules after adding</string>
     <string name="get_book_progress">Pull the cloud  progress</string>
@@ -1128,9 +857,6 @@
     <string name="pre_download_s">Download %s chapters in advance</string>
     <string name="is_enabled">Is enabled</string>
     <string name="background_image">Background image</string>
-    <string name="background_image_blurring">Background image blurring</string>
-    <string name="background_image_blurring_radius">Blurring radius</string>
-    <string name="background_image_hint">Disabled when 0, enable range from 1 to 25\nThe greater the radius, the stronger the effect of blurring</string>
     <string name="copy_book_url">Copy book URL</string>
     <string name="copy_toc_url">Copy chapters URL</string>
     <string name="export_folder">Export folder</string>
@@ -1148,16 +874,13 @@
     <string name="high_brush_title">High screen refresh rate</string>
     <string name="high_brush_summary">Use maximum screen refresh rate</string>
     <string name="export_all">Export all</string>
-    <string name="complete">Finished</string>
     <string name="show_unread">Show unread flag</string>
-    <string name="show_bookshelf_read_progress">Show reading progress</string>
     <string name="use_default_cover">Always show default cover</string>
     <string name="use_default_cover_s">Always show the default cover, do not show the network cover</string>
     <string name="search_src">Search source code</string>
     <string name="boo_src">Book source code</string>
     <string name="toc_src">Chapters source code</string>
     <string name="content_src">Content source code</string>
-    <string name="list_src">List source code</string>
     <string name="title_font_size">Font size</string>
     <string name="title_margin_top">Margin top</string>
     <string name="title_margin_bottom">Margin bottom</string>
@@ -1174,14 +897,10 @@
     <string name="dict">dict</string>
     <string name="unknown_error">unknown error</string>
     <string name="export_no_chapter_name">No export chapter names</string>
-    <string name="autobackup_fail">Autobackup failed\n%s</string>
     <string name="end">end</string>
-    <string name="custom_group_summary">Turn off Replace Group / Turn on Add Group</string>
     <string name="pref_media_button_per_next">Media Buttons • Previous | Next</string>
     <string name="pref_media_button_per_next_summary">Previous Paragraph|Next Paragraph/Previous Chapter|Next Chapter</string>
     <string name="read_aloud_by_page_summary">Turning pages in time, with a pause when the page is turned</string>
-    <string name="check_source_show_debug_message">Check book source shows debug message</string>
-    <string name="check_source_show_debug_message_summary">Show network status and timestamp during source checking</string>
     <string name="need_login">need login</string>
     <string name="pref_cronet_summary">use Cronet access network</string>
     <string name="anti_alias">Anti-Aliasing</string>
@@ -1205,12 +924,6 @@
     <string name="downloading_dots">Downloading…</string>
     <string name="unexpected_web_file_data">Unexpected webFileData</string>
     <string name="loading_dots">Loading…</string>
-    <string name="book_not_found">Book not found</string>
-    <string name="download_remote_book_fail">Failed to download remote book &lt;%1$s&gt;</string>
-    <string name="downloaded">Downloaded</string>
-    <string name="clear_cache_error">Failed to clear cache</string>
-    <string name="webdav_not_configured_alarm">WebDav is not configured</string>
-    <string name="load_toc_error">Toc load error: %1$s</string>
     <string name="book_info_save_fail_duplicate">Failed to save book info: book with the same name and author already exists\n%1$s</string>
     <string name="book_info_save_fail">Failed to save book info\n%1$s</string>
     <string name="summary">summary</string>
@@ -1229,8 +942,6 @@
     <string name="download_already_in_list">already in download list</string>
     <string name="download_unfinished_tip">download incomplete, see Download folder</string>
     <string name="download_fail_tip">download failed, see download management</string>
-    <string name="download_encrypt_unsupported">encrypted stream not supported</string>
-    <string name="download_hls_failed">m3u8 download failed</string>
     <string name="download_file_not_found">local file not found</string>
     <string name="download_file_missing">File missing or deleted, you can remove this record</string>
     <string name="download_eta_left">%1$s left</string>
@@ -1255,13 +966,10 @@
     <string name="download_network_wifi_only">Wi-Fi only</string>
     <string name="download_need_storage_permission">Download to public folder needs storage permission. Grant it in download settings.</string>
     <string name="download_dir_setting">Download directory</string>
-    <string name="download_dir_default_summary">Default is the app-private folder, no permission needed; only a public path you fill in needs storage permission</string>
     <string name="download_configure_dir">Configure directory</string>
-    <string name="download_storage_permission_action">Grant storage permission</string>
     <string name="download_storage_permission_granted">Storage permission granted</string>
     <string name="download_dir_saved">Download directory saved</string>
     <string name="download_dir_reset_default">Download directory reset to default</string>
-    <string name="download_network_wifi_hint">Wi-Fi only: downloads pause on mobile data and auto-resume on Wi-Fi</string>
     <string name="video_download_no_url">video address unavailable, cannot download</string>
     <string name="downloading">downloading</string>
     <string name="unknown_state">unknown</string>
@@ -1297,7 +1005,6 @@
     <string name="tts_speech_reduce">Decrease speech speed</string>
     <string name="tts_speech_add">Increase speech speed</string>
     <string name="open_sys_dir_picker_error">Error opening system folder selector, automatically open application folder selector</string>
-    <string name="open_sys_doc_picker_error">Error opening system file selector, automatically open application file selector</string>
     <string name="expand_text_menu">Expand text selection menu</string>
     <string name="book_tree_uri_t">Book Save Location</string>
     <string name="book_tree_uri_s">Save location for books opened from other apps</string>
@@ -1319,7 +1026,6 @@
     <string name="import_check_strict_lenient">Lenient: only filter unreachable sources (recommended)</string>
     <string name="import_check_strict_standard">Standard: also filter failed search/list</string>
     <string name="import_check_strict_strict">Strict: also filter failed toc/content</string>
-    <string name="import_check_advanced">Advanced</string>
     <string name="import_check_concurrency">Concurrent probes</string>
     <string name="import_check_timeout">Single source timeout (seconds)</string>
     <string name="import_check_retry">Retry search with another keyword</string>
@@ -1344,19 +1050,16 @@
     <string name="quality_report_scope_all">All sources</string>
     <string name="quality_report_scope_group">Current group</string>
     <string name="quality_report_scope_selected">Selected sources</string>
-    <string name="quality_report_start">Start check</string>
     <string name="quality_report_first_hint">Quality report probes sources read-only (nothing is written). Use "Check" to mark groups and weight</string>
     <string name="quality_report_disable">Disable</string>
     <string name="quality_report_delete">Delete</string>
     <string name="quality_report_delete_confirm">%1$d sources will be backed up as JSON to the backup folder first, then deleted. Continue?</string>
-    <string name="quality_report_backup_done">Backup saved: %1$s</string>
     <string name="quality_report_progress">Checking %1$d/%2$d, failed %3$d</string>
     <string name="import_status_filtered">Filtered</string>
     <string name="quality_report_pause">Pause</string>
     <string name="quality_report_resume">Resume</string>
     <string name="quality_report_paused_hint">Paused at %1$d/%2$d, tap Resume to continue</string>
     <string name="quality_report_disabled_toast">Disabled %1$d sources</string>
-    <string name="quality_report_deleted_toast">Deleted %1$d sources, backup: %2$s</string>
     <string name="quality_report_deleted_title">Deleted %1$d sources</string>
     <string name="quality_report_copy_path">Copy path</string>
     <string name="quality_report_path_copied">Path copied</string>
@@ -1379,16 +1082,12 @@
     <string name="enable_dedup">Enable dedup</string>
     <string name="dedup_enabled">Enabled</string>
     <string name="dedup_disabled">Disabled</string>
-    <string name="check_selected_rss">Check selected RSS sources</string>
     <string name="rss_check_source">RSS source check setting</string>
     <string name="record_debug_log">Record debug log</string>
     <string name="sub_dir">Sub dir</string>
-    <string name="general">General</string>
     <string name="use_replace">Use replace</string>
     <string name="scope_title">Act on the title</string>
     <string name="scope_content">Act on the content</string>
-    <string name="join_qq_channel">Join QQ channel</string>
-    <string name="qq_channel_summary">点击加入阅读QQ频道</string>
     <string name="menu_refresh_dur">Refresh the current chapter</string>
     <string name="menu_refresh_after">Refresh the chapter after</string>
     <string name="menu_refresh_all">Refresh all chapters</string>
@@ -1427,20 +1126,13 @@
     <string name="cache_rate_invalid">Invalid format. Use a number (e.g. 1500) or count/ms (e.g. 20/60000)</string>
     <string name="assists_key_config">Secondary button configuration</string>
     <string name="url_option">Url parameter</string>
-    <string name="insert_url_param">Insert URL parameter</string>
-    <string name="insert_group">Insert into groups</string>
-    <string name="book_source_tutorial">Book source tutorial</string>
-    <string name="js_tutorial">JS tutorial</string>
-    <string name="regex_tutorial">Regex tutorial</string>
     <string name="only_wifi">WIFI only</string>
     <string name="only_wifi_summary">Load network cover only under wifi</string>
     <string name="cover_rule">Cover rule</string>
     <string name="cover_rule_summary">Use the cover rule to retrieve the cover when entering the details page</string>
     <string name="cover_rule_empty">Search url and cover rule cannot be empty</string>
-    <string name="scroll_to_dur_source">Navigate to the current book source</string>
     <string name="sys_tts_config">System tts Settings</string>
     <string name="sys_tts_config_summary">Open the system tts settings interface</string>
-    <string name="cannot_timed_non_playback">When the non-playback state is not legal</string>
     <string name="all_bookmark">All bookmarks</string>
     <string name="all_bookmark_empty_title">No bookmarks</string>
     <string name="all_bookmark_empty_subtitle">Add bookmarks while reading</string>
@@ -1461,9 +1153,6 @@
     <string name="cookie">Clear cookie</string>
     <string name="download_and_import_file">Import online book files</string>
     <string name="upload_book_success">Upload Success</string>
-    <string name="upload_book_fail">Upload Fail</string>
-    <string name="download_book_success">Download Success</string>
-    <string name="download_book_fail">Download Fail</string>
     <string name="upload_to_remote">Upload</string>
     <string name="add_remote_book">RemoteBook</string>
     <string name="bitmap_cache_size_summary">当前缓存上限 %1$s MB（仅作用于正文/漫画页位图缓存，不影响封面加载与网络）</string>
@@ -1500,14 +1189,10 @@
     <string name="post_review_url">Send a reply to URL（postReviewUrl）</string>
     <string name="post_quote_url">Send a reply paragraph comment URL（postQuoteUrl）</string>
     <string name="delete_review_url">Delete paragraph comment URL（deleteUrl）</string>
-    <string name="tag_explore_enabled">Flag: found enabled</string>
-    <string name="tag_explore_disabled">Flag: found disabled</string>
     <string name="show_read_title_addition">show read title addition area</string>
-    <string name="read_bar_style_follow_page">read bar style follow page</string>
     <string name="rule_image_decode">Decode Image(imageDecode)</string>
     <string name="like_source">Like</string>
     <string name="not_like_source">Not like</string>
-    <string name="async_load_image">Load pictures asynchronously</string>
     <string name="ignore_audio_focus_title">Ignore audio focus</string>
     <string name="ignore_audio_focus_summary">Allow audio to be played at the same time as other applications</string>
     <string name="refresh_sort">Refresh sort</string>
@@ -1520,7 +1205,6 @@
     <string name="source_edit_max_line_summary">%s,Setting the number of rows less than the maximum number of rows that can be displayed on the screen makes it easier to slide to other fields for editing.</string>
     <string name="restore_last_book_process">Whether to return to the reading progress before the jump？</string>
     <string name="search_scope">Search scope</string>
-    <string name="toggle_search_scope">Handover</string>
     <string name="sure_clear_search_history">Are you sure to clear all search history</string>
     <string name="no_anim_scroll_page">Disable scroll click animation</string>
     <string name="webdav_device_name">Device name</string>
@@ -1529,16 +1213,13 @@
     <string name="read_aloud_wake_lock">Read aloud service wake-up lock</string>
     <string name="read_aloud_wake_lock_summary">The wake-up lock is enabled when reading aloud is enabled, and the wake-up lock on some mobile phones will be killed in the background.</string>
     <string name="audio_play_wake_lock">Audio service wake-up lock</string>
-    <string name="audio_play_wake_lock_summary">The wake-up lock is enabled when playing audio, and some phones will be killed when the wake-up lock is turned on.</string>
     <string name="audio_stop_play">Stop playing</string>
     <string name="audio_stop_play_confirm">Stopping closes the background audio service and cannot be undone.</string>
     <string name="audio_continue_play">Continue playing</string>
-    <string name="change_search_scope">Toggle search scope</string>
     <string name="copy_rule">Copy Rule</string>
     <string name="paste_rule">Paste Rule</string>
     <string name="groups_or_source">Multi-group / book source</string>
     <string name="change_source">Change source</string>
-    <string name="read_menu_chapter_list">Chapters</string>
     <string name="rss_article_info_title">Article Details</string>
     <string name="rss_article_info_no_description">No description</string>
     <string name="rss_article_info_no_pubdate">No publish date</string>
@@ -1559,13 +1240,11 @@
     <string name="rss_sort_group_source">Source</string>
     <string name="rss_sort_group_record">Records</string>
     <string name="rss_sort_group_danger">Danger zone</string>
-    <string name="rss_source_selected">Selected source</string>
     <string name="replace_state_change">Replace (enable / disable)</string>
     <string name="show_last_update_time">Show last updated time</string>
     <string name="refresh_list">Refresh list</string>
     <string name="tip_divider_color">Divider color</string>
     <string name="same_title_removed">Remove duplicate title</string>
-    <string name="no_remove_duplicate_title">No duplicate title found to remove</string>
     <string name="update_book_fail">Update failed</string>
     <string name="notification_permission_rationale">Reading requires sending notifications to show reading control and download progress</string>
     <string name="webdav_after_local_restore_confirm">The webDav book source is newer than the local one, whether to restore it or not</string>
@@ -1599,7 +1278,6 @@
     <string name="file_manage_summary">Managing files in the application\'s private folder</string>
     <string name="root">Root</string>
     <string name="create_folder">Create Folder</string>
-    <string name="allow_drop_down_refresh">Allow drop-down refresh</string>
     <string name="only_update_read">仅更新已读完</string>
     <string name="ps_only_update_read">自动刷新时，只更新已读完的书籍</string>
     <string name="text_underline">Text underline</string>
@@ -1608,7 +1286,6 @@
     <string name="set_local_password">Setting the local password</string>
     <string name="set_local_password_summary">The local password is used to encrypt and decrypt the sensitive information of the backup, if you need to synchronize between different devices, the local password should be the same.</string>
     <string name="password">Password</string>
-    <string name="crash_detected_prompt">Reading has crashed. Do you want to open the crash log to report the issue?</string>
     <string name="only_latest_backup_t">Keep only the latest backup</string>
     <string name="only_latest_backup_s">Local backup keeps only the latest backup file</string>
     <string name="webdav_application_authorization_error">Fail to authorize WebDav application</string>
@@ -1616,7 +1293,6 @@
     <string name="load_word_count">Load word count</string>
     <string name="replace_exclude_scope">Exclude range, optional title or source URL</string>
     <string name="format_js_rule">格式化规则(formatJs)</string>
-    <string name="adjust_pos">Adjustment position</string>
     <string name="error_scope_input">Please enter the correct range</string>
     <string name="custom_export">Custom Export</string>
     <string name="file_contains_number">The number of chapters contained in each file</string>
@@ -1625,13 +1301,8 @@
     <string name="shrink_database_summary">Reduce the size of the database file</string>
     <string name="is_compress">Compressed or not</string>
     <string name="sort_desc">Descend order</string>
-    <string name="sort_asc">Ascend order</string>
-    <string name="list_layout_menu">Layout &amp; sort</string>
-    <string name="list_layout">Layout</string>
-    <string name="list_layout_menu_switch_hint">%1$s · tap to switch direction</string>
     <string name="test">Test</string>
     <string name="show_wait_up_count">Display the number of pending updates</string>
-    <string name="exit_app">Exit</string>
     <string name="result_analyzed">Analyzed</string>
     <string name="bookshelf_px_4">Comprehensive</string>
     <string name="bookshelf_px_5">Sort by author</string>
@@ -1642,7 +1313,6 @@
     <string name="url_record">URL access records</string>
     <string name="url_record_summary">View and manage URL access records</string>
     <string name="rss_search">RSS global search</string>
-    <string name="rss_search_summary">Search across all subscribed sources</string>
     <string name="my_metric_shelf">Bookshelf</string>
     <string name="my_metric_book_source">Sources</string>
     <string name="my_metric_rss_source">RSS feeds</string>
@@ -1661,7 +1331,6 @@
     <string name="hours_ago">%1$d h ago</string>
     <string name="days_ago">%1$d d ago</string>
     <string name="url_record_empty">No URL access records</string>
-    <string name="url_record_enable_hint">Enable URL record to collect access data</string>
     <string name="precise_manage">Precise manage</string>
     <string name="precise_manage_summary">URL records, storage, download, file manage</string>
     <string name="data_manage">Data management</string>
@@ -1701,7 +1370,6 @@
     <string name="download_tab_paused">Paused</string>
     <string name="download_tab_completed">Completed</string>
     <string name="download_tab_failed">Failed</string>
-    <string name="download_summary">Downloading: %1$d  Completed: %2$d  Failed: %3$d</string>
     <string name="clear_completed_tasks">Clear completed/failed</string>
     <string name="clear_completed_confirm">Clear completed and failed download tasks?</string>
     <string name="download_play_with_builtin">Play</string>
@@ -1723,24 +1391,6 @@
     <string name="filter_failed">Failed</string>
     <string name="clear_filter">Clear filter</string>
     <string name="url_record_no_values">No available values</string>
-    <string name="export_to_obsidian">Export to Obsidian</string>
-    <string name="export_book_to_obsidian">Export 《%1$s》 to Obsidian</string>
-    <string name="export_method">Export method</string>
-    <string name="obsidian_rest_api">Local REST API</string>
-    <string name="obsidian_local_file">Local file</string>
-    <string name="obsidian_api_url_hint">API URL (e.g. http://localhost:27124)</string>
-    <string name="obsidian_api_key_hint">API Key</string>
-    <string name="obsidian_test_connection">Test connection</string>
-    <string name="obsidian_local_path_hint">Obsidian vault directory</string>
-    <string name="select_obsidian_dir">Select directory</string>
-    <string name="obsidian_vault_path_hint">Vault sub-path (optional, e.g. notes/thoughts)</string>
-    <string name="obsidian_export_result">Exported %1$d/%2$d books successfully</string>
-    <string name="obsidian_export_failed">Export failed: %1$s</string>
-    <string name="obsidian_connection_success">Connection successful</string>
-    <string name="obsidian_connection_failed">Connection failed</string>
-    <string name="obsidian_connection_failed_detail">Connection failed: %1$s</string>
-    <string name="obsidian_api_url_empty">Please enter the API URL</string>
-    <string name="obsidian_auto_export">Auto export highlights to Obsidian (off by default)</string>
     <string name="change_source_delay">Change source delay</string>
     <string name="change_source_progress">Result %1$d, Progress %2$d / %3$d: %4$s</string>
     <string name="open_book_info_by_click_title">Click on the book title to open details</string>
@@ -1748,7 +1398,6 @@
     <string name="show_bookshelf_fast_scroller">Show quick scroll bar</string>
     <string name="export_all_use_book_source">Export book source for all books</string>
     <string name="keep_enable">Retain Enabled Status</string>
-    <string name="preview_image_by_click">Click to preview image</string>
     <string name="default_home_page">Default HomePage</string>
     <string name="screen_portrait_reversed">Portrait Reversed</string>
     <string name="screen_landscape_reversed">Landscape Reversed</string>
@@ -1756,14 +1405,10 @@
     <string name="del_h_tag">Delete h tag</string>
     <string name="adjust_chapter_page">Adjust of chapter page</string>
     <string name="adjust_chapter_index">Adjust of chapter index</string>
-    <string name="clear_webview_data_success">Cleared successfully, automatically restarts the application after 3 seconds</string>
     <string name="key_page_on_long_press">Press and hold the key to turn the page</string>
-    <string name="save_log">Save logs</string>
     <string name="create_heap_dump">Create heap dump</string>
     <string name="record_heap_dump_s">Saving a heap dump when the application crashes by OOM</string>
     <string name="record_heap_dump_t">Capture heap dump</string>
-    <string name="font_weight_text">N/B/L</string>
-    <string name="keep_swipe_tip">Keep swiping to load the next chapter…</string>
     <string name="enable_optimize_render">启用绘制优化</string>
     <string name="ignore_battery_permission_rationale">阅读需要请求后台权限以保持服务正常运行</string>
     <string name="simulated_reading">Simulated Reading</string>
@@ -1784,9 +1429,7 @@
     <string name="update_accel_summary_none">GitHub 通道，不使用代理</string>
     <string name="update_accel_summary_proxy">GitHub 通道，代理：%1$s</string>
     <string name="default_version">当前</string>
-    <string name="official_version">正式版</string>
     <string name="beta_release_version">测试版</string>
-    <string name="beta_releaseA_version">共存版</string>
     <string name="beta_releaseS_version" translatable="false">正式版</string>
     <string name="stream_read_aloud_audio">流式播放音频</string>
     <string name="stream_read_aloud_audio_summary">即边下边播，网络不好时播放会断断续续，仅TTS源有效</string>
@@ -1806,7 +1449,6 @@
     <string name="manga_config">配置</string>
     <string name="manga_footer_config">页脚配置</string>
     <string name="setting_manga_auto_page_speed">设置自动翻页速度</string>
-    <string name="book_reader_info_bar">页数. %1$d/%2$d  章节. %3$d/%4$d -> %5$s%%</string>
     <string name="menu_download_after">Download the chapter after</string>
     <string name="menu_download_all">Download all chapter</string>
     <string name="manga_header_chapter">《章节和文案》隐藏</string>
@@ -1845,7 +1487,6 @@
     <string name="r_startJs">启动页Js（startJs）</string>
     <string name="load_with_web_log">输出 WebLog</string>
     <string name="auto_update">自动更新</string>
-    <string name="time_day">天</string>
     <string name="update_interval">间隔：</string>
     <string name="silent_update">静默更新</string>
     <string name="show_web_log">输出日志</string>
@@ -1870,13 +1511,10 @@
     <string name="config_settings">配置</string>
     <string name="auto_wrap">自动换行</string>
     <string name="font_size">字体大小 %d</string>
-    <string name="view_code">查看代码</string>
-    <string name="show_bookname">显示书名</string>
     <string name="float_permission_rationale">阅读需要悬浮窗权限来显示播放窗口</string>
     <string name="video">视频</string>
     <string name="float_window">悬浮窗</string>
     <string name="video_play">视频播放</string>
-    <string name="no_more_chapter">没有更多章节</string>
     <string name="overlay">叠加</string>
     <string name="margin">间距</string>
     <string name="replace_to_js">js处理</string>
@@ -1926,7 +1564,6 @@
     <!-- video-player-ux-fixes P2: 滑动快进灵敏度 -->
     <string name="video_settings_title">视频设置</string>
     <string name="seek_sensitivity">滑动快进灵敏度</string>
-    <string name="seek_sensitivity_summary">滑动快进灵敏度 %.1fx</string>
     <string name="seek_sensitivity_multiplier_format">%.1fx</string>
     <!-- video-player-image-enhance A 期: 画质增强 -->
     <string name="image_enhance">画质增强</string>
@@ -2122,7 +1759,6 @@
     <!-- F-P1-1 自动任务 UI（列表页 / 编辑页 / 导入对话框） -->
     <string name="auto_task_manage">自动任务管理</string>
     <string name="auto_task_manage_desc">管理自动任务规则</string>
-    <string name="auto_task_service_desc">后台定时执行脚本任务</string>
     <string name="auto_task_add">添加任务</string>
     <string name="auto_task_edit">编辑任务</string>
     <string name="auto_task_delete">删除任务</string>
@@ -2188,17 +1824,11 @@
     <string name="highlight_rule_pattern">匹配模式</string>
     <string name="highlight_rule_replacement">替换模板（可选，为捕获组套用样式标签，如 &lt;b&gt;&lt;font color=\"red\"&gt;$1&lt;/font&gt;&lt;/b&gt;&lt;i&gt;$2&lt;/i&gt;）</string>
     <string name="highlight_rule_dot_all">点号匹配换行</string>
-    <string name="highlight_rule_scope_hint">作用范围（留空=全部）</string>
-    <string name="highlight_rule_disable">停用规则</string>
     <!-- F-P1-2 高亮规则分组管理（借鉴蛋蛋Max） -->
     <string name="more">More</string>
     <string name="highlight_rule_group_manage_title">Group Management</string>
-    <string name="highlight_rule_group_manage_subtitle">Manage highlight rule groups (add, rename, delete).</string>
-    <string name="highlight_rule_group_add">Add</string>
     <string name="highlight_rule_group_view_all">View All Groups</string>
-    <string name="highlight_rule_group_empty">No groups</string>
     <string name="highlight_rule_group_rules_count">%1$d rules</string>
-    <string name="highlight_rule_group_name_blank">Group name cannot be empty</string>
     <string name="highlight_rule_group_name_exists">Group name already exists</string>
     <string name="highlight_rule_group_default_protected">The default group cannot be deleted</string>
     <string name="delete_group">Delete group</string>
@@ -2236,7 +1866,6 @@
     <string name="source_folder_group_by_group">By Group</string>
     <string name="source_folder_group_by_type">By Type</string>
     <!-- source-layout-redesign: 类型筛选字符串 -->
-    <string name="source_type">Type</string>
     <string name="type_text">文本</string>
     <string name="type_audio">音频</string>
     <string name="type_image">图片</string>
@@ -2265,7 +1894,6 @@
     <!-- video-playback-issues-round1: 视频播放失败提示字符串
          video-sniff-403-and-rss-classic-fix Phase 2 (3.6)：use_webview_play/switch_to_exo_player/
          player_type_webview 三条已随 WebView 播放器删除 -->
-    <string name="video_play_error_title">视频播放失败</string>
     <string name="player_type">播放器类型</string>
     <string name="player_type_auto">自动</string>
     <string name="player_type_exo">内置播放器</string>
@@ -2295,31 +1923,6 @@
     <string name="player_error_tip">播放错误提示</string>
     <string name="player_auto_reconnect">自动重连</string>
     <!-- HeatmapCalendar（task 12.39） -->
-    <string name="rr_heatmap_count">Reads</string>
-    <string name="rr_heatmap_duration">Duration</string>
-    <string name="rr_heatmap_clear_filter">Clear filter</string>
-    <string name="rr_heatmap_times">×</string>
-    <string name="rr_heatmap_day_unit">d</string>
-    <string name="rr_heatmap_prev_month">Previous month</string>
-    <string name="rr_heatmap_next_month">Next month</string>
-    <string name="rr_heatmap_show_by_count">By count</string>
-    <string name="rr_heatmap_show_by_duration">By duration</string>
-    <string name="rr_heatmap_year_month">%1$d/%2$d</string>
-    <string name="rr_heatmap_read">Read</string>
-    <string name="rr_heatmap_days">Days</string>
-    <string name="rr_heatmap_mon">Mon</string>
-    <string name="rr_heatmap_tue">Tue</string>
-    <string name="rr_heatmap_wed">Wed</string>
-    <string name="rr_heatmap_thu">Thu</string>
-    <string name="rr_heatmap_fri">Fri</string>
-    <string name="rr_heatmap_sat">Sat</string>
-    <string name="rr_heatmap_sun">Sun</string>
-    <string name="rr_heatmap_less">Less</string>
-    <string name="rr_heatmap_more">More</string>
-    <string name="rr_heatmap_date_format">M/d</string>
-    <string name="rr_heatmap_duration_day">d</string>
-    <string name="rr_heatmap_duration_hour">h</string>
-    <string name="rr_heatmap_duration_minute">min</string>
     <string name="read_record_heatmap">Reading heatmap</string>
     <string name="read_record_recent_books">Recently reading</string>
     <string name="read_record_recent_days">Daily summary</string>
@@ -2335,13 +1938,11 @@
     <string name="read_record_current_chapter">Current %1$s</string>
     <string name="read_record_continue_reading">Continue ›</string>
     <string name="read_record_active_days_value">%1$d days</string>
-    <string name="read_record_clear_all">Clear all records</string>
     <string name="read_record_placeholder">--</string>
     <string name="read_record_heatmap_range">Last 16 weeks</string>
     <string name="read_record_heatmap_summary">Longest streak %1$d d · Best day %2$s</string>
     <string name="read_record_today_word">Today</string>
     <string name="read_record_yesterday_word">Yesterday</string>
-    <string name="read_record_select_date">Select date</string>
     <string name="read_record_selected_day_label">Selected day</string>
     <string name="read_record_customize_components">Customize stats widgets</string>
     <string name="read_record_components_hint">Check to show widgets, use move controls to reorder</string>
@@ -2367,7 +1968,6 @@
     <string name="read_record_goal_today">Today %1$s</string>
     <string name="read_record_goal_total">Total %1$s</string>
     <string name="read_record_goal_books">Books read %1$d</string>
-    <string name="read_record_goal_progress">%1$s / %2$s · %3$d%%</string>
     <string name="read_record_goal_achieved">Achieved</string>
     <string name="read_record_goal_achieved_hint">Today\'s target done · %1$s / %2$s</string>
     <string name="read_record_goal_target">Daily goal</string>
@@ -2385,9 +1985,7 @@
     <string name="read_record_delete_entry">Delete this record</string>
     <string name="read_record_date_pattern">MMM d, yyyy</string>
     <string name="read_record_month_pattern">MMM</string>
-    <string name="read_record_top_bar_summary">Today %1$s · This month %2$s</string>
     <string name="read_record_select_year">Select year</string>
-    <string name="read_record_select_day">Select day</string>
     <string name="read_record_year_value">%1$d</string>
     <string name="read_record_month_value">%1$d</string>
     <string name="discovery_page_mode_modern">Modern discovery</string>
@@ -2397,11 +1995,9 @@
     <string name="rss_page_mode_legacy">Classic subscription</string>
     <string name="side_nav_assistant">Assistant</string>
     <string name="theme_manage_title">Theme Manager</string>
-    <string name="image_crop_title">Crop image</string>
     <string name="image_crop_failed">Image crop failed: %1$s</string>
     <string name="image_crop_hint">Move or pinch the image, then confirm</string>
     <string name="image_crop_saving">Saving, please wait…</string>
-    <string name="read_goal_widget_description">Reading goal card</string>
     <string name="theme_day">Day theme</string>
     <string name="theme_night">Night theme</string>
     <string name="theme_day_short">Day</string>
@@ -2428,7 +2024,6 @@
     <string name="theme_delete_remote">Delete cloud</string>
     <string name="theme_delete_both">Delete both</string>
     <string name="theme_downloaded">Downloaded</string>
-    <string name="theme_sync_queued">Added to cloud sync queue</string>
     <string name="theme_delete_local_confirm">Delete local theme?</string>
     <string name="theme_delete_remote_confirm">Delete cloud theme?</string>
     <string name="theme_delete_both_confirm">Delete both local and cloud theme?</string>
@@ -2481,7 +2076,6 @@
     <string name="theme_image_value_unselected_blur">Not selected · blur %d</string>
     <string name="theme_image_value_file_blur">%1$s · blur %2$d</string>
     <string name="theme_image_selected">Selected</string>
-    <string name="read_rank_widget_description">Reading rank widget</string>
     <string name="theme_image_panel_background">Panel background</string>
     <string name="theme_image_panel_background_mode">Panel image mode</string>
     <string name="theme_panel_border_color">Panel border color</string>
@@ -2676,10 +2270,6 @@ Selected text or question:
         <string name="share_note_template_copy_builtin">复制内置模板新建</string>
         <string name="share_note_import_html">导入 HTML</string>
         <string name="share_note_import_zip">导入 ZIP</string>
-        <string name="share_note_preview_header">预览头部</string>
-        <string name="share_note_copy_as_new">复制新建</string>
-        <string name="share_note_export_html">导出 HTML</string>
-        <string name="share_note_export_zip">导出 ZIP</string>
         <string name="share_note_export_failed">导出失败</string>
 	<string name="ai_not_enabled">AI assistant is disabled</string>
 	<string name="paragraph_rule_no_book_hint">No current book</string>
@@ -2708,7 +2298,6 @@ Selected text or question:
 	<string name="advanced_title_name">Title name</string>
 	<string name="advanced_title_use_regex">Use regex</string>
 	<string name="advanced_title_sample_default">Chapter 1 Delivery</string>
-	<string name="advanced_title_height_factor_hint">30-120, default 55 (percent of visible height)</string>
 	<string name="advanced_title_open_editor">Edit JSON</string>
 	<string name="advanced_title_rule_error">Rule error: %1$s</string>
 	<string name="advanced_title_edit_title">Edit advanced title</string>
@@ -2733,7 +2322,6 @@ Selected text or question:
 	<string name="read_menu_alpha">Read Menu Opacity</string>
 	<string name="content_select_menu_config_summary">Configure long-press actions and default open action</string>
 	<string name="paragraph_rule_script">Paragraph processing JS</string>
-	<string name="paragraph_rule_save_invalid">Name and paragraph script cannot be empty</string>
 	<string name="paragraph_rule_manage">Paragraph rule management</string>
 	<string name="paragraph_rule_manage_summary">Enable one or more rules for the current book. Long press or drag the right-side handle to sort execution order.</string>
 	<string name="paragraph_rule_drag_handle">Drag handle</string>
@@ -2745,8 +2333,6 @@ Selected text or question:
 	<string name="ai_usage_chip_cached">Cached</string>
 	<string name="ai_usage_chip_output">Out</string>
 	<string name="ai_usage_chip_total">Total</string>
-	<string name="ai_usage_detail_expand">Details ›</string>
-	<string name="ai_usage_detail_collapse">Collapse ▾</string>
 	<string name="ai_usage_model_detail">By model</string>
 	<string name="ai_usage_delete_selected">Delete %1$d</string>
 	<string name="ai_usage_export_selected">Export</string>
@@ -2824,12 +2410,10 @@ Selected text or question:
 	<string name="paragraph_rule_edit">Edit paragraph rule</string>
 
     <!-- Auto-added AI config strings -->
-    <string name="ai_reply">AI Reply</string>
     <string name="ai_setting_summary">分开配置提供商和模型</string>
     <string name="ai_enable">Enable AI</string>
     <string name="ai_enable_summary_disabled">当前提供商下有模型时才能开启</string>
     <string name="ai_system_prompt">系统提示词</string>
-    <string name="ai_system_prompt_summary">设置 AI 的身份、工具调用规则和回答风格</string>
     <string name="ai_system_prompt_hint">输入系统提示词</string>
     <string name="ai_provider">提供商</string>
     <string name="ai_current_provider">当前提供商</string>
@@ -2842,7 +2426,6 @@ Selected text or question:
     <string name="ai_provider_name_required">请输入提供商名称</string>
     <string name="ai_provider_url_required">请输入接口地址</string>
     <string name="ai_no_providers">暂无提供商</string>
-    <string name="ai_set_current_provider">设为当前提供商</string>
     <string name="ai_edit_provider">编辑提供商</string>
     <string name="ai_remove_provider">删除提供商</string>
     <string name="ai_remove_provider_confirm">确定删除这个提供商吗？</string>
@@ -2886,9 +2469,7 @@ Selected text or question:
     <string name="ai_api_mode">接口模式</string>
     <string name="ai_enable_prompt_cache_key">启用提示词缓存标记</string>
     <string name="ai_base_url">Base URL</string>
-    <string name="ai_base_url_summary">Compatible endpoint base address</string>
     <string name="ai_api_key">API Key</string>
-    <string name="ai_api_key_summary">Used for Authorization authentication</string>
     <string name="ai_custom_headers">Custom headers</string>
     <string name="ai_web_tools">Web tools</string>
     <string name="ai_tavily_enable">Enable Tavily search</string>
@@ -2900,11 +2481,8 @@ Selected text or question:
     <string name="ai_enter_to_send_summary">When enabled, pressing Enter sends the message. When disabled, only the send button sends.</string>
     <string name="ai_context_compression">上下文压缩</string>
     <string name="ai_context_compression_summary_default">默认 258K 上下文，128K 思考上下文；接近上限时压缩旧历史</string>
-    <string name="ai_context_compression_enabled">启用上下文压缩</string>
     <string name="ai_context_tokens">上下文长度</string>
     <string name="ai_thinking_context_tokens">思考上下文</string>
-    <string name="ai_persona_manage">人格提示词</string>
-    <string name="ai_persona_manage_summary_empty">未设置人格提示词</string>
     <string name="ai_image_provider_manage">生图供应商</string>
     <string name="ai_image_provider_summary_empty">未配置生图供应商</string>
     <string name="ai_image_provider_summary">已启用 %1$d 个，共 %2$d 个</string>
@@ -2916,8 +2494,6 @@ Selected text or question:
     <string name="ai_image_style_prompt">风格提示词</string>
     <string name="ai_image_script">生图脚本</string>
     <string name="ai_image_gallery_summary">查看生成图片、收藏分组和临时图片</string>
-    <string name="ai_image_default_group">默认分组</string>
-    <string name="ai_image_generating">正在生成图片...</string>
     <string name="ai_tavily_api_key">Tavily API key</string>
     <string name="ai_tavily_api_key_hint">tvly-...</string>
     <string name="ai_tavily_api_key_summary">Tap to set your Tavily API key.</string>
@@ -2932,19 +2508,11 @@ Selected text or question:
     <string name="ai_tavily_search_depth_advanced">Advanced</string>
     <string name="ai_tavily_search_depth_ultra_fast">Ultra fast</string>
     <string name="ai_tavily_max_results">Default result count</string>
-    <string name="ai_tavily_max_results_invalid">Enter a number between 1 and 10.</string>
-    <string name="ai_current_model_summary_empty">Add a model first</string>
-    <string name="ai_current_model_summary_no_provider_models">No models under the current provider</string>
     <string name="ai_add_model">Add model</string>
-    <string name="ai_add_model_summary">Add a new model ID</string>
-    <string name="ai_add_model_summary_modern">Choose from fetched models or enter a model ID manually</string>
     <string name="ai_add_model_from_list">Choose from fetched list</string>
     <string name="ai_add_model_manual">Enter model ID manually</string>
     <string name="ai_add_all_models">Add all new models</string>
     <string name="ai_fetch_models">Fetch model list</string>
-    <string name="ai_fetch_models_summary">Read models from the standard OpenAI /v1/models API</string>
-    <string name="ai_fetch_models_summary_modern">Read /v1/models and choose which models to save</string>
-    <string name="ai_fetch_models_loading">Fetching model list...</string>
     <string name="ai_fetch_models_empty">No models returned</string>
     <string name="ai_fetch_models_no_new">No new models</string>
     <string name="ai_fetch_models_success">Added %1$d models</string>
@@ -2978,8 +2546,6 @@ Selected text or question:
     <string name="ai_remove_mcp_server_confirm">确定删除这个 MCP 服务器吗？</string>
     <string name="ai_enable_mcp_server">启用服务器</string>
     <string name="ai_disable_mcp_server">停用服务器</string>
-    <string name="ai_read_delete_history">Delete this record</string>
-    <string name="ai_chat_thinking_collapsed">Thinking, tap to expand</string>
     <string name="ai_model_input_hint">model id</string>
     <string name="ai_model_exists">Model already exists</string>
     <string name="ai_model_added">Model added</string>
@@ -2987,9 +2553,6 @@ Selected text or question:
     <string name="ai_remove_model">Remove model</string>
     <string name="ai_remove_model_confirm">Remove this model?</string>
     <string name="ai_model_removed">Model removed</string>
-    <string name="ai_request_error_title">AI request failed</string>
-    <string name="ai_request_error_log">AI request log</string>
-    <string name="ai_view_log">View log</string>
     <string name="ai_import_default_skill">Install default 阅读Archive skill</string>
     <string name="ai_import_default_skill_summary">Download a real SKILL.md from DandanLLab/legadoSkill</string>
     <string name="ai_skill_prompt">Manage skills</string>
@@ -3004,19 +2567,12 @@ Selected text or question:
     <string name="ai_add_skill_manual">Import SKILL.md manually</string>
     <string name="ai_skill_default_name">Imported Skill</string>
     <string name="ai_remove_skill_confirm">Remove this skill?</string>
-    <string name="ai_tool_call">Calling tool: %1$s\nArguments: %2$s</string>
-    <string name="ai_tool_result">Tool result: %1$s\n%2$s</string>
-<string name="app_launcher_name">阅读</string>
 <string name="epub_read_engine">EPUB read engine</string>
 <string name="epub_read_engine_summary">Default to plain text conversion; EPUB engine is experimental and may have layout or performance issues.</string>
 <string name="epub_read_engine_text">Convert to plain text</string>
 <string name="epub_read_engine_core">EPUB engine (experimental)</string>
-<string name="update_no_new_version">No updates available</string>
 <string name="update_acceleration_manage">加速管理</string>
 <string name="selection_search_engine_url">Search URL</string>
-<string name="book_info_tab_intro">Intro</string>
-<string name="book_info_tab_info">Info</string>
-<string name="paper_effect">Text shadow</string>
 <string name="rss_search_hint">Search subscription content</string>
 <string name="main_immersion_status_bar">Hide main screen status bar</string>
 <string name="main_status_bar_immersion">Use fullscreen mode on the main screen</string>
@@ -3029,29 +2585,10 @@ Selected text or question:
     <string name="config_category_sync">Sync and services</string>
     <string name="config_category_tools">Tools</string>
     <string name="config_category_about">About</string>
-<string name="resize">Resize</string>
 <string name="discover_group_other">Other</string>
-<string name="modern_rss_page_summary">Use the new RSS home layout with source switch, categories, and embedded content.</string>
-<string name="merge_discovery_rss">Merge discovery and RSS tab</string>
-<string name="merge_discovery_rss_summary">Use one bottom tab for discovery and RSS. Long press the tab to switch between them.</string>
-<string name="bottom_bar_effect_mode">Bottom bar style</string>
-<string name="bottom_bar_effect_mode_summary">Current style: %s</string>
 <string name="bottom_bar_hide_search">Hide main search bar</string>
 <string name="bottom_bar_hide_search_summary">Hide the search button on the floating bottom bar. Only applies to floating mode; for custom navigation bar packs, edit in bottom bar manager</string>
-<string name="liquid_glass_level">Liquid glass level</string>
-<string name="liquid_glass_level_summary">Current level: %s. Higher means stronger refraction and liquid distortion.</string>
-<string name="frosted_glass_level">Frosted glass level</string>
-<string name="frosted_glass_level_summary">Current level: %s. Higher means stronger blur and frost on glass bars.</string>
-<string name="ui_corner_scale_summary">Current corner radius scale: %s, range 0-3</string>
-<string name="ui_corner_scale_invalid">Please enter a number from 0 to 3</string>
-<string name="ui_corner_search_follow_summary">Allow search bars to use the global corner radius scale</string>
-<string name="ui_corner_reply_follow_summary">Allow reply/input bars to use the global corner radius scale</string>
-<string name="show_read_record">Show reading stats entry</string>
-<string name="modern_discovery_page_summary">Choose classic, modern, or suite discovery page.</string>
-<string name="discovery_settings_summary">Configure discovery entrance and page style.</string>
-<string name="subscription_settings_summary">Configure subscription entrance and page style.</string>
 <string name="discovery_subscription_settings_summary">Manage discovery and subscription entrances and page styles.</string>
-<string name="discovery_suite_no_suite">No suite</string>
 <string name="discovery_suite_manage_title">Discovery suites</string>
 <string name="discovery_suite_empty_title">No discovery suites yet</string>
 <string name="discovery_suite_empty_summary">Create a suite, then add book widgets from selected sources and discovery tags.</string>
@@ -3071,7 +2608,6 @@ Selected text or question:
 <string name="discovery_suite_widget_targets_empty">Select at least one Tag or source target first</string>
 <string name="discovery_suite_widget_rank_targets_range">Rank widgets need 3-9 tags</string>
 <string name="discovery_suite_name">Suite name</string>
-<string name="discovery_suite_widget_title">Widget title</string>
 <string name="discovery_suite_widget_type">Widget style</string>
 <string name="discovery_suite_widget_type_random_books">Random picks</string>
 <string name="discovery_suite_widget_type_tag_bar">Tag buttons</string>
@@ -3081,97 +2617,12 @@ Selected text or question:
 <string name="discovery_suite_refresh_batch">Refresh batch</string>
 <string name="discovery_suite_default_random_title">Random picks</string>
 <string name="discovery_suite_default_tag_bar_title">Category tags</string>
-<string name="discovery_suite_default_recommend_title">Recommended for you</string>
-<string name="discovery_suite_default_rank_title">Selected rankings</string>
 <string name="opening_credits">Opening</string>
 <string name="closing_credits">Closing</string>
-<string name="book_info_background_image">Book detail background image (day)</string>
-<string name="book_info_background_image_night">Book detail background image (night)</string>
-<string name="book_info_background_image_summary">Replace the detail cover-blur background. Uses theme background color when unset.</string>
 <string name="load_cover_high_quality">Load high quality covers</string>
 <string name="load_cover_high_quality_summary">Use original cover images instead of cached thumbnails</string>
 <string name="book_cover_shadow">Show cover shadow</string>
 <string name="book_cover_shadow_summary">Draw an outer shadow for book covers</string>
-<string name="check_source_thread_count">Check concurrency (1-64)</string>
-<string name="check_source_thread_count_invalid">Check concurrency must be between 1 and 64</string>
-<string name="check_source_quick_mode">Quick full check mode</string>
-<string name="check_source_mode_quick">Quick full check</string>
-<string name="check_source_mode_manual">Manual</string>
-<string name="check_source_config_summary_ext">Check timeout: %1$ss\nConcurrency: %2$s\nMode: %3$s\nCheck item:%4$s</string>
-<string name="read_menu_alpha_summary">Adjust opacity for top/bottom menu panels</string>
-<string name="read_menu_custom_button_help"><![CDATA[自定义按键说明
-
-触发方式：
-1. 短按按键：执行「按钮 JS」里的 function run()。
-2. 长按按键：打开登录入口。登录 UI 使用 loginUi；点击登录按钮后执行 loginUrl 里的 function login()。
-3. 如果 loginUi 为空，但 loginUrl 中定义了 function login()，长按时仍可直接执行登录逻辑。
-
-短按 run() 可直接使用：
-- book：当前书籍。常用字段：book.name、book.author、book.bookUrl、book.origin、book.originName、book.kind、book.customTag、book.coverUrl、book.intro、book.latestChapterTitle、book.totalChapterNum、book.durChapterIndex。
-- chapter：当前章节。常用字段：chapter.title、chapter.index、chapter.url、chapter.baseUrl、chapter.bookUrl、chapter.tag、chapter.wordCount、chapter.variable。
-- content / src / result：当前章节正文，三者内容相同。
-- title：当前章节标题，等同于 chapter.title。
-- baseUrl：当前章节请求地址，优先使用章节绝对地址。
-- bookSource / readSource：当前正在阅读的书源对象，可能为空。
-- button：当前自定义按键对象。常用字段：button.id、button.name、button.loginUrl、button.loginUi、button.jsLib、button.timeoutMillisecond。
-- source：当前按键源对象。常用方法：source.getKey()、source.getTag()、source.get(key)、source.put(key,value)、source.getVariable()、source.putVariable(value)、source.login()。
-- java：阅读页辅助对象。常用方法：java.copyText(text)、java.showBrowser(url, html)、java.refreshBookInfo()、java.refreshBookToc()、java.refreshContent()。
-- cache / cookie：缓存与 Cookie 工具。
-
-长按登录可直接使用：
-- book：当前书籍。
-- chapter：当前章节。
-- result：登录表单数据 Map，例如 result.bookName。
-- isLongClick：是否长按触发。
-- source / java / cache / cookie：同上。
-
-短按测试例程，填入「按钮 JS」：
-function run() {
-    var info = {
-        bookName: book ? book.name : "",
-        author: book ? book.author : "",
-        bookUrl: book ? book.bookUrl : "",
-        originName: book ? book.originName : "",
-        chapterTitle: chapter ? chapter.title : title,
-        chapterIndex: chapter ? chapter.index : -1,
-        chapterUrl: chapter ? chapter.url : "",
-        baseUrl: baseUrl,
-        buttonId: button ? button.id : "",
-        buttonName: button ? button.name : "",
-        sourceKey: source.getKey(),
-        sourceTag: source.getTag(),
-        textLength: (content || "").length
-    };
-    var text = JSON.stringify(info, null, 2);
-    java.copyText(text);
-    java.showBrowser(baseUrl || "about:blank", "<pre style='white-space:pre-wrap'>" + text + "</pre>");
-    return text;
-}
-
-长按登录测试：
-1. loginUi 填入：
-@js:
-JSON.stringify([
-    {name:"bookName", type:"text", viewName:"书名", default:book ? book.name : ""},
-    {name:"chapterTitle", type:"text", viewName:"章节名", default:chapter ? chapter.title : ""},
-    {name:"copyInfo", type:"button", viewName:"复制当前登录信息", action:"java.copyText(JSON.stringify({bookName:book?book.name:'', chapterTitle:chapter?chapter.title:'', form:result, isLongClick:isLongClick}, null, 2))"}
-])
-
-2. loginUrl 填入：
-function login() {
-    var info = {
-        bookName: book ? book.name : "",
-        chapterTitle: chapter ? chapter.title : "",
-        form: result,
-        isLongClick: isLongClick
-    };
-    var text = JSON.stringify(info, null, 2);
-    source.put("lastLoginTest", text);
-    java.copyText(text);
-    return true;
-}
-
-注意：自定义按键用于读取和辅助操作，不建议直接修改正文内容。]]></string>
 <string name="bookshelf_return_to_top_after_read">Return to top after reading</string>
 <string name="bookshelf_return_to_top_after_read_short">Top</string>
 <string name="fast_scroller_touch_target">Quick scroll bar touch area</string>
@@ -3180,11 +2631,7 @@ function login() {
 <string name="fast_scroller_touch_target_standard">Standard 44dp</string>
 <string name="fast_scroller_touch_target_large">Large 52dp</string>
 <string name="fast_scroller_touch_target_extra_large">Extra large 60dp</string>
-<string name="manga_page_mode">翻页方式</string>
 <string name="manga_header_footer_alignment">页脚对齐</string>
-<string name="change_book_source_action">更换书源</string>
-<string name="video_source_label">Source: %s</string>
-<string name="video_origin_label">Origin: %s</string>
 <string name="navigation_bar_manage">Bottom bar manager</string>
 <string name="navigation_bar_manage_summary">Manage bottom bar themes, icons, glass style, and opacity.</string>
 <string name="navigation_bar_package_summary">Tap a bottom bar theme to apply, edit, export, or sync.</string>
@@ -3192,17 +2639,12 @@ function login() {
 <string name="navigation_bar_edit">Bottom bar theme</string>
 <string name="navigation_bar_preview">Bottom bar preview</string>
 <string name="navigation_bar_name">Bottom bar theme name</string>
-<string name="navigation_bar_download_first">Download the cloud bottom bar theme before editing.</string>
 <string name="navigation_bar_upload">Upload</string>
 <string name="navigation_bar_delete_local_confirm">Delete local bottom bar theme?</string>
 <string name="navigation_bar_delete_remote_confirm">Delete cloud bottom bar theme?</string>
 <string name="navigation_bar_delete_both_confirm">Delete both local and cloud bottom bar theme?</string>
 <string name="navigation_icon_normal">Normal</string>
 <string name="navigation_icon_selected">Selected</string>
-<string name="navigation_icon_set_normal">Set normal icon</string>
-<string name="navigation_icon_set_selected">Set selected icon</string>
-<string name="navigation_icon_clear_normal">Clear normal icon</string>
-<string name="navigation_icon_clear_selected">Clear selected icon</string>
 <string name="navigation_icon_select_file">Select navigation icon</string>
 <string name="bottom_bar_effect_solid">Solid</string>
 <string name="bottom_bar_effect_glass">Glass</string>
@@ -3217,13 +2659,11 @@ function login() {
 <string name="bottom_bar_item_hidden">已隐藏</string>
 <string name="cache_manage_title">Cache Manager</string>
 <string name="cache_manage_summary">Manage book, audio, and manga caches in one place.</string>
-<string name="cache_manage_cached_only">Only cached chapters</string>
 <string name="cache_manage_books">Books</string>
 <string name="cache_manage_audio">Audio</string>
 <string name="cache_manage_manga">Manga</string>
 <string name="cache_manage_search_book">Search cache</string>
 <string name="cache_manage_sort_title">Sort cache</string>
-<string name="cache_manage_sort_current">Sort: %1$s</string>
 <string name="cache_manage_sort_name">Name</string>
 <string name="cache_manage_sort_last_read">Last read</string>
 <string name="cache_manage_sort_time">Recent</string>
@@ -3241,10 +2681,7 @@ function login() {
 <string name="cache_manage_cached">Cached</string>
 <string name="cache_manage_not_cached">Not cached</string>
 <string name="cache_manage_search_chapter">Search chapters</string>
-<string name="cache_manage_swipe_delete_hint">Swipe left to delete chapter cache</string>
-<string name="cache_manage_delete_chapter_confirm">Delete cache for “%1$s”?</string>
 <string name="cache_manage_delete_chapter_failed">Delete failed: %1$s</string>
-<string name="cache_manage_delete_book_confirm">Delete all cache for “%1$s”?</string>
 <string name="cache_manage_delete_book_title">Delete cache for “%1$s”</string>
 <string name="cache_manage_delete_local">Delete local</string>
 <string name="cache_manage_delete_remote">Delete cloud</string>
@@ -3256,20 +2693,12 @@ function login() {
 <string name="cache_manage_upload">Upload</string>
 <string name="cache_manage_uploading">Packing and uploading...</string>
 <string name="cache_manage_upload_success">Cache package uploaded to WebDAV</string>
-<string name="cache_manage_upload_failed">Upload failed: %1$s</string>
 <string name="cache_manage_no_cache">No cache to upload</string>
 <string name="cache_manage_pack_failed">Failed to pack cache</string>
 <string name="cache_manage_upload_all">Upload all</string>
 <string name="cache_manage_delete_all">Delete all</string>
 <string name="cache_manage_batch_empty">No cache to operate</string>
-<string name="cache_manage_batch_upload_done">Batch upload finished: %1$d succeeded, %2$d failed</string>
-<string name="cache_manage_delete_all_confirm">Delete all cache for %1$d item(s) in the current list?</string>
-<string name="cache_manage_delete_cached">Delete cached</string>
-<string name="cache_manage_cache_uncached">Cache missing</string>
-<string name="cache_manage_audio_cache_done">Audio cache finished: %1$d chapter(s)</string>
 <string name="cache_manage_audio_cache_started">Queued %1$d chapter(s) for caching</string>
-<string name="cache_manage_audio_cache_failed">Audio cache failed: %1$s</string>
-<string name="cache_manage_delete_cached_confirm">Delete cached content for %1$d chapter(s) in the current list?</string>
 <string name="cache_manage_audio_url_empty">Audio URL is empty</string>
 <string name="cache_manage_resolving_chapter">Resolving %1$d/%2$d</string>
 <string name="cache_manage_task_progress">%1$d/%2$d · %3$s / %4$s · %5$s</string>
@@ -3287,12 +2716,9 @@ function login() {
 <string name="cache_manage_use_cache">Use cache</string>
 <string name="cache_manage_add_bookshelf_success">Added to bookshelf from cache</string>
 <string name="cache_manage_use_cache_success">Cache chapters synced</string>
-<string name="cache_manage_author_source">%1$s · %2$s</string>
 <string name="cache_manage_source_deleted">Source removed: %1$s</string>
 <string name="cache_manage_source_deleted_chip">Removed · %1$s</string>
 <string name="cache_manage_select_source">Select source</string>
-<string name="background_image_too_large">Background image is too large</string>
-<string name="background_image_load_error">Failed to load background\n%1$s</string>
 <string name="navigation_bar_sidebar_background">Sidebar wallpaper</string>
 <string name="bottom_bar_layout_standard">Bottom navigation bar</string>
 <string name="top_bar_manage">Top bar manager</string>
@@ -3322,7 +2748,6 @@ function login() {
 <string name="top_bar_filter_toggle_show">Show</string>
 <string name="top_bar_filter_toggle_hide_when_expanded">Hide when expanded</string>
 <string name="top_bar_follow_theme">Follow theme</string>
-<string name="source_runtime_backup">Ignore source login and variables</string>
 <string name="auto_refresh_media_toc">Auto refresh empty media catalog link</string>
 <string name="auto_refresh_media_toc_summary">Refresh the catalog once when an audio or video chapter link is empty or invalid</string>
 <string name="book_info_manage">Book detail manager</string>
@@ -3335,8 +2760,6 @@ function login() {
 <string name="book_info_style_immersive_title">Immersive cover detail page</string>
 <string name="book_info_style_immersive_desc">A modern detail page with cover backdrop, compact actions, intro, chapter preview and image gallery. Switch back to Classic to customize component order.</string>
 <string name="book_info_component_keep_one">Keep at least one detail component enabled.</string>
-<string name="catalog_page_indicator_empty">0/0</string>
-<string name="catalog_page_indicator">%1$d/%2$d</string>
 <string name="cache_manage_downloading">Downloading cloud cache...</string>
 <string name="cache_manage_download_queued">Queued for WebDAV download</string>
 <string name="cache_manage_download_success">Cloud cache downloaded</string>
@@ -3345,7 +2768,6 @@ function login() {
 <string name="cache_manage_download_first">Download the cloud cache to local first</string>
 <string name="cache_manage_batch_upload_queued">Queued %1$d upload task(s)</string>
 <string name="bottom_bar_border_color">Bottom bar border color</string>
-<string name="top_bar_border_color">Top bar border color</string>
 <string name="cover_collection_manage">Cover collections</string>
 <string name="cover_collection_select">Use collection</string>
 <string name="cover_collection_none">None</string>
@@ -3359,18 +2781,12 @@ function login() {
 <string name="cover_collection_mode_mixed">Mixed</string>
 <string name="cover_collection_name">Collection name</string>
 <string name="cover_collection_delete_image_confirm">Delete this image from the collection?</string>
-<string name="paragraph_rule_add_hint">Add paragraph rule</string>
-<string name="paragraph_rule_all_rules">All paragraph rules</string>
-<string name="paragraph_rule_current_book">Current book</string>
-<string name="paragraph_rule_no_editable_vars">No editable variables</string>
-<string name="paragraph_rule_save">Save paragraph rule</string>
 <string name="cache_manage_state_none">No cache</string>
 <string name="cache_manage_state_local">Local</string>
 <string name="cache_manage_state_remote">Cloud</string>
 <string name="cache_manage_state_both">Local + cloud</string>
 <string name="cache_manage_manifest_missing">Cache manifest is missing</string>
 <string name="cache_manage_legacy_manifest_missing">Legacy cache package is missing chapter manifest. Open the book once or re-upload from a device with chapter list.</string>
-<string name="top_bar_style_immersive">Immersive</string>
 <string name="webdav_account_manage">WebDAV account</string>
 <string name="webdav_account_manage_summary">Configure server address, account, and password</string>
 <string name="sync_theme_packages">Sync cloud themes</string>
@@ -3387,8 +2803,6 @@ function login() {
 <string name="s3_container_delete_confirm">&#30830;&#23450;&#21024;&#38500; %1$s &#21527;&#65311;</string>
 <string name="s3_container_name">&#23481;&#22120;&#21517;&#31216;</string>
 <string name="s3_container_capacity_gb">Capacity (GB, 0 or empty means unlimited)</string>
-<string name="s3_container_advanced_show">Show advanced settings</string>
-<string name="s3_container_advanced_hide">Hide advanced settings</string>
 <string name="s3_container_enabled">&#21551;&#29992;</string>
 <string name="s3_container_disabled">&#20572;&#29992;</string>
 <string name="s3_container_enable">&#21551;&#29992;</string>
@@ -3413,7 +2827,6 @@ function login() {
 <string name="s3_full_webdav_fallback_upload">&#19978;&#20256;&#21040; WebDAV</string>
 <string name="s3_full_webdav_fallback_never">&#27704;&#19981;&#25552;&#37266;</string>
 <string name="s3_endpoint">Endpoint</string>
-<string name="s3_endpoint_summary">S3/R2 Endpoint</string>
 <string name="s3_region">Region</string>
 <string name="s3_prefix">Prefix</string>
 <string name="s3_access_key">Access Key</string>
@@ -3428,22 +2841,7 @@ function login() {
 <string name="bookshelf_list_intro_lines_1">1 line</string>
 <string name="bookshelf_list_intro_lines_2">2 lines</string>
 <string name="bookshelf_list_intro_lines_3">3 lines</string>
-<string name="main_layout_preset">Navigation style</string>
-<string name="main_layout_preset_summary">Switch to built-in top and bottom navigation presets</string>
-<string name="main_layout_preset_default">Floating</string>
-<string name="main_layout_preset_default_summary">Floating bottom bar with default top bar</string>
-<string name="main_layout_preset_regular">Regular</string>
-<string name="main_layout_preset_regular_summary">Standard bottom bar with regular top bar</string>
-<string name="main_layout_preset_sidebar">Sidebar</string>
-<string name="main_layout_preset_sidebar_summary">Sidebar navigation with default top bar</string>
-<string name="appearance_kit_actions">Theme actions</string>
-<string name="appearance_kit_import_summary">Supports RED theme packages, theme ZIPs, and app theme ZIPs</string>
-<string name="appearance_kit_export_summary">Export current theme, top bar, bottom bar, and cover collection together</string>
-<string name="appearance_kit_sync_summary">View cloud sync tasks for themes, top bars, and bottom bars</string>
-<string name="appearance_kit_advanced">Advanced management</string>
-<string name="appearance_kit_cover_summary">Manage book cover gallery resources</string>
 <string name="share_note_template">模板</string>
-<string name="share_note_manage_templates">管理模板</string>
 <string name="continue_">Continue</string>
 <string name="import_">Import</string>
 <string name="import_json_format_unrecognized">Unrecognized import content, please check the file type</string>
@@ -3491,7 +2889,6 @@ function login() {
 <string name="online_import_error_package_limit">The package exceeds the import limits</string>
 <string name="import_read_config_success">Layout imported: %1$s</string>
 <string name="online_import_paragraph_script_warning">Warning: Paragraph rules may contain JavaScript or login scripts. Import only from a trusted source.</string>
-<string name="paragraph_import_title">Import paragraph rules</string>
 <string name="paragraph_import_summary">Rules: %1$d\nNew names: %2$d\nSame-name conflicts: %3$d</string>
 <string name="paragraph_import_conflict_message">%1$d imported rule(s) have the same name as an existing rule or another rule in this package. Choose how to handle them.</string>
 <string name="paragraph_import_conflict_rename">Keep both and number automatically</string>
@@ -3511,7 +2908,6 @@ function login() {
 <string name="public_web_relay_status">当前状态</string>
 <string name="public_web_relay_device_id">设备 ID</string>
 <string name="public_web_relay_test">测试连接</string>
-<string name="public_web_relay_copy_address">复制设备地址</string>
 <string name="public_web_relay_save_reconnect">保存并重新连接</string>
 <string name="public_web_relay_pairing">设备配对</string>
 <string name="public_web_relay_pairing_summary">输入部署 Worker 时设置的管理员令牌，仅用于本次配对，不会保存到设备。配对后 Worker 只保存设备鉴权键，不会获得设备原始密钥。</string>
@@ -3571,9 +2967,7 @@ function login() {
     <string name="video_no_audio_track">无可用音轨</string>
     <string name="video_ratio_playing">画面比例: %1$s</string>
     <string name="video_audio_track_playing">音轨: %1$s</string>
-    <string name="theme_preview">Live preview</string>
-    <string name="theme_editor_suggest_palette">Suggested from wallpaper</string>
-    <string name="theme_editor_hex_color">Hex color</string><string name="manage_bg_alpha">Management page background transparency</string>
+    <string name="manage_bg_alpha">Management page background transparency</string>
     <string name="manage_bg_alpha_summary">0 = opaque (default), 100 = fully transparent (shows background image); applies to all management &amp; settings pages</string>    <string name="tts_preview_default_text">你好，这是一段朗读试听示例文本。</string>
     <string name="tts_preview_action">试听</string>
     <string name="tts_preview_stop">停止</string>
@@ -3638,7 +3032,6 @@ function login() {
     <string name="tts_casting_prebuild_end_chapter">结束章节号</string>
     <string name="tts_casting_prebuild_chapter_count">本书共 %1$d 章</string>
     <string name="tts_casting_prebuild_chapter_invalid">章节范围无效，请检查起止章节号</string>
-    <string name="tts_casting_prebuild_chapter_hint">起止章节号（如 1-10）</string>
     <string name="tts_casting_prebuild_no_net">当前无网络连接，请检查网络后重试</string>
     <string name="tts_casting_prebuild_gate_system">当前为系统朗读引擎，不支持批量预合成（仅在线/脚本引擎支持）</string>
     <string name="tts_casting_prebuild_gate_stream">流式朗读模式已开启，批量预合成不可用</string>
@@ -3673,11 +3066,8 @@ function login() {
     <string name="dlna_stop_cast">结束投屏</string>
     <string name="dlna_volume">音量</string>
     <string name="dlna_proxy_relaying">代理转发中</string>
-    <string name="dlna_direct_cast">直连投递</string>
     <string name="dlna_seek_unsupported">该设备不支持进度控制</string>
-    <string name="dlna_volume_unsupported">该设备不支持音量控制</string>
     <string name="dlna_stopped_local_paused">已在手机暂停，可继续播放</string>
-    <string name="dlna_return_to_phone">回到手机播放</string>
     <!-- 投屏态提示条 -->
     <string name="dlna_casting_banner">正在投屏：%1$s</string>
     <string name="dlna_cast_settings">投屏设置</string>
@@ -3710,9 +3100,7 @@ function login() {
     <string name="dlna_error_device_lost">投屏已断开，设备可能已关闭</string>
     <string name="dlna_error_network_changed">网络已切换，投屏已中断</string>
     <string name="dlna_error_local_file_missing">本地文件不可用，可能已被删除或移动</string>
-    <string name="dlna_hint_hls_maybe_unsupported">部分电视不支持 HLS 直播流，如无画面请改用其他方式</string>
     <string name="dlna_error_start_failed">投屏启动失败，请重试</string>
-    <string name="dlna_action_open_in_browser">用浏览器打开</string>
     <!-- 设置项 -->
     <string name="dlna_settings_group">投屏</string>
     <string name="dlna_settings_enabled">启用投屏功能</string>
