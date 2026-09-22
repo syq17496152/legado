@@ -21,6 +21,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 import androidx.fragment.app.DialogFragment
 import io.legado.app.R
+import io.legado.app.constant.AppLog
 import io.legado.app.ui.widget.dialog.TextDialog
 
 inline fun <reified T : DialogFragment> AppCompatActivity.showDialogFragment(
@@ -257,8 +258,15 @@ val Activity.navigationBarGravity: Int
  * 显示目录help下的帮助文档
  */
 fun AppCompatActivity.showHelp(fileName: String) {
-    val mdText = String(assets.open("web/help/md/${fileName}.md").readBytes())
-    showDialogFragment(TextDialog(getString(R.string.help), mdText, TextDialog.Mode.MD))
+    // 资产缺失容错（2026-09-22 回补）：原实现直接 `assets.open` ⇒ md 缺失时抛 FileNotFoundException
+    // 一路冒泡到点击回调，用户点「帮助」即报错。与 AutoTaskEditActivity 已有兜底同口径：失败留痕 + toast 回执。
+    kotlin.runCatching {
+        val mdText = String(assets.open("web/help/md/${fileName}.md").readBytes())
+        showDialogFragment(TextDialog(getString(R.string.help), mdText, TextDialog.Mode.MD))
+    }.onFailure {
+        AppLog.put("帮助文档缺失或读取失败: $fileName", it)
+        toastOnUi(R.string.load_failed)
+    }
 }
 
 val isHuaweiSystemDevice: Boolean

@@ -237,7 +237,7 @@ class AutoTaskEditActivity :
     }
 
     private fun showHelpDialog() {
-        // TODO: 需创建 assets/web/help/md/autoTaskHelp.md 帮助文档
+        // autoTaskHelp.md 已于 2026-09-22 回补入库；保留 runCatching 作为资产缺失的结构性兜底
         kotlin.runCatching {
             showHelp("autoTaskHelp")
         }.onFailure {

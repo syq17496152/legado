@@ -14,6 +14,7 @@ import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import io.legado.app.R
+import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.Book
 import io.legado.app.help.book.isAudio
 import io.legado.app.help.book.isImage
@@ -109,8 +110,14 @@ fun Fragment.startActivityForBook(
 }
 
 fun Fragment.showHelp(fileName: String) {
-    val mdText = String(requireContext().assets.open("web/help/md/${fileName}.md").readBytes())
-    showDialogFragment(TextDialog(getString(R.string.help), mdText, TextDialog.Mode.MD))
+    // 资产缺失容错（2026-09-22 回补）：与 AppCompatActivity.showHelp 同口径，防 md 缺失时抛异常冒泡到点击回调
+    kotlin.runCatching {
+        val mdText = String(requireContext().assets.open("web/help/md/${fileName}.md").readBytes())
+        showDialogFragment(TextDialog(getString(R.string.help), mdText, TextDialog.Mode.MD))
+    }.onFailure {
+        AppLog.put("帮助文档缺失或读取失败: $fileName", it)
+        toastOnUi(R.string.load_failed)
+    }
 }
 
 val Fragment.isCreated
