@@ -729,7 +729,7 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
         }
     }
 
-    // W3.2：原 optionRow（PackageManageUi View 行助手）随 View 弹框废弃，
+    // W3.2：原 optionRow（设置页 View 行助手）随 View 弹框废弃，
     // 对应 View 行助手文件已随死件清理删除（Compose 行由本页自有 Composable 承担）
 
     // W3.2：NumberPickerDialog(View)→showComposeNumberPickerDialog（MC 门禁统一弹框基线）

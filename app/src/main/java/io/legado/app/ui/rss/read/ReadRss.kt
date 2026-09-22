@@ -203,7 +203,7 @@ object ReadRss {
      *       ImageCanvasViewModel.loadArticleInternal → Rss.getContentAwait 取 body，
      *       再交 ImageUrlExtractor.extractImageList 解析为图片URL列表，支持多图浏览
      * - ruleContent 为空时：由 ImageUrlExtractor 的「单URL兜底」策略用 article.link 作单图
-     *       （原 ImageGalleryViewModel 已随死件清理删除，逻辑全部落在 ImageUrlExtractor）
+     *       （原图集 ViewModel 已随死件清理删除，逻辑全部落在 ImageUrlExtractor）
      */
     private fun readNoHtml(
         fragment: Fragment,
