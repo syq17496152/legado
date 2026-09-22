@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- my-compose-full W4.1：View 布局整体纯化为单 ComposeView 宿主
-     （原 MainTopBarView/tab_bar/tv_summary/recycler_view/RotateLoading/tv_empty/batch_bar
-     全部由 CacheManageScreen Compose 渲染，顶栏为 AppManagementScaffold） -->
-<androidx.compose.ui.platform.ComposeView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/compose_host"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent" />

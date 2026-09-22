@@ -19,7 +19,7 @@ import io.legado.app.ui.widget.number.NumberPickerDialog
 /**
  * 视频设置对话框（ComposeDialogFragment 壳迁移）。
  *
- * 原 BaseDialogFragment(R.layout.dialog_video_settings)（ComposeView 宿主布局）迁移为
+ * 原 BaseDialogFragment(R.layout.dialog_video_settings)（ComposeView 宿主布局；该布局已随死资源清理删除）迁移为
  * [ComposeDialogFragment] + 程序化创建 ComposeView，移除 R.layout / ViewBinding 依赖。
  *
  * video-player-ux-fixes P3 透明修复：ComposeDialogFragment 基类 window 背景透明，

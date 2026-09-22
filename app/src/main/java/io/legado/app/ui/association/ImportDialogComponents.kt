@@ -27,15 +27,6 @@ import io.legado.app.ui.widget.compose.toMiuixPalette
 import androidx.compose.material3.MaterialTheme
 
 /**
- * Load state for import dialogs.
- */
-enum class ImportLoadState {
-    LOADING,
-    SUCCESS,
-    ERROR
-}
-
-/**
  * Common source item row used by all import dialogs.
  */
 @Composable

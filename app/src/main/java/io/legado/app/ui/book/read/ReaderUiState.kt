@@ -21,7 +21,7 @@ data class ReaderUiState(
 
 /** 弹层单态枚举（AD-02：任意时刻最多一个 activeSheet） */
 sealed interface ReadBookSheet {
-    /** 目录/书签双 Tab Sheet（Phase4 已接线 BookTocBookmarkSheet） */
+    /** 目录/书签双 Tab Sheet（本骨架尚未接线：实际入口走 TocActivity；原拟用的 BookTocBookmarkSheet 已随死件清理删除） */
     object Toc : ReadBookSheet
     /** 阅读设置 Sheet（字号/亮度/夜间/行距/对齐 + 扩展翻页/字体） */
     object ReaderMenu : ReadBookSheet

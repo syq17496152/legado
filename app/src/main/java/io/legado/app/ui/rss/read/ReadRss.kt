@@ -199,9 +199,11 @@ object ReadRss {
      *
      * 改造说明（image-gallery-activity spec）：
      * - 原：ruleContent 解析为单URL，用 PhotoDialog 显示单图
-     * - 新：设置 ImagePlay 单例，启动 ImageGalleryActivity，由 ViewModel.loadArticleContent 调用 Rss.getContentAwait
-     *       获取 body 并解析为图片URL列表（split 换行符），支持多图浏览
-     * - ruleContent 为空时：ImageGalleryViewModel 兜底用 article.link 作为单图URL
+     * - 新：设置 ImagePlay 单例，启动 ImageGalleryActivity，由
+     *       ImageCanvasViewModel.loadArticleInternal → Rss.getContentAwait 取 body，
+     *       再交 ImageUrlExtractor.extractImageList 解析为图片URL列表，支持多图浏览
+     * - ruleContent 为空时：由 ImageUrlExtractor 的「单URL兜底」策略用 article.link 作单图
+     *       （原 ImageGalleryViewModel 已随死件清理删除，逻辑全部落在 ImageUrlExtractor）
      */
     private fun readNoHtml(
         fragment: Fragment,

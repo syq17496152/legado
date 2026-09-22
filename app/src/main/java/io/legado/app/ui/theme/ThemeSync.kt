@@ -14,7 +14,7 @@ import androidx.compose.runtime.setValue
  * 机制：ThemeConfig.applyTheme() 末尾调用 [bump]（T12 注释修正：recreateActivities 仅
  * postEvent(RECREATE)，重建页面经 onCreate 全量重读，不直接 bump），
  * 所有在组合中读取了 [version] 的 Composable（LegadoTheme、直接读
- * ThemeStore 的 GlassTopAppBar/PillNavigationBar 等）立即失效重组，
+ * ThemeStore 的 GlassTopAppBar 等）立即失效重组，
  * 重新读取 ThemeStore 最新值 —— 无需依赖 Activity 重建，栈内后台页面同样生效。
  */
 object ThemeSync {

@@ -20,6 +20,19 @@ class MigrationTest {
 
     private val ALL_MIGRATIONS = DatabaseMigrations.migrations
 
+    /**
+     * 本 App 真实发布过的 DB 版本（由 `git log --follow -- AppDatabase.kt` 抽取 `version = N` 得到）。
+     *
+     * ⚠️ 不可用「有迁移的最早版本」当起点：本仓迁移边只覆盖 10→43 与 89→110 两段
+     * （43~88 为上游 fork 遗留空档），`fallbackToDestructiveMigrationFrom` 仅兜底 1~9
+     * ⇒ 从 10 起跑找不到到 110 的路径（Room 抛 "A migration from 10 to 110 was required
+     * but not found"），旧版 `migrateAll(10)` 属**测试资产失实**（真跑必失败）。
+     * 详见 `docs/project-rules/database-migration-safety.md` R7。
+     */
+    private val SHIPPED_VERSIONS = listOf(
+        89, 92, 93, 94, 98, 99, 100, 101, 103, 104, 106, 107, 108, 109
+    )
+
     @get:Rule
     val helper: MigrationTestHelper = MigrationTestHelper(
         InstrumentationRegistry.getInstrumentation(),
@@ -29,20 +42,35 @@ class MigrationTest {
 
     @Test
     @Throws(IOException::class)
-    fun migrateAll() {
-        // Create earliest version of the database with manual migrations.
-        // Versions 1-9 use fallbackToDestructiveMigrationFrom, so the earliest
-        // testable version is 10 (start of manual migrations in DatabaseMigrations).
-        helper.createDatabase(TEST_DB, 10).apply {
+    fun migrateFromEarliestShippedVersion() {
+        // 起点取本 App 真实发布过的最低版本；Room 在迁移后做 schema 校验，不匹配即抛异常。
+        openFromVersion(89, TEST_DB)
+    }
+
+    /**
+     * 覆盖安装矩阵：逐个「历史发布版本」起跑 → 打开当前版本库 → Room 校验通过。
+     * 任一版本找不到迁移路径（IllegalStateException）或 schema 校验失败都会使本用例失败。
+     */
+    @Test
+    @Throws(IOException::class)
+    fun migrateFromEveryShippedVersion() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        SHIPPED_VERSIONS.forEach { from ->
+            val dbName = "$TEST_DB-$from"
+            context.deleteDatabase(dbName)
+            openFromVersion(from, dbName)
+            context.deleteDatabase(dbName)
+        }
+    }
+
+    private fun openFromVersion(from: Int, dbName: String) {
+        helper.createDatabase(dbName, from).apply {
             close()
         }
-
-        // Open latest version of the database. Room will validate the schema
-        // once all migrations execute.
         Room.databaseBuilder(
             InstrumentationRegistry.getInstrumentation().targetContext,
             AppDatabase::class.java,
-            TEST_DB
+            dbName
         ).addMigrations(*ALL_MIGRATIONS)
             .build().apply {
                 openHelper.writableDatabase

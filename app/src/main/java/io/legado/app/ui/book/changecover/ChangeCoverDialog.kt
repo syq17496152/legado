@@ -55,7 +55,7 @@ import kotlinx.coroutines.launch
 
 /**
  * 换封面（迁移：原 BaseDialogFragment(R.layout.dialog_change_cover) 的
- * Toolbar 菜单（开始/停止）+ RefreshProgressBar + RecyclerView(CoverAdapter 3 列网格)
+ * Toolbar 菜单（开始/停止）+ RefreshProgressBar + RecyclerView 3 列网格（适配器已随迁移删除）
  * 迁移为 AppDialogFrame + LinearProgressIndicator + LazyVerticalGrid（3 列），
  * 封面项用 AndroidView 包裹 [CoverImageView] 保留原有加载逻辑（含默认封面/书名绘制）。
  * 构造器（name/author）、CallBack 接口、ViewModel 数据流行为保持不变。）
