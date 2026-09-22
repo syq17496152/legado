@@ -1,5 +1,6 @@
 package io.legado.app.service.relay
 
+import androidx.annotation.Keep
 import io.legado.app.utils.GSON
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -10,6 +11,8 @@ import okio.Buffer
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
+// GSON 反序列化目标：必须 @Keep（release R8 优化会把「仅反射使用」的类/成员移走，铁证 2026-09-22）
+@Keep
 internal data class RelayShareResult(
     val id: String,
     val shareUrl: String,
@@ -127,6 +130,8 @@ internal class RelayControlClient(
             .header("x-legado-signature", proof.signature)
     }
 
+    // GSON 反序列化目标：必须 @Keep（同上）
+    @Keep
     private data class ProvisionResult(val deviceId: String = "", val deviceHandle: String = "")
 
     private fun execute(request: Request): String {

@@ -1,5 +1,6 @@
 package io.legado.app.service.relay
 
+import androidx.annotation.Keep
 import io.legado.app.utils.GSON
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart

@@ -1,5 +1,6 @@
 package io.legado.app.service.relay
 
+import androidx.annotation.Keep
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -73,6 +74,8 @@ internal object RelayProtocol {
     }
 }
 
+// GSON 反序列化目标（RelayClient 收控制帧）：必须 @Keep（release R8 会把「仅反射使用」的成员移走）
+@Keep
 internal data class RelayControlMessage(
     val v: Int = RelayProtocol.VERSION,
     val type: String,

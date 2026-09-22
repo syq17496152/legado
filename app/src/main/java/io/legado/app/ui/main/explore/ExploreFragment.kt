@@ -1,5 +1,6 @@
 package io.legado.app.ui.main.explore
 
+import androidx.annotation.Keep
 import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteBlobTooBigException
@@ -3864,6 +3865,8 @@ private data class SuiteRankedPagingState(
     @Volatile var exhausted: Boolean = false
 )
 
+// GSON 反序列化目标（现代发现缓存）：必须 @Keep，否则 release R8 优化会移走仅反射使用的成员
+@Keep
 private data class ModernDiscoverResultCache(
     val sourceUrl: String = "",
     val tagUrl: String = "",
@@ -3873,6 +3876,8 @@ private data class ModernDiscoverResultCache(
     val savedAt: Long = 0L
 )
 
+// GSON 反序列化目标（发现分组页快照）：必须 @Keep（同上）
+@Keep
 private data class DiscoverySuitePageSnapshot(
     val suiteId: String,
     val signature: String,

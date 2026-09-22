@@ -1,5 +1,6 @@
 package io.legado.app.model
 
+import androidx.annotation.Keep
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import io.legado.app.constant.BookSourceType
@@ -75,7 +76,10 @@ data class DimResult(
 
 /**
  * 源质量报告（评分 v2：形态模板 + 已校验维度归一化）
+ *
+ * GSON 反序列化目标（结论缓存）：必须 @Keep，否则 release R8 优化会移走仅反射使用的成员。
  */
+@Keep
 data class SourceQualityReport(
     val sourceUrl: String,
     val sourceType: Int,
@@ -797,6 +801,8 @@ object SourceQualityChecker {
         }
     }
 
+    // GSON 反序列化目标（缓存包装）：必须 @Keep
+    @Keep
     data class CachedReport(val lastUpdateTime: Long, val reportJson: String)
 
     // ============ 工具 ============
