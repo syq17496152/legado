@@ -2161,7 +2161,7 @@ private fun BookInfoIntroContent(
 
 @Composable
 @SuppressLint("SetJavaScriptEnabled")
-private fun BookInfoWebIntro(
+internal fun BookInfoWebIntro(
     rawIntro: String,
     bookUrl: String,
     actions: BookInfoActions,
@@ -2566,7 +2566,7 @@ private fun bookInfoUseWebThemeCss(style: BookInfoComposeStyle): String {
     """.trimIndent()
 }
 
-private suspend fun loadCoverThemeColor(context: Context, coverPath: String?): Int? {
+internal suspend fun loadCoverThemeColor(context: Context, coverPath: String?): Int? {
     if (coverPath.isNullOrBlank()) return null
     return withContext(Dispatchers.IO) {
         runCatching {

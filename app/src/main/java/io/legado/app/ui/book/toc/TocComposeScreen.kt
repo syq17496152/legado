@@ -759,7 +759,7 @@ private fun TocChapterList(
 }
 
 @Composable
-private fun TocVolumeHeaderRow(
+internal fun TocVolumeHeaderRow(
     palette: AppManagementPalette,
     title: String,
     collapsed: Boolean,
@@ -812,7 +812,7 @@ private fun TocVolumeHeaderRow(
 }
 
 @Composable
-private fun TocChapterRow(
+internal fun TocChapterRow(
     palette: AppManagementPalette,
     book: Book?,
     chapter: BookChapter,
@@ -1167,7 +1167,7 @@ private data class TocTitleContext(
     val replaceBook: io.legado.app.data.entities.ReplaceBook?
 )
 
-private fun collapsedVolumeIndexesFor(
+internal fun collapsedVolumeIndexesFor(
     chapters: List<BookChapter>,
     durChapterIndex: Int
 ): Set<Int> {
@@ -1184,7 +1184,7 @@ private fun collapsedVolumeIndexesFor(
     return volumeIndexes
 }
 
-private fun visibleChapters(
+internal fun visibleChapters(
     chapters: List<BookChapter>,
     searchKey: String,
     collapsedVolumeIndexes: Set<Int>
@@ -1209,7 +1209,7 @@ private fun visiblePositionOf(chapters: List<BookChapter>, chapterIndex: Int): I
     return chapters.indexOfLast { it.index < chapterIndex }.coerceAtLeast(0)
 }
 
-private fun isChapterCached(
+internal fun isChapterCached(
     book: Book?,
     chapter: BookChapter,
     cacheFileNames: Set<String>

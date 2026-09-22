@@ -2,6 +2,7 @@ package io.legado.app.ui.config
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,10 +22,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +52,10 @@ import androidx.compose.material3.MaterialTheme
 import io.legado.app.ui.theme.bodyTertiary
 import io.legado.app.ui.theme.bodySecondary
 import io.legado.app.ui.theme.bodyLargeX
+import kotlin.math.roundToInt
+
+/** 拖拽位移换算目标索引的近似行高（与既有拖拽实现同口径：固定行高近似，非逐行精确测量） */
+private val DragRowHeightApprox = 84.dp
 
 @Composable
 internal fun BookInfoManageScreen(
@@ -57,6 +68,9 @@ internal fun BookInfoManageScreen(
     onMoveItem: (Int, Int) -> Unit
 ) {
     val palette = rememberAppManagementPalette()
+    var dragIndex by remember { mutableStateOf<Int?>(null) }
+    var dragTotalY by remember { mutableStateOf(0f) }
+    val itemHeightPx = with(LocalDensity.current) { DragRowHeightApprox.toPx() }
 
     // followup F5：统一管理族壳（AppManagementScaffold 平移，宿主 View TitleBar 已摘除）
     AppManagementScaffold(
@@ -80,10 +94,11 @@ internal fun BookInfoManageScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Summary text
+            // Summary text：如实描述各样式与组件配置的关系（组件配置只对现代样式生效）
             val summaryText = when (style) {
-                BookInfoPageStyle.CLASSIC -> stringResource(R.string.book_info_components_hint)
+                BookInfoPageStyle.CLASSIC -> stringResource(R.string.book_info_style_classic_hint)
                 BookInfoPageStyle.IMMERSIVE_COMPOSE -> stringResource(R.string.book_info_style_immersive_hint)
+                BookInfoPageStyle.MODERN_COMPOSE -> stringResource(R.string.book_info_components_hint)
             }
             Text(
                 text = summaryText,
@@ -97,38 +112,10 @@ internal fun BookInfoManageScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             when (style) {
+                // 经典样式：固定布局，只提供「切到现代样式编辑组件」动线
                 BookInfoPageStyle.CLASSIC -> {
-                    // Component list
-                    LazyColumn(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentPadding = PaddingValues(vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
-                    ) {
-                        itemsIndexed(
-                            items = components,
-                            key = { _, item -> item.type.name }
-                        ) { index, item ->
-                            ComponentItemRow(
-                                item = item,
-                                palette = palette,
-                                onCheckedChange = { checked ->
-                                    onComponentToggle(index, checked)
-                                }
-                            )
-                        }
-                    }
-
-                    // Reset button
-                    LegadoMiuixActionButton(
-                        text = stringResource(R.string.reset),
-                        palette = palette.miuix,
-                        onClick = onReset,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 16.dp)
-                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    GotoModernButton(palette = palette, onStyleChanged = onStyleChanged)
                 }
 
                 BookInfoPageStyle.IMMERSIVE_COMPOSE -> {
@@ -157,10 +144,7 @@ internal fun BookInfoManageScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.height(14.dp))
-                        // F98（ui-subpage-optimization）：沉浸 Tab 的决策支持——
-                        // 原为「一句描述文本 + 无回切入口」，用户需退出本页开一本书才能看效果。
-                        // 补①结构示意占位（封面通栏 + 浮层两栏，明确标注「示意，以详情页为准」）
-                        //   ②「切回经典样式继续编辑组件」显式动线（复用既有 onStyleChanged，行为同 Tab）
+                        // F98（ui-subpage-optimization）：结构示意占位（封面通栏 + 浮层两栏）
                         ImmersiveStructurePreview(palette = palette)
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
@@ -174,20 +158,84 @@ internal fun BookInfoManageScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    LegadoMiuixActionButton(
-                        text = stringResource(R.string.book_info_style_back_to_classic),
-                        palette = palette.miuix,
-                        onClick = { onStyleChanged(BookInfoPageStyle.CLASSIC) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                    )
+                    // F98 原为「切回经典样式继续编辑组件」，该动线会全局改样式且指向不支持组件配置的样式，
+                    // 现改为指向唯一支持组件配置的现代样式（book-info-modern-compose 4.4）
+                    GotoModernButton(palette = palette, onStyleChanged = onStyleChanged)
 
                     Spacer(modifier = Modifier.weight(1f))
+                }
+
+                // 现代样式：组件显隐 + 长按拖拽排序（项目内唯一消费方）
+                BookInfoPageStyle.MODERN_COMPOSE -> {
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentPadding = PaddingValues(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(AppListSpacing.Normal)
+                    ) {
+                        itemsIndexed(
+                            items = components,
+                            key = { _, item -> item.type.name }
+                        ) { index, item ->
+                            ComponentItemRow(
+                                item = item,
+                                palette = palette,
+                                onCheckedChange = { checked ->
+                                    onComponentToggle(index, checked)
+                                },
+                                onDragStart = {
+                                    dragIndex = index
+                                    dragTotalY = 0f
+                                },
+                                onDrag = { dragAmount ->
+                                    dragTotalY += dragAmount
+                                    dragIndex?.let { current ->
+                                        val target = (current + (dragTotalY / itemHeightPx).roundToInt())
+                                            .coerceIn(0, components.lastIndex)
+                                        if (target != current) {
+                                            onMoveItem(current, target)
+                                            dragIndex = target
+                                        }
+                                    }
+                                },
+                                onDragEnd = {
+                                    dragIndex = null
+                                    dragTotalY = 0f
+                                }
+                            )
+                        }
+                    }
+
+                    // Reset button
+                    LegadoMiuixActionButton(
+                        text = stringResource(R.string.reset),
+                        palette = palette.miuix,
+                        onClick = onReset,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 16.dp)
+                    )
                 }
             }
         }
     }
+}
+
+/** 「切到现代样式编辑组件」动线（唯一支持组件配置的样式） */
+@Composable
+private fun GotoModernButton(
+    palette: AppManagementPalette,
+    onStyleChanged: (BookInfoPageStyle) -> Unit
+) {
+    LegadoMiuixActionButton(
+        text = stringResource(R.string.book_info_style_goto_modern),
+        palette = palette.miuix,
+        onClick = { onStyleChanged(BookInfoPageStyle.MODERN_COMPOSE) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    )
 }
 
 /**
@@ -238,7 +286,6 @@ private fun StyleTabBar(
     palette: AppManagementPalette,
     onStyleChanged: (BookInfoPageStyle) -> Unit
 ) {
-    val isClassic = style == BookInfoPageStyle.CLASSIC
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -247,16 +294,23 @@ private fun StyleTabBar(
     ) {
         StyleTabButton(
             text = stringResource(R.string.book_info_style_classic),
-            selected = isClassic,
+            selected = style == BookInfoPageStyle.CLASSIC,
             palette = palette,
             onClick = { onStyleChanged(BookInfoPageStyle.CLASSIC) },
             modifier = Modifier.weight(1f)
         )
         StyleTabButton(
             text = stringResource(R.string.book_info_style_immersive),
-            selected = !isClassic,
+            selected = style == BookInfoPageStyle.IMMERSIVE_COMPOSE,
             palette = palette,
             onClick = { onStyleChanged(BookInfoPageStyle.IMMERSIVE_COMPOSE) },
+            modifier = Modifier.weight(1f)
+        )
+        StyleTabButton(
+            text = stringResource(R.string.book_info_style_modern),
+            selected = style == BookInfoPageStyle.MODERN_COMPOSE,
+            palette = palette,
+            onClick = { onStyleChanged(BookInfoPageStyle.MODERN_COMPOSE) },
             modifier = Modifier.weight(1f)
         )
     }
@@ -300,7 +354,10 @@ private fun StyleTabButton(
 private fun ComponentItemRow(
     item: BookInfoComponentItem,
     palette: AppManagementPalette,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    onDragStart: () -> Unit,
+    onDrag: (Float) -> Unit,
+    onDragEnd: () -> Unit
 ) {
     AppManagementCard(
         palette = palette,
@@ -340,11 +397,24 @@ private fun ComponentItemRow(
 
             Spacer(modifier = Modifier.width(8.dp))
 
+            // 长按拖拽手柄：与项目既有 7 处拖拽实现同型（detectDragGesturesAfterLongPress + change.consume）
             Icon(
                 painter = painterResource(R.drawable.ic_arrange),
                 contentDescription = stringResource(R.string.read_record_drag_sort),
                 tint = palette.settings.secondaryText.copy(alpha = 0.6f),
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier
+                    .size(24.dp)
+                    .pointerInput(item.type) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { onDragStart() },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                onDrag(dragAmount.y)
+                            },
+                            onDragEnd = { onDragEnd() },
+                            onDragCancel = { onDragEnd() }
+                        )
+                    }
             )
         }
     }

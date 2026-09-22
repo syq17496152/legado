@@ -123,7 +123,7 @@
     <string name="image_save_receipt_with_position">（第 %1$d/%2$d 张）</string>
     <string name="image_save_receipt_folder_unknown">所选目录</string>
     <string name="book_info_style_preview_note">结构示意，实际效果以详情页为准</string>
-    <string name="book_info_style_back_to_classic">切回经典样式继续编辑组件</string>
+    <string name="book_info_style_goto_modern">切到现代样式编辑组件</string>
     <string name="toc_unread_chapters">%1$d 章未读</string>
     <string name="toc_new_chapter">新</string>
     <string name="toc_locate_current">定位到当前章</string>
@@ -2345,6 +2345,12 @@ bookUrl：%7$s
 <string name="bubble_manage">气泡管理</string>
 <string name="book_info_components_hint">勾选启用组件，拖动调整顺序。重新打开详情页后生效。</string>
 <string name="book_info_component_keep_one">至少保留一个详情组件。</string>
+<string name="book_info_style_modern">现代</string>
+<string name="book_info_style_modern_hint">卡片式页面：组件块在单页内顺序排列。可在下方开关并拖动排序，仅对本样式生效。</string>
+<string name="book_info_style_modern_title">卡片式详情页</string>
+<string name="book_info_style_modern_desc">单页顺序排列的组件块：主信息卡片、分组来源卡片、简介目录卡片、目录面板与本书图库。切到本样式即可自定义组件顺序。</string>
+<string name="book_info_catalog_page">%1$d / %2$d</string>
+<string name="book_info_intro_empty">本书暂无简介。</string>
 <string name="cache_manage_downloading">正在下载云端缓存...</string>
 <string name="cache_manage_download_success">云端缓存已下载</string>
 <string name="cache_manage_download_failed">下载失败：%1$s</string>
@@ -2495,10 +2501,11 @@ bookUrl：%7$s
 <string name="s3_session_token">Session Token</string>
 <string name="s3_path_style">Path style</string>
 <string name="book_info_style_classic">经典</string>
+<string name="book_info_style_classic_hint">经典详情页沿用原版固定布局，组件配置对它不生效。</string>
 <string name="book_info_style_immersive">沉浸</string>
-<string name="book_info_style_immersive_hint">沉浸详情页使用固定 Compose 布局，组件编辑只作用于经典详情页。</string>
+<string name="book_info_style_immersive_hint">沉浸详情页使用固定布局，组件编辑只作用于现代详情页。</string>
 <string name="book_info_style_immersive_title">沉浸封面详情页</string>
-<string name="book_info_style_immersive_desc">以封面背景、紧凑操作、简介、目录预览和图片库组成现代详情页。需要自定义组件顺序时可切回经典详情页。</string>
+<string name="book_info_style_immersive_desc">以封面背景、紧凑操作、简介、目录预览和图片库组成详情页。本样式组件顺序固定，需要自定义时可切到现代详情页。</string>
 <string name="bookshelf_list_style">列表卡片样式</string>
 <string name="bookshelf_list_style_classic">经典列表</string>
 <string name="bookshelf_list_style_rounded_card">圆角卡片</string>

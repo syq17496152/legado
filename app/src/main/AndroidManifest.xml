@@ -795,6 +795,11 @@
             android:name=".ui.book.info.BookInfoComposeActivity"
             android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:exported="false" />
+        <!-- 书籍详情页(现代样式 Compose)：组件块顺序渲染 + 简介/目录一体化 + 目录面板 -->
+        <activity
+            android:name=".ui.book.info.BookInfoModernActivity"
+            android:configChanges="locale|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false" />
         <!-- 主题管理 -->
         <activity
             android:name=".ui.config.ThemeManageActivity"

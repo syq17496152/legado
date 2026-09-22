@@ -58,10 +58,10 @@ object BookInfoNavigator {
     }
 
     fun targetClass(): Class<*> {
-        return if (BookInfoComponentConfig.loadStyle() == BookInfoPageStyle.IMMERSIVE_COMPOSE) {
-            BookInfoComposeActivity::class.java
-        } else {
-            BookInfoActivity::class.java
+        return when (BookInfoComponentConfig.loadStyle()) {
+            BookInfoPageStyle.MODERN_COMPOSE -> BookInfoModernActivity::class.java
+            BookInfoPageStyle.IMMERSIVE_COMPOSE -> BookInfoComposeActivity::class.java
+            BookInfoPageStyle.CLASSIC -> BookInfoActivity::class.java
         }
     }
 

@@ -32,9 +32,13 @@ data class BookInfoComponentItem(
 
 enum class BookInfoPageStyle(val key: String) {
     CLASSIC("classic"),
-    IMMERSIVE_COMPOSE("immersive_compose");
+    IMMERSIVE_COMPOSE("immersive_compose"),
+
+    /** 现代样式：卡片化组件块 + 简介/目录一体化 + 目录面板（组件显隐/排序唯一生效方） */
+    MODERN_COMPOSE("modern_compose");
 
     companion object {
+        // 默认值当前仍为 IMMERSIVE_COMPOSE；切换为 MODERN_COMPOSE 需在视觉验收（tasks 5.7）通过后执行
         fun fromKey(key: String?): BookInfoPageStyle {
             return entries.firstOrNull { it.key.equals(key, ignoreCase = true) }
                 ?: IMMERSIVE_COMPOSE
