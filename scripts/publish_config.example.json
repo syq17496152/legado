@@ -16,13 +16,11 @@
   },
   "apk_dirs": {
     "test": "output/apk/test",
-    "release": "output/apk/release",
-    "coexist": "output/apk/coexist"
+    "release": "output/apk/release"
   },
   "apk_patterns": {
     "test": "legado_miss_app_*.apk",
-    "release": "legado_miss_app_*.apk",
-    "coexist": "legado_legacy_app_*.apk"
+    "release": "legado_miss_app_*.apk"
   },
   "update_log_path": "app/src/main/assets/updateLog.md",
   "version_pattern": "3\\.\\d{2}\\.\\d{6}",

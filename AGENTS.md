@@ -8,7 +8,6 @@
 |------|------|
 | 一键打包（测试包） | `build-legado.bat` |
 | 正式包 | `build-legado.bat release` |
-| 共存包 | `build-legado.bat debug io.legado.app` |
 | 一键发布（五阶段：构建→校验→gh release→tag） | `publish.bat`（或 `ai_tests\venv\Scripts\python.exe scripts\publish_release.py`，--dry-run 预览） |
 | 底层 Gradle 任务 | `./gradlew assembleAppDebug` / `assembleAppRelease`（productFlavors 仅 `app`，App 首字母大写，**不是** `assembleDebug`） |
 | 改签名/strings.xml 后强制重打 | `./gradlew assembleAppRelease --rerun-tasks` |
@@ -17,7 +16,7 @@
 
 > `build-legado.bat` **硬编码本机环境**（`JAVA_HOME=C:\Program Files\AdoptOpenJDK\jdk-17.0.0.20-hotspot`、`ANDROID_HOME=C:\Android\Sdk`、`GRADLE_USER_HOME=F:\gh`、`PROJECT_DIR`），换机器需先改头部。完整打包流程见 `docs/project-flow/build-apk-guide.md`。
 
-> 🔴 **强制（2026-09-15 三包优化铁律）：交付/发布 APK 一律走 `build-legado.bat`，禁止手动 `gradlew assembleXxx` 产出交付包**。原因：脚本内置 ①产物自动拷贝到 `output\apk\{test|release|coexist}\`（工作区产物会被同 variant 后续构建 stale 清理，手动 gradlew 的包不在保护范围）②Cronet 动态下载双向门禁 ③瞬态锁自动重试 ④daemon/缓存复用编排。手动 `gradlew` 仅限过程验证（如 R8/依赖排查），其产物不得交付。子规范见 `docs/project-rules/package-naming.md`「三包打包模式」与 `docs/project-flow/build-apk-guide.md` §三/§五。
+> 🔴 **强制（2026-09-15 双包优化铁律）：交付/发布 APK 一律走 `build-legado.bat`，禁止手动 `gradlew assembleXxx` 产出交付包**。原因：脚本内置 ①产物自动拷贝到 `output\apk\{test|release}\`（工作区产物会被同 variant 后续构建 stale 清理，手动 gradlew 的包不在保护范围）②Cronet 动态下载双向门禁 ③瞬态锁自动重试 ④daemon/缓存复用编排。手动 `gradlew` 仅限过程验证（如 R8/依赖排查），其产物不得交付。子规范见 `docs/project-rules/package-naming.md`「双包打包模式」与 `docs/project-flow/build-apk-guide.md` §三/§五。
 
 ## 关键文件速查
 
@@ -82,7 +81,6 @@ OpenSpec 步骤 5→6 之间必须真机/模拟器验证，禁止只改代码不
 |---------|-----|------|
 | 项目代码优化/开发 | 测试包 | `io.legado.miss.app.debug` |
 | 书源/订阅源 Skill 真机测试 | 正式包 | `io.legado.miss.app.release` |
-| 与原版共存 | 共存包 | `io.legado.app.debug` |
 
 - ❌ 同一模拟器实例同时操作多个包（Activity 抢占，铁证 2026-07-25）
 - ❌ 代码优化用正式包 / Skill 测试用测试包
@@ -113,9 +111,9 @@ OpenSpec 步骤 5→6 之间必须真机/模拟器验证，禁止只改代码不
 
 ### 7. R8 × Gson 泛型签名门禁（2026-09-22 铁证）
 **任何 Gson 反序列化模型（含 `List<Model>`/`Map<K,Model>` 字段）一律 `@Keep`**——R8 只对 keep/`@Keep` pin 的成员保留 `dalvik.annotation.Signature`，未 pin 的集合字段签名会被剥离 ⇒ Gson 元素类型回落 `Object` ⇒ `LinkedTreeMap` + `ClassCastException`（多人朗读曾因此崩溃）。注意 `**.data.entities.**` keep 规则只覆盖数据实体包，`help.*`/`ui.*`/`model.*` 的 Gson 模型必须自行 `@Keep`。
-交付前强制跑三包审计门禁（退出码 1 = 阻断交付）：
+交付前强制跑双包审计门禁（退出码 1 = 阻断交付）：
 ```
-ai_tests\venv\Scripts\python.exe ai_tests/scripts/audit_gson_generic_signature.py <测试包> <正式包> <共存包>
+ai_tests\venv\Scripts\python.exe ai_tests/scripts/audit_gson_generic_signature.py <测试包> <正式包>
 ```
 > 完整规范：`docs/project-rules/package-naming.md` §R8 × Gson 泛型签名红线；设计文档：`docs/specs/fix-r8-gson-signature-loss/`
 

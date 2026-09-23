@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-APK 一键发布编排器：版本确认 → 三包构建 → 校验强化 → gh release → git tag
+APK 一键发布编排器：版本确认 → 双包构建 → 校验强化 → gh release → git tag
 
 用法:
     ai_tests\\venv\\Scripts\\python.exe scripts\\publish_release.py [--version <ver>] [--dry-run]
@@ -13,11 +13,11 @@ APK 一键发布编排器：版本确认 → 三包构建 → 校验强化 → g
 五阶段:
     Stage1 版本确认   --version 显式传入，否则按公式 bump（3.yyMMddHH 型 6 位，
                       与 build.gradle releaseTime() 及 version_pattern 同构）
-    Stage2 三包构建   依次 subprocess 调 build-legado.bat（test/release/coexist，
+    Stage2 双包构建   依次 subprocess 调 build-legado.bat（test/release，
                       显式版本第 3 参保证同版本），每包后 bat 内嵌 daemon 清场
-    Stage3 校验强化   三包齐全 / Cronet 动态下载双门禁 / apksigner 验签 / 包名版本一致性 /
+    Stage3 校验强化   双包齐全 / Cronet 动态下载双门禁 / apksigner 验签 / 包名版本一致性 /
                       updateLog 当日条目——致命项 fail-fast exit
-    gh release gh CLI 上传三包（test 包带 _debug 后缀命名防同名冲突）；
+    gh release gh CLI 上传双包（test 包带 _debug 后缀命名防同名冲突）；
                       gitee 走原 requests 层
     Stage5 git tag    tag=版本号，push 前人工确认，形成版本回滚锚点
 
@@ -54,19 +54,18 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 SESSION = requests.Session()
 SESSION.verify = False
 
-# Stage2 三包构建计划：(包类型, build-legado.bat 参数模板)
-# 参数序: <debug|release> <customAppId 或 "-" 占位> <显式版本号>
+# Stage2 双包构建计划：(包类型, build-legado.bat 参数模板)
+# 参数序: <debug|release> <显式版本号>
+# 2026-09-23 用户裁决：取消共存包，发版仅 test + release 两包
 BUILD_PLAN: List[Tuple[str, List[str]]] = [
-    ("test", ["debug", "-", "{version}"]),
-    ("release", ["release", "-", "{version}"]),
-    ("coexist", ["debug", "io.legado.app", "{version}"]),
+    ("test", ["debug", "{version}"]),
+    ("release", ["release", "{version}"]),
 ]
 
-# 三包包名断言表（R7）：上传前逐一核对包名与包类型匹配（防混发）
+# 双包包名断言表（R7）：上传前逐一核对包名与包类型匹配（防混发）
 EXPECTED_PACKAGES = {
     "test": "io.legado.miss.app.debug",
     "release": "io.legado.miss.app.release",
-    "coexist": "io.legado.app.debug",
 }
 
 # ---------------------------------------------------------------- 更新日志规范常量
@@ -111,7 +110,7 @@ def hide_token(token: str) -> str:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="APK 一键发布编排器（版本确认→三包构建→校验强化→gh release→git tag）")
+        description="APK 一键发布编排器（版本确认→双包构建→校验强化→gh release→git tag）")
     parser.add_argument("--version", help="指定版本号（如 3.26.083020），缺省时按公式 bump")
     parser.add_argument("--dry-run", action="store_true", help="全流程模拟预览，无任何副作用")
     parser.add_argument("--platform", choices=["gitee", "github", "both"], default="both",
@@ -126,7 +125,7 @@ def parse_args():
                              "要求文件存在且修改时间为当日）")
     parser.add_argument("--skip-build", action="store_true",
                         help="跳过 Stage2 构建，复用 output/apk/ 各目录下最新产物直接走校验+发布+tag"
-                             "（复用场景：三包已由 build-legado.bat 手工产出；发布版本取各包文件名版本 max）")
+                             "（复用场景：双包已由 build-legado.bat 手工产出；发布版本取各包文件名版本 max）")
     parser.add_argument("--from-version",
                         help="发版正文区间起点版本（如 3.26.090820）；缺省时自动从 git tag 推断"
                              "（取小于当前版本的最大 tag）。发版正文=起点到当前版本的全部更新日志")
@@ -204,7 +203,7 @@ def bump_version() -> str:
 
 
 def scan_apk_files(config: dict, specified_version: Optional[str] = None) -> Tuple[str, Dict[str, Path]]:
-    """扫描三包目录，返回 (version, {type: apk_path})"""
+    """扫描双包目录，返回 (version, {type: apk_path})"""
     apk_dirs = config["apk_dirs"]
     apk_patterns = config["apk_patterns"]
     version_pattern = config["version_pattern"]
@@ -247,7 +246,7 @@ def scan_apk_files(config: dict, specified_version: Optional[str] = None) -> Tup
             else:
                 result[pkg_type] = apk_path
 
-    # 检查是否三包齐全（此处 WARN 仅提示；编排器 Stage3 会 fail-fast）
+    # 检查是否双包齐全（此处 WARN 仅提示；编排器 Stage3 会 fail-fast）
     missing = set(apk_dirs.keys()) - set(result.keys())
     if missing:
         log("SCAN", f"版本 {version} 缺少包: {missing}", "WARN")
@@ -263,7 +262,7 @@ def scan_apk_files(config: dict, specified_version: Optional[str] = None) -> Tup
 def collect_latest_artifacts(config: dict) -> Tuple[str, Dict[str, Path]]:
     """--skip-build 模式：各包目录取 mtime 最新产物（不限文件名版本），发布版本取各包版本 max。
 
-    复用场景：三包已由 build-legado.bat 分批产出（文件名时间戳可能跨小时不一致），
+    复用场景：双包已由 build-legado.bat 分批产出（文件名时间戳可能跨小时不一致），
     versionName 差异在 Stage3 以 WARN 提示（skip_build 宽松模式），不阻断发布。
     """
     apk_dirs = config["apk_dirs"]
@@ -291,10 +290,10 @@ def collect_latest_artifacts(config: dict) -> Tuple[str, Dict[str, Path]]:
         log("SCAN", f"  {pkg_type}: {latest.name} ({size_mb:.1f}MB, mtime 最新)")
 
     version = max(versions, key=lambda v: [int(p) for p in v.split(".")])
-    log("SCAN", f"--skip-build 复用三包，发布版本取 max: {version}")
+    log("SCAN", f"--skip-build 复用双包，发布版本取 max: {version}")
     distinct = sorted(set(versions))
     if len(distinct) > 1:
-        log("SCAN", f"三包文件名版本存在差异 {distinct}（跨小时构建所致，versionName 差异仅 WARN）", "WARN")
+        log("SCAN", f"双包文件名版本存在差异 {distinct}（跨小时构建所致，versionName 差异仅 WARN）", "WARN")
     return version, result
 
 
@@ -577,7 +576,6 @@ def get_upload_name(pkg_type: str, apk_path: Path, version: str) -> str:
 
     test 包（debug 构建）→ legado_miss_app_debug_{version}.apk
     release 包（正式构建）→ legado_miss_app_{version}.apk
-    coexist 包（共存构建）→ legado_legacy_app_{version}.apk
     """
     if pkg_type == "test":
         return f"legado_miss_app_debug_{version}.apk"
@@ -642,21 +640,21 @@ def stage1_confirm_version(args, config: dict) -> str:
     if version_to_date(version) == "":
         log("STAGE1", f"版本号格式异常: {version}（期望 3.YY.MMDDHH 6 位尾段）", "ERROR")
         sys.exit(2)
-    if not confirm(f"版本号 {version}（updateLog 需已有当日条目），确认开始三包构建",
+    if not confirm(f"版本号 {version}（updateLog 需已有当日条目），确认开始双包构建",
                    "build", args.confirm_stage, args.dry_run):
         log("STAGE1", "未确认构建，中止发布", "WARN")
         sys.exit(1)
     return version
 
 
-# === Stage 2: 三包构建 ===
+# === Stage 2: 双包构建 ===
 
 def stage2_build_three(version: str, dry_run: bool) -> Dict[str, Path]:
-    """Stage2 三包构建（R1/R8）：subprocess 调 build-legado.bat，解析 [ARTIFACT] 行。
+    """Stage2 双包构建（R1/R8）：subprocess 调 build-legado.bat，解析 [ARTIFACT] 行。
 
-    - 显式版本第 3 参保证三包同版本
-    - daemon 复用是三包提速核心（2026-09-15 build-three-packages-optimize）：bat 成功路径
-      已无清场逻辑，三包全程共享 daemon（Kotlin 增量快照/构建缓存跨包生效）；
+    - 显式版本第 2 参保证双包同版本
+    - daemon 复用是双包提速核心（2026-09-15 build-three-packages-optimize）：bat 成功路径
+      已无清场逻辑，双包全程共享 daemon（Kotlin 增量快照/构建缓存跨包生效）；
       禁止恢复成功路径清场！失败路径清场 + 瞬态锁自动重试由 bat 内置处理
     - stdin=DEVNULL：bat 内 pause 读到 EOF 立即返回，不阻塞编排器
     """
@@ -725,7 +723,7 @@ def check_cronet_packaging(apk: Path) -> Tuple[bool, str]:
       ② APK **必须含** `assets/cronet.json` —— 缺失则运行时按 ABI 下载 so 的校验必失败
 
     ⚠️ 旧实现（cronet-bundled 时代）要求"APK 内含 libcronet*.so"，与现行路线完全相反：
-    按现行动态下载打的包会被它 100% 拦截（2026-09-17 三包发布实测 exit 1 铁证）。
+    按现行动态下载打的包会被它 100% 拦截（2026-09-17 双包发布实测 exit 1 铁证）。
     """
     try:
         with zipfile.ZipFile(apk) as z:
@@ -756,9 +754,9 @@ def stage3_verify(config: dict, version: str, dry_run: bool,
     """Stage3 校验强化（R2-R5）：致命项 fail-fast exit，建议项 WARN 清单。
 
     skip_build=True：使用 pre_scanned 产物（collect_latest_artifacts 扫描结果），
-    跳过按版本过滤的三包齐全重扫；versionName 与发布版本不一致降级 WARN（跨小时构建差异）。
+    跳过按版本过滤的双包齐全重扫；versionName 与发布版本不一致降级 WARN（跨小时构建差异）。
     """
-    # 致命项 1：三包齐全（重扫兜底，不信任 Stage2 [ARTIFACT] 解析）
+    # 致命项 1：双包齐全（重扫兜底，不信任 Stage2 [ARTIFACT] 解析）
     if skip_build and pre_scanned is not None:
         apks = dict(pre_scanned)
         missing = [k for k in EXPECTED_PACKAGES if k not in apks]
@@ -788,7 +786,7 @@ def stage3_verify(config: dict, version: str, dry_run: bool,
         if not ok:
             log("VERIFY", f"[{pkg}] Cronet 打包门禁失败: {apk.name} —— {detail}（exit 1）", "ERROR")
             sys.exit(1)
-    log("VERIFY", "Cronet 动态下载双门禁：三包全部通过（无 libcronet*.so + 含 assets/cronet.json）")
+    log("VERIFY", "Cronet 动态下载双门禁：双包全部通过（无 libcronet*.so + 含 assets/cronet.json）")
 
     # 致命项 3/4：apksigner 验签 + aapt2 包名/版本一致性（R5）
     apksigner = find_sdk_tool("apksigner.bat")
@@ -1006,7 +1004,7 @@ def github_publish_gh(config: dict, version: str, body: str, apks: Dict[str, Pat
                       dry_run: bool) -> Dict[str, bool]:
     """GitHub 发布流程（gh CLI 替代 requests，规避 uploads.github.com SSL 与 51MB+ 双坑）。
 
-    2026-08-30 用户裁决：三包全上传，test 包经 get_upload_name 加 _debug 后缀防同名冲突。
+    2026-08-30 用户裁决：双包全上传，test 包经 get_upload_name 加 _debug 后缀防同名冲突。
     """
     results: Dict[str, bool] = {}
     g = config["github"]
@@ -1117,7 +1115,7 @@ def main():
         log("MAIN", f"--skip-build 复用模式：发布版本 {version}（跳过构建，产物来自 output/apk/）")
 
     # ---------------- 发版前置：更新日志清洗加工（update-log-release-optimize REQ-5） ----------------
-    # 位置：版本最终确定之后、三包构建之前 —— 清洗不过即停，不浪费三包构建时间（约 20 分钟）。
+    # 位置：版本最终确定之后、双包构建之前 —— 清洗不过即停，不浪费双包构建时间（约 20 分钟）。
     # 产出 output/release-notes/{version}.md 供发版前审阅与事后追溯；
     # Stage3 的 read_update_log 用同版本+同区间+同规则重新清洗，结果与产物文件确定性一致。
     log_path = PROJECT_ROOT / config["update_log_path"]
@@ -1128,7 +1126,7 @@ def main():
     release_body, clean_stats = clean_release_notes(log_content, version, args.from_version)
     write_release_notes(version, release_body, args.dry_run)
 
-    # Stage2 三包构建（非复用模式）
+    # Stage2 双包构建（非复用模式）
     if not args.skip_build:
         stage2_build_three(version, args.dry_run)
 
@@ -1141,7 +1139,7 @@ def main():
     # L2 真机门禁（不可跳过，无 flag 旁路）
     check_l2_evidence(args)
 
-    # Stage4 发布（三包全上传；test 包经 get_upload_name 加 _debug 后缀防同名冲突）
+    # Stage4 发布（双包全上传；test 包经 get_upload_name 加 _debug 后缀防同名冲突）
     all_results: Dict[str, Dict[str, bool]] = {}
     exit_code = 0
 

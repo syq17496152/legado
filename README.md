@@ -61,7 +61,6 @@
 | 版本 | 说明 |
 |------|------|
 | **测试包** | 开发调试，更新频繁，可覆盖安装 |
-| **共存包** | 自定义包名，与原版共存 |
 | **正式包** | 稳定发布，代码混淆压缩 |
 
 > 详见 [更新日志](app/src/main/assets/updateLog.md)
@@ -84,9 +83,6 @@ build-legado.bat
 
 # 正式包
 build-legado.bat release
-
-# 共存包（与原版 io.legado.app 共存）
-build-legado.bat debug io.legado.app
 ```
 
 ---

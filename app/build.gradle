@@ -98,17 +98,15 @@ android {
         }
     }
     defaultConfig {
-        // 包类型判断：
-        // 1. 传 -PcustomAppId=xxx → 共存包（用户自定义包名）
-        // 2. 不传参数 + 构建类型 debug → 测试包（io.legado.miss.app.debug）
-        // 3. 不传参数 + 构建类型 release → 正式包（io.legado.miss.app.release）
-        applicationId project.hasProperty("customAppId") ? project.property("customAppId") : "io.legado.miss.app"
+        // 包类型判断（2026-09-23 用户裁决：取消共存包，仅保留测试包/正式包）：
+        // 1. 构建类型 debug → 测试包（io.legado.miss.app.debug）
+        // 2. 构建类型 release → 正式包（io.legado.miss.app.release）
+        applicationId "io.legado.miss.app"
 
         // 输出包名信息，便于AI解析日志
         println "========== PACKAGE INFO =========="
         println "Base applicationId: ${applicationId}"
         println "Build type: ${project.gradle.startParameter.taskNames.find { it.contains('Release') } ? 'release' : 'debug'}"
-        println "Custom package: ${project.hasProperty('customAppId')}"
         println "=================================="
         minSdk 23
         targetSdk 36
@@ -160,13 +158,7 @@ android {
                 signingConfig signingConfigs.myConfig
             }
             applicationIdSuffix '.release'
-            if (getApplicationIdSuffix() == '.releaseA') {
-                manifestPlaceholders.put("app_name", "@string/app_name_a")
-            } else if (getApplicationIdSuffix() == '.releaseS') {
-                manifestPlaceholders.put("app_name", "@string/app_name_s")
-            } else {
-                manifestPlaceholders.put("app_name", "@string/app_name")
-            }
+            manifestPlaceholders.put("app_name", "@string/app_name")
 
             minifyEnabled true
             shrinkResources = true
@@ -176,7 +168,7 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'cronet-proguard-rules.pro', 'proguard-release-rules.pro'
         }
         debug {
-            // 三包统一正式签名（铁律 2026-08-25）：debug 也套 myConfig，保证测试包/正式包/共存包签名一致，可互相覆盖安装
+            // 双包统一正式签名（铁律 2026-08-25）：debug 也套 myConfig，保证测试包/正式包签名一致，可互相覆盖安装
             // ⚠️ 禁止删掉此行！否则测试包回落 Android Debug 签名，与历史已装的正式签名测试包签名不一致，覆盖安装报 INSTALL_FAILED_UPDATE_INCOMPATIBLE
             if (storeFilePath != null) {
                 signingConfig signingConfigs.myConfig
@@ -185,17 +177,16 @@ android {
 
             applicationIdSuffix '.debug'
             versionNameSuffix 'debug'
-            // 2026-09-15 三包优化（用户裁决）：测试包/共存包对齐正式包 optimize 裁剪深度
+            // 2026-09-15 双包优化（用户裁决）：测试包对齐正式包 optimize 裁剪深度
             // （实测 debug 与 release 的 14.2MB dex 差距全部来自优化器），保留 -dontobfuscate 混淆红线
             // （proguard-debug-rules.pro）；keep 规则与 release 共用（proguard-rules.pro 已被发版长期验证）。
             // 调试日志铁律：BuildConfig.DEBUG=true 分支可达，DebugLog/AppLog 不被裁剪。
             // ABI 已按构建类型精简为仅 arm64-v8a（见上方 ndk 块）
             //
-            // 2026-09-15 裁决：测试包（无 customAppId）恢复 debuggable=true 供 IDE attach/调试器使用；
-            // 共存包（-PcustomAppId=io.legado.app）与正式包保持 debuggable=false。
+            // 2026-09-15 裁决：测试包 debuggable=true 供 IDE attach/调试器使用；
             // 注意：debuggable=true 会使 R8 走 debug compilation mode（优化受限，体积回升至 ~37MB），
-            // 用户知情选择"测试包调试器优先"；共存包/正式包不受影响（体积 22.73/24.62MB）
-            debuggable = project.findProperty("customAppId") == null
+            // 用户知情选择"测试包调试器优先"。
+            debuggable true
             buildConfigField "boolean", "BUILD_DEBUG", "true"
             minifyEnabled true
             shrinkResources = true
@@ -215,17 +206,8 @@ android {
         variant.outputs.configureEach {
             def flavor = variant.productFlavors[0].name
             def appId = variant.applicationId
-            // 从applicationId提取包名标识: io.legado.miss.app → miss, io.legado.app → legacy, 其他取最后一段
-            def appIdSuffix = ""
-            if (appId.startsWith("io.legado.miss.app")) {
-                appIdSuffix = "miss"
-            } else if (appId.startsWith("io.legado.app")) {
-                appIdSuffix = "legacy"
-            } else {
-                // 自定义包名取最后一段
-                def parts = appId.split("\\.")
-                appIdSuffix = parts.length > 0 ? parts[-1] : "custom"
-            }
+            // 从applicationId提取包名标识: io.legado.miss.app → miss
+            def appIdSuffix = "miss"
             outputFileName = "${name}_${appIdSuffix}_${flavor}_${defaultConfig.versionName}.apk"
         }
     }

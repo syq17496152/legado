@@ -55,7 +55,6 @@ Extended features based on ReadSigma:
 | Version | Description |
 |---------|-------------|
 | **Debug** | Development & testing, frequent updates, can overwrite install |
-| **Coexist** | Custom package name, coexists with original version |
 | **Release** | Stable release, code obfuscation & shrinking |
 
 ---

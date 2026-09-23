@@ -1,5 +1,5 @@
 # proguard-release-rules.pro（2026-09-15 自 proguard-rules.pro 剪切，仅 release 引用）
-# 原属共用规则的 Log 移除段：三包优化后 debug/共存包不再共用此段——
+# 原属共用规则的 Log 移除段：双包优化后 debug 包不再共用此段——
 # 调试日志铁律（用户裁决）：测试包 DebugLog/AppLog 必须完整保留供真机排障，
 # 仅正式包移除 android.util.Log 全等级打印（AppLog 自有实现不受影响，正式包日志页可用）
 

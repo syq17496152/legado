@@ -57,7 +57,7 @@
 #noinspection ShrinkerUnresolvedReference
 
 # 【2026-09-15 迁移说明】原此处的 -assumenosideeffects android.util.Log（移除全部 Log 打印）
-# 已剪切至 proguard-release-rules.pro（仅 release 引用）——三包优化后 debug/共存包共用本文件，
+# 已剪切至 proguard-release-rules.pro（仅 release 引用）——双包优化后 debug 包共用本文件，
 # 若保留该段会移除测试包调试日志，违背"测试包调试日志铁律"（用户裁决：禁止关闭测试包调试日志）
 # 保持js引擎调用的java类
 -keep class * extends io.legado.app.help.JsExtensions{*;}

@@ -5,20 +5,15 @@ setlocal EnableDelayedExpansion
 
 :: ============================================================
 ::  Legado APK Build Script
-::  Usage: build-legado.bat [debug|release|clean] [package_name]
+::  Usage: build-legado.bat [debug|release|clean] [version]
 ::
-::  Package Types:
+::  Package Types (2026-09-23 用户裁决：取消共存包，仅保留测试包/正式包):
 ::  1. Test Package (测试包):
 ::     - Package: io.legado.miss.app.debug
 ::     - Usage: Development, quick verification
 ::     - Command: build-legado.bat
 ::
-::  2. Coexist Package (共存包):
-::     - Package: io.legado.app.debug
-::     - Usage: Coexist with official legado-E version
-::     - Command: build-legado.bat debug io.legado.app
-::
-::  3. Release Package (正式包):
+::  2. Release Package (正式包):
 ::     - Package: io.legado.miss.app.release
 ::     - Usage: Production release
 ::     - Command: build-legado.bat release
@@ -26,8 +21,6 @@ setlocal EnableDelayedExpansion
 ::  Examples:
 ::    build-legado.bat                          (test package, default)
 ::    build-legado.bat release                  (release package, default)
-::    build-legado.bat debug io.legado.app     (coexist package, with original legado-E)
-::    build-legado.bat release io.legado.app   (coexist package, with original legado-E)
 ::    build-legado.bat debug - 3.26.082918     (test package with explicit version, 与正式包版本对齐)
 ::    build-legado.bat clean
 :: ============================================================
@@ -49,28 +42,18 @@ set "BUILD_TYPE=debug"
 if /i "%~1"=="release" set "BUILD_TYPE=release"
 if /i "%~1"=="-r" set "BUILD_TYPE=release"
 
-:: Parse custom package name (2nd arg; "-" 或空 = 使用默认包名，为占位第3参版本号)
-set "CUSTOM_APP_ID="
-if not "%~2"=="" if /i not "%~2"=="-" set "CUSTOM_APP_ID=%~2"
-
-:: Parse explicit version (3rd arg, e.g. 3.26.082918) - 保证双包同版本发版
+:: Parse explicit version (2nd arg, e.g. 3.26.082918) - 保证双包同版本发版
 set "APP_VERSION="
-if not "%~3"=="" set "APP_VERSION=%~3"
+if not "%~2"=="" set "APP_VERSION=%~2"
 
-:: Determine final applicationId
-if "%CUSTOM_APP_ID%"=="" (
-    set "FINAL_APP_ID=%DEFAULT_APP_ID%"
-    set "APP_ID_MODE=default"
-) else (
-    set "FINAL_APP_ID=%CUSTOM_APP_ID%"
-    set "APP_ID_MODE=custom"
-)
+:: Final applicationId（2026-09-23 取消共存包，仅 io.legado.miss.app）
+set "FINAL_APP_ID=%DEFAULT_APP_ID%"
 
 echo ============================================================
 echo   Legado APK Builder
 echo ============================================================
 echo   Build type : %BUILD_TYPE%
-echo   Package ID : %FINAL_APP_ID% (%APP_ID_MODE%)
+echo   Package ID : %FINAL_APP_ID%
 echo ============================================================
 echo.
 
@@ -126,16 +109,16 @@ echo   applicationId = %FINAL_APP_ID%
 echo ============================================================
 echo.
 
-:: Assemble optional Gradle -P flags (custom package name / explicit version)
+:: Assemble optional Gradle -P flags (explicit version for 双包同版本发版)
 set "P_FLAGS="
-if not "%CUSTOM_APP_ID%"=="" set "P_FLAGS=%P_FLAGS% -PcustomAppId=%CUSTOM_APP_ID%"
 if not "%APP_VERSION%"=="" set "P_FLAGS=%P_FLAGS% -PappVersion=%APP_VERSION%"
 
 :: Build with optional Gradle project properties + transient-lock auto-retry
 :: 2026-09-03 local-build-speedup（P1/P1b）：
 :: ① 移除 --no-daemon：复用 daemon 保住 Kotlin 增量编译快照（VFS/配置缓存同步生效）
-:: ② debug 分支注入降堆参数（红队 H5：-D 覆盖会整体替换 properties 参数串，
-::    必须完整复制原串仅改 Xmx 4g→3g）；release 不注入，沿用 properties 4g（R8 OOM 防回归）
+:: ② debug 分支注入堆参数（红队 H5：-D 覆盖会整体替换 properties 参数串，必须完整复制原串）；
+::    2026-09-23 修正：双包优化后 debug 变体同走 R8 + lintVital，原 3g 上限实测
+::    GC overhead OOM，改为与 properties/release 对齐的 4g
 :: 2026-09-15 cronet-dynamic-download 增强：transform 瞬态锁自动重试——
 ::   官方 so/jar 大文件频繁进出 transforms 缓存后，Defender/TGitCache 与 Gradle 的
 ::   rename 竞争导致 "Could not move temporary workspace" 瞬态失败（实测 10-30s 内快速失败）。
@@ -143,7 +126,7 @@ if not "%APP_VERSION%"=="" set "P_FLAGS=%P_FLAGS% -PappVersion=%APP_VERSION%"
 ::   UP-TO-DATE 保住已完成任务，重试成本低）；真实编译/R8 错误耗时 >120s → 立即失败不浪费时间
 set "HEAP_ARGS="
 if "%BUILD_TYPE%"=="debug" (
-set HEAP_ARGS=-Dorg.gradle.jvmargs="-XX:+UseParallelGC -Xmx3g -Xms256m -XX:MaxMetaspaceSize=768m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8" -Dkotlin.daemon.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=768m"
+set HEAP_ARGS=-Dorg.gradle.jvmargs="-XX:+UseParallelGC -Xmx4g -Xms256m -XX:MaxMetaspaceSize=768m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8" -Dkotlin.daemon.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=768m"
 )
 
 set "BUILD_TASK=assembleAppDebug"
@@ -195,10 +178,9 @@ echo ============================================================
 echo.
 
 set "APK_FOUND=0"
-:: 根据包类型确定子目录名：customAppId=coexist, release=release, debug=test
+:: 根据包类型确定子目录名：release=release, debug=test
 set "APK_SUBDIR=test"
 if "%BUILD_TYPE%"=="release" set "APK_SUBDIR=release"
-if not "%CUSTOM_APP_ID%"=="" set "APK_SUBDIR=coexist"
 set "DIST_DIR=%PROJECT_DIR%\output\apk\%APK_SUBDIR%"
 set "APK_BUILD_DIR=%APK_OUTPUT_DIR%\app\%BUILD_TYPE%"
 if not exist "%DIST_DIR%" mkdir "%DIST_DIR%"
@@ -288,7 +270,7 @@ echo ============================================================
 cd /d "%PROJECT_DIR%"
 call "%PROJECT_DIR%\gradlew.bat" clean
 echo.
-echo   Done. Run: build-legado.bat [debug^|release] [package_name]
+echo   Done. Run: build-legado.bat [debug^|release] [version]
 echo.
 pause
 exit /b 0
