@@ -346,6 +346,11 @@
     <string name="layout_config">版面设置</string>
     <string name="layout_config_padding">边距</string>
     <string name="layout_config_tip">页眉页脚</string>
+    <string name="tip_template_edit_hint">自定义模板（点按编辑）</string>
+    <string name="tip_template_help">点选下方变量插入占位符（插入到光标处）；预览按阅读页样本值渲染，未知占位符原样显示</string>
+    <string name="tip_template_label">模板内容</string>
+    <string name="tip_template_preview">预览</string>
+    <string name="tip_template_empty">（空模板，该槽位不显示内容）</string>
     <string name="check_book_source">校验书源</string>
     <string name="check_select_source">校验所选</string>
     <string name="source_health_healthy">可用 %1$d</string>

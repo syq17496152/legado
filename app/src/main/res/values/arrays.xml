@@ -212,6 +212,7 @@
 		<item>Pages and progress</item>
 		<item>Time and Battery</item>
 		<item>Time and Battery%</item>
+		<item>Custom template</item>
 	</string-array>
 
 	<string-array name="text_font_weight">

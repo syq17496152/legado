@@ -76,6 +76,7 @@
         <item>Số trang và Tiến độ</item>
         <item>Thời gian và Pin</item>
         <item>Thời gian và Pin %</item>
+        <item>Mẫu tùy chỉnh</item>
     </string-array>
 
     <string-array name="text_font_weight">

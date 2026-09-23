@@ -59,6 +59,7 @@ import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
 import io.legado.app.ui.widget.compose.LegadoMiuixChoiceRow
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.showComposeTipTemplateDialog
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.postEvent
@@ -145,11 +146,25 @@ class PaddingConfigDialog : ComposeDialogFragment() {
                                 .setDialogId(TIP_DIVIDER_COLOR)
                                 .show(requireActivity())
                         },
-                        onColorChanged = { colorRefreshTick++ }
+                        onColorChanged = { colorRefreshTick++ },
+                        onShowTemplateEditor = ::showTemplateEditor
                     )
                 }
             }
         }
+    }
+
+    /** R12：打开自定义模板编辑器（可视化插入占位符 + 实时预览），保存即写回该槽位模板 */
+    private fun showTemplateEditor(
+        title: String,
+        template: String,
+        onSave: (String) -> Unit
+    ) {
+        showComposeTipTemplateDialog(
+            title = title,
+            initialValue = template,
+            onPositive = onSave
+        )
     }
 
     private fun showActionSelector(
@@ -179,7 +194,8 @@ class PaddingConfigDialog : ComposeDialogFragment() {
         onShowSelector: (String, List<String>, (Int) -> Unit) -> Unit,
         onShowTipColorPicker: () -> Unit,
         onShowTipDividerColorPicker: () -> Unit,
-        onColorChanged: () -> Unit
+        onColorChanged: () -> Unit,
+        onShowTemplateEditor: (String, String, (String) -> Unit) -> Unit
     ) {
         var section by rememberSaveable { mutableIntStateOf(0) }
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -197,7 +213,8 @@ class PaddingConfigDialog : ComposeDialogFragment() {
                     onShowSelector = onShowSelector,
                     onShowTipColorPicker = onShowTipColorPicker,
                     onShowTipDividerColorPicker = onShowTipDividerColorPicker,
-                    onColorChanged = onColorChanged
+                    onColorChanged = onColorChanged,
+                    onShowTemplateEditor = onShowTemplateEditor
                 )
             }
         }

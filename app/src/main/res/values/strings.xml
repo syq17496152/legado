@@ -375,6 +375,11 @@
     <string name="layout_config">Layout</string>
     <string name="layout_config_padding">Padding</string>
     <string name="layout_config_tip">Header/footer</string>
+    <string name="tip_template_edit_hint">Custom template (tap to edit)</string>
+    <string name="tip_template_help">Tap a variable to insert a placeholder at the cursor. Preview below uses sample reading values; unknown placeholders are kept as typed.</string>
+    <string name="tip_template_label">Template</string>
+    <string name="tip_template_preview">Preview</string>
+    <string name="tip_template_empty">(empty)</string>
     <string name="check_book_source">Check book sources</string>
     <string name="check_select_source">Check the selected source</string>
     <string name="source_health_healthy">Healthy %1$d</string>

@@ -97,6 +97,7 @@
         <item>頁數及進度</item>
         <item>時間及電量</item>
         <item>時間及電量%</item>
+        <item>自訂範本</item>
     </string-array>
 
     <string-array name="text_font_weight">

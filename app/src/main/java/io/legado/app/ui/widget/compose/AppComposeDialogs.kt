@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -12,6 +13,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -50,16 +53,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.legado.app.R
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.ReadTipTemplate
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.bottomBackground
@@ -280,6 +287,37 @@ private fun AppDialogMessageText(
 }
 
 @Composable
+private fun AppDialogFieldLabel(label: String, style: AppDialogStyle) {
+    label.takeIf { it.isNotBlank() }?.let {
+        Text(
+            text = it,
+            color = style.secondaryText,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
+            fontWeight = FontWeight.Medium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+/** 弹框输入框配色（String 版与 TextFieldValue 版共用 ⇒ 样式单源，避免两处漂移） */
+@Composable
+private fun AppDialogFieldColors(style: AppDialogStyle) = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = style.primaryText,
+    unfocusedTextColor = style.primaryText,
+    disabledTextColor = style.secondaryText,
+    focusedContainerColor = style.fieldSurface,
+    unfocusedContainerColor = style.fieldSurface,
+    disabledContainerColor = style.fieldSurface.copy(alpha = 0.58f),
+    cursorColor = style.accent,
+    focusedBorderColor = style.accent.copy(alpha = 0.55f),
+    unfocusedBorderColor = style.stroke,
+    disabledBorderColor = style.stroke.copy(alpha = 0.38f),
+    focusedPlaceholderColor = style.secondaryText,
+    unfocusedPlaceholderColor = style.secondaryText
+)
+
+@Composable
 private fun AppDialogTextField(
     value: String,
     onValueChange: (String) -> Unit,
@@ -297,16 +335,7 @@ private fun AppDialogTextField(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        label.takeIf { it.isNotBlank() }?.let {
-            Text(
-                text = it,
-                color = style.secondaryText,
-                fontSize = MaterialTheme.typography.bodySmall.fontSize,
-                fontWeight = FontWeight.Medium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+        AppDialogFieldLabel(label = label, style = style)
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
@@ -318,20 +347,49 @@ private fun AppDialogTextField(
             visualTransformation = visualTransformation,
             keyboardOptions = keyboardOptions,
             shape = RoundedCornerShape(style.actionRadius),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = style.primaryText,
-                unfocusedTextColor = style.primaryText,
-                disabledTextColor = style.secondaryText,
-                focusedContainerColor = style.fieldSurface,
-                unfocusedContainerColor = style.fieldSurface,
-                disabledContainerColor = style.fieldSurface.copy(alpha = 0.58f),
-                cursorColor = style.accent,
-                focusedBorderColor = style.accent.copy(alpha = 0.55f),
-                unfocusedBorderColor = style.stroke,
-                disabledBorderColor = style.stroke.copy(alpha = 0.38f),
-                focusedPlaceholderColor = style.secondaryText,
-                unfocusedPlaceholderColor = style.secondaryText
-            ),
+            colors = AppDialogFieldColors(style),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                color = style.primaryText,
+                fontFamily = style.bodyFontFamily
+            )
+        )
+    }
+}
+
+/**
+ * `TextFieldValue` 版输入框（R12 模板编辑器用）。
+ *
+ * 与 String 版差别只有一处：**保留选区**（光标位置）。模板编辑器要把「点选占位符」
+ * 插入到光标处，String 版无法表达光标 ⇒ 需要该版本；样式与 String 版共用
+ * `AppDialogFieldColors`，不复制配色。
+ */
+@Composable
+internal fun AppDialogValueTextField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "",
+    minLines: Int = 1,
+    maxLines: Int = 4,
+    readOnly: Boolean = false,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
+) {
+    val style = rememberAppDialogStyle()
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        AppDialogFieldLabel(label = label, style = style)
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            minLines = minLines,
+            maxLines = maxLines,
+            readOnly = readOnly,
+            keyboardOptions = keyboardOptions,
+            shape = RoundedCornerShape(style.actionRadius),
+            colors = AppDialogFieldColors(style),
             textStyle = MaterialTheme.typography.bodyMedium.copy(
                 color = style.primaryText,
                 fontFamily = style.bodyFontFamily
@@ -494,6 +552,191 @@ class ComposeTextInputDialog : ComposeDialogFragment() {
         private const val ARG_NEUTRAL_TEXT = "neutralText"
         private const val ARG_MIN_LINES = "minLines"
         private const val ARG_MAX_LINES = "maxLines"
+    }
+}
+
+/**
+ * 页眉页脚「自定义模板」编辑器（R12）。
+ *
+ * 交互要点（spec R12-1 硬要求）：**可视化插入占位符** —— 变量以 chip 按钮呈现，
+ * 点选即插入到**光标处**（非手写 `\${...}` 串）；下方实时预览按样本值渲染，
+ * 未知占位符原样保留（与阅读页同一渲染引擎 `ReadTipTemplate.render`）。
+ *
+ * 编辑框用 `TextFieldValue` 承载（保留光标），插入语义本身是纯函数
+ * `ReadTipTemplate.insertPlaceholder` ⇒ 可单测、可回退（用户手动改串不被回写）。
+ */
+class ComposeTipTemplateDialog : ComposeDialogFragment() {
+
+    override val dialogSize: AppDialogSize = AppDialogSize.Form
+
+    private var onPositive: ((String) -> Unit)? = null
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        val args = arguments ?: Bundle()
+        return ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                DismissWhenCallbackMissing(
+                    missing = onPositive == null,
+                    dismiss = ::dismissAllowingStateLoss
+                )
+                var field by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+                    mutableStateOf(TextFieldValue(args.getString(ARG_INITIAL_TEXT).orEmpty()))
+                }
+                val style = rememberAppDialogStyle()
+                AppDialogFrame(
+                    title = args.getString(ARG_TITLE).orEmpty(),
+                    message = stringResource(R.string.tip_template_help),
+                    content = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            AppDialogValueTextField(
+                                value = field,
+                                onValueChange = { field = it },
+                                label = stringResource(R.string.tip_template_label),
+                                minLines = 2,
+                                maxLines = 4
+                            )
+                            TipTemplatePlaceholderChips(
+                                style = style,
+                                onInsert = { name ->
+                                    val (text, cursor) = ReadTipTemplate.insertPlaceholder(
+                                        text = field.text,
+                                        selectionStart = field.selection.start,
+                                        selectionEnd = field.selection.end,
+                                        name = name
+                                    )
+                                    field = TextFieldValue(text, TextRange(cursor))
+                                }
+                            )
+                            TipTemplatePreview(text = field.text, style = style)
+                        }
+                    },
+                    actions = {
+                        val palette = style.toMiuixPalette()
+                        LegadoMiuixActionButton(
+                            text = stringResource(R.string.cancel),
+                            palette = palette,
+                            onClick = { dismissAllowingStateLoss() },
+                            cornerRadius = style.actionRadius
+                        )
+                        onPositive?.let { callback ->
+                            Spacer(modifier = Modifier.width(8.dp))
+                            LegadoMiuixActionButton(
+                                text = stringResource(R.string.ok),
+                                palette = palette,
+                                onClick = {
+                                    val current = field.text
+                                    dismissAllowingStateLoss()
+                                    callback.invoke(current)
+                                },
+                                primary = true,
+                                cornerRadius = style.actionRadius
+                            )
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    companion object {
+        fun create(
+            title: String,
+            initialValue: String,
+            onPositive: (String) -> Unit
+        ): ComposeTipTemplateDialog {
+            return ComposeTipTemplateDialog().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_TITLE, title)
+                    putString(ARG_INITIAL_TEXT, initialValue)
+                }
+                this.onPositive = onPositive
+            }
+        }
+
+        private const val ARG_TITLE = "title"
+        private const val ARG_INITIAL_TEXT = "initialText"
+    }
+}
+
+/** 占位符 chip 行（点选插入；变量白名单单源 = `ReadTipTemplate.variables`） */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TipTemplatePlaceholderChips(
+    style: AppDialogStyle,
+    onInsert: (String) -> Unit
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        ReadTipTemplate.variables.forEach { name ->
+            Surface(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(style.actionRadius))
+                    .background(style.fieldSurface)
+                    .clickable { onInsert(name) },
+                shape = RoundedCornerShape(style.actionRadius),
+                color = style.fieldSurface,
+                contentColor = style.primaryText,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp
+            ) {
+                Text(
+                    text = name,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                    color = style.primaryText,
+                    fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                    fontFamily = style.bodyFontFamily,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+/** 实时预览（样本值渲染；空模板给出明确回执，避免"什么都没显示"被当成故障） */
+@Composable
+private fun TipTemplatePreview(text: String, style: AppDialogStyle) {
+    val rendered = ReadTipTemplate.render(text, ReadTipTemplate.previewValues())
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.tip_template_preview),
+            color = style.secondaryText,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(style.actionRadius),
+            color = style.fieldSurface,
+            contentColor = style.primaryText,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
+        ) {
+            Text(
+                text = rendered.ifBlank { stringResource(R.string.tip_template_empty) },
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                color = if (rendered.isBlank()) style.secondaryText else style.accent,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                fontFamily = style.bodyFontFamily,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

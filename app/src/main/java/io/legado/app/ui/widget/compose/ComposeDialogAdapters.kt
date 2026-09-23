@@ -208,6 +208,26 @@ fun Fragment.showComposeTextInputDialog(
     )
 }
 
+/**
+ * 页眉页脚「自定义模板」编辑器（R12）。
+ *
+ * 与 `showComposeTextInputDialog` 的差别：本编辑器支持**点选插入占位符**（插入到光标处）与实时预览，
+ * 故用专用弹窗（`ComposeTipTemplateDialog`）而非通用文本输入框。
+ */
+fun Fragment.showComposeTipTemplateDialog(
+    title: CharSequence,
+    initialValue: CharSequence = "",
+    onPositive: (String) -> Unit
+) {
+    showDialogFragment(
+        ComposeTipTemplateDialog.create(
+            title = title.toString(),
+            initialValue = initialValue.toString(),
+            onPositive = onPositive
+        )
+    )
+}
+
 fun Fragment.showComposeTextFormDialog(
     title: CharSequence,
     labels: List<CharSequence>,

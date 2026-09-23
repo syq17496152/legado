@@ -79,7 +79,9 @@ internal fun TipConfigContent(
     onShowSelector: (String, List<String>, (Int) -> Unit) -> Unit,
     onShowTipColorPicker: () -> Unit,
     onShowTipDividerColorPicker: () -> Unit,
-    onColorChanged: () -> Unit
+    onColorChanged: () -> Unit,
+    /** R12（B3）：打开「自定义模板」编辑器（可视化插入占位符 + 实时预览） */
+    onShowTemplateEditor: (title: String, template: String, onSave: (String) -> Unit) -> Unit
 ) {
     val context = LocalContext.current
     val miuixPalette = style.toMiuixPalette()
@@ -97,6 +99,9 @@ internal fun TipConfigContent(
     var footerLeft by rememberSaveable { mutableIntStateOf(ReadTipConfig.tipFooterLeft) }
     var footerMiddle by rememberSaveable { mutableIntStateOf(ReadTipConfig.tipFooterMiddle) }
     var footerRight by rememberSaveable { mutableIntStateOf(ReadTipConfig.tipFooterRight) }
+    // R12：模板编辑令牌 —— 编辑保存后自增，令下方模板行（读取 ReadTipConfig）重新取值。
+    // 模板串本身不另存一份状态（避免与配置双源），只用令牌驱动重读。
+    var templateTick by rememberSaveable { mutableIntStateOf(0) }
     val headerModes = remember(context) { ReadTipConfig.getHeaderModes(context) }
     val footerModes = remember(context) { ReadTipConfig.getFooterModes(context) }
     val tipNames = ReadTipConfig.tipNames
@@ -125,8 +130,31 @@ internal fun TipConfigContent(
         val index = tipValues.indexOf(value)
         return tipNames.getOrElse(index) { tipNames[ReadTipConfig.none] }
     }
+
+    /** 槽位名（页眉/页脚 + 左中右），供自定义模板编辑入口标识「在编辑哪个槽位」 */
+    fun slotLabel(slot: Int): String {
+        val area = when (slot) {
+            ReadTipConfig.SLOT_HEADER_LEFT,
+            ReadTipConfig.SLOT_HEADER_MIDDLE,
+            ReadTipConfig.SLOT_HEADER_RIGHT -> context.getString(R.string.header)
+            else -> context.getString(R.string.footer)
+        }
+        val position = when (slot) {
+            ReadTipConfig.SLOT_HEADER_LEFT, ReadTipConfig.SLOT_FOOTER_LEFT -> R.string.left
+            ReadTipConfig.SLOT_HEADER_MIDDLE, ReadTipConfig.SLOT_FOOTER_MIDDLE -> R.string.middle
+            else -> R.string.right
+        }
+        return "$area · ${context.getString(position)}"
+    }
+
+    /** 当前为「自定义模板」的槽位（多个槽位可同时自定义 ⇒ 各自独立模板） */
+    val customSlotList = listOf(
+        headerLeft, headerMiddle, headerRight, footerLeft, footerMiddle, footerRight
+    ).mapIndexedNotNull { slot, value -> slot.takeIf { value == ReadTipConfig.custom } }
     fun clearRepeat(value: Int) {
         if (value == ReadTipConfig.none) return
+        // R12：custom 不是「唯一槽位语义」，多个槽位可同时自定义 ⇒ 不参与去重清除
+        if (value == ReadTipConfig.custom) return
         if (headerLeft == value) { headerLeft = ReadTipConfig.none; ReadTipConfig.tipHeaderLeft = ReadTipConfig.none }
         if (headerMiddle == value) { headerMiddle = ReadTipConfig.none; ReadTipConfig.tipHeaderMiddle = ReadTipConfig.none }
         if (headerRight == value) { headerRight = ReadTipConfig.none; ReadTipConfig.tipHeaderRight = ReadTipConfig.none }
@@ -236,6 +264,35 @@ internal fun TipConfigContent(
             onMiddleClick = { chooseTip(context.getString(R.string.middle)) { footerMiddle = it; ReadTipConfig.tipFooterMiddle = it } },
             onRightClick = { chooseTip(context.getString(R.string.right)) { footerRight = it; ReadTipConfig.tipFooterRight = it } }
         )
+        // R12：自定义模板编辑入口（仅当有槽位选为「自定义模板」时出现）
+        if (customSlotList.isNotEmpty()) {
+            TipSection(style = style) {
+                Text(
+                    text = stringResource(R.string.tip_template_edit_hint),
+                    color = style.accent,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                customSlotList.forEach { slot ->
+                    val template = remember(templateTick, slot) { ReadTipConfig.slotTemplate(slot) }
+                    TipValueRow(
+                        title = slotLabel(slot),
+                        value = template.ifBlank { stringResource(R.string.tip_template_empty) },
+                        style = style,
+                        onClick = {
+                            onShowTemplateEditor(slotLabel(slot), template) { newTemplate ->
+                                ReadTipConfig.setSlotTemplate(slot, newTemplate)
+                                templateTick++
+                                postEvent(EventBus.UP_CONFIG, arrayListOf(2, 6))
+                            }
+                        }
+                    )
+                }
+            }
+        }
         // 颜色
         TipColorSection(
             colorRefreshTick = colorRefreshTick,

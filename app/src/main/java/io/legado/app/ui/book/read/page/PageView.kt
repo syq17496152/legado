@@ -36,6 +36,7 @@ import io.legado.app.help.config.AdvancedTitleFontAssetDelegate
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
+import io.legado.app.help.config.ReadTipTemplate
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.read.page.entities.TextLine
@@ -323,6 +324,72 @@ class PageView(context: Context) : FrameLayout(context) {
             typeface = ChapterProvider.typeface
             textSize = 12f
         }
+        // R12（B3）：自定义模板槽位走**按槽位**渲染 —— 不复用 getTipView 反查
+        // （反查是「按枚举值找槽位」语义；多个槽位同时为 custom 时数值相同无法区分）
+        val slotViews = slotViews()
+        for (slot in 0 until ReadTipConfig.slotCount) {
+            if (ReadTipConfig.slotValue(slot) == ReadTipConfig.custom) {
+                renderCustomTipSlot(slot, slotViews[slot], textPage)
+            }
+        }
+    }
+
+    /** 槽位视图表（下标 = `ReadTipConfig.SLOT_*`，顺序与布局中的左/中/右一致） */
+    private fun slotViews(): List<BatteryView> = listOf(
+        binding.tvHeaderLeft, binding.tvHeaderMiddle, binding.tvHeaderRight,
+        binding.tvFooterLeft, binding.tvFooterMiddle, binding.tvFooterRight
+    )
+
+    /**
+     * R12（B3）：渲染单个「自定义模板」槽位。
+     *
+     * 电量占位符位于模板末尾时走电量图标分支（`BatteryView` 按文本尾部数字画框），
+     * 否则一律纯文本（避免电量框画到无关字符上）；文本由与阅读页其它信息同一套
+     * `ReadTipTemplate.render` 生成 ⇒ 未知占位符原样保留。
+     */
+    private fun renderCustomTipSlot(
+        slot: Int,
+        view: BatteryView,
+        textPage: TextPage? = currentTextPage
+    ) {
+        val template = ReadTipConfig.slotTemplate(slot)
+        val asBattery = ReadTipTemplate.batteryIconTrailing(template)
+        view.isBattery = asBattery
+        view.typeface = ChapterProvider.typeface
+        view.textSize = if (asBattery) 11f else 12f
+        view.setTextIfNotEqual(renderCustomTip(template, textPage))
+    }
+
+    /**
+     * R12（B3）：刷新所有自定义模板槽位。
+     *
+     * 由时间 / 电量 / 页码进度等**可变信息源**驱动（`upTime` / `upBattery` / `setProgress`）——
+     * 槽位值不等于 `custom` 时直接跳过 ⇒ 既有枚举槽位零影响。
+     */
+    fun upCustomTips() {
+        val views = slotViews()
+        for (slot in 0 until ReadTipConfig.slotCount) {
+            if (ReadTipConfig.slotValue(slot) == ReadTipConfig.custom) {
+                renderCustomTipSlot(slot, views[slot])
+            }
+        }
+    }
+
+    private fun renderCustomTip(template: String, textPage: TextPage?): String {
+        val page = textPage ?: currentTextPage
+        return ReadTipTemplate.render(
+            template,
+            ReadTipTemplate.values(
+                chapterTitle = page?.title.orEmpty(),
+                bookName = ReadBook.book?.name.orEmpty(),
+                author = ReadBook.book?.author.orEmpty(),
+                time = timeFormat.format(Date(System.currentTimeMillis())),
+                battery = battery,
+                page = page?.let { "${it.index.plus(1)}/${it.pageSize}" }.orEmpty(),
+                totalProgress = page?.readProgress.orEmpty(),
+                totalProgress1 = page?.let { "${it.chapterIndex.plus(1)}/${it.chapterSize}" }.orEmpty()
+            )
+        )
     }
 
     /**
@@ -403,6 +470,7 @@ class PageView(context: Context) : FrameLayout(context) {
     fun upTime() {
         tvTime?.text = timeFormat.format(Date(System.currentTimeMillis()))
         upTimeBattery()
+        upCustomTips()
     }
 
     /**
@@ -414,6 +482,7 @@ class PageView(context: Context) : FrameLayout(context) {
         tvBattery?.setBattery(battery)
         tvBatteryP?.text = "$battery%"
         upTimeBattery()
+        upCustomTips()
     }
 
     /**
@@ -488,6 +557,8 @@ class PageView(context: Context) : FrameLayout(context) {
             tvPageAndTotal?.setTextIfNotEqual("${index.plus(1)}/$pageSize  $readProgress")
             tvPage?.setTextIfNotEqual("${index.plus(1)}/$pageSize")
         }
+        // R12（B3）：页码/进度/章节标题变化 ⇒ 自定义模板槽位同步刷新
+        upCustomTips()
     }
 
     fun setAutoPager(autoPager: AutoPager?) {

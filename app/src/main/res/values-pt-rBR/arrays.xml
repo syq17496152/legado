@@ -99,6 +99,7 @@
 		<item>Páginas e progresso</item>
 		<item>Tempo e Bateria</item>
 		<item>Tempo e Bateria%</item>
+		<item>Modelo personalizado</item>
 	</string-array>
 
 	<string-array name="text_font_weight">
