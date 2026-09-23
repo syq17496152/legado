@@ -2712,4 +2712,10 @@ bookUrl：%7$s
     <string name="selection_search_engine_hide_css_enabled">已启用 CSS 拦截器</string>
     <string name="selection_search_engine_hide_css_hint">CSS 拦截器（可选）。示例：header, form[role=&quot;search&quot;] { display:none!important; }</string>
     <string name="auto_task_item_summary">Cron：%1$s | %2$s</string>
+    <!-- B6·R27：高亮规则包文件导入导出（与剪贴板 JSON 通道并存） -->
+    <string name="highlight_rule_import_from_clipboard">从剪贴板 JSON 导入</string>
+    <string name="highlight_rule_import_from_pack">从规则包文件导入</string>
+    <string name="highlight_rule_export_to_clipboard">导出为剪贴板 JSON</string>
+    <string name="highlight_rule_export_to_pack">导出为规则包文件</string>
+    <string name="highlight_rule_export_pack_done">已导出 %1$d 条规则到：\n%2$s</string>
 </resources>

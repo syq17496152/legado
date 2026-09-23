@@ -3234,4 +3234,10 @@ Selected text or question:
     <string name="search_book_empty_title">搜索结果为空</string>
     <string name="search_book_empty_precision">%1$s分组搜索结果为空，是否关闭精准搜索？</string>
     <string name="search_book_empty_switch">%1$s分组搜索结果为空，是否切换到全部分组？</string>
+    <!-- B6·R27：高亮规则包文件导入导出（与剪贴板 JSON 通道并存） -->
+    <string name="highlight_rule_import_from_clipboard">Import from clipboard JSON</string>
+    <string name="highlight_rule_import_from_pack">Import from rule package file</string>
+    <string name="highlight_rule_export_to_clipboard">Export as clipboard JSON</string>
+    <string name="highlight_rule_export_to_pack">Export as rule package file</string>
+    <string name="highlight_rule_export_pack_done">Exported %1$d rules to:\n%2$s</string>
 </resources>

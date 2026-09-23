@@ -1,7 +1,9 @@
 package io.legado.app.ui.highlight
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
@@ -25,6 +27,7 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.fromJsonArray
+import java.io.File
 
 /**
  * F-P1-2 高亮规则管理页（借鉴阅读T，适配 SharedPreferences 存储）
@@ -41,6 +44,11 @@ class HighlightRuleActivity :
     // Compose 桥接状态（双轨过渡：列表/搜索在 Compose 侧渲染）
     private var composeRules by mutableStateOf(listOf<HighlightRule>())
     private var composeSearchQuery by mutableStateOf("")
+
+    /** R27：包文件选择器（SAF；导入包走「解压校验 → 全通过才写存储」） */
+    private val packPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { importRulesFromPack(it) }
+    }
 
     // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
     override fun manageBackgroundAlphaEnabled(): Boolean = true
@@ -139,6 +147,19 @@ class HighlightRuleActivity :
     }
 
     private fun importRules() {
+        // R27（B6）：两条通道并存 —— 剪贴板 JSON（少量规则快速粘贴）/ 包文件（整套分发，含校验）
+        showComposeChoiceListDialog(
+            title = getString(R.string.import_highlight_rule),
+            labels = listOf(
+                getString(R.string.highlight_rule_import_from_clipboard),
+                getString(R.string.highlight_rule_import_from_pack)
+            )
+        ) { index ->
+            if (index == 0) importRulesFromClipboard() else pickPackFile()
+        }
+    }
+
+    private fun importRulesFromClipboard() {
         val clipText = getClipText()
         if (clipText.isNullOrBlank()) {
             toastOnUi(R.string.highlight_rule_import_clipboard_empty)
@@ -150,30 +171,65 @@ class HighlightRuleActivity :
                     toastOnUi(R.string.highlight_rule_import_invalid)
                     return
                 }
-                val current = HighlightRuleStore.load(this).toMutableList()
-                val existingIds = current.map { it.id }.toSet()
-                val toAdd = imported.filter { it.id !in existingIds }
-                if (toAdd.isEmpty()) {
+                val added = HighlightRulePack.commit(this, imported)
+                if (added == 0) {
                     toastOnUi(R.string.highlight_rule_import_all_exist)
                     return
                 }
-                current.addAll(toAdd)
-                HighlightRuleStore.save(this, current)
                 viewModel.loadRules()
-                toastOnUi(getString(R.string.highlight_rule_import_done, toAdd.size))
+                toastOnUi(getString(R.string.highlight_rule_import_done, added))
             } ?: toastOnUi(R.string.highlight_rule_import_invalid)
         }.onFailure {
             toastOnUi(getString(R.string.highlight_rule_import_failed, it.message))
         }
     }
 
+    /** R27：包文件导入（SAF 选择 → 解压校验 → 全通过才写入存储） */
+    private fun pickPackFile() {
+        packPicker.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+    }
+
+    private fun importRulesFromPack(uri: Uri) {
+        kotlin.runCatching {
+            val temp = File(cacheDir, "highlightRulePack_import.zip")
+            contentResolver.openInputStream(uri)?.use { input ->
+                temp.outputStream().use { out -> input.copyTo(out) }
+            } ?: throw HighlightRulePack.PackException("无法读取所选文件")
+            // 解压+校验（复用 R21 防护）；任何失败都在 commit 之前抛出 ⇒ 存储零写入
+            val imported = HighlightRulePack.importFromZip(this, temp)
+            temp.delete()
+            val added = HighlightRulePack.commit(this, imported)
+            viewModel.loadRules()
+            if (added == 0) {
+                toastOnUi(R.string.highlight_rule_import_all_exist)
+            } else {
+                toastOnUi(getString(R.string.highlight_rule_import_done, added))
+            }
+        }.onFailure {
+            toastOnUi(getString(R.string.highlight_rule_import_failed, it.message))
+        }
+    }
+
     private fun exportRules() {
+        // R27：导出同样两通道（剪贴板可核对内容 / 包文件可分发）
         val rules = HighlightRuleStore.load(this)
         if (rules.isEmpty()) {
             toastOnUi(R.string.highlight_rule_export_empty)
             return
         }
-        val json = GSON.toJson(rules)
+        showComposeChoiceListDialog(
+            title = getString(R.string.export_highlight_rule),
+            labels = listOf(
+                getString(R.string.highlight_rule_export_to_clipboard),
+                getString(R.string.highlight_rule_export_to_pack)
+            )
+        ) { index ->
+            if (index == 0) exportRulesToClipboard(rules) else exportRulesToPack(rules)
+        }
+    }
+
+    private fun exportRulesToClipboard(rules: List<HighlightRule>) {
+        val json = HighlightRulePack.rulesJson(rules)
         // F50 导出回执可视化：原实现"静默写剪贴板 + 一句 toast"，用户无法核对导出了什么内容；
         // 改为弹框展示可核对内容（messageInContent 走可滚动内容区，长规则集不撑破弹框）+ 显式复制动作
         showComposeConfirmDialog(
@@ -187,6 +243,25 @@ class HighlightRuleActivity :
                 toastOnUi(getString(R.string.highlight_rule_export_done, rules.size))
             }
         )
+    }
+
+    /** R27：导出包文件到应用外部目录，并给出可核对回执（路径 + 条数） */
+    private fun exportRulesToPack(rules: List<HighlightRule>) {
+        kotlin.runCatching {
+            val file = HighlightRulePack.exportToFile(rules)
+            showComposeConfirmDialog(
+                title = getString(R.string.export_success),
+                message = getString(R.string.highlight_rule_export_pack_done, rules.size, file.absolutePath),
+                positiveText = getString(R.string.copy_text),
+                negativeText = getString(R.string.close),
+                onPositive = {
+                    sendToClip(file.absolutePath)
+                    toastOnUi(getString(R.string.highlight_rule_export_done, rules.size))
+                }
+            )
+        }.onFailure {
+            toastOnUi(getString(R.string.highlight_rule_import_failed, it.message))
+        }
     }
 
     override fun onDestroy() {

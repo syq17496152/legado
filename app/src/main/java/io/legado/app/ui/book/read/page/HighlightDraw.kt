@@ -93,15 +93,37 @@ object HighlightDraw {
     }
 
     /** applyTextStyle 需还原的原始 Paint 状态 */
-    class SavedTextStyle(val bold: Boolean, val skew: Float, val typeface: Typeface?)
+    class SavedTextStyle(
+        val bold: Boolean,
+        val skew: Float,
+        val typeface: Typeface?,
+        /** R26：原字号（绘制期覆写后必须复位，否则泄漏到后续列/行） */
+        val textSize: Float,
+        /** R26：原字距（em；同上必须复位） */
+        val letterSpacing: Float
+    )
 
-    /** 用样式配置文字 Paint(加粗/斜体/自定义字体/阴影)。返回需要还原的原值以便调用方复位。 */
+    /** 用样式配置文字 Paint(加粗/斜体/自定义字体/阴影/字号倍率/字距)。返回需要还原的原值以便调用方复位。 */
     fun applyTextStyle(paint: Paint, style: HighlightStyle): SavedTextStyle {
-        val saved = SavedTextStyle(paint.isFakeBoldText, paint.textSkewX, paint.typeface)
+        val saved = SavedTextStyle(
+            paint.isFakeBoldText,
+            paint.textSkewX,
+            paint.typeface,
+            paint.textSize,
+            paint.letterSpacing
+        )
         paint.isFakeBoldText = saved.bold || style.bold
         if (style.italic) paint.textSkewX = -0.25f
         if (style.fontPath.isNotEmpty()) {
             ChapterProvider.getHighlightTypeface(style.fontPath)?.let { paint.typeface = it }
+        }
+        // R26：字号倍率 / 字距增量（域已由 HighlightStyle.sanitized() 夹紧；
+        // 这里是绘制期覆写，不参与预排版测量 —— 约束与升级路径见 HighlightStyle.fontScale KDoc）
+        if (style.fontScale != null) {
+            paint.textSize = saved.textSize * style.resolvedFontScale
+        }
+        if (style.letterSpacingEm != null) {
+            paint.letterSpacing = saved.letterSpacing + style.resolvedLetterSpacingEm
         }
         // R1a：文字阴影（color == 0 表示跟随当前字色）
         style.shadow?.let { s ->
@@ -114,6 +136,9 @@ object HighlightDraw {
         paint.isFakeBoldText = saved.bold
         paint.textSkewX = saved.skew
         paint.typeface = saved.typeface
+        // R26：字号/字距必须显式复位（Paint 可读回，但统一在此收口，避免调用点各写一遍）
+        paint.textSize = saved.textSize
+        paint.letterSpacing = saved.letterSpacing
         // D2：Paint 无法读回阴影（无 getter）→ 必须显式清除，否则会泄漏到后续列/行
         paint.clearShadowLayer()
     }

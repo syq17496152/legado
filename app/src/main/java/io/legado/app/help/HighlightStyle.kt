@@ -25,7 +25,24 @@ data class HighlightStyle(
     /** R1a：背景填充形状（null = 矩形，与改造前等价） */
     val fillShape: FillShape? = null,
     /** R1a：文字阴影（null = 无阴影，与改造前等价） */
-    val shadow: Shadow? = null
+    val shadow: Shadow? = null,
+    /**
+     * R26：**相对字号倍率**（null/1.0 = 与正文同字号，零回归）。
+     *
+     * ⚠ 结构约束（实施期实测，2026-09-24）：本阅读器正文是**预排版**的
+     * （`TextChapterLayout` 用单一 paint 逐字测量列宽），本字段在**绘制期**覆写画笔字号
+     * ⇒ 只影响字形大小，不参与列宽测量。故域收敛在 [MIN_FONT_SCALE]..[MAX_FONT_SCALE]（±10%），
+     * 与既有「加粗/斜体」在绘制期的可接受漂移同量级；超域会被 [sanitized] 夹回。
+     * 升级路径：若要支持更大范围，需把该字段引入排版测量（列宽按样式分档），属排版引擎级改造。
+     */
+    val fontScale: Float? = null,
+    /**
+     * R26：**字距增量（em）**（null/0 = 不改，零回归）；域 [MIN_LETTER_SPACING_EM]..[MAX_LETTER_SPACING_EM]。
+     *
+     * 语义说明（与 spec「相对倍率」的差异，实施期裁定）：`Paint.letterSpacing` 的默认值是 **0**，
+     * 「相对倍率」乘 0 恒为 0（等于该通道永不生效）⇒ 本字段实现为**em 增量**（加法），才有可感知语义。
+     */
+    val letterSpacingEm: Float? = null
 ) {
     data class Underline(
         val kind: Kind = Kind.SOLID,
@@ -86,13 +103,25 @@ data class HighlightStyle(
     val isEmpty: Boolean
         get() = fill == 0 && textColor == 0 && !bold && !italic &&
                 underline == null && strike == null && box == null && emphasis == null &&
-                fontPath.isEmpty() && shadow == null
+                fontPath.isEmpty() && shadow == null && !hasFontOverrides
+
+    /** R26：是否设置了字号/字距覆写（两者都属「绘制期覆写」通道） */
+    val hasFontOverrides: Boolean
+        get() = fontScale != null || letterSpacingEm != null
+
+    /** 实际字号倍率：未设置或 ≤0 回退 1.0（零回归基线） */
+    val resolvedFontScale: Float
+        get() = fontScale?.takeIf { it > 0f } ?: 1f
+
+    /** 实际字距增量（em）：未设置回退 0（零回归基线） */
+    val resolvedLetterSpacingEm: Float
+        get() = letterSpacingEm ?: 0f
 
     /** 是否需要「逐列绘制」(任何非纯背景填充的通道都需要) */
     val needsPerColumnDraw: Boolean
         get() = textColor != 0 || bold || italic ||
                 underline != null || strike != null || box != null || emphasis != null ||
-                fontPath.isNotEmpty()
+                fontPath.isNotEmpty() || hasFontOverrides
 
     /**
      * 空值兜底（健壮性）。
@@ -121,6 +150,30 @@ data class HighlightStyle(
                 s = s.copy(underline = u.copy(width = w, distance = d))
             }
         }
+        // R26：字号倍率/字距增量越界兜底（手改 JSON 写出极端值 → 会与相邻列重叠/整行挤压）
+        s.fontScale?.let { scale ->
+            val clamped = scale.coerceIn(MIN_FONT_SCALE, MAX_FONT_SCALE)
+            if (clamped != scale) s = s.copy(fontScale = clamped)
+        }
+        s.letterSpacingEm?.let { em ->
+            val clamped = em.coerceIn(MIN_LETTER_SPACING_EM, MAX_LETTER_SPACING_EM)
+            if (clamped != em) s = s.copy(letterSpacingEm = clamped)
+        }
         return s
+    }
+
+    companion object {
+        /**
+         * R26 字号倍率域（±10%）。
+         *
+         * 定档依据：正文预排版（列宽按单一 paint 测量），绘制期覆写字形大小会带来与「加粗」
+         * 同量级的相邻列漂移；±10% 是「可感知但不破坏版式」的上界。
+         */
+        const val MIN_FONT_SCALE = 0.9f
+        const val MAX_FONT_SCALE = 1.1f
+
+        /** R26 字距增量域（em）：0～+0.1em（再大则整行超宽） */
+        const val MIN_LETTER_SPACING_EM = 0f
+        const val MAX_LETTER_SPACING_EM = 0.1f
     }
 }
