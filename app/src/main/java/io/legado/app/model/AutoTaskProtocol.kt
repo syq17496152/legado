@@ -72,14 +72,19 @@ object AutoTaskProtocol {
         if (bookUrl.isBlank()) return "refreshToc 缺少 bookUrl"
         val book = appDb.bookDao.getBook(bookUrl) ?: return "refreshToc 未找到书籍"
         val beforeList = appDb.bookChapterDao.getChapterList(bookUrl)
-        val beforeCount = beforeList.size
         val refresh = BookController.refreshToc(mapOf("url" to listOf(bookUrl)))
         if (!refresh.isSuccess) {
             return "《${book.name}》更新失败: ${refresh.errorMsg}"
         }
         val afterList = appDb.bookChapterDao.getChapterList(bookUrl)
-        val afterCount = afterList.size
-        val newCount = (afterCount - beforeCount).coerceAtLeast(0)
+        // R9（B2，2026-09-23）：改用**结构化 diff**（身份匹配 + 区间合并 + 超限降级），替换原
+        // 「afterCount - beforeCount」计数差：该口径在「中间插入 + 删除」混合时会算错新增数
+        // （等量替换甚至算出 0 ⇒ 通知不触发），缓存区间也恒取尾段 ⇒ 漏缓存插入段、错缓存既有章节。
+        val tocDiff = AutoTaskTocDiff.diff(
+            beforeList.map { it.url },
+            afterList.map { it.url }
+        )
+        val newCount = tocDiff.addedCount
         val notifyObj = getMap(action, "notify")
         val notifyEnabled = notifyObj?.let { getBoolean(it, "enable", defaultValue = true) } ?: false
         val notifyMin = notifyObj?.let { getInt(it, "minCount") } ?: 1
@@ -101,15 +106,14 @@ object AutoTaskProtocol {
             )
         }
         var cacheCount = 0
-        if (shouldCache) {
-            val start = beforeCount
-            val end = afterCount - 1
-            if (start <= end && !book.isLocal) {
-                CacheBook.start(context, book, start, end)
-                cacheCount = end - start + 1
+        if (shouldCache && !book.isLocal) {
+            // R9：只按 diff 合并出的**新增章节区间**拉取缓存（不再按「尾段 [beforeCount, afterCount-1]」猜测）
+            tocDiff.ranges.forEach { range ->
+                CacheBook.start(context, book, range.first, range.last)
+                cacheCount += range.last - range.first + 1
             }
         }
-        return buildSummary(book, newCount, shouldNotify, cacheCount)
+        return buildSummary(book, newCount, shouldNotify, cacheCount, tocDiff.degraded)
     }
 
     private fun handleNotify(
@@ -189,7 +193,8 @@ object AutoTaskProtocol {
         book: Book,
         newCount: Int,
         notified: Boolean,
-        cacheCount: Int
+        cacheCount: Int,
+        cacheRangesMerged: Boolean = false
     ): String {
         val name = if (book.name.isBlank()) book.bookUrl else book.name
         val parts = mutableListOf("《$name》")
@@ -199,7 +204,11 @@ object AutoTaskProtocol {
             parts.add("无更新")
         }
         if (notified) parts.add("通知")
-        if (cacheCount > 0) parts.add("缓存$cacheCount")
+        // R9-4（B2，2026-09-23）：新增区间数超过合并上限时，摘要明确标注「区间已合并」，
+        // 而不是把全部分段罗列出来（摘要必须收敛，避免长目录刷屏）。
+        if (cacheCount > 0) {
+            parts.add(if (cacheRangesMerged) "缓存$cacheCount(区间已合并)" else "缓存$cacheCount")
+        }
         return parts.joinToString(" ")
     }
 
@@ -209,13 +218,14 @@ object AutoTaskProtocol {
 
     private fun parseActions(result: Any?): List<Map<String, Any?>>? {
         if (result == null) return null
-        return when (result) {
-            is String -> parseActionsFromJson(result)
-            else -> {
-                val json = runCatching { GSON.toJson(result) }.getOrNull()
-                if (json.isNullOrBlank()) null else parseActionsFromJson(json)
-            }
-        }
+        if (result is String) return parseActionsFromJson(result)
+        // R11（B2，2026-09-23）：脚本返回值先做 **JSON 兼容化**再交给 Gson。
+        // 原实现直接 `GSON.toJson(result)`：Rhino 的 NativeArray 会退化成 {"0":…}（数组语义丢失）、
+        // NativeObject 会带出 __proto__ 等内部键、自引用还会抛异常并被 runCatching 吞掉
+        // ⇒ 动作静默丢失（用户只看到「脚本没报错但什么都没发生」）。
+        val compatible = runCatching { toJsonCompatible(result) }.getOrNull()
+        val json = compatible?.let { runCatching { GSON.toJson(it) }.getOrNull() }
+        return if (json.isNullOrBlank()) null else parseActionsFromJson(json)
     }
 
     private fun parseActionsFromJson(text: String): List<Map<String, Any?>>? {

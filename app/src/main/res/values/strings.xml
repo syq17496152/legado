@@ -1744,6 +1744,8 @@
     <string name="auto_task_service">自动任务</string>
     <string name="auto_task_no_task">暂无任务</string>
     <string name="auto_task_no_enabled">没有启用的任务</string>
+    <!-- R6（B2）：单轮执行预算用尽（跳过的任务会在下次调度继续执行，不会丢） -->
+    <string name="auto_task_round_budget_exceeded">本轮时间预算用尽，已跳过 %1$d 条任务（下次调度继续）</string>
     <string name="auto_task_cron_invalid">cron 表达式无效</string>
     <string name="auto_task_running_state">运行中</string>
     <string name="auto_task_script_empty">脚本不能为空</string>

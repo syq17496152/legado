@@ -105,9 +105,15 @@ object AutoTask {
 
     @Synchronized
     fun saveRules(list: List<AutoTaskRule>, refresh: Boolean = true) {
-        appDb.autoTaskRuleDao.deleteAll()
-        if (list.isNotEmpty()) {
-            appDb.autoTaskRuleDao.insert(*list.toTypedArray())
+        // R10（B2，2026-09-23）：规则「整表替换」必须**事务化**。
+        // 原实现先 deleteAll() 再 insert()：若 insert 抛异常（或进程中途被杀），
+        // 数据库会停留在「已清空」状态 ⇒ 用户规则全部丢失且不可恢复。
+        // 约束：事务体内只做 DB 写（不得有文件/网络 IO）；缓存清理与重排程一律移到事务之后。
+        appDb.runInTransaction {
+            appDb.autoTaskRuleDao.deleteAll()
+            if (list.isNotEmpty()) {
+                appDb.autoTaskRuleDao.insert(*list.toTypedArray())
+            }
         }
         // 清除旧缓存中的副本
         CacheManager.delete(KEY_RULES)

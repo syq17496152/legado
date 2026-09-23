@@ -755,6 +755,21 @@
             android:name=".service.AutoTaskService"
             android:foregroundServiceType="dataSync|shortService" />
 
+        <!-- R7（B2，2026-09-23）：自动任务唤醒重排——
+             重启/换时区/改系统时间/覆盖安装都会使既有 AlarmManager 闹钟失效（重启直接清空），
+             修复前该链路完全缺失 ⇒ 表现为「重启后自动任务不再触发」。重排是幂等的。 -->
+        <receiver
+            android:name=".service.AutoTaskBootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <!-- F-P1-F AI 任务保活服务 -->
         <service
             android:name=".service.AiTaskKeepAliveService"

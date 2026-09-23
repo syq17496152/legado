@@ -161,6 +161,13 @@ object Restore {
         fileToListT<BookHighlight>(path, "highlights.json")?.let {
             withContext(IO) { appDb.bookHighlightDao.insert(*it.toTypedArray()) }
         }
+        // R8（B2，2026-09-23）：自动任务规则导入（autoTaskRuleDao 亦为 REPLACE ⇒ 幂等）。
+        // 恢复后**必须立即重排**：否则规则已在库里但系统闹钟未建立，用户会以为「恢复了却不跑」。
+        // 旧备份不含该文件时 fileToListT 返回 null ⇒ 静默跳过（不报错）。
+        fileToListT<io.legado.app.model.AutoTaskRule>(path, "autoTask.json")?.let {
+            withContext(IO) { appDb.autoTaskRuleDao.insert(*it.toTypedArray()) }
+            io.legado.app.model.AutoTask.refreshSchedule()
+        }
         fileToListT<BookGroup>(path, "bookGroup.json")?.let {
             withContext(IO) { appDb.bookGroupDao.insert(*it.toTypedArray()) }
         }

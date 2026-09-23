@@ -54,6 +54,14 @@ class AutoTaskService : BaseService() {
         private const val DATA_SYNC_IDLE_CHECK_MS = 60_000L
         private const val DATA_SYNC_MIN_DELAY_MS = 1_000L
         private const val FIRST_RUN_GRACE_MS = 5 * 60_000L
+        /**
+         * R6（B2，2026-09-23）：单轮执行预算（毫秒）。
+         * 取值必须**明显低于**短时 FGS 的系统上限（`shortService` ≈3 分钟）⇒ 取 150s，
+         * 给收尾留出余量（更新通知、释放 taskLock），避免被系统在任务中途掐断。
+         * 简化说明：未做用户可配（需新增设置项 UI 与文案）；升级路径：需要时提升为
+         * `PreferKey` 配置键 + 设置页开关，复用本常量作为默认值。
+         */
+        private const val ROUND_BUDGET_MS = 150_000L
 
         var isRun = false
             private set
@@ -246,6 +254,16 @@ class AutoTaskService : BaseService() {
 
         val now = System.currentTimeMillis()
         var hasDueTask = false
+        // R6（B2，2026-09-23）：单轮执行**预算护栏**。
+        // 背景：Alarm/短时 FGS 模式下一次执行窗口受系统上限约束（`shortService` 约 3 分钟，
+        // 见 :153-155 注释）；修复前对「单条规则耗时」无任何约束，前面的规则一旦卡住，
+        // 系统会在**任务中途**掐断服务（:158 的 finally 都来不及跑），既无日志也可能留下半完成状态。
+        // 现在：预算用尽后不再启动新任务，并留下「规则 id + 阶段 + 已耗时」日志。
+        // 注：阻塞中的 Rhino 脚本无法被墙钟超时打断（本项目无 Rhino 指令计数级 ContextFactory），
+        //     故护栏作用于「规则之间」，而不是「规则内部」；跳过的规则本轮不更新 lastRunAt，
+        //     下一次调度仍会判定为到期 ⇒ 不会丢任务（仅延后）。
+        val roundStartAt = System.currentTimeMillis()
+        var skippedByBudget = 0
         enabled.forEach { task ->
             val cron = task.cron?.trim().orEmpty()
             if (cron.isBlank()) {
@@ -264,9 +282,21 @@ class AutoTaskService : BaseService() {
                 return@forEach
             }
             if (nextRun <= now) {
+                val elapsed = System.currentTimeMillis() - roundStartAt
+                if (elapsed > ROUND_BUDGET_MS) {
+                    skippedByBudget++
+                    AppLog.put(
+                        "自动任务：本轮预算用尽，跳过规则 id=${task.id} 阶段=规则调度前 已耗时=${elapsed}ms"
+                    )
+                    return@forEach
+                }
                 hasDueTask = true
                 runTask(task)
             }
+        }
+        if (skippedByBudget > 0) {
+            notificationContent = getString(R.string.auto_task_round_budget_exceeded, skippedByBudget)
+            upNotification()
         }
 
         if (!hasDueTask) {

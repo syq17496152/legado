@@ -109,6 +109,8 @@ object Backup {
             // B2.5：手动划线（与 BackupSelectorConfig 条目、导出分支同名同文件）
             "highlights.json",
             HighlightRuleStore.backupFileName,
+            // R8（B2，2026-09-23）：自动任务规则（与 BackupSelectorConfig 条目、导出/恢复分支同名同文件）
+            "autoTask.json",
             "readRecord.json",
             "readRecordDetail.json",
             "searchHistory.json",
@@ -482,6 +484,11 @@ object Backup {
         // B2.5：手动划线纳入备份（此前不在备份范围 → 换机/重装即丢且无法重建）
         if (selectedFiles.contains("highlights.json")) {
             writeListToJson(appDb.bookHighlightDao.all, "highlights.json", backupPath)
+        }
+        // R8（B2，2026-09-23）：自动任务规则纳入备份
+        // （修复前不在备份范围 ⇒ 换机/重装/清数据后任务全丢，且 cron+脚本无法重建）
+        if (selectedFiles.contains("autoTask.json")) {
+            writeListToJson(appDb.autoTaskRuleDao.all(), "autoTask.json", backupPath)
         }
         if (selectedFiles.contains("keyboardAssists.json")) {
             writeListToJson(appDb.keyboardAssistsDao.all, "keyboardAssists.json", backupPath)
