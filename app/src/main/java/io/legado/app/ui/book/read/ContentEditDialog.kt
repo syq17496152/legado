@@ -62,6 +62,7 @@ import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
+import io.legado.app.ui.book.read.page.entities.ReadSelectionPosition
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.sendToClip
@@ -73,6 +74,29 @@ import kotlinx.coroutines.withContext
  * 内容编辑
  */
 class ContentEditDialog() : ComposeDialogFragment() {
+
+    companion object {
+        /** R14：选中位置所属章节下标；缺省 -1 表示无选区定位信息 */
+        private const val KEY_ANCHOR_CHAPTER_INDEX = "anchorChapterIndex"
+
+        /** R14：选中位置在章内的字符偏移；缺省 -1 表示无选区定位信息 */
+        private const val KEY_ANCHOR_CHAPTER_POS = "anchorChapterPos"
+
+        /**
+         * R14 统一入口：四个既有入口传 `null`（走缺省进度回退），
+         * 选中文字「编辑此处」入口传选区位置（走 offset 优先）。
+         */
+        fun create(position: ReadSelectionPosition?): ContentEditDialog {
+            return ContentEditDialog().apply {
+                if (position != null) {
+                    arguments = Bundle().apply {
+                        putInt(KEY_ANCHOR_CHAPTER_INDEX, position.chapterIndex)
+                        putInt(KEY_ANCHOR_CHAPTER_POS, position.chapterPosition)
+                    }
+                }
+            }
+        }
+    }
 
     override val dialogWidth: Int = ViewGroup.LayoutParams.MATCH_PARENT
     override val dialogHeight: Int = ViewGroup.LayoutParams.MATCH_PARENT
@@ -214,8 +238,15 @@ class ContentEditDialog() : ComposeDialogFragment() {
         viewModel.initContent { content ->
             editorRef?.apply {
                 setText(content)
+                // R14 双态锚点：有选区定位（offset 优先）则落到选中位置，否则回退阅读进度（不回归）
+                val anchorOffset = ContentEditAnchor.resolve(
+                    anchorChapterIndex = arguments?.getInt(KEY_ANCHOR_CHAPTER_INDEX, -1) ?: -1,
+                    anchorPos = arguments?.getInt(KEY_ANCHOR_CHAPTER_POS, -1) ?: -1,
+                    currentChapterIndex = ReadBook.durChapterIndex,
+                    durChapterPos = ReadBook.durChapterPos
+                )
                 post {
-                    val lineIndex = layout.getLineForOffset(ReadBook.durChapterPos)
+                    val lineIndex = layout.getLineForOffset(anchorOffset)
                     val lineHeight = layout.getLineTop(lineIndex)
                     scrollTo(0, lineHeight)
                 }
@@ -309,4 +340,25 @@ class ContentEditDialog() : ComposeDialogFragment() {
 
     }
 
+}
+
+/**
+ * R14（B3）：编辑器定位锚点解析（纯函数，可单测）。
+ *
+ * 双态语义：
+ * - 选区入口传入 offset（`anchorPos >= 0` 且章节一致）⇒ **offset 优先**，光标/视口落到选中位置；
+ * - 其余入口（含 Epub 原生选区无章内坐标）⇒ **缺省回退**阅读进度 `durChapterPos`，保持既有行为不回归。
+ */
+internal object ContentEditAnchor {
+
+    fun resolve(
+        anchorChapterIndex: Int,
+        anchorPos: Int,
+        currentChapterIndex: Int,
+        durChapterPos: Int
+    ): Int {
+        if (anchorPos < 0) return durChapterPos
+        if (anchorChapterIndex != currentChapterIndex) return durChapterPos
+        return anchorPos
+    }
 }

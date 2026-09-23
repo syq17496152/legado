@@ -23,6 +23,9 @@ object ContentSelectConfig {
     /** B2.5：手动划线（高亮）动作 —— 此前整条链零可达，本次恢复入口 */
     const val ACTION_HIGHLIGHT = "highlight"
 
+    /** R14（B3）：选中文字直达编辑器并定位到选中位置 */
+    const val ACTION_EDIT_HERE = "edit_here"
+
     private val legacyDefaultActions = setOf(
         ACTION_REPLACE,
         ACTION_COPY,
@@ -56,7 +59,9 @@ object ContentSelectConfig {
         ACTION_DICT,
         ACTION_ASK_AI,
         ACTION_GENERATE_IMAGE,
-        ACTION_SHARE_IMAGE
+        ACTION_SHARE_IMAGE,
+        // R14（B3）：新用户默认可见「编辑此处」；同样不动 legacy 两集合（参与老用户偏好迁移判定）
+        ACTION_EDIT_HERE
     )
 
     val defaultOpenValues = listOf("", ACTION_WEB_SEARCH, ACTION_DICT, ACTION_ASK_AI)

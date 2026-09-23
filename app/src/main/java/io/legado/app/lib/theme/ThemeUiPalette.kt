@@ -197,17 +197,18 @@ private fun Context.themePanelImageSignature(): String {
 
 @ColorInt
 fun Context.themeCardColorOrDefault(): Int {
-    return themeColorOrDefault(PreferKey.themeCardColor, R.color.background_card)
+    return themeColorOrNull(PreferKey.themeCardColor) ?: deriveSurfaceColor(cardSurfaceStep)
 }
 
 @ColorInt
 fun Context.themeMutedColorOrDefault(): Int {
-    return themeColorOrDefault(PreferKey.themeMutedColor, R.color.background_menu)
+    return themeColorOrNull(PreferKey.themeMutedColor) ?: deriveSurfaceColor(secondarySurfaceStep)
 }
 
 @ColorInt
 fun Context.themeSearchFieldBackgroundColorOrDefault(): Int {
-    return themeColorOrDefault(PreferKey.themeSearchFieldBackgroundColor, R.color.background_menu)
+    return themeColorOrNull(PreferKey.themeSearchFieldBackgroundColor)
+        ?: deriveSurfaceColor(secondarySurfaceStep)
 }
 
 @ColorInt
@@ -217,7 +218,71 @@ fun Context.themeSearchFieldBackgroundColorOrNull(): Int? {
 
 @ColorInt
 fun Context.themeTabBackgroundColorOrDefault(): Int {
-    return themeColorOrDefault(PreferKey.themeTabBackgroundColor, R.color.background_menu)
+    return themeColorOrNull(PreferKey.themeTabBackgroundColor) ?: deriveSurfaceColor(secondarySurfaceStep)
+}
+
+/**
+ * 面 token「运行时推导」层 —— 取色三层优先级「用户自定义 key → **运行时推导** → R.color 兜底」
+ * （`ui-standards/color.md` §一）的中间层。
+ *
+ * ⚠ 该层此前**缺失**：未自定义面时直接落静态 `R.color`（`background_card`/`background_menu` 均为固定灰，
+ * 与主题背景色无关）⇒ **改主题色时标签 / 芯片 / Tab / 次级表面颜色不跟随**
+ * （2026-09-23 用户实证：书架与订阅源「标签」布局模式下的标签颜色不随主题变化；
+ * 亦即 K3 判据「T2 自定义主题色态必须变色」失守）。
+ *
+ * 推导口径：以当前生效主题的背景色（`ThemeStore.backgroundColor`）为基准做明暗阶梯
+ * （夜间提亮 / 日间压暗）。出厂默认主题下阶梯结果与既有静态灰资源逐通道一致（±1 色阶，肉眼无差）
+ * ⇒ T1 默认 / T4 夜间观感零变化；用户改主题背景色后各面随主题联动 ⇒ T2 / T3 生效。
+ */
+private val Context.cardSurfaceStep: Int
+    get() = SurfaceLadder.cardStep(AppConfig.isNightTheme)
+
+/** 次级面阶梯（chip / Tab / 搜索框 / 弱化底）：日间压暗一阶（md_grey_200）、夜间提亮两阶（md_grey_800） */
+private val Context.secondarySurfaceStep: Int
+    get() = SurfaceLadder.secondaryStep(AppConfig.isNightTheme)
+
+private fun Context.deriveSurfaceColor(step: Int): Int {
+    // 直读 ThemeStore（不用 Context.backgroundColor 扩展：配了背景图时后者返回透明，会把面推导成透明色）
+    return SurfaceLadder.derive(ThemeStore.backgroundColor(this), AppConfig.isNightTheme, step)
+}
+
+/**
+ * 面 token「运行时推导」纯运算（**无 Android 依赖**，可单测）。
+ *
+ * ⚠ 不得改用 `ColorUtils.blendColors` / `android.graphics.Color`：JVM 单测里 android.jar 是 stub
+ * （方法恒返回 0），混色会静默变 0 导致推导面失效。此处用位运算自实现，保真且可断言。
+ *
+ * 阶梯口径与出厂默认主题对齐，故 T1 默认 / T4 夜间观感零变化；换主题背景色则各面联动。
+ */
+internal object SurfaceLadder {
+
+    /** 日间阶梯步长（压暗） */
+    const val DAY_ALPHA = 0.030f
+
+    /** 夜间阶梯步长（提亮） */
+    const val NIGHT_ALPHA = 0.075f
+
+    /** 阶梯混色目标通道值（推导基元，非取色：明暗方向的端点，不参与任何直接渲染） */
+    private const val DARK_CHANNEL = 0x00
+    private const val LIGHT_CHANNEL = 0xFF
+
+    /** 卡片面阶梯：日间与背景同阶；夜间较背景高一阶 */
+    fun cardStep(night: Boolean): Int = if (night) 1 else 0
+
+    /** 次级面阶梯（chip / Tab / 搜索框）：日间压暗一阶、夜间提亮两阶 */
+    fun secondaryStep(night: Boolean): Int = if (night) 2 else 1
+
+    fun derive(baseColor: Int, night: Boolean, step: Int): Int {
+        if (step <= 0) return baseColor
+        val alpha = ((if (night) NIGHT_ALPHA else DAY_ALPHA) * step).coerceIn(0f, 1f)
+        val inverse = 1f - alpha
+        val target = if (night) LIGHT_CHANNEL else DARK_CHANNEL
+        val a = baseColor ushr 24 and 0xFF
+        val r = ((baseColor shr 16 and 0xFF) * inverse + target * alpha).toInt()
+        val g = ((baseColor shr 8 and 0xFF) * inverse + target * alpha).toInt()
+        val b = ((baseColor and 0xFF) * inverse + target * alpha).toInt()
+        return (a shl 24) or (r shl 16) or (g shl 8) or b
+    }
 }
 
 @ColorInt

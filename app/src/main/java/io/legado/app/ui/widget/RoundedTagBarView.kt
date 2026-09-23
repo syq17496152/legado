@@ -23,7 +23,6 @@ import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.secondaryTextColor
-import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.lib.theme.themeColorOrNull
 import io.legado.app.lib.theme.themeMutedColorOrDefault
 import io.legado.app.lib.theme.uiTypeface
@@ -178,14 +177,21 @@ class RoundedTagBarView @JvmOverloads constructor(
             // R28（2026-09-23）：regular 风格 tagBarAlpha=0（栏底完全透明），此兜底色仅作
             // withOpacity 的基色、其 RGB 永不参与渲染 ⇒ 改用「无填充」语义替代原硬编码白色字面值。
             // 非 regular 风格仍走 tabBackgroundColor / mutedColor（面 token 归属表）。
+            // 2026-09-23 用户实证修正：**主题显式声明的 `themeTabBackgroundColor` 必须先于
+            // regular 的「无填充」分支**，否则外观套件（regular 形态 + tagBarAlpha>0）钉死字面色时
+            // 标签栏底色不随主题变化；主题未声明该面时 regular 行为不变（无填充）。
+            ?: context.themeColorOrNull(PreferKey.themeTabBackgroundColor)
             ?: if (config.style == TopBarConfig.STYLE_REGULAR) {
                 Color.TRANSPARENT
             } else {
-                context.themeColorOrNull(PreferKey.themeTabBackgroundColor)
-                    ?: context.themeMutedColorOrDefault()
+                context.themeMutedColorOrDefault()
             }
+        // R28/D1 双栈一致（2026-09-23 用户实证修正）：选中标签底的兜底由 cardColor 改为 accent ——
+        // 与 Compose 侧 AppFilterChip「选中 = accent」同语义同口径（组件登记表要求双栈一致）。
+        // 原 cardColor 兜底有两处失守：① 与未选中态的卡片面同族、选中态几不可辨；② 不随主题强调色变化
+        // ⇒ 用户改主题色后标签栏选中态不变（书架 / 订阅源「标签」布局模式的实测症状）。
         val selectedColor = config.tagSelectedColor
-            ?: context.themeCardColorOrDefault()
+            ?: context.accentColor
         val barColor = backgroundOverrideColor ?: TopBarConfig.withOpacity(tagBarColor, config.tagBarAlpha)
         background = when (displayMode) {
             DisplayMode.TEXT -> null
@@ -335,7 +341,8 @@ class RoundedTagBarView @JvmOverloads constructor(
 
     private inner class TagAdapter : RecyclerView.Adapter<TagViewHolder>() {
 
-        var selectedBackgroundColor: Int = context.themeCardColorOrDefault()
+        // R28/D1：与 applyTopBarStyle 的选中底口径一致（accent 兜底，随主题强调色）
+        var selectedBackgroundColor: Int = context.accentColor
         var selectedTextColor: Int = context.accentColor
         var normalTextColor: Int = context.primaryTextColor
 

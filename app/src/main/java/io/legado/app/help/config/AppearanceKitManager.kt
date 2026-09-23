@@ -238,13 +238,24 @@ object AppearanceKitManager {
         }
     }
 
+    /**
+     * 暗夜紫顶栏包：**不钉死标签栏字面色**。
+     *
+     * 原实现把 `tagBarColor`/`tagSelectedColor` 写成字面色（注释写的是「贴主题色」，但字面色运行时会
+     * 优先于主题面 token）⇒ 用户改主题色后标签栏颜色不变（2026-09-23 用户实证：书架 / 订阅源
+     * 「标签」布局模式下标签颜色不随主题变化）。
+     *
+     * 现留空 ⇒ 栏底回落主题面 token `themeTabBackgroundColor`、选中底回落主题强调色；
+     * 套件主题自身已声明 `tabBackgroundColor`（夜 #3A2E4E / 日 #DFD2EE）、强调色为紫调，
+     * 故紫调观感延续，同时恢复「随主题变化」。
+     */
     private fun darkPurpleTopBarConfig(isNightMode: Boolean): TopBarConfig.Config = TopBarConfig.Config(
         name = DARK_PURPLE_TOP_BAR_NAME,
         isNightMode = isNightMode,
         style = TopBarConfig.STYLE_REGULAR,          // 胶囊搜索框+标签条
-        tagBarColor = if (isNightMode) 0xFF2A2138.toInt() else 0xFFDCCFEA.toInt(),  // 贴卡片弱化面（夜=深紫底/日=浅紫底）
+        tagBarColor = null,                           // 交回主题面 token（见上方 KDoc）
         tagBarAlpha = if (isNightMode) 100 else 92,
-        tagSelectedColor = if (isNightMode) 0xFFCE93D8.toInt() else 0xFF8E24AA.toInt(),  // 夜=亮紫选中/日=主紫选中（贴主题色）
+        tagSelectedColor = null,                      // 交回主题强调色（见上方 KDoc）
         tagSelectedAlpha = 100,
         cornerScale = 1f,                            // 贴卡片圆角
         updatedAt = System.currentTimeMillis()

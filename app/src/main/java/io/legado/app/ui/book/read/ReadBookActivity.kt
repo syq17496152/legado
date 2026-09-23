@@ -153,6 +153,7 @@ import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.book.read.page.LottieImageBitmapCache
 import io.legado.app.ui.book.read.page.delegate.ScrollPageDelegate
 import io.legado.app.ui.book.read.page.entities.PageDirection
+import io.legado.app.ui.book.read.page.entities.ReadSelectionPosition
 import io.legado.app.ui.book.read.page.entities.TextPage
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.book.read.page.provider.LayoutProgressListener
@@ -568,7 +569,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             5 -> ReadAloud.prevParagraph(this)
             6 -> ReadAloud.nextParagraph(this)
             7 -> addBookmark()
-            8 -> showDialogFragment(ContentEditDialog())
+            8 -> openContentEditDialog()
             9 -> changeReplaceRuleState()
             10 -> openChapterList()
             11 -> openSearchActivity(null)
@@ -922,7 +923,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             R.id.menu_highlight_rule -> startActivity<HighlightRuleActivity>()
             R.id.menu_clear_chapter_highlights -> confirmClearChapterHighlights()
             R.id.menu_simulated_reading -> showSimulatedReading()
-            R.id.menu_edit_content -> showDialogFragment(ContentEditDialog())
+            R.id.menu_edit_content -> openContentEditDialog()
             R.id.menu_update_toc -> ReadBook.book?.let {
                 if (it.isEpub) {
                     BookHelp.clearCache(it)
@@ -1419,8 +1420,35 @@ class ReadBookActivity : BaseReadBookActivity(),
                 addHighlightFromSelection()
                 return true
             }
+
+            R.id.menu_edit_here -> {
+                openContentEditDialog(selectedReadPositionOrNull(notifyMissing = true))
+                return true
+            }
         }
         return false
+    }
+
+    /**
+     * R14（B3）：内容编辑器统一入口。
+     *
+     * - 传入选区位置 ⇒ 编辑器 offset 优先，落点即选中位置；
+     * - 传入 null（四个既有入口）⇒ 缺省回退阅读进度，保持既有行为不回归。
+     */
+    private fun openContentEditDialog(position: ReadSelectionPosition? = null) {
+        showDialogFragment(ContentEditDialog.create(position))
+    }
+
+    /**
+     * R14：取当前选区章内坐标；Epub 原生选区无章内坐标（返回 null）⇒ 由调用方回退进度定位。
+     * @param notifyMissing 选中菜单入口为 true，缺定位信息时给出提示（不静默）
+     */
+    private fun selectedReadPositionOrNull(notifyMissing: Boolean = false): ReadSelectionPosition? {
+        val position = if (epubCoreActive) null else binding.readView.getSelectedReadPosition()
+        if (position == null && notifyMissing) {
+            toastOnUi(R.string.edit_here_unsupported)
+        }
+        return position
     }
 
     /**
@@ -4805,7 +4833,7 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     override fun editContent() {
-        showDialogFragment(ContentEditDialog())
+        openContentEditDialog()
     }
 
     override fun showPageAnim() {

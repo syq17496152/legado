@@ -1092,6 +1092,9 @@
     <string name="menu_refresh_after">Refresh the chapter after</string>
     <string name="menu_refresh_all">Refresh all chapters</string>
     <string name="edit_content">Edit Content</string>
+    <!-- R14（B3）：选中文字菜单直达编辑器并定位到选中位置 -->
+    <string name="edit_here">Edit Here</string>
+    <string name="edit_here_unsupported">This selection has no position info, opening at current progress</string>
     <string name="chapter_change_source">Single chapter source switching</string>
     <string name="book_change_source">Change the source of the whole book</string>
     <string name="sort_by_time">Sort by time</string>
