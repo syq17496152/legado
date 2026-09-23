@@ -146,8 +146,8 @@ import io.legado.app.ui.book.read.config.ReadMenuCustomButtonEditActivity
 import io.legado.app.ui.book.read.config.ReadMenuButtonManageActivity
 import io.legado.app.ui.book.read.config.ReadAloudDialog
 import io.legado.app.ui.book.read.config.ReadStyleDialog
-import io.legado.app.ui.book.read.config.TipConfigDialog.Companion.TIP_COLOR
-import io.legado.app.ui.book.read.config.TipConfigDialog.Companion.TIP_DIVIDER_COLOR
+import io.legado.app.ui.book.read.config.TIP_COLOR
+import io.legado.app.ui.book.read.config.TIP_DIVIDER_COLOR
 import io.legado.app.ui.book.read.page.ContentTextView
 import io.legado.app.ui.book.read.page.ReadView
 import io.legado.app.ui.book.read.page.LottieImageBitmapCache

@@ -342,6 +342,10 @@
     <string name="bottom">下</string>
     <string name="top">上</string>
     <string name="padding">边距</string>
+    <!-- R13（B3）：边距 + 页眉页脚 合并为单一「版面设置」弹窗 -->
+    <string name="layout_config">版面设置</string>
+    <string name="layout_config_padding">边距</string>
+    <string name="layout_config_tip">页眉页脚</string>
     <string name="check_book_source">校验书源</string>
     <string name="check_select_source">校验所选</string>
     <string name="source_health_healthy">可用 %1$d</string>
@@ -639,6 +643,14 @@
     <string name="custom_page_key">自定义翻页按键</string>
     <string name="prev_page_key">上一页按键</string>
     <string name="next_page_key">下一页按键</string>
+    <!-- R15（B3）：外接手柄翻页预设（一键同时填入上/下页键码） -->
+    <string name="gamepad_preset">手柄预设</string>
+    <string name="gamepad_preset_shoulder">肩键（L1/R1）</string>
+    <string name="gamepad_preset_trigger">扳机（L2/R2）</string>
+    <string name="gamepad_preset_dpad">十字键（上/下）</string>
+    <string name="gamepad_preset_conflict_title">键码冲突</string>
+    <string name="gamepad_preset_conflict_message">预设键码与当前已设置的自定义键码冲突，继续将覆盖后者。是否继续？</string>
+    <string name="gamepad_preset_applied">已套用预设，可继续手动修改</string>
     <string name="no_group">未分组</string>
     <string name="folder_view">文件夹视图</string>
     <string name="all_groups">全部</string>
@@ -741,6 +753,10 @@
     <string name="clear_cache_summary">清除已下载书籍和字体缓存</string>
     <string name="default_cover">默认封面</string>
     <string name="restore_ignore">恢复忽略列表</string>
+    <!-- R17（B3）：备份前按内容类别分选 -->
+    <string name="backup_content_select">备份内容</string>
+    <string name="backup_content_select_summary">已选 %1$d / %2$d 项，未勾选的类别不进入备份</string>
+    <string name="backup_content_select_empty">请至少勾选一项备份内容</string>
     <string name="restore_ignore_summary">恢复时忽略一些内容不恢复，方便不同手机配置不同</string>
     <string name="read_config">阅读界面设置</string>
     <string name="group_name">分组名称</string>
@@ -844,6 +860,9 @@
     <string name="high_brush_summary">使用屏幕最高刷新率</string>
     <string name="export_all">导出所有</string>
     <string name="show_unread">显示未读标志</string>
+    <!-- R16（B3）：书架未读颜色强调（默认关） -->
+    <string name="bookshelf_unread_emphasis">未读用强调色</string>
+    <string name="bookshelf_unread_emphasis_short">强调</string>
     <string name="use_default_cover">总是使用默认封面</string>
     <string name="use_default_cover_s">总是显示默认封面（不显示网络封面）</string>
     <string name="title_font_size">字号</string>

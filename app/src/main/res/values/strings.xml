@@ -371,6 +371,10 @@
     <string name="bottom">Bottom</string>
     <string name="top">Top</string>
     <string name="padding">Padding</string>
+    <!-- R13（B3）：边距 + 页眉页脚 合并为单一「版面设置」弹窗 -->
+    <string name="layout_config">Layout</string>
+    <string name="layout_config_padding">Padding</string>
+    <string name="layout_config_tip">Header/footer</string>
     <string name="check_book_source">Check book sources</string>
     <string name="check_select_source">Check the selected source</string>
     <string name="source_health_healthy">Healthy %1$d</string>
@@ -669,6 +673,14 @@
     <string name="custom_page_key">Set page-turning buttons</string>
     <string name="prev_page_key">Page up button</string>
     <string name="next_page_key">Page down button</string>
+    <!-- R15（B3）：外接手柄翻页预设 -->
+    <string name="gamepad_preset">Gamepad preset</string>
+    <string name="gamepad_preset_shoulder">Shoulder (L1/R1)</string>
+    <string name="gamepad_preset_trigger">Trigger (L2/R2)</string>
+    <string name="gamepad_preset_dpad">D-pad (Up/Down)</string>
+    <string name="gamepad_preset_conflict_title">Key conflict</string>
+    <string name="gamepad_preset_conflict_message">This preset conflicts with your current custom key codes; continuing will overwrite them. Continue?</string>
+    <string name="gamepad_preset_applied">Preset applied, you can still edit manually</string>
     <string name="no_group">Ungrouped</string>
     <string name="folder_view">Folder view</string>
     <string name="all_groups">All</string>
@@ -772,6 +784,10 @@
     <string name="clear_cache_summary">Clear the cache of the downloaded books and fonts</string>
     <string name="default_cover">Default cover</string>
     <string name="restore_ignore">Bypass list</string>
+    <!-- R17（B3）：备份前按内容类别分选 -->
+    <string name="backup_content_select">Backup content</string>
+    <string name="backup_content_select_summary">%1$d / %2$d selected; unchecked categories are excluded</string>
+    <string name="backup_content_select_empty">Select at least one item to back up</string>
     <string name="restore_ignore_summary">Ignore some contents while restoring</string>
     <string name="read_config">Reading interface settings</string>
     <string name="group_name">Group name</string>
@@ -875,6 +891,9 @@
     <string name="high_brush_summary">Use maximum screen refresh rate</string>
     <string name="export_all">Export all</string>
     <string name="show_unread">Show unread flag</string>
+    <!-- R16（B3）：书架未读颜色强调（默认关） -->
+    <string name="bookshelf_unread_emphasis">Accent color for unread</string>
+    <string name="bookshelf_unread_emphasis_short">Accent</string>
     <string name="use_default_cover">Always show default cover</string>
     <string name="use_default_cover_s">Always show the default cover, do not show the network cover</string>
     <string name="search_src">Search source code</string>

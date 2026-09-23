@@ -170,7 +170,9 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                     onClick = { showTextIndentDialog() }
                 )
                 ReaderTextAction(
-                    text = stringResource(R.string.padding),
+                    // R13（B3）：原「边距」「信息」两个入口合并为单一「版面设置」——
+                    // 弹窗内两段切换（边距 / 页眉页脚），无需二次进入；配置项键完全不变。
+                    text = stringResource(R.string.layout_config),
                     style = style,
                     modifier = Modifier.weight(1f),
                     onClick = {
@@ -187,14 +189,6 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                         AppConfig.chineseConverterType = chineseMode
                         ChineseUtils.unLoad(*TransType.entries.toTypedArray())
                         postEvent(EventBus.UP_CONFIG, arrayListOf(5))
-                    }
-                )
-                ReaderTextAction(
-                    text = stringResource(R.string.information),
-                    style = style,
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        TipConfigDialog().show(childFragmentManager, "tipConfigDialog")
                     }
                 )
             }

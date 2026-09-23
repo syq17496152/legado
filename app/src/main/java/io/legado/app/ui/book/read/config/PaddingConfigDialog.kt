@@ -46,16 +46,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import io.legado.app.R
 import io.legado.app.constant.EventBus
+import io.legado.app.help.config.AdvancedTitleConfig
 import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.ui.config.AdvancedTitleManageActivity
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.AppThemedStepperSlider
+import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixCard
+import io.legado.app.ui.widget.compose.LegadoMiuixChoiceRow
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
+import io.legado.app.utils.observeEvent
 import io.legado.app.utils.postEvent
+import android.content.Intent
 import androidx.compose.material3.MaterialTheme
 
 private data class PaddingItem(
@@ -65,10 +72,20 @@ private data class PaddingItem(
     val onValueChange: (Int) -> Unit
 )
 
+/**
+ * 版面设置（R13 合并：**边距 + 页眉页脚 同一弹窗两段切换**，无需二次进入）。
+ *
+ * - 第一段「边距」= 原 `PaddingConfigDialog` 的 Header/Body/Footer 三段（**配置项键完全不变**，旧配置零迁移）；
+ * - 第二段「页眉页脚」= 复用 `TipConfigContent`（与 `TipConfigDialog` 同一实现，避免两处各写一份）；
+ * - 两段共用 `ReadBookConfig` 的既有字段与 `EventBus.UP_CONFIG` 刷新链路 ⇒ 与原两条独立路径**等价**。
+ */
 class PaddingConfigDialog : ComposeDialogFragment() {
 
     override val widthFraction: Float = 0.91f
     override val maxWidthDp: Int? = 400
+
+    /** 页眉页脚段配色的刷新令牌（与 `TipConfigDialog` 同源事件） */
+    private var colorRefreshTick by mutableIntStateOf(0)
 
     override fun onStart() {
         super.onStart()
@@ -90,6 +107,14 @@ class PaddingConfigDialog : ComposeDialogFragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+        // R13：页眉页脚段的配色变更令牌（与页眉页脚内容体同源事件，保证观感一致）
+        observeEvent<String>(EventBus.TIP_COLOR) {
+            colorRefreshTick++
+        }
+        // 原 TipConfigDialog 的标题模式兜底校验（合并后由本弹窗承担，行为等价）
+        if (ReadBookConfig.titleMode !in 0..AdvancedTitleConfig.TITLE_MODE_ADVANCED) {
+            ReadBookConfig.titleMode = 0
+        }
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
@@ -97,14 +122,122 @@ class PaddingConfigDialog : ComposeDialogFragment() {
                 CompositionLocalProvider(
                     LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
                 ) {
-                    PaddingConfigContent(style = style)
+                    LayoutConfigContent(
+                        style = style,
+                        colorRefreshTick = colorRefreshTick,
+                        onShowAdvancedTitleConfig = {
+                            startActivity(
+                                Intent(requireContext(), AdvancedTitleManageActivity::class.java)
+                            )
+                        },
+                        onShowSelector = ::showActionSelector,
+                        onShowTipColorPicker = {
+                            ColorPickerDialog.newBuilder()
+                                .setShowAlphaSlider(false)
+                                .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
+                                .setDialogId(TIP_COLOR)
+                                .show(requireActivity())
+                        },
+                        onShowTipDividerColorPicker = {
+                            ColorPickerDialog.newBuilder()
+                                .setShowAlphaSlider(false)
+                                .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
+                                .setDialogId(TIP_DIVIDER_COLOR)
+                                .show(requireActivity())
+                        },
+                        onColorChanged = { colorRefreshTick++ }
+                    )
                 }
             }
         }
     }
 
+    private fun showActionSelector(
+        title: String,
+        labels: List<String>,
+        onSelected: (Int) -> Unit
+    ) {
+        ComposeActionListDialog.create(
+            title = title,
+            labels = labels,
+            negativeText = getString(R.string.cancel),
+            onSelected = onSelected
+        ).show(parentFragmentManager, "layoutConfigSelector")
+    }
+
+    /**
+     * 版面设置内容体：**顶部分段切换 + 对应段落**。
+     *
+     * 只做「容器 + 切换」，两段内容分别复用既有实现（边距三段 / `TipConfigContent`），
+     * 避免任何渲染逻辑复制（复制即口径分裂）。
+     */
     @Composable
-    private fun PaddingConfigContent(style: AppDialogStyle) {
+    private fun LayoutConfigContent(
+        style: AppDialogStyle,
+        colorRefreshTick: Int,
+        onShowAdvancedTitleConfig: () -> Unit,
+        onShowSelector: (String, List<String>, (Int) -> Unit) -> Unit,
+        onShowTipColorPicker: () -> Unit,
+        onShowTipDividerColorPicker: () -> Unit,
+        onColorChanged: () -> Unit
+    ) {
+        var section by rememberSaveable { mutableIntStateOf(0) }
+        Column(modifier = Modifier.fillMaxWidth()) {
+            LayoutSectionSwitch(
+                section = section,
+                style = style,
+                onSectionChange = { section = it }
+            )
+            when (section) {
+                0 -> PaddingSectionCard(style = style)
+                else -> TipConfigContent(
+                    style = style,
+                    colorRefreshTick = colorRefreshTick,
+                    onShowAdvancedTitleConfig = onShowAdvancedTitleConfig,
+                    onShowSelector = onShowSelector,
+                    onShowTipColorPicker = onShowTipColorPicker,
+                    onShowTipDividerColorPicker = onShowTipDividerColorPicker,
+                    onColorChanged = onColorChanged
+                )
+            }
+        }
+    }
+
+    /** 两段切换条（复用全站 chip 选择行组件，与页眉页脚段的标题模式选择同款） */
+    @Composable
+    private fun LayoutSectionSwitch(
+        section: Int,
+        style: AppDialogStyle,
+        onSectionChange: (Int) -> Unit
+    ) {
+        val palette = style.toMiuixPalette()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(
+                stringResource(R.string.layout_config_padding),
+                stringResource(R.string.layout_config_tip)
+            ).forEachIndexed { index, label ->
+                LegadoMiuixChoiceRow(
+                    text = label,
+                    selected = section == index,
+                    palette = palette,
+                    onClick = { onSectionChange(index) },
+                    modifier = Modifier.weight(1f),
+                    minHeight = 32.dp,
+                    compact = true,
+                    showSelectedMark = false
+                )
+            }
+        }
+    }
+
+    /** 第一段「边距」（原实现原样保留：Header / Body / Footer 三段 + 同键同刷新链路） */
+    @Composable
+    private fun PaddingSectionCard(style: AppDialogStyle) {
         LegadoMiuixCard(
             modifier = Modifier
                 .fillMaxWidth()

@@ -47,9 +47,12 @@ import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
+import io.legado.app.ui.widget.compose.showComposeActionListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.toMiuixPalette
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.putPrefString
+import io.legado.app.utils.toastOnUi
 
 /**
  * 自定义翻页键（deep-fix F 迁移：ComponentDialog+ComposeView → ComposeDialogFragment + AppDialogFrame 标准壳）
@@ -94,9 +97,45 @@ class PageKeyDialog : ComposeDialogFragment() {
                             requireContext().putPrefString(PreferKey.prevKeys, prevKeys)
                             requireContext().putPrefString(PreferKey.nextKeys, nextKeys)
                             dismissAllowingStateLoss()
-                        }
+                        },
+                        onShowGamepadPreset = { showGamepadPreset() }
                     )
                 }
+            }
+        }
+    }
+
+    /**
+     * R15（B3）：手柄预设 —— 一键同时填入上/下页键码。
+     *
+     * - R15-2「手动编辑不被覆盖」：预设**只在本次显式选择时**写入，此后手改不再被任何路径回写
+     *   （本页无任何自动重套用逻辑）；
+     * - R15-3 冲突提示：当前已自定义且将被覆盖时先确认，不静默覆盖。
+     */
+    private fun showGamepadPreset() {
+        val presets = GamepadKeyPresets.all.filter { GamepadKeyPresets.isSelfConsistent(it) }
+        if (presets.isEmpty()) return
+        showComposeActionListDialog(
+            title = getString(R.string.gamepad_preset),
+            labels = presets.map { getString(it.labelRes) },
+            negativeText = getString(R.string.cancel)
+        ) { index ->
+            val preset = presets.getOrNull(index) ?: return@showComposeActionListDialog
+            val apply = {
+                prevKeys = GamepadKeyPresets.toKeyString(preset.prevKeys)
+                nextKeys = GamepadKeyPresets.toKeyString(preset.nextKeys)
+                toastOnUi(R.string.gamepad_preset_applied)
+            }
+            if (GamepadKeyPresets.overwritesCustomKey(preset, prevKeys, nextKeys)) {
+                showComposeConfirmDialog(
+                    title = getString(R.string.gamepad_preset_conflict_title),
+                    message = getString(R.string.gamepad_preset_conflict_message),
+                    positiveText = getString(R.string.ok),
+                    negativeText = getString(R.string.cancel),
+                    onPositive = apply
+                )
+            } else {
+                apply()
             }
         }
     }
@@ -116,7 +155,8 @@ private fun PageKeyContent(
     onNextChange: (String) -> Unit,
     onFocusChange: (PageKeyField, Boolean) -> Unit,
     onReset: () -> Unit,
-    onConfirm: () -> Unit
+    onConfirm: () -> Unit,
+    onShowGamepadPreset: () -> Unit = {}
 ) {
     val style = rememberAppDialogStyle()
     val palette = style.toMiuixPalette()
@@ -144,6 +184,13 @@ private fun PageKeyContent(
                     onFocusChanged = { focused ->
                         onFocusChange(PageKeyField.Next, focused)
                     }
+                )
+                LegadoMiuixActionButton(
+                    text = stringResource(R.string.gamepad_preset),
+                    palette = palette,
+                    onClick = onShowGamepadPreset,
+                    cornerRadius = style.actionRadius,
+                    minHeight = 34.dp
                 )
                 Text(
                     text = stringResource(R.string.page_key_set_help),

@@ -56,76 +56,23 @@ import io.legado.app.utils.postEvent
 import androidx.compose.material3.MaterialTheme
 import io.legado.app.ui.theme.bodyTertiary
 
-class TipConfigDialog : ReaderBottomSheetComposeDialogFragment() {
+/**
+ * 页眉页脚配色的对话框 id（宿主 Activity 依据该 id 回传选色结果）。
+ *
+ * R13（B3）合并后，原先的 `TipConfigDialog` 弹窗已并入「版面设置」（`PaddingConfigDialog`）——
+ * 其入口与内容体都不再需要独立弹窗；但这两个 id 仍是宿主回传契约的一部分，故提升为文件级常量。
+ */
+internal const val TIP_COLOR = 7897
+internal const val TIP_DIVIDER_COLOR = 7898
 
-    companion object {
-        const val TIP_COLOR = 7897
-        const val TIP_DIVIDER_COLOR = 7898
-    }
-
-    override val maxSheetHeightFraction: Float = 0.76f
-
-    private var colorRefreshTick by mutableIntStateOf(0)
-
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View {
-        if (ReadBookConfig.titleMode !in 0..AdvancedTitleConfig.TITLE_MODE_ADVANCED) {
-            ReadBookConfig.titleMode = 0
-        }
-        observeEvent<String>(EventBus.TIP_COLOR) {
-            colorRefreshTick++
-        }
-        return ComposeView(requireContext()).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
-                ReaderBottomSheetFrame(maxHeightFraction = maxSheetHeightFraction) { style ->
-                    TipConfigContent(
-                        style = style,
-                        colorRefreshTick = colorRefreshTick,
-                        onShowAdvancedTitleConfig = {
-                            startActivity(Intent(requireContext(), AdvancedTitleManageActivity::class.java))
-                        },
-                        onShowSelector = ::showActionSelector,
-                        onShowTipColorPicker = {
-                            ColorPickerDialog.newBuilder()
-                                .setShowAlphaSlider(false)
-                                .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
-                                .setDialogId(TIP_COLOR)
-                                .show(requireActivity())
-                        },
-                        onShowTipDividerColorPicker = {
-                            ColorPickerDialog.newBuilder()
-                                .setShowAlphaSlider(false)
-                                .setDialogType(ColorPickerDialog.TYPE_CUSTOM)
-                                .setDialogId(TIP_DIVIDER_COLOR)
-                                .show(requireActivity())
-                        },
-                        onColorChanged = { colorRefreshTick++ }
-                    )
-                }
-            }
-        }
-    }
-
-    private fun showActionSelector(
-        title: String,
-        labels: List<String>,
-        onSelected: (Int) -> Unit
-    ) {
-        ComposeActionListDialog.create(
-            title = title,
-            labels = labels,
-            negativeText = getString(R.string.cancel),
-            onSelected = onSelected
-        ).show(parentFragmentManager, "tipConfigSelector")
-    }
-}
-
+/**
+ * 页眉页脚/标题设置内容体。
+ *
+ * R13（B3）：由 `TipConfigDialog` 改为 **internal**，供「版面设置」弹窗
+ * （`PaddingConfigDialog` 合并后）在同一弹窗内复用 —— 避免两处各写一份渲染（口径分裂来源）。
+ */
 @Composable
-private fun TipConfigContent(
+internal fun TipConfigContent(
     style: AppDialogStyle,
     colorRefreshTick: Int,
     onShowAdvancedTitleConfig: () -> Unit,

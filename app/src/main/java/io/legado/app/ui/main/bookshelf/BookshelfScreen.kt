@@ -75,6 +75,7 @@ import io.legado.app.data.entities.BookGroup
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.readProgress
 import io.legado.app.help.config.AppConfig
+import io.legado.app.ui.main.bookshelf.compose.BookshelfUnreadEmphasis
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.onAccentFor
 import io.legado.app.lib.theme.rememberThemeUiPalette
@@ -708,6 +709,15 @@ private fun BookGridItem(
             }
         }
         if (showBookname == 1) {
+            // R16（B3）：未读强调 —— 与列表行/其余布局共用统一决策函数（防口径分裂）
+            val titleColor = Color(
+                BookshelfUnreadEmphasis.titleColor(
+                    enabled = AppConfig.bookshelfUnreadEmphasis,
+                    unreadCount = book.getUnreadChapterNum(),
+                    accent = accent.toArgb(),
+                    primaryText = palette.primaryText.toArgb(),
+                )
+            )
             Text(
                 text = book.name,
                 maxLines = 2,
@@ -717,7 +727,7 @@ private fun BookGridItem(
                 fontFamily = FontFamily(context.titleTypeface()),
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
-                color = palette.primaryText,
+                color = titleColor,
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
             )
             val progress = book.readProgress()
@@ -860,6 +870,15 @@ private fun BookListItem(
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // R16（B3）：未读强调 —— 与网格卡共用统一决策函数
+                val listTitleColor = Color(
+                    BookshelfUnreadEmphasis.titleColor(
+                        enabled = AppConfig.bookshelfUnreadEmphasis,
+                        unreadCount = book.getUnreadChapterNum(),
+                        accent = palette.accent.toArgb(),
+                        primaryText = palette.primaryText.toArgb(),
+                    )
+                )
                 Text(
                     text = book.name,
                     maxLines = 1,
@@ -867,7 +886,7 @@ private fun BookListItem(
                     fontSize = 16.sp,
                     fontFamily = FontFamily(context.titleTypeface()),
                     fontWeight = FontWeight.Medium,
-                    color = palette.primaryText,
+                    color = listTitleColor,
                     modifier = Modifier.weight(1f, fill = false),
                 )
             }

@@ -20,6 +20,14 @@ object ReadTipConfig {
     const val timeBatteryPercentage = 9
     const val totalProgress1 = 11
 
+    /**
+     * R12（B3）：槽位「自定义模板」哨兵值。
+     *
+     * ⚠ 取值必须落在既有枚举之外（既有为 0..11），且**不得**与它们混用；
+     * 槽位值 == 本常量时由 `PageView` 走按槽位的模板渲染分支（详见 `ReadTipTemplate`）。
+     */
+    const val custom = 100
+
     val tipValues = arrayOf(
         none, bookName, chapterTitle, time, battery, batteryPercentage, page,
         totalProgress, totalProgress1, pageAndTotal, timeBattery, timeBatteryPercentage

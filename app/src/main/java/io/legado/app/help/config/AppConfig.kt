@@ -293,6 +293,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.showUnread, value)
         }
 
+    /** R16（B3）：书架未读颜色强调。默认 **关**（新装/升级渲染零变化） */
+    var bookshelfUnreadEmphasis: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.bookshelfUnreadEmphasis, false)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.bookshelfUnreadEmphasis, value)
+        }
+
     var showLastUpdateTime: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showLastUpdateTime, false)
         set(value) {

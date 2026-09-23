@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.main.bookshelf
+package io.legado.app.ui.main.bookshelf
 
 import android.content.DialogInterface
 import android.os.Bundle
@@ -80,6 +80,8 @@ private const val BOOKSHELF_PANEL_DISMISS_MS = BOOKSHELF_PANEL_ANIMATION_MS + 20
 data class BookshelfConfigValues(
     val groupStyle: Int,
     val showUnread: Boolean,
+    /** R16（B3）：未读颜色强调（默认关） */
+    val unreadEmphasis: Boolean = false,
     val showLastUpdateTime: Boolean,
     val showWaitUpCount: Boolean,
     val showFastScroller: Boolean,
@@ -382,6 +384,14 @@ private fun BookshelfConfigContent(
             summaryLabel = "未读",
             checked = values.showUnread,
             onCheckedChange = { onValuesChange(values.copy(showUnread = it)) }
+        ),
+        // R16（B3）：未读颜色强调（默认关；开启后未读书籍标题用主题强调色）
+        BookshelfSwitchItem(
+            key = "unreadEmphasis",
+            label = stringResource(R.string.bookshelf_unread_emphasis),
+            summaryLabel = stringResource(R.string.bookshelf_unread_emphasis_short),
+            checked = values.unreadEmphasis,
+            onCheckedChange = { onValuesChange(values.copy(unreadEmphasis = it)) }
         ),
         BookshelfSwitchItem(
             key = "updateTime",

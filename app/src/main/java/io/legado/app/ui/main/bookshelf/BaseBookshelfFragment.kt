@@ -326,6 +326,7 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
                 initialValues = BookshelfConfigValues(
                     groupStyle = AppConfig.bookGroupStyle,
                     showUnread = AppConfig.showUnread,
+                    unreadEmphasis = AppConfig.bookshelfUnreadEmphasis,
                     showLastUpdateTime = AppConfig.showLastUpdateTime,
                     showWaitUpCount = AppConfig.showWaitUpCount,
                     showFastScroller = AppConfig.showBookshelfFastScroller,
@@ -401,6 +402,11 @@ abstract class BaseBookshelfFragment(layoutId: Int) : VMBaseFragment<BookshelfVi
         }
         if (AppConfig.showUnread != values.showUnread) {
             AppConfig.showUnread = values.showUnread
+            refreshBookshelf = true
+        }
+        // R16（B3）：未读颜色强调（默认关）
+        if (AppConfig.bookshelfUnreadEmphasis != values.unreadEmphasis) {
+            AppConfig.bookshelfUnreadEmphasis = values.unreadEmphasis
             refreshBookshelf = true
         }
         if (AppConfig.showLastUpdateTime != values.showLastUpdateTime) {

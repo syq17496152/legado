@@ -21,6 +21,7 @@ import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.storage.Backup
 import io.legado.app.help.storage.BackupConfig
+import io.legado.app.help.storage.BackupSelectorConfig
 import io.legado.app.help.storage.ImportOldData
 import io.legado.app.help.storage.Restore
 import io.legado.app.lib.permission.Permissions
@@ -69,6 +70,8 @@ class BackupConfigFragment : ComposeSettingFragment() {
         const val KEY_WEB_DAV_BACKUP = "web_dav_backup"
         const val KEY_WEB_DAV_RESTORE = "web_dav_restore"
         const val KEY_IMPORT_OLD = "import_old"
+        /** R17（B3）：备份内容分选入口 */
+        const val KEY_BACKUP_CONTENT_SELECT = "backupContentSelect"
     }
 
     private val viewModel by activityViewModels<ConfigViewModel>()
@@ -269,6 +272,13 @@ class BackupConfigFragment : ComposeSettingFragment() {
                             title = getString(R.string.backup),
                             summary = getString(R.string.backup_summary),
                             onClick = { backup() }
+                        ),
+                        // R17（B3）：备份前按内容分选（与「恢复忽略」两套机制**各自独立**）
+                        SettingActionSpec(
+                            key = KEY_BACKUP_CONTENT_SELECT,
+                            title = getString(R.string.backup_content_select),
+                            summary = backupContentSelectSummary(),
+                            onClick = ::backupContentSelect
                         ),
                         SettingActionSpec(
                             key = KEY_WEB_DAV_RESTORE,
@@ -480,6 +490,40 @@ class BackupConfigFragment : ComposeSettingFragment() {
         )
     }
 
+    /**
+     * R17（B3）：备份内容分选。
+     *
+     * - **本地/云端共用同一类别模型**：选中的文件名列表由 `Backup.backup()` 统一消费（云端上传走同一路径）；
+     * - 与「恢复忽略」**解耦**：本表决定「备份什么」，恢复忽略决定「恢复什么」，两套机制互不干扰；
+     * - 与 R8 的 `autoTask.json` 归属对接：该条目已在 `BackupSelectorConfig.allItems` 中登记（类别=数据库）。
+     */
+    private fun backupContentSelect() {
+        val items = BackupSelectorConfig.allItems
+        val checked = items.indices
+            .filter { BackupSelectorConfig.isSelected(items[it].key) }
+            .toSet()
+        showComposeMultiChoiceDialog(
+            title = getString(R.string.backup_content_select),
+            labels = items.map { "${it.group} · ${it.title}" },
+            checkedIndices = checked,
+            negativeText = getString(android.R.string.ok),
+            onItemCheckedChange = { which, isChecked ->
+                items.getOrNull(which)?.let { item ->
+                    BackupSelectorConfig.setSelected(item.key, isChecked)
+                    BackupSelectorConfig.save()
+                }
+                refreshSettings()
+            }
+        )
+    }
+
+    /** R17：分选摘要（已选 N / 共 M 项）。 */
+    private fun backupContentSelectSummary(): String {
+        val items = BackupSelectorConfig.allItems
+        val selected = items.count { BackupSelectorConfig.isSelected(it.key) }
+        return getString(R.string.backup_content_select_summary, selected, items.size)
+    }
+
     private fun showWebDavAccountDialog() {
         showComposeTextFormDialog(
             title = getString(R.string.webdav_account_manage),
@@ -508,6 +552,12 @@ class BackupConfigFragment : ComposeSettingFragment() {
 
 
     fun backup(ignoreS3FullPrompt: Boolean = false) {
+        // R17（B3）：**全不勾选阻止提交**（不得产出空备份）；此判定必须先于云存储容量回退分支，
+        // 否则会出现「S3 满 → 回退 WebDAV」先弹窗、再发现无可备份内容的错序交互。
+        if (BackupSelectorConfig.isNoneSelected()) {
+            toastOnUi(R.string.backup_content_select_empty)
+            return
+        }
         val backupPath = AppConfig.backupPath
         if (backupPath.isNullOrEmpty()) {
             backupDir.launch()
