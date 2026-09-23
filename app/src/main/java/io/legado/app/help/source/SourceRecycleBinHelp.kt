@@ -144,6 +144,8 @@ object SourceRecycleBinHelp {
                 if (!overwrite && appDb.bookSourceDao.has(source.bookSourceUrl))
                     return logRestoreFailed(item, "目标已存在")
                 appDb.bookSourceDao.insert(source)
+                // R18（B4）：写源入口 ③批量导入（回收站还原）—— 使查询缓存整体失效
+                SourceQueryCache.invalidate()
             }
             TYPE_RSS_SOURCE -> {
                 val source = GSON.fromJsonObject<RssSource>(item.payload).getOrNull()
@@ -151,6 +153,8 @@ object SourceRecycleBinHelp {
                 if (!overwrite && appDb.rssSourceDao.has(source.sourceUrl))
                     return logRestoreFailed(item, "目标已存在")
                 appDb.rssSourceDao.insert(source)
+                // R18（B4）：写源入口 ③批量导入（回收站还原，订阅源）
+                SourceQueryCache.invalidate()
             }
             TYPE_REPLACE_RULE -> {
                 val rule = GSON.fromJsonObject<ReplaceRule>(item.payload).getOrNull()

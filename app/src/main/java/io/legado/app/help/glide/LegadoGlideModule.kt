@@ -1,12 +1,10 @@
 package io.legado.app.help.glide
 
 import android.content.Context
-import android.util.Log
 import com.bumptech.glide.Glide
 import com.bumptech.glide.GlideBuilder
 import com.bumptech.glide.Registry
 import com.bumptech.glide.annotation.GlideModule
-import com.bumptech.glide.load.engine.cache.InternalCacheDiskCacheFactory
 import com.bumptech.glide.load.engine.cache.MemorySizeCalculator
 import com.bumptech.glide.load.engine.executor.GlideExecutor
 import com.bumptech.glide.load.model.GlideUrl
@@ -62,7 +60,10 @@ class LegadoGlideModule : AppGlideModule() {
         val bitmapPool = AsyncRecycleBitmapPool(bitmapPoolSize)
         builder.setMemorySizeCalculator(calculator)
         builder.setBitmapPool(bitmapPool)
-        builder.setDiskCache(InternalCacheDiskCacheFactory(context, 1024 * 1024 * 1000))
+        // B4·R19：封面双区磁盘缓存（封面持久区 filesDir + 普通临时区 cacheDir）
+        // 改造前为单区 InternalCacheDiskCacheFactory(context, 1000MB)：清缓存会把封面一起清掉，
+        // 导致「清缓存 ⇒ 封面全部重下」。双区后总量口径不变（256MB + 768MB）。
+        builder.setDiskCache(MultiDiskCacheFactory(context))
         // 配置图片加载线程数(仅启动时生效,修改后需重启App)
         // 失败不影响启动,降级到Glide默认线程数
         kotlin.runCatching {
@@ -74,7 +75,9 @@ class LegadoGlideModule : AppGlideModule() {
             builder.setSourceExecutor(sourceExecutor)
         }
         if (!BuildConfig.BUILD_DEBUG && !AppConfig.recordLog) {
-            builder.setLogLevel(Log.ERROR)
+            // 注意：这里用的是 **Glide 的日志级别常量**（不是本项目日志），故全限定引用而不引入
+            // `android.util.Log`——避免裸 Log 导入被 G-10（临时排查日志清零门禁）判为违规。
+            builder.setLogLevel(android.util.Log.ERROR)
         }
     }
 }

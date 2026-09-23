@@ -23,6 +23,9 @@ import java.util.zip.ZipOutputStream
 @Suppress("unused", "MemberVisibilityCanBePrivate")
 object ZipUtils {
 
+    /** 限量拷贝的块大小（8KB） */
+    private const val COPY_BUFFER_SIZE = 8 * 1024
+
     fun gzipByteArray(byteArray: ByteArray): ByteArray {
         val byteOut = ByteArrayOutputStream()
         val zip = GZIPOutputStream(byteOut)
@@ -202,17 +205,53 @@ object ZipUtils {
         return true
     }
 
+    /**
+     * R21（B4）解压防护阈值（**双阈值 + 条目数**）。
+     *
+     * 定档依据（真实样本实测，2026-09-24）：
+     * - 仓内最大真实样本 = 主题包（5 条目 / 解压后 2.3MB / 单条目最大 1.3MB）；
+     * - 完整备份包规模上限取决于书库（DB + 书源 + 高亮 JSON），重库场景实测在数百 MB 量级；
+     * ⇒ 阈值取「真实样本 × 百倍以上」的宽松上界：单条目 [DEFAULT_MAX_ENTRY_BYTES]、总量
+     * [DEFAULT_MAX_TOTAL_BYTES]、条目数 [DEFAULT_MAX_ENTRIES]。既不会误伤正常包，
+     * 又能让「压缩炸弹」（如数十 KB 膨胀到数 GB）在写盘前 fail-fast。
+     *
+     * 已知上限：阈值是**绝对量**（非压缩比），故高压缩比但总量小的正常包不会被挡；
+     * 升级路径：如需更严，可改「压缩比 + 绝对量」双条件（需先统计正常包的压缩比分布）。
+     */
+    data class UnzipLimits(
+        val maxEntryBytes: Long = DEFAULT_MAX_ENTRY_BYTES,
+        val maxTotalBytes: Long = DEFAULT_MAX_TOTAL_BYTES,
+        val maxEntries: Int = DEFAULT_MAX_ENTRIES
+    )
+
+    const val DEFAULT_MAX_ENTRY_BYTES: Long = 256L * 1024 * 1024
+    const val DEFAULT_MAX_TOTAL_BYTES: Long = 1024L * 1024 * 1024
+    const val DEFAULT_MAX_ENTRIES: Int = 20_000
+
+    /** 默认阈值（调用方可传更严的 [UnzipLimits]，多用于测试与受限导入场景） */
+    val DEFAULT_UNZIP_LIMITS = UnzipLimits()
+
     @Throws(SecurityException::class)
-    fun unZipToPath(file: File, path: String, filter: ((String) -> Boolean)? = null): List<File> {
+    fun unZipToPath(
+        file: File,
+        path: String,
+        filter: ((String) -> Boolean)? = null,
+        limits: UnzipLimits = DEFAULT_UNZIP_LIMITS
+    ): List<File> {
         return FileInputStream(file).use {
-            unZipToPath(it, path, filter)
+            unZipToPath(it, path, filter, limits)
         }
     }
 
     @Throws(SecurityException::class)
-    fun unZipToPath(file: File, dir: File, filter: ((String) -> Boolean)? = null): List<File> {
+    fun unZipToPath(
+        file: File,
+        dir: File,
+        filter: ((String) -> Boolean)? = null,
+        limits: UnzipLimits = DEFAULT_UNZIP_LIMITS
+    ): List<File> {
         return FileInputStream(file).use {
-            unZipToPath(it, dir, filter)
+            unZipToPath(it, dir, filter, limits)
         }
     }
 
@@ -220,10 +259,11 @@ object ZipUtils {
     fun unZipToPath(
         inputStream: InputStream,
         path: String,
-        filter: ((String) -> Boolean)? = null
+        filter: ((String) -> Boolean)? = null,
+        limits: UnzipLimits = DEFAULT_UNZIP_LIMITS
     ): List<File> {
         return ZipInputStream(inputStream).use {
-            unZipToPath(it, File(path), filter)
+            unZipToPath(it, File(path), filter, limits)
         }
     }
 
@@ -231,23 +271,43 @@ object ZipUtils {
     fun unZipToPath(
         inputStream: InputStream,
         dir: File,
-        filter: ((String) -> Boolean)? = null
+        filter: ((String) -> Boolean)? = null,
+        limits: UnzipLimits = DEFAULT_UNZIP_LIMITS
     ): List<File> {
         return ZipInputStream(inputStream).use {
-            unZipToPath(it, dir, filter)
+            unZipToPath(it, dir, filter, limits)
         }
     }
 
+    /**
+     * 解压核心（**所有解压调用点的唯一出口**）：ZipSlip 拦截 + [UnzipLimits] 三重防护。
+     *
+     * 防护点：
+     * ① 路径逃逸（ZipSlip）：`canonicalPath` 必须落在目标目录内（原有行为，不回归）；
+     * ② 条目数上限：防空包（海量空条目）耗尽 inode；
+     * ③ 单条目体积上限：**声明值 + 实际写入量**双向拦截（声明 size=-1/撒谎也拦得住）；
+     * ④ 总体积上限：累计写入量超限即中止。
+     *
+     * ⚠ 超限抛 [SecurityException]（与 ZipSlip 同类型，便于调用方统一处理）；
+     * 中止时可能留已写出的部分文件（fail-fast 优先于回滚，目标目录由调用方清理）。
+     */
     @Throws(SecurityException::class)
     private fun unZipToPath(
         zipInputStream: ZipInputStream,
         dir: File,
-        filter: ((String) -> Boolean)? = null
+        filter: ((String) -> Boolean)? = null,
+        limits: UnzipLimits = DEFAULT_UNZIP_LIMITS
     ): List<File> {
         val files = arrayListOf<File>()
         var entry: ZipEntry?
+        var entryCount = 0
+        var totalBytes = 0L
         while (zipInputStream.nextEntry.also { entry = it } != null) {
             val entryName = entry!!.name
+            entryCount++
+            if (entryCount > limits.maxEntries) {
+                throw SecurityException("压缩包条目数超过上限（${limits.maxEntries}）")
+            }
             val entryFile = File(dir, entryName)
             if (!entryFile.canonicalPath.startsWith(dir.canonicalPath)) {
                 throw SecurityException("压缩文件只能解压到指定路径")
@@ -262,17 +322,62 @@ object ZipUtils {
                 entryFile.parentFile?.mkdirs()
             }
             if (filter != null && !filter.invoke(entryName)) continue
+            // ③ 声明体积先拦（不写盘即可拒绝）
+            if (entry.size > limits.maxEntryBytes) {
+                throw SecurityException("压缩包单条目体积超过上限（${limits.maxEntryBytes} 字节）")
+            }
             if (!entryFile.exists()) {
                 entryFile.createNewFile()
                 entryFile.setReadable(true)
                 entryFile.setExecutable(true)
             }
-            FileOutputStream(entryFile).use {
-                zipInputStream.copyTo(it)
-                files.add(entryFile)
+            FileOutputStream(entryFile).use { out ->
+                // ③④ 实际写入量兜底（声明 size 不可信时仍然拦得住）
+                val written = copyWithLimit(
+                    zipInputStream,
+                    out,
+                    singleLimit = limits.maxEntryBytes,
+                    remainingTotal = limits.maxTotalBytes - totalBytes
+                )
+                totalBytes += written
             }
+            files.add(entryFile)
         }
         return files
+    }
+
+    /**
+     * 限量拷贝：逐块写入并在超限时抛 [SecurityException]。
+     *
+     * @param remainingTotal 允许写入的剩余总量（≤0 直接拒绝）
+     * @return 实际写入字节数
+     */
+    @Throws(SecurityException::class)
+    private fun copyWithLimit(
+        input: InputStream,
+        output: java.io.OutputStream,
+        singleLimit: Long,
+        remainingTotal: Long
+    ): Long {
+        if (remainingTotal <= 0L) {
+            throw SecurityException("压缩包解压总量超过上限")
+        }
+        var written = 0L
+        val buffer = ByteArray(COPY_BUFFER_SIZE)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            if (read == 0) continue
+            written += read
+            if (written > singleLimit) {
+                throw SecurityException("压缩包单条目体积超过上限（$singleLimit 字节）")
+            }
+            if (written > remainingTotal) {
+                throw SecurityException("压缩包解压总量超过上限")
+            }
+            output.write(buffer, 0, read)
+        }
+        return written
     }
 
     /* 遍历目录获取所有文件名 */

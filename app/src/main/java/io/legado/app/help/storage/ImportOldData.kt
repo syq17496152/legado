@@ -9,6 +9,7 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.BookSourceType
 import io.legado.app.constant.BookType
 import io.legado.app.data.appDb
+import io.legado.app.help.source.SourceQueryCache
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.rule.*
@@ -109,6 +110,8 @@ object ImportOldData {
     fun importOldSource(json: String): Int {
         val sources = fromOldBookSources(json)
         runBlocking(IO) { appDb.bookSourceDao.insert(*sources.toTypedArray()) }
+        // R18（B4）：写源入口 ③批量导入（旧数据迁移）—— 使查询缓存整体失效
+        SourceQueryCache.invalidate()
         return sources.size
     }
 

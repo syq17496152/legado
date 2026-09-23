@@ -14,6 +14,7 @@ import io.legado.app.help.http.CookieStore
 import io.legado.app.help.http.newCallStrResponse
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.source.SourceHelp
+import io.legado.app.help.source.SourceQueryCache
 import io.legado.app.help.source.clearExploreKindsCache
 import io.legado.app.help.storage.ImportOldData
 import io.legado.app.model.SharedJsScope
@@ -73,6 +74,8 @@ class BookSourceEditViewModel(application: Application) : BaseViewModel(applicat
                 }
             }
             appDb.bookSourceDao.insert(source)
+            // R18（B4）：写源入口 ①新增/编辑书源 —— 使查询缓存整体失效（epoch++）
+            SourceQueryCache.invalidate()
             bookSource = source
             concurrentRecordMap.remove(source.bookSourceUrl) //删除并发限制缓存
             source

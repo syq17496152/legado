@@ -2,6 +2,7 @@ package io.legado.app.model
 
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
+import io.legado.app.help.source.SourceQueryCache
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.RssSource
 import io.legado.app.exception.NoStackTraceException
@@ -65,6 +66,8 @@ object QualityReportApplier {
             appDb.bookSourceDao.update(source)
             applied++
         }
+        // R18（B4）：写源入口 ⑥质量修复 —— 使查询缓存整体失效（批量写后一次失效即可）
+        if (applied > 0) SourceQueryCache.invalidate()
         AppLog.putDebugWithTag(
             QualityCheckSession.LOG_TAG,
             "应用体检结果(书源): count=$applied",
@@ -185,6 +188,8 @@ object QualityReportApplier {
             appDb.rssSourceDao.update(source)
             applied++
         }
+        // R18（B4）：写源入口 ⑥质量修复（订阅源）
+        if (applied > 0) SourceQueryCache.invalidate()
         AppLog.putDebugWithTag(
             QualityCheckSession.LOG_TAG,
             "应用体检结果(订阅源): count=$applied",

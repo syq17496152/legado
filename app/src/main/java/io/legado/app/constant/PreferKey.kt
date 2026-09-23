@@ -262,6 +262,13 @@ object PreferKey {
     const val mouseWheelPage = "mouseWheelPage"
     const val recordHeapDump = "recordHeapDump"
     const val optimizeRender = "optimizeRender"
+
+    /**
+     * R18（B4）书源查询短时缓存开关（默认开）。
+     *
+     * 无 UI 入口的技术开关（同 `optimizeRender`）：关闭 ⇒ 每次直查数据库（回退到改造前行为）。
+     */
+    const val sourceQueryCacheEnabled = "sourceQueryCacheEnabled"
     const val updateToVariant = "updateToVariant"
 
     /** 更新加速：GitHub 代理模板列表（JSON 数组字符串；未配置=内置默认，`[]`=用户已清空） */

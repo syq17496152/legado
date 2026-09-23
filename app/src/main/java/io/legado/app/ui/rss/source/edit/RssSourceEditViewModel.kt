@@ -12,6 +12,7 @@ import io.legado.app.help.ConcurrentRateLimiter.Companion.concurrentRecordMap
 import io.legado.app.help.RuleComplete
 import io.legado.app.help.http.CookieStore
 import io.legado.app.help.http.okHttpClient
+import io.legado.app.help.source.SourceQueryCache
 import io.legado.app.help.source.removeSortCache
 import io.legado.app.model.SharedJsScope
 import io.legado.app.utils.GSON
@@ -66,6 +67,8 @@ class RssSourceEditViewModel(application: Application) : BaseViewModel(applicati
                 }
             }
             appDb.rssSourceDao.insert(source)
+            // R18（B4）：写源入口 ①新增/编辑订阅源 —— 使查询缓存整体失效（epoch++）
+            SourceQueryCache.invalidate()
             rssSource = source
             concurrentRecordMap.remove(source.sourceUrl) //删除并发限制缓存
             source

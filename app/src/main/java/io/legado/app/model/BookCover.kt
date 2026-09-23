@@ -25,6 +25,7 @@ import io.legado.app.help.CacheManager
 import io.legado.app.help.DefaultData
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.glide.BlurTransformation
+import io.legado.app.help.glide.CoverDiskCacheMarker
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
 import io.legado.app.model.analyzeRule.AnalyzeRule
@@ -97,6 +98,8 @@ object BookCover {
         }
         var builder = ImageLoader.load(context, path)
             .apply(options)
+            // B4·R19：封面加显式签名 ⇒ 磁盘缓存路由到「封面持久区」（清缓存/断网后仍可用）
+            .signature(CoverDiskCacheMarker.SIGNATURE)
         if (onLoadFinish != null) {
             builder = builder.addListener(object : RequestListener<Drawable> {
                 override fun onLoadFailed(

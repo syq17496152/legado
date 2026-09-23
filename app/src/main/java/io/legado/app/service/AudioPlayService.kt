@@ -37,6 +37,8 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.exoplayer.ExoPlayerHelper
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.model.AudioPlay
+import io.legado.app.model.ListeningPlaybackCoordinator
+import io.legado.app.model.ReadAloud
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.analyzeRule.AnalyzeUrl.Companion.getMediaItem
 import io.legado.app.receiver.MediaButtonReceiver
@@ -197,6 +199,8 @@ class AudioPlayService : BaseService(),
 
     override fun onDestroy() {
         super.onDestroy()
+        // R22（B4）：释放听书播放权（模式不匹配会被忽略 ⇒ 不会误清朗读占用）
+        ListeningPlaybackCoordinator.release(ListeningPlaybackCoordinator.Mode.AUDIO_PLAY)
         if (useWakeLock) {
             wakeLock.release()
             wifiLock?.release()
@@ -221,6 +225,13 @@ class AudioPlayService : BaseService(),
     @OptIn(UnstableApi::class)
     @SuppressLint("WakelockTimeout")
     private fun play() {
+        // R22（B4）：听书与朗读互斥 —— 起播前终止正在进行的朗读（两向互斥的唯一入口）
+        ListeningPlaybackCoordinator.acquire(ListeningPlaybackCoordinator.Mode.AUDIO_PLAY) { mode ->
+            if (mode == ListeningPlaybackCoordinator.Mode.READ_ALOUD) {
+                // 走既有朗读停止通道（下发 stop action；非阻塞，符合协调器回调约束）
+                ReadAloud.stop(this)
+            }
+        }
         if (useWakeLock) {
             wakeLock.acquire()
             wifiLock?.acquire()

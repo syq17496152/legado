@@ -4,6 +4,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.model.Debug
 import io.legado.app.utils.GSON
+import io.legado.app.utils.Utf8Sha256
 import io.legado.app.utils.fromJsonObject
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.coroutineScope
@@ -12,7 +13,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import splitties.init.appCtx
 import java.io.File
-import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -1296,8 +1296,8 @@ object AiWorkspaceTool {
     }
 
     private fun sha256(text: String): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
-        return digest.joinToString("") { "%02x".format(it) }
+        // R20（B4）：统一走 Utf8Sha256（UTF-8 语义与改造前一致；大文本不再逐个 %02x 格式化）
+        return Utf8Sha256.hex(text)
     }
 
     private fun safeFileName(name: String): String {

@@ -75,6 +75,12 @@ object SourceHelp {
         bookSourceCache.remove(key)
     }
 
+    /**
+     * 读取书源/订阅源（会话态优先，其次 R18 短时缓存，未命中回库）。
+     *
+     * R18（B4）：末段回库查询包进 [SourceQueryCache]（TTL + epoch 失效）；
+     * 六类写源入口会让缓存整体失效 ⇒ 「写完立即读到最新」，开关关闭时行为与改造前一致。
+     */
     fun getSource(key: String?): BaseSource? {
         key ?: return null
         if (ReadBook.bookSource?.bookSourceUrl == key) {
@@ -86,15 +92,21 @@ object SourceHelp {
         } else if (VideoPlay.source?.getKey() == key) {
             return VideoPlay.source
         }
-        return appDb.bookSourceDao.getBookSource(key)
-            ?: appDb.rssSourceDao.getByKey(key)
+        return SourceQueryCache.get("any:$key") {
+            appDb.bookSourceDao.getBookSource(key)
+                ?: appDb.rssSourceDao.getByKey(key)
+        }
     }
 
     fun getSource(key: String?, @SourceType.Type type: Int): BaseSource? {
         key ?: return null
         return when (type) {
-            SourceType.book -> appDb.bookSourceDao.getBookSource(key)
-            SourceType.rss -> appDb.rssSourceDao.getByKey(key)
+            SourceType.book -> SourceQueryCache.get("book:$key") {
+                appDb.bookSourceDao.getBookSource(key)
+            }
+            SourceType.rss -> SourceQueryCache.get("rss:$key") {
+                appDb.rssSourceDao.getByKey(key)
+            }
             else -> null
         }
     }
@@ -133,6 +145,8 @@ object SourceHelp {
         }
         removeBookSourceCache(key)
         appDb.bookSourceDao.delete(key)
+        // R18（B4）：写源入口 ②删除源 —— 使查询缓存整体失效（epoch++）
+        SourceQueryCache.invalidate()
         appDb.cacheDao.deleteSourceVariables(key)
         SourceConfig.removeSource(key)
         // F-P1-C4 删源时清理并发限流记录，避免内存泄漏
@@ -171,6 +185,8 @@ object SourceHelp {
         }
         appDb.rssSourceDao.delete(key)
         appDb.rssArticleDao.delete(key)
+        // R18（B4）：写源入口 ②删除源（订阅）—— 使查询缓存整体失效
+        SourceQueryCache.invalidate()
         appDb.cacheDao.deleteSourceVariables(key)
         // F-P1-C4 删源时清理并发限流记录，避免内存泄漏
         ConcurrentRateLimiter.clearRecord(key)
@@ -195,6 +211,8 @@ object SourceHelp {
             SourceType.book -> appDb.bookSourceDao.enable(key, enable)
             SourceType.rss -> appDb.rssSourceDao.enable(key, enable)
         }
+        // R18（B4）：启停属于写源（影响 getSource 命中结果的可用态）⇒ 一并失效
+        SourceQueryCache.invalidate()
     }
 
     fun insertRssSource(vararg rssSources: RssSource) {
@@ -206,6 +224,8 @@ object SourceHelp {
         }
         rssSourcesGroup[false]?.let {
             appDb.rssSourceDao.insert(*it.toTypedArray())
+            // R18（B4）：写源入口 ①新增/③批量导入（订阅）
+            SourceQueryCache.invalidate()
         }
     }
 
@@ -219,6 +239,8 @@ object SourceHelp {
         bookSourcesGroup[false]?.let {
             appDb.bookSourceDao.insert(*it.toTypedArray())
             it.forEach { source -> putBookSourceCache(source.bookSourceUrl, source) }
+            // R18（B4）：写源入口 ①新增/③批量导入/⑤内置源自动更新（RuleUpdate 经本函数写入）
+            SourceQueryCache.invalidate()
         }
         Coroutine.async {
             adjustSortNumber()

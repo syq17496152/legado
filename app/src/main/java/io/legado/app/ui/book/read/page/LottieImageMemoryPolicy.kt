@@ -1,6 +1,6 @@
 package io.legado.app.ui.book.read.page
 
-import java.security.MessageDigest
+import io.legado.app.utils.Utf8Sha256
 import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -69,8 +69,7 @@ internal object LottieImageMemoryPolicy {
     }
 
     fun sourceSha256(source: String): String {
-        return MessageDigest.getInstance("SHA-256")
-            .digest(source.toByteArray(Charsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
+        // R20（B4）：统一走 Utf8Sha256（查表出十六进制，摘要逐位不变）
+        return Utf8Sha256.hex(source)
     }
 }

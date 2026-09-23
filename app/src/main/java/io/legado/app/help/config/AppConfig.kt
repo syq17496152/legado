@@ -101,6 +101,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         }
     var optimizeRender = CanvasRecorderFactory.isSupport
             && appCtx.getPrefBoolean(PreferKey.optimizeRender, false)
+    /**
+     * R18（B4）书源查询短时缓存开关（默认开）。
+     *
+     * 无 UI 入口的技术开关（同 `optimizeRender` 口径）：关闭后 `SourceHelp.getSource` 每次直查数据库
+     * ⇒ 行为与改造前**完全一致**（便于线上出问题时一键回退定位，由单测固化该分支）。
+     */
+    var sourceQueryCacheEnabled = appCtx.getPrefBoolean(PreferKey.sourceQueryCacheEnabled, true)
     // log-system-upgrade AD-01: 默认值按包类型区分——debug 测试包默认 true（AI 解析需要详细日志），release 默认 false
     // 用户显式设置后 key 存在，getPrefBoolean 以设置为准（两类包行为一致）
     var recordLog = appCtx.getPrefBoolean(PreferKey.recordLog, BuildConfig.BUILD_DEBUG)

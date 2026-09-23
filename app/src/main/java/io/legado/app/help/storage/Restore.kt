@@ -12,6 +12,7 @@ import kotlinx.coroutines.CancellationException
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
+import io.legado.app.help.source.SourceQueryCache
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookHighlight
@@ -173,6 +174,8 @@ object Restore {
         }
         fileToListT<BookSource>(path, "bookSource.json")?.let {
             withContext(IO) { appDb.bookSourceDao.insert(*it.toTypedArray()) }
+            // R18（B4）：写源入口 ④备份恢复（书源）—— 使查询缓存整体失效
+            SourceQueryCache.invalidate()
         } ?: run {
             val bookSourceFile = File(path, "bookSource.json")
             if (bookSourceFile.exists()) {
@@ -182,6 +185,8 @@ object Restore {
         }
         fileToListT<RssSource>(path, "rssSources.json")?.let {
             withContext(IO) { appDb.rssSourceDao.insert(*it.toTypedArray()) }
+            // R18（B4）：写源入口 ④备份恢复（订阅源）
+            SourceQueryCache.invalidate()
         }
         fileToListT<RssStar>(path, "rssStar.json")?.let {
             withContext(IO) { appDb.rssStarDao.insert(*it.toTypedArray()) }
