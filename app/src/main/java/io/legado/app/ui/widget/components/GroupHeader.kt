@@ -25,8 +25,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.legado.app.lib.theme.rememberThemeUiPalette
+import io.legado.app.ui.widget.compose.AppUiTokens
 
 /**
  * 分组列表组头（AD-21：MoRealm BookSourceManageScreen 分组头部范式）。
@@ -48,7 +51,12 @@ fun GroupHeader(
 ) {
     Box(modifier = modifier.fillMaxWidth()) {
         var menuExpanded by remember { mutableStateOf(false) }
-
+        // R28 收口（2026-09-23）：本组件原用 M3 派生键（含 onSurfaceVariant）取色 ⇒ 换主题色时
+        // 组头文字/徽标不跟随，且作为 J3 的「复用目标」会把失守传染给复用方。
+        // 现改走面 token：文字 palette.primaryText / palette.secondaryText；计数徽标底 = chip 面
+        // token tabBackgroundColor（ui-standards/color.md §六）。
+        val palette = AppUiTokens.settingPalette()
+        val themeUi = rememberThemeUiPalette()
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -60,7 +68,7 @@ fun GroupHeader(
             Icon(
                 imageVector = if (collapsed) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = palette.secondaryText,
                 modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
@@ -68,18 +76,18 @@ fun GroupHeader(
                 text = name,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = palette.primaryText,
                 modifier = Modifier.weight(1f)
             )
             Surface(
                 shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                color = Color(themeUi.tabBackgroundColor),
                 modifier = Modifier.padding(end = 8.dp)
             ) {
                 Text(
                     text = if (enabledCount == totalCount) "$totalCount" else "$enabledCount/$totalCount",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = palette.secondaryText,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                 )
             }
@@ -87,7 +95,7 @@ fun GroupHeader(
                 Icon(
                     imageVector = Icons.Filled.MoreVert,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = palette.secondaryText,
                     modifier = Modifier
                         .size(24.dp)
                         .clickable { menuExpanded = true }

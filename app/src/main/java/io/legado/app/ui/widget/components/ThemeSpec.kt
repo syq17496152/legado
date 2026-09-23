@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.ColorUtils
+import io.legado.app.ui.widget.compose.AppSemanticColors
 import io.legado.app.utils.ColorUtils as LegadoColorUtils
 import io.legado.app.utils.MIN_FONT_SURFACE_CONTRAST
 
@@ -69,8 +70,12 @@ fun ThemeSpec.toM3Scheme(): ColorScheme {
     val surfaceContainerLow = lerp(bg, neutral, if (isLight) 0.06f else 0.08f)
     val surfaceContainerHigh = lerp(bg, neutral, if (isLight) 0.10f else 0.16f)
     val surfaceContainerHighest = lerp(bg, neutral, if (isLight) 0.14f else 0.20f)
-    val error = if (isLight) Color(0xFFE53935) else Color(0xFFFF5252)
-    val onError = if (isLight) Color.White else Color.Black
+    // R28/AD-14（2026-09-23）：error 收敛到 danger 语义色**单源** `AppSemanticColors.Danger`。
+    // 改造前为硬编码的浅红/深红字面色值（不随主题）+ 亮底取白、暗底取黑的内联推导
+    // ⇒ 与 ui-standards/color.md §7.1「danger 真值单源」冲突：所有消费 error 键的组件
+    //   （角标等）都被固定红，换主题色时毫无变化（A2 失守根因）。
+    val error = AppSemanticColors.Danger
+    val onError = contrastOn(error)
     val errorContainer = lerp(surface, error, if (isLight) 0.12f else 0.28f)
     val inverseSurface = if (isLight) Color(0xFF322F35) else Color(0xFFE6E0E9)
     val inverseOnSurface = contrastOn(inverseSurface)
@@ -200,9 +205,14 @@ private fun ColorScheme.withContrastGuard(): ColorScheme {
     )
 }
 
-/** contrastOn：亮底取黑、暗底取白 */
+/**
+ * contrastOn：亮底取黑、暗底取白。
+ *
+ * R31 单源（2026-09-23）：判据真值收敛到 `ColorUtils.contrastOnColor`（View 与 Compose 双栈共用），
+ * 本函数仅做 Compose Color ↔ ARGB 的域转换；`RoundedTagBarView.readableTagTextColor` 亦转发同一真值。
+ */
 fun contrastOn(color: Color): Color =
-    if (LegadoColorUtils.isColorLight(color.toArgb())) Color.Black else Color.White
+    Color(LegadoColorUtils.contrastOnColor(color.toArgb()))
 
 /** hueShift：HSL 旋转色相（tertiary 相临色用，MoRealm 同源思路），度数如 60f */
 fun Color.hueShift(degrees: Float): Color {

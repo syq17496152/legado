@@ -209,6 +209,13 @@ fun DownloadManageScreen(
                     }
                 },
                 update = { view ->
+                    // R29/C1（2026-09-23）：主题色/日夜/顶栏包变更时必须重算标签栏取色。
+                    // 改造前此处只 submitItems、从不刷新 ⇒ 主题切换后本页标签栏不跟随
+                    // （对照正确实现 ReadRecordFragment 的同类调用）。
+                    // 采用非 force 调用即可：RoundedTagBarView 内部签名已纳入
+                    // TopBarConfig.currentSignature（其两分支均含 themeUiSignature），
+                    // 主题色变化会改变签名 ⇒ 不会早退。
+                    view.applyTopBarStyle()
                     val labelItems = DownloadTab.entries.map {
                         RoundedTagBarView.Item(view.context.getString(it.labelRes))
                     }
@@ -478,7 +485,9 @@ private fun DownloadTaskItemRow(
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.outline,
+                        // R28（2026-09-23）：图标弱化色改走面 token secondaryText（原取 M3 派生键 outline，
+                        // 属页面级派生色禁区，换主题背景/卡片色后与面色明显偏色）
+                        tint = rememberAppSettingPalette().secondaryText,
                         modifier = Modifier.size(18.dp)
                     )
                 }

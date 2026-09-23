@@ -28,6 +28,21 @@ object ColorUtils {
         return ColorUtils.calculateLuminance(color) >= 0.5
     }
 
+    /**
+     * 前景对比色单源（R31，2026-09-23）：亮底取黑、暗底取白。
+     *
+     * View 侧与 Compose 侧**必须共用本函数**：Compose 的 `contrastOn`（ThemeSpec）与
+     * View 的 `RoundedTagBarView.readableTagTextColor` 均转发此处，禁止各自实现——
+     * 改造前曾三套并存（`readableTagTextColor` / `badgeTextBright` / `contrastOn`），
+     * 导致同主题下不同控件的兜底文字色分叉。
+     *
+     * 本函数是 `theme-consistency-iron-rule` §四 S3 的**登记豁免点**（对比度兜底真值单源，
+     * 见 `ai_tests/config/theme_token_allowlist.json`）。
+     */
+    @ColorInt
+    fun contrastOnColor(@ColorInt background: Int): Int =
+        if (isColorLight(background)) Color.BLACK else Color.WHITE
+
     fun intToString(intColor: Int): String {
         return String.format("#%06X", 0xFFFFFF and intColor)
     }

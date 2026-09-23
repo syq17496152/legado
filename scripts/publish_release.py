@@ -835,7 +835,66 @@ def stage3_verify(config: dict, version: str, dry_run: bool,
     # 致命项 5：updateLog 发版正文（区间全集 + 前置清洗，R2 fail-fast）
     log_path = PROJECT_ROOT / config["update_log_path"]
     body = read_update_log(log_path, version, from_version)
+
+    # 致命项 6：主题一致性门禁（门禁 16 取色 token / 门禁 17 宿主刷新覆盖）
+    stage3_theme_gates()
+
     return apks, body
+
+
+# === 主题一致性门禁（发布链路接线点 3/3）===
+
+THEME_GATE_SCRIPTS = (
+    ("门禁 16 · 取色 token", "ai_tests/scripts/audit_theme_token_violation.py", True),
+    ("门禁 17 · 宿主刷新覆盖", "ai_tests/scripts/audit_host_refresh_coverage.py", False),
+)
+
+
+def _last_release_tag() -> str:
+    """最近 release tag：作为「本次发布引入的变更文件」的比对基准；无 tag 时回退 HEAD~1。"""
+    try:
+        out = subprocess.check_output(
+            ["git", "describe", "--tags", "--abbrev=0"],
+            cwd=str(PROJECT_ROOT), stderr=subprocess.STDOUT,
+        )
+        tag = out.decode("utf-8", "replace").strip()
+        return tag or "HEAD~1"
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return "HEAD~1"
+
+
+def stage3_theme_gates() -> None:
+    """Stage3 附加致命项：主题一致性门禁（门禁 16/17）—— 发布链路 fail-fast。
+
+    依据 docs/project-rules/theme-consistency-iron-rule.md §九。
+    基准 = 最近 release tag ⇒ 比对「本次发布实际引入的变更文件」，规避旧门禁
+    `--diff`(worktree vs HEAD) 在提交后恒空 ⇒ 恒 PASS 的退化（该项目曾经的实证缺陷）。
+
+    ⚠ 接线点说明（据实修正，2026-09-23）：CI 接线在本项目**不可行** —— `docs/` 与 `ai_tests/`
+    按品牌词合规策略不入远端（.gitignore:236-237），`.github/workflows/*` 亦被忽略
+    （.gitignore:161-165，test.yml 已注释 push 触发器并注明「本地构建为唯一交付链路」）
+    ⇒ 远端无脚本可跑。三处接线点 = ① pre-commit hook ② Trae Hook ③ 本处（发布链路）。
+    """
+    base = _last_release_tag()
+    for name, rel, use_base in THEME_GATE_SCRIPTS:
+        script = PROJECT_ROOT / rel
+        if not script.is_file():
+            log("VERIFY", f"{name} 脚本缺失（{rel}）—— 本地工作区不完整，WARN 跳过", "WARN")
+            continue
+        # sys.executable = 本项目 venv 的 python（发布脚本按规范由 ai_tests\venv 运行）
+        cmd = [sys.executable, str(script)]
+        cmd += ["--base", base] if use_base else ["--no-sweep"]
+        try:
+            out = subprocess.run(cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True)
+        except OSError as exc:  # noqa: BLE001
+            log("VERIFY", f"{name} 执行失败: {exc}", "ERROR")
+            sys.exit(1)
+        if out.returncode != 0:
+            log("VERIFY", f"{name} 未通过（exit {out.returncode}，基准 {base}）", "ERROR")
+            for line in (out.stdout or "").strip().splitlines()[-4:]:
+                log("VERIFY", f"  | {line}")
+            sys.exit(1)
+        log("VERIFY", f"{name} 通过（基准 {base}）")
 
 
 # === L2 真机门禁（不可跳过，AD-05/AD-07）===

@@ -175,8 +175,11 @@ class RoundedTagBarView @JvmOverloads constructor(
         styleSignature = signature
         val config = TopBarConfig.currentConfig(context, AppConfig.isNightTheme)
         val tagBarColor = config.tagBarColor
+            // R28（2026-09-23）：regular 风格 tagBarAlpha=0（栏底完全透明），此兜底色仅作
+            // withOpacity 的基色、其 RGB 永不参与渲染 ⇒ 改用「无填充」语义替代原硬编码白色字面值。
+            // 非 regular 风格仍走 tabBackgroundColor / mutedColor（面 token 归属表）。
             ?: if (config.style == TopBarConfig.STYLE_REGULAR) {
-                Color.WHITE
+                Color.TRANSPARENT
             } else {
                 context.themeColorOrNull(PreferKey.themeTabBackgroundColor)
                     ?: context.themeMutedColorOrDefault()
@@ -214,15 +217,12 @@ class RoundedTagBarView @JvmOverloads constructor(
 
     private fun readableTagTextColor(preferredColor: Int, backgroundColor: Int): Int {
         if (Color.alpha(backgroundColor) < 40) return preferredColor
-        val preferredIsLight = ColorUtils.isColorLight(preferredColor)
-        val backgroundIsLight = ColorUtils.isColorLight(backgroundColor)
-        return if (preferredIsLight != backgroundIsLight) {
-            preferredColor
-        } else if (backgroundIsLight) {
-            Color.BLACK
-        } else {
-            Color.WHITE
-        }
+        // R31 单源（2026-09-23）：对比度兜底统一走 ColorUtils.contrastOnColor，
+        // 不再本文件自建黑白兜底（改造前为三套并存之一：本函数 / badgeTextBright / contrastOn）。
+        // 保留「preferred 与底已反差 ⇒ 沿用 preferred」的既有快捷分支，保证既有观感零回归。
+        val preferredContrasts =
+            ColorUtils.isColorLight(preferredColor) != ColorUtils.isColorLight(backgroundColor)
+        return if (preferredContrasts) preferredColor else ColorUtils.contrastOnColor(backgroundColor)
     }
 
     fun setDisplayMode(mode: DisplayMode) {

@@ -117,13 +117,22 @@ object TopBarConfig {
             ?: DEFAULT_DIR_NAME
     }
 
+    /**
+     * 顶栏样式签名：用于「同签名早退、变签名重算」的刷新判据。
+     *
+     * ⚠ 两分支都**必须**纳入 `themeUiSignature()`（R29 根修，2026-09-23）：
+     * 自定义顶栏包分支原先只含 `isNight + 包名 + 配置文件 mtime`，而**换主题色不改这三者**
+     * ⇒ 签名不变 ⇒ 消费方（`RoundedTagBarView` / `MainTopBarView` / `ExploreFragment` /
+     * `ReadRecordFragment`）的 `applyTopBarStyle()` 非 force 调用直接早退 ⇒ 标签栏底色
+     * 不随主题色变化（B3/C4 失守，2026-09-23 审计实证）。
+     */
     fun currentSignature(isNight: Boolean): String {
         val dirName = activeDirName(isNight)
         if (dirName == DEFAULT_DIR_NAME) {
             return "$isNight|$DEFAULT_DIR_NAME|${MainLayoutPresetConfig.defaultTopBarStyle()}|${MainLayoutPresetConfig.defaultTopBarShowSearch()}|${appCtx.themeUiSignature()}"
         }
         val configFile = File(localDir(isNight, dirName), packageFileName)
-        return "$isNight|$dirName|${configFile.lastModified()}"
+        return "$isNight|$dirName|${configFile.lastModified()}|${appCtx.themeUiSignature()}"
     }
 
     fun currentEntry(context: Context, isNight: Boolean): Entry {

@@ -12,14 +12,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import io.legado.app.help.config.AppConfig
+import io.legado.app.lib.theme.rememberThemeUiPalette
 import io.legado.app.ui.widget.compose.rememberAppSettingPalette
+import io.legado.app.utils.ColorUtils
 
 /**
  * 可选中胶囊 chip（筛选/开关类单源实现，M4 9-10/11 收口）。
  *
  * 取色与 XML 侧 `SearchActivity.createSourceGroupChip` 同口径：未选中 = 次级表面底 + 面板描边 + 主文本色；
- * 选中 = accent 16%（夜间 28%）叠加 + accent 描边与字色。同一「范围/开关 chip」语义不得再出现第二套视觉。
+ * 选中 = accent 半透明叠加 + accent 描边与字色。同一「范围/开关 chip」语义不得再出现第二套视觉。
+ *
+ * R28 收口（2026-09-23）：
+ * - 未选中底改走**面 token 归属表**的 chip 唯一 token `tabBackgroundColor`
+ *   （`ui-standards/color.md` §六）。改造前取 `palette.rowPressed`，与 XML 侧（mutedColor）
+ *   及规范（tabBackgroundColor）构成 D1「同语义三套口径」。
+ * - 选中叠加浓度改由**解析后的面色明暗**推导，不再直读 `AppConfig.isNightTheme`——该值非 Compose
+ *   状态，宿主未包 `LegadoTheme` 时不会刷新（B1/C3 失守）。
  *
  * @param selected 是否选中；只表达状态，切换语义由 [onClick] 调用方决定
  */
@@ -31,9 +39,10 @@ fun AppFilterChip(
     modifier: Modifier = Modifier
 ) {
     val palette = rememberAppSettingPalette()
-    val selectedAlpha = if (AppConfig.isNightTheme) 0.28f else 0.16f
+    val themeUi = rememberThemeUiPalette()
+    val selectedAlpha = if (ColorUtils.isColorLight(themeUi.cardColor)) 0.16f else 0.28f
     // 未选中底/描边取「次级表面 + 面板描边」token（border 为可空 Int，缺省退化为透明描边）
-    val idleBg = Color(palette.rowPressed)
+    val idleBg = Color(themeUi.tabBackgroundColor)
     val idleBorder = palette.border?.let { Color(it) } ?: Color.Transparent
     Text(
         text = text,
