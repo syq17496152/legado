@@ -237,6 +237,9 @@ android {
             // 纯 JVM 单测中 android.jar 方法（如 android.util.Log）返回默认值而非抛
             // "not mocked"：AppLog 在 recordLog=false 分支仍会走 Log.e（2026-08-28）
             returnDefaultValues = true
+            // B5·R23：把合并后的 res/assets 暴露给 JVM 单测（Robolectric 前置条件）。
+            // 仅影响 testAppDebugUnitTest，不进任何 APK；回滚 = 删本行 + 移除测试底座依赖。
+            includeAndroidResources = true
         }
     }
     packaging {
@@ -275,6 +278,13 @@ dependencies {
     testImplementation(libs.junit)
     // TTS 选角模板/路由解析单测需真实 org.json（returnDefaultValues 桩无法提供 JSONObject）
     testImplementation("org.json:json:20240303")
+    // === 测试底座（B5·R23）：JVM 侧可跑 Context / 资源 / Composable；全部 testImplementation ===
+    // 版本由 libs.versions.toml 单源管理；Compose 侧版本由 compose-bom 统一约束
+    testImplementation(libs.bundles.unitTest)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    // Robolectric 下 createComposeRule 需要 ui-test-manifest 提供宿主 Activity 清单
+    testImplementation(libs.compose.ui.test.manifest)
     androidTestImplementation(libs.bundles.androidTest)
     // Compose UI 测试（A2.1.3）：createComposeRule 走宿主 Activity 渲染，故
     // ui-test-manifest 必须进 debug 变体清单（Google 官方推荐组合）

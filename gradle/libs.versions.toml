@@ -76,6 +76,11 @@ media3 = "1.10.1"
 #noinspection GradleDependency
 gsyvideoplayer = "11.3.0"
 
+# 测试底座（B5·R23）：4.16.1 覆盖 Android 16 / API 36（= 本项目 targetSdk），
+# 避免默认 SDK 档位回落报 "targetSdkVersion > maxSdkVersion"
+robolectric = "4.16.1"
+androidxTestCore = "1.7.0"
+
 #noinspection GradleDependency
 webkit = "1.14.0"
 activity = "1.13.0"
@@ -223,6 +228,10 @@ jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 jsoupxpath = { module = "cn.wanghaomiao:JsoupXpath", version.ref = "jsoupxpath" }
 brotli = { module = "org.brotli:dec", version.ref = "brotli" }
 junit = { module = "junit:junit", version = "4.13.2" }
+# 测试底座（B5·R23）：JVM 侧可跑 Context/资源/Composable，全部只进 testImplementation（零 APK 影响）
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 
@@ -244,6 +253,7 @@ subsampling-scale-image-view = { module = "com.davemorrissey.labs:subsampling-sc
 [bundles]
 coroutines = ["kotlinx-coroutines-core", "kotlinx-coroutines-android"]
 androidTest = ["androidx-espresso-core", "androidx-junit", "androidx-runner"]
+unitTest = ["junit", "robolectric", "kotlinx-coroutines-test", "androidx-test-core"]
 
 [plugins]
 
