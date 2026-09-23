@@ -219,7 +219,8 @@ private fun WebDavTaskStatus.sortOrder(): Int {
 
 private fun WebDavTaskStatus.textColor(style: io.legado.app.ui.widget.compose.AppDialogStyle): Color {
     return when (this) {
-        WebDavTaskStatus.FAILED -> Color(0xFFC43636)
+        // R28/AD-14（2026-09-23）：失败态文字色改走 danger 语义色单源（禁止再写字面色值）
+        WebDavTaskStatus.FAILED -> io.legado.app.ui.widget.compose.AppUiTokens.danger
         WebDavTaskStatus.RUNNING -> style.accent
         else -> style.secondaryText
     }

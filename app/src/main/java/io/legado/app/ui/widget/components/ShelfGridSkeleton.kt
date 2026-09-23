@@ -47,7 +47,10 @@ fun ShelfGridSkeleton(
         label = "skeletonAlpha"
     )
 
-    val base = MaterialTheme.colorScheme.surfaceVariant
+    // R28（2026-09-23）：骨架屏占位底改走面 token tabBackgroundColor（原取 M3 派生键 surfaceVariant）
+    val base = androidx.compose.ui.graphics.Color(
+        io.legado.app.lib.theme.rememberThemeUiPalette().tabBackgroundColor
+    )
 
     Column(
         modifier = modifier
@@ -120,7 +123,10 @@ fun ShelfListSkeleton(
         label = "skeletonListAlpha"
     )
 
-    val base = MaterialTheme.colorScheme.surfaceVariant
+    // R28（2026-09-23）：骨架屏占位底改走面 token tabBackgroundColor（原取 M3 派生键 surfaceVariant）
+    val base = androidx.compose.ui.graphics.Color(
+        io.legado.app.lib.theme.rememberThemeUiPalette().tabBackgroundColor
+    )
     val coverSize = if (compact) 48.dp else 60.dp
 
     Column(

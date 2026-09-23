@@ -138,7 +138,8 @@ class HighlightRuleGroupManageDialog @JvmOverloads constructor(
                 actions += MenuAction(
                     icon = Icons.Filled.Delete,
                     title = context.getString(R.string.delete),
-                    tint = androidx.compose.ui.graphics.Color(0xFFE53935),
+                    // R28/AD-14（2026-09-23）：删除动作色改走 danger 语义色单源（禁止再写字面色值）
+                    tint = io.legado.app.ui.widget.compose.AppUiTokens.danger,
                     onClick = { confirmDeleteGroup(group) }
                 )
             }

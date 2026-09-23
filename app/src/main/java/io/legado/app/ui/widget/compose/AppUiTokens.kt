@@ -2,6 +2,7 @@ package io.legado.app.ui.widget.compose
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import io.legado.app.ui.widget.components.contrastOn
 
@@ -45,6 +46,13 @@ object AppSemanticColors {
      * 原型以「状态说明」而非「错误」呈现只读态，故不得复用 danger。
      */
     val Warning = Color(0xFFE8B26B)
+
+    /**
+     * danger 的 **ARGB Int 形式**（View 侧 / Int 参数场景复用）。
+     * 避免各调用点再写 `Color(...).toArgb()` 甚至直接写字面色值（color.md §7.1 禁令）。
+     */
+    val DangerArgb: Int
+        get() = Danger.toArgb()
 }
 
 /**

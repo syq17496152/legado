@@ -201,7 +201,11 @@ private fun DecodeFailedBanner(onRetryClick: () -> Unit) {
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
             .background(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                // R28（2026-09-23）：提示条/卡片底改走面 token cardColor（原取 M3 派生键 surface
+                // ⇒ 换主题背景/卡片色后卡面不跟随；文件内确实压在相机预览上的极少数元素另走"沉浸色"常量）
+                color = androidx.compose.ui.graphics.Color(
+                    io.legado.app.lib.theme.rememberThemeUiPalette().cardColor
+                ).copy(alpha = 0.96f),
                 shape = RoundedCornerShape(12.dp),
             )
             .border(
@@ -260,7 +264,11 @@ private fun DecodingCard(succeeded: Boolean, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .background(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                // R28（2026-09-23）：提示条/卡片底改走面 token cardColor（原取 M3 派生键 surface
+                // ⇒ 换主题背景/卡片色后卡面不跟随；文件内确实压在相机预览上的极少数元素另走"沉浸色"常量）
+                color = androidx.compose.ui.graphics.Color(
+                    io.legado.app.lib.theme.rememberThemeUiPalette().cardColor
+                ).copy(alpha = 0.96f),
                 shape = RoundedCornerShape(16.dp),
             )
             .padding(horizontal = 26.dp, vertical = 18.dp),
@@ -314,7 +322,11 @@ private fun PermissionCard(
         modifier = modifier
             .fillMaxWidth()
             .background(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                // R28（2026-09-23）：提示条/卡片底改走面 token cardColor（原取 M3 派生键 surface
+                // ⇒ 换主题背景/卡片色后卡面不跟随；文件内确实压在相机预览上的极少数元素另走"沉浸色"常量）
+                color = androidx.compose.ui.graphics.Color(
+                    io.legado.app.lib.theme.rememberThemeUiPalette().cardColor
+                ).copy(alpha = 0.96f),
                 shape = RoundedCornerShape(18.dp),
             )
             .padding(horizontal = 20.dp, vertical = 22.dp),
@@ -367,12 +379,18 @@ private fun PermissionCard(
                 modifier = Modifier
                     .weight(1f)
                     .background(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        // R28（2026-09-23）：权限卡未选按钮底改走 chip/次级表面面 token
+                        color = androidx.compose.ui.graphics.Color(
+                            io.legado.app.lib.theme.rememberThemeUiPalette().tabBackgroundColor
+                        ),
                         shape = RoundedCornerShape(12.dp),
                     )
                     .border(
                         width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline,
+                        // R28：描边改走分隔线面 token dividerColor
+                        color = androidx.compose.ui.graphics.Color(
+                            io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
+                        ),
                         shape = RoundedCornerShape(12.dp),
                     )
                     .clickable(onClick = onGrantClick)

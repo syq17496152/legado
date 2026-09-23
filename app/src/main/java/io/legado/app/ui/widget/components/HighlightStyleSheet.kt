@@ -105,7 +105,9 @@ fun HighlightStyleSheet(
             }
         }
         HorizontalDivider(
-            color = MaterialTheme.colorScheme.outlineVariant,
+            color = androidx.compose.ui.graphics.Color(
+            io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
+        ),
             modifier = Modifier.padding(vertical = 8.dp)
         )
 
@@ -146,7 +148,9 @@ fun HighlightStyleSheet(
             }
         }
         HorizontalDivider(
-            color = MaterialTheme.colorScheme.outlineVariant,
+            color = androidx.compose.ui.graphics.Color(
+            io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
+        ),
             modifier = Modifier.padding(vertical = 8.dp)
         )
 
@@ -206,7 +210,9 @@ private fun HighlightPresetSwatch(
                 if (selected) {
                     Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape)
                 } else {
-                    Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+                    Modifier.border(1.dp, androidx.compose.ui.graphics.Color(
+            io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
+        ), shape)
                 }
             )
             .clickable(onClick = onClick)

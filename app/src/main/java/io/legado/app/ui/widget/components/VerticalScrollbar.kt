@@ -67,8 +67,11 @@ private fun InternalScrollbar(
     }
     if (!shouldShow) return
 
-    val trackColor = MaterialTheme.colorScheme.surface
-    val thumbColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+    // R28（2026-09-23）：滚动条轨道/滑块改走面 token（原取 M3 派生键 surface / outline）
+    // 轨道 = 次级表面（tabBackgroundColor）；滑块 = 分隔线色（dividerColor，可见且不抢视觉）
+    val themeUi = io.legado.app.lib.theme.rememberThemeUiPalette()
+    val trackColor = androidx.compose.ui.graphics.Color(themeUi.tabBackgroundColor)
+    val thumbColor = androidx.compose.ui.graphics.Color(themeUi.dividerColor)
     // thumb 高度比例：offsetFraction 越大（滚动越靠后），指示块越高，近似表达位置
     val thumbFraction = (0.2f + offsetFraction.coerceIn(0f, 1f) * 0.3f).coerceIn(0.15f, 0.5f)
 

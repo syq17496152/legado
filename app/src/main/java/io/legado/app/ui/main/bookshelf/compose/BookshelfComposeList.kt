@@ -313,10 +313,13 @@ private fun BookshelfUnreadBadge(
 ) {
     if (item !is BookshelfBookItemUi) return
     if (!AppConfig.showUnread || item.unreadCount <= 0) return
+    val themeUi = io.legado.app.lib.theme.rememberThemeUiPalette()
+    // R28/A4（2026-09-23）：无新章的未读角标改走面 token（底 = chip/次级表面 tabBackgroundColor；
+    // 字 = 对比度兜底单源 contrastOn），原为硬编码黑底白字（不随主题）。
     val badgeColor = if (item.hasNewChapter) {
         palette.accent
     } else {
-        Color.Black.copy(alpha = 0.58f)
+        androidx.compose.ui.graphics.Color(themeUi.tabBackgroundColor)
     }
     Text(
         text = item.unreadCount.coerceAtMost(99999).toString(),
@@ -325,7 +328,7 @@ private fun BookshelfUnreadBadge(
             .background(badgeColor)
             .widthIn(min = 22.dp)
             .padding(horizontal = 6.dp, vertical = 2.dp),
-        color = Color.White,
+        color = io.legado.app.ui.widget.components.contrastOn(badgeColor),
         fontSize = MaterialTheme.typography.labelXSmall.fontSize,
         fontWeight = FontWeight.SemiBold,
         maxLines = 1

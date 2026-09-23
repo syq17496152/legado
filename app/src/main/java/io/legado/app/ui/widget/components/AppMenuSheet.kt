@@ -97,7 +97,9 @@ fun AppMenuSheet(
         }
         if (title != null && actions.isNotEmpty()) {
             HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant,
+                color = androidx.compose.ui.graphics.Color(
+                    io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
+                ),
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
         }

@@ -245,7 +245,9 @@ fun AutoTaskScreen(
                                 }
                             )
                             HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                color = androidx.compose.ui.graphics.Color(
+                                    io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
+                                ).copy(alpha = 0.5f),
                                 thickness = 0.5.dp
                             )
                         }

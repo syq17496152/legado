@@ -66,7 +66,11 @@ private fun MetricTile(
         modifier = modifier
             .fillMaxWidth()
             .background(
-                MaterialTheme.colorScheme.surfaceVariant,
+                // R28（2026-09-23）：指标卡底改走 chip/次级表面面 token tabBackgroundColor
+                // （原取 M3 派生键 surfaceVariant ⇒ 换主题背景/卡片色后偏色）
+                androidx.compose.ui.graphics.Color(
+                    io.legado.app.lib.theme.rememberThemeUiPalette().tabBackgroundColor
+                ),
                 AppShapes.Card
             )
             .padding(12.dp),

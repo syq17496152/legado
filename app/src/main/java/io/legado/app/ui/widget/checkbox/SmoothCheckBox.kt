@@ -10,6 +10,7 @@ import android.widget.Checkable
 import androidx.core.view.postDelayed
 import io.legado.app.R
 import io.legado.app.lib.theme.ThemeStore
+import io.legado.app.lib.theme.themeTabBackgroundColorOrDefault
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.getCompatColor
 import kotlin.math.min
@@ -46,8 +47,10 @@ class SmoothCheckBox @JvmOverloads constructor(
     init {
         val ta = context.obtainStyledAttributes(attrs, R.styleable.SmoothCheckBox)
         var tickColor = ThemeStore.accentColor(context)
-        mCheckedColor = context.getCompatColor(R.color.background_menu)
-        mUnCheckedColor = context.getCompatColor(R.color.background_menu)
+        // R28（2026-09-23）：勾选框默认底改走面 token tabBackgroundColor
+        // （原取静态资源色 background_menu ⇒ 仅日夜两态、换主题色/主题包无效）
+        mCheckedColor = context.themeTabBackgroundColorOrDefault()
+        mUnCheckedColor = context.themeTabBackgroundColorOrDefault()
         mFloorColor = context.getCompatColor(R.color.transparent30)
         tickColor = ta.getColor(R.styleable.SmoothCheckBox_color_tick, tickColor)
         mAnimDuration = ta.getInt(R.styleable.SmoothCheckBox_duration, DEF_ANIM_DURATION)

@@ -130,7 +130,11 @@ fun ImportBookScreen(
             },
             singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,
+                // R28（2026-09-23）：未聚焦描边改走面 token dividerColor（原取 M3 派生键 surfaceVariant
+                // ⇒ 换主题背景/卡片色后与面色偏色）
+                unfocusedBorderColor = androidx.compose.ui.graphics.Color(
+                    io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
+                ),
                 focusedBorderColor = MaterialTheme.colorScheme.primary
             ),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
@@ -147,7 +151,13 @@ fun ImportBookScreen(
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     itemsIndexed(items = items, key = { index, item -> "$index-${item.name}" }) { index, item ->
                         ImportBookItemRow(item = item, onClick = { onItemClick(index) }, onLongClick = { onItemLongClick(index) })
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 0.5.dp)
+                        // R28（2026-09-23）：分隔线改走面 token dividerColor（原取 M3 派生键 outlineVariant）
+                        HorizontalDivider(
+                            color = androidx.compose.ui.graphics.Color(
+                                io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
+                            ).copy(alpha = 0.5f),
+                            thickness = 0.5.dp
+                        )
                     }
                 }
             }
@@ -202,7 +212,8 @@ private fun ImportBookItemRow(item: ImportBookDisplayItem, onClick: () -> Unit, 
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     TagChip(text = item.tag)
                     Text(text = item.size, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(text = item.date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    // R28（2026-09-23）：日期弱化文字改走面 token secondaryText（原取 M3 派生键 outline）
+                    Text(text = item.date, style = MaterialTheme.typography.bodySmall, color = io.legado.app.ui.widget.compose.AppUiTokens.settingPalette().secondaryText)
                 }
             }
         }

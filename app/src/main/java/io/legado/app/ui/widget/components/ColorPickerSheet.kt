@@ -99,7 +99,9 @@ fun ColorPickerSheet(
                         .background(Color(currentColor))
                         .border(
                             width = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant,
+                            color = androidx.compose.ui.graphics.Color(
+                                io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
+                            ),
                             shape = CircleShape
                         )
                 )
@@ -134,7 +136,9 @@ fun ColorPickerSheet(
                                 color = if (selected) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
-                                    MaterialTheme.colorScheme.outlineVariant
+                                    androidx.compose.ui.graphics.Color(
+                                io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
+                            )
                                 },
                                 shape = CircleShape
                             )
@@ -152,7 +156,9 @@ fun ColorPickerSheet(
                             Icon(
                                 imageVector = Icons.Filled.Check,
                                 contentDescription = null,
-                                tint = if (ColorUtils.isColorLight(preset)) Color.Black else Color.White,
+                                // R31（2026-09-23）：预设色上的对勾字色改走对比度兜底单源 contrastOn
+                                // （原为内联 isColorLight 推导 ⇒ 三套并存之一）
+                                tint = contrastOn(androidx.compose.ui.graphics.Color(preset)),
                                 modifier = Modifier.size(18.dp)
                             )
                         }

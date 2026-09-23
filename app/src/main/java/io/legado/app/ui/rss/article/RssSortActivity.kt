@@ -169,7 +169,9 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
                         CountBadgeDrawable(
                             this, count,
                             AppSemanticColors.Danger.toArgb(),
-                            getCompatColor(R.color.white)
+                            // R28/R31（2026-09-23）：danger 底上的角标字色改走对比度兜底单源
+                            // （原取静态白色资源色 ⇒ 危险色变浅时字色不可读）
+                            io.legado.app.utils.ColorUtils.contrastOnColor(AppSemanticColors.DangerArgb)
                         ),
                         null
                     )

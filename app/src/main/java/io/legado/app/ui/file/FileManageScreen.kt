@@ -129,7 +129,10 @@ fun FileManageScreen(
                                 )
                             }
                             HorizontalDivider(
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                // R28（2026-09-23）：分隔线改走面 token dividerColor（原取 M3 派生键 outlineVariant = outline 的 lerp 变体）
+                                color = androidx.compose.ui.graphics.Color(
+                                    io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
+                                ).copy(alpha = 0.5f),
                                 thickness = 0.5.dp
                             )
                         }
@@ -175,7 +178,8 @@ private fun PathBar(pathSegments: List<String>, onJumpPath: (Int) -> Unit) {
                         Icon(
                             Icons.Default.NavigateNext,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.outline,
+                            // R28（2026-09-23）：路径分隔图标改走面 token secondaryText（原取 M3 派生键 outline）
+                            tint = io.legado.app.ui.widget.compose.AppUiTokens.settingPalette().secondaryText,
                             modifier = Modifier.size(18.dp)
                         )
                     }

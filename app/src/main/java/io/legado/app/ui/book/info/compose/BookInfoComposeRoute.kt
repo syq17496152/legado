@@ -1179,7 +1179,8 @@ private fun BookInfoMoreActionItem(
 ) {
     Text(
         text = text,
-        color = if (danger) Color(0xffd64545) else style.colors.primaryText,
+        // R28/AD-14（2026-09-23）：danger 文字色改走语义色单源（color.md §7.1 禁止任何位置再写 danger 色值）
+        color = if (danger) io.legado.app.ui.widget.compose.AppUiTokens.danger else style.colors.primaryText,
         fontSize = MaterialTheme.typography.bodySecondary.fontSize,
         fontWeight = FontWeight.Medium,
         modifier = Modifier

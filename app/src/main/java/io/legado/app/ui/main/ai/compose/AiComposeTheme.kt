@@ -101,7 +101,8 @@ fun aiComposeStyle(context: Context): AiComposeStyle {
             processSurface = Color(processSurface),
             toolSurface = Color(toolSurface),
             stroke = Color(stroke),
-            danger = Color(0xfff44336.toInt())
+            // R28/AD-14（2026-09-23）：danger 改走语义色单源（原写死字面色值 ⇒ 与全站 danger 不一致）
+            danger = io.legado.app.ui.widget.compose.AppSemanticColors.Danger
         ),
         metrics = AiComposeMetrics(
             cardRadius = context.composePanelRadius(),
