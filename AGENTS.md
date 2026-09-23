@@ -121,7 +121,7 @@ ai_tests\venv\Scripts\python.exe ai_tests/scripts/audit_gson_generic_signature.p
 **任何代码变更必须同步新增/更新对应工程级测试**；修 Bug 必须先写失败复现用例再修。**未配对即阻断提交（硬门禁，不可跳过）**。
 - 规范全文：`docs/project-rules/testing-iron-rule.md`
 - 配对审计门禁：`ai_tests\venv\Scripts\python.exe ai_tests/scripts/audit_code_change_has_test.py`（未配对 `exit 1`）
-- 全量单测：`.\gradlew testAppDebugUnitTest`（必须全绿）
+- 全量单测：`ai_tests\venv\Scripts\python.exe ai_tests/scripts/run_unit_tests.py`（必须全绿；**统一入口**：按 OS 选 `gradlew.bat`/`gradlew` 并加 `--no-configuration-cache` —— 裸 `.\gradlew testAppDebugUnitTest` 在 Windows 下不可执行（无扩展名 shell 脚本），且 Cronet 任务在配置缓存下会报 `Could not find method patchClassVersion()`。2026-09-24 实测修正）
 - 涉 Gson 反序列化模型变更（含 `List<Model>`/`Map<K,Model>` 字段）：追加 `audit_gson_generic_signature.py` 双包审计（见规则 7）
 - 每批次收尾必须附「测试更新证据」：新增/修改的测试文件路径 + 用例数 + 门禁退出码
 > 机制化依据：项目已多次实证「纯文档约束无效」（先例 `apk-publish-workflow.md` 的 fail-fast 拦截、`ai_e2e_testing_workflow.md` 的门禁级规则）。
