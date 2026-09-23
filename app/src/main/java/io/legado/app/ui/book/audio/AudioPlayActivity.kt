@@ -93,7 +93,9 @@ class AudioPlayActivity :
     override val viewModel by viewModels<AudioPlayViewModel>()
 
     // 主题架构 v2：沉浸播放页不随主题事件重建（避免打断播放），Compose 侧经 ThemeSync 刷新
-    // T3（theme-arch-gap）核实：本页无 View 侧主题色消费，豁免+ThemeSync 覆盖完整（2026-08-28 审查）
+    // B7 修正（2026-09-24）：原注「本页无 View 侧主题色消费」**失实** —— 歌词时间轴字色取自
+    // `accentColor`（View 侧 `LyricViewX`，见 [loadLyric]）⇒ 补 `EventBus.RECREATE` 原位刷新
+    // [refreshLyricThemeInPlace]，否则主题变更后歌词时间轴字色停留在旧主题。
     override val recreateOnThemeChange: Boolean
         get() = false
     private var adjustProgress = false
@@ -470,6 +472,19 @@ class AudioPlayActivity :
     }
 
     /**
+     * B7（2026-09-24）：主题变更时原位刷新 View 侧主题色。
+     *
+     * 本页 `recreateOnThemeChange=false`（沉浸页不重建）⇒ 主题切换后 `LyricViewX` 的
+     * 时间轴字色（[loadLyric] 内 `setTimelineTextColor(accentColor)`）不会自动跟随；
+     * 歌词未加载时无需处理（下次 [loadLyric] 会取新值）。
+     */
+    private fun refreshLyricThemeInPlace() {
+        if (lyricOn) {
+            lyricViewX.setTimelineTextColor(accentColor)
+        }
+    }
+
+    /**
      * 优化 2（P1，2026-09-21）：歌词展开态封面缩为小图。
      *
      * 本来：`iv_cover` 固定 260dp 且上下双向约束（垂直居中），歌词区只能拿到剩余高度，小屏可读行数少。
@@ -613,6 +628,11 @@ class AudioPlayActivity :
 
     @SuppressLint("SetTextI18n")
     override fun observeLiveBus() {
+        // B7（2026-09-24）：本页 recreateOnThemeChange=false（沉浸页不重建）⇒
+        // 主题变更必须**原位**刷新 View 侧主题色，否则歌词时间轴字色停留旧主题。
+        observeEvent<String>(EventBus.RECREATE) {
+            refreshLyricThemeInPlace()
+        }
         observeEvent<Boolean>(EventBus.MEDIA_BUTTON) {
             if (it) {
                 playButton()
