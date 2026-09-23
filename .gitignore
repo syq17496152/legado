@@ -247,3 +247,4 @@ git_log.txt
 /*-after-fix.png
 # 项目记忆的本地备份（归档轮次产物，不入库；归档快照见 .trae/memory/archived/，已单独忽略）
 /.trae/memory/ai_memory_main.md.bak*
+`n# Trae Hook 运行时状态（不跟踪）`n.trae/.hook-state/

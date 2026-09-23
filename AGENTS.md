@@ -117,6 +117,35 @@ ai_tests\venv\Scripts\python.exe ai_tests/scripts/audit_gson_generic_signature.p
 ```
 > 完整规范：`docs/project-rules/package-naming.md` §R8 × Gson 泛型签名红线；设计文档：`docs/specs/fix-r8-gson-signature-loss/`
 
+### 8. 测试铁律（动代码即更新工程级测试｜2026-09-23 用户裁定）
+**任何代码变更必须同步新增/更新对应工程级测试**；修 Bug 必须先写失败复现用例再修。**未配对即阻断提交（硬门禁，不可跳过）**。
+- 规范全文：`docs/project-rules/testing-iron-rule.md`
+- 配对审计门禁：`ai_tests\venv\Scripts\python.exe ai_tests/scripts/audit_code_change_has_test.py`（未配对 `exit 1`）
+- 全量单测：`.\gradlew testAppDebugUnitTest`（必须全绿）
+- 涉 Gson 反序列化模型变更（含 `List<Model>`/`Map<K,Model>` 字段）：追加 `audit_gson_generic_signature.py` 双包审计（见规则 7）
+- 每批次收尾必须附「测试更新证据」：新增/修改的测试文件路径 + 用例数 + 门禁退出码
+> 机制化依据：项目已多次实证「纯文档约束无效」（先例 `apk-publish-workflow.md` 的 fail-fast 拦截、`ai_e2e_testing_workflow.md` 的门禁级规则）。
+
+### 9. 主题一致性铁律（取色与刷新不可失守｜2026-09-23 用户裁定）
+**任何 UI 取色/刷新改动必须走「四道流程卡点」**，卡点不过即无法继续 —— 这是「让 AI 后续不再失守」的强制结构，不是建议清单。
+- 规范全文：`docs/project-rules/theme-consistency-iron-rule.md`
+- **K1 开工卡**：取色归属三步（查面 token 归属表 → 查同语义既有实现保证双栈一致 → 排除 M3 派生色禁区）+ 新增组件必须登记；**无勾选记录禁止开始编码**
+- **K2 提交卡（工具层阻断，AI 无法绕过）**：`audit_theme_token_violation.py --base HEAD` + `audit_host_refresh_coverage.py` + `audit_code_change_has_test.py --base HEAD`，任一退出码非 0 ⇒ **提交失败**；确需跳过用 `SKIP_GATES=1` 并在 commit message 与项目记忆留痕
+- **K3 审核卡**：四态截图基线（默认主题 / 自定义主题色 / 主题包 / 夜间）+ 15 条红线逐条勾选；**缺失不予验收**
+- **K4 沉淀卡**：发现新失守必须沉淀为检查表条目 + 补门禁断言；**未沉淀视为任务未完成**
+- **豁免**：硬编码色必须登记到 `ai_tests/config/theme_token_allowlist.json`（含理由/归属设置项/批准人）；**未登记一律视为违规**
+- **接线安装**：`cp ai_tests/scripts/hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit`
+> 机制化依据：本项目取色门禁 `ui_gate.py` / `theme_color_gate.py` 曾「恒 PASS 且从未接线」（保单是空的）；只写文档的约束一律失效。门禁必须同时满足「接线 + 覆盖全源码面 + 可自检」。
+
+### 10. 流程卡点体系（全局卡点总纲｜2026-09-23 用户裁定）
+**所有子规范必须登记到卡点归属矩阵；未登记 = 裸奔，须限期补卡点。** 卡点分六类 G1-G6（开工/提交/审核/发布/沉淀/交付），**每类必须写明「不做即停」**。
+- 总纲：`docs/project-rules/process-gate-architecture.md`（含 **26 份子规范**卡点归属矩阵 + 裸奔清单 + 六类卡点定义）
+- **统一门禁注册表**：`ai_tests/config/gate_registry.json`（**唯一登记处**；新增门禁只改注册表，挂载点自动生效）
+- **统一 runner**：`ai_tests\venv\Scripts\python.exe ai_tests/scripts/run_gates.py --stage commit|ci|publish|deliver`
+- **三类挂载点**：pre-commit hook（`ai_tests/scripts/hooks/pre-commit`）+ CI + 发布/交付链路
+- **铁律**：禁止删 hook / 改门禁为恒 PASS / 注释 CI job 绕卡点；跳过唯一通道 `SKIP_GATES=1` + 三处留痕
+> 起因：26 份子规范卡点散落、无归属矩阵、无裸奔清单 ⇒ AI 不知「哪一步必须做什么」⇒ 必然漏（本轮已实证 5 条强制子规范漏载 + 取色门禁从未接线）。
+
 ## 记忆系统（memory-mechanism-redesign，AD-11 已启用）
 | 配置项 | 值 |
 |--------|-----|
