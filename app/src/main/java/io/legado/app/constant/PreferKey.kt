@@ -20,6 +20,9 @@ object PreferKey {
     const val editThemeDark = "editThemeDark"
     const val editTemeAuto = "editTemeAuto"
     const val showUnread = "showUnread"
+
+    /** R16（B3）：书架未读颜色强调（默认关 ⇒ 渲染与现状一致） */
+    const val bookshelfUnreadEmphasis = "bookshelfUnreadEmphasis"
     const val showBookshelfReadProgress = "showBookshelfReadProgress"
     const val showBooknameLayout = "showBooknameLayout"
     const val bookshelfMargin = "bookshelfMargin"
@@ -285,6 +288,16 @@ object PreferKey {
      * 取代原「`dNThemeName` 是否为空」判据（该判据会把只用过日间主题的存量用户误判为首装）。
      */
     const val themeFirstInstallDone = "theme_first_install_done"
+
+    /**
+     * 首装「自动套用暗夜紫外观套件」的**一次性**标记（2026-09-24 修复主题设置体系失守）。
+     *
+     * 原实现用 [themeFirstInstallDone] 作判据，而该键的语义是「**本机是全新安装**」（迁移后长期为 true，
+     * 并非「已首装完成」）⇒ `App.kt` 每次启动都重新 `apply(kit)`，把用户此后选择的主题、外观套件、
+     * 主页布局 preset 与顶栏包**全部静默还原**（实测：注入的 `themeTabBackgroundColorNight` 重启后
+     * 变回套件值、`mainLayoutPreset`/`defaultTopBarStyle` 被改回 regular）。
+     */
+    const val appearanceKitAutoApplyDone = "appearanceKitAutoApplyDone"
 
     const val cPrimary = "colorPrimary"
     const val cAccent = "colorAccent"

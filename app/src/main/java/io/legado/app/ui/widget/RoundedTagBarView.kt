@@ -173,6 +173,11 @@ class RoundedTagBarView @JvmOverloads constructor(
         if (!force && styleSignature == signature) return
         styleSignature = signature
         val config = TopBarConfig.currentConfig(context, AppConfig.isNightTheme)
+        // 顶栏包是「顶栏样式」的用户显式选择（含标签栏/选中标签色），故**顶栏包字面色优先**；
+        // 主题面 token 作为「顶栏包未声明该面」时的来源（如外观套件的 regular 形态）。
+        // 实证（2026-09-24 用户复现）：主题列表切主题**不会**切换顶栏包（`topBarPackageNight` 不变），
+        // 因此若顶栏包钉了字面色，标签色会保持上一个主题的观感 —— 属「顶栏包是更具体设置」的预期行为；
+        // 需要标签随主题变化时，应通过「套件」应用（套件=主题+配套顶栏包一体）或不在顶栏包里钉该色。
         val tagBarColor = config.tagBarColor
             // R28（2026-09-23）：regular 风格 tagBarAlpha=0（栏底完全透明），此兜底色仅作
             // withOpacity 的基色、其 RGB 永不参与渲染 ⇒ 改用「无填充」语义替代原硬编码白色字面值。

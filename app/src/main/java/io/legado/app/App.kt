@@ -226,11 +226,22 @@ class App : Application() {
             }.onFailure {
                 AppLog.put("注册暗夜紫主题包失败\n${it.localizedMessage}", it)
             }
-            // F-暗夜紫外观套件：确保「主题包+专属紫调顶栏包+外观套件索引」就绪；首次安装自动套用整套
+            // F-暗夜紫外观套件：确保「主题包+专属紫调顶栏包+外观套件索引」就绪；首装**一次性**自动套用整套。
+            // 2026-09-24 主题设置体系失守修复：原判据仅 `firstInstallDarkPurple`，而该值语义是
+            // 「本机为全新安装」（迁移后**长期为 true**，并非「已完成首装」）⇒ 每次启动都重复
+            // `apply(kit)`，把用户此后选择的主题 / 外观套件 / 主页布局 preset / 顶栏包**静默还原**
+            // （实测：注入的面 token 重启后被改回套件值、`mainLayoutPreset` 与 `defaultTopBarStyle`
+            // 被改回 regular）。故追加一次性标记 `appearanceKitAutoApplyDone`。
             runCatching {
                 AppearanceKitManager.ensureDarkPurpleKit()?.let { kit ->
-                    if (firstInstallDarkPurple) {
+                    val autoApplied = getPrefBoolean(PreferKey.appearanceKitAutoApplyDone, false)
+                    val shouldApply = AppearanceKitManager.shouldAutoApplyDarkPurpleKitOnce(
+                        isFreshInstall = firstInstallDarkPurple,
+                        alreadyAutoApplied = autoApplied
+                    )
+                    if (shouldApply) {
                         AppearanceKitManager.apply(appCtx, kit.toAppearanceKit())
+                        appCtx.putPrefBoolean(PreferKey.appearanceKitAutoApplyDone, true)
                     }
                 }
             }.onFailure {
@@ -249,6 +260,9 @@ class App : Application() {
         runCatching {
             ThemeRuntimeKeys.migrateLegacyNightValues(base)
             ThemeRuntimeKeys.migrateThemeFirstInstallFlag(base)
+            // 2026-09-24：为「已配置过的存量用户」回填套件自动套用的一次性标记，
+            // 避免升级后首启被套件再覆盖一次主题/布局（详见该函数 KDoc）
+            ThemeRuntimeKeys.migrateAppearanceKitAutoApplyFlag(base)
         }
         super.attachBaseContext(AppContextWrapper.wrap(base))
     }

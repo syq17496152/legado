@@ -306,6 +306,19 @@ object AppearanceKitManager {
             }
     }
 
+    /**
+     * 是否应在本次启动自动套用「暗夜紫」整套外观（纯函数，可单测）。
+     *
+     * 必须**同时**满足：①本机是全新安装（`theme_first_install_done`，语义见其 KDoc）；
+     * ②此前从未自动套用过（`appearanceKitAutoApplyDone`）。
+     *
+     * ⚠ 只用①作判据是原缺陷根因（该键长期为 true ⇒ 每次启动都套用 ⇒ 用户改过的主题/套件/布局被静默还原）。
+     */
+    internal fun shouldAutoApplyDarkPurpleKitOnce(
+        isFreshInstall: Boolean,
+        alreadyAutoApplied: Boolean
+    ): Boolean = isFreshInstall && !alreadyAutoApplied
+
     suspend fun apply(context: Context, kit: AppearanceKit) {
         currentModeThemeMutex.lock()
         try {

@@ -75,6 +75,31 @@ object ThemeRuntimeKeys {
             .commit()
     }
 
+    private const val appearanceKitAutoApplyMigratedKey = "appearanceKitAutoApplyFlagMigrated"
+
+    /**
+     * 「首装自动套用暗夜紫套件」一次性标记的**存量回填**（2026-09-24，主题设置体系失守修复配套）。
+     *
+     * 背景：`App.kt` 原先每次启动都套用套件（判据 `theme_first_install_done` 长期为 true）。
+     * 修复后改为「一次性」，但**已配置过的存量用户**若升级后被判为「尚未自动套用过」，
+     * 会在升级后首启**再被套件覆盖一次**（主题/布局/顶栏包被改回）。
+     *
+     * 回填口径（哨兵键 + 幂等，与 [migrateThemeFirstInstallFlag] 同范式）：
+     *  · `currentAppearanceKitId` / `dNThemeName` / `dThemeName` 任一非空 ⇒ 用户已配置 ⇒ 标记已套用过
+     *  · 三者全空 ⇒ 真首装 ⇒ 不写标记，保留「首装自动套用一次」的行为
+     */
+    fun migrateAppearanceKitAutoApplyFlag(context: Context) {
+        val prefs = context.defaultSharedPreferences
+        if (prefs.getBoolean(appearanceKitAutoApplyMigratedKey, false)) return
+        val hasUserConfig = listOf(
+            PreferKey.currentAppearanceKitId, PreferKey.dNThemeName, PreferKey.dThemeName
+        ).any { !prefs.getString(it, null).isNullOrBlank() }
+        prefs.edit().apply {
+            if (hasUserConfig) putBoolean(PreferKey.appearanceKitAutoApplyDone, true)
+            putBoolean(appearanceKitAutoApplyMigratedKey, true)
+        }.commit()
+    }
+
     fun fontScale(isNight: Boolean = AppConfig.isNightTheme): String =
         if (isNight) PreferKey.fontScaleN else PreferKey.fontScale
 
