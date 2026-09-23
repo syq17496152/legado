@@ -69,7 +69,12 @@ class ReadView(context: Context, attrs: AttributeSet) :
     val prevPage by lazy { PageView(context) }
     val curPage by lazy { PageView(context) }
     val nextPage by lazy { PageView(context) }
-    val defaultAnimationSpeed = 300
+    // B1·R5（2026-09-23）：翻页动画速度改为可调四档（原硬编码 300ms）。
+    // 档位→毫秒映射单源 = PageTurnAnimSpeed；非法档位回落标准 300ms ⇒ 新装默认值不变。
+    val defaultAnimationSpeed: Int
+        get() = io.legado.app.utils.PageTurnAnimSpeed.msOf(
+            io.legado.app.help.config.AppConfig.pageTurnAnimSpeedTier
+        )
     private var pressDown = false
     private var isMove = false
     private var ignoreMandatoryGestureTouch = false

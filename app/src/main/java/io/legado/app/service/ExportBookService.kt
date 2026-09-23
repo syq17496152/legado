@@ -79,6 +79,14 @@ class ExportBookService : BaseService() {
     companion object {
         val exportProgress = ConcurrentHashMap<String, Int>()
         val exportMsg = ConcurrentHashMap<String, String>()
+
+        /**
+         * R2（B1，2026-09-23）：导出章节正文的兜底取值。
+         *
+         * 正文为空时一律返回**空字符串**——修复前调用点写的是字符串字面量 `"null"`，
+         * 会被当作正文写进 EPUB（用户可在导出书里看到「null」字样）。
+         */
+        fun epubChapterContent(content: String?): String = content ?: ""
     }
 
     data class ExportConfig(
@@ -531,15 +539,21 @@ class ExportBookService : BaseService() {
             1
         }
         var parentSection: TOCReference? = null
+        // R2（B1，2026-09-23）：统计「非卷章节正文为空」的章节数，供导出结果日志（原缺陷把这类章节
+        // 的正文写成字符串字面量 "null"，被当作正文导出到 EPUB）。
+        val emptyContentCount = java.util.concurrent.atomic.AtomicInteger(0)
         flow {
             appDb.bookChapterDao.getChapterList(book.bookUrl).forEach { chapter ->
                 emit(chapter)
             }
         }.mapAsyncIndexed(threads) { index, chapter ->
             val content = BookHelp.getContent(book, chapter)
+            if (content == null && !chapter.isVolume) {
+                emptyContentCount.incrementAndGet()
+            }
             val (contentFix, resources) = fixPic(
                 book,
-                content ?: if (chapter.isVolume) "" else "null",
+                epubChapterContent(content),
                 chapter
             )
             // 不导出vip标识
@@ -582,6 +596,11 @@ class ExportBookService : BaseService() {
             } else {
                 epubBook.addSection(parentSection, title, chapterResource)
             }
+        }
+        // R2（B1，2026-09-23）：导出结果日志——空正文章节计数，便于定位「源规则取不到正文」的章节
+        val emptyCount = emptyContentCount.get()
+        if (emptyCount > 0) {
+            io.legado.app.constant.AppLog.put("导出 EPUB：$emptyCount 个非卷章节正文为空，已按空正文导出")
         }
     }
 

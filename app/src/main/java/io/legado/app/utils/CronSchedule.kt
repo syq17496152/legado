@@ -107,7 +107,10 @@ class CronSchedule private constructor(
                     }
                     else -> {
                         val value = base.toIntOrNull() ?: return null
-                        value..value
+                        // R1（B1，2026-09-23）：**单值 + 步进**须按标准 cron 语义从该值起步长延伸到字段上界
+                        // （`5/15` → 5,20,35,50；`0/15` → 0,15,30,45）。原实现恒取 `value..value`
+                        // ⇒ 步进被静默吃掉，只剩 1 个值（如 `0/15` 只在整点触发，非每 15 分钟）。
+                        if (stepSplit.size == 2) value..max else value..value
                     }
                 }
                 for (value in range step step) {

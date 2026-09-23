@@ -2317,6 +2317,17 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.parallelExportBook, value)
         }
 
+    /**
+     * B1·R5：翻页动画速度档位（0=慢 / 1=标准 / 2=快 / 3=极快；毫秒映射见 [io.legado.app.utils.PageTurnAnimSpeed]）。
+     * 读侧 `coerceIn(0, 3)` 兜底非法值 ⇒ 新装/异常数据恒回落标准档（300ms）。
+     */
+    var pageTurnAnimSpeedTier: Int
+        get() = appCtx.getPrefInt(PreferKey.pageTurnAnimSpeed, io.legado.app.utils.PageTurnAnimSpeed.DEFAULT_TIER)
+            .coerceIn(0, io.legado.app.utils.PageTurnAnimSpeed.tierCount - 1)
+        set(value) {
+            appCtx.putPrefInt(PreferKey.pageTurnAnimSpeed, value)
+        }
+
     var changeSourceCheckAuthor: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.changeSourceCheckAuthor)
         set(value) {

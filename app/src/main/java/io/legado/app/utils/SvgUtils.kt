@@ -19,8 +19,10 @@ object SvgUtils {
     
     fun createBitmap(filePath: String, width: Int, height: Int? = null): Bitmap? {
         return kotlin.runCatching {
-            val inputStream = FileInputStream(filePath)
-            createBitmap(inputStream, width, height)
+            // R3（B1，2026-09-23）：文件流必须关闭——原实现直接 new 后不 use ⇒ fd 泄漏
+            FileInputStream(filePath).use { inputStream ->
+                createBitmap(inputStream, width, height)
+            }
         }.getOrNull()
     }
 
@@ -47,8 +49,10 @@ object SvgUtils {
     //获取svg图片大小
     fun getSize(filePath: String): Size? {
         return kotlin.runCatching {
-            val inputStream = FileInputStream(filePath)
-            getSize(inputStream)
+            // R3（B1，2026-09-23）：文件流必须关闭（同 createBitmap(filePath) 的 fd 泄漏问题）
+            FileInputStream(filePath).use { inputStream ->
+                getSize(inputStream)
+            }
         }.getOrNull()
     }
 

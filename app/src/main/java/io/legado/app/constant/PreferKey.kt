@@ -221,6 +221,12 @@ object PreferKey {
     const val showAddToShelfAlert = "showAddToShelfAlert"
     const val ignoreAudioFocus = "ignoreAudioFocus"
     const val parallelExportBook = "parallelExportBook"
+
+    /**
+     * B1·R5：翻页动画速度档位（0=慢 / 1=标准(默认) / 2=快 / 3=极快）。
+     * 档位→毫秒映射单源见 [io.legado.app.utils.PageTurnAnimSpeed]；供 B3/B4 复用同一键。
+     */
+    const val pageTurnAnimSpeed = "pageTurnAnimSpeed"
     const val progressBarBehavior = "progressBarBehavior"
     const val sourceEditMaxLine = "sourceEditMaxLine"
     const val ttsTimer = "ttsTimer"
