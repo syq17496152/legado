@@ -195,6 +195,16 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
             themeCardColorOrDefault(),
             UiCorner.actionRadius(this@ReadAloudBgmManageActivity)
         )
+        // R30（2026-09-23）：段底改走主题派生——镜像同语义既有实现 ReadMenuButtonManageActivity。
+        // 原依赖 XML 静态 @color/background_card（仅日夜两态）⇒ 换自定义主题色/主题包时选中段底不跟随，
+        // 而本页已把轨道底色改为主题派生，唯段底漏改（同族「一处补了一处漏了」）。
+        listOf(btnDay, btnNight).forEach {
+            it.background = UiCorner.actionSelector(
+                android.graphics.Color.TRANSPARENT,
+                themeCardColorOrDefault(),
+                UiCorner.actionRadius(this@ReadAloudBgmManageActivity)
+            )
+        }
         btnDay.text = "配乐"
         btnNight.text = "音效"
         btnDay.setOnClickListener { switchAssetType(ReadAloudBgmTrack.TYPE_BGM) }

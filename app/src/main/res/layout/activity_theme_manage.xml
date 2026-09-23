@@ -17,7 +17,6 @@
         android:layout_marginStart="16dp"
         android:layout_marginTop="10dp"
         android:layout_marginEnd="16dp"
-        android:background="@drawable/bg_bookshelf_tag_track"
         android:gravity="center"
         android:orientation="horizontal"
         android:padding="4dp">
@@ -26,7 +25,6 @@
             android:id="@+id/btn_day"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:background="@drawable/bg_bookshelf_tag_item"
             android:layout_weight="1"
             android:gravity="center"
             android:text="@string/theme_day"
@@ -36,7 +34,6 @@
             android:id="@+id/btn_night"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:background="@drawable/bg_bookshelf_tag_item"
             android:layout_weight="1"
             android:gravity="center"
             android:text="@string/theme_night"
