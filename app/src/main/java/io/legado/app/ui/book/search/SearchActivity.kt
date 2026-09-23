@@ -47,7 +47,7 @@ import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.secondaryTextColor
-import io.legado.app.lib.theme.themeMutedColorOrDefault
+import io.legado.app.lib.theme.themeTabBackgroundColorOrDefault
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.SearchBookOpenHelper
@@ -523,7 +523,9 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
         val bgColor = if (selected) {
             ColorUtils.adjustAlpha(accentColor, if (AppConfig.isNightTheme) 0.28f else 0.16f)
         } else {
-            themeMutedColorOrDefault()
+            // R28/D1（2026-09-23）：未选中底改取 chip 面 token tabBackgroundColor（原取 mutedColor，
+            // 与 Compose 侧 AppFilterChip、规范三方口径不一致），与同语义双栈实现保持同 token。
+            themeTabBackgroundColorOrDefault()
         }
         val strokeColor = if (selected) {
             accentColor

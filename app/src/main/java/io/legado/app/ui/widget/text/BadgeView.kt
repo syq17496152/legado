@@ -15,8 +15,8 @@ import android.widget.FrameLayout.LayoutParams
 import androidx.appcompat.widget.AppCompatTextView
 import io.legado.app.R
 import io.legado.app.lib.theme.accentColor
+import io.legado.app.lib.theme.themeTabBackgroundColorOrDefault
 import io.legado.app.utils.ColorUtils
-import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.invisible
 import io.legado.app.utils.visible
 
@@ -125,13 +125,9 @@ class BadgeView @JvmOverloads constructor(
         val bgDrawable = ShapeDrawable(roundRect)
         bgDrawable.paint.color = badgeColor
         background = bgDrawable
-        setTextColor(
-            if (ColorUtils.isColorLight(badgeColor)) {
-                Color.BLACK
-            } else {
-                Color.WHITE
-            }
-        )
+        // R31 单源（2026-09-23）：角标字色走 contrastOnColor（与 Compose 侧 contrastOn、标签栏同真值），
+        // 不再自建黑白兜底（改造前为三套并存之一）。
+        setTextColor(ColorUtils.contrastOnColor(badgeColor))
     }
 
     /**
@@ -154,7 +150,9 @@ class BadgeView @JvmOverloads constructor(
         if (highlight) {
             setBackgroundColor(context.accentColor)
         } else {
-            setBackgroundColor(context.getCompatColor(R.color.darker_gray))
+            // R28/A3（2026-09-23）：未高亮角标底改取 chip 面 token tabBackgroundColor
+            // （原取静态灰阶资源色，仅日夜两态、换主题色/主题包无效）。
+            setBackgroundColor(context.themeTabBackgroundColorOrDefault())
         }
     }
 

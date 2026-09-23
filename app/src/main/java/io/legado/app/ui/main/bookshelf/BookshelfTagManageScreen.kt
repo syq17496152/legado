@@ -49,6 +49,7 @@ import io.legado.app.R
 import io.legado.app.data.dao.BookTagInfo
 import io.legado.app.help.book.BookTagHelper
 import io.legado.app.help.book.BookTagManagement
+import io.legado.app.lib.theme.rememberThemeUiPalette
 import io.legado.app.ui.widget.compose.AppListSpacing
 import io.legado.app.ui.widget.compose.AppManagementAction
 import io.legado.app.ui.widget.compose.AppManagementCard
@@ -204,6 +205,9 @@ private fun GroupSelector(
     palette: AppManagementPalette,
     onSelect: (Long) -> Unit
 ) {
+    // R28/D2（2026-09-23）：chip 底改取面 token tabBackgroundColor（原取 settings.row，属面 token
+    // 越界），与 TagChip / AppFilterChip（Compose）及 XML 侧同语义 chip 统一口径。
+    val themeUi = rememberThemeUiPalette()
     LazyRow(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
@@ -217,7 +221,7 @@ private fun GroupSelector(
                 color = if (selected) {
                     palette.settings.accent.copy(alpha = 0.16f)
                 } else {
-                    Color(palette.settings.row)
+                    Color(themeUi.tabBackgroundColor)
                 },
                 contentColor = if (selected) palette.settings.accent else palette.settings.primaryText
             ) {
