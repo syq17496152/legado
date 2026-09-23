@@ -14,11 +14,11 @@ APK 一键发布编排器：版本确认 → 双包构建 → 校验强化 → g
     Stage1 版本确认   --version 显式传入，否则按公式 bump（3.yyMMddHH 型 6 位，
                       与 build.gradle releaseTime() 及 version_pattern 同构）
     Stage2 双包构建   依次 subprocess 调 build-legado.bat（test/release，
-                      显式版本第 3 参保证同版本），每包后 bat 内嵌 daemon 清场
+                      显式版本第 2 参保证同版本），每包后 bat 内嵌 daemon 清场
     Stage3 校验强化   双包齐全 / Cronet 动态下载双门禁 / apksigner 验签 / 包名版本一致性 /
                       updateLog 当日条目——致命项 fail-fast exit
     gh release gh CLI 上传双包（test 包带 _debug 后缀命名防同名冲突）；
-                      gitee 走原 requests 层
+                      gitee 走原 requests 层（2026-09-23 用户裁决：默认仅 github，gitee 暂忽略）
     Stage5 git tag    tag=版本号，push 前人工确认，形成版本回滚锚点
 
 设计文档: docs/specs/build-release-automation/design.md（AD-01~AD-07）
@@ -113,8 +113,8 @@ def parse_args():
         description="APK 一键发布编排器（版本确认→双包构建→校验强化→gh release→git tag）")
     parser.add_argument("--version", help="指定版本号（如 3.26.083020），缺省时按公式 bump")
     parser.add_argument("--dry-run", action="store_true", help="全流程模拟预览，无任何副作用")
-    parser.add_argument("--platform", choices=["gitee", "github", "both"], default="both",
-                        help="发布平台（默认 both）")
+    parser.add_argument("--platform", choices=["gitee", "github", "both"], default="github",
+                        help="发布平台（默认 github；2026-09-23 用户裁决：App 内置 GitHub 加速通道，Gitee 暂忽略）")
     parser.add_argument("--config", help=f"配置文件路径（默认 {DEFAULT_CONFIG}）")
     parser.add_argument("--confirm-stage", action="append", choices=["build", "tag"], default=[],
                         metavar="STAGE",
@@ -649,7 +649,7 @@ def stage1_confirm_version(args, config: dict) -> str:
 
 # === Stage 2: 双包构建 ===
 
-def stage2_build_three(version: str, dry_run: bool) -> Dict[str, Path]:
+def stage2_build_two(version: str, dry_run: bool) -> Dict[str, Path]:
     """Stage2 双包构建（R1/R8）：subprocess 调 build-legado.bat，解析 [ARTIFACT] 行。
 
     - 显式版本第 2 参保证双包同版本
@@ -1128,7 +1128,7 @@ def main():
 
     # Stage2 双包构建（非复用模式）
     if not args.skip_build:
-        stage2_build_three(version, args.dry_run)
+        stage2_build_two(version, args.dry_run)
 
     # Stage3 校验强化（含更新日志区间门禁 fail-fast）
     apks, body = stage3_verify(config, version, args.dry_run,

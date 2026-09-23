@@ -6,7 +6,7 @@ setlocal
 ::                      [--platform gitee^|github^|both]
 ::                      [--confirm-stage build|tag] [--l2-evidence <path>]
 ::
-::  Five stages: version confirm -> 3 APK build -> verify fail-fast
+::  Five stages: version confirm -> 2 APK build -> verify fail-fast
 ::               -> gh release -> git tag
 ::  Confirm points: before build / L2 device gate (default N) / tag push
 ::  Detail: docs/project-rules/apk-publish-workflow.md
