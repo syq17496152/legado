@@ -1,17 +1,15 @@
 package io.legado.app.ui.rss.search
 
 import android.os.Bundle
-import android.view.ViewGroup
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
 import io.legado.app.base.composeShell
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
@@ -67,33 +65,25 @@ class RssArticleInfoActivity : BaseActivity<ViewBinding>() {
     }
 
     private fun initComposeContent() {
-        val container = binding.root as? ViewGroup ?: return
-        val cv = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setContent {
-                LegadoTheme {
-                    RssArticleInfoScreen(
-                        title = titleText,
-                        pubDate = pubDateText,
-                        typeText = typeText,
-                        sourceCountText = sourceCountText,
-                        description = descriptionText,
-                        coverUrl = coverUrl,
-                        coverSourceOrigin = coverSourceOrigin,
-                        sources = sourceItems,
-                        selectedOrigin = selectedOriginState,
-                        onSourceClick = ::onSourceClick,
-                        onRead = ::onReadClick,
-                        onBack = { finish() }
-                    )
-                }
+        // CA′ 1.2（B→A 归一）：改走 attachComposeContent 单源，不再手写 ComposeView + setContent
+        binding.root.attachComposeContent {
+            LegadoTheme {
+                RssArticleInfoScreen(
+                    title = titleText,
+                    pubDate = pubDateText,
+                    typeText = typeText,
+                    sourceCountText = sourceCountText,
+                    description = descriptionText,
+                    coverUrl = coverUrl,
+                    coverSourceOrigin = coverSourceOrigin,
+                    sources = sourceItems,
+                    selectedOrigin = selectedOriginState,
+                    onSourceClick = ::onSourceClick,
+                    onRead = ::onReadClick,
+                    onBack = { finish() }
+                )
             }
         }
-        container.addView(cv)
     }
 
     /**

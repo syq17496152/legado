@@ -628,10 +628,10 @@
     <string name="show_unread">Hiển thị cờ chưa đọc</string>
     <string name="use_default_cover">Luôn hiển thị bìa mặc định</string>
     <string name="use_default_cover_s">Luôn hiển thị bìa mặc định, không hiển thị bìa từ mạng</string>
-    <string name="search_src">Tìm kiếm mã nguồn</string>
-    <string name="boo_src">Mã nguồn sách</string>
-    <string name="toc_src">Mã nguồn chương</string>
-    <string name="content_src">Mã nguồn nội dung</string>
+
+
+
+
     <string name="title_font_size">Cỡ chữ</string>
     <string name="title_margin_top">Lề trên</string>
     <string name="title_margin_bottom">Lề dưới</string>
@@ -949,7 +949,7 @@
     <string name="enable_manga_horizontal_scroll">Cuộn ngang</string>
     <string name="manga_color_filter">Bộ lọc</string>
     <string name="hide_manga_title">Ẩn tiêu đề danh sách manga</string>
-    <string name="refresh_explore">Làm mới khám phá</string>
+
     <string name="padding_display_cutouts">Đệm các phần cắt hiển thị</string>
     <string name="manga_epaper">Màn hình mực</string>
     <string name="manga_epaper_stting">Cài đặt màn hình mực</string>

@@ -615,10 +615,10 @@
     <string name="system_tts">系統TTS</string>
     <string name="export_type">匯出格式</string>
     <string name="checkAuthor">校驗作者</string>
-    <string name="search_src">搜尋原始碼</string>
-    <string name="boo_src">書籍原始碼</string>
-    <string name="toc_src">目錄原始碼</string>
-    <string name="content_src">正文原始碼</string>
+
+
+
+
     <string name="url_already">此url已訂閱</string>
     <string name="high_brush_title">高刷</string>
     <string name="high_brush_summary">使用螢幕最高更新率</string>
@@ -950,7 +950,7 @@
     <string name="enable_manga_horizontal_scroll">水平滚动</string>
     <string name="manga_color_filter">滤镜</string>
     <string name="hide_manga_title">隐藏漫画列表标题</string>
-    <string name="refresh_explore">刷新发现</string>
+
     <string name="padding_display_cutouts">填充刘海区域</string>
     <string name="read_aloud_pause_resume">朗讀暫停/繼續</string>
     <string name="manga_epaper">墨水屏</string>

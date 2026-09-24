@@ -4,16 +4,14 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
 import io.legado.app.base.composeShell
 import io.legado.app.constant.EventBus
 import io.legado.app.help.config.AppConfig
@@ -68,65 +66,56 @@ class AiImageProviderEditActivity : BaseActivity<ViewBinding>() {
 
     private fun initComposeContent() {
         // subpage-topbar-unify 3.3：XML 残留 TitleBar 已删，Compose 全权接管顶栏+内容
-        val container = binding.root as? ViewGroup ?: return
-        container.removeAllViews()
-        val cv = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
+        // CA′ 1.2（B→A 归一）：改走 attachComposeContent 单源，不再手写 ComposeView + setContent
+        binding.root.attachComposeContent {
+            val isOpenAi = providerType == AiImageProviderConfig.TYPE_OPENAI
+            AiImageProviderEditScreen(
+                name = nameText,
+                onNameChange = { nameText = it },
+                baseUrl = baseUrlText,
+                onBaseUrlChange = { baseUrlText = it },
+                apiKey = apiKeyText,
+                onApiKeyChange = { apiKeyText = it },
+                model = modelText,
+                onModelChange = { modelText = it },
+                headers = headersText,
+                onHeadersChange = { headersText = it },
+                timeout = timeoutText,
+                onTimeoutChange = { timeoutText = it },
+                enabled = enabledState,
+                onEnabledChange = { enabledState = it },
+                providerType = providerType,
+                isOpenAi = isOpenAi,
+                onTypeClick = { selectType() },
+                stylePromptSummary = "${getString(R.string.ai_image_style_prompt)}: ${summary(stylePromptText)}",
+                onStylePromptClick = {
+                    openCodeEditor(
+                        Field.STYLE_PROMPT,
+                        getString(R.string.ai_image_style_prompt),
+                        stylePromptText,
+                        "text.html.markdown"
+                    )
+                },
+                paramsSummary = "${getString(R.string.ai_image_params)}: ${summary(paramsText.ifBlank { defaultParams() })}",
+                onParamsClick = {
+                    openCodeEditor(
+                        Field.PARAMS,
+                        getString(R.string.ai_image_params),
+                        paramsText.ifBlank { defaultParams() }
+                    )
+                },
+                scriptSummary = "${getString(R.string.ai_image_script)}: ${summary(scriptText)}",
+                onScriptClick = {
+                    openCodeEditor(Field.SCRIPT, getString(R.string.ai_image_script), scriptText)
+                },
+                jsLibSummary = "jsLib: ${summary(jsLibText)}",
+                onJsLibClick = {
+                    openCodeEditor(Field.JS_LIB, "jsLib", jsLibText)
+                },
+                onSave = { save() },
+                onBack = { finish() }
             )
-            setContent {
-                val isOpenAi = providerType == AiImageProviderConfig.TYPE_OPENAI
-                AiImageProviderEditScreen(
-                    name = nameText,
-                    onNameChange = { nameText = it },
-                    baseUrl = baseUrlText,
-                    onBaseUrlChange = { baseUrlText = it },
-                    apiKey = apiKeyText,
-                    onApiKeyChange = { apiKeyText = it },
-                    model = modelText,
-                    onModelChange = { modelText = it },
-                    headers = headersText,
-                    onHeadersChange = { headersText = it },
-                    timeout = timeoutText,
-                    onTimeoutChange = { timeoutText = it },
-                    enabled = enabledState,
-                    onEnabledChange = { enabledState = it },
-                    providerType = providerType,
-                    isOpenAi = isOpenAi,
-                    onTypeClick = { selectType() },
-                    stylePromptSummary = "${getString(R.string.ai_image_style_prompt)}: ${summary(stylePromptText)}",
-                    onStylePromptClick = {
-                        openCodeEditor(
-                            Field.STYLE_PROMPT,
-                            getString(R.string.ai_image_style_prompt),
-                            stylePromptText,
-                            "text.html.markdown"
-                        )
-                    },
-                    paramsSummary = "${getString(R.string.ai_image_params)}: ${summary(paramsText.ifBlank { defaultParams() })}",
-                    onParamsClick = {
-                        openCodeEditor(
-                            Field.PARAMS,
-                            getString(R.string.ai_image_params),
-                            paramsText.ifBlank { defaultParams() }
-                        )
-                    },
-                    scriptSummary = "${getString(R.string.ai_image_script)}: ${summary(scriptText)}",
-                    onScriptClick = {
-                        openCodeEditor(Field.SCRIPT, getString(R.string.ai_image_script), scriptText)
-                    },
-                    jsLibSummary = "jsLib: ${summary(jsLibText)}",
-                    onJsLibClick = {
-                        openCodeEditor(Field.JS_LIB, "jsLib", jsLibText)
-                    },
-                    onSave = { save() },
-                    onBack = { finish() }
-                )
-            }
         }
-        container.addView(cv)
     }
 
     private fun bind(provider: AiImageProviderConfig?) {

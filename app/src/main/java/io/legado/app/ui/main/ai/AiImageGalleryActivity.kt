@@ -1,17 +1,15 @@
 package io.legado.app.ui.main.ai
 
 import android.os.Bundle
-import android.view.ViewGroup
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
 import io.legado.app.base.composeShell
 import io.legado.app.data.entities.AiGeneratedImage
 import io.legado.app.data.entities.AiImageGroup
@@ -60,38 +58,30 @@ class AiImageGalleryActivity : BaseActivity<ViewBinding>() {
     }
 
     private fun initComposeContent() {
-        val container = binding.root as? ViewGroup ?: return
-        val cv = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setContent {
-                LegadoTheme {
-                    AiImageGalleryScreen(
-                        chips = buildChips(),
-                        images = imagesState,
-                        selectedIds = selectedIds.value,
-                        searchQuery = searchQueryState,
-                        onSearchChange = { query ->
-                            searchQueryState = query
-                            reload()
-                        },
-                        pageTitle = fixedTitle.ifBlank { getString(R.string.ai_image_gallery) },
-                        onChipClick = ::onChipClick,
-                        onImageClick = ::onImageClick,
-                        onImageLongClick = ::toggleSelection,
-                        onSelectAll = ::selectAllVisibleImages,
-                        onBatchGroup = ::showBatchGroupDialog,
-                        onBatchDelete = ::confirmBatchDelete,
-                        onBatchCancel = ::clearSelection,
-                        onBack = { finish() }
-                    )
-                }
+        // CA′ 1.2（B→A 归一）：改走 attachComposeContent 单源，不再手写 ComposeView + setContent
+        binding.root.attachComposeContent {
+            LegadoTheme {
+                AiImageGalleryScreen(
+                    chips = buildChips(),
+                    images = imagesState,
+                    selectedIds = selectedIds.value,
+                    searchQuery = searchQueryState,
+                    onSearchChange = { query ->
+                        searchQueryState = query
+                        reload()
+                    },
+                    pageTitle = fixedTitle.ifBlank { getString(R.string.ai_image_gallery) },
+                    onChipClick = ::onChipClick,
+                    onImageClick = ::onImageClick,
+                    onImageLongClick = ::toggleSelection,
+                    onSelectAll = ::selectAllVisibleImages,
+                    onBatchGroup = ::showBatchGroupDialog,
+                    onBatchDelete = ::confirmBatchDelete,
+                    onBatchCancel = ::clearSelection,
+                    onBack = { finish() }
+                )
             }
         }
-        container.addView(cv)
     }
 
     override fun onResume() {
