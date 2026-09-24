@@ -1343,6 +1343,7 @@
     <string name="download_pause">暂停</string>
     <string name="download_resume">继续</string>
     <string name="download_empty">暂无下载任务</string>
+    <string name="download_tab_empty">该分类下暂无任务</string>
     <string name="download_speed">%1$s/s</string>
     <string name="download_started">开始下载</string>
     <string name="download_already_in_list">已在下载列表中</string>

@@ -59,6 +59,8 @@ class DownloadManageActivity : BaseActivity<ViewBinding>() {
     // Compose 桥接状态
     private var composeItems by mutableStateOf(listOf<DownloadDisplayItem>())
     private var tabIndex by mutableStateOf(0)
+    // CP-2：未过滤全量任务缓存（点 Tab 时无需等下一次 StateFlow 发射即可重算）
+    private var rawTasks: List<DownloadTask> = emptyList()
     private var isLoading by mutableStateOf(true)
     private var onlyWifi by mutableStateOf(false)
     // D6：目录状态化（原实现每次重组重读 Pref+构造 File）
@@ -86,6 +88,7 @@ class DownloadManageActivity : BaseActivity<ViewBinding>() {
             LegadoTheme {
                 DownloadManageScreen(
                     items = composeItems,
+                    totalTaskCount = rawTasks.size,
                     tabIndex = tabIndex,
                     isLoading = isLoading,
                     onlyWifi = onlyWifi,
@@ -95,6 +98,8 @@ class DownloadManageActivity : BaseActivity<ViewBinding>() {
                     },
                     onTabChange = { index ->
                         tabIndex = index
+                        // CP-2：点 Tab 必须立即重算（改造前只写 tabIndex ⇒ 无任务发射时不生效）
+                        renderItems()
                     },
                     onPauseTask = { pauseTask(it) },
                     onResumeTask = { resumeTask(it) },
@@ -118,7 +123,8 @@ class DownloadManageActivity : BaseActivity<ViewBinding>() {
                 calibrateTasks()
                 isLoading = false
                 DownloadState.tasks.collect { tasks ->
-                    composeItems = filterTasks(tasks.values.toList()).map { it.toDisplayItem() }
+                    rawTasks = tasks.values.toList()
+                    renderItems()
                 }
             }
         }
@@ -147,18 +153,12 @@ class DownloadManageActivity : BaseActivity<ViewBinding>() {
         errorCode = errorCode
     )
 
-    /** C6：Tab 过滤基于单源枚举 DownloadTab */
-    private fun filterTasks(tasks: List<DownloadTask>): List<DownloadTask> {
-        return when (DownloadTab.entries.getOrNull(tabIndex)) {
-            DownloadTab.ALL -> tasks
-            DownloadTab.RUNNING -> tasks.filter {
-                it.status == DownloadStatus.RUNNING || it.status == DownloadStatus.WAITING
-            }
-            DownloadTab.PAUSED -> tasks.filter { it.status == DownloadStatus.PAUSED }
-            DownloadTab.COMPLETED -> tasks.filter { it.status == DownloadStatus.COMPLETED }
-            DownloadTab.FAILED -> tasks.filter { it.status == DownloadStatus.FAILED }
-            null -> tasks
-        }.sortedByDescending { it.startTime }
+    /**
+     * CP-2：按当前 Tab 重算展示项（双路径调用 —— ① [initData] 的状态发射 ② 用户点 Tab）。
+     * 过滤口径收口到纯函数 [DownloadFilter.apply]，便于单测覆盖。
+     */
+    private fun renderItems() {
+        composeItems = DownloadFilter.apply(rawTasks, tabIndex).map { it.toDisplayItem() }
     }
 
     /** 删除任务并清理文件 */

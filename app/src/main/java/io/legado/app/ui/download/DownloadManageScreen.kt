@@ -98,6 +98,8 @@ data class DownloadDisplayItem(
 @Composable
 fun DownloadManageScreen(
     items: List<DownloadDisplayItem>,
+    /** CP-2：未过滤的全量任务数（用于区分「全空」与「该 Tab 筛后空」两种空态语义） */
+    totalTaskCount: Int,
     tabIndex: Int,
     isLoading: Boolean,
     onlyWifi: Boolean,
@@ -227,8 +229,10 @@ fun DownloadManageScreen(
             )
 
             when {
-                isLoading && items.isEmpty() -> ShelfListSkeleton(compact = true)
-                items.isEmpty() -> EmptyStatePlaceholder(
+                // 首次进入且尚无任何任务记录：骨架屏
+                isLoading && totalTaskCount == 0 -> ShelfListSkeleton(compact = true)
+                // 全空（无任何任务记录）：整页空态
+                totalTaskCount == 0 -> EmptyStatePlaceholder(
                     icon = Icons.Default.Download,
                     title = stringResource(R.string.download_empty),
                     modifier = Modifier.fillMaxSize()
@@ -252,12 +256,24 @@ fun DownloadManageScreen(
                             )
                         }
                     }
-                    VerticalScrollbar(
-                        listState = listState,
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .fillMaxSize()
-                    )
+                    if (items.isEmpty()) {
+                        // CP-2：该 Tab 筛后为空 —— 保留列表容器、仅叠加区分文案。
+                        // 改造前此处整页替换为空态，用户上滑/切 Tab 时感知为「列表收缩消失」。
+                        EmptyStatePlaceholder(
+                            icon = Icons.Default.Download,
+                            title = stringResource(R.string.download_tab_empty),
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .fillMaxSize()
+                        )
+                    } else {
+                        VerticalScrollbar(
+                            listState = listState,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxSize()
+                        )
+                    }
                 }
             }
         }
