@@ -301,7 +301,8 @@ def list_git_tags() -> List[str]:
     """读取本地 git tag 列表（失败返回空列表，由调用方 fail-fast 提示传 --from-version）"""
     try:
         proc = subprocess.run(["git", "tag"], cwd=str(PROJECT_ROOT),
-                              capture_output=True, text=True, timeout=30, errors="ignore")
+                              capture_output=True, text=True, timeout=30,
+                              encoding="utf-8", errors="replace")
         if proc.returncode != 0:
             return []
         return [t.strip() for t in proc.stdout.splitlines() if t.strip()]
@@ -742,7 +743,7 @@ def run_tool(tool: Path, tool_args: List[str]) -> Tuple[bool, str]:
     """执行 SDK 工具，返回 (成功, 合并输出)"""
     try:
         proc = subprocess.run([str(tool)] + tool_args, capture_output=True,
-                              text=True, errors="replace", timeout=300)
+                              text=True, encoding="utf-8", errors="replace", timeout=300)
         return proc.returncode == 0, (proc.stdout or "") + (proc.stderr or "")
     except subprocess.TimeoutExpired:
         return False, "tool timeout (300s)"
@@ -838,6 +839,8 @@ def stage3_verify(config: dict, version: str, dry_run: bool,
 
     # 致命项 6：主题一致性门禁（门禁 16 取色 token / 门禁 17 宿主刷新覆盖）
     stage3_theme_gates()
+    # 致命项 7（H2.2）：**交付门禁**（run_gates --stage deliver）—— 交付/归档前的最终闸门
+    stage3b_deliver_gates()
 
     return apks, body
 
@@ -863,6 +866,75 @@ def _last_release_tag() -> str:
         return "HEAD~1"
 
 
+def _run_gate_runner(stage: str, base: str, fatal_label: str) -> None:
+    """统一调用门禁 runner（H2.2/H2.4）：fail-fast + GATE_NESTED 传递。
+
+    · `--exclude G-06 G-09`：G-06 的 cmd 是本机不存在的 `git hook pre-push`（必红），
+      G-09 是发布链路自身（防自调）；
+    · `--base-ref <最近 release tag>`：取色门禁语义 = 比对本次发布引入的变更；
+    · GATE_NESTED：若本进程已在门禁链内（由 runner 派生），子 runner 会按哨兵自行跳过。
+    """
+    runner = PROJECT_ROOT / "ai_tests" / "scripts" / "run_gates.py"
+    if not runner.is_file():
+        log("VERIFY", f"门禁 runner 缺失（{runner}）—— 本地工作区不完整", "ERROR")
+        sys.exit(1)
+    cmd = [sys.executable, str(runner), "--stage", stage,
+           "--exclude", "G-06", "G-09", "--base-ref", base]
+    if os.environ.get("GATE_NESTED") == "1":
+        log("VERIFY", "检测到门禁链内调用（GATE_NESTED=1）⇒ 子 runner 将按哨兵跳过（防递归）")
+    try:
+        out = subprocess.run(cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True,
+                             encoding="utf-8", errors="replace")
+    except OSError as exc:  # noqa: BLE001
+        log("VERIFY", f"门禁 runner 执行失败: {exc}", "ERROR")
+        sys.exit(1)
+    if out.returncode != 0:
+        log("VERIFY", f"{fatal_label}未通过（exit {out.returncode}，基准 {base}）", "ERROR")
+        for line in (out.stdout or "").strip().splitlines()[-12:]:
+            log("VERIFY", f"  | {line}")
+        sys.exit(1)
+    log("VERIFY", f"{fatal_label}全部通过（runner --stage {stage}，基准 {base}）")
+
+
+def _legacy_direct_theme_gates(base: str) -> None:
+    """H2.3 回退分支（flag 切换）：改造前的**硬编码直调**实现（不经 runner）。
+
+    用途：runner 改造若在真实发版中出现回归，用 `LEGACY_DIRECT_THEME_GATES=1` 一键回到改造前
+    行为（直调 THEME_GATE_SCRIPTS 两个脚本并 fail-fast），而不是只能回滚代码版本
+    ⇒ 保证发布链路永远有一条可用通道（验证标准：切换 flag 后行为与改造前一致）。
+    差异说明：改造前直调用的基准参数为 `--diff`（worktree vs HEAD，提交后恒空 ⇒ 有恒 PASS 陷阱），
+    此处按现行语义传 `--base <最近 release tag>`，更严格；其余 keep-alive 行为一致。
+    """
+    for name, script, need_base in THEME_GATE_SCRIPTS:
+        cmd = [sys.executable, str(PROJECT_ROOT / script)]
+        if need_base:
+            cmd += ["--base", base]
+        try:
+            proc = subprocess.run(cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace")
+        except OSError as exc:  # noqa: BLE001
+            log("VERIFY", f"{name} 直调回退分支执行失败: {exc}", "ERROR")
+            sys.exit(1)
+        if proc.returncode != 0:
+            log("VERIFY", f"{name} 未通过（直调回退分支 exit {proc.returncode}）", "ERROR")
+            for line in (proc.stdout or "").strip().splitlines()[-12:]:
+                log("VERIFY", f"  | {line}")
+            sys.exit(1)
+        log("VERIFY", f"{name} 通过（直调回退分支）")
+
+
+def stage3b_deliver_gates() -> None:
+    """Stage3 附加致命项（H2.2）：**交付门禁** —— `run_gates.py --stage deliver`。
+
+    补齐「挂载点 3 = deliver 无真实调用链路」的缺口（spec REQ-1 Scenario「deliver 阶段有挂载点」：
+    「存在真实调用 `run_gates.py --stage deliver` 的链路」）。deliver 阶段覆盖
+    G-08 全量单测 / G-10 日志 / G-12 迁移 / G-14 死资源 / G-15 元门禁 / G-17 漂移 / G-19 独立抽查
+    （G-06/G-09 不属该阶段）。语义 = 「交付产物/归档前」的最终闸门，与 publish 阶段分工：
+    publish 管「发布动作相关」，deliver 管「产物本身够不够交付标准」。
+    """
+    _run_gate_runner("deliver", _last_release_tag(), "交付阶段门禁")
+
+
 def stage3_theme_gates() -> None:
     """Stage3 附加致命项：主题一致性门禁（门禁 16/17）—— 发布链路 fail-fast。
 
@@ -876,33 +948,16 @@ def stage3_theme_gates() -> None:
     ⇒ 远端无脚本可跑。三处接线点 = ① pre-commit hook ② Trae Hook ③ 本处（发布链路）。
     """
     base = _last_release_tag()
+    # H2.3：回退开关 —— 需要回到「改造前硬编码直调」时置 1（防发版链路回归）
+    if os.environ.get("LEGACY_DIRECT_THEME_GATES") == "1":
+        log("VERIFY", "LEGACY_DIRECT_THEME_GATES=1 ⇒ 走改造前硬编码直调回退分支（不经 runner）")
+        _legacy_direct_theme_gates(base)
+        return
     # 2026-09-24（门禁包 H2）：由「硬编码直调门禁 16/17 脚本」改为**统一走 runner**，
     # 兑现「新增门禁只改注册表、挂载点自动生效」的承诺（原实现绕过注册表，是设计承诺的偏离）。
-    # ⚠ 必须 --exclude G-06 G-09：
-    #   - G-06 的 cmd 是 `git hook pre-push` —— 本机 git 无该子命令 ⇒ exit 129 ⇒ 发布必红；
-    #     其语义本就是「由 git 自动调用、不纳入 runner」；
-    #   - G-09 是发布链路自身，排除以防自调递归（防御性，成本极低）。
-    # ⚠ 必须 --base-ref <最近 release tag>：取色门禁的语义是「比对本次发布实际引入的变更」，
-    #   若用默认 HEAD 会在提交后 diff 恒空 ⇒ 退化为恒 PASS（本项目历史实证陷阱）。
+    # ⚠ 必须 --exclude G-06 G-09 与 --base-ref（理由见 _run_gate_runner 文档串）。
     # ⚠ 前置（GB-7）：注册表 G-02/G-03 的 stages 必须含 publish，否则本阶段不再覆盖取色门禁。
-    runner = PROJECT_ROOT / "ai_tests" / "scripts" / "run_gates.py"
-    if not runner.is_file():
-        log("VERIFY", f"门禁 runner 缺失（{runner}）—— 本地工作区不完整", "ERROR")
-        sys.exit(1)
-    cmd = [sys.executable, str(runner), "--stage", "publish",
-           "--exclude", "G-06", "G-09", "--base-ref", base]
-    try:
-        out = subprocess.run(cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True,
-                             encoding="utf-8", errors="replace")
-    except OSError as exc:  # noqa: BLE001
-        log("VERIFY", f"门禁 runner 执行失败: {exc}", "ERROR")
-        sys.exit(1)
-    if out.returncode != 0:
-        log("VERIFY", f"发布阶段门禁未通过（exit {out.returncode}，基准 {base}）", "ERROR")
-        for line in (out.stdout or "").strip().splitlines()[-12:]:
-            log("VERIFY", f"  | {line}")
-        sys.exit(1)
-    log("VERIFY", f"发布阶段门禁全部通过（runner --stage publish，基准 {base}）")
+    _run_gate_runner("publish", base, "发布阶段门禁")
 
 
 # === L2 真机门禁（不可跳过，AD-05/AD-07）===
@@ -1046,7 +1101,7 @@ def gh_run(gh_args: List[str], env: dict, stage: str) -> Optional[subprocess.Com
     for attempt in range(1, 4):
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True,
-                                  errors="replace", env=env, timeout=1800)
+                                  encoding="utf-8", errors="replace", env=env, timeout=1800)
         except subprocess.TimeoutExpired:
             log(stage, f"gh 调用超时（尝试 {attempt}/3）", "WARN")
             time.sleep(2 ** attempt)
@@ -1143,7 +1198,7 @@ def stage5_git_tag(version: str, confirmed_stages: List[str], dry_run: bool) -> 
         log("TAG", f"[dry-run] 将执行: git tag {tag} && git push origin {tag}")
         return
     proc = subprocess.run(["git", "tag", tag], capture_output=True, text=True,
-                          cwd=str(PROJECT_ROOT), errors="replace")
+                          cwd=str(PROJECT_ROOT), encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         if "already exists" in (proc.stderr or ""):
             log("TAG", f"tag {tag} 已存在，复用（幂等）")
@@ -1151,7 +1206,7 @@ def stage5_git_tag(version: str, confirmed_stages: List[str], dry_run: bool) -> 
             log("TAG", f"创建 tag 失败: {proc.stderr}", "ERROR")
             sys.exit(1)
     proc = subprocess.run(["git", "push", "origin", tag], capture_output=True, text=True,
-                          cwd=str(PROJECT_ROOT), errors="replace")
+                          cwd=str(PROJECT_ROOT), encoding="utf-8", errors="replace")
     if proc.returncode != 0:
         log("TAG", f"push tag 失败: {proc.stderr}", "ERROR")
         sys.exit(1)
