@@ -1,13 +1,16 @@
 package io.legado.app.ui.browser
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
@@ -15,11 +18,17 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.addCallback
 import androidx.activity.viewModels
-import androidx.core.view.size
-import io.legado.app.R
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -34,15 +43,25 @@ import androidx.compose.material.icons.outlined.Web
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.size
+import androidx.viewbinding.ViewBinding
+import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppConst.imagePathKey
-import io.legado.app.databinding.ActivityWebViewBinding
 import io.legado.app.help.source.SourceVerificationHelp
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.anima.RefreshProgressBar
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
@@ -59,8 +78,7 @@ import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.utils.ACache
 import io.legado.app.utils.ColorUtils
-import io.legado.app.utils.gone
-import io.legado.app.utils.invisible
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.keepScreenOn
 import io.legado.app.utils.longSnackbar
 import io.legado.app.utils.openUrl
@@ -68,8 +86,6 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.snackbar
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toggleSystemBar
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
 import android.webkit.JavascriptInterface
 import android.webkit.URLUtil
 import io.legado.app.constant.AppLog
@@ -92,7 +108,7 @@ import androidx.core.graphics.createBitmap
 import io.legado.app.help.WebCacheManager
 import io.legado.app.help.webView.WebJsExtensions.Companion.nameCache
 
-class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
+class WebViewActivity : VMBaseActivity<ViewBinding, WebViewModel>() {
     companion object {
         // 是否输出日志
         var sessionShowWebLog = false
@@ -110,7 +126,10 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     private lateinit var pooledWebView: PooledWebView
     private lateinit var currentWebView: WebView
 
-    override val binding by viewBinding(ActivityWebViewBinding::inflate)
+    // CE 5.2（compose 包）：原 activity_web_view.xml 已退役 ⇒ 改 composeShell 工厂创建合成壳，
+    // Compose 全权接管页面骨架；**四个 View 内核一律 AndroidView 原样托管**（WebView 容器 /
+    // 通知条 / 进度条 / 自定义全屏容器）。
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<WebViewModel>()
     private var customWebViewCallback: WebChromeClient.CustomViewCallback? = null
     private var webPic: String? = null
@@ -131,6 +150,17 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     private var verificationMode = false
     // F214：上次返回键按下时刻（栈顶二次确认窗口）
     private var lastBackPressedTime = 0L
+
+    // ---- CE 5.2：原 XML 的 View 机制改由 Compose 状态 + 程序化 View 驱动（逐一与原节点等价）----
+    //  · webProgress        ← progress_bar 的 setDurProgress + gone(progress==100)
+    //  · customFullscreen   ← ll_view 的 invisible()/visible()（网页自定义全屏期间收起页面骨架）
+    private var webProgress by mutableIntStateOf(0)
+    private var customFullscreen by mutableStateOf(false)
+    // 程序化创建的原 XML 节点（组合挂载时创建，由这些字段持有页面级引用）
+    private var noticeBarView: LinearLayout? = null
+    private var noticeTextView: TextView? = null
+    private var noticeCloseView: ImageView? = null
+    private var customWebViewContainer: FrameLayout? = null
     private val saveImage = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
             ACache.get().put(imagePathKey, uri.toString())
@@ -145,7 +175,8 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         pooledWebView = WebViewPool.acquire(this)
         currentWebView = pooledWebView.realWebView
-        binding.webViewContainer.addView(currentWebView)
+        // CE 5.2：原 `binding.webViewContainer.addView(currentWebView)` 改由组合内 AndroidView
+        // 的 factory 完成（见 initComposeContent），避免在组合挂载前依赖 binding 子视图
         currentWebView.post {
             currentWebView.clearHistory()
         }
@@ -161,8 +192,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         } else {
             initVerificationGuide()
         }
-        initComposeTopBar()
-        initNoticeBar()
+        initComposeContent()
         viewModel.initData(intent) {
             val url = viewModel.baseUrl
             val headerMap = viewModel.headerMap
@@ -183,7 +213,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         }
         currentWebView.clearHistory()
         onBackPressedDispatcher.addCallback(this) {
-            if (binding.customWebView.size > 0) { //网页全屏
+            if ((customWebViewContainer?.childCount ?: 0) > 0) { //网页全屏
                 customWebViewCallback?.onCustomViewHidden()
                 return@addCallback
             }
@@ -235,78 +265,169 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         }
     }
 
-    private fun initComposeTopBar() {
-        binding.composeTopBar.setContent {
-            LegadoTheme {
-                GlassTopAppBar(
-                    title = titleState,
-                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                    onNavClick = { finish() },
-                    actions = {
-                        // 常驻快捷按钮：刷新 / 完成
-                        IconButton(onClick = { refresh() }) {
-                            Icon(Icons.Outlined.Refresh, contentDescription = null)
+    /**
+     * CE 5.2：Compose 承载页面骨架（顶栏 + 通知条 + 网页区 + 进度条 + 自定义全屏容器）。
+     *
+     * 与原 XML（`activity_web_view.xml`）的**逐一对应关系**：
+     *  · 根 `FrameLayout` → `composeShell` 合成壳（`binding.root`）
+     *  · `ll_view`(ConstraintLayout) → 顶层 `Column`；`customFullscreen` 时收起顶栏与通知条
+     *    （等价原 `ll_view.invisible()/visible()`）；**网页区容器绝不条件移除**（否则 WebView 被 detach）
+     *  · `compose_top_bar`(ComposeView) → 页内直接渲染 `GlassTopAppBar`（内容逐行不变）
+     *  · `notice_bar`（**F215 明文保持纯 View**）→ `AndroidView` 托管程序化 `LinearLayout`；
+     *    文案与可见性仍走 **View API**（`update` 内切 View 可见性），F215 结论不作废
+     *  · `web_view_container` → `AndroidView` 托管 `FrameLayout`，factory 内 `addView(currentWebView)`
+     *  · `progress_bar`（1dp，网页区顶部悬浮、不占内容布局）→ `AndroidView` 托管 `RefreshProgressBar`
+     *  · `custom_web_view`（网页自定义全屏 overlay）→ `AndroidView` 托管 `FrameLayout`，恒在场、绘于最上层
+     */
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (!customFullscreen) {
+                        // ---- 顶栏（原 compose_top_bar，内容逐行不变）----
+                        LegadoTheme {
+                            GlassTopAppBar(
+                                title = titleState,
+                                subtitle = subtitleState,
+                                navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                                onNavClick = { finish() },
+                                actions = {
+                                    // 常驻快捷按钮：刷新 / 完成
+                                    IconButton(onClick = { refresh() }) {
+                                        Icon(Icons.Outlined.Refresh, contentDescription = null)
+                                    }
+                                    IconButton(onClick = { onClickOk() }) {
+                                        Icon(Icons.Filled.Check, contentDescription = null)
+                                    }
+                                    // 溢出菜单
+                                    Box {
+                                        IconButton(onClick = { menuExpanded = true }) {
+                                            Icon(Icons.Filled.MoreVert, contentDescription = null)
+                                        }
+                                        AppDropdownMenu(
+                                            expanded = menuExpanded,
+                                            onDismiss = { menuExpanded = false },
+                                            actions = buildMenuActions(AppUiTokens.danger)
+                                        )
+                                    }
+                                }
+                            )
                         }
-                        IconButton(onClick = { onClickOk() }) {
-                            Icon(Icons.Filled.Check, contentDescription = null)
+                        // ---- 通知条（原 notice_bar）：状态先在组合作用域读取，update 内落到 View 可见性 ----
+                        val noticeText = when {
+                            challengeChecking -> getString(R.string.source_verification_checking)
+                            guideBarVisible -> getString(R.string.source_verification_guide)
+                            else -> null
                         }
-                        // 溢出菜单
-                        Box {
-                            IconButton(onClick = { menuExpanded = true }) {
-                                Icon(Icons.Filled.MoreVert, contentDescription = null)
+                        val noticeClosable = !challengeChecking
+                        AndroidView(
+                            modifier = Modifier.fillMaxWidth(),
+                            factory = { ctx -> createNoticeBar(ctx) },
+                            update = { applyNoticeBar(noticeText, noticeClosable) }
+                        )
+                    }
+                    // ---- 网页区 + 进度条（原 web_view_container + progress_bar）----
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { ctx ->
+                                FrameLayout(ctx).apply { addView(currentWebView) }
                             }
-                            AppDropdownMenu(
-                                expanded = menuExpanded,
-                                onDismiss = { menuExpanded = false },
-                                actions = buildMenuActions(AppUiTokens.danger)
+                        )
+                        // 原 `gone(progress == 100)` ⇒ 进度 100 时该 1dp 条不再进入组合（同为不占位）
+                        if (webProgress < 100) {
+                            AndroidView(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .fillMaxWidth()
+                                    .height(1.dp),
+                                factory = { ctx ->
+                                    RefreshProgressBar(ctx).apply { fontColor = accentColor }
+                                },
+                                update = { it.setDurProgress(webProgress) }
                             )
                         }
                     }
+                }
+                // ---- 自定义全屏容器（原 custom_web_view，绘制在最上层）----
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx -> FrameLayout(ctx).also { customWebViewContainer = it } }
                 )
             }
         }
     }
 
     /**
-     * F215 顶栏下引导/状态条（**纯 View 实现**）：文案与可见性都走 View API。
-     * 用 Compose 实现时 ComposeView 处于 `gone` 不参与遍历，组合内容与其内的可见性写入在
-     * 「初始即应显示」路径上不可靠（真机多轮实测：挑战期条会出现、初始引导条不出现）；
-     * View 可见性变化本身即可靠触发父容器重排，网页区随之让位。
+     * F215：通知条的程序化等价物（**纯 View 实现，结论保留**）。
+     *
+     * 原 XML 注释已明确：用 Compose 实现时 `ComposeView` 处于 `gone` 不参与遍历，组合内容与其内的
+     * 可见性写入在「初始即应显示」路径上不可靠（真机多轮实测）；View 可见性变化本身即可靠触发
+     * 父容器重排，网页区随之让位。本页换装后仍沿用该机制 ⇒ 文案/可见性一律走 View API。
      */
-    private fun initNoticeBar() {
+    private fun createNoticeBar(context: Context): LinearLayout {
+        val icon = ImageView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(16.dpToPx(), 16.dpToPx())
+            contentDescription = null
+            setImageResource(R.drawable.ic_help)
+        }
+        val label = TextView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+            ).apply { marginStart = 8.dpToPx() }
+            textSize = 12f
+        }
+        val close = ImageView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(28.dpToPx(), 28.dpToPx())
+            val pad = 7.dpToPx()
+            setPadding(pad, pad, pad, pad)
+            contentDescription = getString(R.string.close)
+            setImageResource(R.drawable.ic_close_x)
+            visibility = View.GONE
+        }
         val accent = accentColor
-        binding.noticeBar.setBackgroundColor(
-            ColorUtils.blendColors(this.bottomBackground, accent, 0.12f)
-        )
-        binding.noticeText.setTextColor(this.primaryTextColor)
-        binding.noticeIcon.setColorFilter(accent)
-        binding.noticeClose.setColorFilter(this.secondaryTextColor)
-        binding.noticeClose.setOnClickListener { onNoticeClose() }
-        updateNoticeBar()
+        val bar = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            visibility = View.GONE
+            setPadding(12.dpToPx(), 4.dpToPx(), 4.dpToPx(), 4.dpToPx())
+            setBackgroundColor(ColorUtils.blendColors(this@WebViewActivity.bottomBackground, accent, 0.12f))
+            addView(icon)
+            addView(label)
+            addView(close)
+        }
+        label.setTextColor(this.primaryTextColor)
+        icon.setColorFilter(accent)
+        close.setColorFilter(this.secondaryTextColor)
+        close.setOnClickListener { onNoticeClose() }
+        noticeBarView = bar
+        noticeTextView = label
+        noticeCloseView = close
+        return bar
     }
 
-    private fun updateNoticeBar() {
-        val text = when {
-            challengeChecking -> getString(R.string.source_verification_checking)
-            guideBarVisible -> getString(R.string.source_verification_guide)
-            else -> null
-        }
+    /** F215：把「文案 + 是否可关闭」落到 View 可见性（不改为 Compose 条件组合，见 [createNoticeBar]）。 */
+    private fun applyNoticeBar(text: String?, closable: Boolean) {
+        val bar = noticeBarView ?: return
+        val label = noticeTextView ?: return
+        val close = noticeCloseView ?: return
         if (text == null) {
-            binding.noticeBar.gone()
+            bar.visibility = View.GONE
             return
         }
-        binding.noticeText.text = text
-        if (challengeChecking) {
-            binding.noticeClose.gone()          // 挑战期条不可关闭（瞬态系统状态，给关闭是假选择）
-        } else {
-            binding.noticeClose.visible()
-        }
-        binding.noticeBar.visible()
+        label.text = text
+        // 挑战期条不可关闭（瞬态系统状态，给关闭是假选择）
+        close.visibility = if (closable) View.VISIBLE else View.GONE
+        bar.visibility = View.VISIBLE
     }
 
     private fun onNoticeClose() {
+        // 状态变更触发重组 ⇒ 通知条经 AndroidView 的 update 落下可见性
         guideBarVisible = false
-        updateNoticeBar()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -426,7 +547,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun initWebView(url: String, headerMap: HashMap<String, String>) {
-        binding.progressBar.fontColor = accentColor
+        // CE 5.2：原 `binding.progressBar.fontColor = accentColor` 改在组合内 AndroidView factory 设置
         currentWebView.webChromeClient = CustomWebChromeClient()
         // 添加 JavaScript 接口
         currentWebView.addJavascriptInterface(JSInterface(this), nameBasic)
@@ -583,14 +704,16 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
 
         override fun onProgressChanged(view: WebView?, newProgress: Int) {
             super.onProgressChanged(view, newProgress)
-            binding.progressBar.setDurProgress(newProgress)
-            binding.progressBar.gone(newProgress == 100)
+            // CE 5.2：原 ProgressBar 的 setDurProgress + gone(==100) 改由状态驱动（组合内 update 落地）
+            webProgress = newProgress
         }
 
         override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
             isfullscreen = true
-            binding.llView.invisible()
-            binding.customWebView.addView(view)
+            // 原 `binding.llView.invisible()`：收起页面骨架（顶栏/通知条随组合移除，
+            // 网页区容器保留挂载 ⇒ WebView 不被 detach；自定义视图为不透明全屏、覆盖其上方）
+            customFullscreen = true
+            customWebViewContainer?.addView(view)
             customWebViewCallback = callback
             keepScreenOn(true)
             toggleSystemBar(false)
@@ -598,8 +721,8 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
 
         override fun onHideCustomView() {
             isfullscreen = false
-            binding.customWebView.removeAllViews()
-            binding.llView.visible()
+            customWebViewContainer?.removeAllViews()
+            customFullscreen = false
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             keepScreenOn(false)
             toggleSystemBar(true)
@@ -681,7 +804,8 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
                         // 本次加载已无挑战标记 ⇒ 状态条复位（isCloudflareChallenge 语义保持原样，见 close()）
                         challengeChecking = false
                     }
-                    updateNoticeBar()
+                    // CE 5.2：挑战状态置位即触发重组，通知条由 AndroidView 的 update 落地
+                    // （原显式 `updateNoticeBar()` 调用随之删除）
                     if (it != "true" && isCloudflareChallenge && viewModel.sourceVerificationEnable) {
                         viewModel.saveVerificationResult(currentWebView) {
                             finish()
