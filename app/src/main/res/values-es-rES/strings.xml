@@ -6,7 +6,7 @@
     <string name="tip_perm_request_storage">Legado necesita de acceso de almacenamineto para buscar y leer libros. Por favor, diríjase a los "Ajustes de la aplicación" para conceder el "Permiso de almacenamineto".</string>
 
     <!--Other-->
-    <string name="menu_import_old">Importar datos de Legado</string>
+
     <string name="backup_path">Respaldar para</string>
     <string name="select_backup_path">Por favor, seleccione una carpeta de respaldo.</string>
     <string name="menu_import_old_version">Importar desde legado</string>
@@ -80,8 +80,8 @@
     <string name="web_service_desc">Fuente de edición web y lectura de libros</string>
     <string name="offline_cache">Caché sin conexión</string>
     <string name="change_origin">Cambiar origen</string>
-    <string name="about_description">\u3000\u3000 Este es una aplicación de lectura bajo software libre, desarrollado en Kotlin, en que podrás participar. </string>
-    <string name="app_share_description">Legado (YueDu 3.0) disponible para descargar en：\n https://github.com/gedoor/legado/releases</string>
+
+
     <string name="pt_auto_refresh">Actualización automática</string>
     <string name="ps_auto_refresh">Actualiza los libros automáticamente al abrir la App</string>
     <string name="backup_restore">Respaldo y restauración</string>
@@ -213,7 +213,7 @@
     <string name="check_select_source">Verificar fuente seleccionada</string>
     <string name="progress_show">%1$s      Avance %2$d/%3$d</string>
     <string name="tts_init_failed">¡Error al inicializar TTS!</string>
-    <string name="jf_convert">Conversión a simplificada</string>
+
     <string name="jf_convert_o">Desactivado</string>
     <string name="jf_convert_f">Simplificado a tradicional</string>
     <string name="jf_convert_j">Tradicional a simplificado</string>
@@ -226,7 +226,7 @@
     <string name="selection_to_top">Selection To Top</string>
     <string name="to_bottom">Debajo</string>
     <string name="selection_to_bottom">Selection To Bottom</string>
-    <string name="threads_num">Líneas actuales %s</string>
+
     <string name="read_aloud_speed">Velocidad de voz</string>
     <string name="auto_next_page">Deslizamiento automático</string>
     <string name="book_info">Información sobre libro</string>
@@ -253,7 +253,7 @@
     <string name="go_to_top">Ir al principio</string>
     <string name="go_to_bottom">Ir al final</string>
     <string name="finish">Listo</string>
-    <string name="all_book">Todo</string>
+
     <string name="local_book">Libros locales</string>
     <string name="status_bar_immersion">El color de la barra de estado se vuelve transparente</string>
     <string name="imm_navigation_bar">barra de navegación de inmersión</string>
@@ -348,7 +348,7 @@
     <string name="theme">Tema</string>
     <string name="theme_mode">Tipo de tema</string>
     <string name="theme_mode_desc">Seleccione el tema que prefiera</string>
-    <string name="del_file">Borrar archivo</string>
+
     <string name="del_file_success">Archivo borrado</string>
     <string name="discovery">Descubrir</string>
     <string name="get_storage_per">requiere permiso</string>
@@ -459,7 +459,7 @@
     <string name="share_book_source">Compartir fuentes de libros</string>
     <string name="go_back">Atrás</string>
     <string name="show_rss">Mostrar suscripción</string>
-    <string name="service_start">Iniciando el servicio\nComprobando la barra de notificaciones para más detalles</string>
+
     <string name="sys_folder_picker">Selector de carpetas del sistema</string>
     <string name="app_folder_picker">Selector de carpetas de aplicaciones</string>
     <string name="app_file_picker">Selector de archivos de la aplicación</string>
@@ -540,7 +540,7 @@
     <string name="disabled">Desactivado</string>
     <string name="enabled_explore">Discovery Enabled</string>
     <string name="disabled_explore">Discovery Disabled</string>
-    <string name="contributors_summary">gedoor, Invinciblelee, Xwite, etc. Para obtener más detalles, vaya a Github</string>
+
     <string name="clear_cache_summary">Limpiar la caché de libros y fuentes descargados</string>
     <string name="default_cover">Portada predeterminada</string>
     <string name="restore_ignore">Lista de descartados</string>
@@ -572,7 +572,7 @@
     <string name="rss_source_empty">Empty now!</string>
     <string name="explore_empty">Actualmente no hay una fuente para Descubrir!</string>
     <string name="page_key_set_help">将焦点放到输入框按下物理按键会自动录入键值,多个按键会自动用英文逗号隔开.</string>
-    <string name="theme_name">Nombre del tema</string>
+
     <string name="auto_clear_expired">Limpiar automáticamente los datos de búsqueda caducados</string>
     <string name="auto_clear_expired_summary">Historial de búsqueda de más de un día</string>
     <string name="re_segment">Volver a segmentar</string>

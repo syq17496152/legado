@@ -6,7 +6,7 @@
     <string name="tip_perm_request_storage">Legado precisa de acesso ao armazenamento para encontrar e ler livros. Por favor, vá às "Configurações do App" para conceder "Permissão de armazenamento".</string>
 
     <!--Other-->
-    <string name="menu_import_old">Importar dados ao Legado</string>
+
     <string name="backup_path">Backup para</string>
     <string name="select_backup_path">Por favor, selecione uma pasta de Backup.</string>
     <string name="menu_import_old_version">Importar dados de Legado</string>
@@ -80,12 +80,8 @@
     <string name="web_service_desc">Fonte de edição web e livro lidos</string>
     <string name="offline_cache">Cache off-line</string>
     <string name="change_origin">Alterar a origem</string>
-    <string name="about_description">
-        \u3000\u3000 Este é um App de leitura de software livre, desenvolvido em Kotlin, você é bem-vindo a participar em projeto.
-    </string>
-    <string name="app_share_description">
-        Legado (YueDu 3.0) link de download：\n https://github.com/gedoor/legado/releases
-    </string>
+
+
     <string name="pt_auto_refresh">Atualização automática</string>
     <string name="ps_auto_refresh">Atualizar os livros automaticamente ao abrir o App</string>
     <string name="backup_restore">Backup e restauração</string>
@@ -217,7 +213,7 @@
     <string name="check_select_source">Verificar a fonte selecionada</string>
     <string name="progress_show">%1$s      Progresso %2$d/%3$d</string>
     <string name="tts_init_failed">A inicialização do TTS falhou!</string>
-    <string name="jf_convert">Conversão simplificada</string>
+
     <string name="jf_convert_o">Desligado</string>
     <string name="jf_convert_f">Simplificado ao tradicional</string>
     <string name="jf_convert_j">Tradicional ao simplificado</string>
@@ -230,7 +226,7 @@
     <string name="selection_to_top">Seleção até o topo</string>
     <string name="to_bottom">Na parte inferior</string>
     <string name="selection_to_bottom">Seleção até o final</string>
-    <string name="threads_num">Linhas atuais %s</string>
+
     <string name="read_aloud_speed">Velocidade da voz</string>
     <string name="auto_next_page">Deslize automático</string>
     <string name="book_info">Informações sobre livro</string>
@@ -255,7 +251,7 @@
     <string name="go_to_top">Vá ao topo</string>
     <string name="go_to_bottom">Vá ao final</string>
     <string name="finish">Concluído</string>
-    <string name="all_book">Tudo</string>
+
     <string name="local_book">Livros locais</string>
     <string name="status_bar_immersion">A cor da barra de status fica transparente</string>
     <string name="imm_navigation_bar">barra de navegação de imersão</string>
@@ -350,7 +346,7 @@
     <string name="theme">Tema</string>
     <string name="theme_mode">Tipo de tema</string>
     <string name="theme_mode_desc">Selecionar tema que você preferir</string>
-    <string name="del_file">Excluir arquivo</string>
+
     <string name="del_file_success">Arquivo excluído</string>
     <string name="discovery">Descoberta</string>
     <string name="get_storage_per">requer permissão</string>
@@ -461,7 +457,7 @@
     <string name="share_book_source">Compartilhar fontes de livros</string>
     <string name="go_back">Voltar</string>
     <string name="show_rss">Exibir assinatura</string>
-    <string name="service_start">Iniciando o serviço\nVerificando a barra de notificações para detalhes</string>
+
     <string name="sys_folder_picker">Seletor de pastas do sistema</string>
     <string name="app_folder_picker">Seletor de pastas do App</string>
     <string name="app_file_picker">Seletor de arquivos do App</string>
@@ -541,7 +537,7 @@
     <string name="disabled">Desativado</string>
     <string name="enabled_explore">Discovery Enabled</string>
     <string name="disabled_explore">Discovery Disabled</string>
-    <string name="contributors_summary">gedoor,Invinciblelee,Xwite etc. Para mais detalhes vá ao Github</string>
+
     <string name="clear_cache_summary">Limpar o cache dos livros e fontes baixados</string>
     <string name="default_cover">Capa padrão</string>
     <string name="restore_ignore">Lista de ignorados</string>
@@ -573,7 +569,7 @@
     <string name="rss_source_empty">Empty now!</string>
     <string name="explore_empty">Atualmente não há nenhuma fonte!</string>
     <string name="page_key_set_help">将焦点放到输入框按下物理按键会自动录入键值,多个按键会自动用英文逗号隔开.</string>
-    <string name="theme_name">Nome de tema</string>
+
     <string name="auto_clear_expired">Excluir automaticamente dados vencidos da busca</string>
     <string name="auto_clear_expired_summary">Histórico de busca mais de um dia</string>
     <string name="re_segment">Re-segmentar</string>

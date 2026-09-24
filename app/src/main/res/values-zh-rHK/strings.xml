@@ -5,7 +5,7 @@
     <string name="tip_perm_request_storage">閲讀需要訪問存儲卡權限，請前往「設定」—「應用程式權限」—開啟所需要的權限</string>
 
     <!--Other-->
-    <string name="menu_import_old">導入閲讀數據</string>
+
     <string name="backup_path">備份路徑</string>
     <string name="menu_import_old_version">導入舊版數據</string>
 
@@ -72,12 +72,8 @@
     <string name="web_service_desc">瀏覽器寫源,看書</string>
     <string name="offline_cache">離線緩存</string>
     <string name="change_origin">換源</string>
-    <string name="about_description">
-        \u3000\u3000這是一款使用 Kotlin 全新開發的開源的閲讀應用程式，歡迎你的加入。
-    </string>
-    <string name="app_share_description">
-        閲讀3.0下載地址：\nhttps://github.com/gedoor/legado/releases
-    </string>
+
+
     <string name="pt_auto_refresh">自動刷新</string>
     <string name="ps_auto_refresh">打開程式時自動更新書輯</string>
     <string name="backup_restore">備份與還原</string>
@@ -209,7 +205,7 @@
     <string name="check_select_source">校驗所選</string>
     <string name="progress_show">%1$s      進度 %2$d/%3$d</string>
     <string name="tts_init_failed">TTS 初始化失敗!</string>
-    <string name="jf_convert">簡繁轉換</string>
+
     <string name="jf_convert_o">關閉</string>
     <string name="jf_convert_f">簡轉繁</string>
     <string name="jf_convert_j">繁轉簡</string>
@@ -222,7 +218,7 @@
     <string name="selection_to_top">置頂所選</string>
     <string name="to_bottom">置底</string>
     <string name="selection_to_bottom">置底所選</string>
-    <string name="threads_num">當前線程數 %s</string>
+
     <string name="read_aloud_speed">朗讀語速</string>
     <string name="auto_next_page">自動翻頁</string>
     <string name="book_info">書籍信息</string>
@@ -249,7 +245,7 @@
     <string name="go_to_top">滾動到頂部</string>
     <string name="go_to_bottom">滾動到底部</string>
     <string name="finish">完結</string>
-    <string name="all_book">所有書籍</string>
+
     <string name="local_book">本地書籍</string>
     <string name="status_bar_immersion">狀態欄顏色透明</string>
     <string name="imm_navigation_bar">沉浸式导航栏</string>
@@ -338,7 +334,7 @@
     <string name="theme">主題</string>
     <string name="theme_mode">主題模式</string>
     <string name="theme_mode_desc">選擇主題模式</string>
-    <string name="del_file">刪除文件</string>
+
     <string name="del_file_success">刪除文件成功</string>
     <string name="discovery">發現</string>
     <string name="get_storage_per">需要存儲權限</string>
@@ -451,7 +447,7 @@
     <string name="share_book_source">分享書源</string>
     <string name="go_back">上級</string>
     <string name="show_rss">顯示訂閲</string>
-    <string name="service_start">正在啟動服務\n具體信息查看通知欄</string>
+
     <string name="sys_folder_picker">系統文件夾選擇器</string>
     <string name="app_folder_picker">自帶文件夾選擇器</string>
     <string name="app_file_picker">自帶文件選擇器</string>
@@ -532,7 +528,7 @@
     <string name="enabled_explore">已啟用發現</string>
     <string name="disabled_explore">已禁用發現</string>
     <string name="text_bottom_justify">文字底部對齊</string>
-    <string name="contributors_summary">gedoor,Invinciblelee,Xwite等,詳情請在github中查看</string>
+
     <string name="clear_cache_summary">清除已下載書籍和字體緩存</string>
     <string name="default_cover">默認封面</string>
     <string name="restore_ignore">恢復忽略列表</string>
@@ -568,7 +564,7 @@
     <string name="rss_source_empty">Empty now!</string>
     <string name="explore_empty">目前沒有發現源!</string>
     <string name="page_key_set_help">將焦點放到輸入框按下物理按鍵會自動輸入鍵值,多個按鍵會自動用英文逗號隔開.</string>
-    <string name="theme_name">主題名</string>
+
     <string name="auto_clear_expired">自動清除過期搜尋資料</string>
     <string name="auto_clear_expired_summary">超過一天的搜尋資料</string>
     <string name="re_segment">重新分段</string>

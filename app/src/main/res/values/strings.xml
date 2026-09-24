@@ -2,7 +2,7 @@
 <resources>
     <!--App-->
     <string name="app_name">阅读M</string>
-    <string name="app_name_s" translatable="false">LegadoPlus</string>
+
     <string name="receiving_shared_label">Legado·search</string>
     <string name="tip_perm_request_storage">Legado needs storage access to find and read books. please go "App Settings" to allow "Storage permission".</string>
     <string name="ai_missing_config">Complete the provider and model setup first.</string>
@@ -10,7 +10,7 @@
     <string name="book_cloud_cache_package_mode">Cloud backup</string>
 
     <!--Other-->
-    <string name="menu_import_old">Import Legado data</string>
+
     <string name="backup_path">Backup to</string>
     <string name="select_backup_path">Please select a backup path.</string>
     <string name="menu_import_old_version">Import legacy data</string>
@@ -161,12 +161,8 @@
     <string name="web_service_desc">Web edit source and read book</string>
     <string name="offline_cache">Offline cache</string>
     <string name="change_origin">Change Origin</string>
-    <string name="about_description">
-        \u3000\u3000 This is an open source reading software newly developed by Kotlin, welcome to join us.
-    </string>
-    <string name="app_share_description">
-        Legado (YueDu 3.0) download link：\n https://github.com/gedoor/legado/releases
-    </string>
+
+
     <string name="pt_auto_refresh">Auto-refresh</string>
     <string name="ps_auto_refresh">Update books automatically when opening the software</string>
     <string name="backup_restore">Backup and restore</string>
@@ -391,7 +387,7 @@
     <string name="book_source_clear_search">Clear search</string>
     <string name="progress_show">%1$s      Progress %2$d/%3$d</string>
     <string name="tts_init_failed">TTS initialization failed!</string>
-    <string name="jf_convert">Simplified conversion</string>
+
     <string name="jf_convert_o">Off</string>
     <string name="jf_convert_f">Simplified to traditional</string>
     <string name="jf_convert_j">Traditional to simplified</string>
@@ -404,7 +400,7 @@
     <string name="selection_to_top">Selection To Top</string>
     <string name="to_bottom">To Bottom</string>
     <string name="selection_to_bottom">Selection To Bottom</string>
-    <string name="threads_num">Current threads %s</string>
+
     <string name="read_aloud_speed">Speech rate</string>
     <string name="auto_next_page">Auto scroll</string>
     <string name="book_info">Book information</string>
@@ -425,7 +421,7 @@
     <string name="rss_search_key">Search RSS content</string>
     <string name="rss_source_manage">RSS Sources management</string>
     <string name="rss_source_manage_summary">Manage RSS sources and source repositories.</string>
-    <string name="rss_search_type">Search result type</string>
+
     <string name="rss_search_type_all">All types</string>
     <!-- L-D3 订阅源调试页（12.5D Compose 化 i18n 清理） -->
     <string name="update_toc">Update chapters</string>
@@ -439,7 +435,7 @@
     <string name="go_to_top">Scroll to the top</string>
     <string name="go_to_bottom">Scroll to the bottom</string>
     <string name="finish">Finished</string>
-    <string name="all_book">All</string>
+
     <string name="local_book">Local books</string>
     <string name="status_bar_immersion">The status bar color becomes transparent</string>
     <string name="imm_navigation_bar">immersion navigation bar</string>
@@ -570,7 +566,7 @@
     <string name="theme">Theme</string>
     <string name="theme_mode">Theme mode</string>
     <string name="theme_mode_desc">Select a theme you want</string>
-    <string name="del_file">Delete file</string>
+
     <string name="del_file_success">Deleted file</string>
     <string name="discovery">Discovery</string>
     <string name="get_storage_per">requires storage permission</string>
@@ -697,7 +693,7 @@
     <string name="share_book_source">Book sources sharing</string>
     <string name="go_back">Go back</string>
     <string name="show_rss">Show RSS feeds</string>
-    <string name="service_start">Starting service\nChecking notification bar for details</string>
+
     <string name="sys_folder_picker">System folder picker</string>
     <string name="app_folder_picker">App folder picker</string>
     <string name="app_file_picker">App file picker</string>
@@ -785,7 +781,7 @@
     <string name="disabled">Disabled</string>
     <string name="enabled_explore">Discovery Enabled</string>
     <string name="disabled_explore">Discovery Disabled</string>
-    <string name="contributors_summary">gedoor,Invinciblelee,Xwite etc. Checking in github for details</string>
+
     <string name="clear_cache_summary">Clear the cache of the downloaded books and fonts</string>
     <string name="default_cover">Default cover</string>
     <string name="restore_ignore">Bypass list</string>
@@ -824,7 +820,7 @@
     <string name="image_load_concurrency">Image load concurrency</string>
     <string name="image_load_concurrency_summary">Number of concurrent image loading threads (current %s, default 5, restart required)</string>
     <string name="source_parse_concurrency">Source parse concurrency</string>
-    <string name="source_parse_concurrency_summary">Parse concurrency override for this source (0 = use global config)</string>
+
     <string name="domain_check_socket">Socket quick check</string>
     <string name="domain_check_analyze_url">Analyze rule real request</string>
     <string name="all_read_time">Total read time</string>
@@ -842,7 +838,7 @@
     <string name="explore_empty">Empty now!</string>
     <string name="explore_group_empty">No explore source groups yet</string>
     <string name="page_key_set_help">Focusing on the input box and pressing a physical key will automatically enter the value of the key, and multiple keys will be automatically separated by commas.</string>
-    <string name="theme_name">Theme name</string>
+
     <string name="auto_clear_expired">"Clear expired search histories automatically "</string>
     <string name="auto_clear_expired_summary">Search histories more than one day</string>
     <string name="re_segment">Re-segment</string>
@@ -1098,15 +1094,15 @@
     <string name="less_than">Less than</string>
     <string name="check_source_config_summary">Check timeout: %1$ss\nCheck item:%2$s</string>
     <string name="check_rss_source">Check RSS sources</string>
-    <string name="check_rss_source_config">RSS check setting</string>
+
     <string name="check_rss_source_config_summary">RSS check timeout: %1$ss\nCheck item:%2$s\nDedup: %3$s</string>
-    <string name="check_rss_source_item">RSS check item</string>
+
     <string name="check_rss_articles">Articles</string>
     <string name="check_rss_sort">Sort URL</string>
-    <string name="enable_dedup">Enable dedup</string>
+
     <string name="dedup_enabled">Enabled</string>
     <string name="dedup_disabled">Disabled</string>
-    <string name="rss_check_source">RSS source check setting</string>
+
     <string name="record_debug_log">Record debug log</string>
     <string name="sub_dir">Sub dir</string>
     <string name="use_replace">Use replace</string>
@@ -1339,7 +1335,7 @@
     <string name="export_md">Export(MD)</string>
     <string name="url_record">URL access records</string>
     <string name="url_record_summary">View and manage URL access records</string>
-    <string name="rss_search">RSS global search</string>
+
     <string name="my_metric_shelf">Bookshelf</string>
     <string name="my_metric_book_source">Sources</string>
     <string name="my_metric_rss_source">RSS feeds</string>
@@ -1405,8 +1401,8 @@
     <string name="download_copy_path">Copy path</string>
     <string name="download_delete_task">Delete</string>
     <string name="download_retry">Retry</string>
-    <string name="download_pause">Pause</string>
-    <string name="download_resume">Resume</string>
+
+
     <string name="download_empty">No download tasks</string>
     <string name="download_tab_empty">No tasks in this category</string>
     <string name="download_speed">%1$s/s</string>
@@ -2457,7 +2453,7 @@ Selected text or question:
     <string name="ai_provider_url_required">请输入接口地址</string>
     <string name="ai_no_providers">暂无提供商</string>
     <string name="ai_edit_provider">编辑提供商</string>
-    <string name="ai_remove_provider">删除提供商</string>
+
     <string name="ai_remove_provider_confirm">确定删除这个提供商吗？</string>
     <string name="ai_remove_provider_confirm_with_models">确定删除这个提供商吗？关联的 %1$d 个模型也会一起删除。</string>
     <string name="ai_provider_saved">已保存提供商</string>
@@ -2554,7 +2550,7 @@ Selected text or question:
     <string name="ai_fetch_models_existing">Already added</string>
     <string name="ai_fetch_models_click_toggle">Tap to toggle selection</string>
     <string name="ai_fetch_models_click_add_long_select">Tap to add, long press for multi-select</string>
-    <string name="ai_manage_models">Manage models</string>
+
     <string name="ai_manage_models_summary">%1$d models added</string>
     <string name="ai_edit_model">Edit model</string>
     <string name="ai_model_saved">Model saved</string>
@@ -2580,7 +2576,7 @@ Selected text or question:
     <string name="ai_model_exists">Model already exists</string>
     <string name="ai_model_added">Model added</string>
     <string name="ai_set_current">Set as current model</string>
-    <string name="ai_remove_model">Remove model</string>
+
     <string name="ai_remove_model_confirm">Remove this model?</string>
     <string name="ai_model_removed">Model removed</string>
     <string name="ai_import_default_skill">Install default 阅读Archive skill</string>
@@ -2602,7 +2598,7 @@ Selected text or question:
 <string name="epub_read_engine_text">Convert to plain text</string>
 <string name="epub_read_engine_core">EPUB engine (experimental)</string>
 <string name="update_acceleration_manage">加速管理</string>
-<string name="selection_search_engine_url">Search URL</string>
+
 <string name="rss_search_hint">Search subscription content</string>
 <string name="main_immersion_status_bar">Hide main screen status bar</string>
 <string name="main_status_bar_immersion">Use fullscreen mode on the main screen</string>
@@ -2792,15 +2788,15 @@ Selected text or question:
 <string name="book_info_style_immersive_desc">A detail page with cover backdrop, compact actions, intro, chapter preview and image gallery. Component order is fixed in this style; switch to Modern to customize it.</string>
 <string name="book_info_component_keep_one">Keep at least one detail component enabled.</string>
     <string name="book_info_style_modern">Modern</string>
-    <string name="book_info_style_modern_hint">Card-based page: component blocks stacked in one scroll. Enable and reorder the blocks below; changes apply to this style only.</string>
-    <string name="book_info_style_modern_title">Card-based detail page</string>
-    <string name="book_info_style_modern_desc">Blocks in a single scroll: main book card, group/source card, intro and chapters card, chapter panel and image gallery. Switch to this style to customize block order.</string>
+
+
+
     <string name="book_info_catalog_page">%1$d / %2$d</string>
     <string name="book_info_intro_empty">No description for this book.</string>
 <string name="cache_manage_downloading">Downloading cloud cache...</string>
 <string name="cache_manage_download_queued">Queued for WebDAV download</string>
 <string name="cache_manage_download_success">Cloud cache downloaded</string>
-<string name="cache_manage_download_failed">Download failed: %1$s</string>
+
 <string name="cache_manage_download_failed_simple">Download failed</string>
 <string name="cache_manage_download_first">Download the cloud cache to local first</string>
 <string name="cache_manage_batch_upload_queued">Queued %1$d upload task(s)</string>

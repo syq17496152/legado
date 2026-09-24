@@ -6,7 +6,7 @@
     <string name="tip_perm_request_storage">Legado needs storage access to find and read books. please go "App Settings" to allow "Storage permission".</string>
 
     <!--Other-->
-    <string name="menu_import_old">Import Legado data</string>
+
     <string name="backup_path">Backup to</string>
     <string name="select_backup_path">Please select a backup path.</string>
     <string name="menu_import_old_version">Import legacy data</string>
@@ -80,12 +80,8 @@
     <string name="web_service_desc">Web edit source and read book</string>
     <string name="offline_cache">Offline cache</string>
     <string name="change_origin">Change Origin</string>
-    <string name="about_description">
-        \u3000\u3000 This is an open source reading software newly developed by Kotlin, welcome to join us.
-    </string>
-    <string name="app_share_description">
-        Legado (YueDu 3.0) download link：\n https://github.com/gedoor/legado/releases
-    </string>
+
+
     <string name="pt_auto_refresh">Auto-refresh</string>
     <string name="ps_auto_refresh">Update books automatically when opening the software</string>
     <string name="backup_restore">Backup and restore</string>
@@ -217,7 +213,7 @@
     <string name="check_select_source">Check the selected source</string>
     <string name="progress_show">%1$s      Progress %2$d/%3$d</string>
     <string name="tts_init_failed">TTS initialization failed!</string>
-    <string name="jf_convert">Simplified conversion</string>
+
     <string name="jf_convert_o">Off</string>
     <string name="jf_convert_f">Simplified to traditional</string>
     <string name="jf_convert_j">Traditional to simplified</string>
@@ -230,7 +226,7 @@
     <string name="selection_to_top">Selection To Top</string>
     <string name="to_bottom">To Bottom</string>
     <string name="selection_to_bottom">Selection To Bottom</string>
-    <string name="threads_num">Current threads %s</string>
+
     <string name="read_aloud_speed">Speech rate</string>
     <string name="auto_next_page">Auto scroll</string>
     <string name="book_info">Book information</string>
@@ -257,7 +253,7 @@
     <string name="go_to_top">Scroll to the top</string>
     <string name="go_to_bottom">Scroll to the bottom</string>
     <string name="finish">Finished</string>
-    <string name="all_book">All</string>
+
     <string name="local_book">Local books</string>
     <string name="status_bar_immersion">The status bar color becomes transparent</string>
     <string name="imm_navigation_bar">immersion navigation bar</string>
@@ -352,7 +348,7 @@
     <string name="theme">Theme</string>
     <string name="theme_mode">Theme mode</string>
     <string name="theme_mode_desc">Select a theme you want</string>
-    <string name="del_file">Delete file</string>
+
     <string name="del_file_success">Deleted file</string>
     <string name="discovery">Discovery</string>
     <string name="get_storage_per">requires storage permission</string>
@@ -463,7 +459,7 @@
     <string name="share_book_source">Book sources sharing</string>
     <string name="go_back">Go back</string>
     <string name="show_rss">Display Subscription</string>
-    <string name="service_start">Starting service\nChecking notification bar for details</string>
+
     <string name="sys_folder_picker">System folder picker</string>
     <string name="app_folder_picker">App folder picker</string>
     <string name="app_file_picker">App file picker</string>
@@ -543,7 +539,7 @@
     <string name="disabled">Disabled</string>
     <string name="enabled_explore">Discovery Enabled</string>
     <string name="disabled_explore">Discovery Disabled</string>
-    <string name="contributors_summary">gedoor,Invinciblelee,Xwite etc. Checking in github for details</string>
+
     <string name="clear_cache_summary">Clear the cache of the downloaded books and fonts</string>
     <string name="default_cover">Default cover</string>
     <string name="restore_ignore">Bypass list</string>
@@ -575,7 +571,7 @@
     <string name="rss_source_empty">Empty now!</string>
     <string name="explore_empty">Empty now!</string>
     <string name="page_key_set_help">将焦点放到输入框按下物理按键会自动录入键值,多个按键会自动用英文逗号隔开.</string>
-    <string name="theme_name">Theme name</string>
+
     <string name="auto_clear_expired">"Clear expired search histories automatically "</string>
     <string name="auto_clear_expired_summary">Search histories more than one day</string>
     <string name="re_segment">Re-segment</string>

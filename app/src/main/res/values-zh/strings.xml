@@ -1,7 +1,7 @@
 <resources>
     <!--App-->
     <string name="app_name">阅读M</string>
-    <string name="app_name_s">阅读Plus</string>
+
     <string name="receiving_shared_label">阅读·搜索</string>
     <string name="tip_perm_request_storage">阅读需要访问存储卡权限，请前往“设置”—“应用权限”，打开所需权限</string>
     <string name="ai_missing_config">请先完成提供商和模型配置</string>
@@ -9,7 +9,7 @@
     <string name="book_cloud_cache_package_mode">云端备份</string>
 
     <!--Other-->
-    <string name="menu_import_old">导入阅读数据</string>
+
     <string name="backup_path">备份路径</string>
     <string name="select_backup_path">请选择备份路径</string>
     <string name="menu_import_old_version">导入旧版数据</string>
@@ -160,12 +160,8 @@
     <string name="web_service_desc">用浏览器写源或看书</string>
     <string name="offline_cache">离线缓存</string>
     <string name="change_origin">换源</string>
-    <string name="about_description">
-        \u3000\u3000这是一款使用 Kotlin 全新开发的开源的阅读软件，欢迎您的加入。
-    </string>
-    <string name="app_share_description">
-        阅读 3.0 下载地址：\nhttps://github.com/gedoor/legado/releases
-    </string>
+
+
     <string name="pt_auto_refresh">自动刷新</string>
     <string name="ps_auto_refresh">打开软件时自动更新书籍</string>
     <string name="backup_restore">备份与恢复</string>
@@ -362,7 +358,7 @@
     <string name="book_source_clear_search">清空搜索</string>
     <string name="progress_show">%1$s      进度 %2$d/%3$d</string>
     <string name="tts_init_failed">TTS 初始化失败！</string>
-    <string name="jf_convert">简繁转换</string>
+
     <string name="jf_convert_o">关闭</string>
     <string name="jf_convert_f">简转繁</string>
     <string name="jf_convert_j">繁转简</string>
@@ -375,7 +371,7 @@
     <string name="selection_to_top">置顶所选</string>
     <string name="to_bottom">置底</string>
     <string name="selection_to_bottom">置底所选</string>
-    <string name="threads_num">当前线程数 %s</string>
+
     <string name="read_aloud_speed">朗读语速</string>
     <string name="auto_next_page">自动翻页</string>
     <string name="book_info">书籍信息</string>
@@ -396,7 +392,7 @@
     <string name="rss_search_key">搜索订阅源内容</string>
     <string name="rss_source_manage">订阅源管理</string>
     <string name="rss_source_manage_summary">管理订阅源和源仓库。</string>
-    <string name="rss_search_type">搜索结果类型</string>
+
     <string name="rss_search_type_all">全部类型</string>
     <!-- L-D3 订阅源调试页（12.5D Compose 化 i18n 清理） -->
     <string name="update_toc">更新目录</string>
@@ -410,7 +406,7 @@
     <string name="go_to_top">滚动到顶部</string>
     <string name="go_to_bottom">滚动到底部</string>
     <string name="finish">完结</string>
-    <string name="all_book">所有书籍</string>
+
     <string name="local_book">本地书籍</string>
     <string name="status_bar_immersion">状态栏颜色透明</string>
     <string name="imm_navigation_bar">沉浸式导航栏</string>
@@ -541,7 +537,7 @@
     <string name="theme">主题</string>
     <string name="theme_mode">主题模式</string>
     <string name="theme_mode_desc">选择主题模式</string>
-    <string name="del_file">删除文件</string>
+
     <string name="del_file_success">删除文件成功</string>
     <string name="discovery">发现</string>
     <string name="get_storage_per">需要存储权限</string>
@@ -667,7 +663,7 @@
     <string name="share_book_source">分享书源</string>
     <string name="go_back">上级</string>
     <string name="show_rss">显示订阅</string>
-    <string name="service_start">正在启动服务\n具体信息请查看通知栏</string>
+
     <string name="sys_folder_picker">系统文件夹选择器</string>
     <string name="app_folder_picker">自带文件夹选择器</string>
     <string name="app_file_picker">自带文件选择器</string>
@@ -754,7 +750,7 @@
     <string name="disabled">已禁用</string>
     <string name="enabled_explore">已启用发现</string>
     <string name="disabled_explore">已禁用发现</string>
-    <string name="contributors_summary">gedoor、Invinciblelee 和 Xwite 等，详情请在 GitHub 中查看</string>
+
     <string name="clear_cache_summary">清除已下载书籍和字体缓存</string>
     <string name="default_cover">默认封面</string>
     <string name="restore_ignore">恢复忽略列表</string>
@@ -808,7 +804,7 @@
     <string name="explore_empty">当前没有发现源！</string>
     <string name="explore_group_empty">当前没有发现源分组</string>
     <string name="page_key_set_help">将焦点放到输入框按下物理按键会自动录入键值，多个按键会自动用英文逗号隔开。</string>
-    <string name="theme_name">主题名称</string>
+
     <string name="auto_clear_expired">自动清除过期搜索数据</string>
     <string name="auto_clear_expired_summary">超过一天的搜索数据</string>
     <string name="re_segment">重新分段</string>
@@ -1274,7 +1270,7 @@
     <string name="export_md">导出(MD)</string>
     <string name="url_record">URL访问记录</string>
     <string name="url_record_summary">查看与管理URL访问记录</string>
-    <string name="rss_search">订阅源全局搜索</string>
+
     <string name="my_metric_shelf">书架书籍</string>
     <string name="my_metric_book_source">使用书源</string>
     <string name="my_metric_rss_source">订阅源</string>
@@ -1340,8 +1336,8 @@
     <string name="download_copy_path">复制路径</string>
     <string name="download_delete_task">删除</string>
     <string name="download_retry">重试</string>
-    <string name="download_pause">暂停</string>
-    <string name="download_resume">继续</string>
+
+
     <string name="download_empty">暂无下载任务</string>
     <string name="download_tab_empty">该分类下暂无任务</string>
     <string name="download_speed">%1$s/s</string>
@@ -2106,7 +2102,7 @@ bookUrl：%7$s
     <string name="ai_provider_url_required">请输入接口地址</string>
     <string name="ai_no_providers">暂无提供商</string>
     <string name="ai_edit_provider">编辑提供商</string>
-    <string name="ai_remove_provider">删除提供商</string>
+
     <string name="ai_remove_provider_confirm">确定删除这个提供商吗？</string>
     <string name="ai_remove_provider_confirm_with_models">确定删除这个提供商吗？关联的 %1$d 个模型也会一起删除。</string>
     <string name="ai_provider_saved">已保存提供商</string>
@@ -2153,7 +2149,7 @@ bookUrl：%7$s
     <string name="ai_fetch_models_existing">已添加</string>
     <string name="ai_fetch_models_click_toggle">点击切换勾选</string>
     <string name="ai_fetch_models_click_add_long_select">点击添加，长按多选</string>
-    <string name="ai_manage_models">管理模型</string>
+
     <string name="ai_manage_models_summary">已添加 %1$d 个模型</string>
     <string name="ai_edit_model">编辑模型</string>
     <string name="ai_model_saved">已保存模型</string>
@@ -2179,7 +2175,7 @@ bookUrl：%7$s
     <string name="ai_model_exists">模型已存在</string>
     <string name="ai_model_added">已添加模型</string>
     <string name="ai_set_current">设为当前模型</string>
-    <string name="ai_remove_model">删除模型</string>
+
     <string name="ai_remove_model_confirm">确定删除这个模型吗？</string>
     <string name="ai_model_removed">已删除模型</string>
     <string name="ai_import_default_skill">安装默认 阅读Archive Skill</string>
@@ -2201,7 +2197,7 @@ bookUrl：%7$s
 <string name="epub_read_engine_text">转换为纯文本</string>
 <string name="epub_read_engine_core">EPUB引擎（实验性）</string>
 <string name="update_acceleration_manage">加速管理</string>
-<string name="selection_search_engine_url">搜索 URL</string>
+
 <string name="rss_search_hint">搜索订阅内容</string>
 <string name="main_immersion_status_bar">隐藏主界面状态栏</string>
 <string name="main_status_bar_immersion">开启后主界面进入全屏模式</string>
@@ -2374,14 +2370,14 @@ bookUrl：%7$s
 <string name="book_info_components_hint">勾选启用组件，拖动调整顺序。重新打开详情页后生效。</string>
 <string name="book_info_component_keep_one">至少保留一个详情组件。</string>
 <string name="book_info_style_modern">现代</string>
-<string name="book_info_style_modern_hint">卡片式页面：组件块在单页内顺序排列。可在下方开关并拖动排序，仅对本样式生效。</string>
-<string name="book_info_style_modern_title">卡片式详情页</string>
-<string name="book_info_style_modern_desc">单页顺序排列的组件块：主信息卡片、分组来源卡片、简介目录卡片、目录面板与本书图库。切到本样式即可自定义组件顺序。</string>
+
+
+
 <string name="book_info_catalog_page">%1$d / %2$d</string>
 <string name="book_info_intro_empty">本书暂无简介。</string>
 <string name="cache_manage_downloading">正在下载云端缓存...</string>
 <string name="cache_manage_download_success">云端缓存已下载</string>
-<string name="cache_manage_download_failed">下载失败：%1$s</string>
+
 <string name="cache_manage_download_failed_simple">下载失败</string>
 <string name="cache_manage_download_first">请先下载云端缓存到本地</string>
 <string name="cover_collection_manage">封面图集</string>
@@ -2697,17 +2693,17 @@ bookUrl：%7$s
     <!-- 中文语言包补全（M7 清壳期真机复核发现：以下键在 values-zh 缺失 ⇒ 中文用户直接看到英文；
          判定口径=「default 值不含中日韩字符且非品牌/技术术语/纯格式串」，审计脚本见 .temp/probe_zh_missing_precise.py） -->
     <string name="source_parse_concurrency">源解析并发数</string>
-    <string name="source_parse_concurrency_summary">覆盖该源的解析并发数（0 表示使用全局配置）</string>
+
     <string name="video_download_no_url">视频地址不可用，无法下载</string>
-    <string name="check_rss_source_config">订阅源检查设置</string>
+
     <string name="check_rss_source_config_summary">订阅检查超时：%1$ss\n检查项：%2$s\n去重：%3$s</string>
-    <string name="check_rss_source_item">订阅源检查项</string>
+
     <string name="check_rss_articles">文章列表</string>
     <string name="check_rss_sort">分类地址</string>
-    <string name="enable_dedup">启用去重</string>
+
     <string name="dedup_enabled">已启用</string>
     <string name="dedup_disabled">已禁用</string>
-    <string name="rss_check_source">订阅源检查设置</string>
+
     <string name="highlight_rule_export_done">已复制 %1$d 条规则到剪贴板</string>
     <string name="cover_collection_empty">还没有图片，点按导入按钮添加</string>
     <string name="selection_search_engine_hide_css_enabled">已启用 CSS 拦截器</string>

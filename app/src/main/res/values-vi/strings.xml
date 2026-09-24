@@ -6,7 +6,7 @@
     <string name="tip_perm_request_storage">Legado cần quyền truy cập bộ nhớ để tìm và đọc sách. Vui lòng vào "Cài đặt ứng dụng" để cấp "Quyền truy cập bộ nhớ".</string>
 
     <!--Other-->
-    <string name="menu_import_old">Nhập dữ liệu Legado cũ</string>
+
     <string name="backup_path">Đường dẫn sao lưu</string>
     <string name="select_backup_path">Vui lòng chọn đường dẫn sao lưu.</string>
     <string name="menu_import_old_version">Nhập dữ liệu phiên bản cũ</string>
@@ -79,8 +79,8 @@
     <string name="web_service_desc">Chỉnh sửa nguồn và đọc sách qua web</string>
     <string name="offline_cache">Bộ đệm ngoại tuyến</string>
     <string name="change_origin">Đổi nguồn</string>
-    <string name="about_description">Đây là một phần mềm đọc mã nguồn mở được phát triển mới bằng Kotlin, chào mừng bạn tham gia.</string>
-    <string name="app_share_description">Link tải Legado (YueDu 3.0):\n https://github.com/gedoor/legado/releases</string>
+
+
     <string name="pt_auto_refresh">Tự động làm mới</string>
     <string name="ps_auto_refresh">Tự động cập nhật sách khi mở phần mềm</string>
     <string name="backup_restore">Sao lưu và khôi phục</string>
@@ -212,7 +212,7 @@
     <string name="check_select_source">Kiểm tra nguồn đã chọn</string>
     <string name="progress_show">%1$s      Tiến độ %2$d/%3$d</string>
     <string name="tts_init_failed">Khởi tạo TTS thất bại!</string>
-    <string name="jf_convert">Chuyển đổi Giản thể</string>
+
     <string name="jf_convert_o">Tắt</string>
     <string name="jf_convert_f">Giản thể sang Phồn thể</string>
     <string name="jf_convert_j">Phồn thể sang Giản thể</string>
@@ -225,7 +225,7 @@
     <string name="selection_to_top">Chọn lên đầu</string>
     <string name="to_bottom">Xuống cuối</string>
     <string name="selection_to_bottom">Chọn xuống cuối</string>
-    <string name="threads_num">Số luồng hiện tại %s</string>
+
     <string name="read_aloud_speed">Tốc độ đọc</string>
     <string name="auto_next_page">Tự động cuộn</string>
     <string name="book_info">Thông tin sách</string>
@@ -253,7 +253,7 @@
     <string name="go_to_top">Cuộn lên đầu</string>
     <string name="go_to_bottom">Cuộn xuống cuối</string>
     <string name="finish">Đã hoàn thành</string>
-    <string name="all_book">Tất cả</string>
+
     <string name="local_book">Sách cục bộ</string>
     <string name="status_bar_immersion">Màu thanh trạng thái trở nên trong suốt</string>
     <string name="imm_navigation_bar">Thanh điều hướng chìm</string>
@@ -347,7 +347,7 @@
     <string name="theme">Chủ đề</string>
     <string name="theme_mode">Chế độ chủ đề</string>
     <string name="theme_mode_desc">Chọn chủ đề bạn muốn</string>
-    <string name="del_file">Xóa tệp</string>
+
     <string name="del_file_success">Đã xóa tệp</string>
     <string name="discovery">Khám phá</string>
     <string name="get_storage_per">cần quyền truy cập bộ nhớ</string>
@@ -458,7 +458,7 @@
     <string name="share_book_source">Chia sẻ nguồn sách</string>
     <string name="go_back">Quay lại</string>
     <string name="show_rss">Hiển thị nguồn cấp RSS</string>
-    <string name="service_start">Đang khởi động dịch vụ\nKiểm tra thanh thông báo để biết chi tiết</string>
+
     <string name="sys_folder_picker">Bộ chọn thư mục hệ thống</string>
     <string name="app_folder_picker">Bộ chọn thư mục ứng dụng</string>
     <string name="app_file_picker">Bộ chọn tệp ứng dụng</string>
@@ -539,7 +539,7 @@
     <string name="disabled">Đã tắt</string>
     <string name="enabled_explore">Đã bật khám phá</string>
     <string name="disabled_explore">Đã tắt khám phá</string>
-    <string name="contributors_summary">gedoor, Invinciblelee, Xwite, v.v. Kiểm tra trên github để biết chi tiết</string>
+
     <string name="clear_cache_summary">Xóa bộ đệm của sách và phông chữ đã tải xuống</string>
     <string name="default_cover">Bìa mặc định</string>
     <string name="restore_ignore">Danh sách bỏ qua</string>
@@ -572,7 +572,7 @@
     <string name="rss_source_empty">Hiện tại trống!</string>
     <string name="explore_empty">Hiện tại trống!</string>
     <string name="page_key_set_help">Tập trung vào hộp nhập và nhấn một phím vật lý sẽ tự động nhập giá trị của phím, và nhiều phím sẽ được tự động phân tách bằng dấu phẩy.</string>
-    <string name="theme_name">Tên chủ đề</string>
+
     <string name="auto_clear_expired">Tự động xóa lịch sử tìm kiếm đã hết hạn</string>
     <string name="auto_clear_expired_summary">Lịch sử tìm kiếm quá một ngày</string>
     <string name="re_segment">Phân đoạn lại</string>
