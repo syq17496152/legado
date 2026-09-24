@@ -392,6 +392,10 @@ class RssFragment() : VMBaseFragment<RssViewModel>(R.layout.fragment_rss), MainF
         // XML 基线：recycler_view/folder_compose_view 均无 padding、clipToPadding 默认 false。
         binding.recyclerView.clipToPadding = false
         binding.recyclerView.setPadding(0, 0, 0, 0)
+        // CP-1：先归零消除 modern 模式污染，再叠加「底栏安全区」底部留白
+        // （单源 = main_content_bottom_bar_padding 90dp + 导航栏 inset，见 applyMainBottomBarPadding）。
+        // 不加这一步时 classic 列表底部 padding 为 0 ⇒ 滚到底最后一项被底栏遮挡（用户 2026-09-24 报障）。
+        binding.recyclerView.applyMainBottomBarPadding()
         // 防御性重置：folderComposeView 当前未被 modern 写 padding，此处归零防同类污染链路
         binding.folderComposeView.setPadding(0, 0, 0, 0)
         binding.folderComposeView.clipToPadding = false

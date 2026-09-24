@@ -39,6 +39,7 @@ import androidx.core.view.marginBottom
 import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager.widget.ViewPager
+import io.legado.app.R
 import io.legado.app.help.GlideImageGetter
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.TintHelper
@@ -482,14 +483,16 @@ fun View.applyNavigationBarMargin(withInitialMargin: Boolean = false) {
 }
 
 fun View.applyMainBottomBarPadding(withInitialPadding: Boolean = false) {
-    // 简化说明: 相对 Archive 版移除了 RecyclerView ItemDecoration 与未存在资源
-    // (R.dimen.main_content_bottom_bar_padding / R.id.main_bottom_bar_space_decoration),
-    // 目标项目无对应资源且当前仅用于 ScrollView,底部留白以 90dp 等效值补齐。
-    // 已知上限: 90dp 等效值与原 Decoration 实测值可能存在像素级差异
-    // 升级路径: 补齐对应 dimen 资源与 Decoration 后恢复 archive 同构实现
+    // 单源（CP-1）：底部留白 = R.dimen.main_content_bottom_bar_padding（90dp）+ 导航栏 inset。
+    // 为什么必须含 inset：主壳底栏是 overlay（activity_main.xml 中 content_container 与
+    // bottom_controls 为同层兄弟），三键导航设备 inset≈48dp，只加静态 dp 会漏留白
+    // ⇒ 列表滚到底时最后一项被底栏遮挡（用户 2026-09-24 报障）。
+    // 已知上限：未复原 Archive 的 ItemDecoration（R.id.main_bottom_bar_space_decoration 本项目不存在），
+    // 底部留白以 dimen + inset 等效实现。
     val initialPadding = if (withInitialPadding) bottomPadding else 0
     setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
-        val bottomSpace = windowInsets.navigationBarHeight + 90.dpToPx()
+        val bottomSpace = windowInsets.navigationBarHeight +
+            resources.getDimensionPixelSize(R.dimen.main_content_bottom_bar_padding)
         bottomPadding = initialPadding + bottomSpace
         windowInsets
     }

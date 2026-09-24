@@ -7,7 +7,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -54,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import io.legado.app.R
+import io.legado.app.base.mainBottomBarContentPadding
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.book.explore.exploreListIntro
@@ -163,11 +163,10 @@ fun ExploreModernListScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
+            contentPadding = mainBottomBarContentPadding(
                 start = 8.dp,
                 top = 8.dp,
-                end = 8.dp,
-                bottom = 86.dp
+                end = 8.dp
             ),
             verticalArrangement = Arrangement.spacedBy(if (listItemStyle == BookshelfListItemStyle.RoundedCard) 4.dp else 2.dp)
         ) {
@@ -283,11 +282,10 @@ private fun ExploreModernGridScreen(
             columns = GridCells.Fixed(3),
             state = gridState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
+            contentPadding = mainBottomBarContentPadding(
                 start = 8.dp,
                 top = 8.dp,
-                end = 8.dp,
-                bottom = 86.dp
+                end = 8.dp
             ),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -398,11 +396,10 @@ private fun ExploreModernWaterfallScreen(
             columns = StaggeredGridCells.Fixed(2),
             state = gridState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
+            contentPadding = mainBottomBarContentPadding(
                 start = 8.dp,
                 top = 8.dp,
-                end = 8.dp,
-                bottom = 86.dp
+                end = 8.dp
             ),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalItemSpacing = 10.dp

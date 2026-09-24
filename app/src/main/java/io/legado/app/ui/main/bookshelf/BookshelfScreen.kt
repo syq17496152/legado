@@ -6,7 +6,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -70,6 +69,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.ImageView
 import io.legado.app.R
+import io.legado.app.base.mainBottomBarContentPadding
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.help.book.isLocal
@@ -435,7 +435,7 @@ private fun FolderGroupGridContent(
     LazyVerticalGrid(
         columns = GridCells.Fixed(spanCount),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = m, top = m, end = m, bottom = m),
+        contentPadding = mainBottomBarContentPadding(start = m, top = m, end = m, extraBottom = m),
         horizontalArrangement = Arrangement.spacedBy(m),
         verticalArrangement = Arrangement.spacedBy(m),
     ) {
@@ -506,7 +506,10 @@ private fun FolderGroupListContent(
     val rowMinHeight = shelfRowMinHeight(compact = false, rounded = rounded).dp
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = margin.coerceAtLeast(2).dp),
+        contentPadding = mainBottomBarContentPadding(
+            top = margin.coerceAtLeast(2).dp,
+            extraBottom = margin.coerceAtLeast(2).dp
+        ),
     ) {
         items(bookGroups, key = { it.groupId }) { group ->
             Row(
@@ -609,7 +612,7 @@ private fun BookGrid(
         columns = GridCells.Fixed(spanCount),
         modifier = Modifier.fillMaxSize(),
         state = gridState,
-        contentPadding = PaddingValues(start = m, top = m, end = m, bottom = m),
+        contentPadding = mainBottomBarContentPadding(start = m, top = m, end = m, extraBottom = m),
         horizontalArrangement = Arrangement.spacedBy(m),
         verticalArrangement = Arrangement.spacedBy(m),
     ) {
@@ -779,7 +782,10 @@ private fun BookList(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         state = listState,
-        contentPadding = PaddingValues(vertical = margin.coerceAtLeast(2).dp),
+        contentPadding = mainBottomBarContentPadding(
+            top = margin.coerceAtLeast(2).dp,
+            extraBottom = margin.coerceAtLeast(2).dp
+        ),
     ) {
         items(books, key = { it.bookUrl }) { book ->
             BookListItem(

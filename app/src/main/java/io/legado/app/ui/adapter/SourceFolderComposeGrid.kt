@@ -6,7 +6,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import io.legado.app.base.mainBottomBarContentPadding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.rememberThemeUiPalette
@@ -67,7 +67,7 @@ fun SourceFolderComposeGrid(
     LazyVerticalGrid(
         columns = GridCells.Fixed(spanCount),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = m, top = m, end = m, bottom = m),
+        contentPadding = mainBottomBarContentPadding(start = m, top = m, end = m, extraBottom = m),
         horizontalArrangement = Arrangement.spacedBy(m),
         verticalArrangement = Arrangement.spacedBy(m),
     ) {
