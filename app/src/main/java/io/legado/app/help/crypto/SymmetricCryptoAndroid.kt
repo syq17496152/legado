@@ -1,6 +1,5 @@
 package io.legado.app.help.crypto
 
-import android.util.Log
 import androidx.annotation.Keep
 import cn.hutool.core.codec.Base64
 import cn.hutool.core.io.IoUtil
@@ -50,8 +49,11 @@ class SymmetricCryptoAndroid(
             // P1-2.1: 捕获加密解密异常（IllegalBlockSizeException/BadPaddingException 等）
             // 记录日志并返回空 ByteArray，避免异常传播导致播放崩溃
             val algoName = this.javaClass.simpleName
+            // log-compliance（2026-09-24，G-10 存量清偿）：原此处另有一行裸 `Log.d("RssDecrypt", …)`，
+            // 字段与本行**逐字重复**（algorithm/dataLen/exception）⇒ 冗余；且 `"RssDecrypt"` 非 AppLog 登记 TAG
+            // （全仓仅此一处 + 一份已归档 spec 提及，无任何采集脚本依赖）。诊断信息由本行
+            // `AppLog.put`（含异常栈）完整覆盖，故直接删除裸 Log 行而非另立 TAG 常量。
             AppLog.put("解密失败: algorithm=${algoName}, dataLen=${data.length}, exception=${e.javaClass.simpleName}", e)
-            Log.d("RssDecrypt", "decrypt failed: algo=${algoName}, dataLen=${data.length}, exception=${e.javaClass.simpleName}")
             ByteArray(0)
         }
     }

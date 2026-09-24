@@ -1,6 +1,5 @@
 package io.legado.app.utils
 
-import android.util.Log
 import android.util.LruCache
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BaseSource
@@ -15,8 +14,6 @@ import kotlinx.coroutines.CancellationException
  * 加密图片解密工具
  */
 object ImageUtils {
-
-    private const val TAG = "ImgDecrypt"
 
     /**
      * P1-2 解密结果缓存：避免列表刷新时重复解密相同图片
@@ -96,7 +93,15 @@ object ImageUtils {
         }.onFailure {
             // P2-A 修复：协程取消异常必须重新抛出，不能视为解密错误污染日志
             if (it is CancellationException) throw it
-            Log.e(TAG, "decode(InputStream) failed: ${it.message}", it)
+            // log-compliance（2026-09-24，G-10 存量清偿）：原为裸 `Log.e(TAG, …)`；
+            // 改为 `putDebugWithTag(AppLog.TAG_IMG_DECRYPT, …)` —— **logcat tag 逐字不变**
+            // （`TAG_IMG_DECRYPT` 值即 `"ImgDecrypt"`，该 tag 被真机异常分析文档引用，必须保留），
+            // 同时消除裸 `android.util.Log` 依赖（对齐 log-compliance-cleanup 的既有收编范式）。
+            AppLog.putDebugWithTag(
+                AppLog.TAG_IMG_DECRYPT,
+                "decode(InputStream) failed: ${it.message}",
+                it
+            )
             AppLog.put("图片解密错误 src=${src.take(60)}", it)
         }.getOrNull()
     }
