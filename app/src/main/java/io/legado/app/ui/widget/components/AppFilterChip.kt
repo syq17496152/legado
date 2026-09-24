@@ -19,8 +19,9 @@ import io.legado.app.utils.ColorUtils
 /**
  * 可选中胶囊 chip（筛选/开关类单源实现，M4 9-10/11 收口）。
  *
- * 取色与 XML 侧 `SearchActivity.createSourceGroupChip` 同口径：未选中 = 次级表面底 + 面板描边 + 主文本色；
- * 选中 = accent 半透明叠加 + accent 描边与字色。同一「范围/开关 chip」语义不得再出现第二套视觉。
+ * 取色与此前 XML 侧「源分组 chip」（`SearchActivity.createSourceGroupChip`，CE 5.2 已随该页换装删除）
+ * 同口径：未选中 = 次级表面底 + 面板描边 + 主文本色；选中 = accent 半透明叠加 + accent 描边与字色。
+ * 同一「范围/开关 chip」语义不得再出现第二套视觉 ⇒ 该 View 实现删除后，本组件即此语义的**唯一实现**。
  *
  * R28 收口（2026-09-23）：
  * - 未选中底改走**面 token 归属表**的 chip 唯一 token `tabBackgroundColor`

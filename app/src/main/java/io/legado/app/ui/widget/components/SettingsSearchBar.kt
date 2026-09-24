@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -55,7 +56,13 @@ fun SettingsSearchBar(
     modifier: Modifier = Modifier,
     placeholder: String? = null,
     onSearch: (() -> Unit)? = null,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
+    /**
+     * CE 5.2（可选扩展，默认 null ⇒ 既有调用点零改动）：焦点变化回调。
+     * 书源搜索页用它承载原 `SearchView.setOnQueryTextFocusChangeListener` 的语义
+     * （聚焦时展示搜索历史、失焦且有结果时收起），避免该页再自建第二套输入框。
+     */
+    onFocusChanged: ((Boolean) -> Unit)? = null
 ) {
     // topbar-search-entry-align v3：palette 槽位取色（自定义 key → background_menu 兜底）+ alpha/描边对齐 View 侧 TopBarSearchStyle
     val context = LocalContext.current
@@ -109,6 +116,14 @@ fun SettingsSearchBar(
             .height(40.dp)
             .background(fieldBackground, AppShapes.Search)
             .border(1.dp, fieldStroke, AppShapes.Search)
+            // 焦点观察必须排在 focusRequester 之前（在其后的焦点目标上才可被观测到）
+            .then(
+                if (onFocusChanged != null) {
+                    Modifier.onFocusChanged { onFocusChanged(it.isFocused) }
+                } else {
+                    Modifier
+                }
+            )
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
     )
 }

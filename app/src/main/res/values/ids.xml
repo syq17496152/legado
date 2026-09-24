@@ -36,4 +36,8 @@
     <!-- X1 清理 activity_config.xml 后保留的代码引用 id（ConfigActivity 纯代码容器） -->
     <item name="configFrameLayout" type="id" />
 
+    <!-- CE 5.2：menu/book_search.xml 退役后保留的代码引用 id（SearchActivity 菜单动作 id，AppDropdownMenu 数据驱动） -->
+    <item name="menu_source_manage" type="id" />
+    <item name="menu_search_scope" type="id" />
+
 </resources>
