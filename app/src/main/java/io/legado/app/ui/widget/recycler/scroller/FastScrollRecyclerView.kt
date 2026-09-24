@@ -32,7 +32,11 @@ class FastScrollRecyclerView : RecyclerView {
     }
 
     private fun layout(context: Context, attrs: AttributeSet?) {
-        mFastScroller = FastScroller(context, attrs)
+        // attrs==null（即经 `FastScrollRecyclerView(context)` 程序化构造）必须走无属性构造：
+        // FastScroller 的 (context, attrs, defStyleAttr) 会执行 LinearLayout.generateLayoutParams(null)，
+        // 因缺 layout_width 抛 UnsupportedOperationException（CE 5.2 全文搜索页程序化装配时实测）。
+        // XML 路径（attrs 非空）行为不变。
+        mFastScroller = if (attrs == null) FastScroller(context) else FastScroller(context, attrs)
         mFastScroller.id = R.id.fast_scroller
     }
 

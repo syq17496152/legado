@@ -1,37 +1,63 @@
 package io.legado.app.ui.book.searchContent
 
-import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
-import android.view.inputmethod.InputMethodManager
+import android.text.TextUtils
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.Space
+import android.widget.TextView
 import androidx.activity.viewModels
+import androidx.appcompat.widget.AppCompatImageView
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
-import io.legado.app.databinding.ActivitySearchContentBinding
 import io.legado.app.help.IntentData
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.isLocal
+import io.legado.app.lib.theme.Selector
+import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.bottomBackground
 import io.legado.app.lib.theme.getPrimaryTextColor
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.anima.RefreshProgressBar
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.AppMenuSheet
 import io.legado.app.ui.widget.components.GlassTopAppBar
@@ -39,19 +65,16 @@ import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.ui.widget.recycler.UpLinearLayoutManager
 import io.legado.app.ui.widget.recycler.VerticalDivider
+import io.legado.app.ui.widget.recycler.scroller.FastScrollRecyclerView
 import io.legado.app.utils.ColorUtils
-import io.legado.app.utils.applyNavigationBarMargin
-import io.legado.app.utils.invisible
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.postEvent
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import splitties.systemservices.inputMethodManager
 
 /**
  * 命中分布条目（F77）：一章的命中聚合，供「按章直达」列表消费。
@@ -67,10 +90,13 @@ private data class ChapterHit(
 
 
 class SearchContentActivity :
-    VMBaseActivity<ActivitySearchContentBinding, SearchContentViewModel>(),
+    VMBaseActivity<ViewBinding, SearchContentViewModel>(),
     SearchContentAdapter.Callback {
 
-    override val binding by viewBinding(ActivitySearchContentBinding::inflate)
+    // CE 5.2（compose 包）：原 activity_search_content.xml 已退役 ⇒ 改 composeShell 工厂创建合成壳，
+    // Compose 全权接管页面骨架；**四个 View 内核一律 AndroidView 原样托管**
+    // （结果列表 / 进度条 / 底部信息条 / 停止 FAB）。
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<SearchContentViewModel>()
     private val adapter by lazy { SearchContentAdapter(this, this) }
     private val mLayoutManager by lazy { UpLinearLayoutManager(this) }
@@ -85,6 +111,21 @@ class SearchContentActivity :
     private var hitDistribution by mutableStateOf<List<ChapterHit>>(emptyList())
     private var distSheetExpanded by mutableStateOf(false)
 
+    // CE 5.2：原 XML 的 View 机制改由 Compose 状态 + 程序化 View 驱动（逐一与原节点等价）
+    //  · progressLoading    ← `refresh_progress_bar` 的 isAutoLoading（原实现从不改可见性 ⇒ 条恒挂载）
+    //  · stopFabVisible     ← `fb_stop` 的 visible()/invisible()
+    //  · focusRequestSignal ← 原「点信息条 → 焦点回搜索框 + 弹输入法」改为对 Compose 搜索框发聚焦请求
+    private var progressLoading by mutableStateOf(false)
+    private var stopFabVisible by mutableStateOf(false)
+    private var focusRequestSignal by mutableIntStateOf(0)
+    // 程序化创建的原 XML 节点（组合挂载时创建，由这些字段持有页面级引用）
+    private var resultListView: FastScrollRecyclerView? = null
+    private var infoTextView: TextView? = null
+    /** 底部信息条文案：组合挂载前先落字段，挂载时回填（原 TextView 的 text 只会更晚被写入，等价）。 */
+    private var infoText: String = ""
+    /** 原 `initSearchResultList` 的 `scrollToPosition` 在列表尚未挂载时的待回放定位。 */
+    private var pendingScrollPosition = -1
+
     // search-content-compose 壳层化：菜单动作 ID（原 R.id.menu_xxx，菜单资源已删除）
     private object MenuId {
         const val ENABLE_REPLACE = 1
@@ -92,19 +133,10 @@ class SearchContentActivity :
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        val bbg = bottomBackground
-        val btc = getPrimaryTextColor(ColorUtils.isColorLight(bbg))
-        binding.llSearchBaseInfo.setBackgroundColor(bbg)
-        binding.llSearchBaseInfo.applyNavigationBarMargin()
-        binding.tvCurrentSearchInfo.setTextColor(btc)
-        binding.ivSearchContentTop.setColorFilter(btc)
-        binding.ivSearchContentBottom.setColorFilter(btc)
+        initComposeContent()
         val searchResultList = IntentData.get<List<SearchResult>>("searchResultList")
         val position = intent.getIntExtra("searchResultIndex", 0)
         val noSearchResult = searchResultList == null
-        initComposeTopBar()
-        initRecyclerView()
-        initView()
         val bookUrl = intent.getStringExtra("bookUrl") ?: return
         viewModel.initBook(bookUrl) {
             initSearchResultList(searchResultList, position)
@@ -112,64 +144,125 @@ class SearchContentActivity :
         }
     }
 
-    // search-content-compose 壳层化：顶栏（GlassTopAppBar 标题 + 搜索 SettingsSearchBar + 更多菜单 AppDropdownMenu）
+    /**
+     * CE 5.2：Compose 承载全页（顶栏 + 进度条 + 结果列表 + 底部信息条 + 停止 FAB）。
+     *
+     * 与原 XML（`activity_search_content.xml`）的**逐一对应关系**（三不影响口径）：
+     *  · `compose_top_bar` → 顶部 `LegadoTheme { Column { … } }`（内容原样搬入，不再套壳 ComposeView）
+     *  · `refresh_progress_bar`（2dp，无 visibility 属性 ⇒ 恒在布局中）→ `AndroidView` 托管
+     *    `RefreshProgressBar`（**自绘动画条，无 Compose 等价物**）；原实现只切 `isAutoLoading`
+     *    ⇒ 这里**保持恒挂载**、仅由 `progressLoading` 驱动动画（不改成条件组合，否则会少 2dp 高度）
+     *  · `recyclerView`（FastScrollRecyclerView + UpLinearLayoutManager + VerticalDivider）
+     *    → `AndroidView` 原样托管（View 版 adapter 仍在）
+     *  · `ll_search_base_info`（48dp 信息条：TextView + 上/下箭头）→ `AndroidView` 程序化构造
+     *    （保留 middle 省略 / 长按提示 / 波纹底 / 箭头 36dp 几何 / 导航栏边距）
+     *  · `fb_stop`（mini FAB / 16dp 边距 / invisible）→ `AndroidView` 托管同配置 FAB；
+     *    其底边距对齐原 `constraintBottom_toTopOf=ll_search_base_info`（位于信息条**之上**）
+     *    ⇒ 无需再补导航栏 inset
+     */
     @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-    private fun initComposeTopBar() {
-        binding.composeTopBar.setContent {
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
             LegadoTheme {
-                Column {
-                    GlassTopAppBar(
-                        title = getString(R.string.search_content),
-                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                        onNavClick = { finish() },
-                        actions = {
-                            // F77：命中跨 ≥2 章时才给「按章直达」入口（单章命中时列表本身就一眼看完，加了是仪式感）
-                            if (hitDistribution.size >= 2) {
-                                IconButton(onClick = { distSheetExpanded = true }) {
-                                    Icon(
-                                        Icons.Default.PieChart,
-                                        contentDescription = stringResource(R.string.search_content_distribution_label)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // ---- 顶栏区（原 binding.composeTopBar 内容，逐行不变）----
+                    Column {
+                        GlassTopAppBar(
+                            title = getString(R.string.search_content),
+                            navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                            onNavClick = { finish() },
+                            actions = {
+                                // F77：命中跨 ≥2 章时才给「按章直达」入口（单章命中时列表本身就一眼看完，加了是仪式感）
+                                if (hitDistribution.size >= 2) {
+                                    IconButton(onClick = { distSheetExpanded = true }) {
+                                        Icon(
+                                            Icons.Default.PieChart,
+                                            contentDescription = stringResource(R.string.search_content_distribution_label)
+                                        )
+                                    }
+                                }
+                                Box {
+                                    IconButton(onClick = { menuExpanded = true }) {
+                                        Icon(Icons.Default.MoreVert, contentDescription = null)
+                                    }
+                                    AppDropdownMenu(
+                                        expanded = menuExpanded,
+                                        onDismiss = { menuExpanded = false },
+                                        actions = buildMenuActions()
                                     )
                                 }
                             }
-                            Box {
-                                IconButton(onClick = { menuExpanded = true }) {
-                                    Icon(Icons.Default.MoreVert, contentDescription = null)
-                                }
-                                AppDropdownMenu(
-                                    expanded = menuExpanded,
-                                    onDismiss = { menuExpanded = false },
-                                    actions = buildMenuActions()
-                                )
-                            }
+                        )
+                        SettingsSearchBar(
+                            query = composeSearchQuery,
+                            onQueryChange = { composeSearchQuery = it },
+                            placeholder = getString(R.string.search),
+                            onSearch = { startContentSearch(composeSearchQuery.trim()) },
+                            focusRequester = searchFocusRequester
+                        )
+                        if (distSheetExpanded) {
+                            AppMenuSheet(
+                                title = getString(
+                                    R.string.search_content_distribution,
+                                    hitDistribution.size
+                                ),
+                                actions = hitDistribution.map { hit ->
+                                    MenuAction(
+                                        Icons.Default.Article,
+                                        getString(
+                                            R.string.search_content_distribution_item,
+                                            hit.chapterTitle,
+                                            hit.count
+                                        )
+                                    ) { scrollToChapter(hit) }
+                                },
+                                onDismiss = { distSheetExpanded = false }
+                            )
                         }
+                    }
+                    // 点信息条 → 聚焦搜索框（原实现挂在已退役的 ComposeView 壳上：View 层焦点进不了
+                    // Compose 焦点系统 ⇒ 改为对 Compose 搜索框发聚焦请求，语义等价且真正生效）
+                    LaunchedEffect(focusRequestSignal) {
+                        if (focusRequestSignal > 0) {
+                            searchFocusRequester.requestFocus()
+                        }
+                    }
+                    // ---- 进度条（原 refresh_progress_bar：2dp，恒在布局中，只切动画态）----
+                    AndroidView(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.dp),
+                        factory = { ctx -> RefreshProgressBar(ctx) },
+                        update = { it.isAutoLoading = progressLoading }
                     )
-                    SettingsSearchBar(
-                        query = composeSearchQuery,
-                        onQueryChange = { composeSearchQuery = it },
-                        placeholder = getString(R.string.search),
-                        onSearch = { startContentSearch(composeSearchQuery.trim()) },
-                        focusRequester = searchFocusRequester
-                    )
-                    if (distSheetExpanded) {
-                        AppMenuSheet(
-                            title = getString(
-                                R.string.search_content_distribution,
-                                hitDistribution.size
-                            ),
-                            actions = hitDistribution.map { hit ->
-                                MenuAction(
-                                    Icons.Default.Article,
-                                    getString(
-                                        R.string.search_content_distribution_item,
-                                        hit.chapterTitle,
-                                        hit.count
-                                    )
-                                ) { scrollToChapter(hit) }
-                            },
-                            onDismiss = { distSheetExpanded = false }
+                    // ---- 结果列表 + 停止 FAB（原 recycler_view / fb_stop）----
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { ctx -> createResultList(ctx) }
+                        )
+                        AndroidView(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(16.dp),
+                            factory = { ctx -> createStopFab(ctx) },
+                            update = { fab ->
+                                fab.visibility =
+                                    if (stopFabVisible) View.VISIBLE else View.INVISIBLE
+                            }
                         )
                     }
+                    // ---- 底部信息条（原 ll_search_base_info：48dp + 导航栏边距）----
+                    AndroidView(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding(),
+                        factory = { ctx -> createSearchInfoBar(ctx) }
+                    )
                 }
             }
         }
@@ -218,40 +311,155 @@ class SearchContentActivity :
         }
     }
 
+    /**
+     * 原 `recycler_view` 的程序化等价物（FastScrollRecyclerView + 上推布局 + 分割线 + View 版 adapter）。
+     *
+     * 组合挂载晚于 `onActivityCreated`（ComposeView 在附着窗口后才组合）⇒ `initSearchResultList`
+     * 可能早于本工厂执行，此时定位请求先入 [pendingScrollPosition]，在此回放。
+     */
+    private fun createResultList(context: Context): FastScrollRecyclerView =
+        FastScrollRecyclerView(context).apply {
+            // 原 XML `android:id="@+id/recycler_view"`；程序化构造必须显式赋 id——
+            // FastScroller.setLayoutParams 以 `require(recyclerViewId != View.NO_ID)` 定位宿主
+            // （无 id 时挂载即抛 IllegalArgumentException，真机实测）
+            id = R.id.recycler_view
+            overScrollMode = View.OVER_SCROLL_NEVER
+            layoutManager = mLayoutManager
+            addItemDecoration(VerticalDivider(context))
+            adapter = this@SearchContentActivity.adapter
+            if (pendingScrollPosition >= 0) {
+                scrollToPosition(pendingScrollPosition)
+                pendingScrollPosition = -1
+            }
+            resultListView = this
+        }
+
+    /** 原 `fb_stop` 的程序化等价物（mini 尺寸 / accent 底 / 停止图标 / 原点击语义）。 */
+    private fun createStopFab(context: Context): FloatingActionButton =
+        FloatingActionButton(context).apply {
+            size = FloatingActionButton.SIZE_MINI
+            contentDescription = getString(R.string.stop)
+            setImageResource(R.drawable.ic_stop_black_24dp)
+            backgroundTintList = Selector.colorBuild()
+                .setDefaultColor(accentColor)
+                .setPressedColor(ColorUtils.darkenColor(accentColor))
+                .create()
+            visibility = if (stopFabVisible) View.VISIBLE else View.INVISIBLE
+            setOnClickListener {
+                searchJob?.cancel()
+            }
+        }
+
+    /**
+     * 原 `ll_search_base_info` 的程序化等价物（F76/F77 的信息陈述条）。
+     *
+     * 取色沿用原 `onActivityCreated` 口径（K1：面 token 归属 = `bottomBackground` 面色；
+     * 文字/箭头 = `getPrimaryTextColor(isColorLight(bottomBackground))`，与同语义既有实现双栈一致）。
+     */
+    private fun createSearchInfoBar(context: Context): LinearLayout {
+        val bbg = bottomBackground
+        val btc = getPrimaryTextColor(ColorUtils.isColorLight(bbg))
+        val borderlessBg = borderlessItemBackgroundRes()
+        val bar = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 48.dpToPx()
+            )
+            setBackgroundColor(bbg)
+            elevation = 3.dpToPx().toFloat()
+            setPadding(10.dpToPx(), 0, 10.dpToPx(), 0)
+        }
+        val info = TextView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+            setBackgroundResource(borderlessBg)
+            ellipsize = TextUtils.TruncateAt.MIDDLE
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(10.dpToPx(), 0, 10.dpToPx(), 0)
+            setSingleLine()
+            setTextColor(btc)
+            textSize = 12f
+            text = infoText
+            setOnClickListener { focusRequestSignal++ }
+        }
+        val spacer = Space(context).apply {
+            layoutParams = LinearLayout.LayoutParams(20.dpToPx(), 1.dpToPx())
+        }
+        val toTop = createNavArrow(
+            context, R.drawable.ic_arrow_drop_up, getString(R.string.go_to_top),
+            btc, borderlessBg
+        ) {
+            mLayoutManager.scrollToPositionWithOffset(0, 0)
+        }
+        val toBottom = createNavArrow(
+            context, R.drawable.ic_arrow_drop_down, getString(R.string.go_to_bottom),
+            btc, borderlessBg
+        ) {
+            if (adapter.itemCount > 0) {
+                mLayoutManager.scrollToPositionWithOffset(adapter.itemCount - 1, 0)
+            }
+        }
+        bar.addView(info)
+        bar.addView(spacer)
+        bar.addView(toTop)
+        bar.addView(toBottom)
+        infoTextView = info
+        return bar
+    }
+
+    /** 原信息条右侧上/下箭头（36dp、无边界波纹底、图标 tint = 主文字色、长按提示）。 */
+    private fun createNavArrow(
+        context: Context,
+        iconRes: Int,
+        label: String,
+        tint: Int,
+        borderlessBg: Int,
+        onClick: () -> Unit
+    ): AppCompatImageView = AppCompatImageView(context).apply {
+        layoutParams = LinearLayout.LayoutParams(36.dpToPx(), ViewGroup.LayoutParams.MATCH_PARENT)
+        setBackgroundResource(borderlessBg)
+        contentDescription = label
+        setImageResource(iconRes)
+        // 原 XML 用 android:tooltipText（API 26+ 才生效）；直接调属性会在低版本抛 NoSuchMethod
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            tooltipText = label
+        }
+        setColorFilter(tint)
+        setOnClickListener { onClick() }
+    }
+
+    /** `?android:attr/selectableItemBackgroundBorderless` 的样式资源 id（原 XML 三处点击节点的波纹底）。 */
+    private fun borderlessItemBackgroundRes(): Int {
+        val outValue = TypedValue()
+        theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, outValue, true)
+        return outValue.resourceId
+    }
+
+    /** 底部信息条文案落点（原 `tv_current_search_info` 的 `post { text = … }` 等价物）。 */
+    private fun setInfoText(text: String) {
+        infoText = text
+        val tv = infoTextView
+        if (tv == null) {
+            runOnUiThread { infoTextView?.text = text }
+        } else {
+            tv.post { tv.text = text }
+        }
+    }
+
     private fun initSearchResultList(list: List<SearchResult>?, position: Int) {
         list ?: return
         viewModel.searchResultList.addAll(list)
         viewModel.searchResultCounts = list.size
         adapter.setItems(list)
-        binding.recyclerView.scrollToPosition(position)
+        val listView = resultListView
+        if (listView == null) {
+            // 组合尚未挂载：先记定位，待 createResultList 回放（原实现列表恒在场，无此分支）
+            pendingScrollPosition = position
+        } else {
+            listView.scrollToPosition(position)
+        }
         // F77：既有结果也陈述分布（不重搜也能按章直达）
         renderCoverage()
-    }
-
-    private fun initRecyclerView() {
-        binding.recyclerView.layoutManager = mLayoutManager
-        binding.recyclerView.addItemDecoration(VerticalDivider(this))
-        binding.recyclerView.adapter = adapter
-    }
-
-    private fun initView() {
-        binding.ivSearchContentTop.setOnClickListener {
-            mLayoutManager.scrollToPositionWithOffset(0, 0)
-        }
-        binding.ivSearchContentBottom.setOnClickListener {
-            if (adapter.itemCount > 0) {
-                mLayoutManager.scrollToPositionWithOffset(adapter.itemCount - 1, 0)
-            }
-        }
-        binding.tvCurrentSearchInfo.setOnClickListener {
-            searchFocusRequester.requestFocus()
-            inputMethodManager.showSoftInput(
-                binding.composeTopBar, InputMethodManager.SHOW_IMPLICIT
-            )
-        }
-        binding.fbStop.setOnClickListener {
-            searchJob?.cancel()
-        }
     }
 
     private fun initBook(submit: Boolean = true) {
@@ -297,8 +505,8 @@ class SearchContentActivity :
         viewModel.lastQuery = query
         hitDistribution = emptyList()
         distSheetExpanded = false
-        binding.refreshProgressBar.isAutoLoading = true
-        binding.fbStop.visible()
+        progressLoading = true
+        stopFabVisible = true
         searchJob = lifecycleScope.launch(IO) {
             initJob?.join()
             // F76：把「搜了哪些章、跳过了多少章」变成可陈述的事实——本页只搜**已缓存**章节，
@@ -322,7 +530,8 @@ class SearchContentActivity :
                     ensureActive()
                     if (searchResults.isNotEmpty()) {
                         viewModel.searchResultList.addAll(searchResults)
-                        binding.tvCurrentSearchInfo.post {
+                        // 原实现借 `tv_current_search_info.post{}` 回主线程（列表/文案均须主线程）
+                        runOnUiThread {
                             adapter.addItems(searchResults)
                         }
                     }
@@ -337,16 +546,16 @@ class SearchContentActivity :
                 if (viewModel.searchResultCounts == 0) {
                     val noSearchResult =
                         SearchResult(resultText = getString(R.string.search_content_empty))
-                    binding.tvCurrentSearchInfo.post {
+                    runOnUiThread {
                         adapter.addItem(noSearchResult)
                     }
                 }
             }.onFailure {
                 AppLog.put("全文搜索出错\n${it.localizedMessage}", it)
             }
-            binding.tvCurrentSearchInfo.post {
-                binding.fbStop.invisible()
-                binding.refreshProgressBar.isAutoLoading = false
+            runOnUiThread {
+                stopFabVisible = false
+                progressLoading = false
                 // 结果与覆盖率一并落定：命中数 / 分布章数 / 已搜章数（+被跳过的未缓存章）
                 renderCoverage(searchedChapters, skippedChapters)
             }
@@ -355,12 +564,11 @@ class SearchContentActivity :
 
     /** F76：搜索进行中的确定性进度（已搜 N/M 章 + 实时命中数） */
     private fun renderProgress(searched: Int, total: Int) {
-        val text = getString(
-            R.string.search_content_progress, searched, total, viewModel.searchResultCounts
+        setInfoText(
+            getString(
+                R.string.search_content_progress, searched, total, viewModel.searchResultCounts
+            )
         )
-        binding.tvCurrentSearchInfo.post {
-            binding.tvCurrentSearchInfo.text = text
-        }
     }
 
     /**
@@ -383,9 +591,7 @@ class SearchContentActivity :
         } else {
             getString(R.string.search_content_coverage, hitCount, chapterCount)
         }
-        binding.tvCurrentSearchInfo.post {
-            binding.tvCurrentSearchInfo.text = text
-        }
+        setInfoText(text)
     }
 
     /**
