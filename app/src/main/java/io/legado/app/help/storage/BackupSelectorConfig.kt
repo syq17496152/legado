@@ -1,6 +1,7 @@
 package io.legado.app.help.storage
 
 import io.legado.app.data.repository.CoverGalleryRepository
+import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
@@ -25,7 +26,12 @@ object BackupSelectorConfig {
     val allItems = listOf(
         BackupItem("coverGallery", CoverGalleryRepository.backupDirName, "封面图集", "配置"),
         BackupItem("bookshelf", "bookshelf.json", "书架", "数据库"),
-        BackupItem("bookChapter", "bookChapter.json", "章节目录", "数据库"),
+        // R17 修正（2026-09-24）：原有一行 `BackupItem("bookChapter", "bookChapter.json", "章节目录", …)`
+        // 是**只列不产出的死条目** —— 全仓零处写/读 `bookChapter.json`；章节目录实际由
+        // `Backup.stageBookChapterForCache()` 写出 `bookChapterCache.json`，且**由「书籍缓存」门控**
+        // （其 KDoc 原文：「备份选中书籍的章节目录（与缓存一起，确保恢复后可读）」）
+        // ⇒ 该条目勾选与否均无效果（R17 的分选 UI 会把它暴露给用户，属必须清掉的误导）。
+        // 语义已由下方 `bookCache` 条目完整覆盖，故整条删除（非改名）。
         BackupItem("bookmark", "bookmark.json", "书签", "数据库"),
         BackupItem("bookGroup", "bookGroup.json", "书籍分组", "数据库"),
         BackupItem("bookSource", "bookSource.json", "书源", "数据库"),
@@ -49,7 +55,11 @@ object BackupSelectorConfig {
         BackupItem("servers", "servers.json", "服务器配置", "数据库"),
         BackupItem("runtimeSourceCache", "runtimeSourceCache.json", "书源运行数据", "数据库"),
         BackupItem("readConfig", "readConfig.json", "阅读样式配置", "配置"),
-        BackupItem("readShareConfig", "readShareConfig.json", "阅读分享配置", "配置"),
+        // R17 修正（2026-09-24）：原为字面量 `"readShareConfig.json"`，与真实文件名**写反**
+        // （备份侧 `Backup.kt` 与恢复侧 `Restore.kt:299` 用的是
+        // `ReadBookConfig.shareConfigFileName` = `shareReadConfig.json`）⇒ 勾选该键不会裁剪真实文件。
+        // 改用常量引用，与既有 `coverGallery` 条目同口径，从结构上防再次漂移。
+        BackupItem("readShareConfig", ReadBookConfig.shareConfigFileName, "阅读分享配置", "配置"),
         BackupItem("themeConfig", "themeConfig.json", "主题配置", "配置"),
         BackupItem("coverRule", "coverRule.json", "封面规则", "配置"),
         BackupItem("directLinkRule", "directLinkUploadRule.json", "直链规则", "配置"),
