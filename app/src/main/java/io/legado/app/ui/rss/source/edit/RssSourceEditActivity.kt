@@ -6,9 +6,26 @@ import android.os.Build
 import android.os.Bundle
 import android.view.Menu
 import android.view.View
+import android.text.InputFilter
+import android.text.InputType
+import android.view.Gravity
+import android.view.ViewGroup
 import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.HorizontalScrollView
+import android.widget.LinearLayout
 import android.widget.EditText
-import androidx.activity.compose.setContent
+import androidx.appcompat.view.ContextThemeWrapper
+import androidx.appcompat.widget.AppCompatEditText
+import androidx.appcompat.widget.AppCompatSpinner
+import androidx.appcompat.widget.AppCompatTextView
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
@@ -36,12 +53,14 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.viewbinding.ViewBinding
 import com.google.android.material.tabs.TabLayout
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.data.entities.RssSource
-import io.legado.app.databinding.ActivityRssSourceEditBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.SelectItem
@@ -78,7 +97,8 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
+import io.legado.app.lib.theme.view.ThemeCheckBox
+import io.legado.app.utils.dpToPx
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -86,13 +106,31 @@ import splitties.views.bottomPadding
 import kotlin.text.isNotEmpty
 
 class RssSourceEditActivity :
-    VMBaseActivity<ActivityRssSourceEditBinding, RssSourceEditViewModel>(),
+    VMBaseActivity<ViewBinding, RssSourceEditViewModel>(),
     KeyboardToolPop.CallBack,
     VariableDialog.Callback {
 
-    override val binding by viewBinding(ActivityRssSourceEditBinding::inflate)
+    // CE 5.2（compose 包）：原 activity_rss_source_edit.xml 已退役 ⇒ composeShell 合成壳 +
+    // attachComposeContent 单源承载；**四个 View 内核一律 AndroidView 原样托管**
+    // （多选框行 / 参数行 / TabLayout / RecyclerView）。
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<RssSourceEditViewModel>()
     private var menuExpanded by mutableStateOf(false)
+
+    // ---- CE 5.2：原 XML 节点的程序化等价物（随宿主即时创建：initView 早于组合挂载）----
+    private val checkRowView: HorizontalScrollView by lazy { createCheckRow() }
+    private val paramRowView: HorizontalScrollView by lazy { createParamRow() }
+    private val tabLayoutView: TabLayout by lazy { createTabLayout() }
+    private val recyclerView: RecyclerView by lazy { createRecyclerView() }
+    // 多选框/参数行内节点（宿主读写它们的状态）
+    private val cbIsEnable: ThemeCheckBox by lazy { checkBox(R.string.is_enable, true) }
+    private val cbSingleUrl: ThemeCheckBox by lazy { checkBox(R.string.single_url, false) }
+    private val cbIsEnableCookie: ThemeCheckBox by lazy { checkBox(R.string.auto_save_cookie, true) }
+    private val cbIsEnablePreload: ThemeCheckBox by lazy { checkBox(R.string.enable_preload, false) }
+    private val spType: AppCompatSpinner by lazy { spinner(R.array.rss_type) }
+    private val lyType: AppCompatSpinner by lazy { spinner(R.array.layout_type) }
+    private val editParseConcurrency: EditText by lazy { createParseConcurrencyEdit() }
+
     private val softKeyboardTool by lazy {
         KeyboardToolPop(this, lifecycleScope, binding.root, this)
     }
@@ -121,7 +159,7 @@ class RssSourceEditActivity :
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         softKeyboardTool.attachToWindow(window)
         initView()
-        initComposeTopBar()
+        initComposeContent()
         viewModel.initData(intent) {
             upSourceView(viewModel.rssSource)
         }
@@ -168,62 +206,183 @@ class RssSourceEditActivity :
         return false
     }
 
-    private fun initComposeTopBar() {
-        binding.composeTopBar.setContent {
-            LegadoTheme {
-                GlassTopAppBar(
-                    title = getString(R.string.rss_source_edit),
-                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                    onNavClick = { finish() },
-                    actions = {
-                        // topbar-icon-semantics-fix 3.2：代码/保存/调试恢复一级图标
-                        //（对齐原版 source_edit.xml showAsAction=always；tint 继承 actionIconContentColor 禁自传）
-                        IconButton(onClick = { onFullEditClicked() }) {
-                            Icon(
-                                imageVector = Icons.Filled.Code,
-                                contentDescription = getString(R.string.edit_content)
-                            )
-                        }
-                        IconButton(onClick = {
-                            saveSource {
-                                setResult(RESULT_OK)
-                                finish()
-                            }
-                        }) {
-                            Icon(
-                                imageVector = Icons.Filled.Save,
-                                contentDescription = getString(R.string.action_save)
-                            )
-                        }
-                        IconButton(onClick = {
-                            saveSource { source ->
-                                startActivity<RssSourceDebugActivity> {
-                                    putExtra("key", source.sourceUrl)
-                                }
-                            }
-                        }) {
-                            Icon(
-                                imageVector = Icons.Filled.BugReport,
-                                contentDescription = getString(R.string.debug_source)
-                            )
-                        }
-                        Box {
-                            IconButton(onClick = { menuExpanded = true }) {
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 compose_top_bar 内容，逐行不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = getString(R.string.rss_source_edit),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = {
+                            // topbar-icon-semantics-fix 3.2：代码/保存/调试恢复一级图标
+                            //（对齐原版 source_edit.xml showAsAction=always；tint 继承 actionIconContentColor 禁自传）
+                            IconButton(onClick = { onFullEditClicked() }) {
                                 Icon(
-                                    imageVector = Icons.Filled.MoreVert,
-                                    contentDescription = null
+                                    imageVector = Icons.Filled.Code,
+                                    contentDescription = getString(R.string.edit_content)
                                 )
                             }
-                            AppDropdownMenu(
-                                expanded = menuExpanded,
-                                onDismiss = { menuExpanded = false },
-                                actions = buildMenuActions()
-                            )
+                            IconButton(onClick = {
+                                saveSource {
+                                    setResult(RESULT_OK)
+                                    finish()
+                                }
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Save,
+                                    contentDescription = getString(R.string.action_save)
+                                )
+                            }
+                            IconButton(onClick = {
+                                saveSource { source ->
+                                    startActivity<RssSourceDebugActivity> {
+                                        putExtra("key", source.sourceUrl)
+                                    }
+                                }
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Filled.BugReport,
+                                    contentDescription = getString(R.string.debug_source)
+                                )
+                            }
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(
+                                        imageVector = Icons.Filled.MoreVert,
+                                        contentDescription = null
+                                    )
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = buildMenuActions()
+                                )
+                            }
                         }
-                    }
+                    )
+                }
+                // ---- 多选框行（原 HorizontalScrollView#1）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth(),
+                    factory = { checkRowView }
+                )
+                // ---- 参数行（原 HorizontalScrollView#2）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth(),
+                    factory = { paramRowView }
+                )
+                // ---- TabLayout（原 tab_layout：36dp 高 + elevation 3dp）----
+                AndroidView(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(36.dp),
+                    factory = { tabLayoutView }
+                )
+                // ---- RecyclerView（原 recycler_view：占剩余高度、clipToPadding=false）----
+                AndroidView(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    factory = { recyclerView }
                 )
             }
         }
+    }
+
+    // ==================== CE 5.2：原 XML 节点的程序化等价物 ====================
+
+    /** 原 `HorizontalScrollView#1`：4 个多选框（accent tint 由 `ThemeCheckBox` 自身施加）。 */
+    private fun createCheckRow(): HorizontalScrollView {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(8.dpToPx(), 0, 8.dpToPx(), 0)
+        }
+        row.addView(cbIsEnable)
+        row.addView(cbSingleUrl)
+        row.addView(cbIsEnableCookie)
+        row.addView(cbIsEnablePreload)
+        return HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(row)
+        }
+    }
+
+    /** 原 `HorizontalScrollView#2`：书源类型 / 版面类型 / 解析并发 三个参数。 */
+    private fun createParamRow(): HorizontalScrollView {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(8.dpToPx(), 0, 8.dpToPx(), 0)
+        }
+        row.addView(label(R.string.book_type))
+        row.addView(spType)
+        row.addView(label(R.string.layout_type))
+        row.addView(lyType)
+        row.addView(label(R.string.parse_concurrency, marginStart = 12))
+        row.addView(editParseConcurrency)
+        return HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(row)
+        }
+    }
+
+    /** 原参数行标签（`TextView`：wrap × match_parent + `gravity=center` ⇒ 随行高垂直居中）。 */
+    private fun label(
+        @androidx.annotation.StringRes textRes: Int,
+        marginStart: Int = 0
+    ): AppCompatTextView = AppCompatTextView(this).apply {
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.MATCH_PARENT
+        ).apply { this.marginStart = marginStart.dpToPx() }
+        gravity = Gravity.CENTER
+        setText(textRes)
+    }
+
+    /** 原 `ThemeCheckBox`（文案/勾选态由代码给，其余取主题默认 ⇒ 与 XML 同口径）。 */
+    private fun checkBox(
+        @androidx.annotation.StringRes textRes: Int,
+        checked: Boolean
+    ): ThemeCheckBox = ThemeCheckBox(this).apply {
+        setText(textRes)
+        isChecked = checked
+    }
+
+    /** 原 `AppCompatSpinner`（`android:entries` + `android:theme="@style/Spinner"`）。 */
+    private fun spinner(@androidx.annotation.ArrayRes entriesRes: Int): AppCompatSpinner =
+        AppCompatSpinner(ContextThemeWrapper(this, R.style.Spinner)).apply {
+            adapter = ArrayAdapter(
+                this@RssSourceEditActivity,
+                android.R.layout.simple_spinner_item,
+                resources.getStringArray(entriesRes)
+            ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        }
+
+    /** 原 `edit_parse_concurrency`（60dp / 居中 / 数字键盘 / 最长 2 位 / hint 0）。 */
+    private fun createParseConcurrencyEdit(): EditText =
+        AppCompatEditText(ContextThemeWrapper(this, R.style.Spinner)).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                60.dpToPx(), LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            gravity = Gravity.CENTER
+            hint = "0"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            filters = arrayOf(InputFilter.LengthFilter(2))
+        }
+
+    /** 原 `tab_layout`（36dp 高 + elevation 3dp；底色/指示器色由 `initView` 按主题覆写）。 */
+    private fun createTabLayout(): TabLayout = TabLayout(this).apply {
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 36.dpToPx()
+        )
+        elevation = 3.dpToPx().toFloat()
+    }
+
+    /** 原 `recycler_view`（`clipToPadding=false`；布局管理器与 adapter 由 `initView` 装配）。 */
+    private fun createRecyclerView(): RecyclerView = RecyclerView(this).apply {
+        clipToPadding = false
     }
 
     /**
@@ -350,12 +509,12 @@ class RssSourceEditActivity :
         val entity = sourceEntities.firstOrNull { it.key == key } ?: return
         sourceEntities.forEach { it.error = null }
         entity.error = getString(R.string.source_required_hint)
-        binding.tabLayout.selectTab(binding.tabLayout.getTabAt(0))
+        tabLayoutView.selectTab(tabLayoutView.getTabAt(0))
         setEditEntities(0)
         val index = adapter.indexOfKey(key)
         if (index >= 0) {
             adapter.notifyItemChanged(index)
-            binding.recyclerView.post { binding.recyclerView.scrollToPosition(index) }
+            recyclerView.post { recyclerView.scrollToPosition(index) }
         }
     }
 
@@ -399,19 +558,19 @@ class RssSourceEditActivity :
     }
 
     private fun initView() {
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+        tabLayoutView.addTab(tabLayoutView.newTab().apply {
             setText(R.string.source_tab_base)
         })
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+        tabLayoutView.addTab(tabLayoutView.newTab().apply {
             setText(R.string.source_tab_start)
         })
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+        tabLayoutView.addTab(tabLayoutView.newTab().apply {
             setText(R.string.source_tab_list)
         })
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+        tabLayoutView.addTab(tabLayoutView.newTab().apply {
             text = "WEB_VIEW"
         })
-        binding.recyclerView.setEdgeEffectColor(primaryColor)
+        recyclerView.setEdgeEffectColor(primaryColor)
         val createSpanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
             override fun getSpanSize(position: Int): Int = when (adapter.getItemViewType(position)) {
                 EditEntity.ViewType.checkBox -> 1 //CheckBox 占1个span
@@ -431,16 +590,16 @@ class RssSourceEditActivity :
                 spanSizeLookup = createSpanSizeLookup
             }
         }
-        binding.recyclerView.layoutManager = gridLayoutManager
-        binding.recyclerView.adapter = adapter
-        binding.recyclerView.viewTreeObserver.addOnGlobalFocusChangeListener { _, newFocus ->
+        recyclerView.layoutManager = gridLayoutManager
+        recyclerView.adapter = adapter
+        recyclerView.viewTreeObserver.addOnGlobalFocusChangeListener { _, newFocus ->
             if (newFocus is EditText) {
                 newFocus.postDelayed({ sendText("") }, 120)
             }
         }
-        binding.tabLayout.setBackgroundColor(backgroundColor)
-        binding.tabLayout.setSelectedTabIndicatorColor(accentColor)
-        binding.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+        tabLayoutView.setBackgroundColor(backgroundColor)
+        tabLayoutView.setSelectedTabIndicatorColor(accentColor)
+        tabLayoutView.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabReselected(tab: TabLayout.Tab?) {
 
             }
@@ -454,7 +613,7 @@ class RssSourceEditActivity :
             }
         })
         // 监听源类型切换：type=2 为视频源，刷新 Adapter 以显示/隐藏 textVideoOnly 项
-        binding.spType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+        spType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 adapter.currentSourceType = position
                 adapter.notifyDataSetChanged()
@@ -462,10 +621,12 @@ class RssSourceEditActivity :
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
-        binding.recyclerView.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
+        // CE 5.2：insets 监听锚点由「XML 里的 recyclerView」改为合成壳 root（同一套 window insets；
+        // 组合内 AndroidView 子视图不保证收到 insets 派发）⇒ 监听逻辑与 padding 落点保持等价
+        binding.root.setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
             val navigationBarHeight = windowInsets.navigationBarHeight
             val imeHeight = windowInsets.imeHeight
-            view.bottomPadding = if (imeHeight == 0) navigationBarHeight else 0
+            recyclerView.bottomPadding = if (imeHeight == 0) navigationBarHeight else 0
             softKeyboardTool.initialPadding = imeHeight
             windowInsets
         }
@@ -478,28 +639,28 @@ class RssSourceEditActivity :
             3 -> adapter.editEntities = webViewEntities
             else -> adapter.editEntities = sourceEntities
         }
-        binding.recyclerView.scrollToPosition(0)
+        recyclerView.scrollToPosition(0)
         window.decorView.rootView.clearFocus()
     }
 
     private fun upSourceView(rssSource: RssSource?) {
         val rs = rssSource ?: RssSource()
         rs.let {
-            binding.cbIsEnable.isChecked = rs.enabled
-            binding.cbSingleUrl.isChecked = rs.singleUrl
-            binding.cbIsEnableCookie.isChecked = rs.enabledCookieJar == true
-            binding.cbIsEnablePreload.isChecked = rs.preload
-            if (rs.type !in 0..<binding.spType.count) {
+            cbIsEnable.isChecked = rs.enabled
+            cbSingleUrl.isChecked = rs.singleUrl
+            cbIsEnableCookie.isChecked = rs.enabledCookieJar == true
+            cbIsEnablePreload.isChecked = rs.preload
+            if (rs.type !in 0..<spType.count) {
                 rs.type = 0
             }
-            binding.spType.setSelection(rs.type)
-            if (rs.articleStyle !in 0..<binding.lyType.count) {
+            spType.setSelection(rs.type)
+            if (rs.articleStyle !in 0..<lyType.count) {
                 rs.articleStyle = 0
             }
-            binding.lyType.setSelection(rs.articleStyle)
+            lyType.setSelection(rs.articleStyle)
             // Issue-1 修复：单源未配置时直接显示系统全局配置值
             // 设计：parseConcurrency=0 表示未单独配置，应显示继承的全局 AppConfig.rssParseConcurrency 值
-            binding.editParseConcurrency.setText(
+            editParseConcurrency.setText(
                 if (rs.parseConcurrency > 0) rs.parseConcurrency.toString()
                 else AppConfig.rssParseConcurrency.toString()
             )
@@ -590,20 +751,20 @@ class RssSourceEditActivity :
                 )
             )
         }
-        binding.tabLayout.selectTab(binding.tabLayout.getTabAt(0))
+        tabLayoutView.selectTab(tabLayoutView.getTabAt(0))
         setEditEntities(0)
     }
 
     private fun getRssSource(): RssSource {
         val source = viewModel.rssSource?.copy() ?: RssSource()
-        source.enabled = binding.cbIsEnable.isChecked
-        source.singleUrl = binding.cbSingleUrl.isChecked
-        source.enabledCookieJar = binding.cbIsEnableCookie.isChecked
-        source.preload = binding.cbIsEnablePreload.isChecked
-        source.type = binding.spType.selectedItemPosition
-        source.articleStyle = binding.lyType.selectedItemPosition
+        source.enabled = cbIsEnable.isChecked
+        source.singleUrl = cbSingleUrl.isChecked
+        source.enabledCookieJar = cbIsEnableCookie.isChecked
+        source.preload = cbIsEnablePreload.isChecked
+        source.type = spType.selectedItemPosition
+        source.articleStyle = lyType.selectedItemPosition
         // Issue-5 修复：保存单源解析并发配置（空值或0=用全局配置）
-        source.parseConcurrency = binding.editParseConcurrency.text.toString()
+        source.parseConcurrency = editParseConcurrency.text.toString()
             .trim().toIntOrNull()?.coerceIn(0, 32) ?: 0
         sourceEntities.forEach {
             it.value = it.value?.takeIf { s -> s.isNotBlank() }
@@ -752,7 +913,7 @@ class RssSourceEditActivity :
                     val editTextLocation = IntArray(2)
                     view.getLocationOnScreen(editTextLocation)
                     val recyclerViewLocation = IntArray(2)
-                    binding.recyclerView.getLocationOnScreen(recyclerViewLocation)
+                    recyclerView.getLocationOnScreen(recyclerViewLocation)
                     val layout = view.layout
                     if (layout != null) {
                         val line = layout.getLineForOffset(end)
@@ -761,12 +922,12 @@ class RssSourceEditActivity :
                         val cursorYOnScreen = editTextLocation[1] + cursorYInEditText
                         // 光标相对于RecyclerView的位置
                         val cursorYInRecyclerView = cursorYOnScreen - recyclerViewLocation[1]
-                        val recyclerViewBottom = binding.recyclerView.height - 120 //考虑键盘的经验值
+                        val recyclerViewBottom = recyclerView.height - 120 //考虑键盘的经验值
                         // 如果光标不在可见范围内，则滚动到光标位置
                         if (cursorYInRecyclerView !in 0..recyclerViewBottom) {
                             val scrollDistance = cursorYInRecyclerView - recyclerViewBottom / 3
-                            if (scrollDistance > 0 && binding.recyclerView.canScrollVertically(1) || scrollDistance < 0 && binding.recyclerView.canScrollVertically(-1)) {
-                                binding.recyclerView.smoothScrollBy(0, scrollDistance)
+                            if (scrollDistance > 0 && recyclerView.canScrollVertically(1) || scrollDistance < 0 && recyclerView.canScrollVertically(-1)) {
+                                recyclerView.smoothScrollBy(0, scrollDistance)
                             }
                         }
                     }
