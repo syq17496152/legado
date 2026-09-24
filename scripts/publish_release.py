@@ -876,25 +876,33 @@ def stage3_theme_gates() -> None:
     ⇒ 远端无脚本可跑。三处接线点 = ① pre-commit hook ② Trae Hook ③ 本处（发布链路）。
     """
     base = _last_release_tag()
-    for name, rel, use_base in THEME_GATE_SCRIPTS:
-        script = PROJECT_ROOT / rel
-        if not script.is_file():
-            log("VERIFY", f"{name} 脚本缺失（{rel}）—— 本地工作区不完整，WARN 跳过", "WARN")
-            continue
-        # sys.executable = 本项目 venv 的 python（发布脚本按规范由 ai_tests\venv 运行）
-        cmd = [sys.executable, str(script)]
-        cmd += ["--base", base] if use_base else ["--no-sweep"]
-        try:
-            out = subprocess.run(cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True)
-        except OSError as exc:  # noqa: BLE001
-            log("VERIFY", f"{name} 执行失败: {exc}", "ERROR")
-            sys.exit(1)
-        if out.returncode != 0:
-            log("VERIFY", f"{name} 未通过（exit {out.returncode}，基准 {base}）", "ERROR")
-            for line in (out.stdout or "").strip().splitlines()[-4:]:
-                log("VERIFY", f"  | {line}")
-            sys.exit(1)
-        log("VERIFY", f"{name} 通过（基准 {base}）")
+    # 2026-09-24（门禁包 H2）：由「硬编码直调门禁 16/17 脚本」改为**统一走 runner**，
+    # 兑现「新增门禁只改注册表、挂载点自动生效」的承诺（原实现绕过注册表，是设计承诺的偏离）。
+    # ⚠ 必须 --exclude G-06 G-09：
+    #   - G-06 的 cmd 是 `git hook pre-push` —— 本机 git 无该子命令 ⇒ exit 129 ⇒ 发布必红；
+    #     其语义本就是「由 git 自动调用、不纳入 runner」；
+    #   - G-09 是发布链路自身，排除以防自调递归（防御性，成本极低）。
+    # ⚠ 必须 --base-ref <最近 release tag>：取色门禁的语义是「比对本次发布实际引入的变更」，
+    #   若用默认 HEAD 会在提交后 diff 恒空 ⇒ 退化为恒 PASS（本项目历史实证陷阱）。
+    # ⚠ 前置（GB-7）：注册表 G-02/G-03 的 stages 必须含 publish，否则本阶段不再覆盖取色门禁。
+    runner = PROJECT_ROOT / "ai_tests" / "scripts" / "run_gates.py"
+    if not runner.is_file():
+        log("VERIFY", f"门禁 runner 缺失（{runner}）—— 本地工作区不完整", "ERROR")
+        sys.exit(1)
+    cmd = [sys.executable, str(runner), "--stage", "publish",
+           "--exclude", "G-06", "G-09", "--base-ref", base]
+    try:
+        out = subprocess.run(cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True,
+                             encoding="utf-8", errors="replace")
+    except OSError as exc:  # noqa: BLE001
+        log("VERIFY", f"门禁 runner 执行失败: {exc}", "ERROR")
+        sys.exit(1)
+    if out.returncode != 0:
+        log("VERIFY", f"发布阶段门禁未通过（exit {out.returncode}，基准 {base}）", "ERROR")
+        for line in (out.stdout or "").strip().splitlines()[-12:]:
+            log("VERIFY", f"  | {line}")
+        sys.exit(1)
+    log("VERIFY", f"发布阶段门禁全部通过（runner --stage publish，基准 {base}）")
 
 
 # === L2 真机门禁（不可跳过，AD-05/AD-07）===
