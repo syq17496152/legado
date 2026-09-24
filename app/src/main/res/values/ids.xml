@@ -40,4 +40,13 @@
     <item name="menu_source_manage" type="id" />
     <item name="menu_search_scope" type="id" />
 
+    <!-- CE 5.2：activity_image_detail.xml 退役后保留的代码引用 id（大图模式三个 View 内核程序化构造；
+         同一族 id 后续 activity_image_gallery 退役时可直接复用，避免再次迁移） -->
+    <item name="view_pager" type="id" />
+    <item name="tv_page_index" type="id" />
+    <item name="layout_rotate_toolbar" type="id" />
+    <item name="btn_rotate_left" type="id" />
+    <item name="btn_reset" type="id" />
+    <item name="btn_rotate_right" type="id" />
+
 </resources>

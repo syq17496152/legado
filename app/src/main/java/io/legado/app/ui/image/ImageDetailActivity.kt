@@ -1,37 +1,56 @@
 package io.legado.app.ui.image
 
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.appcompat.widget.AppCompatImageButton
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.viewbinding.ViewBinding
 import androidx.viewpager2.widget.ViewPager2
 import com.bumptech.glide.request.RequestOptions
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
-import io.legado.app.databinding.ActivityImageDetailBinding
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
 import io.legado.app.ui.file.FileManageActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.image.adapter.ImageDetailAdapter
-import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
-import io.legado.app.utils.ACache
-import io.legado.app.utils.sendToClip
-import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.writeBytes
-import java.util.Date
-import androidx.activity.compose.setContent
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.utils.ACache
+import io.legado.app.utils.dpToPx
+import io.legado.app.utils.sendToClip
+import io.legado.app.utils.toastOnUi
+import io.legado.app.utils.writeBytes
+import java.util.Date
 
 /**
  * 图片大图模式 Activity（V4 实施 Phase 1.3）
@@ -54,11 +73,16 @@ import io.legado.app.ui.widget.components.GlassTopAppBar
  * 共享元素动画：
  * - 共享元素 transitionName = "shared_image_${listPosition}"（与 ImageCanvasAdapter.ImageViewHolder 一致）
  * - 需在 AndroidManifest.xml 中启用 windowActivityTransitions（Phase 1.3.5）
+ *
+ * CE 5.2（compose 包）：原 `activity_image_detail.xml` 已退役 ⇒ `composeShell` 合成壳 +
+ * `attachComposeContent` 单源承载；**三个 View 内核一律 `AndroidView` 原样托管**
+ * （`ViewPager2` 图片区 / 页码徽标 / 旋转工具条）。画布域固定黑白字面色已在
+ * `theme_token_allowlist.json` 按同域同口径登记（原 XML 亦在画布域豁免内）。
  */
-class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding>(),
+class ImageDetailActivity : BaseActivity<ViewBinding>(),
     ImageDetailAdapter.OnImageDetailCallback {
 
-    override val binding by viewBinding(ActivityImageDetailBinding::inflate)
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private var imageDetailAdapter: ImageDetailAdapter? = null
 
@@ -70,6 +94,21 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding>(),
 
     /** 当前长按的图片URL（用于选择保存目录后回调） */
     private var currentLongClickUrl: String? = null
+
+    // ---- CE 5.2：原 XML 显隐机制改状态驱动（逐一与原 View 操作等价）----
+    //  · topBarVisible        ← compose_top_bar 的 GONE/VISIBLE（沉浸式切换）
+    //  · rotateToolbarVisible ← layout_rotate_toolbar 的 GONE/VISIBLE（沉浸式切换 + 初始 VISIBLE）
+    //  · pageIndexVisible / pageIndexText ← tv_page_index 的 GONE/VISIBLE 与页码文案
+    private var topBarVisible by mutableStateOf(true)
+    private var rotateToolbarVisible by mutableStateOf(true)
+    private var pageIndexVisible by mutableStateOf(false)
+    private var pageIndexText by mutableStateOf("")
+
+    // 三个 View 内核：随宿主即时创建（`initViewPager`/`initRotateToolbar` 早于组合挂载，
+    // 因此必须先于 AndroidView factory 存在；factory 只做「把它挂上去」）
+    private val viewPager by lazy { ViewPager2(this) }
+    private val pageIndexView by lazy { createPageIndexView() }
+    private val rotateToolbarView by lazy { createRotateToolbar() }
 
     /** startActivityForResult 请求码 */
     companion object {
@@ -100,7 +139,7 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding>(),
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initSharedElementTransition()
         initImmersion()
-        initComposeTopBar()
+        initComposeContent()
         initViewPager(savedInstanceState)
         initRotateToolbar()
     }
@@ -146,26 +185,147 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding>(),
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         )
-        // 默认显示工具栏
-        binding.layoutRotateToolbar.visibility = View.VISIBLE
+        // 原 XML root 的 android:background="@android:color/black"：换装后由合成壳承担同色底
+        binding.root.setBackgroundColor(Color.BLACK)
+        // 默认显示工具栏（原 binding.layoutRotateToolbar.visibility = View.VISIBLE）
+        rotateToolbarVisible = true
     }
 
     /**
-     * Compose 顶栏（L-C15 S5 改造）：GlassTopAppBar + 返回按钮，无菜单
+     * CE 5.2：Compose 承载全页（图片区 + 顶栏 + 页码徽标 + 旋转工具条）。
      *
-     * - 返回按钮：直接 finish()
-     * - 标题：使用 "图片浏览" 占位（页码通过 onPageChanged 更新）
+     * 与原 XML（`activity_image_detail.xml`）的**逐一对应关系**（三不影响口径）：
+     *  · `view_pager`（全屏 ViewPager2 + PhotoView 手势，**无 Compose 等价物**）
+     *    → `AndroidView { viewPager }`（同一实例，`initViewPager` 已在挂载前完成配置）
+     *  · `compose_top_bar`（已 Compose）→ 内容逐行搬入页内；沉浸态隐藏改为条件组合
+     *    （原 `visibility = GONE` ⇒ 不参与布局，语义等价）
+     *  · `tv_page_index`（右上徽标：上边距 56dp / 右 16dp / `bg_image_page_index` / 白字 14sp）
+     *    → `AndroidView` 程序化 `TextView`，显隐与文案由状态驱动
+     *  · `layout_rotate_toolbar`（底部居中：下边距 32dp / `bg_overlay_button` / padding 12dp /
+     *    三个 48dp 白色图标按钮）→ `AndroidView` 程序化 `LinearLayout`，显隐由状态驱动
      */
-    private fun initComposeTopBar() {
-        binding.composeTopBar.setContent {
-            LegadoTheme {
-                GlassTopAppBar(
-                    title = getString(R.string.image_browse),
-                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                    onNavClick = { finish() }
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Box(modifier = Modifier.fillMaxSize()) {
+                // ---- 图片区（原 view_pager）----
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { viewPager }
+                )
+                // ---- 顶栏（原 compose_top_bar；沉浸态整体收起）----
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (topBarVisible) {
+                        LegadoTheme {
+                            GlassTopAppBar(
+                                title = getString(R.string.image_browse),
+                                navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                                onNavClick = { finish() }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+                // ---- 页码徽标（原 tv_page_index：右上、上边距 56dp、右 16dp）----
+                AndroidView(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 56.dp, end = 16.dp),
+                    factory = { pageIndexView },
+                    update = { tv ->
+                        tv.visibility = if (pageIndexVisible) View.VISIBLE else View.GONE
+                        if (pageIndexVisible) {
+                            tv.text = pageIndexText
+                        }
+                    }
+                )
+                // ---- 旋转工具条（原 layout_rotate_toolbar：底部居中、下边距 32dp）----
+                AndroidView(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 32.dp),
+                    factory = { rotateToolbarView },
+                    update = { bar ->
+                        bar.visibility =
+                            if (rotateToolbarVisible) View.VISIBLE else View.GONE
+                    }
                 )
             }
         }
+    }
+
+    /** 原 `tv_page_index` 的程序化等价物（drawable 底 / 白字 / 14sp / 12×6 内边距）。 */
+    private fun createPageIndexView(): TextView = TextView(this).apply {
+        id = R.id.tv_page_index
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        setBackgroundResource(R.drawable.bg_image_page_index)
+        setPadding(12.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())
+        setTextColor(Color.WHITE)
+        textSize = 14f
+        visibility = View.GONE
+    }
+
+    /** 原 `layout_rotate_toolbar` 的程序化等价物（底 drawable / 12dp 内边距 / 三个 48dp 按钮）。 */
+    private fun createRotateToolbar(): LinearLayout {
+        val toolbar = LinearLayout(this).apply {
+            id = R.id.layout_rotate_toolbar
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setBackgroundResource(R.drawable.bg_overlay_button)
+            val pad = 12.dpToPx()
+            setPadding(pad, pad, pad, pad)
+            visibility = View.GONE
+        }
+        toolbar.addView(
+            createRotateButton(
+                R.id.btn_rotate_left, R.drawable.ic_rotate_left, "逆时针旋转90度",
+                marginStart = 0, marginEnd = 16
+            ) { imageDetailAdapter?.rotateCurrentCounterClockwise() }
+        )
+        toolbar.addView(
+            createRotateButton(
+                R.id.btn_reset, R.drawable.ic_reset, "重置视图",
+                marginStart = 16, marginEnd = 16
+            ) { imageDetailAdapter?.resetCurrentView() }
+        )
+        toolbar.addView(
+            createRotateButton(
+                R.id.btn_rotate_right, R.drawable.ic_rotate_right, "顺时针旋转90度",
+                marginStart = 16, marginEnd = 0
+            ) { imageDetailAdapter?.rotateCurrentClockwise() }
+        )
+        return toolbar
+    }
+
+    /** 原工具条按钮（48dp、无边界波纹底、白 tint、工具条内 16dp 间距）。 */
+    private fun createRotateButton(
+        viewId: Int,
+        iconRes: Int,
+        label: String,
+        marginStart: Int,
+        marginEnd: Int,
+        onClick: () -> Unit
+    ): AppCompatImageButton = AppCompatImageButton(this).apply {
+        id = viewId
+        layoutParams = LinearLayout.LayoutParams(48.dpToPx(), 48.dpToPx()).apply {
+            this.marginStart = marginStart.dpToPx()
+            this.marginEnd = marginEnd.dpToPx()
+        }
+        setBackgroundResource(borderlessItemBackgroundRes())
+        contentDescription = label
+        setImageResource(iconRes)
+        setColorFilter(Color.WHITE)
+        setOnClickListener { onClick() }
+    }
+
+    /** `?attr/selectableItemBackgroundBorderless` 的样式资源 id（原 XML 三处按钮的波纹底）。 */
+    private fun borderlessItemBackgroundRes(): Int {
+        val outValue = TypedValue()
+        theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, outValue, true)
+        return outValue.resourceId
     }
 
     /**
@@ -186,11 +346,11 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding>(),
 
         imageDetailAdapter = ImageDetailAdapter(this, sourceOrigin, referer)
         imageDetailAdapter?.setCallback(this)
-        binding.viewPager.orientation = ViewPager2.ORIENTATION_HORIZONTAL
-        binding.viewPager.adapter = imageDetailAdapter
+        viewPager.orientation = ViewPager2.ORIENTATION_HORIZONTAL
+        viewPager.adapter = imageDetailAdapter
 
         // V2 B-4：从 savedInstanceState 恢复时使用 false（无动画）
-        binding.viewPager.setCurrentItem(currentIndex, false)
+        viewPager.setCurrentItem(currentIndex, false)
 
         AppLog.putDebugWithTag(
             AppLog.TAG_IMAGE_DETAIL,
@@ -199,7 +359,7 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding>(),
         )
 
         // 页面切换监听（更新 currentIndex + TitleBar 页码）
-        binding.viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+        viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 super.onPageSelected(position)
                 currentIndex = position
@@ -217,17 +377,12 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding>(),
      *
      * - 顺时针 90° / 逆时针 90° / 重置视图
      * - 调用 ImageDetailAdapter 当前 ViewHolder 的旋转方法
+     *
+     * CE 5.2：三个按钮的点击回调已在 [createRotateToolbar] 内绑定（工具条随宿主即时创建，
+     * 与「先建视图再绑监听」的原顺序等价）；此处仅确保工具条实例已就绪。
      */
     private fun initRotateToolbar() {
-        binding.btnRotateRight.setOnClickListener {
-            imageDetailAdapter?.rotateCurrentClockwise()
-        }
-        binding.btnRotateLeft.setOnClickListener {
-            imageDetailAdapter?.rotateCurrentCounterClockwise()
-        }
-        binding.btnReset.setOnClickListener {
-            imageDetailAdapter?.resetCurrentView()
-        }
+        rotateToolbarView
     }
 
     /**
@@ -244,13 +399,13 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding>(),
             controller.hide(android.view.WindowInsets.Type.systemBars())
             controller.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            binding.composeTopBar.visibility = View.GONE
-            binding.layoutRotateToolbar.visibility = View.GONE
+            topBarVisible = false
+            rotateToolbarVisible = false
         } else {
             // 显示系统栏
             controller.show(android.view.WindowInsets.Type.systemBars())
-            binding.composeTopBar.visibility = View.VISIBLE
-            binding.layoutRotateToolbar.visibility = View.VISIBLE
+            topBarVisible = true
+            rotateToolbarVisible = true
         }
         AppLog.putDebugWithTag(AppLog.TAG_IMAGE_DETAIL, "toggleImmersive isImmersive=$isImmersive", level = AppLog.Level.INFO)
     }
@@ -389,11 +544,11 @@ class ImageDetailActivity : BaseActivity<ActivityImageDetailBinding>(),
      */
     override fun onPageChanged(position: Int, total: Int) {
         if (total > 1) {
-            binding.tvPageIndex.visibility = View.VISIBLE
-            binding.tvPageIndex.text = "${position + 1} / $total"
+            pageIndexVisible = true
+            pageIndexText = "${position + 1} / $total"
         } else {
             // 单图时隐藏页码（R1.4）
-            binding.tvPageIndex.visibility = View.GONE
+            pageIndexVisible = false
         }
     }
 
