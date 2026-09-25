@@ -96,16 +96,23 @@ fun GlassTopAppBar(
     val context = LocalContext.current
     // 订阅全局主题信号：ThemeSync.bump() 后本组件重组，重读 primaryColor/elevation 最新值
     val themeVersion = ThemeSync.version
+    // 顶栏包 §1.3/§2.2（2026-09-25）：样式解析以**契约签名**为记忆键（而非单纯 themeVersion）——
+    // 签名函数与 View 侧同为 `TopBarConfig.currentSignature`（含 themeUiSignature + 顶栏包/样式/搜索态），
+    // 签名未变 ⇒ 复用上次解析结果（不重读配置/壁纸），行为等价（同签名 ⇒ 同解析结果）；
+    // 签名变化才重算。这也是 G-03 能断言「Compose 顶栏宿主真实引用契约签名」的落点（门禁 §3.1 前置）。
+    val styleSignature = remember(themeVersion) {
+        TopBarConfig.currentSignature(AppConfig.isNightTheme)
+    }
     // bugfix-0908f 尺寸单源：按钮容器/图标尺寸经 TopBarConfig 唯一口径取值
     // （regular 36/20，default 34/18，×fontScale），与 MainTopBarView 完全同源，禁止写死
     val actionContainer = TopBarConfig.actionContainerSize(context)
     val actionIcon = TopBarConfig.actionIconSize(context)
-    val config = remember(themeVersion) {
+    val config = remember(styleSignature) {
         TopBarConfig.currentConfig(context, AppConfig.isNightTheme)
     }
     val isRegular = config.style == TopBarConfig.STYLE_REGULAR
     // 顶栏包背景：仅 regular 样式消费（对齐 MainTopBarView renderBackgroundLayer）
-    val wallpaperFile = remember(config.wallpaperPath, themeVersion) {
+    val wallpaperFile = remember(styleSignature, isRegular) {
         if (isRegular && !config.wallpaperPath.isNullOrBlank()) {
             TopBarConfig.currentWallpaperFile(context, AppConfig.isNightTheme)
         } else {
@@ -118,14 +125,18 @@ fun GlassTopAppBar(
     val wallpaper = remember(wallpaperFile) { wallpaperFile?.let(::decodeTopBarWallpaper) }
     // 顶栏最终色唯一取色入口（AD-01 v1.5）：色相+透明度合一（与 AppManagementTopBar/MainTopBarView 同源），
     // 禁止组件各自计算；wallpaperAlpha 只作用于壁纸图
-    val defaultColor = Color(TopBarConfig.resolvePageBarColorWithAlpha(context, config))
+    val defaultColor = remember(styleSignature) {
+        Color(TopBarConfig.resolvePageBarColorWithAlpha(context, config))
+    }
     // 默认容器色：跟随 TopBarConfig（regular）/「颜色主题」colorPrimary（默认），可覆盖
     val barColor = containerColor ?: defaultColor
     // 默认阴影：跟随 barElevation 设置（View 侧 context.elevation，px→dp），可覆盖
     val barElevation = elevation ?: with(LocalDensity.current) { context.elevation.toDp() }
     // 内容色：按容器色亮度取黑/白（亮底黑 / 暗底白），与 View Toolbar 对比度一致
     val contentColor = contrastOn(barColor)
-    val cornerRadius = if (isRegular) TopBarConfig.cornerRadius(context, config) else 0f
+    val cornerRadius = remember(styleSignature, isRegular) {
+        if (isRegular) TopBarConfig.cornerRadius(context, config) else 0f
+    }
     // shadow 仅实色容器生效（W0 定稿）：半透明/透明顶栏画阴影会形成可见灰白框（真机实锤）
     val useCustomLayout = barHeight != null || secondRow != null
     // W6.5：标题字体槽（管理族 titleFontFamily 跟随页面包）最优先；
