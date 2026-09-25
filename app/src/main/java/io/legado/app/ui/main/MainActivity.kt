@@ -100,8 +100,7 @@ import io.legado.app.ui.main.ai.AiChatActivity
 import io.legado.app.ui.main.explore.ExploreFragment
 import io.legado.app.ui.main.my.MyFragment
 import io.legado.app.ui.main.rss.RssFragment
-import io.legado.app.ui.widget.MainTopBarView
-import io.legado.app.ui.widget.TitleBar
+import io.legado.app.ui.widget.TopBarRefreshable
 import io.legado.app.ui.widget.StableLiquidGlassView
 import io.legado.app.ui.widget.compose.ComposeThemeImageLayer
 import io.legado.app.ui.widget.compose.ComposeThemeImageState
@@ -770,13 +769,14 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         }
     }
 
+    /**
+     * 顶栏包 §2.1：View 侧顶栏**统一刷新入口**——不再按类型分叉（原 `MainTopBarView.refreshStyle()`
+     * 与 `TitleBar.refreshTopBarAppearance()` 两分支）⇒ 所有顶栏实现同一接口 [TopBarRefreshable]，
+     * 宿主只按接口遍历调用；签名早退（§1.3/§2.2）由各实现内部完成、判据同为
+     * `TopBarConfig.currentSignature`（含 `themeUiSignature()`）。
+     */
     private fun refreshMainTopBars(view: View) {
-        if (view is MainTopBarView) {
-            view.refreshStyle()
-        } else if (view is TitleBar) {
-            // bugfix ③: 主界面"我的/发现经典"的 managed TitleBar 刷新顶栏管理配色
-            view.refreshTopBarAppearance()
-        }
+        (view as? TopBarRefreshable)?.refreshTopBarStyle()
         if (view is ViewGroup) {
             for (index in 0 until view.childCount) {
                 refreshMainTopBars(view.getChildAt(index))

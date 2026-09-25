@@ -2,6 +2,7 @@ package io.legado.app.help.config
 
 import android.content.Context
 import android.graphics.Color
+import androidx.annotation.DrawableRes
 import androidx.annotation.Keep
 import io.legado.app.R
 import io.legado.app.constant.AppLog
@@ -310,6 +311,49 @@ object TopBarConfig {
     fun withOpacity(color: Int, opacity: Int): Int {
         val alpha = (opacity.coerceIn(0, 100) * 255 / 100).coerceIn(0, 255)
         return Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color))
+    }
+
+    /**
+     * 顶栏图标资产契约（顶栏包 §1.1，2026-09-25）：两侧实现（View `MainTopBarView` / Compose
+     * `GlassTopAppBar`）一律经本契约取图标资源，**禁止在实现内写死 `R.drawable.xxx`**
+     * （顶栏图标资产统一铁律；原先两侧各写 9–11 处硬编码 ⇒ 换资产必漏改）。
+     */
+    object Icons {
+        /** 更多（主 Tab 与子页一级/溢出共用同一入口图标）。 */
+        @DrawableRes
+        val more: Int = R.drawable.ic_more_vert
+
+        /** 搜索（顶栏动作按钮 + 内联搜索胶囊前缀）。 */
+        @DrawableRes
+        val search: Int = R.drawable.ic_search
+
+        /** 排序 / 筛选入口。 */
+        @DrawableRes
+        val sort: Int = R.drawable.ic_sort
+
+        /** 收藏（订阅 Star）。 */
+        @DrawableRes
+        val star: Int = R.drawable.ic_star_border
+
+        /** 刷新。 */
+        @DrawableRes
+        val refresh: Int = R.drawable.ic_refresh_black_24dp
+
+        /** 登录。 */
+        @DrawableRes
+        val login: Int = R.drawable.ic_bottom_person
+
+        /** 筛选展开/收起指示（标题行右端）。 */
+        @DrawableRes
+        val filterToggle: Int = R.drawable.ic_expand_more
+
+        /** 标题选择箭头（`titleSelect`）。 */
+        @DrawableRes
+        val titleArrow: Int = R.drawable.ic_arrow_drop_down
+
+        /** 返回位默认资产（Compose 顶栏「默认返回」语义归一目标，见 AD-TB-09）。 */
+        @DrawableRes
+        val navBack: Int = R.drawable.ic_back
     }
 
     /**

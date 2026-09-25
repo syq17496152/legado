@@ -49,7 +49,7 @@ import io.legado.app.utils.eventObservable
 class MainTopBarView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
-) : LinearLayout(context, attrs), StatusBarInsetAware {
+) : LinearLayout(context, attrs), StatusBarInsetAware, TopBarRefreshable {
 
     enum class Mode { BOOKSHELF, DISCOVERY, RSS, READ_RECORD, MY }
 
@@ -59,22 +59,22 @@ class MainTopBarView @JvmOverloads constructor(
     val searchEntry = LinearLayout(context)
     private val searchEntryText = TextView(context)
     private val searchEntryIcon = AppCompatImageView(context)
-    val moreButton = actionButton(R.drawable.ic_more_vert, R.string.menu)
+    val moreButton = actionButton(TopBarConfig.Icons.more, R.string.menu)
     /** subpage-topbar-unify: 子页动态图标菜单插槽（S3容器切换/排序/同步史等），宿主经 addActionButton 添加，样式统一走 TopBarConfig+主题 token。 */
     val actionsBar = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
     }
-    val searchButton = actionButton(R.drawable.ic_search, R.string.search)
-    val filterButton = actionButton(R.drawable.ic_sort, R.string.sort)
-    val starButton = actionButton(R.drawable.ic_star_border, R.string.favorite)
-    val refreshButton = actionButton(R.drawable.ic_refresh_black_24dp, R.string.refresh)
-    val loginButton = actionButton(R.drawable.ic_bottom_person, R.string.login)
+    val searchButton = actionButton(TopBarConfig.Icons.search, R.string.search)
+    val filterButton = actionButton(TopBarConfig.Icons.sort, R.string.sort)
+    val starButton = actionButton(TopBarConfig.Icons.star, R.string.favorite)
+    val refreshButton = actionButton(TopBarConfig.Icons.refresh, R.string.refresh)
+    val loginButton = actionButton(TopBarConfig.Icons.login, R.string.login)
     val primaryBar = RoundedTagBarView(context)
     val selectsBar = RoundedTagBarView(context)
     val tagsBar = RoundedTagBarView(context)
     private val primaryFilterRow = LinearLayout(context)
-    private val filterToggleButton = actionButton(R.drawable.ic_expand_more, R.string.screen)
+    private val filterToggleButton = actionButton(TopBarConfig.Icons.filterToggle, R.string.screen)
     private val titleSpacer = Space(context)
     private val titleRow = buildTitleRow()
     private val surfaceLayout = ContentMeasuredFrameLayout(context)
@@ -202,7 +202,7 @@ class MainTopBarView @JvmOverloads constructor(
         if (topBarChangeObserver != null) return
         val observer = Observer<Boolean> { isNight ->
             // 对齐 MainActivity 过滤口径：过期日夜标志事件不处理
-            if (isNight == AppConfig.isNightTheme) refreshStyle()
+            if (isNight == AppConfig.isNightTheme) refreshTopBarStyle(force = true)
         }
         topBarChangeObserver = observer
         eventObservable<Boolean>(EventBus.TOP_BAR_CHANGED).observeForever(observer)
@@ -231,7 +231,7 @@ class MainTopBarView @JvmOverloads constructor(
         // 2.1（bookshelf-refresh-and-title-fix）：去除书架 24sp 特判，全主 Tab 统一 20sp
         // （基线 = titleLarge 20sp/Medium，对齐 View ToolbarTitle，主题统一 AD-19）
         titleText.textSize = 20f
-        titleArrow.setImageResource(R.drawable.ic_arrow_drop_down)
+        titleArrow.setImageResource(TopBarConfig.Icons.titleArrow)
         titleText.applyUiTitleTypeface(context)
         applyTopBarStyle(force = true)
     }
@@ -298,7 +298,17 @@ class MainTopBarView @JvmOverloads constructor(
         applyTopBarStyle(force = true, resetFilters = false)
     }
 
-    fun refreshStyle() {
+    /**
+     * 顶栏包 §2.1/§2.2：View 侧顶栏统一刷新入口（原 `refreshStyle()`）。
+     *
+     * · **签名早退（§2.2）**：非 force 且样式签名未变（主题色 / 顶栏包 / 样式 / 搜索态均未变）
+     *   ⇒ 直接返回，避免无变化时的重复全量刷新；判据与 [applyTopBarStyle] **同一函数**
+     *   （`TopBarConfig.currentSignature`，含 `themeUiSignature()`）。
+     * · **force = true** 时行为与旧 `refreshStyle()` 完全一致（清签名 + 三标签栏 + 顶栏全量 + 请求布局）。
+     */
+    override fun refreshTopBarStyle(force: Boolean) {
+        val signature = "${TopBarConfig.currentSignature(AppConfig.isNightTheme)}|$mode"
+        if (!force && styleSignature == signature) return
         styleSignature = null
         listOf(primaryBar, selectsBar, tagsBar).forEach { it.applyTopBarStyle(force = true) }
         applyTopBarStyle(force = true)
@@ -568,7 +578,7 @@ class MainTopBarView @JvmOverloads constructor(
                 layoutParams = LayoutParams(0, height, 1f)
                 setPadding(14.dp, 0, 14.dp, 0)
                 addView(searchEntryIcon.apply {
-                    setImageResource(R.drawable.ic_search)
+                    setImageResource(TopBarConfig.Icons.search)
                     layoutParams = LayoutParams(17.dp, 17.dp)
                 })
                 addView(searchEntryText.apply {
@@ -598,7 +608,7 @@ class MainTopBarView @JvmOverloads constructor(
                     applyUiTitleTypeface(context)
                 })
                 addView(titleArrow.apply {
-                    setImageResource(R.drawable.ic_arrow_drop_down)
+                    setImageResource(TopBarConfig.Icons.titleArrow)
                     layoutParams = LayoutParams(
                         resources.getDimensionPixelSize(R.dimen.bookshelf_title_arrow_size),
                         resources.getDimensionPixelSize(R.dimen.bookshelf_title_arrow_size)
@@ -743,7 +753,7 @@ class MainTopBarView @JvmOverloads constructor(
     }
 
     private fun animateFilterToggle(expanded: Boolean) {
-        filterToggleButton.setImageResource(R.drawable.ic_expand_more)
+        filterToggleButton.setImageResource(TopBarConfig.Icons.filterToggle)
         val targetRotation = if (expanded) 180f else 0f
         // 幂等守卫（ui-theme-governance-followup F3）：目标角与当前一致时不重启动画，
         // 防渲染链路高频调用导致旋转动画反复重置

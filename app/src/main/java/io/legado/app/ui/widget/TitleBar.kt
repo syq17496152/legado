@@ -33,7 +33,7 @@ import splitties.views.topPadding
 class TitleBar @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
-) : AppBarLayout(context, attrs) {
+) : AppBarLayout(context, attrs), TopBarRefreshable {
 
     val toolbar: Toolbar
     val menu: Menu
@@ -65,6 +65,9 @@ class TitleBar @JvmOverloads constructor(
 
     /** bugfix ③: 主界面"我的/发现经典"头部读顶栏管理配色（含 TopBarConfig 底色）。默认 false 不污染子页面。 */
     private val topBarColorManaged: Boolean
+
+    /** 顶栏包 §2.2：最近一次刷新使用的样式签名（判据同 `TopBarConfig.currentSignature`），未变更即早退。 */
+    private var styleSignature: String? = null
 
     init {
         val a = context.obtainStyledAttributes(
@@ -214,6 +217,20 @@ class TitleBar @JvmOverloads constructor(
             stateListAnimator = null
         }
         a.recycle()
+    }
+
+    /**
+     * 顶栏包 §2.1/§2.2：View 侧顶栏统一刷新入口（原 `refreshTopBarAppearance()`）。
+     * 签名早退判据与 [MainTopBarView] **同一函数**（`TopBarConfig.currentSignature`，含 `themeUiSignature()`）
+     * ——「我的页」的 managed `TitleBar` 与主 Tab 的 `MainTopBarView` 从此走同一入口、同一判据，
+     * 消除 09-08「不同栏刷新结果不一致」的类型分叉。
+     */
+    override fun refreshTopBarStyle(force: Boolean) {
+        if (!topBarColorManaged || !isEInkModeExcluded()) return
+        val signature = "${TopBarConfig.currentSignature(AppConfig.isNightTheme)}|$topBarColorManaged"
+        if (!force && styleSignature == signature) return
+        styleSignature = signature
+        refreshTopBarAppearance()
     }
 
     /** bugfix ③: 顶栏管理配色变更后刷新(仅主界面 managed 头部生效)，保留默认行为不受影响。 */

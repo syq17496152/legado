@@ -49,7 +49,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import io.legado.app.R
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.TopBarConfig
 import io.legado.app.lib.theme.applyUiTitleTypeface
@@ -295,7 +294,8 @@ private fun NavIconSlot(navIcon: ImageVector?, size: androidx.compose.ui.unit.Dp
         )
     } else {
         Icon(
-            painter = painterResource(R.drawable.ic_back),
+            // 顶栏包 §1.1：默认返回资产改为**契约取值**（原先写死 R.drawable.ic_back ⇒ 换资产必漏改）
+            painter = painterResource(TopBarConfig.Icons.navBack),
             contentDescription = null,
             modifier = Modifier.size(size)
         )
