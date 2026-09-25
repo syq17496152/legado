@@ -52,4 +52,7 @@
 <!-- CE-b：activity_qrcode_capture.xml 退役后保留的代码引用 id（Fragment 事务按 id 定位预览容器） -->
     <item name="fl_content" type="id" />
 
+    <!-- CE-b：activity_about.xml 退役后保留的代码引用 id（AboutFragment 事务按 id 定位容器） -->
+    <item name="fl_fragment" type="id" />
+
 </resources>
