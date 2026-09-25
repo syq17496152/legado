@@ -1,24 +1,61 @@
 package io.legado.app.ui.image
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.View
+import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.view.WindowManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
+import androidx.appcompat.widget.AppCompatImageButton
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.viewbinding.ViewBinding
 import androidx.viewpager2.widget.ViewPager2
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
-import io.legado.app.databinding.ActivityImageGalleryBinding
 import io.legado.app.help.webView.SilentSslWebViewClient
 import io.legado.app.R
 import io.legado.app.lib.dialogs.alert
@@ -31,33 +68,19 @@ import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.image.ImageCanvasItem
 import io.legado.app.ui.image.ImagePlay
 import io.legado.app.ui.rss.favorites.RssFavoritesDialog
-import io.legado.app.utils.ACache
-import io.legado.app.utils.NetworkUtils
-import io.legado.app.utils.openUrl
-import io.legado.app.utils.sendToClip
-import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.OpenInBrowser
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.InlineTaskBar
 import io.legado.app.ui.widget.components.InlineTaskState
 import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.utils.ACache
+import io.legado.app.utils.NetworkUtils
+import io.legado.app.utils.dpToPx
+import io.legado.app.utils.openUrl
+import io.legado.app.utils.sendToClip
+import io.legado.app.utils.showDialogFragment
+import io.legado.app.utils.toastOnUi
 
 /**
  * 图片浏览 Activity（V4 重写：垂直画布架构）
@@ -86,10 +109,41 @@ import io.legado.app.ui.widget.components.MenuAction
  * - 状态：loadState LiveData 通知 footer 切换（LOADING/SUCCESS/ERROR/NO_MORE）
  * - 大图：点击缩略图 → enterHorizontalMode 显示 ViewPager2 并定位 → 退出时 scrollToPosition
  */
-class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCanvasViewModel>() {
+class ImageGalleryActivity : VMBaseActivity<ViewBinding, ImageCanvasViewModel>() {
 
-    override val binding by viewBinding(ActivityImageGalleryBinding::inflate)
+    // CE 5.2（compose 包）：原 activity_image_gallery.xml 已退役 ⇒ composeShell 合成壳 +
+    // attachComposeContent 单源承载；**六个 View 内核一律 `AndroidView` 原样托管**
+    // （垂直画布 RecyclerView / 全屏 ViewPager2 / 预热 WebView / 页码徽标 / 旋转工具条 / 画布页码），
+    // 覆盖组与顶栏按原 XML 声明顺序入 Box（z-order 逐层等价）。
+    // ⚠ 页面级 4 个不可达节点（progress_loading / layout_error / tv_error / btn_retry：原 XML 中
+    //   全仓零代码引用、初值均 gone）随壳退役 ⇒ 不重建，登记见 tasks §5 ledger（防「静默消失」）。
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<ImageCanvasViewModel>()
+
+    // ---- CE 5.2：原 XML 显隐机制改状态驱动（逐一与原 View 操作等价）----
+    //  · topBarVisible          ← compose_top_bar 的 GONE/VISIBLE（沉浸式切换）
+    //  · rotateToolbarVisible   ← layout_rotate_toolbar 的 GONE/VISIBLE（进/退横向模式 + 沉浸式）
+    //  · pageIndexVisible/Text  ← tv_page_index 的 GONE/VISIBLE 与页码文案
+    //  · canvasPageIndexVisible/Text ← tv_canvas_page_index 的 GONE/VISIBLE 与画布页码文案
+    private var topBarVisible by mutableStateOf(true)
+    private var rotateToolbarVisible by mutableStateOf(false)
+    private var pageIndexVisible by mutableStateOf(false)
+    private var pageIndexText by mutableStateOf("")
+    private var canvasPageIndexVisible by mutableStateOf(false)
+    private var canvasPageIndexText by mutableStateOf("")
+
+    // ---- CE 5.2：顶栏高度一次性测量（替代原 composeTopBar.viewTreeObserver 的 OnGlobalLayoutListener；
+    //      口径不变：只落一次 paddingTop，后续顶栏变高（如 F179 刷新任务条出现）不再改 padding）----
+    private var topBarHeightPx by mutableIntStateOf(0)
+    private var topBarPaddingApplied = false
+
+    // ---- CE 5.2：六个 View 内核（随宿主即时创建；init* 早于组合挂载）----
+    private val recyclerView by lazy { createRecyclerView() }
+    private val fullscreenPager by lazy { createFullscreenPager() }
+    private val preheatWebView by lazy { createPreheatWebView() }
+    private val pageIndexView by lazy { createPageIndexView() }
+    private val rotateToolbarView by lazy { createRotateToolbar() }
+    private val canvasPageIndexView by lazy { createCanvasPageIndexView() }
 
     private var canvasAdapter: ImageCanvasAdapter? = null
 
@@ -184,7 +238,7 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
             level = AppLog.Level.INFO
         )
         initImmersion()
-        initComposeTopBar()
+        initComposeContent()
         initRecyclerView()
         initFullscreenViewPager()
         initRotateToolbar()
@@ -207,63 +261,288 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
     }
 
     /**
-     * Compose 顶栏（L-C15 S5 改造）：GlassTopAppBar + 收藏/刷新图标按钮 + MoreVert 下拉菜单
+     * CE 5.2：Compose 承载页面骨架（z-order 与原 XML 声明顺序逐层等价）。
      *
-     * F179：刷新回执走顶栏 `secondRow`（**栏内第二行**，随栏底色）——
+     * F179 备注（沿用原实现口径）：刷新回执走顶栏 `secondRow`（**栏内第二行**，随栏底色）——
      * 本页画布是纯黑沉浸底色，若把任务条挂在栏外会落到黑底上（`InlineTaskBar` 用
      * `settings.secondaryText/accent` 取色，黑底上不可读）。Idle 时 `InlineTaskBar` 零高度输出，
-     * 顶栏高度口径不变（RecyclerView 的 paddingTop 一次性测量结果不受影响）。
+     * 顶栏高度口径不变（画布顶部 paddingTop 为一次性测量结果）。
+     *
+     * 与原 XML（`activity_image_gallery.xml`）的**逐一对应关系**（三不影响口径）：
+     *  · 根底 `@android:color/black` → 合成壳 root `setBackgroundColor`（画布域固定深色底）
+     *  · `recycler_view` → `AndroidView` 托管 [recyclerView]（`fillMaxSize()`；原
+     *    `clipToPadding=false` + `overScrollMode=never` 在 [createRecyclerView] 内复刻）
+     *  · `view_pager_fullscreen` → `AndroidView` 托管 [fullscreenPager]；**显隐仍是 View 级命令式**——
+     *    它与 alpha 动画的 `withEndAction` 属同一段语义，改状态驱动会丢过渡尾部
+     *  · `webview_preheat` → `AndroidView` 托管 [preheatWebView]（1dp 占位；只求挂到窗口以便 loadUrl）
+     *  · `compose_top_bar` → 顶部 Compose 顶栏（原 `setContent` 内容逐行搬入）；外层 `clickable` 空实现
+     *    复刻原 ComposeView「顶栏区域吃掉点击、不落到画布」的语义，`onGloballyPositioned` 上报高度
+     *    替代原 `OnGlobalLayoutListener` 的一次性 paddingTop
+     *  · `tv_page_index` / `layout_rotate_toolbar` / `tv_canvas_page_index` → 三个 `AndroidView`
+     *    （几何沿用原约束：右上 56dp/16dp、底部居中 32dp、右下 16dp/32dp）
+     *  · 页面级 4 个不可达节点（`progress_loading` / `layout_error` / `tv_error` / `btn_retry`）随壳退役
      */
-    private fun initComposeTopBar() {
+    private fun initComposeContent() {
+        // 原 XML 根底 `@android:color/black`（画布域固定深色底，同域同口径已登记 allowlist）
+        binding.root.setBackgroundColor(Color.BLACK)
         val title = intent.getStringExtra("title") ?: getString(R.string.image_browse)
-        binding.composeTopBar.setContent {
-            LegadoTheme {
-                GlassTopAppBar(
-                    title = title,
-                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                    onNavClick = {
-                        if (isHorizontalMode) {
-                            exitHorizontalMode()
-                        } else {
-                            finish()
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { starCurrentArticle() }) {
-                            Icon(
-                                imageVector = Icons.Filled.Star,
-                                contentDescription = getString(R.string.favorite)
-                            )
-                        }
-                        IconButton(onClick = { refreshImages() }) {
-                            Icon(
-                                imageVector = Icons.Filled.Refresh,
-                                contentDescription = getString(R.string.refresh)
-                            )
-                        }
-                        Box {
-                            IconButton(onClick = { menuExpanded = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.MoreVert,
-                                    contentDescription = getString(R.string.more)
+        binding.root.attachComposeContent {
+            Box(modifier = Modifier.fillMaxSize()) {
+                // ---- 1. 垂直长画布（原 recycler_view：全屏 + 顶部 padding=顶栏高）----
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { recyclerView }
+                )
+                // ---- 2. 全屏横向浏览层（原 view_pager_fullscreen，初始 gone）----
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { fullscreenPager }
+                )
+                // ---- 3. 预热 WebView（原 webview_preheat：1px + invisible）----
+                AndroidView(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .size(1.dp),
+                    factory = { preheatWebView }
+                )
+                // ---- 4. 顶栏（原 compose_top_bar；沉浸态整体收起）----
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopStart)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { /* 只挡点击，不响应（对齐原 ComposeView 顶栏的触摸语义） */ }
+                ) {
+                    if (topBarVisible) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onGloballyPositioned { topBarHeightPx = it.size.height }
+                        ) {
+                            LegadoTheme {
+                                GlassTopAppBar(
+                                    title = title,
+                                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                                    onNavClick = {
+                                        if (isHorizontalMode) {
+                                            exitHorizontalMode()
+                                        } else {
+                                            finish()
+                                        }
+                                    },
+                                    actions = {
+                                        IconButton(onClick = { starCurrentArticle() }) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Star,
+                                                contentDescription = getString(R.string.favorite)
+                                            )
+                                        }
+                                        IconButton(onClick = { refreshImages() }) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Refresh,
+                                                contentDescription = getString(R.string.refresh)
+                                            )
+                                        }
+                                        Box {
+                                            IconButton(onClick = { menuExpanded = true }) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.MoreVert,
+                                                    contentDescription = getString(R.string.more)
+                                                )
+                                            }
+                                            AppDropdownMenu(
+                                                expanded = menuExpanded,
+                                                onDismiss = { menuExpanded = false },
+                                                actions = buildMenuActions()
+                                            )
+                                        }
+                                    },
+                                    secondRow = {
+                                        InlineTaskBar(
+                                            state = refreshTaskState,
+                                            text = refreshTaskText
+                                        )
+                                    }
                                 )
                             }
-                            AppDropdownMenu(
-                                expanded = menuExpanded,
-                                onDismiss = { menuExpanded = false },
-                                actions = buildMenuActions()
-                            )
                         }
-                    },
-                    secondRow = {
-                        InlineTaskBar(
-                            state = refreshTaskState,
-                            text = refreshTaskText
+                    }
+                }
+                // 顶栏高度一次性落地为画布顶部内边距（原「BUG1 fix V2」口径：只执行一次）
+                LaunchedEffect(topBarHeightPx) {
+                    val h = topBarHeightPx
+                    if (!topBarPaddingApplied && h > 0) {
+                        topBarPaddingApplied = true
+                        recyclerView.setPadding(
+                            recyclerView.paddingLeft, h,
+                            recyclerView.paddingRight, recyclerView.paddingBottom
                         )
+                        AppLog.putDebugWithTag(
+                            AppLog.TAG_IMAGE_CANVAS,
+                            "BUG1 fix V2: set paddingTop=$h (topBar=$h)",
+                            level = AppLog.Level.INFO
+                        )
+                    }
+                }
+                // ---- 5. 页码徽标（原 tv_page_index：右上、上边距 56dp、右 16dp）----
+                AndroidView(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 56.dp, end = 16.dp),
+                    factory = { pageIndexView },
+                    update = { tv ->
+                        tv.visibility = if (pageIndexVisible) View.VISIBLE else View.GONE
+                        if (pageIndexVisible) {
+                            tv.text = pageIndexText
+                        }
+                    }
+                )
+                // ---- 6. 旋转工具条（原 layout_rotate_toolbar：底部居中、下边距 32dp）----
+                AndroidView(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 32.dp),
+                    factory = { rotateToolbarView },
+                    update = { bar ->
+                        bar.visibility =
+                            if (rotateToolbarVisible) View.VISIBLE else View.GONE
+                    }
+                )
+                // ---- 7. 画布页码（原 tv_canvas_page_index：右下、右 16dp、下 32dp）----
+                AndroidView(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 32.dp),
+                    factory = { canvasPageIndexView },
+                    update = { tv ->
+                        tv.visibility =
+                            if (canvasPageIndexVisible) View.VISIBLE else View.GONE
+                        if (canvasPageIndexVisible) {
+                            tv.text = canvasPageIndexText
+                        }
                     }
                 )
             }
         }
+    }
+
+    // ==================== CE 5.2：原 XML 节点的程序化等价物 ====================
+
+    /** 原 `recycler_view`（全屏 / `clipToPadding=false` / `overScrollMode=never`）。 */
+    private fun createRecyclerView(): RecyclerView = RecyclerView(this).apply {
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+        )
+        clipToPadding = false
+        overScrollMode = View.OVER_SCROLL_NEVER
+    }
+
+    /** 原 `view_pager_fullscreen`（全屏 / 黑底 / 初始 gone）。 */
+    private fun createFullscreenPager(): ViewPager2 = ViewPager2(this).apply {
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+        )
+        setBackgroundColor(Color.BLACK)
+        visibility = View.GONE
+    }
+
+    /** 原 `webview_preheat`（1px / `invisible`；只求挂到窗口以便 `loadUrl`）。 */
+    private fun createPreheatWebView(): WebView = WebView(this).apply {
+        layoutParams = ViewGroup.LayoutParams(1, 1)
+        visibility = View.INVISIBLE
+    }
+
+    /** 原 `tv_page_index`（drawable 底 / 白字 / 14sp / 12×6 内边距 / 初始 gone）。 */
+    private fun createPageIndexView(): TextView = TextView(this).apply {
+        id = R.id.tv_page_index
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        setBackgroundResource(R.drawable.bg_image_page_index)
+        setPadding(12.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())
+        setTextColor(Color.WHITE)
+        textSize = 14f
+        visibility = View.GONE
+    }
+
+    /** 原 `tv_canvas_page_index`（同徽标样式 / 初始 gone）。 */
+    private fun createCanvasPageIndexView(): TextView = TextView(this).apply {
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        setBackgroundResource(R.drawable.bg_image_page_index)
+        setPadding(12.dpToPx(), 6.dpToPx(), 12.dpToPx(), 6.dpToPx())
+        setTextColor(Color.WHITE)
+        textSize = 14f
+        visibility = View.GONE
+    }
+
+    /**
+     * 原 `layout_rotate_toolbar`（`bg_rotate_toolbar` 底 / 12dp 内边距 / 三个 48dp 按钮 / 初始 gone）。
+     *
+     * 按钮点击语义与原 `initRotateToolbar()` 完全一致（转发到全屏 pager 适配器）。
+     */
+    private fun createRotateToolbar(): LinearLayout {
+        val toolbar = LinearLayout(this).apply {
+            id = R.id.layout_rotate_toolbar
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setBackgroundResource(R.drawable.bg_rotate_toolbar)
+            val pad = 12.dpToPx()
+            setPadding(pad, pad, pad, pad)
+            visibility = View.GONE
+        }
+        toolbar.addView(
+            createRotateButton(
+                R.id.btn_rotate_left, R.drawable.ic_rotate_left, "逆时针旋转90度",
+                marginStart = 0, marginEnd = 16
+            ) { detailViewPagerAdapter?.rotateCurrentCounterClockwise() }
+        )
+        toolbar.addView(
+            createRotateButton(
+                R.id.btn_reset, R.drawable.ic_reset, "重置视图",
+                marginStart = 16, marginEnd = 16
+            ) { detailViewPagerAdapter?.resetCurrentView() }
+        )
+        toolbar.addView(
+            createRotateButton(
+                R.id.btn_rotate_right, R.drawable.ic_rotate_right, "顺时针旋转90度",
+                marginStart = 16, marginEnd = 0
+            ) { detailViewPagerAdapter?.rotateCurrentClockwise() }
+        )
+        return toolbar
+    }
+
+    /** 原工具条按钮（48dp、无边界波纹底、白 tint、工具条内 16dp 间距）。 */
+    private fun createRotateButton(
+        viewId: Int,
+        iconRes: Int,
+        label: String,
+        marginStart: Int,
+        marginEnd: Int,
+        onClick: () -> Unit
+    ): AppCompatImageButton = AppCompatImageButton(this).apply {
+        id = viewId
+        layoutParams = LinearLayout.LayoutParams(48.dpToPx(), 48.dpToPx()).apply {
+            this.marginStart = marginStart.dpToPx()
+            this.marginEnd = marginEnd.dpToPx()
+        }
+        setBackgroundResource(borderlessItemBackgroundRes())
+        contentDescription = label
+        setImageResource(iconRes)
+        setColorFilter(Color.WHITE)
+        setOnClickListener { onClick() }
+    }
+
+    /** `?attr/selectableItemBackgroundBorderless` 的样式资源 id（原 XML 三处按钮的波纹底）。 */
+    private fun borderlessItemBackgroundRes(): Int {
+        val outValue = TypedValue()
+        theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, outValue, true)
+        return outValue.resourceId
     }
 
     // ==================== B3-5.1: 工具栏菜单（收藏/刷新/浏览器打开/日志） ====================
@@ -327,7 +606,7 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
         canvasAdapter?.notifyDataSetChanged()
         // 任务条：进行中
         isRefreshing = true
-        refreshDismissRunnable?.let { binding.composeTopBar.removeCallbacks(it) }
+        refreshDismissRunnable?.let { binding.root.removeCallbacks(it) }
         refreshDismissRunnable = null
         refreshTaskText = getString(R.string.image_refresh_running)
         refreshTaskState = InlineTaskState.Running
@@ -343,11 +622,11 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
         isRefreshing = false
         refreshTaskText = text
         refreshTaskState = InlineTaskState.Done
-        refreshDismissRunnable?.let { binding.composeTopBar.removeCallbacks(it) }
+        refreshDismissRunnable?.let { binding.root.removeCallbacks(it) }
         refreshDismissRunnable = Runnable {
             refreshTaskState = InlineTaskState.Idle
             refreshTaskText = ""
-        }.also { binding.composeTopBar.postDelayed(it, 2500) }
+        }.also { binding.root.postDelayed(it, 2500) }
     }
 
     /**
@@ -397,14 +676,14 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
                             pendingFallbackReload[domain]?.add(position)
                                 ?: pendingFallbackReload.put(domain, mutableSetOf(position))
                         }
-                        binding.webviewPreheat.loadUrl(url)
+                        preheatWebView.loadUrl(url)
                         AppLog.putDebugWithTag(
                             AppLog.TAG_IMAGE_CANVAS,
                             "ImageFallback: webview preheat start, domain=***, position=$position",
                             level = AppLog.Level.INFO
                         )
                         // 5s 超时兜底：onPageFinished 未触发也执行重载（弱网/WebView 卡住场景）
-                        binding.webviewPreheat.postDelayed({
+                        preheatWebView.postDelayed({
                             if (!isDestroyed && !isFinishing) {
                                 triggerFallbackReload(domain)
                             }
@@ -450,30 +729,12 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
                 )
             },
             // F179：长画布失败点在最底部，footer 提供原地「返回顶部」逃生口
-            onBackToTop = { binding.recyclerView.smoothScrollToPosition(0) }
+            onBackToTop = { recyclerView.smoothScrollToPosition(0) }
         )
-        binding.recyclerView.apply {
-            // BUG1 fix V2: 使用 OnGlobalLayoutListener 确保在布局完成后获取准确高度
-            // V1 的 titleBar.post 在某些时机 titleBar.height=0（尚未完成 layout），导致 paddingTop 不够
-            // V2 改用 OnGlobalLayoutListener 回调，此时所有 View 已完成 measure/layout
-            binding.composeTopBar.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
-                override fun onGlobalLayout() {
-                    val topBarHeight = binding.composeTopBar.height
-                    if (topBarHeight <= 0) return // 高度仍为0则等待下次回调
-                    // L-C15 S5 改造：Compose GlassTopAppBar 已自带状态栏 padding，无需再加 statusBarHeight
-                    val totalTopPadding = topBarHeight
-                    if (totalTopPadding > 0 && paddingTop != totalTopPadding) {
-                        setPadding(paddingLeft, totalTopPadding, paddingRight, paddingBottom)
-                        AppLog.putDebugWithTag(
-                            AppLog.TAG_IMAGE_CANVAS,
-                            "BUG1 fix V2: set paddingTop=$totalTopPadding (topBar=$topBarHeight)",
-                            level = AppLog.Level.INFO
-                        )
-                    }
-                    // 只需执行一次，移除监听
-                    binding.composeTopBar.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                }
-            })
+        recyclerView.apply {
+            // BUG1 fix V2（CE 5.2 换装）：原「在 composeTopBar 的 OnGlobalLayoutListener 内读 height
+            // 再落 paddingTop」的时序依赖已消除——顶栏成为组合内节点后，其高度由 onGloballyPositioned
+            // 上报到 topBarHeightPx，再由 LaunchedEffect 一次性落地 paddingTop（口径不变：只落一次）。
             layoutManager = LinearLayoutManager(this@ImageGalleryActivity)
             adapter = canvasAdapter
             // AD-08: 离屏缓存 2 个 ViewHolder（默认 2，显式设置明确意图）
@@ -484,7 +745,9 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
             // AD-04: 滚动监听触发分页加载 + 快速滚动暂停 Glide + Phase 3.4 智能预加载
             addOnScrollListener(object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                    super.onScrolled(recyclerView, dy, dy)
+                    // 缺陷修复（2026-09-25，CE 5.2 第 9 页顺手修）：原实参为 `(recyclerView, dy, dy)`
+                    // ⇒ dx 被误写成 dy；基类实现为空故无可见影响，但属真实签名误传，改为正确传参。
+                    super.onScrolled(recyclerView, dx, dy)
                     // 修复（image-canvas-3fix-20260728 Q1修复3）：首次插入未完成时禁用 loadNextArticle
                     // 根因：首次插入 24 项后 80ms 触发 loadNextArticle（铁证：008 日志 L107），
                     // loadNextArticle 加载下一篇并插入，破坏初始滚动定位。
@@ -609,8 +872,8 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
      * - OnPageChangeCallback 注册一次（重复注册会累积）
      */
     private fun initFullscreenViewPager() {
-        binding.viewPagerFullscreen.orientation = ViewPager2.ORIENTATION_HORIZONTAL
-        binding.viewPagerFullscreen.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+        fullscreenPager.orientation = ViewPager2.ORIENTATION_HORIZONTAL
+        fullscreenPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 if (isHorizontalMode) {
                     updatePageIndex(position)
@@ -623,15 +886,9 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
      * 初始化旋转工具栏按钮（顺时针/逆时针/重置，复用布局已有 layout_rotate_toolbar）
      */
     private fun initRotateToolbar() {
-        binding.btnRotateRight.setOnClickListener {
-            detailViewPagerAdapter?.rotateCurrentClockwise()
-        }
-        binding.btnRotateLeft.setOnClickListener {
-            detailViewPagerAdapter?.rotateCurrentCounterClockwise()
-        }
-        binding.btnReset.setOnClickListener {
-            detailViewPagerAdapter?.resetCurrentView()
-        }
+        // CE 5.2：工具条与三个按钮改为程序化构造（createRotateToolbar），点击回调随按钮创建即绑定
+        // （与原「先建视图再逐个绑监听」等价）；此处保留一次引用以确保工具条视图已就位。
+        rotateToolbarView
     }
 
     /**
@@ -660,18 +917,18 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
     private fun enterHorizontalMode(imageIdx: Int) {
         isHorizontalMode = true
         setupFullscreenViewPager()
-        binding.viewPagerFullscreen.setCurrentItem(imageIdx, false)
+        fullscreenPager.setCurrentItem(imageIdx, false)
 
-        // 淡入显示 ViewPager2
-        binding.viewPagerFullscreen.alpha = 0f
-        binding.viewPagerFullscreen.visibility = View.VISIBLE
-        binding.viewPagerFullscreen.animate().alpha(1f).setDuration(200).start()
+        // 淡入显示 ViewPager2（View 级命令式：与 alpha 动画的 withEndAction 属同一段语义）
+        fullscreenPager.alpha = 0f
+        fullscreenPager.visibility = View.VISIBLE
+        fullscreenPager.animate().alpha(1f).setDuration(200).start()
 
-        // 显示旋转工具栏 + 页码
-        binding.layoutRotateToolbar.visibility = View.VISIBLE
+        // 显示旋转工具栏 + 页码（状态驱动）
+        rotateToolbarVisible = true
         updatePageIndex(imageIdx)
         // 进入大图模式时隐藏画布页码（避免与 tvPageIndex 重叠）
-        binding.tvCanvasPageIndex.visibility = View.GONE
+        canvasPageIndexVisible = false
         AppLog.putDebugWithTag(
             AppLog.TAG_IMAGE_CANVAS,
             "enterHorizontalMode: imageIdx=$imageIdx totalImages=${detailViewPagerAdapter?.getDataSize() ?: 0}",
@@ -683,7 +940,7 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
      * 退出横向浏览模式：隐藏 ViewPager2 + 同步索引回垂直列表滚动位置
      */
     private fun exitHorizontalMode() {
-        val currentIdx = binding.viewPagerFullscreen.currentItem
+        val currentIdx = fullscreenPager.currentItem
         isHorizontalMode = false
 
         // 退出前恢复非沉浸式（确保 TitleBar 可见）
@@ -692,19 +949,19 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
         }
 
         // 淡出隐藏 ViewPager2
-        binding.viewPagerFullscreen.animate().alpha(0f).setDuration(150).withEndAction {
-            binding.viewPagerFullscreen.visibility = View.GONE
+        fullscreenPager.animate().alpha(0f).setDuration(150).withEndAction {
+            fullscreenPager.visibility = View.GONE
         }.start()
 
-        // 隐藏旋转工具栏与页码（垂直模式不显示）
-        binding.layoutRotateToolbar.visibility = View.GONE
-        binding.tvPageIndex.visibility = View.GONE
+        // 隐藏旋转工具栏与页码（垂直模式不显示；状态驱动）
+        rotateToolbarVisible = false
+        pageIndexVisible = false
 
         // 同步索引回垂直列表滚动位置（imageIndexToListPosition，V3 B-7）
         val listPos = canvasAdapter?.imageIndexToListPosition(currentIdx) ?: -1
         if (listPos >= 0) {
-            binding.recyclerView.post {
-                binding.recyclerView.smoothScrollToPosition(listPos)
+            recyclerView.post {
+                recyclerView.smoothScrollToPosition(listPos)
             }
         }
         AppLog.putDebugWithTag(
@@ -742,7 +999,7 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
             }
         })
         detailViewPagerAdapter = adapter
-        binding.viewPagerFullscreen.adapter = adapter
+        fullscreenPager.adapter = adapter
     }
 
     /**
@@ -751,10 +1008,10 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
     private fun updatePageIndex(position: Int) {
         val total = detailViewPagerAdapter?.getDataSize() ?: 0
         if (total > 1 && isHorizontalMode && !isImmersive) {
-            binding.tvPageIndex.visibility = View.VISIBLE
-            binding.tvPageIndex.text = "${position + 1} / $total"
+            pageIndexVisible = true
+            pageIndexText = "${position + 1} / $total"
         } else {
-            binding.tvPageIndex.visibility = View.GONE
+            pageIndexVisible = false
         }
     }
 
@@ -771,15 +1028,15 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
             controller.hide(android.view.WindowInsets.Type.systemBars())
             controller.systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            binding.composeTopBar.visibility = View.GONE
-            binding.layoutRotateToolbar.visibility = View.GONE
-            binding.tvPageIndex.visibility = View.GONE
+            topBarVisible = false
+            rotateToolbarVisible = false
+            pageIndexVisible = false
         } else {
             controller.show(android.view.WindowInsets.Type.systemBars())
-            binding.composeTopBar.visibility = View.VISIBLE
+            topBarVisible = true
             if (isHorizontalMode) {
-                binding.layoutRotateToolbar.visibility = View.VISIBLE
-                updatePageIndex(binding.viewPagerFullscreen.currentItem)
+                rotateToolbarVisible = true
+                updatePageIndex(fullscreenPager.currentItem)
             }
         }
         AppLog.putDebugWithTag(AppLog.TAG_IMAGE_CANVAS, "toggleImmersive isImmersive=$isImmersive", level = AppLog.Level.INFO)
@@ -868,18 +1125,18 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
             // 此时高度已测量，滚动定位准确且不会被布局过程覆盖。
             if (!isInitialScrollDone && startPos == 0 && itemCount > 0) {
                 isInitialScrollDone = true
-                binding.recyclerView.viewTreeObserver.addOnGlobalLayoutListener(
+                recyclerView.viewTreeObserver.addOnGlobalLayoutListener(
                     object : ViewTreeObserver.OnGlobalLayoutListener {
                         override fun onGlobalLayout() {
-                            binding.recyclerView.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                            binding.recyclerView.scrollToPosition(0)
+                            recyclerView.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                            recyclerView.scrollToPosition(0)
                             AppLog.putDebugWithTag(
                                 AppLog.TAG_IMAGE_CANVAS,
                                 "observeNewItems: initial scroll to position 0 (after layout)",
                                 level = AppLog.Level.INFO
                             )
                             // 初始滚动完成后更新页码
-                            val lm = binding.recyclerView.layoutManager as? LinearLayoutManager
+                            val lm = recyclerView.layoutManager as? LinearLayoutManager
                             if (lm != null) updateCanvasPageIndex(lm)
                         }
                     }
@@ -902,12 +1159,12 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
     private fun updateCanvasPageIndex(layoutManager: LinearLayoutManager) {
         val snapshot = ImagePlay.allImageUrls.value
         if (snapshot.isEmpty()) {
-            binding.tvCanvasPageIndex.visibility = View.GONE
+            canvasPageIndexVisible = false
             return
         }
         val firstVisiblePos = layoutManager.findFirstVisibleItemPosition()
         if (firstVisiblePos == RecyclerView.NO_POSITION || firstVisiblePos >= snapshot.size) {
-            binding.tvCanvasPageIndex.visibility = View.GONE
+            canvasPageIndexVisible = false
             return
         }
         // 找到第一个可见的 ImageItem（跳过 ArticleDivider）
@@ -922,7 +1179,7 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
             currentPos++
         }
         if (currentItem == null) {
-            binding.tvCanvasPageIndex.visibility = View.GONE
+            canvasPageIndexVisible = false
             return
         }
         val articleIndex = currentItem.articleIndex
@@ -950,10 +1207,10 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
         }
         if (articleTotal <= 1) {
             // 单图时隐藏页码
-            binding.tvCanvasPageIndex.visibility = View.GONE
+            canvasPageIndexVisible = false
         } else {
-            binding.tvCanvasPageIndex.visibility = View.VISIBLE
-            binding.tvCanvasPageIndex.text = "${currentIndexInArticle + 1} / $articleTotal"
+            canvasPageIndexVisible = true
+            canvasPageIndexText = "${currentIndexInArticle + 1} / $articleTotal"
         }
     }
 
@@ -968,13 +1225,13 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
      * - CookieManager.flush() 同步 cookies 到 CookieStore 供 Glide 复用
      */
     private fun initPreheatWebView() {
-        binding.webviewPreheat.settings.javaScriptEnabled = true
-        binding.webviewPreheat.settings.domStorageEnabled = true
-        binding.webviewPreheat.settings.databaseEnabled = true
+        preheatWebView.settings.javaScriptEnabled = true
+        preheatWebView.settings.domStorageEnabled = true
+        preheatWebView.settings.databaseEnabled = true
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(binding.webviewPreheat, true)
+            android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(preheatWebView, true)
         }
-        binding.webviewPreheat.webViewClient = object : SilentSslWebViewClient() {
+        preheatWebView.webViewClient = object : SilentSslWebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 return false
             }
@@ -1059,7 +1316,7 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
             "Preheat: start domain=${nextDomain.hashCode()} remaining=${pendingPreheatDomains.size}",
             level = AppLog.Level.INFO
         )
-        binding.webviewPreheat.loadUrl(preheatUrl)
+        preheatWebView.loadUrl(preheatUrl)
     }
 
     /**
@@ -1107,10 +1364,10 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
     override fun onDestroy() {
         super.onDestroy()
         // Phase 3.4: 清理预加载任务（避免 Activity 销毁后执行）
-        preloadRunnable?.let { binding.recyclerView.removeCallbacks(it) }
+        preloadRunnable?.let { recyclerView.removeCallbacks(it) }
         preloadRunnable = null
         // F179: 清理任务条自动消退任务
-        refreshDismissRunnable?.let { binding.composeTopBar.removeCallbacks(it) }
+        refreshDismissRunnable?.let { binding.root.removeCallbacks(it) }
         refreshDismissRunnable = null
         // V2 O-3: 清理垂直画布状态（避免 Activity 销毁后再次进入继承上次 allImageUrls）
         val clearedSize = ImagePlay.allImageUrls.value.size
@@ -1121,7 +1378,7 @@ class ImageGalleryActivity : VMBaseActivity<ActivityImageGalleryBinding, ImageCa
         }
         // E5: 销毁预热 WebView 释放内存（每个 WebView 30-50MB，未销毁导致内存泄漏）
         kotlin.runCatching {
-            binding.webviewPreheat.apply {
+            preheatWebView.apply {
                 stopLoading()
                 webChromeClient = null
                 webViewClient = WebViewClient()
