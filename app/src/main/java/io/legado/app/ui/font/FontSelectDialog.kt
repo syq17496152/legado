@@ -84,7 +84,7 @@ import java.net.URLDecoder
  * - 字体项保留「字体自身渲染预览 + 当前字体勾选」
  * - 原 Toolbar 菜单两项（默认字体 / 其他文件夹）迁移为底部操作按钮
  */
-class FontSelectDialog : ComposeDialogFragment(), FontAdapter.CallBack {
+class FontSelectDialog : ComposeDialogFragment() {
 
     override val dialogSize: AppDialogSize = AppDialogSize.Management
 
@@ -274,7 +274,14 @@ class FontSelectDialog : ComposeDialogFragment(), FontAdapter.CallBack {
         }
     }
 
-    override fun onFontSelect(docItem: FileDoc) {
+    /**
+     * 选中字体行（原 `FontAdapter.CallBack.onFontSelect` 的实现方法）。
+     *
+     * CF 6.2 首项（2026-09-26）：本页已由 `LazyColumn + FontItemRow` 承载字体列表，
+     * 旧 `FontAdapter`（View 侧 RecyclerAdapter）**已无任何实例化点**成为死件 ⇒ 该回调接口随
+     * `FontAdapter.kt` 一并退役，本方法降级为**页内私有函数**（唯一调用点 = `FontItemRow` 的 `onClick`）。
+     */
+    private fun onFontSelect(docItem: FileDoc) {
         Coroutine.async(scope = lifecycleScope) {
             callBack?.selectFont(docItem.toString())
         }.onSuccess {
