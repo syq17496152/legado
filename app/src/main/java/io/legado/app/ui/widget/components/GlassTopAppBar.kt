@@ -37,6 +37,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -173,14 +175,10 @@ fun GlassTopAppBar(
                             .padding(start = 4.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (navIcon != null && onNavClick != null) {
+                        if (onNavClick != null) {
                             // 容器/图标尺寸走 TopBarConfig 单源（与主 Tab 完全同口径）
                             IconButton(onClick = onNavClick, modifier = Modifier.size(actionContainer.dp)) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_back),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(actionIcon.dp)
-                                )
+                                NavIconSlot(navIcon = navIcon, size = actionIcon.dp)
                             }
                         }
                         if (subtitle != null) {
@@ -255,23 +253,52 @@ fun GlassTopAppBar(
                 }
             },
             navigationIcon = {
-                if (navIcon != null && onNavClick != null) {
+                if (onNavClick != null) {
                     // 容器/图标尺寸走 TopBarConfig 单源（与主 Tab 完全同口径）
                     IconButton(
                         onClick = onNavClick,
                         modifier = Modifier.size(actionContainer.dp)
                     ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_back),
-                            contentDescription = null,
-                            modifier = Modifier.size(actionIcon.dp)
-                        )
+                        NavIconSlot(navIcon = navIcon, size = actionIcon.dp)
                     }
                 }
             },
             actions = actions
         )
         }
+    }
+}
+
+/**
+ * 返回位图标槽（顶栏包 §1.6 / AD-TB-09 + 顶栏图标资产统一铁律）。
+ *
+ * 语义：
+ * · **返回位由 `onNavClick` 驱动**——`onNavClick == null` ⇒ 不渲染返回位。与旧门槛
+ *   `navIcon != null && onNavClick != null` 在现网**全部调用点等价**（实施前已机检：全仓
+ *   「有 onNavClick 但无 navIcon」的宿主数 = 0）。
+ * · 图标取 `navIcon`，但**「默认返回」语义（Material `Icons.AutoMirrored.Filled.ArrowBack`）归一为
+ *   项目资产 `R.drawable.ic_back`**；其余图标（如选择态 `Icons.Default.Close`）按传入值渲染。
+ *
+ * 为什么必须归一（而不是改成「凡传即生效」）：全仓 **52 处**调用点都传同一个 Material ArrowBack，
+ * 而原实现**完全忽略 navIcon、恒渲染 `ic_back`**；若改成「凡传即生效」，这 52 处会统一切到 Material
+ * 粗线资产 ⇒ 直接违反「顶栏图标资产统一（细线 `ic_back`）」铁律。归一后收益：
+ * ①这 52 处像素零变化；②`LogManageScreen` 选择态的 `Icons.Default.Close` **首次真正生效**
+ * （原实现属「传了也不显示」的真缺陷）；③`onNavClick` 成为返回位的唯一驱动，语义单源。
+ */
+@Composable
+private fun NavIconSlot(navIcon: ImageVector?, size: androidx.compose.ui.unit.Dp) {
+    if (navIcon != null && navIcon !== Icons.AutoMirrored.Filled.ArrowBack) {
+        Icon(
+            imageVector = navIcon,
+            contentDescription = null,
+            modifier = Modifier.size(size)
+        )
+    } else {
+        Icon(
+            painter = painterResource(R.drawable.ic_back),
+            contentDescription = null,
+            modifier = Modifier.size(size)
+        )
     }
 }
 
