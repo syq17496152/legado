@@ -54,9 +54,15 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
-import io.legado.app.databinding.ActivityRssArtivlesBinding
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.viewbinding.ViewBinding
 import io.legado.app.help.source.getSearchUrl
 import io.legado.app.help.source.sortUrls
 import io.legado.app.lib.theme.accentColor
@@ -74,7 +80,6 @@ import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.dialog.VariableDialog
 import io.legado.app.ui.widget.text.CountBadgeDrawable
 import io.legado.app.utils.*
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
@@ -84,11 +89,25 @@ import kotlinx.coroutines.withContext
 import androidx.viewpager.widget.ViewPager
 import io.legado.app.utils.startActivity
 
-class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewModel>(),
+class RssSortActivity : VMBaseActivity<ViewBinding, RssSortViewModel>(),
     VariableDialog.Callback {
 
-    override val binding by viewBinding(ActivityRssArtivlesBinding::inflate)
+    // 原 activity_rss_artivles.xml 已退役（CE-b）：改 composeShell 工厂创建合成壳，Compose 全权接管页面骨架
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<RssSortViewModel>()
+
+    /**
+     * 原 XML `tabs_container` / `view_pager` 的程序化等价物（CE-b）。**必须是 Activity 字段**：
+     * `onActivityCreated` 里就要 `viewPager.adapter = adapter`，且 `setupMultiLineTabs()` 会向
+     * `tabsContainer` 反复 `removeAllViews()/addView(...)`（View 语义驱动不变），工厂内创建会扑空（§8-㉕）。
+     */
+    private val tabsContainer: LinearLayout by lazy {
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(8.dpToPx(), 8.dpToPx(), 8.dpToPx(), 8.dpToPx())
+        }
+    }
+    private val viewPager: ViewPager by lazy { ViewPager(this) }
     private val adapter by lazy { TabFragmentPageAdapter() }
     private var sortUrls: List<Pair<String, String>>? = null
     private val sortList = mutableListOf<Pair<String, String>>()
@@ -183,7 +202,7 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
     }
 
     private fun setupMultiLineTabs() {
-        val tabsContainer = binding.tabsContainer
+        val tabsContainer = this.tabsContainer
         tabsContainer.removeAllViews()
         tabRows.clear()
         tabScrollViews.clear()
@@ -234,12 +253,12 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
             tabRows.add(rowLayout)
         }
         // 初始选中状态
-        updateTabSelection(binding.viewPager.currentItem)
+        updateTabSelection(viewPager.currentItem)
         // F210：分类超出首行容量时默认收敛为一行 + 追加「全部/收起」切换行
         // 安全前提：切换行**不进 tabRows**，故不参与 `rowIndex * maxTagsPerRow + i` 索引映射；
         // 收敛只裁掉后续行（首行仍承载 0..maxTagsPerRow-1）⇒ updateTabSelection/ensureTabVisible 无需改口径。
         val collapsible = sortList.size > maxTagsPerRow
-        if (collapsible && binding.viewPager.currentItem >= maxTagsPerRow) {
+        if (collapsible && viewPager.currentItem >= maxTagsPerRow) {
             // 当前选中分类不在首行 ⇒ 本次强制展开，避免「选中项不可见」
             tabsExpanded = true
         }
@@ -309,7 +328,7 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
             }
             setOnClickListener {
                 setTextColor(context.getCompatColor(R.color.secondaryText)) //点击变色
-                binding.viewPager.currentItem = position
+                viewPager.currentItem = position
                 updateTabSelection(position)
             }
         }
@@ -387,9 +406,9 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initComposeTopBar()
-        binding.viewPager.adapter = adapter
-        binding.viewPager.addOnPageChangeListener(object : ViewPager.SimpleOnPageChangeListener() {
+        initComposeContent()
+        viewPager.adapter = adapter
+        viewPager.addOnPageChangeListener(object : ViewPager.SimpleOnPageChangeListener() {
             override fun onPageSelected(position: Int) {
                 updateTabSelection(position)
             }
@@ -408,9 +427,20 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
         }
     }
 
-    // L-D4 顶栏 Compose 化：GlassTopAppBar + 更多菜单 AppDropdownMenu（搜索/翻页/登录/刷新分类等全量下沉）
-    private fun initComposeTopBar() {
-        binding.composeTopBar.setContent {
+    /**
+     * CE-b：Compose 承载页面骨架（顶栏 + 分类标签行 + 文章分页）。
+     *
+     * 与原 XML（`activity_rss_artivles.xml`）的**逐一对应关系**：
+     *  · 根 `LinearLayout` → `composeShell` 合成壳（`binding.root`）
+     *  · `compose_top_bar`(ComposeView) → 页内直接渲染 `GlassTopAppBar`（内容逐行不变，含 F201 页码 chip 与搜索弹框）
+     *  · `tabs_container`(LinearLayout，8dp 内边距) → `AndroidView` 托管程序化 `LinearLayout`（宿主继续以 View 语义驱动它）
+     *  · `view_pager`(`ViewPager`) → `AndroidView` 托管程序化 `ViewPager`（保持原 `wrap_content` 测量语义）
+     */
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
             LegadoTheme {
                 val palette = rememberAppSettingPalette()
                 GlassTopAppBar(
@@ -479,6 +509,17 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
                         onDismiss = { searchDialogVisible = false }
                     )
                 }
+            }
+                // ---- 分类标签行（原 tabs_container；宿主继续以 View 语义驱动其子视图）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth(),
+                    factory = { tabsContainer }
+                )
+                // ---- 文章分页（原 view_pager；保持 wrap_content 测量语义）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth(),
+                    factory = { viewPager }
+                )
             }
         }
     }
@@ -592,14 +633,14 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
     // 保存当前选中位置
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putInt("CURRENT_POSITION", binding.viewPager.currentItem)
+        outState.putInt("CURRENT_POSITION", viewPager.currentItem)
     }
 
     // 恢复状态
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {
         super.onRestoreInstanceState(savedInstanceState)
         val position = savedInstanceState.getInt("CURRENT_POSITION", 0)
-        binding.viewPager.currentItem = position
+        viewPager.currentItem = position
         updateTabSelection(position)
     }
 
@@ -617,7 +658,7 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
 
     private val currentArticlesFragment: RssArticlesFragment?
         get() {
-            val position = binding.viewPager.currentItem
+            val position = viewPager.currentItem
             val sortName = sortList.getOrNull(position)?.first ?: return null
             return fragmentMap[sortName] as? RssArticlesFragment
         }
@@ -676,15 +717,15 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
             sortList.first().first.takeIf { it.isNotEmpty() }?.let {
                 composeTitle = viewModel.searchKey ?: it
             }
-            binding.tabsContainer.gone()
+            tabsContainer.gone()
         } else {
             composeTitle = viewModel.sourceName ?: ""
-            binding.tabsContainer.visible()
+            tabsContainer.visible()
             setupMultiLineTabs()
         }
         adapter.notifyDataSetChanged()
         if (sortList.isNotEmpty()) {
-            updateTabSelection(binding.viewPager.currentItem)
+            updateTabSelection(viewPager.currentItem)
         }
         // F143：分类 Tab 存在时才需要未读计数（单分类态 Tab 整体隐藏，无需查询）
         if (sortList.size > 1) {

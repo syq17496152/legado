@@ -4,6 +4,13 @@ package io.legado.app.ui.rss.favorites
 
 import android.os.Bundle
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.viewbinding.ViewBinding
+import com.google.android.material.tabs.TabLayout
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -22,10 +29,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.viewpager.widget.ViewPager
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssStar
-import io.legado.app.databinding.ActivityRssFavoritesBinding
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.ui.main.MainActivity
 import io.legado.app.ui.theme.LegadoTheme
@@ -37,7 +45,6 @@ import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.utils.gone
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.delay
@@ -52,9 +59,20 @@ import kotlinx.coroutines.launch
  * L-D7 S2 改造：Compose 顶栏桥接（GlassTopAppBar + AppDropdownMenu 分组/删除菜单，
  * Compose ConfirmDialog 删除确认），ViewPager + TabLayout + 分组 Fragment 内核保留。
  */
-class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
+class RssFavoritesActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityRssFavoritesBinding::inflate)
+    // 原 activity_rss_favorites.xml 已退役（CE-b）：改 composeShell 工厂创建合成壳，Compose 全权接管页面骨架
+    override val binding: ViewBinding by lazy { composeShell(this) }
+
+    /**
+     * 原 XML `tab_layout` / `view_pager` 的程序化等价物（CE-b）。**必须是 Activity 字段**：
+     * `onActivityCreated` 的 `initView()` 就要 `viewPager.adapter = adapter` 与
+     * `tabLayout.setupWithViewPager(viewPager)`，工厂内创建会扑空（交接文档 §8-㉕）。
+     */
+    private val tabLayout: TabLayout by lazy {
+        TabLayout(this).apply { tabMode = TabLayout.MODE_SCROLLABLE }
+    }
+    private val viewPager: ViewPager by lazy { ViewPager(this) }
     private val adapter by lazy { TabFragmentPageAdapter() }
     private var groupList = mutableListOf<String>()
 
@@ -66,38 +84,9 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
     private var pendingDelete by mutableStateOf<PendingDelete?>(null)
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initComposeTopBar()
-        initEmptyState()
+        initComposeContent()
         initView()
         upFragments()
-    }
-
-    /**
-     * F1 空态操作化（优化 4）：一条收藏都没有时（⇒ 无分组、无 Tab、无列表页）不再整页空白。
-     *
-     * ⚠️ 落地口径与蓝图不同（已反哺蓝图 §1.5）：蓝图按「空**分组**」设计，但分组清单由 `rssStars`
-     * 派生（`flowGroups: select group … group by group`）⇒ **空分组在数据模型里无法持久存在**，
-     * 分组层空态不可达（仅清空瞬间的瞬态窗口）。真正可达且对用户有意义的是「全库无收藏」的新手态，
-     * 故空态落在 Activity 层；出口取「去订阅源逛逛」（无分组可切换，跨页找文章点星标才是真实下一步）。
-     */
-    private fun initEmptyState() {
-        binding.emptyOverlay.setContent {
-            LegadoTheme {
-                // 状态驱动（与顶栏标题同源）：composeGroups 为空 = 全库无收藏 ⇒ 渲染空态；
-                // 非空时不渲染任何内容（透明且无触摸 ⇒ 不遮挡列表），无需切换 View 可见性
-                if (composeGroups.isEmpty()) {
-                    EmptyStatePlaceholder(
-                        icon = Icons.Outlined.StarBorder,
-                        title = getString(R.string.favorites_empty_title),
-                        subtitle = getString(R.string.favorites_empty_desc),
-                        primaryAction = EmptyStateAction(
-                            label = getString(R.string.favorites_empty_browse_rss),
-                            onClick = { MainActivity.openRss(this) }
-                        )
-                    )
-                }
-            }
-        }
     }
 
     override fun onResume() {
@@ -105,7 +94,7 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
         //从ReadRssActivity退出时，判断是否需要重新定位tabLayout选中项
         if (currentGroup.isNotEmpty() && groupList.isNotEmpty()) {
             var item = groupList.indexOf(currentGroup)
-            val currentItem = binding.viewPager.currentItem
+            val currentItem = viewPager.currentItem
             //如果坐标没有变化，则结束
             if (item == currentItem) {
                 return
@@ -115,7 +104,7 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
             }
             lifecycleScope.launch {
                 delay(100)
-                binding.tabLayout.getTabAt(item)?.select()
+                tabLayout.getTabAt(item)?.select()
             }
         }
     }
@@ -126,9 +115,10 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
      * topbar-icon-semantics-fix 3.3：分组恢复一级图标（原版 rss_favorites menu_group always），
      * 点击弹分组切换子菜单（对齐 CacheActivity 分组模式）。
      */
-    private fun initComposeTopBar() {
-        binding.composeTopBar.setContent {
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
             LegadoTheme {
+                Column(modifier = Modifier.fillMaxSize()) {
                 Box {
                     GlassTopAppBar(
                         // F145（优化 6）：单分组时 TabLayout 被隐藏（见 upFragments）⇒ 当前分组名必须由
@@ -182,6 +172,32 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
                         )
                     }
                 }
+                    // ---- 分组 Tab 行（原 tab_layout；单分组时宿主仍以 View 语义 gone/visible）----
+                    AndroidView(modifier = Modifier.fillMaxWidth(), factory = { tabLayout })
+                    // ---- 收藏列表 + 空态覆盖层（原 FrameLayout { view_pager ; empty_overlay }）----
+                    // F1 空态操作化（口径与蓝图不同，已反哺蓝图 §1.5）：分组清单由 rssStars 派生 ⇒ 空分组
+                    // 不可持久存在，真正可达的空态是「全库无收藏」⇒ 空态落在 Activity 层、由 composeGroups 状态驱动；
+                    // 非空时不渲染任何内容（透明且无触摸 ⇒ 不遮挡列表），无需切换 View 可见性。
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        AndroidView(modifier = Modifier.fillMaxSize(), factory = { viewPager })
+                        if (composeGroups.isEmpty()) {
+                            EmptyStatePlaceholder(
+                                icon = Icons.Outlined.StarBorder,
+                                title = getString(R.string.favorites_empty_title),
+                                subtitle = getString(R.string.favorites_empty_desc),
+                                primaryAction = EmptyStateAction(
+                                    label = getString(R.string.favorites_empty_browse_rss),
+                                    // 注意：此处 lambda 的 `this` 被 ColumnScope 遮蔽 ⇒ 必须显式限定 Activity
+                                    onClick = { MainActivity.openRss(this@RssFavoritesActivity) }
+                                )
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -198,7 +214,7 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
                 checked = group == currentGroup,
                 onClick = {
                     groupMenuExpanded = false
-                    binding.viewPager.setCurrentItem(index)
+                    viewPager.setCurrentItem(index)
                 }
             )
         }
@@ -220,7 +236,7 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
             onClick = {
                 menuExpanded = false
                 if (composeGroups.isNotEmpty()) {
-                    pendingDelete = PendingDelete.Group(composeGroups[binding.viewPager.currentItem])
+                    pendingDelete = PendingDelete.Group(composeGroups[viewPager.currentItem])
                 }
             }
         )
@@ -264,8 +280,8 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
     }
 
     private fun initView() {
-        binding.viewPager.adapter = adapter
-        binding.viewPager.addOnPageChangeListener(object : ViewPager.OnPageChangeListener {
+        viewPager.adapter = adapter
+        viewPager.addOnPageChangeListener(object : ViewPager.OnPageChangeListener {
             override fun onPageScrolled(
                 position: Int,
                 positionOffset: Float,
@@ -280,8 +296,8 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
             override fun onPageScrollStateChanged(state: Int) {}
 
         })
-        binding.tabLayout.setupWithViewPager(binding.viewPager)
-        binding.tabLayout.setSelectedTabIndicatorColor(accentColor)
+        tabLayout.setupWithViewPager(viewPager)
+        tabLayout.setSelectedTabIndicatorColor(accentColor)
     }
 
     private fun upFragments() {
@@ -293,9 +309,9 @@ class RssFavoritesActivity : BaseActivity<ActivityRssFavoritesBinding>() {
                 groupList.addAll(it)
                 composeGroups = it
                 if (groupList.size == 1) {
-                    binding.tabLayout.gone()
+                    tabLayout.gone()
                 } else {
-                    binding.tabLayout.visible()
+                    tabLayout.visible()
                 }
                 adapter.notifyDataSetChanged()
             }
