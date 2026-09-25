@@ -2,16 +2,24 @@ package io.legado.app.ui.replace.edit
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.text.InputType
+import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.EditText
-import androidx.activity.compose.setContent
+import android.widget.ImageView
+import android.widget.LinearLayout
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -43,6 +51,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,7 +59,18 @@ import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.data.entities.ReplaceRule
-import io.legado.app.databinding.ActivityReplaceEditBinding
+import androidx.compose.ui.platform.ComposeView
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.appcompat.widget.AppCompatImageView
+import androidx.core.widget.ImageViewCompat
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
+import io.legado.app.lib.theme.view.ThemeCheckBox
+import io.legado.app.lib.theme.view.ThemeEditText
+import io.legado.app.ui.widget.NoChildScrollNestedScrollView
+import io.legado.app.utils.dpToPx
+import io.legado.app.ui.widget.text.TextInputLayout
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.theme.LegadoTheme
@@ -68,7 +88,6 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -81,7 +100,7 @@ import kotlinx.coroutines.withContext
  * + 正则帮助，AD-20 内核 View 桥接），底部保存/取消栏 Compose 化（12dp 圆角 48dp 高）。
  */
 class ReplaceEditActivity :
-    VMBaseActivity<ActivityReplaceEditBinding, ReplaceEditViewModel>(),
+    VMBaseActivity<ViewBinding, ReplaceEditViewModel>(),
     KeyboardToolPop.CallBack {
 
     companion object {
@@ -103,7 +122,11 @@ class ReplaceEditActivity :
 
     }
 
-    override val binding by viewBinding(ActivityReplaceEditBinding::inflate)
+    // CE 5.2（compose 包）：原 activity_replace_edit.xml 已退役 ⇒ composeShell 合成壳 +
+    // attachComposeContent 单源承载；**字段区 View 内核整体以 `AndroidView` 原样托管**
+    // （原 `NoChildScrollNestedScrollView` + `ll_content` 的全部字段节点在代码里重建，
+    //  滚动/焦点语义（`NoChildScrollNestedScrollView.requestChildFocus` 特化）与键盘工具联动不得丢）。
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<ReplaceEditViewModel>()
 
     private val softKeyboardTool by lazy {
@@ -111,6 +134,74 @@ class ReplaceEditActivity :
     }
 
     private var menuExpanded by mutableStateOf(false)
+
+    // ==================== CE 5.2：原 XML 字段节点的程序化等价物 ====================
+    // 每个字段 = TextInputLayout（hint）+ ThemeEditText 子节点（原 XML 成对出现；
+    // 注意 `TextInputLayout` 的 attrs 本身可空 ⇒ 程序化构造与 XML 膨胀同走 `R.attr.textInputStyle`）
+    private val etName by lazy { ThemeEditText(this) }
+    private val tilName by lazy { field(R.string.replace_rule_summary, etName) }
+    private val etGroup by lazy { ThemeEditText(this) }
+    private val tilGroup by lazy { field(R.string.group, etGroup) }
+    private val etReplaceRule by lazy { ThemeEditText(this) }
+    private val tilReplaceRule by lazy { field(R.string.replace_rule, etReplaceRule) }
+    private val cbUseRegex by lazy { ThemeCheckBox(this).apply { setText(R.string.use_regex) } }
+    private val ivHelp by lazy { createHelpIcon() }
+    private val etReplaceTo by lazy { ThemeEditText(this) }
+    private val tilReplaceTo by lazy { field(R.string.replace_to, etReplaceTo) }
+    private val cbScopeTitle by lazy {
+        ThemeCheckBox(this).apply {
+            isChecked = false
+            setText(R.string.scope_title)
+        }
+    }
+    private val cbScopeContent by lazy {
+        ThemeCheckBox(this).apply {
+            isChecked = true
+            setText(R.string.scope_content)
+        }
+    }
+    private val etScope by lazy { ThemeEditText(this) }
+    private val tilScope by lazy { field(R.string.replace_scope, etScope) }
+    private val etExcludeScope by lazy { ThemeEditText(this) }
+    private val tilExcludeScope by lazy { field(R.string.replace_exclude_scope, etExcludeScope) }
+    private val etTimeout by lazy {
+        ThemeEditText(this).apply { inputType = InputType.TYPE_CLASS_NUMBER }
+    }
+    private val tilTimeout by lazy { field(R.string.timeout_millisecond, etTimeout) }
+
+    // 字段区内的两个「已 Compose」槽位（F64 高级组头 / F69 样本试运行）：
+    // 它们在原 XML 里就夹在 View 字段之间，换装后仍须留在滚动内容中间 ⇒ 以 ComposeView 单点创建
+    private val advancedHeaderCompose by lazy {
+        composeSlot {
+            LegadoTheme {
+                CollapseSectionHeader(
+                    title = getString(R.string.replace_advanced_group),
+                    hint = getString(R.string.replace_advanced_group_hint),
+                    expanded = advancedExpanded,
+                    onToggle = {
+                        advancedExpanded = !advancedExpanded
+                        applyAdvancedVisibility()
+                    }
+                )
+            }
+        }
+    }
+    private val sampleSectionCompose by lazy {
+        composeSlot {
+            LegadoTheme {
+                ReplaceSampleSection(
+                    expanded = sampleExpanded,
+                    onToggle = { sampleExpanded = !sampleExpanded },
+                    input = sampleInput,
+                    onInputChange = { sampleInput = it },
+                    running = sampleRunning,
+                    result = sampleResult,
+                    onRun = { runSample() }
+                )
+            }
+        }
+    }
+    private val contentScrollView: NoChildScrollNestedScrollView by lazy { createContentScroll() }
 
     // ==================== F64：高级字段渐进披露 ====================
     /** 高级配置组展开态（默认收起；存量规则已有非空高级值时自动展开） */
@@ -128,60 +219,230 @@ class ReplaceEditActivity :
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         softKeyboardTool.attachToWindow(window)
-        initComposeTopBar()
-        initComposeBottomBar()
-        initAdvancedHeader()
-        initSampleSection()
-        initView()
+        initComposeContent()
         viewModel.initData(intent) {
             upReplaceView(it)
         }
     }
 
-    /**
-     * F64：高级配置组头（点击展开/收起低频字段：替换范围 / 排除范围 / 超时）。
-     *
-     * 只切换这三个 View 的可见性，字段定义与保存逻辑零改动（纯视图层折叠）。
-     */
-    private fun initAdvancedHeader() {
-        binding.composeAdvancedHeader.setContent {
-            LegadoTheme {
-                CollapseSectionHeader(
-                    title = getString(R.string.replace_advanced_group),
-                    hint = getString(R.string.replace_advanced_group_hint),
-                    expanded = advancedExpanded,
-                    onToggle = {
-                        advancedExpanded = !advancedExpanded
-                        applyAdvancedVisibility()
-                    }
+    // ==================== CE 5.2：原 XML 字段节点的构造助手 ====================
+
+    /** 原 `TextInputLayout` + 子 `ThemeEditText` 成对结构（wrap_content 高、match_parent 宽）。 */
+    private fun field(@androidx.annotation.StringRes hintRes: Int, child: EditText): TextInputLayout =
+        TextInputLayout(this, null).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            hint = getString(hintRes)
+            addView(
+                child, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
                 )
-            }
+            )
         }
-        applyAdvancedVisibility()
+
+    /** 原 `iv_help`（24dp / `ic_help` / `app:tint="@color/primaryText"`）。 */
+    private fun createHelpIcon(): AppCompatImageView = AppCompatImageView(this).apply {
+        layoutParams = LinearLayout.LayoutParams(24.dpToPx(), 24.dpToPx())
+        contentDescription = getString(R.string.help)
+        scaleType = ImageView.ScaleType.CENTER
+        setImageResource(R.drawable.ic_help)
+        ImageViewCompat.setImageTintList(
+            this, AppCompatResources.getColorStateList(this@ReplaceEditActivity, R.color.primaryText)
+        )
+        setOnClickListener { showHelp("regexHelp") }
     }
 
+    /**
+     * 字段区内的 Compose 槽位（原 XML 中夹在 View 字段之间的 `ComposeView`）。
+     *
+     * ⚠️ 本页是**唯一保留 ComposeView 程序化创建**的换装页：这两个槽位在语义上就是
+     * 「View 滚动内容里的 Compose 段落」，位置不可上移/下移（上移会改变渐进披露的分组归属），
+     * 且必须继续享受 `NoChildScrollNestedScrollView` 的焦点滚动特化 ⇒ 只能原地以 ComposeView 承载。
+     * 与旧 XML 的差别仅为「谁来创建这个 ComposeView」，`setContent` 与默认合成策略口径一致。
+     */
+    private fun composeSlot(content: @Composable () -> Unit): ComposeView =
+        ComposeView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            setContent(content)
+        }
+
+    /**
+     * 原 `NoChildScrollNestedScrollView` + `ll_content`（10dp 内边距的竖向字段栈）。
+     *
+     * 子节点顺序**逐项复刻 XML**（顺序即渐进披露的分组语义，不得调整）：
+     * 摘要 / 分组 / 替换规则 / 正则行（勾选 + 帮助）/ 替换为 /
+     * 范围勾选行 / 【高级组头】/ 替换范围 / 排除范围 / 超时 / 【样本试运行】。
+     */
+    private fun createContentScroll(): NoChildScrollNestedScrollView {
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            val pad = 10.dpToPx()
+            setPadding(pad, pad, pad, pad)
+        }
+        content.addView(tilName)
+        content.addView(tilGroup)
+        content.addView(tilReplaceRule)
+        // 正则行：勾选（占满剩余宽）+ 帮助图标（24dp）
+        content.addView(
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                addView(
+                    cbUseRegex, LinearLayout.LayoutParams(
+                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+                    )
+                )
+                addView(ivHelp)
+            }
+        )
+        content.addView(tilReplaceTo)
+        // 作用域行：标题 / 正文 两个勾选（后者左间距 10dp）
+        content.addView(
+            androidx.appcompat.widget.LinearLayoutCompat(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                addView(
+                    cbScopeTitle, LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                )
+                addView(
+                    cbScopeContent, LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { marginStart = 10.dpToPx() }
+                )
+            }
+        )
+        content.addView(advancedHeaderCompose)
+        content.addView(tilScope)
+        content.addView(tilExcludeScope)
+        content.addView(tilTimeout)
+        content.addView(sampleSectionCompose)
+        return NoChildScrollNestedScrollView(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            addView(
+                content, ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+    }
+
+    /**
+     * CE 5.2：Compose 承载页面骨架（顶栏 + 字段区 + 底部保存栏）。
+     *
+     * 与原 XML（`activity_replace_edit.xml`）的**逐一对应关系**（三不影响口径）：
+     *  · `compose_top_bar` → 顶部 `LegadoTheme { GlassTopAppBar(…) }`（内容逐行搬入）
+     *  · `NoChildScrollNestedScrollView` + `ll_content`（6 组字段 + 2 个 Compose 槽）
+     *    → `AndroidView` 托管 [contentScrollView]（**滚动与焦点语义整体保留**）
+     *  · `compose_bottom_bar` → 底部 `LegadoTheme { Row { 取消 / 保存 } }`（内容逐行搬入）
+     *  · 高度口径：原 LinearLayout 中滚动区为 `wrap_content`、底部栏随后（内容超高时滚动区被
+     *    钳到剩余高度、底部栏恒可见）⇒ 此处**不加 `weight`**，保持同一测量语义
+     */
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 compose_top_bar，内容逐行不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = getString(R.string.replace_rule_edit),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = {
+                            // topbar-icon-semantics-fix 3.2：代码/保存恢复一级图标
+                            //（对齐原版 replace_edit.xml showAsAction=always；tint 继承 actionIconContentColor 禁自传）
+                            IconButton(onClick = { onFullEditClicked() }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Code,
+                                    contentDescription = getString(R.string.edit_content)
+                                )
+                            }
+                            IconButton(onClick = { saveReplaceRule() }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Save,
+                                    contentDescription = getString(R.string.action_save)
+                                )
+                            }
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(
+                                        imageVector = Icons.Filled.MoreVert,
+                                        contentDescription = null
+                                    )
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = buildMenuActions()
+                                )
+                            }
+                        }
+                    )
+                }
+                // ---- 字段区（原 NoChildScrollNestedScrollView + ll_content）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth(),
+                    factory = { contentScrollView }
+                )
+                // ---- 底部保存/取消栏（S3 骨架范式：12dp 圆角 48dp 高）----
+                LegadoTheme {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { finish() },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = AppShapes.Button
+                        ) {
+                            Text(text = getString(R.string.cancel))
+                        }
+                        Button(
+                            onClick = { saveReplaceRule() },
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = AppShapes.Button
+                        ) {
+                            Text(text = getString(R.string.action_save))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * F64：高级配置组展开态落地（只切换三个 View 的可见性，字段定义与保存逻辑零改动）。
+     *
+     * CE 5.2：组头本身已作为 [advancedHeaderCompose] 槽位固定在字段栈中间（位置即分组语义），
+     * 原 `initAdvancedHeader()` 的「先 setContent 再 applyAdvancedVisibility()」两步等价于
+     * 「槽位已就位 + 首次同步可见性」，此处保留后半步的显式调用点（初值仍为收起）。
+     */
     private fun applyAdvancedVisibility() {
         val visibility = if (advancedExpanded) View.VISIBLE else View.GONE
-        binding.tilScope.visibility = visibility
-        binding.tilExcludeScope.visibility = visibility
-        binding.tilTimeout.visibility = visibility
-    }
-
-    /** F69：样本试运行区（粘贴样本 → 就地看匹配与替换结果；不保存、不影响阅读页） */
-    private fun initSampleSection() {
-        binding.composeSampleSection.setContent {
-            LegadoTheme {
-                ReplaceSampleSection(
-                    expanded = sampleExpanded,
-                    onToggle = { sampleExpanded = !sampleExpanded },
-                    input = sampleInput,
-                    onInputChange = { sampleInput = it },
-                    running = sampleRunning,
-                    result = sampleResult,
-                    onRun = { runSample() }
-                )
-            }
-        }
+        tilScope.visibility = visibility
+        tilExcludeScope.visibility = visibility
+        tilTimeout.visibility = visibility
     }
 
     /**
@@ -197,15 +458,15 @@ class ReplaceEditActivity :
             sampleResult = SamplePreviewResult(0, "", getString(R.string.replace_sample_empty_input))
             return
         }
-        val pattern = binding.etReplaceRule.text.toString()
+        val pattern = etReplaceRule.text.toString()
         if (pattern.isEmpty()) {
             sampleResult = SamplePreviewResult(0, "", getString(R.string.replace_rule_invalid))
             return
         }
-        val replacement = binding.etReplaceTo.text.toString()
-        val isRegex = binding.cbUseRegex.isChecked
-        val ruleName = binding.etName.text.toString().ifBlank { pattern }
-        val timeout = binding.etTimeout.text.toString().trim().toLongOrNull()?.takeIf { it > 0 }
+        val replacement = etReplaceTo.text.toString()
+        val isRegex = cbUseRegex.isChecked
+        val ruleName = etName.text.toString().ifBlank { pattern }
+        val timeout = etTimeout.text.toString().trim().toLongOrNull()?.takeIf { it > 0 }
             ?: 3000L
         sampleRunning = true
         lifecycleScope.launch {
@@ -247,77 +508,6 @@ class ReplaceEditActivity :
                 }
             } else {
                 toastOnUi(R.string.focus_lost_on_textbox)
-            }
-        }
-    }
-
-    // L-C4 顶栏 Compose 化（S3 骨架范式：GlassTopAppBar + 菜单下沉 AppDropdownMenu）
-    private fun initComposeTopBar() {
-        binding.composeTopBar.setContent {
-            LegadoTheme {
-                GlassTopAppBar(
-                    title = getString(R.string.replace_rule_edit),
-                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                    onNavClick = { finish() },
-                    actions = {
-                        // topbar-icon-semantics-fix 3.2：代码/保存恢复一级图标
-                        //（对齐原版 replace_edit.xml showAsAction=always；tint 继承 actionIconContentColor 禁自传）
-                        IconButton(onClick = { onFullEditClicked() }) {
-                            Icon(
-                                imageVector = Icons.Filled.Code,
-                                contentDescription = getString(R.string.edit_content)
-                            )
-                        }
-                        IconButton(onClick = { saveReplaceRule() }) {
-                            Icon(
-                                imageVector = Icons.Filled.Save,
-                                contentDescription = getString(R.string.action_save)
-                            )
-                        }
-                        Box {
-                            IconButton(onClick = { menuExpanded = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.MoreVert,
-                                    contentDescription = null
-                                )
-                            }
-                            AppDropdownMenu(
-                                expanded = menuExpanded,
-                                onDismiss = { menuExpanded = false },
-                                actions = buildMenuActions()
-                            )
-                        }
-                    }
-                )
-            }
-        }
-    }
-
-    // L-C4 底部保存/取消栏（S3 骨架范式：12dp 圆角 48dp 高）
-    private fun initComposeBottomBar() {
-        binding.composeBottomBar.setContent {
-            LegadoTheme {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { finish() },
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = AppShapes.Button
-                    ) {
-                        Text(text = getString(R.string.cancel))
-                    }
-                    Button(
-                        onClick = { saveReplaceRule() },
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = AppShapes.Button
-                    ) {
-                        Text(text = getString(R.string.action_save))
-                    }
-                }
             }
         }
     }
@@ -399,15 +589,15 @@ class ReplaceEditActivity :
      * 修复既有缺陷：原 `getReplaceRule()` 用 `toLong()`，输入非数字会抛 `NumberFormatException`。
      */
     private fun validateTimeout(): Boolean {
-        val raw = binding.etTimeout.text.toString().trim()
+        val raw = etTimeout.text.toString().trim()
         val value = if (raw.isEmpty()) 3000L else raw.toLongOrNull()
         if (value == null || value <= 0) {
             advancedExpanded = true
             applyAdvancedVisibility()
-            binding.tilTimeout.error = getString(R.string.replace_timeout_invalid)
+            tilTimeout.error = getString(R.string.replace_timeout_invalid)
             return false
         }
-        binding.tilTimeout.error = null
+        tilTimeout.error = null
         return true
     }
 
@@ -433,16 +623,16 @@ class ReplaceEditActivity :
     }
 
     private fun initView() {
-        binding.ivHelp.setOnClickListener {
-            showHelp("regexHelp")
-        }
+        // CE 5.2：帮助图标的点击回调在 createHelpIcon() 内绑定（与原「先建视图再绑监听」等价）；
+        // 此处保留一次引用以确保字段区视图已就位（原 initView 即负责装配该监听）
+        ivHelp
         binding.root.setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
             softKeyboardTool.initialPadding = windowInsets.imeHeight
             windowInsets
         }
     }
 
-    private fun upReplaceView(replaceRule: ReplaceRule) = binding.run {
+    private fun upReplaceView(replaceRule: ReplaceRule) {
         etName.setText(replaceRule.name)
         etGroup.setText(replaceRule.group)
         etReplaceRule.setText(replaceRule.pattern)
@@ -460,11 +650,11 @@ class ReplaceEditActivity :
         ) {
             advancedExpanded = true
         }
-        binding.tilTimeout.error = null
+        tilTimeout.error = null
         applyAdvancedVisibility()
     }
 
-    private fun getReplaceRule(): ReplaceRule = binding.run {
+    private fun getReplaceRule(): ReplaceRule {
         val replaceRule: ReplaceRule = viewModel.replaceRule ?: ReplaceRule()
         replaceRule.name = etName.text.toString()
         replaceRule.group = etGroup.text.toString()
