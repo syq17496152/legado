@@ -92,19 +92,19 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
     }
 
     private fun initSelectActionBar() {
-        binding.selectActionBar.setMainActionText(R.string.add_to_bookshelf)
-        binding.selectActionBar.inflateMenu(R.menu.import_book_sel)
-        binding.selectActionBar.setOnMenuItemClickListener { item ->
+        selectActionBar.setMainActionText(R.string.add_to_bookshelf)
+        selectActionBar.inflateMenu(R.menu.import_book_sel)
+        selectActionBar.setOnMenuItemClickListener { item ->
             when (item?.itemId) {
                 R.id.menu_del_selection -> deleteSelection()
             }
             false
         }
-        binding.selectActionBar.setCallBack(this)
+        selectActionBar.setCallBack(this)
     }
 
     private fun initComposeHost() {
-        binding.composeHost.setContent {
+        installImportBookContent {
             LegadoTheme {
                 ImportBookScreen(
                     items = composeItems,
@@ -396,7 +396,7 @@ class ImportBookActivity : BaseImportBookActivity<ImportBookViewModel>(),
     }
 
     fun upCountView() {
-        binding.selectActionBar.upCountView(selectedIndexes.size, checkableCount())
+        selectActionBar.upCountView(selectedIndexes.size, checkableCount())
     }
 
     private fun checkableCount(): Int = currentItems.count { !it.isDir && !it.isOnBookShelf }
