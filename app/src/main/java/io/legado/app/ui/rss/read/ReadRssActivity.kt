@@ -17,10 +17,12 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import androidx.lifecycle.lifecycleScope
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
@@ -34,13 +36,15 @@ import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.size
+import androidx.viewbinding.ViewBinding
 import com.script.rhino.runScriptWithContext
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppConst.imagePathKey
 import io.legado.app.constant.AppLog
-import io.legado.app.databinding.ActivityRssReadBinding
 import io.legado.app.help.WebCacheManager
 import io.legado.app.help.source.SourceCacheManager
 import io.legado.app.help.source.SourceContentFilter
@@ -62,8 +66,6 @@ import io.legado.app.ui.rss.search.ChangeRssArticleSourceDialog
 import io.legado.app.ui.rss.search.RssSearchSourceHolder
 import io.legado.app.utils.ACache
 import io.legado.app.utils.NetworkUtils
-import io.legado.app.utils.gone
-import io.legado.app.utils.invisible
 import io.legado.app.utils.isTrue
 import io.legado.app.utils.keepScreenOn
 import io.legado.app.utils.longSnackbar
@@ -75,8 +77,6 @@ import io.legado.app.utils.startActivity
 import io.legado.app.utils.textArray
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.toggleSystemBar
-import io.legado.app.utils.viewbindingdelegate.viewBinding
-import io.legado.app.utils.visible
 import org.apache.commons.text.StringEscapeUtils
 import org.jsoup.Jsoup
 import splitties.views.bottomPadding
@@ -108,8 +108,12 @@ import java.lang.ref.WeakReference
 import splitties.systemservices.powerManager
 import java.net.URLDecoder
 import androidx.core.graphics.createBitmap
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
@@ -128,9 +132,19 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.anima.RefreshProgressBar
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.InlineTaskBar
@@ -141,14 +155,26 @@ import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 /**
  * rss阅读界面
  */
-class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>(),
+class ReadRssActivity : VMBaseActivity<ViewBinding, ReadRssViewModel>(),
     RssFavoritesDialog.Callback {
 
-    override val binding by viewBinding(ActivityRssReadBinding::inflate)
+    // 原 activity_rss_read.xml 已退役（CE-b）：改 composeShell 工厂创建合成壳，Compose 全权接管页面骨架
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<ReadRssViewModel>()
 
     private lateinit var pooledWebView: PooledWebView
     private lateinit var currentWebView: WebView
+
+    /**
+     * CE-b：原 XML 三个 View 节点的程序化等价物（**先于组合挂载创建**，见交接文档 §8-㉕）。
+     *
+     * `onActivityCreated` 里 `initWebView()` 就要配置 `progressBar.fontColor`、并向
+     * `webViewContainer` 挂 `currentWebView`，故必须是 Activity 字段而非在 `AndroidView` 工厂里创建
+     * （组合发生在 `onActivityCreated` 之后）。`customWebView` 同理：返回键回调会读它的 `size`。
+     */
+    private val webViewContainer: FrameLayout by lazy { FrameLayout(this) }
+    private val progressBar: RefreshProgressBar by lazy { RefreshProgressBar(this) }
+    private val customWebView: FrameLayout by lazy { FrameLayout(this) }
 
     private var isFullscreen = false
 
@@ -158,6 +184,16 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     private var starVisible by mutableStateOf(false)
     private var starChecked by mutableStateOf(false)
     private var ttsPlaying by mutableStateOf(false)
+    // CE-b：原 XML 的 View 显隐/动画机制一律改状态驱动（AndroidView 托管 [progressBar] 除外）
+    /** 原 `progress_bar` 的 `setDurProgress` + `gone(progress == 100)` */
+    private var webProgress by mutableIntStateOf(0)
+    /** 原 `compose_top_bar` 的可见性（收起态即原 `GONE`）⇒ 退出组合，下邻居按剩余空间自然补位 */
+    private var topBarVisible by mutableStateOf(true)
+    /** 原 `compose_top_bar` 的 `translationY`（逐帧动画值；经 `Modifier.offset{}` 落在放置阶段，不逐帧重组） */
+    private var topBarOffsetY by mutableFloatStateOf(0f)
+    /** 原 `ll_view` 的 `invisible()/visible()`（网页自定义全屏期间收起页面骨架） */
+    private var pageContentVisible by mutableStateOf(true)
+
     // F146：顶栏收起态 / 完整高度 / 动画句柄（沉浸阅读）
     private var topBarCollapsed = false
     private var topBarFullHeight = 0
@@ -202,18 +238,18 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         pooledWebView = WebViewPool.acquire(this)
         currentWebView = pooledWebView.realWebView
-        binding.webViewContainer.addView(currentWebView)
+        webViewContainer.addView(currentWebView)
         viewModel.upStarMenuData.observe(this) { upStarMenu() }
         viewModel.upTtsMenuData.observe(this) { upTtsMenu(it) }
         viewModel.upTitleData.observe(this) { composeTitle = it }
-        initComposeTopBar()
+        initComposeContent()
         initView()
         initWebView()
         initLiveData()
         viewModel.initData(intent)
         currentWebView.clearHistory()
         onBackPressedDispatcher.addCallback(this) {
-            if (binding.customWebView.size > 0) { //关闭全屏
+            if (customWebView.size > 0) { //关闭全屏
                 customWebViewCallback?.onCustomViewHidden()
                 return@addCallback
             }
@@ -265,8 +301,8 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        binding.progressBar.visible()
-        binding.progressBar.setDurProgress(30)
+        // 等价原 `progressBar.visible() + setDurProgress(30)`（进度 < 100 ⇒ 进度条重新进入组合）
+        webProgress = 30
         setIntent(intent)
         viewModel.initData(intent)
     }
@@ -289,59 +325,114 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     }
 
     /**
-     * Compose 顶栏（L-D6 S4 改造）：GlassTopAppBar + 刷新/收藏图标按钮 + MoreVert 下拉菜单
+     * CE-b：Compose 承载页面骨架（顶栏 + 网页区 + 进度条 + 自定义全屏容器）。
+     *
+     * 与原 XML（`activity_rss_read.xml`）的**逐一对应关系**：
+     *  · 根 `FrameLayout` → `composeShell` 合成壳（`binding.root`）
+     *  · `ll_view`(ConstraintLayout) → 顶层 `Column`；`pageContentVisible` 承载原 `invisible()/visible()`
+     *    （用 **alpha** 而非条件组合 ⇒ **网页区容器绝不条件移除**，否则 WebView 被 detach）
+     *  · `compose_top_bar`(ComposeView) → 页内直接渲染 `GlassTopAppBar`（内容逐行不变）；
+     *    高度交 `onGloballyPositioned` 上报给 F146 沉浸动画，位移走 `Modifier.offset{}`（放置阶段求值，不逐帧重组）
+     *  · `web_view_container` → `AndroidView` 托管 `FrameLayout`（宿主已在 `onActivityCreated` 挂好 `currentWebView`）
+     *  · `progress_bar`（1dp，网页区顶部悬浮、不占内容布局）→ `AndroidView` 托管 `RefreshProgressBar`
+     *  · `custom_web_view`（网页自定义全屏 overlay）→ `AndroidView` 托管 `FrameLayout`，恒在场、绘于最上层
      */
-    private fun initComposeTopBar() {
-        binding.composeTopBar.setContent {
-            LegadoTheme {
-                GlassTopAppBar(
-                    title = composeTitle,
-                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                    onNavClick = { finish() },
-                    actions = {
-                        IconButton(onClick = { refresh() }) {
-                            Icon(
-                                imageVector = Icons.Filled.Refresh,
-                                contentDescription = getString(R.string.refresh)
-                            )
-                        }
-                        if (starVisible) {
-                            IconButton(onClick = {
-                                viewModel.addFavorite()
-                                viewModel.rssArticle?.let {
-                                    showDialogFragment(RssFavoritesDialog(it))
-                                }
-                            }) {
-                                Icon(
-                                    imageVector = if (starChecked) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                    contentDescription = getString(R.string.favorite)
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .alpha(if (pageContentVisible) 1f else 0f)
+                ) {
+                    // ---- 顶栏（原 compose_top_bar，内容逐行不变；收起态即原 GONE ⇒ 退出组合）----
+                    if (topBarVisible) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .offset { IntOffset(0, topBarOffsetY.roundToInt()) }
+                                .onGloballyPositioned { topBarFullHeight = it.size.height }
+                        ) {
+                            LegadoTheme {
+                                GlassTopAppBar(
+                                    title = composeTitle,
+                                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                                    onNavClick = { finish() },
+                                    actions = {
+                                        IconButton(onClick = { refresh() }) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Refresh,
+                                                contentDescription = getString(R.string.refresh)
+                                            )
+                                        }
+                                        if (starVisible) {
+                                            IconButton(onClick = {
+                                                viewModel.addFavorite()
+                                                viewModel.rssArticle?.let {
+                                                    showDialogFragment(RssFavoritesDialog(it))
+                                                }
+                                            }) {
+                                                Icon(
+                                                    imageVector = if (starChecked) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                                    contentDescription = getString(R.string.favorite)
+                                                )
+                                            }
+                                        }
+                                        Box {
+                                            IconButton(onClick = { menuExpanded = true }) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.MoreVert,
+                                                    contentDescription = getString(R.string.more)
+                                                )
+                                            }
+                                            AppDropdownMenu(
+                                                expanded = menuExpanded,
+                                                onDismiss = { menuExpanded = false },
+                                                actions = buildMenuActions()
+                                            )
+                                        }
+                                    },
+                                    secondRow = {
+                                        // F147：朗读是长任务，原实现的状态信号只有「菜单里图标 Stop 化」——
+                                        // 菜单不展开就看不见「还在读 / 从哪停」。改用共享 InlineTaskBar 常驻页内。
+                                        InlineTaskBar(
+                                            state = if (ttsPlaying) InlineTaskState.Running else InlineTaskState.Idle,
+                                            text = getString(R.string.rss_read_tts_running),
+                                            onCancel = { readAloud() },
+                                            actionLabel = getString(R.string.aloud_stop)
+                                        )
+                                    }
                                 )
                             }
                         }
-                        Box {
-                            IconButton(onClick = { menuExpanded = true }) {
-                                Icon(
-                                    imageVector = Icons.Filled.MoreVert,
-                                    contentDescription = getString(R.string.more)
-                                )
-                            }
-                            AppDropdownMenu(
-                                expanded = menuExpanded,
-                                onDismiss = { menuExpanded = false },
-                                actions = buildMenuActions()
-                            )
-                        }
-                    },
-                    secondRow = {
-                        // F147：朗读是长任务，原实现的状态信号只有「菜单里图标 Stop 化」——
-                        // 菜单不展开就看不见「还在读 / 从哪停」。改用共享 InlineTaskBar 常驻页内。
-                        InlineTaskBar(
-                            state = if (ttsPlaying) InlineTaskState.Running else InlineTaskState.Idle,
-                            text = getString(R.string.rss_read_tts_running),
-                            onCancel = { readAloud() },
-                            actionLabel = getString(R.string.aloud_stop)
-                        )
                     }
+                    // ---- 网页区 + 进度条（原 web_view_container + progress_bar）----
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { webViewContainer }
+                        )
+                        // 原 `gone(progress == 100)` ⇒ 进度 100 时该 1dp 条不再进入组合（同为不占位）
+                        if (webProgress < 100) {
+                            AndroidView(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .fillMaxWidth()
+                                    .height(1.dp),
+                                factory = { progressBar },
+                                update = { it.setDurProgress(webProgress) }
+                            )
+                        }
+                    }
+                }
+                // ---- 自定义全屏容器（原 custom_web_view，绘制在最上层）----
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { customWebView }
                 )
             }
         }
@@ -473,18 +564,19 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     /**
      * F146：沉浸阅读——正文滚动收起/展开顶栏。
      *
-     * 做法：**先动画 `translationY`、动画结束再落高度**（收起：0→-h 位移后把高度置 0；展开：先恢复
-     * 高度并把位移摆到 -h，再动画回 0）。不逐帧改高度是因为 `compose_top_bar` 里是 ComposeView，
-     * 逐帧测量会有掉帧风险；位移与高度在动画终态**视觉等价**（位移量恰等于高度），故落高度无跳变。
-     * 布局零改动：`web_view_container` 是 `height=0dp` + 上下约束 ⇒ 顶栏高度变化时容器自动补位，
-     * 不会出现底部空隙（这比整体平移 `ll_view` 更稳）。
+     * 做法：**先动画位移、动画结束再落可见性**（收起：0→-h 位移后置 `topBarVisible=false`；展开：先恢复
+     * 可见性并把位移摆到 -h，再动画回 0）。不逐帧改高度是因为顶栏里是 Compose 内容，逐帧测量会有掉帧风险；
+     * 位移与高度在动画终态**视觉等价**（位移量恰等于高度），故落可见性无跳变。
+     *
+     * CE-b 等价性（原实现直接操作 XML 里 `compose_top_bar` 这个 ComposeView 的 `visibility/translationY`）：
+     *  · 位移 → `Modifier.offset{}`（**放置阶段求值，不逐帧重组**，与原 `translationY` 同为「跳过布局、只改绘制位置」）
+     *  · 收起 → `topBarVisible=false`（即原 `GONE`）⇒ 下邻居按剩余空间自然补位到顶，页面下方不留空白
+     *  · 高度 → 组合内 `onGloballyPositioned` 上报（替代原 `bar.height` 读取）
      */
     private fun setTopBarCollapsed(collapsed: Boolean, animate: Boolean = true) {
         if (topBarCollapsed == collapsed) return
-        val bar = binding.composeTopBar
-        if (topBarFullHeight <= 0) topBarFullHeight = bar.height
+        if (topBarFullHeight <= 0) return
         val h = topBarFullHeight.toFloat()
-        if (h <= 0f) return
         // 沉浸联动是「只有真机能观察」的行为，保留低量级（仅状态跃迁）诊断日志便于现场定位
         AppLog.putDebugWithTag(
             TAG_RSS_IMMERSIVE,
@@ -494,37 +586,36 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
         topBarCollapsed = collapsed
         topBarAnimator?.cancel()
         if (collapsed) {
-            bar.visibility = View.VISIBLE
-            bar.translationY = 0f
+            topBarVisible = true
+            topBarOffsetY = 0f
             if (!animate) {
-                bar.visibility = View.GONE
+                topBarVisible = false
                 return
             }
             topBarAnimator = ValueAnimator.ofFloat(0f, -h).apply {
                 duration = TOP_BAR_ANIM_MS
-                addUpdateListener { bar.translationY = it.animatedValue as Float }
+                addUpdateListener { topBarOffsetY = it.animatedValue as Float }
                 addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationEnd(animation: Animator) {
                         if (!topBarCollapsed) return
-                        bar.translationY = 0f
-                        // 「收起」用 GONE 表达而非高度置 0：ConstraintLayout 下 `height=0` 是
-                        // **match_constraint** 语义，会被 Compose 内容重新撑开（真机实测仍为 132px）；
-                        // GONE 则让下邻居按约束自然补位到顶（页面下方不留空隙）。
-                        bar.visibility = View.GONE
+                        topBarOffsetY = 0f
+                        // 「收起」用**退出组合**（= 原 GONE）表达而非高度置 0：否则原测量空间仍在，
+                        // 页面下方会留一条与顶栏等高的空白；退出组合让下邻居自然补位到顶。
+                        topBarVisible = false
                     }
                 })
                 start()
             }
         } else {
-            bar.visibility = View.VISIBLE
-            bar.translationY = -h
+            topBarVisible = true
+            topBarOffsetY = -h
             if (!animate) {
-                bar.translationY = 0f
+                topBarOffsetY = 0f
                 return
             }
             topBarAnimator = ValueAnimator.ofFloat(-h, 0f).apply {
                 duration = TOP_BAR_ANIM_MS
-                addUpdateListener { bar.translationY = it.animatedValue as Float }
+                addUpdateListener { topBarOffsetY = it.animatedValue as Float }
                 start()
             }
         }
@@ -570,7 +661,7 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun initWebView() {
-        binding.progressBar.fontColor = accentColor
+        progressBar.fontColor = accentColor
         currentWebView.webChromeClient = CustomWebChromeClient()
         //添加屏幕方向控制，网页关闭，openUI
         currentWebView.addJavascriptInterface(JSInterface(this), nameBasic)
@@ -775,14 +866,15 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
 
         override fun onProgressChanged(view: WebView?, newProgress: Int) {
             super.onProgressChanged(view, newProgress)
-            binding.progressBar.setDurProgress(newProgress)
-            binding.progressBar.gone(newProgress == 100)
+            // CE-b：原 `setDurProgress + gone(==100)` 合并为状态（`webProgress == 100` 时进度条退出组合）
+            webProgress = newProgress
         }
 
         override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
             isFullscreen = true
-            binding.llView.invisible()
-            binding.customWebView.addView(view)
+            // 等价原 `ll_view.invisible()`（页面骨架收起，用 alpha 表达以保住 WebView 不被 detach）
+            pageContentVisible = false
+            customWebView.addView(view)
             customWebViewCallback = callback
             keepScreenOn(true)
             toggleSystemBar(false)
@@ -793,8 +885,9 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
 
         override fun onHideCustomView() {
             isFullscreen = false
-            binding.customWebView.removeAllViews()
-            binding.llView.visible()
+            customWebView.removeAllViews()
+            // 等价原 `ll_view.visible()`
+            pageContentVisible = true
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             keepScreenOn(false)
             toggleSystemBar(true)
