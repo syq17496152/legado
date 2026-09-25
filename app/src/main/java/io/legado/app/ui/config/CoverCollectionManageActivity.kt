@@ -2,24 +2,31 @@ package io.legado.app.ui.config
 
 import android.net.Uri
 import android.os.Bundle
-import android.view.ViewGroup
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
-import io.legado.app.databinding.ActivityCoverCollectionManageBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.config.CoverCollectionManager
 import io.legado.app.lib.cloud.CloudStorageType
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
-import io.legado.app.ui.widget.components.installGlassTopBar
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
@@ -27,16 +34,17 @@ import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getFile
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
-class CoverCollectionManageActivity : BaseActivity<ActivityCoverCollectionManageBinding>() {
+class CoverCollectionManageActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityCoverCollectionManageBinding::inflate)
+    // 原 activity_cover_collection_manage.xml 已退役（CE-b，含顶栏包 §4.1）：
+    // composeShell 合成壳 + attachComposeContent 单源；顶栏由 installGlassTopBar 的运行时注入改为页内直接渲染
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private val isNightState = mutableStateOf(false)
     private val entriesState = mutableStateOf<List<CoverCollectionManager.Entry>>(emptyList())
@@ -54,59 +62,60 @@ class CoverCollectionManageActivity : BaseActivity<ActivityCoverCollectionManage
     override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initTopBar()
         initComposeContent()
         loadCollections()
     }
 
-    // W5.3：顶栏运行时替换为 GlassTopAppBar（透壁纸语义，W1 模式），S3 容器按钮保留一级图标语义
-    private fun initTopBar() {
-        installGlassTopBar(
-            binding,
-            titleProvider = { getString(R.string.cover_collection_manage) },
-            actionsProvider = {
-                if (containerActionVisible) {
-                    listOf(
-                        MenuAction(
-                            iconRes = R.drawable.ic_outline_cloud_24,
-                            title = getString(R.string.s3_bucket),
-                            alwaysShow = true
-                        ) { showContainerSelector() }
-                    )
-                } else {
-                    emptyList()
-                }
-            },
-            onBack = { finish() }
-        )
-    }
-
+    @OptIn(ExperimentalMaterial3Api::class)
     private fun initComposeContent() {
-        val container = binding.recyclerView.parent as? ViewGroup ?: return
-        // W5.3：View 节点全部摘除（titleBar 已由 installGlassTopBar 移除），对齐 W1/W2 迁移模式
-        container.removeView(binding.titleBar)
-        container.removeView(binding.recyclerView)
-        val cv = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setContent {
-                CoverCollectionManageScreen(
-                    isNight = isNightState.value,
-                    entries = entriesState.value,
-                    onTabChanged = { night ->
-                        isNightState.value = night
-                        loadCollections()
-                    },
-                    onItemClick = ::openDetail,
-                    itemActions = ::coverActions,
-                    onAddClick = ::showAddActions
-                )
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/条件云容器动作逐项不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = getString(R.string.cover_collection_manage),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = {
+                            TopBarActionRow(
+                                if (containerActionVisible) {
+                                    listOf(
+                                        MenuAction(
+                                            iconRes = R.drawable.ic_outline_cloud_24,
+                                            title = getString(R.string.s3_bucket),
+                                            alwaysShow = true
+                                        ) { showContainerSelector() }
+                                    )
+                                } else {
+                                    emptyList()
+                                }
+                            )
+                        }
+                    )
+                }
+                // ---- 原 recycler_view 位置（清壳后手拼的 ComposeView）----
+                // 修复：原 XML 的 `btn_add`（「创建图集」）是**可见但不可点击**的重复按钮（页面内已有真实入口），
+                // 且以 match_parent 高度的手拼 ComposeView 挤在根 LinearLayout 尾部 ⇒ 内容区被挤占 96px；
+                // 换装后由 `weight(1f)` 承载屏幕内容，该残留死节点随壳退役（已入 updateLog）
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    CoverCollectionManageScreen(
+                        isNight = isNightState.value,
+                        entries = entriesState.value,
+                        onTabChanged = { night ->
+                            isNightState.value = night
+                            loadCollections()
+                        },
+                        onItemClick = ::openDetail,
+                        itemActions = ::coverActions,
+                        onAddClick = ::showAddActions
+                    )
+                }
             }
         }
-        container.addView(cv)
     }
 
     override fun onResume() {
