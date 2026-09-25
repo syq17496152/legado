@@ -7,23 +7,22 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
-import io.legado.app.base.VMBaseFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssStar
-import io.legado.app.databinding.FragmentRssArticlesBinding
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.ui.rss.article.RssArticlesShellFragment
 import io.legado.app.ui.rss.read.ReadRss
 import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.setEdgeEffectColor
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 
-class RssFavoritesFragment() : VMBaseFragment<RssFavoritesViewModel>(R.layout.fragment_rss_articles),
+// CE-b：原 fragment_rss_articles.xml 已退役 ⇒ 继承共享合成壳基类（与 RssArticlesFragment 同源）
+class RssFavoritesFragment() : RssArticlesShellFragment<RssFavoritesViewModel>(),
     RssFavoritesAdapter.CallBack {
 
     constructor(group: String) : this() {
@@ -32,7 +31,6 @@ class RssFavoritesFragment() : VMBaseFragment<RssFavoritesViewModel>(R.layout.fr
         }
     }
 
-    private val binding by viewBinding(FragmentRssArticlesBinding::bind)
     override val viewModel by viewModels<RssFavoritesViewModel>()
     private val adapter: RssFavoritesAdapter by lazy {
         RssFavoritesAdapter(requireContext(), this@RssFavoritesFragment)
@@ -43,7 +41,7 @@ class RssFavoritesFragment() : VMBaseFragment<RssFavoritesViewModel>(R.layout.fr
         loadArticles()
     }
 
-    private fun initView() = binding.run {
+    private fun initView() = run {
         refreshLayout.isEnabled = false
         recyclerView.setEdgeEffectColor(primaryColor)
         recyclerView.layoutManager = run {

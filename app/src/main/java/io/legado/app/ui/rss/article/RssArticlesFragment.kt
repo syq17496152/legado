@@ -16,11 +16,9 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import io.legado.app.R
-import io.legado.app.base.VMBaseFragment
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssArticle
-import io.legado.app.databinding.FragmentRssArticlesBinding
 import io.legado.app.databinding.ViewLoadMoreBinding
 import io.legado.app.help.image.RssImageRatioStore
 import io.legado.app.help.source.autoNextPageEnabled
@@ -38,7 +36,6 @@ import io.legado.app.utils.applyMainBottomBarPadding
 import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.setEdgeEffectColor
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
@@ -50,7 +47,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.fragment_rss_articles),
+// CE-b：原 fragment_rss_articles.xml 已退役 ⇒ 继承共享合成壳基类（与 RssFavoritesFragment 同源，单源装配）
+class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
     BaseRssArticlesAdapter.CallBack {
 
     constructor(sortName: String, sortUrl: String, searchKey: String?) : this() {
@@ -62,7 +60,6 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
     }
     private var isResumed = false
 
-    private val binding by viewBinding(FragmentRssArticlesBinding::bind)
     // modern-rss: 嵌入 RssFragment（新版订阅）时取父 Fragment 作用域 RssSortViewModel，其余（RssSortActivity）取 Activity 作用域
     private val activityViewModel by lazy(LazyThreadSafetyMode.NONE) {
         ViewModelProvider(parentFragment ?: requireActivity())[RssSortViewModel::class.java]
@@ -110,7 +107,7 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
         initData()
     }
 
-    private fun initView() = binding.run {
+    private fun initView() = run {
         refreshLayout.setColorSchemeColors(accentColor)
         recyclerView.setEdgeEffectColor(primaryColor)
         // modern-rss: 嵌入新版订阅页时预留 MainActivity 主底部栏空间
@@ -264,14 +261,14 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
 
     private fun applyTopOverlaySpace() {
         if (view == null || !embeddedInModernRss) return
-        binding.recyclerView.clipToPadding = true
-        binding.recyclerView.setPadding(
-            binding.recyclerView.paddingLeft,
+        recyclerView.clipToPadding = true
+        recyclerView.setPadding(
+            recyclerView.paddingLeft,
             topOverlaySpace,
-            binding.recyclerView.paddingRight,
-            binding.recyclerView.paddingBottom
+            recyclerView.paddingRight,
+            recyclerView.paddingBottom
         )
-        binding.refreshLayout.setProgressViewOffset(
+        refreshLayout.setProgressViewOffset(
             true,
             (topOverlaySpace - 28.dpToPx()).coerceAtLeast(0),
             topOverlaySpace + 56.dpToPx()
@@ -401,7 +398,7 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
             VideoPlay.lastPlayedArticleLink = null  // 一次性使用，清除标记
             val position = adapter.getItems().indexOfFirst { it.link == link }
             if (position >= 0) {
-                binding.recyclerView.scrollToPosition(position)
+                recyclerView.scrollToPosition(position)
             }
         }
         // image-gallery-activity: 从图片浏览器返回时滚动到退出时正在看的文章位置
@@ -409,7 +406,7 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
             ImagePlay.lastPlayedArticleLink = null  // 一次性使用，清除标记
             val position = adapter.getItems().indexOfFirst { it.link == link }
             if (position >= 0) {
-                binding.recyclerView.scrollToPosition(position)
+                recyclerView.scrollToPosition(position)
             }
         }
     }
@@ -459,7 +456,7 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
                 if (targetPage != currentPage) {
                     fullRefresh = true
                     loadArticles(targetPage)
-                    binding.recyclerView.scrollToPosition(0)
+                    recyclerView.scrollToPosition(0)
                 }
             }
     }
@@ -491,7 +488,7 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
             loadMoreView.error(it)
         }
         viewModel.loadFinallyLiveData.observe(viewLifecycleOwner) { hasMore ->
-            binding.refreshLayout.isRefreshing = false
+            refreshLayout.isRefreshing = false
             if (!hasMore) {
                 loadMoreView.noMore()
             }

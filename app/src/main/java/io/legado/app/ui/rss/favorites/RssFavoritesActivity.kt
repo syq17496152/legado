@@ -72,7 +72,10 @@ class RssFavoritesActivity : BaseActivity<ViewBinding>() {
     private val tabLayout: TabLayout by lazy {
         TabLayout(this).apply { tabMode = TabLayout.MODE_SCROLLABLE }
     }
-    private val viewPager: ViewPager by lazy { ViewPager(this) }
+    // XML `android:id="@+id/view_pager"`：**必须显式赋 id** ——
+    // `FragmentStatePagerAdapter.startUpdate` 会 `require(container.id != View.NO_ID)`，
+    // 程序化构造缺 id 时在 `ViewPager.onMeasure` 首帧即抛 IllegalStateException（真机实测）
+    private val viewPager: ViewPager by lazy { ViewPager(this).apply { id = R.id.view_pager } }
     private val adapter by lazy { TabFragmentPageAdapter() }
     private var groupList = mutableListOf<String>()
 

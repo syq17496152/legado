@@ -107,7 +107,10 @@ class RssSortActivity : VMBaseActivity<ViewBinding, RssSortViewModel>(),
             setPadding(8.dpToPx(), 8.dpToPx(), 8.dpToPx(), 8.dpToPx())
         }
     }
-    private val viewPager: ViewPager by lazy { ViewPager(this) }
+    // XML `android:id="@+id/view_pager"`：**必须显式赋 id** ——
+    // `FragmentStatePagerAdapter.startUpdate` 会 `require(container.id != View.NO_ID)`，
+    // 程序化构造缺 id 时在 `ViewPager.onMeasure` 首帧即抛 IllegalStateException（真机实测）
+    private val viewPager: ViewPager by lazy { ViewPager(this).apply { id = R.id.view_pager } }
     private val adapter by lazy { TabFragmentPageAdapter() }
     private var sortUrls: List<Pair<String, String>>? = null
     private val sortList = mutableListOf<Pair<String, String>>()
