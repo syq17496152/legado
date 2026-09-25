@@ -4,10 +4,23 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.Space
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.appcompat.widget.AppCompatButton
+import androidx.appcompat.widget.AppCompatImageView
+import androidx.appcompat.widget.AppCompatTextView
+import androidx.appcompat.widget.SwitchCompat
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -31,11 +44,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import io.github.rosemoe.sora.event.ContentChangeEvent
 import io.github.rosemoe.sora.event.PublishSearchResultEvent
 import io.github.rosemoe.sora.event.SelectionChangeEvent
@@ -46,11 +62,13 @@ import io.github.rosemoe.sora.widget.EditorSearcher
 import io.github.rosemoe.sora.widget.EditorSearcher.SearchOptions
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.PreferKey
-import io.legado.app.databinding.ActivityCodeEditBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.dialogs.SelectItem
+import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.code.config.ChangeThemeDialog
 import io.legado.app.ui.code.config.SettingsDialog
@@ -62,15 +80,15 @@ import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.keyboard.KeyboardToolPop
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.imeHeight
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
 class CodeEditActivity :
-    VMBaseActivity<ActivityCodeEditBinding, CodeEditViewModel>(),
+    VMBaseActivity<ViewBinding, CodeEditViewModel>(),
     KeyboardToolPop.CallBack, ChangeThemeDialog.CallBack, SettingsDialog.CallBack {
     companion object {
         private var isInitialized = false
@@ -78,12 +96,26 @@ class CodeEditActivity :
         private var replaceText = ""
         private var isRegex = true
     }
-    override val binding by viewBinding(ActivityCodeEditBinding::inflate)
+
+    // CE 5.2（compose 包）：原 activity_code_edit.xml 已退役 ⇒ composeShell 合成壳 +
+    // attachComposeContent 单源承载；两处 View 内核（Sora `CodeEditor` / 搜索替换面板）
+    // 无 Compose 等价物 ⇒ 一律 `AndroidView` 原样托管（面板节点在代码里逐项复刻 XML）。
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<CodeEditViewModel>()
     private val softKeyboardTool by lazy {
         KeyboardToolPop(this, lifecycleScope, binding.root, this)
     }
-    private val editor: CodeEditor by lazy { binding.editText }
+
+    /** 原 `@+id/editText`（Sora 代码编辑器内核，无 Compose 等价物）。 */
+    private val editor: CodeEditor by lazy {
+        CodeEditor(this).apply {
+            // 原 XML `app:textSize="@dimen/text_18sp"` 的初值（随后由 upEdit(AppConfig.editFontScale) 覆盖）。
+            // Sora 覆写了 `setTextSize(Float)`（单位 sp、无 2 参重载）⇒ 由 dimen 的像素值反算 sp 数值
+            setTextSize(
+                resources.getDimension(R.dimen.text_18sp) / resources.displayMetrics.scaledDensity
+            )
+        }
+    }
     private val editorSearcher: EditorSearcher by lazy { editor.searcher }
     private var searchOptions: SearchOptions? = null
     private var menuExpanded by mutableStateOf(false)
@@ -99,6 +131,188 @@ class CodeEditActivity :
     private val isDark
         get() = AppConfig.editTemeAuto && ThemeConfig.isDarkTheme()
     private var themeIndex = -1
+
+    // ==================== CE 5.2：原 XML 搜索/替换面板节点的程序化等价物 ====================
+    // 原 `search_group` 子树在代码里逐项复刻；控件类与被 AppCompat 替换后的实际类型一致
+    // （`TextView`/`ImageView`/`Button` → `AppCompat*`，`Switch` → `SwitchCompat`）。
+
+    /** 面板内文本节点（原 `@dimen/text_14sp`；[colorRes] 非 0 时对齐原 `android:textColor`）。 */
+    private fun panelText(colorRes: Int = 0): AppCompatTextView =
+        AppCompatTextView(this).apply {
+            textSize = 14f
+            if (colorRes != 0) {
+                setTextColor(
+                    AppCompatResources.getColorStateList(this@CodeEditActivity, colorRes)
+                )
+            }
+        }
+
+    /** 原 `style="?android:attr/buttonBarButtonStyle"` 的等价值（以该属性为默认样式属性构造）。 */
+    private fun panelButton(textRes: Int, colorRes: Int): AppCompatButton =
+        AppCompatButton(this, null, android.R.attr.buttonBarButtonStyle).apply {
+            setText(textRes)
+            textSize = 14f
+            setTextColor(AppCompatResources.getColorStateList(this@CodeEditActivity, colorRes))
+        }
+
+    /** 原 `TextInputLayout(boxBackgroundMode=none)` + 子 `TextInputEditText` 成对结构。 */
+    private fun inputField(child: EditText): TextInputLayout =
+        TextInputLayout(this, null).apply {
+            boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_NONE
+            addView(
+                child, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+
+    /** 原面板内的关闭图标（`8dp` 内边距 + `ic_baseline_close`）。 */
+    private fun panelCloseIcon(): AppCompatImageView = AppCompatImageView(this).apply {
+        contentDescription = getString(R.string.close)
+        scaleType = ImageView.ScaleType.CENTER
+        setImageResource(R.drawable.ic_baseline_close)
+        val pad = 8.dpToPx()
+        setPadding(pad, pad, pad, pad)
+    }
+
+    /** `wrap_content × wrap_content` 的 LinearLayout 子节点布局参数。 */
+    private fun wrap() = LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams.WRAP_CONTENT,
+        LinearLayout.LayoutParams.WRAP_CONTENT
+    )
+
+    private val tvSearchResultLabel by lazy { panelText().apply { setText(R.string.search_result) } }
+    private val tvSearchResult by lazy { panelText().apply { text = "0" } }
+    private val switchRegex by lazy {
+        SwitchCompat(this).apply {
+            isChecked = true
+            setText(R.string.regex)
+        }
+    }
+    private val tvFindLabel by lazy { panelText(R.color.primaryText).apply { setText(R.string.find) } }
+    private val etFind by lazy { TextInputEditText(this) }
+    private val btnCloseFind by lazy { panelCloseIcon() }
+    private val tvReplaceLabel by lazy {
+        panelText(R.color.primaryText).apply { setText(R.string.replace) }
+    }
+    private val etReplace by lazy { TextInputEditText(this) }
+    private val btnCloseReplace by lazy { panelCloseIcon() }
+    private val btnPrevious by lazy { panelButton(R.string.btn_previous, R.color.primaryText) }
+    private val btnNext by lazy { panelButton(R.string.btn_next, R.color.primaryText) }
+    private val btnReplace by lazy { panelButton(R.string.replace, R.color.primaryText) }
+    private val btnReplaceAll by lazy {
+        panelButton(R.string.replace_all, R.color.selector_btn_text_color).apply {
+            isEnabled = false
+        }
+    }
+
+    /** 原 `replace_group`（默认 `gone`，点击「替换」后才展开）。 */
+    private val replaceGroup by lazy {
+        LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            visibility = View.GONE
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            addView(tvReplaceLabel, wrap())
+            addView(
+                inputField(etReplace), LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+                )
+            )
+            addView(btnCloseReplace, wrap())
+        }
+    }
+
+    /**
+     * 原 `search_group`（`12dp` 左右内边距 / 默认 `gone`）。
+     *
+     * 面板底原为 XML 静态 `@color/background_card`（R30 技术债，`theme_token_allowlist.json`
+     * 已登记「待 code-side 改造」）⇒ 换装后改走运行时面 token [themeCardColorOrDefault]
+     * （卡片面，`color.md` §六 面 token 归属表），与 Compose 侧 `themeUi.cardColor` 同语义。
+     */
+    private val searchPanel: LinearLayout by lazy {
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            setBackgroundColor(themeCardColorOrDefault())
+            val pad = 12.dpToPx()
+            setPadding(pad, 0, pad, 0)
+            // 行 1：命中计数 + 正则开关
+            addView(
+                LinearLayout(this@CodeEditActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                    addView(tvSearchResultLabel, wrap())
+                    addView(tvSearchResult, wrap().apply { marginStart = 8.dpToPx() })
+                    addView(
+                        Space(this@CodeEditActivity),
+                        LinearLayout.LayoutParams(0, 0, 1f)
+                    )
+                    addView(switchRegex, wrap())
+                }
+            )
+            // 行 2：查找
+            addView(
+                LinearLayout(this@CodeEditActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    clipChildren = false
+                    clipToPadding = false
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                    addView(tvFindLabel, wrap())
+                    addView(
+                        inputField(etFind), LinearLayout.LayoutParams(
+                            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+                        )
+                    )
+                    addView(btnCloseFind, wrap())
+                }
+            )
+            // 行 3：替换（默认收起）
+            addView(replaceGroup)
+            // 行 4：操作按钮条（原 `style="?android:attr/buttonBarStyle"`）
+            addView(
+                LinearLayout(this@CodeEditActivity, null, android.R.attr.buttonBarStyle).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    )
+                    addView(
+                        btnPrevious, LinearLayout.LayoutParams(
+                            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+                        )
+                    )
+                    addView(
+                        btnNext, LinearLayout.LayoutParams(
+                            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+                        )
+                    )
+                    addView(
+                        btnReplace, LinearLayout.LayoutParams(
+                            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+                        )
+                    )
+                    addView(
+                        btnReplaceAll, LinearLayout.LayoutParams(
+                            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+                        )
+                    )
+                }
+            )
+        }
+    }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         softKeyboardTool.attachToWindow(window)
@@ -125,7 +339,7 @@ class CodeEditActivity :
             }
         }
         initView()
-        initComposeTopBar()
+        initComposeContent()
         initDirtyTracking()
     }
 
@@ -139,6 +353,8 @@ class CodeEditActivity :
     }
 
     private fun initView() {
+        // CE 5.2：insets 锚点随换装改到合成壳 root（原 XML 根 View 已退役）。
+        // ComposeView 作为 root 的子节点照常派发 insets ⇒ 监听体与原实现一字不变。
         binding.root.setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
             softKeyboardTool.initialPadding = windowInsets.imeHeight
             windowInsets
@@ -236,79 +452,105 @@ class CodeEditActivity :
         }
     }
 
-    private fun initComposeTopBar() {
-        binding.composeTopBar.setContent {
-            LegadoTheme {
-                GlassTopAppBar(
-                    title = titleState.ifBlank { getString(R.string.edit_code) },
-                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                    onNavClick = { finish() },
-                    // F196/F197 状态行：**必须挂 secondRow**——实测固定栏高下 `subtitle` 槽被裁掉不可见
-                    // （真机截图铁证：脏态时保存键已 accent 高亮，但 subtitle 未渲染），secondRow 为栏内第二行常显区。
-                    secondRow = when {
-                        readonlyState -> {
-                            {
+    /**
+     * CE 5.2：Compose 承载页面骨架（顶栏 + 编辑器 + 搜索/替换面板）。
+     *
+     * 与原 XML（`activity_code_edit.xml`）的**逐一对应关系**（三不影响口径）：
+     *  · `compose_top_bar` → 顶部 `LegadoTheme { GlassTopAppBar(…) }`（内容逐行搬入，不再套壳 ComposeView）
+     *  · `editText`（`0dp` + `layout_weight=1`）→ `AndroidView` 托管 [editor] + `Modifier.weight(1f)`
+     *  · `search_group`（`wrap_content` + `gone`）→ `AndroidView` 托管 [searchPanel]；**显隐仍由宿主按
+     *    View 语义切换**（`visibility`）⇒ 视图实例常驻、监听器与搜索订阅语义与原实现一致。
+     *    原 `layout_gravity=bottom` 在竖向 LinearLayout 中对 `wrap_content` 子节点无几何作用
+     *    （`editText` 的 weight 已把面板压到底部）⇒ 等价。
+     */
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 compose_top_bar，内容逐行不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = titleState.ifBlank { getString(R.string.edit_code) },
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        // F196/F197 状态行：**必须挂 secondRow**——实测固定栏高下 `subtitle` 槽被裁掉不可见
+                        // （真机截图铁证：脏态时保存键已 accent 高亮，但 subtitle 未渲染），secondRow 为栏内第二行常显区。
+                        secondRow = when {
+                            readonlyState -> {
+                                {
+                                    Text(
+                                        text = stringResource(R.string.code_edit_readonly_bar),
+                                        color = AppSemanticColors.Warning,
+                                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                            dirtyState -> {
+                                {
+                                    Text(
+                                        text = stringResource(R.string.code_edit_unsaved),
+                                        color = AppUiTokens.settingPalette().accent,
+                                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                            else -> null
+                        },
+                        actions = {
+                            // 常驻快捷按钮：搜索 / 保存
+                            IconButton(onClick = { search() }) {
+                                Icon(Icons.Outlined.Search, contentDescription = null)
+                            }
+                            if (saveVisible) {
+                                IconButton(onClick = { save(false) }) {
+                                    // F196：脏态下保存键 accent 高亮（干净态保持既有前景色）
+                                    Icon(
+                                        Icons.Outlined.Save,
+                                        contentDescription = null,
+                                        tint = if (dirtyState) {
+                                            AppUiTokens.settingPalette().accent
+                                        } else {
+                                            LocalContentColor.current
+                                        }
+                                    )
+                                }
+                            } else {
+                                // F197：只读态原保存位给「只读」徽章（告知能力缺失而非静默消失）
                                 Text(
-                                    text = stringResource(R.string.code_edit_readonly_bar),
+                                    text = stringResource(R.string.code_edit_readonly_badge),
                                     color = AppSemanticColors.Warning,
-                                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                                )
-                            }
-                        }
-                        dirtyState -> {
-                            {
-                                Text(
-                                    text = stringResource(R.string.code_edit_unsaved),
-                                    color = AppUiTokens.settingPalette().accent,
-                                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                                    fontSize = MaterialTheme.typography.labelMedium.fontSize,
                                     fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                )
+                            }
+                            // 溢出菜单
+                            Box {
+                                IconButton(onClick = { menuExpanded = true }) {
+                                    Icon(Icons.Filled.MoreVert, contentDescription = null)
+                                }
+                                AppDropdownMenu(
+                                    expanded = menuExpanded,
+                                    onDismiss = { menuExpanded = false },
+                                    actions = buildMenuActions()
                                 )
                             }
                         }
-                        else -> null
-                    },
-                    actions = {
-                        // 常驻快捷按钮：搜索 / 保存
-                        IconButton(onClick = { search() }) {
-                            Icon(Icons.Outlined.Search, contentDescription = null)
-                        }
-                        if (saveVisible) {
-                            IconButton(onClick = { save(false) }) {
-                                // F196：脏态下保存键 accent 高亮（干净态保持既有前景色）
-                                Icon(
-                                    Icons.Outlined.Save,
-                                    contentDescription = null,
-                                    tint = if (dirtyState) {
-                                        AppUiTokens.settingPalette().accent
-                                    } else {
-                                        LocalContentColor.current
-                                    }
-                                )
-                            }
-                        } else {
-                            // F197：只读态原保存位给「只读」徽章（告知能力缺失而非静默消失）
-                            Text(
-                                text = stringResource(R.string.code_edit_readonly_badge),
-                                color = AppSemanticColors.Warning,
-                                fontSize = MaterialTheme.typography.labelMedium.fontSize,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(horizontal = 8.dp)
-                            )
-                        }
-                        // 溢出菜单
-                        Box {
-                            IconButton(onClick = { menuExpanded = true }) {
-                                Icon(Icons.Filled.MoreVert, contentDescription = null)
-                            }
-                            AppDropdownMenu(
-                                expanded = menuExpanded,
-                                onDismiss = { menuExpanded = false },
-                                actions = buildMenuActions()
-                            )
-                        }
-                    }
+                    )
+                }
+                // ---- 编辑器内核（原 editText：match_parent × 0dp + weight 1）----
+                AndroidView(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    factory = { editor }
+                )
+                // ---- 搜索/替换面板（原 search_group：match_parent × wrap_content）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth(),
+                    factory = { searchPanel }
                 )
             }
         }
@@ -375,14 +617,14 @@ class CodeEditActivity :
     }
 
     private fun search() {
-        if (binding.searchGroup.isVisible) return
-        binding.switchRegex.run {
+        if (searchPanel.isVisible) return
+        switchRegex.run {
             isChecked = isRegex
             setSearchOptions()
             setOnCheckedChangeListener { _, isChecked ->
                 isRegex = isChecked
                 setSearchOptions()
-                searchTxt(binding.etFind.text.toString())
+                searchTxt(etFind.text.toString())
             }
         }
         val receiptSearch =
@@ -396,9 +638,9 @@ class CodeEditActivity :
                 updateSearchResults()
             }
         }
-        binding.searchGroup.visibility = View.VISIBLE
-        binding.btnCloseFind.setOnClickListener {
-            binding.searchGroup.visibility = View.GONE
+        searchPanel.visibility = View.VISIBLE
+        btnCloseFind.setOnClickListener {
+            searchPanel.visibility = View.GONE
             editorSearcher.stopSearch()
             receiptSearch.unsubscribe()
             receiptChange.unsubscribe()
@@ -406,7 +648,7 @@ class CodeEditActivity :
             editor.invalidate()
         }
         searchTxt(findText)
-        binding.etFind.run {
+        etFind.run {
             requestFocus()
             setText(findText)
             addTextChangedListener { text ->
@@ -420,7 +662,7 @@ class CodeEditActivity :
             }
 
         }
-        binding.etReplace.run {
+        etReplace.run {
             setText(replaceText)
             addTextChangedListener { text ->
                 if (!text.isNullOrEmpty()) {
@@ -428,35 +670,35 @@ class CodeEditActivity :
                 }
             }
         }
-        binding.btnPrevious.setOnClickListener {
+        btnPrevious.setOnClickListener {
             if (editorSearcher.hasQuery()) {
                 editorSearcher.gotoPrevious()
             }
         }
-        binding.btnNext.setOnClickListener {
+        btnNext.setOnClickListener {
             if (editorSearcher.hasQuery()) {
                 editorSearcher.gotoNext()
             }
         }
-        binding.btnReplace.setOnClickListener {
-            if (binding.replaceGroup.isGone) {
-                binding.replaceGroup.visibility = View.VISIBLE
-                binding.btnReplaceAll.isEnabled = true
-                binding.etReplace.requestFocus()
+        btnReplace.setOnClickListener {
+            if (replaceGroup.isGone) {
+                replaceGroup.visibility = View.VISIBLE
+                btnReplaceAll.isEnabled = true
+                etReplace.requestFocus()
             } else {
                 if (editorSearcher.hasQuery()) {
-                    editorSearcher.replaceCurrentMatch(binding.etReplace.text.toString())
+                    editorSearcher.replaceCurrentMatch(etReplace.text.toString())
                 }
             }
         }
-        binding.btnCloseReplace.setOnClickListener {
-            binding.replaceGroup.visibility = View.GONE
-            binding.btnReplaceAll.isEnabled = false
-            binding.etFind.requestFocus()
+        btnCloseReplace.setOnClickListener {
+            replaceGroup.visibility = View.GONE
+            btnReplaceAll.isEnabled = false
+            etFind.requestFocus()
         }
-        binding.btnReplaceAll.setOnClickListener {
+        btnReplaceAll.setOnClickListener {
             if (editorSearcher.hasQuery()) {
-                editorSearcher.replaceAll(binding.etReplace.text.toString())
+                editorSearcher.replaceAll(etReplace.text.toString())
             }
         }
     }
@@ -480,7 +722,7 @@ class CodeEditActivity :
         if (editorSearcher.hasQuery()) {
             val totalResults = editorSearcher.matchedPositionCount
             val currentPosition = editorSearcher.currentMatchedPositionIndex + 1
-            binding.tvSearchResult.text =
+            tvSearchResult.text =
                 "${if (currentPosition > 0) "$currentPosition/" else ""}$totalResults"
         }
     }
