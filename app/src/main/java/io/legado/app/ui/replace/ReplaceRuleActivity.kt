@@ -2,21 +2,19 @@ package io.legado.app.ui.replace
 
 import android.annotation.SuppressLint
 import android.os.Bundle
-import android.view.View
-import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReplaceRule
-import io.legado.app.databinding.ActivityReplaceRuleBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.coroutine.Coroutine
@@ -25,7 +23,6 @@ import io.legado.app.ui.association.showShibbolethDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.replace.edit.ReplaceEditActivity
-import io.legado.app.ui.widget.SelectActionBar
 import io.legado.app.ui.widget.compose.AppManagementAction
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementScaffold
@@ -44,7 +41,6 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -58,9 +54,10 @@ import kotlinx.coroutines.launch
  *
  * 全 Compose（AppManagementScaffold）：与 Archive 对齐，列表/选择/搜索/批量全量 Compose 化。
  */
-class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRuleViewModel>(),
-    SelectActionBar.CallBack {
-    override val binding by viewBinding(ActivityReplaceRuleBinding::inflate)
+class ReplaceRuleActivity : VMBaseActivity<ViewBinding, ReplaceRuleViewModel>() {
+
+    // 原 activity_replace_rule.xml 已退役（CE-b）：composeShell 合成壳 + attachComposeContent 单源
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<ReplaceRuleViewModel>()
     private val importRecordKey = "replaceRuleRecordKey"
     private val rulesState = mutableStateListOf<ReplaceRule>()
@@ -116,101 +113,87 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
     }
 
     private fun initComposeContent() {
-        // bugfix-0908 T1：本布局 titleBar/selectActionBar 与 recyclerView 不同父容器
-        //（根 LinearLayout vs 中间 FrameLayout），removeView 会静默 no-op 导致双搜索框
-        //（根因见 docs/specs/real-device-bugfix-0908）——改 GONE 隐藏（与父容器无关）
-        binding.titleBar.visibility = View.GONE
-        binding.selectActionBar.visibility = View.GONE
-        val container = binding.recyclerView.parent as? ViewGroup ?: return
-        val index = container.indexOfChild(binding.recyclerView)
-        container.removeView(binding.recyclerView)
-        val cv = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setContent {
-                AppManagementScaffold(
-                    title = getString(R.string.replace_purify),
-                    selectedCount = selectedIds.value.size,
-                    totalCount = rulesState.size,
-                    searchQuery = searchQueryState.value,
-                    searchHint = getString(R.string.replace_purify_search),
-                    onSearchChange = ::updateSearchQuery,
-                    topActions = listOf(
-                        AppManagementAction(
-                            text = getString(R.string.menu_action_group),
-                            iconRes = R.drawable.ic_groups,
-                            onClick = ::showFilterMenu
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.add_replace_rule),
-                            iconRes = R.drawable.ic_add,
-                            onClick = {
-                                editActivity.launch(
-                                    ReplaceEditActivity.startIntent(this@ReplaceRuleActivity)
-                                )
-                            }
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.more_menu),
-                            iconRes = R.drawable.ic_more_vert,
-                            menuActions = ::pageMenuActions
-                        )
+        // 原 activity_replace_rule.xml 已退役（CE-b）：合成壳 root + attachComposeContent 单源装配
+        //（原为「运行时隐藏 title_bar + 摘掉 recyclerView 再手拼 ComposeView 插回原索引位」的死壳装配）
+        binding.root.attachComposeContent {
+            AppManagementScaffold(
+                title = getString(R.string.replace_purify),
+                selectedCount = selectedIds.value.size,
+                totalCount = rulesState.size,
+                searchQuery = searchQueryState.value,
+                searchHint = getString(R.string.replace_purify_search),
+                onSearchChange = ::updateSearchQuery,
+                topActions = listOf(
+                    AppManagementAction(
+                        text = getString(R.string.menu_action_group),
+                        iconRes = R.drawable.ic_groups,
+                        onClick = ::showFilterMenu
                     ),
-                    bottomActions = listOf(
-                        AppManagementAction(
-                            text = getString(R.string.enable_selection),
-                            onClick = ::enableSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.disable_selection),
-                            onClick = ::disableSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.selection_to_top),
-                            onClick = { viewModel.topSelect(getSelectedRules()) }
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.selection_to_bottom),
-                            onClick = { viewModel.bottomSelect(getSelectedRules()) }
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.export_selection),
-                            onClick = ::exportSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.delete),
-                            danger = true,
-                            onClick = ::onClickSelectBarMainAction
-                        )
+                    AppManagementAction(
+                        text = getString(R.string.add_replace_rule),
+                        iconRes = R.drawable.ic_add,
+                        onClick = {
+                            editActivity.launch(
+                                ReplaceEditActivity.startIntent(this@ReplaceRuleActivity)
+                            )
+                        }
                     ),
-                    onBack = { finish() },
-                    onSelectAll = { selectAll(true) },
-                    onInvertSelection = { revertSelection() }
-                ) {
-                    ReplaceRuleScreen(
-                        rules = rulesState,
-                        selected = selectedIds.value,
-                        isSelectMode = selectedIds.value.isNotEmpty(),
-                        reorderEnabled = searchQueryState.value.isBlank(),
-                        onReorder = { reordered ->
-                            setResult(RESULT_OK)
-                            viewModel.upOrder(reordered)
-                        },
-                        onSelectToggle = ::onSelectToggle,
-                        onToggleEnabled = ::onToggleEnabled,
-                        onEdit = ::edit,
-                        ruleMenuActions = ::ruleMenuActions
+                    AppManagementAction(
+                        text = getString(R.string.more_menu),
+                        iconRes = R.drawable.ic_more_vert,
+                        menuActions = ::pageMenuActions
                     )
-                }
+                ),
+                bottomActions = listOf(
+                    AppManagementAction(
+                        text = getString(R.string.enable_selection),
+                        onClick = ::enableSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.disable_selection),
+                        onClick = ::disableSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.selection_to_top),
+                        onClick = { viewModel.topSelect(getSelectedRules()) }
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.selection_to_bottom),
+                        onClick = { viewModel.bottomSelect(getSelectedRules()) }
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.export_selection),
+                        onClick = ::exportSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.delete),
+                        danger = true,
+                        onClick = ::onClickSelectBarMainAction
+                    )
+                ),
+                onBack = { finish() },
+                onSelectAll = { selectAll(true) },
+                onInvertSelection = { revertSelection() }
+            ) {
+                ReplaceRuleScreen(
+                    rules = rulesState,
+                    selected = selectedIds.value,
+                    isSelectMode = selectedIds.value.isNotEmpty(),
+                    reorderEnabled = searchQueryState.value.isBlank(),
+                    onReorder = { reordered ->
+                        setResult(RESULT_OK)
+                        viewModel.upOrder(reordered)
+                    },
+                    onSelectToggle = ::onSelectToggle,
+                    onToggleEnabled = ::onToggleEnabled,
+                    onEdit = ::edit,
+                    ruleMenuActions = ::ruleMenuActions
+                )
             }
         }
-        container.addView(cv, index)
     }
 
-    override fun selectAll(selectAll: Boolean) {
+    private fun selectAll(selectAll: Boolean) {
         if (selectAll) {
             selectedIds.value = rulesState.map { it.id }.toSet()
         } else {
@@ -218,7 +201,7 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
         }
     }
 
-    override fun revertSelection() {
+    private fun revertSelection() {
         val currentRules = rulesState
         val currentSelected = selectedIds.value
         selectedIds.value = currentRules
@@ -227,7 +210,7 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
             .toSet()
     }
 
-    override fun onClickSelectBarMainAction() {
+    private fun onClickSelectBarMainAction() {
         showComposeConfirmDialog(
             title = getString(R.string.draw),
             message = getString(R.string.sure_del),
@@ -236,11 +219,6 @@ class ReplaceRuleActivity : VMBaseActivity<ActivityReplaceRuleBinding, ReplaceRu
             dangerPositive = true,
             onPositive = { viewModel.delSelection(getSelectedRules()) }
         )
-    }
-
-    private fun initSelectActionView() {
-        binding.selectActionBar.setMainActionText(R.string.delete)
-        binding.selectActionBar.setCallBack(this)
     }
 
     private fun observeReplaceRuleData(searchKey: String? = null) {

@@ -8,12 +8,12 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.composeShell
 import io.legado.app.data.appDb
-import io.legado.app.databinding.ActivityTranslucenceBinding
 import io.legado.app.help.config.BubblePackageManager
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.config.ParagraphRuleManageActivity
@@ -23,7 +23,6 @@ import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.utils.ConvertUtils
 import io.legado.app.utils.buildMainHandler
 import io.legado.app.utils.showDialogFragment
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers.IO
@@ -37,11 +36,13 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
  * 格式: legado://import/{path}?src={url}
  */
 class OnLineImportActivity :
-    VMBaseActivity<ActivityTranslucenceBinding, OnLineImportViewModel>(),
+    VMBaseActivity<ViewBinding, OnLineImportViewModel>(),
     OnlineImportConfirmDialog.Callback,
     OnlineImportErrorDialog.Callback {
 
-    override val binding by viewBinding(ActivityTranslucenceBinding::inflate)
+    // 原 activity_translucence.xml 已退役（CE-b）：composeShell 合成壳 + 共享装配（5 个宿主共用）
+    override val binding: ViewBinding by lazy { composeShell(this) }
+    private val shell by lazy { TransparentShellViews(this) }
     override val viewModel by viewModels<OnLineImportViewModel>()
     private val onlineImportDownloader by lazy { OnlineImportDownloader(applicationContext) }
     private val handler by lazy { buildMainHandler() }
@@ -59,6 +60,7 @@ class OnLineImportActivity :
     private var lastProgressBytes = 0L
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        shell.install(binding.root)
         initProgressCard()
         viewModel.successLive.observe(this) {
             when (it.first) {
@@ -167,10 +169,8 @@ class OnLineImportActivity :
      * 槽位接线仅本页（其余透明壳页恒 gone 零占位）。
      */
     private fun initProgressCard() {
-        binding.cvImportProgress.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.cvImportProgress.setContent {
+        // 合成策略已收敛到 TransparentShellViews.slot() 单一工厂（本页不再自行设置）
+        shell.importProgress.setContent {
             LegadoTheme {
                 progressState?.let { state ->
                     OnlineImportProgressCard(state = state, onCancel = ::cancelImport)
@@ -187,12 +187,12 @@ class OnLineImportActivity :
         bytesPerSecond: Long = 0L
     ) {
         progressState = OnlineImportProgressState(stage, host, downloaded, total, bytesPerSecond)
-        binding.cvImportProgress.visibility = View.VISIBLE
+        shell.importProgress.visibility = View.VISIBLE
     }
 
     private fun clearProgress() {
         progressState = null
-        binding.cvImportProgress.visibility = View.GONE
+        shell.importProgress.visibility = View.GONE
     }
 
     /** 取消下载：关掉在途连接（OkHttp call）后取消协程并退出，避免「点了取消还在后台下完」 */

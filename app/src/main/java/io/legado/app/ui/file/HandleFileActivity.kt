@@ -9,14 +9,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppLog
-import io.legado.app.databinding.ActivityTranslucenceBinding
 import io.legado.app.help.IntentData
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
+import io.legado.app.ui.association.TransparentShellViews
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.utils.SelectImageContract
@@ -26,15 +28,16 @@ import io.legado.app.utils.getJsonArray
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.launch
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import splitties.init.appCtx
 import java.io.File
 
 class HandleFileActivity :
-    VMBaseActivity<ActivityTranslucenceBinding, HandleFileViewModel>(),
+    VMBaseActivity<ViewBinding, HandleFileViewModel>(),
     FilePickerDialog.CallBack {
 
-    override val binding by viewBinding(ActivityTranslucenceBinding::inflate)
+    // 原 activity_translucence.xml 已退役（CE-b）：composeShell 合成壳 + 共享装配（5 个宿主共用）
+    override val binding: ViewBinding by lazy { composeShell(this) }
+    private val shell by lazy { TransparentShellViews(this) }
     override val viewModel by viewModels<HandleFileViewModel>()
     private var mode = 0
 
@@ -72,6 +75,7 @@ class HandleFileActivity :
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        shell.install(binding.root)
         mode = intent.getIntExtra("mode", 0)
         viewModel.errorLiveData.observe(this) {
             toastOnUi(it)

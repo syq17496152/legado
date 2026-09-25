@@ -37,15 +37,17 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.data.AppDatabase
 import io.legado.app.data.dao.SourceBookCount
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSourcePart
-import io.legado.app.databinding.ActivityBookSourceBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.model.CheckSource
@@ -98,7 +100,6 @@ import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -114,8 +115,10 @@ import kotlinx.coroutines.launch
 /**
  * 书源管理界面
  */
-class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceViewModel>() {
-    override val binding by viewBinding(ActivityBookSourceBinding::inflate)
+class BookSourceActivity : VMBaseActivity<ViewBinding, BookSourceViewModel>() {
+
+    // 原 activity_book_source.xml 已退役（CE-b）：composeShell 合成壳 + attachComposeContent 单源
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<BookSourceViewModel>()
     private val importRecordKey = "bookSourceRecordKey"
     private var sourceFlowJob: Job? = null
@@ -187,154 +190,143 @@ class BookSourceActivity : VMBaseActivity<ActivityBookSourceBinding, BookSourceV
     }
 
     private fun initComposeContent() {
-        binding.titleBar.visibility = View.GONE
-        val container = binding.recyclerView.parent as? ViewGroup ?: return
-        val index = container.indexOfChild(binding.recyclerView)
-        container.removeView(binding.recyclerView)
-        // F2/4.3：旧 View SelectActionBar 已从布局摘除（XML 死声明同步删除），多选操作收口顶栏
-        val cv = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setContent {
-                AppManagementScaffold(
-                    title = getString(R.string.book_source_manage),
-                    selectedCount = selectedUrls.value.size,
-                    totalCount = sourcesState.size,
-                    searchQuery = searchQueryState.value,
-                    searchHint = getString(R.string.search_book_source),
-                    onSearchChange = ::updateSearchQuery,
-                    topActions = listOf(
-                        AppManagementAction(
-                            text = getString(R.string.sort),
-                            iconRes = R.drawable.ic_sort,
-                            onClick = ::showSortMenu
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.menu_action_group),
-                            iconRes = R.drawable.ic_groups,
-                            onClick = ::showFilterMenu
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.add_book_source),
-                            iconRes = R.drawable.ic_add,
-                            onClick = { startActivity<BookSourceEditActivity>() }
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.more_menu),
-                            iconRes = R.drawable.ic_more_vert,
-                            menuActions = ::pageMenuActions
-                        )
+        // 原 activity_book_source.xml 已退役（CE-b）：合成壳 root + attachComposeContent 单源装配
+        //（原为「运行时隐藏 title_bar + 摘掉 recyclerView 再手拼 ComposeView 插回原索引位」的死壳装配）
+        binding.root.attachComposeContent {
+            AppManagementScaffold(
+                title = getString(R.string.book_source_manage),
+                selectedCount = selectedUrls.value.size,
+                totalCount = sourcesState.size,
+                searchQuery = searchQueryState.value,
+                searchHint = getString(R.string.search_book_source),
+                onSearchChange = ::updateSearchQuery,
+                topActions = listOf(
+                    AppManagementAction(
+                        text = getString(R.string.sort),
+                        iconRes = R.drawable.ic_sort,
+                        onClick = ::showSortMenu
                     ),
-                    bottomActions = listOf(
-                        AppManagementAction(
-                            text = getString(R.string.enable_selection),
-                            onClick = ::enableSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.disable_selection),
-                            onClick = ::disableSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.enable_explore),
-                            onClick = ::enableExploreSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.disable_explore),
-                            onClick = ::disableExploreSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.add_group),
-                            onClick = ::selectionAddToGroups
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.remove_group),
-                            onClick = ::selectionRemoveFromGroups
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.selection_to_top),
-                            onClick = ::topSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.selection_to_bottom),
-                            onClick = ::bottomSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.check_select_source),
-                            onClick = { checkSource() }
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.export_selection),
-                            onClick = ::exportSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.share_selected_source),
-                            onClick = ::shareSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.check_selected_interval),
-                            onClick = ::checkSelectedInterval
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.delete),
-                            danger = true,
-                            onClick = ::onClickSelectBarMainAction
-                        )
+                    AppManagementAction(
+                        text = getString(R.string.menu_action_group),
+                        iconRes = R.drawable.ic_groups,
+                        onClick = ::showFilterMenu
                     ),
-                    onBack = { finish() },
-                    onSelectAll = { selectAll(true) },
-                    onInvertSelection = { revertSelection() }
-                ) {
-                    BookSourceScreen(
-                        sources = sourcesState,
-                        selectedUrls = selectedUrls.value,
-                        isSelectMode = isSelectMode.value,
-                        showSourceHost = showSourceHostState.value,
-                        sourceHostHeaders = sourceHostHeaders,
-                        debugMessages = debugMessagesState,
-                        bookCounts = bookCountsState,
-                        isChecking = isCheckingState.value,
-                        checkBannerText = checkBannerState.value,
-                        onCancelCheck = ::cancelSourceCheck,
-                        dataVersion = sourceDataVersion,
-                        searchQuery = searchQueryState.value,
-                        emptyActions = BookSourceEmptyActions(
-                            onAdd = { startActivity<BookSourceEditActivity>() },
-                            onImportLocal = {
-                                importDoc.launch {
-                                    mode = HandleFileContract.FILE
-                                    allowExtensions = arrayOf("txt", "json")
-                                }
-                            },
-                            onImportOnline = ::showImportDialog,
-                            onImportQr = { qrResult.launch() },
-                            onClearSearch = { updateSearchQuery("") }
-                        ),
-                        // 与 CHECK_SOURCE_DONE 的自动筛选同口径（同字面量，保证命中同一分组）
-                        onFilterFailed = { updateSearchQuery(FAILED_SOURCE_GROUP_KEY) },
-                        onCheck = { checkSource(sourcesState.toList()) },
-                        reorderEnabled = sort == BookSourceSort.Default &&
-                            searchQueryState.value.isBlank() &&
-                            !groupSourcesByDomain,
-                        onReorder = { reordered ->
-                            val ordered = if (sortAscending) reordered else reordered.asReversed()
-                            viewModel.upOrder(
-                                ordered.mapIndexed { index, source ->
-                                    source.copy(customOrder = index)
-                                }
-                            )
-                        },
-                        onToggleSelect = ::toggleSourceSelection,
-                        onToggleEnabled = ::toggleSourceEnabled,
-                        onEdit = ::edit,
-                        sourceMenuActions = ::sourceMenuActions
+                    AppManagementAction(
+                        text = getString(R.string.add_book_source),
+                        iconRes = R.drawable.ic_add,
+                        onClick = { startActivity<BookSourceEditActivity>() }
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.more_menu),
+                        iconRes = R.drawable.ic_more_vert,
+                        menuActions = ::pageMenuActions
                     )
-                }
+                ),
+                bottomActions = listOf(
+                    AppManagementAction(
+                        text = getString(R.string.enable_selection),
+                        onClick = ::enableSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.disable_selection),
+                        onClick = ::disableSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.enable_explore),
+                        onClick = ::enableExploreSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.disable_explore),
+                        onClick = ::disableExploreSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.add_group),
+                        onClick = ::selectionAddToGroups
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.remove_group),
+                        onClick = ::selectionRemoveFromGroups
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.selection_to_top),
+                        onClick = ::topSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.selection_to_bottom),
+                        onClick = ::bottomSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.check_select_source),
+                        onClick = { checkSource() }
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.export_selection),
+                        onClick = ::exportSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.share_selected_source),
+                        onClick = ::shareSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.check_selected_interval),
+                        onClick = ::checkSelectedInterval
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.delete),
+                        danger = true,
+                        onClick = ::onClickSelectBarMainAction
+                    )
+                ),
+                onBack = { finish() },
+                onSelectAll = { selectAll(true) },
+                onInvertSelection = { revertSelection() }
+            ) {
+                BookSourceScreen(
+                    sources = sourcesState,
+                    selectedUrls = selectedUrls.value,
+                    isSelectMode = isSelectMode.value,
+                    showSourceHost = showSourceHostState.value,
+                    sourceHostHeaders = sourceHostHeaders,
+                    debugMessages = debugMessagesState,
+                    bookCounts = bookCountsState,
+                    isChecking = isCheckingState.value,
+                    checkBannerText = checkBannerState.value,
+                    onCancelCheck = ::cancelSourceCheck,
+                    dataVersion = sourceDataVersion,
+                    searchQuery = searchQueryState.value,
+                    emptyActions = BookSourceEmptyActions(
+                        onAdd = { startActivity<BookSourceEditActivity>() },
+                        onImportLocal = {
+                            importDoc.launch {
+                                mode = HandleFileContract.FILE
+                                allowExtensions = arrayOf("txt", "json")
+                            }
+                        },
+                        onImportOnline = ::showImportDialog,
+                        onImportQr = { qrResult.launch() },
+                        onClearSearch = { updateSearchQuery("") }
+                    ),
+                    // 与 CHECK_SOURCE_DONE 的自动筛选同口径（同字面量，保证命中同一分组）
+                    onFilterFailed = { updateSearchQuery(FAILED_SOURCE_GROUP_KEY) },
+                    onCheck = { checkSource(sourcesState.toList()) },
+                    reorderEnabled = sort == BookSourceSort.Default &&
+                        searchQueryState.value.isBlank() &&
+                        !groupSourcesByDomain,
+                    onReorder = { reordered ->
+                        val ordered = if (sortAscending) reordered else reordered.asReversed()
+                        viewModel.upOrder(
+                            ordered.mapIndexed { index, source ->
+                                source.copy(customOrder = index)
+                            }
+                        )
+                    },
+                    onToggleSelect = ::toggleSourceSelection,
+                    onToggleEnabled = ::toggleSourceEnabled,
+                    onEdit = ::edit,
+                    sourceMenuActions = ::sourceMenuActions
+                )
             }
         }
-        container.addView(cv, index)
     }
 
     // H17（2026-08-28）：系统 options menu 链删除（onCompatCreateOptionsMenu/onPrepareOptionsMenu/

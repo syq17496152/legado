@@ -1,14 +1,13 @@
-﻿package io.legado.app.ui.config
+package io.legado.app.ui.config
 
 import android.os.Bundle
-import android.view.ViewGroup
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
-import io.legado.app.databinding.ActivityS3ContainerManageBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.AppCloudStorage
 import io.legado.app.lib.cloud.S3CloudStorageBackend
 import io.legado.app.lib.cloud.S3Config
@@ -19,7 +18,6 @@ import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeTextFormDialogWithChecks
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -27,9 +25,10 @@ import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.max
 
-class S3ContainerManageActivity : BaseActivity<ActivityS3ContainerManageBinding>() {
+class S3ContainerManageActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityS3ContainerManageBinding::inflate)
+    // 原 activity_s3_container_manage.xml 已退役（CE-b）：composeShell 合成壳 + attachComposeContent 单源
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private val containersState = mutableStateOf<List<S3Container>>(emptyList())
     private val waitDialog by lazy { WaitDialog(this) }
@@ -48,25 +47,16 @@ class S3ContainerManageActivity : BaseActivity<ActivityS3ContainerManageBinding>
     }
 
     private fun initComposeContent() {
-        val container = binding.root as? ViewGroup ?: return
-        container.removeAllViews()
-        val cv = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
+        // 原为「清空 root 全部子视图（titleBar/摘要/列表/按钮）再手拼 ComposeView」的清壳装配
+        binding.root.attachComposeContent {
+            S3ContainerManageScreen(
+                containers = containersState.value,
+                onBack = { finish() },
+                onAdd = { showEditDialog(null) },
+                onItemClick = { showEditDialog(it) },
+                onMoreActions = ::containerActions
             )
-            setContent {
-                S3ContainerManageScreen(
-                    containers = containersState.value,
-                    onBack = { finish() },
-                    onAdd = { showEditDialog(null) },
-                    onItemClick = { showEditDialog(it) },
-                    onMoreActions = ::containerActions
-                )
-            }
         }
-        container.addView(cv)
     }
 
     private fun reload() {

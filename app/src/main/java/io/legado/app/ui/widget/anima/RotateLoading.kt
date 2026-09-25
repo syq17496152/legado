@@ -94,7 +94,23 @@ class RotateLoading @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
 
         arc = 10f
+        refreshRects(w, h)
+    }
 
+    /**
+     * 程序化构造的等价入口（CE-b）：原 XML 用 `app:loading_width="2dp"` 设定笔宽/内缩基准，
+     * 而类默认是 `DEFAULT_WIDTH`(6dp) ⇒ 透明壳页（`activity_translucence` 5 个宿主）改为程序化构造后
+     * 必须能显式设定，否则笔宽由 2dp 变 6dp（视觉不等价）。
+     */
+    fun setLoadingWidthDp(widthDp: Int) {
+        thisWidth = widthDp.dpToPx()
+        mPaint.strokeWidth = thisWidth.toFloat()
+        refreshRects(width, height)
+        invalidate()
+    }
+
+    /** 依据当前笔宽与视图尺寸重算两个绘制矩形（`onSizeChanged` 与 [setLoadingWidthDp] 共用单源） */
+    private fun refreshRects(w: Int, h: Int) {
         loadingRectF =
             RectF(
                 (2 * thisWidth).toFloat(),

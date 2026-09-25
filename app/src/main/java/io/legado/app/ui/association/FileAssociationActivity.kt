@@ -17,7 +17,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -26,10 +25,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.os.postDelayed
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppLog
-import io.legado.app.databinding.ActivityTranslucenceBinding
 import io.legado.app.exception.InvalidBooksDirException
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.BubblePackageManager
@@ -54,7 +54,6 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,8 +62,13 @@ import java.io.File
 import java.io.FileOutputStream
 
 class FileAssociationActivity :
-    VMBaseActivity<ActivityTranslucenceBinding, FileAssociationViewModel>() {
+    VMBaseActivity<ViewBinding, FileAssociationViewModel>() {
 
+    // 原 activity_translucence.xml 已退役（CE-b）：composeShell 合成壳 + 共享装配（5 个宿主共用）
+    override val binding: ViewBinding by lazy { composeShell(this) }
+    private val shell by lazy { TransparentShellViews(this) }
+
+    /** 本地书籍目录选择（选中后落 `AppConfig.defaultBookTreeUri` 并继续导入） */
     private val localBookTreeSelect = registerForActivityResult(HandleFileContract()) {
         intent.data?.let { uri ->
             it.uri?.let { treeUri ->
@@ -78,8 +82,6 @@ class FileAssociationActivity :
         }
     }
 
-    override val binding by viewBinding(ActivityTranslucenceBinding::inflate)
-
     override val viewModel by viewModels<FileAssociationViewModel>()
 
     private val handler by lazy {
@@ -87,13 +89,14 @@ class FileAssociationActivity :
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        binding.rotateLoading.visible()
+        shell.install(binding.root)
+        shell.rotateLoading.visible()
         initResultCard()
         viewModel.importBookLiveData.observe(this) { uri ->
             importBook(uri)
         }
         viewModel.importRedThemeLiveData.observe(this) { uri ->
-            binding.rotateLoading.gone()
+            shell.rotateLoading.gone()
             showDialogFragment(ImportRedThemeDialog(uri, true))
         }
         viewModel.importBubbleLiveData.observe(this) { uri ->
@@ -122,12 +125,12 @@ class FileAssociationActivity :
             showResult(AssociationResult.Fail(it), finishAfterDelay = true)
         }
         viewModel.openBookLiveData.observe(this) {
-            binding.rotateLoading.gone()
+            shell.rotateLoading.gone()
             startActivityForBook(it)
             finish()
         }
         viewModel.notSupportedLiveData.observe(this) { data ->
-            binding.rotateLoading.gone()
+            shell.rotateLoading.gone()
             showComposeConfirmDialog(
                 title = appCtx.getString(R.string.draw),
                 message = appCtx.getString(R.string.file_not_supported, data.second),
@@ -161,11 +164,9 @@ class FileAssociationActivity :
     private var resultState by mutableStateOf<AssociationResult?>(null)
 
     private fun initResultCard() {
-        binding.cvResultCard.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.cvResultCard.visibility = View.VISIBLE
-        binding.cvResultCard.setContent {
+        // 合成策略已收敛到 TransparentShellViews.slot() 单一工厂（本页不再自行设置）
+        shell.resultCard.visibility = View.VISIBLE
+        shell.resultCard.setContent {
             LegadoTheme {
                 AssociationResultCard(resultState)
             }
@@ -173,7 +174,7 @@ class FileAssociationActivity :
     }
 
     private fun showResult(result: AssociationResult, finishAfterDelay: Boolean) {
-        binding.rotateLoading.gone()
+        shell.rotateLoading.gone()
         resultState = result
         if (finishAfterDelay) {
             handler.postDelayed(2000) { finish() }

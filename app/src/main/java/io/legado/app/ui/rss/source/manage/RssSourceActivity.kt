@@ -1,20 +1,18 @@
 package io.legado.app.ui.rss.source.manage
 
 import android.os.Bundle
-import android.view.View
-import android.view.ViewGroup
 import androidx.activity.viewModels
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssSource
-import io.legado.app.databinding.ActivityRssSourceBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.model.ImportCheck
 import io.legado.app.model.QualityCheckSession
@@ -46,7 +44,6 @@ import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -59,9 +56,10 @@ import kotlinx.coroutines.launch
 /**
  * 订阅源管理
  */
-class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceViewModel>() {
+class RssSourceActivity : VMBaseActivity<ViewBinding, RssSourceViewModel>() {
 
-    override val binding by viewBinding(ActivityRssSourceBinding::inflate)
+    // 原 activity_rss_source.xml 已退役（CE-b）：composeShell 合成壳 + attachComposeContent 单源
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<RssSourceViewModel>()
     private val importRecordKey = "rssSourceRecordKey"
     private var sourceFlowJob: Job? = null
@@ -109,108 +107,97 @@ class RssSourceActivity : VMBaseActivity<ActivityRssSourceBinding, RssSourceView
     }
 
     private fun initComposeContent() {
-        binding.titleBar.visibility = View.GONE
-        val container = binding.recyclerView.parent as? ViewGroup ?: return
-        val index = container.indexOfChild(binding.recyclerView)
-        container.removeView(binding.recyclerView)
-        // F2/4.3：旧 View SelectActionBar 已从布局摘除（XML 死声明同步删除），多选操作收口顶栏
-        val cv = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setContent {
-                AppManagementScaffold(
-                    title = getString(R.string.rss_source_manage),
-                    selectedCount = selectedUrls.value.size,
-                    totalCount = sourcesState.size,
-                    searchQuery = searchQueryState.value,
-                    searchHint = getString(R.string.search_rss_source),
-                    onSearchChange = ::updateSearchQuery,
-                    topActions = listOf(
-                        AppManagementAction(
-                            text = getString(R.string.menu_action_group),
-                            iconRes = R.drawable.ic_groups,
-                            onClick = ::showFilterMenu
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.add),
-                            iconRes = R.drawable.ic_add,
-                            onClick = { startActivity<RssSourceEditActivity>() }
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.more_menu),
-                            iconRes = R.drawable.ic_more_vert,
-                            menuActions = ::pageMenuActions
-                        )
+        // 原 activity_rss_source.xml 已退役（CE-b）：合成壳 root + attachComposeContent 单源装配
+        //（原为「运行时隐藏 title_bar + 摘掉 recyclerView 再手拼 ComposeView 插回原索引位」的死壳装配）
+        binding.root.attachComposeContent {
+            AppManagementScaffold(
+                title = getString(R.string.rss_source_manage),
+                selectedCount = selectedUrls.value.size,
+                totalCount = sourcesState.size,
+                searchQuery = searchQueryState.value,
+                searchHint = getString(R.string.search_rss_source),
+                onSearchChange = ::updateSearchQuery,
+                topActions = listOf(
+                    AppManagementAction(
+                        text = getString(R.string.menu_action_group),
+                        iconRes = R.drawable.ic_groups,
+                        onClick = ::showFilterMenu
                     ),
-                    bottomActions = listOf(
-                        AppManagementAction(
-                            text = getString(R.string.enable_selection),
-                            onClick = ::enableSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.disable_selection),
-                            onClick = ::disableSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.add_group),
-                            onClick = ::selectionAddToGroups
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.remove_group),
-                            onClick = ::selectionRemoveFromGroups
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.selection_to_top),
-                            onClick = ::topSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.selection_to_bottom),
-                            onClick = ::bottomSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.export_selection),
-                            onClick = ::exportSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.share_selected_source),
-                            onClick = ::shareSelected
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.check_selected_interval),
-                            onClick = ::checkSelectedInterval
-                        ),
-                        AppManagementAction(
-                            text = getString(R.string.delete),
-                            danger = true,
-                            onClick = ::delSourceDialog
-                        )
+                    AppManagementAction(
+                        text = getString(R.string.add),
+                        iconRes = R.drawable.ic_add,
+                        onClick = { startActivity<RssSourceEditActivity>() }
                     ),
-                    onBack = { finish() },
-                    onSelectAll = { selectAll(true) },
-                    onInvertSelection = { revertSelection() }
-                ) {
-                    RssSourceScreen(
-                        sources = sourcesState,
-                        selectedUrls = selectedUrls.value,
-                        isSelectMode = isSelectMode.value,
-                        reorderEnabled = searchQueryState.value.isBlank(),
-                        searchQuery = searchQueryState.value,
-                        onReorder = { reordered -> viewModel.upOrder(reordered) },
-                        onToggleSelect = ::toggleSourceSelection,
-                        onToggleEnabled = ::toggleSourceEnabled,
-                        onEdit = ::editSource,
-                        onAdd = { startActivity<RssSourceEditActivity>() },
-                        onImportOnline = ::showImportDialog,
-                        onClearSearch = { updateSearchQuery("") },
-                        sourceMenuActions = ::sourceMenuActions
+                    AppManagementAction(
+                        text = getString(R.string.more_menu),
+                        iconRes = R.drawable.ic_more_vert,
+                        menuActions = ::pageMenuActions
                     )
-                }
+                ),
+                bottomActions = listOf(
+                    AppManagementAction(
+                        text = getString(R.string.enable_selection),
+                        onClick = ::enableSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.disable_selection),
+                        onClick = ::disableSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.add_group),
+                        onClick = ::selectionAddToGroups
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.remove_group),
+                        onClick = ::selectionRemoveFromGroups
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.selection_to_top),
+                        onClick = ::topSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.selection_to_bottom),
+                        onClick = ::bottomSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.export_selection),
+                        onClick = ::exportSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.share_selected_source),
+                        onClick = ::shareSelected
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.check_selected_interval),
+                        onClick = ::checkSelectedInterval
+                    ),
+                    AppManagementAction(
+                        text = getString(R.string.delete),
+                        danger = true,
+                        onClick = ::delSourceDialog
+                    )
+                ),
+                onBack = { finish() },
+                onSelectAll = { selectAll(true) },
+                onInvertSelection = { revertSelection() }
+            ) {
+                RssSourceScreen(
+                    sources = sourcesState,
+                    selectedUrls = selectedUrls.value,
+                    isSelectMode = isSelectMode.value,
+                    reorderEnabled = searchQueryState.value.isBlank(),
+                    searchQuery = searchQueryState.value,
+                    onReorder = { reordered -> viewModel.upOrder(reordered) },
+                    onToggleSelect = ::toggleSourceSelection,
+                    onToggleEnabled = ::toggleSourceEnabled,
+                    onEdit = ::editSource,
+                    onAdd = { startActivity<RssSourceEditActivity>() },
+                    onImportOnline = ::showImportDialog,
+                    onClearSearch = { updateSearchQuery("") },
+                    sourceMenuActions = ::sourceMenuActions
+                )
             }
         }
-        container.addView(cv, index)
     }
 
     private fun showFilterMenu() {
