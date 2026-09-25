@@ -127,4 +127,8 @@
     <color name="drag_handle_bg">#4D000000</color>
     <color name="book_info_frost">#DDF1F2F6</color>
     <color name="glass_stroke">#668FA8C8</color>
+
+    <!-- CE 5.2：图片裁剪页画布固定深色底（原 activity_image_crop.xml 行内 `#FF111111` 具名化，
+         消费侧改走本资源名 ⇒ 不在代码里留行内字面色；画布域语义，不随应用主题） -->
+    <color name="image_canvas_dark">#FF111111</color>
 </resources>
