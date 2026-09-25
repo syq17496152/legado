@@ -55,4 +55,13 @@
     <!-- CE-b：activity_about.xml 退役后保留的代码引用 id（AboutFragment 事务按 id 定位容器） -->
     <item name="fl_fragment" type="id" />
 
+    <!-- CE-a：activity_paragraph_rule_edit.xml 退役后保留的代码引用 id（2 个宿主 hintFor(view)
+         按 view.id 取「全屏编辑」标题文案；字段节点由 ParagraphRuleEditShellViews 程序化构造） -->
+    <item name="et_name" type="id" />
+    <item name="et_login_url" type="id" />
+    <item name="et_login_ui" type="id" />
+    <item name="et_timeout" type="id" />
+    <item name="et_script" type="id" />
+    <item name="et_js_lib" type="id" />
+
 </resources>

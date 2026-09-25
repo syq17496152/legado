@@ -6,19 +6,22 @@ import android.os.Bundle
 import android.view.View
 import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.widget.AppCompatImageButton
 import androidx.core.widget.doAfterTextChanged
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -28,23 +31,25 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.ReadMenuCustomButton
-import io.legado.app.databinding.ActivityParagraphRuleEditBinding
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ReadMenuCustomButtonExecutor
 import io.legado.app.model.ReadBook
@@ -53,8 +58,9 @@ import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.code.addJsPattern
 import io.legado.app.ui.widget.components.AppShapes
 import io.legado.app.ui.widget.components.CollapseSectionHeader
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
-import io.legado.app.ui.widget.components.installGlassTopBar
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.ui.widget.compose.AppUiTokens
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.utils.GSON
@@ -64,7 +70,6 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -75,9 +80,14 @@ import org.mozilla.javascript.NativeArray
 import org.mozilla.javascript.NativeObject
 import org.mozilla.javascript.Scriptable
 
-class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>() {
+class ReadMenuCustomButtonEditActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityParagraphRuleEditBinding::inflate)
+    // 原 activity_paragraph_rule_edit.xml（与段落规则编辑页共用）已退役（CE-a）：
+    // composeShell 合成壳 + attachComposeContent 单源；顶栏改为**页内直接渲染**
+    override val binding: ViewBinding by lazy { composeShell(this) }
+
+    /** 原共用布局字段节点的程序化等价物（见 [ParagraphRuleEditShellViews]） */
+    private val shell by lazy { ParagraphRuleEditShellViews(this) }
     private var button = ReadMenuCustomButton()
 
     /**
@@ -111,7 +121,7 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initTopBar()
+        initComposeContent()
         initView()
         bindRequiredErrorClear()
         val id = intent.getLongExtra("id", 0L)
@@ -124,15 +134,34 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
         }
     }
 
-    // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar（原 MainTopBarView Mode.SUB 消亡）
-    private fun initTopBar() {
-        installGlassTopBar(
-            binding,
-            titleProvider = { getString(R.string.read_menu_custom_button_edit) },
-            actionsProvider = {
-                // 顶栏动作分级（2026-09-22）：一级图标只留高频「代码编辑 / 保存」；拷贝规则、粘贴规则、
-                // 帮助下沉溢出菜单（与段落规则编辑页同构）。顶栏图标由 5 个降为 2 个（+ 溢出 ⋮）。
-                listOf(
+    // CE-a（2026-09-26）：顶栏已从 installGlassTopBar 运行时注入改为**页内直接渲染**（见 initComposeContent）
+    @OptIn(ExperimentalMaterial3Api::class)
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = getString(R.string.read_menu_custom_button_edit),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = { TopBarActionRow(topBarActions()) }
+                    )
+                }
+                // ---- 原 nested_scroll（`0dp + weight=1` ⇒ Compose `weight(1f)`）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    factory = { shell.nestedScroll }
+                )
+            }
+        }
+    }
+
+    /**
+     * 顶栏动作（原 `actionsProvider`：一级 2 个 + 溢出 3 个，分级与文案逐项不变）。
+     */
+    private fun topBarActions(): List<MenuAction> =
+        listOf(
                     MenuAction(
                         iconRes = R.drawable.ic_code,
                         title = getString(R.string.edit_content),
@@ -155,13 +184,9 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
                         iconRes = R.drawable.ic_help,
                         title = getString(R.string.help)
                     ) { showHelp("readMenuCustomButtonHelp") }
-                )
-            },
-            onBack = { finish() }
         )
-    }
 
-    private fun initView() = binding.run {
+    private fun initView() = shell.run {
         tilScript.hint = getString(R.string.read_menu_button_script)
         listOf(etLoginUrl, etLoginUi, etScript, etJsLib).forEach { codeView ->
             codeView.addJsPattern()
@@ -188,7 +213,7 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
      * 本页只在运行时重排 `ll_content` 子视图顺序，**不改共用布局** ⇒ 段落规则编辑页零影响。
      * 两个新槽（组头 / 测试运行）在本页置为可见，共用该布局的段落规则编辑页恒 `gone`（零占位）。
      */
-    private fun applyFormOrder() = binding.run {
+    private fun applyFormOrder() = shell.run {
         cvLoginAdvanced.visibility = View.VISIBLE
         cvScriptTest.visibility = View.VISIBLE
         // 全量列全部子视图后再按目标顺序重排，避免未列出者插在中间造成错位
@@ -210,10 +235,8 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
      * 折叠态 `getButton()` 仍读取全部控件 ⇒ 已配置内容不会因折叠丢失。
      */
     private fun initLoginAdvanced() {
-        binding.cvLoginAdvanced.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.cvLoginAdvanced.setContent {
+        // 合成策略由唯一工厂 `ParagraphRuleEditShellViews.composeSlot` 统一设置（宿主不再自设）
+        shell.cvLoginAdvanced.setContent {
             LegadoTheme {
                 CollapseSectionHeader(
                     title = getString(R.string.read_menu_advanced_group),
@@ -235,7 +258,7 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
 
     private fun applyAdvancedVisibility() {
         val visibility = if (advancedExpanded) View.VISIBLE else View.GONE
-        binding.run {
+        shell.run {
             tilLoginUrl.visibility = visibility
             tilLoginUi.visibility = visibility
             cbIsEnableCookie.visibility = visibility
@@ -245,7 +268,7 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
     }
 
     /** F345：表单里是否已有登录/高级配置（读控件；折叠态不可编辑 ⇒ 仅绑定/导入后需要重算） */
-    private fun hasAdvancedConfig(): Boolean = binding.run {
+    private fun hasAdvancedConfig(): Boolean = shell.run {
         etLoginUrl.text?.isNotBlank() == true ||
             etLoginUi.text?.isNotBlank() == true ||
             etJsLib.text?.isNotBlank() == true ||
@@ -254,10 +277,8 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
 
     /** F343（优化 1）：页内测试运行槽（运行按钮 + 结果面板就地展开） */
     private fun initScriptTest() {
-        binding.cvScriptTest.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.cvScriptTest.setContent {
+        // 合成策略由唯一工厂 `ParagraphRuleEditShellViews.composeSlot` 统一设置（宿主不再自设）
+        shell.cvScriptTest.setContent {
             LegadoTheme {
                 ScriptRunSection(
                     state = runState,
@@ -272,7 +293,7 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
         }
     }
 
-    private fun bindButton() = binding.run {
+    private fun bindButton() = shell.run {
         etName.setText(button.name)
         etLoginUrl.setText(button.loginUrl)
         etLoginUi.setText(button.loginUi)
@@ -366,7 +387,7 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
         )
     }
 
-    private fun getButton(): ReadMenuCustomButton = binding.run {
+    private fun getButton(): ReadMenuCustomButton = shell.run {
         button.copy(
             name = etName.text?.toString().orEmpty().trim(),
             loginUrl = etLoginUrl.text?.toString().orEmpty(),
@@ -386,7 +407,7 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
      * 而脚本是多行大字段、常滚出视口 ⇒ 补字段级 error + 滚动到可见（与书源/订阅源/段落规则编辑页同构）。
      * **校验口径不变**（仍是 name / script 判空）。
      */
-    private fun locateRequiredField(key: String) = binding.run {
+    private fun locateRequiredField(key: String) = shell.run {
         tilName.error = null
         tilScript.error = null
         val target = if (key == "name") tilName else tilScript
@@ -395,7 +416,7 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
     }
 
     /** 用户开始修正即撤下错误态（与书源/订阅源编辑页同构，避免红框一直挂着）。 */
-    private fun bindRequiredErrorClear() = binding.run {
+    private fun bindRequiredErrorClear() = shell.run {
         etName.doAfterTextChanged { if (tilName.error != null) tilName.error = null }
         etScript.doAfterTextChanged { if (tilScript.error != null) tilScript.error = null }
     }
@@ -434,8 +455,8 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
                 return
             }
         }
-        binding.tilName.error = null
-        binding.tilScript.error = null
+        shell.tilName.error = null
+        shell.tilScript.error = null
         lifecycleScope.launch {
             val saved = withContext(Dispatchers.IO) {
                 if (edited.id == 0L) {
@@ -534,9 +555,9 @@ class ReadMenuCustomButtonEditActivity : BaseActivity<ActivityParagraphRuleEditB
 
     /** F343：结果面板挂在表单末尾，运行后滚到底让结果可见（不改变任何字段状态） */
     private fun scrollToResult() {
-        binding.nestedScroll.post {
+        shell.nestedScroll.post {
             if (isFinishing || isDestroyed) return@post
-            binding.nestedScroll.fullScroll(View.FOCUS_DOWN)
+            shell.nestedScroll.fullScroll(View.FOCUS_DOWN)
         }
     }
 

@@ -5,33 +5,43 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.EditText
-import androidx.appcompat.widget.AppCompatImageButton
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ParagraphRule
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.Book
-import io.legado.app.databinding.ActivityParagraphRuleEditBinding
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ParagraphRuleProcessor
 import io.legado.app.model.ReadBook
 import io.legado.app.model.webBook.WebBook
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.utils.stackTraceStr
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.widget.components.EmptyFieldTemplateRow
 import io.legado.app.ui.widget.components.FieldTemplate
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
-import io.legado.app.ui.widget.components.installGlassTopBar
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.widget.doAfterTextChanged
 import io.legado.app.ui.widget.code.addJsPattern
 import io.legado.app.utils.GSON
@@ -40,7 +50,6 @@ import io.legado.app.utils.getClipText
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -126,9 +135,14 @@ function process(ctx) {
 }
 """.trimIndent()
 
-class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>() {
+class ParagraphRuleEditActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityParagraphRuleEditBinding::inflate)
+    // 原 activity_paragraph_rule_edit.xml 已退役（CE-a）：composeShell 合成壳 + attachComposeContent 单源；
+    // 顶栏由 installGlassTopBar 的运行时注入（首插 ComposeView + 移除 R.id.title_bar 锚点）改为**页内直接渲染**
+    override val binding: ViewBinding by lazy { composeShell(this) }
+
+    /** 原 XML 字段节点的程序化等价物（与自定义按键编辑页共用装配，见 [ParagraphRuleEditShellViews]） */
+    private val shell by lazy { ParagraphRuleEditShellViews(this) }
     private var rule = ParagraphRule()
 
     /**
@@ -153,7 +167,7 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initTopBar()
+        initComposeContent()
         initView()
         bindRequiredErrorClear()
         initScriptTemplates()
@@ -165,19 +179,38 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
         }
     }
 
-    // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar（原 MainTopBarView Mode.SUB 消亡）；
+    // CE-a（2026-09-26）：顶栏已从 installGlassTopBar 运行时注入改为**页内直接渲染**（见 initComposeContent）；
     // 大字段编辑期禁用编辑类 action（原 updateActionButtonStates 改 Compose 状态驱动）
     private var topActionsEnabled by mutableStateOf(true)
 
-    private fun initTopBar() {
-        installGlassTopBar(
-            binding,
-            titleProvider = { getString(R.string.paragraph_rule_edit) },
-            actionsProvider = {
-                // 顶栏动作分级（2026-09-22）：一级图标只留本页核心工作流「写规则 → 调试 → 保存」
-                // （代码编辑 / 保存 / 调试）；拷贝规则、粘贴规则、帮助属低频进出通道与辅助入口 ⇒
-                // 下沉溢出菜单。顶栏图标由 6 个降为 3 个（+ 溢出 ⋮），标题不再被图标挤压。
-                listOf(
+    @OptIn(ExperimentalMaterial3Api::class)
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = getString(R.string.paragraph_rule_edit),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = { TopBarActionRow(topBarActions()) }
+                    )
+                }
+                // ---- 原 nested_scroll（`0dp + weight=1` ⇒ Compose `weight(1f)`；滚动/焦点语义整体保留）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    factory = { shell.nestedScroll }
+                )
+            }
+        }
+    }
+
+    /**
+     * 顶栏动作（原 `actionsProvider`：一级 3 个 + 溢出 3 个，分级与文案逐项不变）。
+     * 大字段编辑期禁用编辑类 action（原 `updateActionButtonStates` 改 Compose 状态驱动）。
+     */
+    private fun topBarActions(): List<MenuAction> =
+        listOf(
                     MenuAction(
                         iconRes = R.drawable.ic_code,
                         title = getString(R.string.edit_content),
@@ -210,17 +243,13 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
                         iconRes = R.drawable.ic_help,
                         title = getString(R.string.help)
                     ) { showHelp("paragraphRuleHelp") }
-                )
-            },
-            onBack = { finish() }
         )
-    }
 
     private fun updateActionButtonStates() {
         topActionsEnabled = !bindingLargeRuleFields
     }
 
-    private fun initView() = binding.run {
+    private fun initView() = shell.run {
         listOf(etLoginUrl, etLoginUi, etScript, etJsLib).forEach { codeView ->
             codeView.addJsPattern()
             codeView.setOnFocusChangeListener { v, hasFocus ->
@@ -248,23 +277,21 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
     )
 
     private fun initScriptTemplates() {
-        binding.etScript.doAfterTextChanged {
+        shell.etScript.doAfterTextChanged {
             if (!bindingLargeRuleFields) {
                 scriptTemplateVisible = it.isNullOrBlank()
             }
         }
-        binding.cvScriptTemplates.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.cvScriptTemplates.setContent {
+        // 合成策略由唯一工厂 `ParagraphRuleEditShellViews.composeSlot` 统一设置（宿主不再自设）
+        shell.cvScriptTemplates.setContent {
             LegadoComposeTheme {
                 if (scriptTemplateVisible) {
                     EmptyFieldTemplateRow(
                         title = getString(R.string.paragraph_rule_template_title),
                         templates = scriptTemplates(),
                         onPick = { template ->
-                            binding.etScript.setText(template.code)
-                            binding.etScript.setSelection(template.code.length)
+                            shell.etScript.setText(template.code)
+                            shell.etScript.setSelection(template.code.length)
                         },
                     )
                 }
@@ -272,7 +299,7 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
         }
     }
 
-    private fun bindRule() = binding.run {
+    private fun bindRule() = shell.run {
         val token = ++bindToken
         bindingLargeRuleFields = true
         setLargeEditorsEnabled(false)
@@ -286,7 +313,7 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
         etJsLib.setText("")
         val script = rule.script
         val jsLib = rule.jsLib
-        root.post {
+        binding.root.post {
             if (!isActiveBind(token)) return@post
             etScript.setText(script)
             etScript.post {
@@ -305,7 +332,7 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
         return token == bindToken && !isFinishing && !isDestroyed
     }
 
-    private fun setLargeEditorsEnabled(enabled: Boolean) = binding.run {
+    private fun setLargeEditorsEnabled(enabled: Boolean) = shell.run {
         etScript.isEnabled = enabled
         etJsLib.isEnabled = enabled
     }
@@ -425,7 +452,7 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
         bindRule()
     }
 
-    private fun getRule(): ParagraphRule = binding.run {
+    private fun getRule(): ParagraphRule = shell.run {
         rule.copy(
             name = etName.text?.toString().orEmpty().trim(),
             loginUrl = etLoginUrl.text?.toString().orEmpty(),
@@ -445,7 +472,7 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
      * 而脚本是多行大字段、常滚出视口 ⇒ 补字段级 error + 滚动到可见（与书源/订阅源编辑页同构）。
      * **校验口径不变**（仍是 name / script 判空），仅把「报错」从 toast 升级为「定位」。
      */
-    private fun locateRequiredField(key: String) = binding.run {
+    private fun locateRequiredField(key: String) = shell.run {
         tilName.error = null
         tilScript.error = null
         val target = if (key == "name") tilName else tilScript
@@ -454,7 +481,7 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
     }
 
     /** 用户开始修正即撤下错误态（与书源/订阅源编辑页同构，避免红框一直挂着）。 */
-    private fun bindRequiredErrorClear() = binding.run {
+    private fun bindRequiredErrorClear() = shell.run {
         etName.doAfterTextChanged { if (tilName.error != null) tilName.error = null }
         etScript.doAfterTextChanged { if (tilScript.error != null) tilScript.error = null }
     }
@@ -493,8 +520,8 @@ class ParagraphRuleEditActivity : BaseActivity<ActivityParagraphRuleEditBinding>
                 return
             }
         }
-        binding.tilName.error = null
-        binding.tilScript.error = null
+        shell.tilName.error = null
+        shell.tilScript.error = null
         lifecycleScope.launch {
             val saved = withContext(Dispatchers.IO) {
                 if (edited.id == 0L) {
