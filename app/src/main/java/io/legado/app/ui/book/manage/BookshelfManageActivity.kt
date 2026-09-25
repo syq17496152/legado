@@ -10,6 +10,8 @@ import androidx.activity.viewModels
 import androidx.appcompat.widget.PopupMenu
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -29,17 +31,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.viewbinding.ViewBinding
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookSource
-import io.legado.app.databinding.ActivityArrangeBookBinding
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.book.contains
 import io.legado.app.help.book.isLocal
@@ -65,6 +70,7 @@ import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.ui.widget.recycler.VerticalDivider
+import io.legado.app.ui.widget.recycler.scroller.FastScrollRecyclerView
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.isAbsUrl
@@ -72,7 +78,6 @@ import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.catch
@@ -87,15 +92,34 @@ import kotlin.math.max
  * 书架管理
  */
 class BookshelfManageActivity :
-    VMBaseActivity<ActivityArrangeBookBinding, BookshelfManageViewModel>(),
+    VMBaseActivity<ViewBinding, BookshelfManageViewModel>(),
     PopupMenu.OnMenuItemClickListener,
     SelectActionBar.CallBack,
     BookAdapter.CallBack,
     SourcePickerDialog.Callback,
     GroupSelectDialog.CallBack {
 
-    override val binding by viewBinding(ActivityArrangeBookBinding::inflate)
+    // 原 activity_arrange_book.xml 已退役（CE-b）：改 composeShell 工厂创建合成壳，Compose 全权接管页面骨架
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<BookshelfManageViewModel>()
+
+    /**
+     * 原 XML `recycler_view` 的程序化等价物（CE-b）。**必须是 Activity 字段**：`onActivityCreated` 的
+     * `initRecyclerView()` 就要设 layoutManager / adapter / 两个拖拽助手，工厂内创建会扑空（见交接文档 §8-㉕）。
+     */
+    private val recyclerView: FastScrollRecyclerView by lazy {
+        FastScrollRecyclerView(this).apply {
+            // XML `android:id="@+id/recycler_view"`：程序化构造必须显式赋 id
+            // （`FastScroller.setLayoutParams` 以 view id 定位宿主，缺 id 挂载即抛 IllegalArgumentException）
+            id = R.id.recycler_view
+            // XML `android:scrollbars="none"` 的程序化等价
+            isVerticalScrollBarEnabled = false
+            isHorizontalScrollBarEnabled = false
+        }
+    }
+
+    /** 原 XML `select_action_bar`（批量操作底栏）的程序化等价物（CE-b） */
+    private val selectActionBar: SelectActionBar by lazy { SelectActionBar(this) }
     override val groupList: ArrayList<BookGroup> = arrayListOf()
     private val groupRequestCode = 22
     private val addToGroupRequestCode = 34
@@ -142,7 +166,7 @@ class BookshelfManageActivity :
             }
             upTitle()
         }
-        initComposeTopBar()
+        initComposeContent()
         initRecyclerView()
         initOtherView()
         initGroupData()
@@ -179,9 +203,17 @@ class BookshelfManageActivity :
         composeTitle = getString(R.string.screen) + " • " + viewModel.groupName
     }
 
-    // L-B8 顶栏 Compose 化：GlassTopAppBar + 搜索内联 + 分组管理对话框 + 更多菜单 AppDropdownMenu
-    private fun initComposeTopBar() {
-        binding.composeTopBar.setContent {
+    /**
+     * CE-b：Compose 承载页面骨架（顶栏 + 列表 + 批量底栏）。
+     *
+     * 与原 XML（`activity_arrange_book.xml`）的**逐一对应关系**：
+     *  · 根 `ConstraintLayout` → `composeShell` 合成壳（`binding.root`）
+     *  · `compose_top_bar`(ComposeView) → 页内直接渲染 `GlassTopAppBar`（内容逐行不变，含 F41 模式提示 secondRow）
+     *  · `recycler_view`(`FastScrollRecyclerView`，`0dp` + 上下约束) → `Box(weight 1f)` 内 `AndroidView` 原样托管
+     *  · `select_action_bar`(View 批量底栏) → `AndroidView` 托管程序化 `SelectActionBar`（恒贴底）
+     */
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
             LegadoTheme {
                 Column {
                     GlassTopAppBar(
@@ -239,6 +271,19 @@ class BookshelfManageActivity :
                             placeholder = getString(R.string.screen) + " • " + viewModel.groupName
                         )
                     }
+                    // ---- 列表（原 recycler_view，0dp + 上下约束）----
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { recyclerView }
+                        )
+                    }
+                    // ---- 批量操作底栏（原 select_action_bar，恒贴底）----
+                    AndroidView(factory = { selectActionBar })
                 }
             }
         }
@@ -295,31 +340,31 @@ class BookshelfManageActivity :
     }
 
     private fun initRecyclerView() {
-        binding.recyclerView.setEdgeEffectColor(primaryColor)
-        binding.recyclerView.layoutManager = LinearLayoutManager(this)
-        binding.recyclerView.addItemDecoration(VerticalDivider(this))
-        binding.recyclerView.adapter = adapter
+        recyclerView.setEdgeEffectColor(primaryColor)
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.addItemDecoration(VerticalDivider(this))
+        recyclerView.adapter = adapter
         // F41：可拖拽态（排序模式）——同时驱动「行尾手柄可见」与「顶栏模式提示条」
         dragModeState = AppConfig.bookshelfSort == 3
         itemTouchCallback.isCanDrag = dragModeState
         adapter.dragHandleVisible = dragModeState
         val dragSelectTouchHelper: DragSelectTouchHelper =
             DragSelectTouchHelper(adapter.dragSelectCallback).setSlideArea(16, 50)
-        dragSelectTouchHelper.attachToRecyclerView(binding.recyclerView)
+        dragSelectTouchHelper.attachToRecyclerView(recyclerView)
         // When this page is opened, it is in selection mode
         dragSelectTouchHelper.activeSlideSelect()
         // Note: need judge selection first, so add ItemTouchHelper after it.
         val touchHelper = ItemTouchHelper(itemTouchCallback)
-        touchHelper.attachToRecyclerView(binding.recyclerView)
+        touchHelper.attachToRecyclerView(recyclerView)
         adapter.onStartDrag = { holder -> touchHelper.startDrag(holder) }
     }
 
     private fun initOtherView() {
-        binding.selectActionBar.setMainActionText(R.string.move_to_group)
+        selectActionBar.setMainActionText(R.string.move_to_group)
         // F39：批量操作菜单按用途分组（常用 → 更新管理 → 分组管理 → 数据清理）；
         // 删除/换源为批量管理最高频动作 ⇒ 置首组「常用」，避免埋在长菜单中（蓝图原意「就近可达」，
         // 差异：底栏共享件只有单个主操作槽位，未把两项移出菜单，已登记）
-        binding.selectActionBar.inflateMenu(
+        selectActionBar.inflateMenu(
             R.menu.bookshelf_menage_sel,
             linkedMapOf(
                 R.id.menu_del_selection to getString(R.string.bookshelf_menu_group_common),
@@ -328,8 +373,8 @@ class BookshelfManageActivity :
                 R.id.menu_clear_cache to getString(R.string.bookshelf_menu_group_clean)
             )
         )
-        binding.selectActionBar.setOnMenuItemClickListener(this)
-        binding.selectActionBar.setCallBack(this)
+        selectActionBar.setOnMenuItemClickListener(this)
+        selectActionBar.setCallBack(this)
         waitDialog.setOnCancelListener {
             viewModel.batchChangeSourceCoroutine?.cancel()
         }
@@ -478,7 +523,7 @@ class BookshelfManageActivity :
     }
 
     override fun upSelectCount() {
-        binding.selectActionBar.upCountView(adapter.selection.size, adapter.getItems().size)
+        selectActionBar.upCountView(adapter.selection.size, adapter.getItems().size)
     }
 
     override fun updateBook(vararg book: Book) {

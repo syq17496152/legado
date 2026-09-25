@@ -49,4 +49,7 @@
     <item name="btn_reset" type="id" />
     <item name="btn_rotate_right" type="id" />
 
+<!-- CE-b：activity_qrcode_capture.xml 退役后保留的代码引用 id（Fragment 事务按 id 定位预览容器） -->
+    <item name="fl_content" type="id" />
+
 </resources>

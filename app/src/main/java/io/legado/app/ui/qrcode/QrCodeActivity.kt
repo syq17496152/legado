@@ -7,6 +7,11 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.FrameLayout
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.PhotoLibrary
@@ -15,11 +20,15 @@ import androidx.compose.material3.IconButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.viewbinding.ViewBinding
 import com.google.zxing.Result
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
-import io.legado.app.databinding.ActivityQrcodeCaptureBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.ui.file.HandleFileContract
@@ -27,7 +36,6 @@ import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.utils.QRCodeUtils
 import io.legado.app.utils.readBytes
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.delay
 
 /**
@@ -39,7 +47,7 @@ import kotlinx.coroutines.delay
  * - A3-3 禁止静默失败：解码结果为空不再 setResult(null)+finish，改为页内 danger 提示条 + 重试
  * - A3-2 扫描引导与全屏识别说明（覆盖层，见 [QrCodeOverlay]）
  */
-class QrCodeActivity : BaseActivity<ActivityQrcodeCaptureBinding>(), ScanResultCallback {
+class QrCodeActivity : BaseActivity<ViewBinding>(), ScanResultCallback {
 
     companion object {
         private const val FRAGMENT_TAG = "qrCodeFragment"
@@ -51,7 +59,16 @@ class QrCodeActivity : BaseActivity<ActivityQrcodeCaptureBinding>(), ScanResultC
         private const val DECODE_CONFIRM_DELAY = 400L
     }
 
-    override val binding by viewBinding(ActivityQrcodeCaptureBinding::inflate)
+    // 原 activity_qrcode_capture.xml 已退役（CE-b）：改 composeShell 工厂创建合成壳，Compose 全权接管页面骨架
+    override val binding: ViewBinding by lazy { composeShell(this) }
+
+    /**
+     * 原 XML `fl_content`（相机预览 Fragment 容器，CE-b）：**Fragment 事务按 id 定位容器** ⇒ 必须显式赋同一 id
+     * （id 已随 XML 退役迁入 `values/ids.xml`）。容器由组合内 `AndroidView` 托管，事务延到上树后提交。
+     */
+    private val flContent: FrameLayout by lazy {
+        FrameLayout(this).apply { id = R.id.fl_content }
+    }
 
     // —— 覆盖层状态（解码等待/失败、相机权限受限）——
     private var decoding by mutableStateOf(false)
@@ -64,11 +81,25 @@ class QrCodeActivity : BaseActivity<ActivityQrcodeCaptureBinding>(), ScanResultC
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initComposeTopBar()
-        initComposeOverlay()
-        supportFragmentManager.beginTransaction()
-            .replace(R.id.fl_content, QrCodeFragment(), FRAGMENT_TAG)
-            .commit()
+        initComposeContent()
+        attachQrFragment()
+    }
+
+    /**
+     * 相机预览 Fragment 事务（CE-b）。
+     *
+     * 容器 `fl_content` 由组合内 `AndroidView` 托管 ⇒ 组合挂载晚于 `onActivityCreated`，
+     * 直接 `commit()` 会因「找不到容器 id」而抛 `IllegalStateException`。
+     * `View.post` 在视图未 attach 时会把任务排入 run queue、attach 后立即执行 ⇒ 保证容器已在树上。
+     */
+    private fun attachQrFragment() {
+        flContent.post {
+            if (!isFinishing && supportFragmentManager.findFragmentByTag(FRAGMENT_TAG) == null) {
+                supportFragmentManager.beginTransaction()
+                    .replace(R.id.fl_content, QrCodeFragment(), FRAGMENT_TAG)
+                    .commit()
+            }
+        }
     }
 
     override fun onResume() {
@@ -80,39 +111,58 @@ class QrCodeActivity : BaseActivity<ActivityQrcodeCaptureBinding>(), ScanResultC
         }
     }
 
-    private fun initComposeTopBar() {
-        binding.composeTopBar.setContent {
-            LegadoTheme {
-                GlassTopAppBar(
-                    title = getString(R.string.scan_qr_code),
-                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                    onNavClick = { finish() },
-                    actions = {
-                        // 解码期间置灰相册入口，避免重复触发（覆盖层的触摸拦截是第二道防护）
-                        IconButton(
-                            enabled = !decoding,
-                            onClick = { launchImagePicker() }
-                        ) {
-                            Icon(Icons.Outlined.PhotoLibrary, contentDescription = null)
+    /**
+     * CE-b：Compose 承载页面骨架（顶栏 + 相机预览区 + 覆盖层）。
+     *
+     * 与原 XML（`activity_qrcode_capture.xml`）的**逐一对应关系**：
+     *  · 根 `LinearLayout` → `composeShell` 合成壳（`binding.root`）
+     *  · `compose_top_bar`(ComposeView) → 页内直接渲染 `GlassTopAppBar`（内容逐行不变）
+     *  · `FrameLayout { fl_content ; compose_qr_overlay }` → `Box(weight 1f)` 内
+     *    `AndroidView` 托管 `fl_content`（相机预览 Fragment 容器，显式赋 id）+ 其上渲染 `QrCodeOverlay`
+     *    （覆盖层非交互区域不消费触摸 ⇒ 事件仍回落到预览层，保持缩放/对焦手势）
+     */
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 compose_top_bar，内容逐行不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = getString(R.string.scan_qr_code),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = {
+                            // 解码期间置灰相册入口，避免重复触发（覆盖层的触摸拦截是第二道防护）
+                            IconButton(
+                                enabled = !decoding,
+                                onClick = { launchImagePicker() }
+                            ) {
+                                Icon(Icons.Outlined.PhotoLibrary, contentDescription = null)
+                            }
                         }
+                    )
+                }
+                // ---- 预览区 + 覆盖层（原 FrameLayout { fl_content ; compose_qr_overlay }）----
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { flContent }
+                    )
+                    LegadoTheme {
+                        QrCodeOverlay(
+                            decoding = decoding,
+                            decodeSucceeded = decodeSucceeded,
+                            decodeFailed = decodeFailed,
+                            cameraBlocked = cameraBlocked,
+                            onGalleryClick = { launchImagePicker() },
+                            onRetryClick = { launchImagePicker() },
+                            onGrantClick = { openAppPermissionSettings() }
+                        )
                     }
-                )
-            }
-        }
-    }
-
-    private fun initComposeOverlay() {
-        binding.composeQrOverlay.setContent {
-            LegadoTheme {
-                QrCodeOverlay(
-                    decoding = decoding,
-                    decodeSucceeded = decodeSucceeded,
-                    decodeFailed = decodeFailed,
-                    cameraBlocked = cameraBlocked,
-                    onGalleryClick = { launchImagePicker() },
-                    onRetryClick = { launchImagePicker() },
-                    onGrantClick = { openAppPermissionSettings() }
-                )
+                }
             }
         }
     }
