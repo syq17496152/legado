@@ -79,6 +79,10 @@ fun AppDropdownMenu(
                     compact = true,
                     showSelectedMark = action.checked != null,
                     leadingIcon = action.icon,
+                    // 顶栏包 §1.2（2026-09-25）：补 iconRes 透传。MenuAction 是双源模型
+                    // （icon 与 iconRes 二选一），原实现只传 icon ⇒ **iconRes-only 动作在溢出菜单里静默无图标**
+                    // （顶栏一级路径 AppManagementScaffold 已正确，缺口只在溢出路径）。
+                    leadingIconRes = action.iconRes,
                     tint = action.tint,
                     textAlign = TextAlign.Start
                 )

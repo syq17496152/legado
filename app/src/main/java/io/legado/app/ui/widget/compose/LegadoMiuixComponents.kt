@@ -720,6 +720,10 @@ fun LegadoMiuixChoiceRow(
     // H16（菜单统一）：ImageVector 直绘图标（与 leadingIconName 互斥，MenuAction 场景用），
     // tint=条目内容色覆盖（危险项 danger 红等），null 时回落选中/常规语义色
     leadingIcon: ImageVector? = null,
+    // 顶栏包 §1.2（2026-09-25）：drawable 资源源图标（与 leadingIcon / leadingIconName 三者互斥，
+    // 优先级 icon > iconRes > iconName）。补齐原因：MenuAction 是「双源」模型（icon 与 iconRes 二选一），
+    // 而本组件原只接 ImageVector ⇒ **iconRes-only 动作静默无图标**（顶栏一级路径正确、溢出路径丢失）。
+    leadingIconRes: Int? = null,
     tint: Color? = null
 ) {
     val actionRadius = palette.actionRadius ?: LocalContext.current.composeActionRadius()
@@ -751,6 +755,15 @@ fun LegadoMiuixChoiceRow(
             if (leadingIcon != null) {
                 Icon(
                     imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = tint ?: LocalContentColor.current,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(if (compact) 9.dp else 12.dp))
+            } else if (leadingIconRes != null) {
+                // 顶栏包 §1.2：drawable 源与 ImageVector 源**同尺寸同间距**（口径逐字对齐上面分支）
+                Icon(
+                    painter = painterResource(leadingIconRes),
                     contentDescription = null,
                     tint = tint ?: LocalContentColor.current,
                     modifier = Modifier.size(22.dp)
