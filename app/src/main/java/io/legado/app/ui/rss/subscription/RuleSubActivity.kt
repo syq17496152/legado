@@ -1,18 +1,17 @@
 package io.legado.app.ui.rss.subscription
 
 import android.os.Bundle
-import android.view.ViewGroup
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RuleSub
-import io.legado.app.databinding.ActivityRuleSubBinding
 import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.association.ImportReplaceRuleDialog
 import io.legado.app.ui.association.ImportRssSourceDialog
@@ -24,7 +23,6 @@ import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.conflate
@@ -35,10 +33,11 @@ import kotlinx.coroutines.withContext
 /**
  * 规则订阅管理界面
  */
-class RuleSubActivity : BaseActivity<ActivityRuleSubBinding>(),
+class RuleSubActivity : BaseActivity<ViewBinding>(),
     RuleSubEditComposeDialog.Callback {
 
-    override val binding by viewBinding(ActivityRuleSubBinding::inflate)
+    // 原 activity_rule_sub.xml 已退役（CE-b 首项），改 composeShell 工厂创建合成壳，Compose 全权接管
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private val ruleSubsState = mutableStateListOf<RuleSub>()
     private val searchQueryState = mutableStateOf("")
@@ -57,53 +56,41 @@ class RuleSubActivity : BaseActivity<ActivityRuleSubBinding>(),
     // subpage-topbar-unify 3.2：XML 残留 TitleBar 节点已删，顶栏由 Compose 全权接管。
 
     private fun initComposeContent() {
-        val container = binding.recyclerView.parent as? ViewGroup ?: return
-        val index = container.indexOfChild(binding.recyclerView)
-        container.removeView(binding.recyclerView)
-        container.removeView(binding.tvEmptyMsg)
-        val cv = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setContent {
-                val filteredItems = filterRuleSubs(searchQueryState.value)
-                AppManagementScaffold(
-                    title = getString(R.string.rule_subscription),
-                    selectedCount = 0,
-                    totalCount = filteredItems.size,
-                    searchQuery = searchQueryState.value,
-                    searchHint = getString(R.string.search),
-                    onSearchChange = { searchQueryState.value = it },
-                    topActions = listOf(
-                        AppManagementAction(
-                            text = getString(R.string.add),
-                            iconRes = R.drawable.ic_add,
-                            onClick = ::addSubscription
-                        )
-                    ),
-                    onBack = { finish() }
-                ) {
-                    RuleSubScreen(
-                        subscriptions = filteredItems,
-                        typeLabels = typeLabels,
-                        emptyMessage = if (searchQueryState.value.isBlank()) {
-                            getString(R.string.rule_sub_empty_msg)
-                        } else {
-                            getString(R.string.search_result)
-                        },
-                        dragEnabled = searchQueryState.value.isBlank(),
-                        onOpen = ::openSubscription,
-                        onEdit = ::editSubscription,
-                        ruleSubMenuActions = ::ruleSubMenuActions,
-                        onMoveBy = ::moveSubscriptionBy,
-                        onMoveFinished = ::persistSubscriptionOrder
+        binding.root.attachComposeContent {
+            val filteredItems = filterRuleSubs(searchQueryState.value)
+            AppManagementScaffold(
+                title = getString(R.string.rule_subscription),
+                selectedCount = 0,
+                totalCount = filteredItems.size,
+                searchQuery = searchQueryState.value,
+                searchHint = getString(R.string.search),
+                onSearchChange = { searchQueryState.value = it },
+                topActions = listOf(
+                    AppManagementAction(
+                        text = getString(R.string.add),
+                        iconRes = R.drawable.ic_add,
+                        onClick = ::addSubscription
                     )
-                }
+                ),
+                onBack = { finish() }
+            ) {
+                RuleSubScreen(
+                    subscriptions = filteredItems,
+                    typeLabels = typeLabels,
+                    emptyMessage = if (searchQueryState.value.isBlank()) {
+                        getString(R.string.rule_sub_empty_msg)
+                    } else {
+                        getString(R.string.search_result)
+                    },
+                    dragEnabled = searchQueryState.value.isBlank(),
+                    onOpen = ::openSubscription,
+                    onEdit = ::editSubscription,
+                    ruleSubMenuActions = ::ruleSubMenuActions,
+                    onMoveBy = ::moveSubscriptionBy,
+                    onMoveFinished = ::persistSubscriptionOrder
+                )
             }
         }
-        container.addView(cv, index)
     }
 
     private fun initData() {
