@@ -7,15 +7,25 @@ import android.widget.EditText
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import com.google.android.material.tabs.TabLayout
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.BookSourceType
 import io.legado.app.data.appDb
@@ -25,7 +35,6 @@ import io.legado.app.data.entities.rule.ContentRule
 import io.legado.app.data.entities.rule.ExploreRule
 import io.legado.app.data.entities.rule.SearchRule
 import io.legado.app.data.entities.rule.TocRule
-import io.legado.app.databinding.ActivityBookSourceEditBinding
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.selector
@@ -42,9 +51,10 @@ import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
 import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.InlineGuideBar
 import io.legado.app.ui.widget.components.MenuAction
-import io.legado.app.ui.widget.components.installGlassTopBar
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.ui.widget.dialog.UrlOptionDialog
 import io.legado.app.ui.widget.dialog.VariableDialog
 import io.legado.app.ui.widget.keyboard.KeyboardToolPop
@@ -64,19 +74,24 @@ import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import splitties.views.bottomPadding
 
 class BookSourceEditActivity :
-    VMBaseActivity<ActivityBookSourceEditBinding, BookSourceEditViewModel>(),
+    VMBaseActivity<ViewBinding, BookSourceEditViewModel>(),
     KeyboardToolPop.CallBack,
     VariableDialog.Callback {
 
-    override val binding by viewBinding(ActivityBookSourceEditBinding::inflate)
+    // 原 activity_book_source_edit.xml 已退役（CE-a）：composeShell 合成壳 + attachComposeContent 单源；
+    // 顶栏由 installGlassTopBar 运行时注入（首插 ComposeView + 移除 R.id.title_bar 锚点）改为**页内直接渲染**
+    override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<BookSourceEditViewModel>()
+
+    /** 原 XML 各段节点的程序化等价物（见 [BookSourceEditShellViews]；RecyclerView/TabLayout 需在
+     *  `onActivityCreated` 就被配置 ⇒ 必须由装配类提前建好、宿主以字段持有） */
+    private val shell by lazy { BookSourceEditShellViews(this) }
 
     private val adapter by lazy { BookSourceEditAdapter() }
     private val sourceEntities: ArrayList<EditEntity> = ArrayList()
@@ -109,7 +124,7 @@ class BookSourceEditActivity :
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         softKeyboardTool.attachToWindow(window)
-        initTopBar()
+        initComposeContent()
         initView()
         initRuleHelpGuide()
         viewModel.initData(intent) {
@@ -132,10 +147,8 @@ class BookSourceEditActivity :
     private fun initRuleHelpGuide() {
         RuleHelpGuideOnce.armed = RuleHelpGuideOnce.armed ?: !LocalConfig.ruleHelpVersionIsLast
         ruleHelpGuideVisible = RuleHelpGuideOnce.armed == true
-        binding.cvRuleHelpGuide.setViewCompositionStrategy(
-            ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
-        )
-        binding.cvRuleHelpGuide.setContent {
+        // 合成策略由装配单源（BookSourceEditShellViews）统一设置，宿主不再自设
+        shell.cvRuleHelpGuide.setContent {
             LegadoTheme {
                 if (ruleHelpGuideVisible) {
                     InlineGuideBar(
@@ -156,86 +169,123 @@ class BookSourceEditActivity :
         ruleHelpGuideVisible = false
     }
 
-    // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar——代码/保存/调试一级图标 + 溢出菜单
-    //（原 MainTopBarView moreButton+ModernActionPopup menuRes 链删除，条目行为同 onCompatOptionsItemSelected）
-    private fun initTopBar() {
-        installGlassTopBar(
-            binding,
-            titleProvider = { getString(R.string.edit_book_source) },
-            actionsProvider = {
-                buildList {
-                    add(
-                        MenuAction(
-                            iconRes = R.drawable.ic_code,
-                            title = getString(R.string.edit_content),
-                            alwaysShow = true
-                        ) { onFullEditClicked() }
+    /** CE-a（2026-09-26）：顶栏已从 installGlassTopBar 运行时注入改为**页内直接渲染**（见 initComposeContent）。 */
+    @OptIn(ExperimentalMaterial3Api::class)
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = getString(R.string.edit_book_source),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = { TopBarActionRow(topBarActions()) }
                     )
-                    add(
-                        MenuAction(
-                            iconRes = R.drawable.ic_save,
-                            title = getString(R.string.action_save),
-                            alwaysShow = true
-                        ) {
-                            saveSource(getSource()) {
-                                setResult(RESULT_OK, Intent().putExtra("origin", it.bookSourceUrl))
-                                finish()
-                            }
-                        }
-                    )
-                    add(
-                        MenuAction(
-                            iconRes = R.drawable.ic_bug_report_outline,
-                            title = getString(R.string.debug_source),
-                            alwaysShow = true
-                        ) {
-                            saveSource(getSource()) { source ->
-                                startActivity<BookSourceDebugActivity> {
-                                    putExtra("key", source.bookSourceUrl)
-                                }
-                            }
-                        }
-                    )
-                    // 优化 1（F）：12 项平铺 → 三组 + 组标题。分组按「用户心智（对源的操作 / 进出通道 /
-                    // 诊断与帮助）」而非代码顺序；12 项文案逐字沿用 R.string 现值，零文案改动。
-                    fun addGroup(@androidx.annotation.StringRes titleRes: Int) {
-                        add(MenuAction(title = getString(titleRes), header = true, onClick = {}))
-                    }
-                    // 组 1：源操作
-                    addGroup(R.string.book_source_menu_group_ops)
-                    // 登录入口条件显隐（原 prepare 中 menu_login.isVisible 逻辑平移）
-                    if (!getSource().loginUrl.isNullOrBlank()) {
-                        add(
-                            MenuAction(title = getString(R.string.login)) {
-                                handleSourceEditMenuAction(R.id.menu_login)
-                            }
-                        )
-                    }
-                    add(MenuAction(title = getString(R.string.search)) { handleSourceEditMenuAction(R.id.menu_search) })
-                    add(MenuAction(title = getString(R.string.cookie)) { handleSourceEditMenuAction(R.id.menu_clear_cookie) })
-                    add(
-                        MenuAction(
-                            title = getString(R.string.auto_complete),
-                            checked = viewModel.autoComplete
-                        ) { handleSourceEditMenuAction(R.id.menu_auto_complete) }
-                    )
-                    // 组 2：导入 · 导出 · 分享（拷贝/粘贴成对，二维码导入/二维码分享/字符串分享相邻）
-                    addGroup(R.string.book_source_menu_group_share)
-                    add(MenuAction(title = getString(R.string.copy_source)) { handleSourceEditMenuAction(R.id.menu_copy_source) })
-                    add(MenuAction(title = getString(R.string.paste_source)) { handleSourceEditMenuAction(R.id.menu_paste_source) })
-                    add(MenuAction(title = getString(R.string.import_by_qr_code)) { handleSourceEditMenuAction(R.id.menu_qr_code_camera) })
-                    add(MenuAction(title = getString(R.string.qr_share)) { handleSourceEditMenuAction(R.id.menu_share_qr) })
-                    add(MenuAction(title = getString(R.string.str_share)) { handleSourceEditMenuAction(R.id.menu_share_str) })
-                    // 组 3：诊断与帮助
-                    addGroup(R.string.book_source_menu_group_diag)
-                    add(MenuAction(title = getString(R.string.set_source_variable)) { handleSourceEditMenuAction(R.id.menu_set_source_variable) })
-                    add(MenuAction(title = getString(R.string.log)) { handleSourceEditMenuAction(R.id.menu_log) })
-                    add(MenuAction(title = getString(R.string.help)) { handleSourceEditMenuAction(R.id.menu_help) })
                 }
-            },
-            onBack = { finish() }
-        )
+                // ---- 规则帮助引导条槽（原 cv_rule_help_guide）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth(),
+                    factory = { shell.cvRuleHelpGuide }
+                )
+                // ---- 基础信息行（原 HorizontalScrollView#1）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth(),
+                    factory = { shell.basicRow }
+                )
+                // ---- 开关行（原 HorizontalScrollView#2）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth(),
+                    factory = { shell.switchRow }
+                )
+                // ---- TabLayout（原 tab_layout：36dp 高 + elevation 3dp）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth(),
+                    factory = { shell.tabLayout }
+                )
+                // ---- RecyclerView（原 recycler_view：占剩余高度；`0dp` 高度语义由 Compose weight 表达）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    factory = { shell.recyclerView }
+                )
+            }
+        }
     }
+
+    /**
+     * 顶栏动作（原 `actionsProvider`：代码/保存/调试一级图标 + 三组溢出菜单，条目与行为逐项不变）。
+     *
+     * 溢出菜单分组按「用户心智（对源的操作 / 进出通道 / 诊断与帮助）」而非代码顺序；
+     * 12 项文案逐字沿用 R.string 现值 ⇒ 零文案改动。
+     */
+    private fun topBarActions(): List<MenuAction> =
+        buildList {
+            add(
+                MenuAction(
+                    iconRes = R.drawable.ic_code,
+                    title = getString(R.string.edit_content),
+                    alwaysShow = true
+                ) { onFullEditClicked() }
+            )
+            add(
+                MenuAction(
+                    iconRes = R.drawable.ic_save,
+                    title = getString(R.string.action_save),
+                    alwaysShow = true
+                ) {
+                    saveSource(getSource()) {
+                        setResult(RESULT_OK, Intent().putExtra("origin", it.bookSourceUrl))
+                        finish()
+                    }
+                }
+            )
+            add(
+                MenuAction(
+                    iconRes = R.drawable.ic_bug_report_outline,
+                    title = getString(R.string.debug_source),
+                    alwaysShow = true
+                ) {
+                    saveSource(getSource()) { source ->
+                        startActivity<BookSourceDebugActivity> {
+                            putExtra("key", source.bookSourceUrl)
+                        }
+                    }
+                }
+            )
+            fun addGroup(@androidx.annotation.StringRes titleRes: Int) {
+                add(MenuAction(title = getString(titleRes), header = true, onClick = {}))
+            }
+            // 组 1：源操作
+            addGroup(R.string.book_source_menu_group_ops)
+            // 登录入口条件显隐（原 prepare 中 menu_login.isVisible 逻辑平移）
+            if (!getSource().loginUrl.isNullOrBlank()) {
+                add(
+                    MenuAction(title = getString(R.string.login)) {
+                        handleSourceEditMenuAction(R.id.menu_login)
+                    }
+                )
+            }
+            add(MenuAction(title = getString(R.string.search)) { handleSourceEditMenuAction(R.id.menu_search) })
+            add(MenuAction(title = getString(R.string.cookie)) { handleSourceEditMenuAction(R.id.menu_clear_cookie) })
+            add(
+                MenuAction(
+                    title = getString(R.string.auto_complete),
+                    checked = viewModel.autoComplete
+                ) { handleSourceEditMenuAction(R.id.menu_auto_complete) }
+            )
+            // 组 2：导入 · 导出 · 分享（拷贝/粘贴成对，二维码导入/二维码分享/字符串分享相邻）
+            addGroup(R.string.book_source_menu_group_share)
+            add(MenuAction(title = getString(R.string.copy_source)) { handleSourceEditMenuAction(R.id.menu_copy_source) })
+            add(MenuAction(title = getString(R.string.paste_source)) { handleSourceEditMenuAction(R.id.menu_paste_source) })
+            add(MenuAction(title = getString(R.string.import_by_qr_code)) { handleSourceEditMenuAction(R.id.menu_qr_code_camera) })
+            add(MenuAction(title = getString(R.string.qr_share)) { handleSourceEditMenuAction(R.id.menu_share_qr) })
+            add(MenuAction(title = getString(R.string.str_share)) { handleSourceEditMenuAction(R.id.menu_share_str) })
+            // 组 3：诊断与帮助
+            addGroup(R.string.book_source_menu_group_diag)
+            add(MenuAction(title = getString(R.string.set_source_variable)) { handleSourceEditMenuAction(R.id.menu_set_source_variable) })
+            add(MenuAction(title = getString(R.string.log)) { handleSourceEditMenuAction(R.id.menu_log) })
+            add(MenuAction(title = getString(R.string.help)) { handleSourceEditMenuAction(R.id.menu_help) })
+        }
 
     private val textEditLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
@@ -316,37 +366,37 @@ class BookSourceEditActivity :
     }
 
     private fun initView() {
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+        shell.tabLayout.addTab(shell.tabLayout.newTab().apply {
             setText(R.string.source_tab_base)
         })
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+        shell.tabLayout.addTab(shell.tabLayout.newTab().apply {
             setText(R.string.source_tab_search)
         })
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+        shell.tabLayout.addTab(shell.tabLayout.newTab().apply {
             setText(R.string.source_tab_find)
         })
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+        shell.tabLayout.addTab(shell.tabLayout.newTab().apply {
             setText(R.string.source_tab_info)
         })
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+        shell.tabLayout.addTab(shell.tabLayout.newTab().apply {
             setText(R.string.source_tab_toc)
         })
-        binding.tabLayout.addTab(binding.tabLayout.newTab().apply {
+        shell.tabLayout.addTab(shell.tabLayout.newTab().apply {
             setText(R.string.source_tab_content)
         })
-        binding.recyclerView.setEdgeEffectColor(primaryColor)
+        shell.recyclerView.setEdgeEffectColor(primaryColor)
         if (adapter.editEntityMaxLine < 999) {
-            binding.recyclerView.layoutManager = NoChildScrollLinearLayoutManager(this) //启用后会阻止RecyclerView跟随光标滚动,行数少时,用的TextView跟随
+            shell.recyclerView.layoutManager = NoChildScrollLinearLayoutManager(this) //启用后会阻止RecyclerView跟随光标滚动,行数少时,用的TextView跟随
         }
-        binding.recyclerView.adapter = adapter
-        binding.recyclerView.viewTreeObserver.addOnGlobalFocusChangeListener { _, newFocus ->
+        shell.recyclerView.adapter = adapter
+        shell.recyclerView.viewTreeObserver.addOnGlobalFocusChangeListener { _, newFocus ->
             if (newFocus is EditText) {
                 newFocus.postDelayed({ sendText("") }, 120)
             }
         }
-        binding.tabLayout.setBackgroundColor(backgroundColor)
-        binding.tabLayout.setSelectedTabIndicatorColor(accentColor)
-        binding.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+        shell.tabLayout.setBackgroundColor(backgroundColor)
+        shell.tabLayout.setSelectedTabIndicatorColor(accentColor)
+        shell.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabReselected(tab: TabLayout.Tab?) {
 
             }
@@ -359,7 +409,7 @@ class BookSourceEditActivity :
                 setEditEntities(tab?.position)
             }
         })
-        binding.recyclerView.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
+        shell.recyclerView.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
             val navigationBarHeight = windowInsets.navigationBarHeight
             val imeHeight = windowInsets.imeHeight
             view.bottomPadding = if (imeHeight == 0) navigationBarHeight else 0
@@ -401,17 +451,17 @@ class BookSourceEditActivity :
 //            6 -> reviewEntities
             else -> sourceEntities
         }
-        binding.recyclerView.scrollToPosition(0)
+        shell.recyclerView.scrollToPosition(0)
         window.decorView.rootView.clearFocus()
     }
 
     private fun upSourceView(bookSource: BookSource?) {
         val bs = bookSource ?: BookSource()
         bs.let {
-            binding.cbIsEnable.isChecked = it.enabled
-            binding.cbIsEnableExplore.isChecked = it.enabledExplore
-            binding.cbIsEnableCookie.isChecked = it.enabledCookieJar ?: false
-            binding.spType.setSelection(
+            shell.cbIsEnable.isChecked = it.enabled
+            shell.cbIsEnableExplore.isChecked = it.enabledExplore
+            shell.cbIsEnableCookie.isChecked = it.enabledCookieJar ?: false
+            shell.spType.setSelection(
                 when (it.bookSourceType) {
                     BookSourceType.video -> 4
                     BookSourceType.file -> 3
@@ -420,8 +470,8 @@ class BookSourceEditActivity :
                     else -> 0
                 }
             )
-            binding.cbIsEventListener.isChecked = it.eventListener
-            binding.cbIsCustomButton.isChecked = it.customButton
+            shell.cbIsEventListener.isChecked = it.eventListener
+            shell.cbIsCustomButton.isChecked = it.customButton
         }
         // 基本信息
         sourceEntities.clear()
@@ -535,24 +585,24 @@ class BookSourceEditActivity :
 //            add(EditEntity("postQuoteUrl", rr.postQuoteUrl, R.string.post_quote_url))
 //            add(EditEntity("deleteUrl", rr.deleteUrl, R.string.delete_review_url))
 //        }
-        binding.tabLayout.selectTab(binding.tabLayout.getTabAt(0))
+        shell.tabLayout.selectTab(shell.tabLayout.getTabAt(0))
         setEditEntities(0)
     }
 
     private fun getSource(): BookSource {
         val source = viewModel.bookSource?.copy() ?: BookSource()
-        source.enabled = binding.cbIsEnable.isChecked
-        source.enabledExplore = binding.cbIsEnableExplore.isChecked
-        source.enabledCookieJar = binding.cbIsEnableCookie.isChecked
-        source.bookSourceType = when (binding.spType.selectedItemPosition) {
+        source.enabled = shell.cbIsEnable.isChecked
+        source.enabledExplore = shell.cbIsEnableExplore.isChecked
+        source.enabledCookieJar = shell.cbIsEnableCookie.isChecked
+        source.bookSourceType = when (shell.spType.selectedItemPosition) {
             4 -> BookSourceType.video
             3 -> BookSourceType.file
             2 -> BookSourceType.image
             1 -> BookSourceType.audio
             else -> BookSourceType.default
         }
-        source.eventListener = binding.cbIsEventListener.isChecked
-        source.customButton = binding.cbIsCustomButton.isChecked
+        source.eventListener = shell.cbIsEventListener.isChecked
+        source.customButton = shell.cbIsCustomButton.isChecked
         val searchRule = SearchRule()
         val exploreRule = ExploreRule()
         val bookInfoRule = BookInfoRule()
@@ -823,7 +873,7 @@ class BookSourceEditActivity :
                     val editTextLocation = IntArray(2)
                     view.getLocationOnScreen(editTextLocation)
                     val recyclerViewLocation = IntArray(2)
-                    binding.recyclerView.getLocationOnScreen(recyclerViewLocation)
+                    shell.recyclerView.getLocationOnScreen(recyclerViewLocation)
                     val layout = view.layout
                     if (layout != null) {
                         val line = layout.getLineForOffset(end)
@@ -832,12 +882,12 @@ class BookSourceEditActivity :
                         val cursorYOnScreen = editTextLocation[1] + cursorYInEditText
                         // 光标相对于RecyclerView的位置
                         val cursorYInRecyclerView = cursorYOnScreen - recyclerViewLocation[1]
-                        val recyclerViewBottom = binding.recyclerView.height - 120 //考虑键盘的经验值
+                        val recyclerViewBottom = shell.recyclerView.height - 120 //考虑键盘的经验值
                         // 如果光标不在可见范围内，则滚动到光标位置
                         if (cursorYInRecyclerView !in 0..recyclerViewBottom) {
                             val scrollDistance = cursorYInRecyclerView - recyclerViewBottom / 3
-                            if (scrollDistance > 0 && binding.recyclerView.canScrollVertically(1) || scrollDistance < 0 && binding.recyclerView.canScrollVertically(-1)) {
-                                binding.recyclerView.smoothScrollBy(0, scrollDistance)
+                            if (scrollDistance > 0 && shell.recyclerView.canScrollVertically(1) || scrollDistance < 0 && shell.recyclerView.canScrollVertically(-1)) {
+                                shell.recyclerView.smoothScrollBy(0, scrollDistance)
                             }
                         }
                     }
@@ -856,12 +906,12 @@ class BookSourceEditActivity :
         val entity = sourceEntities.firstOrNull { it.key == key } ?: return
         sourceEntities.forEach { it.error = null }
         entity.error = getString(R.string.source_required_hint)
-        binding.tabLayout.selectTab(binding.tabLayout.getTabAt(0))
+        shell.tabLayout.selectTab(shell.tabLayout.getTabAt(0))
         setEditEntities(0)
         val index = adapter.indexOfKey(key)
         if (index >= 0) {
             adapter.notifyItemChanged(index)
-            binding.recyclerView.post { binding.recyclerView.scrollToPosition(index) }
+            shell.recyclerView.post { shell.recyclerView.scrollToPosition(index) }
         }
     }
 
