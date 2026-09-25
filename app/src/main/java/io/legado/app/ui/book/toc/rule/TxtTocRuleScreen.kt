@@ -120,6 +120,9 @@ fun TxtTocRuleScreen(
                             overflowActions.map { menuAction ->
                                 AppManagementMenuAction(
                                     text = menuAction.title,
+                                    // 顶栏包 §1.2 路径 B：图标双源同链透传（漏传 ⇒ 溢出条目静默无图标）
+                                    icon = menuAction.icon,
+                                    iconRes = menuAction.iconRes,
                                     checked = menuAction.checked == true,
                                     onClick = menuAction.onClick
                                 )

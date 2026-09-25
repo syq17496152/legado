@@ -368,6 +368,9 @@ private fun AppPackageManageMoreButton(
                             title = action.text.toString(),
                             checked = action.checked,
                             enabled = action.enabled,
+                            // 顶栏包 §1.2 路径 B：图标双源同链透传（与 AppManagementMoreActionButton 同口径）
+                            icon = action.icon,
+                            iconRes = action.iconRes,
                             invoke = action.onClick
                         )
                     },

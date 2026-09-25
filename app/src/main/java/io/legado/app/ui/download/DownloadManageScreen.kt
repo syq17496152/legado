@@ -188,6 +188,9 @@ fun DownloadManageScreen(
                     moreMenuActions.map { menuAction ->
                         AppManagementMenuAction(
                             text = menuAction.title,
+                            // 顶栏包 §1.2 路径 B：图标双源同链透传（漏传 ⇒ 溢出条目静默无图标）
+                            icon = menuAction.icon,
+                            iconRes = menuAction.iconRes,
                             // header 分组标签映射为禁用行（ModernActionPopup 无 header 语义）
                             enabled = !menuAction.header,
                             checked = menuAction.checked == true,

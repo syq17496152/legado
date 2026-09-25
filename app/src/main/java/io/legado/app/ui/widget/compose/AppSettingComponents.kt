@@ -58,6 +58,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -119,6 +120,12 @@ data class AppManagementMenuAction(
     val checked: Boolean = false,
     val enabled: Boolean = true,
     val danger: Boolean = false,
+    // 顶栏包 §1.2 路径 B（2026-09-25）：图标**双源**（与契约 `MenuAction` 的 `icon` / `iconRes` 一一对应，
+    // icon 优先）。补齐原因：`MenuAction → AppManagementMenuAction` 跨模型转换时图标无处承载 ⇒
+    // 溢出弹层只能渲染纯文字。实测这几页的溢出条目**用的是 ImageVector 源**（如下载页 `Icons.Default.*`），
+    // 只补 iconRes 仍显示不出图标 ⇒ 必须双源同时承载。
+    val icon: ImageVector? = null,
+    val iconRes: Int? = null,
     val onClick: () -> Unit
 )
 
@@ -596,6 +603,9 @@ fun AppManagementMoreActionButton(
                             title = action.text.toString(),
                             checked = action.checked,
                             enabled = action.enabled,
+                            // 顶栏包 §1.2 路径 B：图标双源必须同链透传（漏传 ⇒ 溢出条目静默无图标）
+                            icon = action.icon,
+                            iconRes = action.iconRes,
                             invoke = action.onClick
                         )
                     },

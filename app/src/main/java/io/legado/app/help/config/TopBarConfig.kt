@@ -325,23 +325,34 @@ object TopBarConfig {
     }
 
     /**
-     * 顶栏动作按钮容器基准（dp，bugfix-0908f 尺寸单源铁律）：
-     * 与 MainTopBarView 完全同源——regular 顶栏包 36dp（top_bar_regular_action_size）/
-     * default 34dp（bookshelf_action_button_size）。子页 Compose 顶栏禁止再写死第二套基准。
+     * 顶栏动作按钮容器基准（dp，顶栏包 §1.4 基准统一 / design AD-TB-07）：
+     * 基准**唯一来源 = `dimens`**——regular 顶栏包 `top_bar_regular_action_size`（36dp）/
+     * default `bookshelf_action_button_size`（34dp），与 `MainTopBarView` 使用**同一资源 id**
+     * （原先本文件另存 36f/34f 常量，与资源重复维护 ⇒ 改一处必漏一处）。
+     * 取 px（`getDimension` 返回 float，无 `getDimensionPixelSize` 的取整漂移）后按 density 折回 dp，
+     * 再乘 fontScale ⇒ 与旧口径（基准 dp × fontScale）逐位等价。
      */
-    private const val ACTION_CONTAINER_REGULAR_DP = 36f
-    private const val ACTION_CONTAINER_DEFAULT_DP = 34f
-    /** 图标内边距基准（dp）：对齐 MainTopBarView 8dp padding（bookshelf_action_button_padding）。 */
-    private const val ACTION_ICON_PADDING_DP = 8f
+    private fun actionContainerBaseDp(context: Context): Float {
+        val resId = if (currentConfig(context, AppConfig.isNightTheme).style == STYLE_REGULAR) {
+            R.dimen.top_bar_regular_action_size
+        } else {
+            R.dimen.bookshelf_action_button_size
+        }
+        return context.resources.getDimension(resId) / context.resources.displayMetrics.density
+    }
+
+    /** 图标内边距基准（dp）：与 `MainTopBarView` 同源资源 `bookshelf_action_button_padding`（8dp）。 */
+    private fun actionIconPaddingDp(context: Context): Float {
+        return context.resources.getDimension(R.dimen.bookshelf_action_button_padding) /
+            context.resources.displayMetrics.density
+    }
 
     /**
      * 顶栏动作按钮容器尺寸（dp，×fontScale）：
      * regular 顶栏包 36 / default 34。所有顶栏动作按钮唯一取值入口。
      */
     fun actionContainerSize(context: Context): Float {
-        val style = currentConfig(context, AppConfig.isNightTheme).style
-        val base = if (style == STYLE_REGULAR) ACTION_CONTAINER_REGULAR_DP else ACTION_CONTAINER_DEFAULT_DP
-        return base * iconScale(context)
+        return actionContainerBaseDp(context) * iconScale(context)
     }
 
     /**
@@ -349,7 +360,7 @@ object TopBarConfig {
      * 对齐 MainTopBarView CENTER_INSIDE 视觉口径（default 18 / regular 20）。
      */
     fun actionIconSize(context: Context): Float {
-        return actionContainerSize(context) - 2 * ACTION_ICON_PADDING_DP * iconScale(context)
+        return actionContainerSize(context) - 2 * actionIconPaddingDp(context) * iconScale(context)
     }
 
     fun defaultBackgroundColor(isNight: Boolean): Int {

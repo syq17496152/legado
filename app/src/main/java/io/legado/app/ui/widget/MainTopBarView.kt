@@ -218,6 +218,9 @@ class MainTopBarView @JvmOverloads constructor(
     fun setMode(mode: Mode) {
         this.mode = mode
         // W7.2（Delta 3→1 终态）：Mode.SUB 枚举删除，本组件仅剩主 Tab 消费
+        // 顶栏包 §1.7（design AD-TB-08 / spec REQ-TB-10）：`Mode.READ_RECORD` 为**历史遗留死分支**——
+        // 全仓 `setMode(` 仅 4 类宿主（书架/发现/订阅/我的），无任何宿主传该值；
+        // 因其参与「更多按钮可见性」的既有取值快照，**保留不删**，禁止新宿主依赖该 Mode。
         moreButton.isVisible =
             mode == Mode.BOOKSHELF || mode == Mode.READ_RECORD || mode == Mode.MY
         searchButton.isVisible = mode == Mode.DISCOVERY || mode == Mode.RSS || mode == Mode.MY

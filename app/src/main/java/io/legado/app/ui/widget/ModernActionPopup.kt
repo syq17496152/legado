@@ -50,6 +50,7 @@ import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -109,6 +110,11 @@ object ModernActionPopup {
         val title: String,
         val description: String? = null,
         val iconName: String? = null,
+        // 顶栏包 §1.2 路径 B（2026-09-25）：图标**双源**槽——`icon`（ImageVector）与 `iconRes`（drawable），
+        // 与契约 `MenuAction` 双源一一对应、由 [LegadoMiuixChoiceRow] 统一解析（优先级 icon > iconRes > iconName）。
+        // 补齐原因：管理族溢出条目实测用的是 ImageVector 源 ⇒ 只补 iconRes 仍显示不出图标。
+        val icon: ImageVector? = null,
+        val iconRes: Int? = null,
         val checked: Boolean = false,
         val enabled: Boolean = true,
         val persistent: Boolean = false,  // true = 点击不关闭弹窗，就地更新状态
@@ -578,6 +584,9 @@ object ModernActionPopup {
                                 enabled = action.enabled,
                                 description = action.description,
                                 leadingIconName = action.iconName,
+                                // 顶栏包 §1.2 路径 B：图标双源同链透传（行内优先级 icon > iconRes > iconName）
+                                leadingIcon = action.icon,
+                                leadingIconRes = action.iconRes,
                                 textAlign = TextAlign.Start
                             )
                             }
