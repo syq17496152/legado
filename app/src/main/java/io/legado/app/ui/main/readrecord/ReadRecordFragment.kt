@@ -298,8 +298,10 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
      */
     private fun installComposeTopBar() {
         val container = binding.root as? ViewGroup ?: return
+        // 顶栏包 §5.3（2026-09-26）：共享布局里的残留节点 `MainTopBarView@id/top_bar` 已从
+        // activity_read_record.xml 删除（历史 `gone` 空壳，仅制造「10 个声明 5 个空壳」的认知混乱），
+        // 故此处不再有 topBar 需要摘除；`title_bar` 仍是布局内的真实节点，照旧摘除后插入 Compose 顶栏。
         (binding.titleBar.parent as? ViewGroup)?.removeView(binding.titleBar)
-        (binding.topBar.parent as? ViewGroup)?.removeView(binding.topBar)
         val topBarView = ComposeView(requireContext()).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
