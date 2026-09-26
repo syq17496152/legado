@@ -14,6 +14,7 @@ import io.legado.app.constant.NotificationId
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.exception.ContentEmptyException
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.exception.TocEmptyException
@@ -22,6 +23,8 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.source.exploreKinds
 import io.legado.app.model.BookCheckResult
 import io.legado.app.model.CheckSource
+import io.legado.app.model.CheckSourceStage
+import io.legado.app.model.CheckSourceTaskStore
 import io.legado.app.model.Debug
 import io.legado.app.model.SourceQualityChecker
 import io.legado.app.model.SourceWeightCalculator
@@ -35,6 +38,7 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
@@ -103,6 +107,8 @@ class CheckSourceService : BaseService() {
         super.onDestroy()
         Debug.finishChecking()
         searchCoroutine.close()
+        // Q-N5：服务异常销毁（未走完 onCompletion）时兜底收口，避免状态机停在 RUNNING
+        CheckSourceTaskStore.finish(cancelled = true)
         postEvent(EventBus.CHECK_SOURCE_DONE, 0)
         notificationManager.cancel(NotificationId.CheckSourceService)
     }
@@ -122,6 +128,8 @@ class CheckSourceService : BaseService() {
             }.onStart {
                 originSize = ids.size
                 finishCount = 0
+                // Q-N5：任务开始即建结构化状态（服务与页面共享，跨 Activity 重建可恢复）
+                CheckSourceTaskStore.begin(ids.map { BookSourcePart(bookSourceUrl = it) })
                 notificationMsg = getString(R.string.progress_show, "", 0, originSize)
                 upNotification()
             }.onEachParallel(threadCount) {
@@ -136,19 +144,32 @@ class CheckSourceService : BaseService() {
                 )
                 upNotification()
                 runBlocking(IO) { appDb.bookSourceDao.update(it) }
-            }.onCompletion {
+            }.onCompletion { cause ->
+                CheckSourceTaskStore.finish(cancelled = cause is CancellationException)
                 stopSelf()
             }.collect()
         }
     }
 
     private suspend fun checkSource(source: BookSource) {
+        val start = System.currentTimeMillis()
+        CheckSourceTaskStore.markRunning(
+            source.bookSourceUrl,
+            source.bookSourceName,
+            source.bookSourceType
+        )
         kotlin.runCatching {
             withTimeout(CheckSource.timeout) {
                 doCheckSource(source)
             }
         }.onSuccess {
             Debug.updateFinalMessage(source.bookSourceUrl, "校验成功")
+            // Q-N5：结果评分沿用本仓既有权重口径（不新造分数体系）
+            CheckSourceTaskStore.markPassed(
+                origin = source.bookSourceUrl,
+                durationMillis = System.currentTimeMillis() - start,
+                score = source.weight
+            )
         }.onFailure {
             currentCoroutineContext().ensureActive()
             when (it) {
@@ -160,8 +181,18 @@ class CheckSourceService : BaseService() {
                 source.addErrorComment(it)
             }
             Debug.updateFinalMessage(source.bookSourceUrl, "校验失败:${it.localizedMessage}")
+            CheckSourceTaskStore.markFailed(
+                origin = source.bookSourceUrl,
+                message = it.localizedMessage.orEmpty(),
+                durationMillis = System.currentTimeMillis() - start
+            )
         }
         source.respondTime = Debug.getRespondTime(source.bookSourceUrl)
+    }
+
+    /** Q-N5：单源阶段打点（过程七阶段可视；并发场景下 stage 仅作展示提示，判定不依赖它） */
+    private fun markStage(source: BookSource, stage: CheckSourceStage) {
+        CheckSourceTaskStore.markStage(source.bookSourceUrl, source.bookSourceName, stage)
     }
 
     /**
@@ -192,6 +223,7 @@ class CheckSourceService : BaseService() {
 
         // 维度1: 域名校验（前置条件，不可并发）
         if (CheckSource.checkDomain) {
+            markStage(source, CheckSourceStage.DOMAIN)
             val domain = source.bookSourceUrl
             if (!domain.startsWith("http", ignoreCase = true)) {
                 throw NoStackTraceException("源地址不是http链接")
@@ -218,6 +250,7 @@ class CheckSourceService : BaseService() {
         coroutineScope {
             val searchDeferred = async {
                 if (CheckSource.checkSearch) {
+                    markStage(source, CheckSourceStage.SEARCH)
                     val searchWord = source.getCheckKeyword(CheckSource.keyword)
                     if (source.searchUrl.isNullOrBlank()) {
                         BookCheckResult(searchChecked = true, searchUrlEmpty = true)
@@ -245,6 +278,7 @@ class CheckSourceService : BaseService() {
 
             val discoveryDeferred = async {
                 if (CheckSource.checkDiscovery && !source.exploreUrl.isNullOrBlank()) {
+                    markStage(source, CheckSourceStage.DISCOVERY)
                     val url = source.exploreKinds().firstOrNull { !it.url.isNullOrBlank() }?.url
                     if (url.isNullOrBlank()) {
                         BookCheckResult(discoveryChecked = true, discoveryRuleEmpty = true)
@@ -369,6 +403,7 @@ class CheckSourceService : BaseService() {
                 return CheckBookDetailResult()
             }
             // 校验详情
+            markStage(source, CheckSourceStage.INFO)
             if (book.tocUrl.isBlank()) {
                 WebBook.getBookInfoAwait(source, book)
             }
@@ -378,6 +413,7 @@ class CheckSourceService : BaseService() {
                 return CheckBookDetailResult(infoSuccess = infoSuccess)
             }
             // 校验目录
+            markStage(source, CheckSourceStage.CATALOG)
             val toc = WebBook.getChapterListAwait(source, book).getOrThrow().asSequence()
                 .filter { !(it.isVolume && it.url.startsWith(it.title)) }
                 .take(2)
@@ -389,6 +425,7 @@ class CheckSourceService : BaseService() {
                 return CheckBookDetailResult(infoSuccess = infoSuccess, categorySuccess = categorySuccess)
             }
             // 校验正文
+            markStage(source, CheckSourceStage.CONTENT)
             WebBook.getContentAwait(
                 bookSource = source,
                 book = book,

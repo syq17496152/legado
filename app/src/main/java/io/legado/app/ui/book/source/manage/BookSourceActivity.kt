@@ -51,9 +51,14 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.model.CheckSource
+import io.legado.app.model.CheckSourceTaskState
+import io.legado.app.model.CheckSourceTaskStatus
+import io.legado.app.model.CheckSourceTaskStore
 import io.legado.app.model.Debug
 import io.legado.app.model.ImportCheck
 import io.legado.app.model.QualityCheckSession
+import io.legado.app.model.bannerText
+import io.legado.app.model.runningStageText
 import io.legado.app.ui.association.ImportBookSourceDialog
 import io.legado.app.ui.association.showShibbolethDialog
 import io.legado.app.ui.book.search.SearchActivity
@@ -104,6 +109,7 @@ import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -130,6 +136,9 @@ class BookSourceActivity : VMBaseActivity<ViewBinding, BookSourceViewModel>() {
         private set
     // 批D：校验进度横幅（原 Snackbar 改 Compose 状态驱动）
     private val checkBannerState = mutableStateOf<String?>(null)
+    // Q-N5：结构化校验任务状态（过程七阶段 + 结果计数/评分）；与 checkBannerState 的关系 =
+    // 有结构化状态时优先（信息更全），否则回落到既有通知文案（兼容未走 begin 的旧路径）
+    private val checkTaskState = mutableStateOf(CheckSourceTaskState())
     // bugfix-0908 T5：数据版本信号（实际变更时递增），替代原 BookSourceScreen 内 1 万条 joinToString 巨串指纹
     internal var sourceDataVersion by mutableStateOf(0)
     private var groupSourcesByDomain = false
@@ -290,7 +299,11 @@ class BookSourceActivity : VMBaseActivity<ViewBinding, BookSourceViewModel>() {
                     debugMessages = debugMessagesState,
                     bookCounts = bookCountsState,
                     isChecking = isCheckingState.value,
-                    checkBannerText = checkBannerState.value,
+                    checkBannerText = checkTaskState.value.bannerText() ?: checkBannerState.value,
+                    checkBannerRunning = checkTaskState.value.status == CheckSourceTaskStatus.RUNNING,
+                    // Q-N5：单源过程文案（仅进行中的源有值；空串 ⇒ 沿用既有校验消息/引用书籍数口径）
+                    checkStageTexts = checkTaskState.value.items
+                        .associate { it.origin to it.runningStageText() },
                     onCancelCheck = ::cancelSourceCheck,
                     dataVersion = sourceDataVersion,
                     searchQuery = searchQueryState.value,
@@ -889,6 +902,12 @@ class BookSourceActivity : VMBaseActivity<ViewBinding, BookSourceViewModel>() {
     }
 
     override fun observeLiveBus() {
+        // Q-N5：订阅结构化校验状态（服务与页面共享同一份状态，Activity 重建/前后台切换不丢）
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                CheckSourceTaskStore.state.collect { checkTaskState.value = it }
+            }
+        }
         observeEvent<String>(EventBus.CHECK_SOURCE) { msg ->
             // 批D：原 Snackbar 改 Compose 横幅状态（取消动作见 cancelSourceCheck）
             checkBannerState.value = msg
@@ -908,7 +927,14 @@ class BookSourceActivity : VMBaseActivity<ViewBinding, BookSourceViewModel>() {
     }
 
     // 批D：校验横幅取消动作（承接原 Snackbar action 逻辑）
+    // Q-N5：仅「已结束」态退化为关闭结果回执；RUNNING/IDLE（旧路径未建结构化状态）仍走既有停止逻辑，
+    // 避免取消按钮在未走 begin 的链路上变成空动作
     private fun cancelSourceCheck() {
+        val status = checkTaskState.value.status
+        if (status == CheckSourceTaskStatus.COMPLETED || status == CheckSourceTaskStatus.CANCELLED) {
+            CheckSourceTaskStore.markResultsAcknowledged()
+            return
+        }
         checkBannerState.value = null
         CheckSource.stop(this)
         Debug.finishChecking()

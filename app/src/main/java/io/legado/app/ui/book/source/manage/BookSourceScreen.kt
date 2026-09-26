@@ -77,6 +77,10 @@ internal fun BookSourceScreen(
     isChecking: Boolean,
     // 批D：校验进度横幅（原 Snackbar 承载，改 Compose 状态驱动）
     checkBannerText: String? = null,
+    /** Q-N5：横幅是否处于进行中（false ⇒ 结果回执态，转圈改关闭动作） */
+    checkBannerRunning: Boolean = true,
+    /** Q-N5：单源过程文案（origin → `校验中·阶段`）；空串/缺项 ⇒ 沿用既有副标题口径 */
+    checkStageTexts: Map<String, String> = emptyMap(),
     onCancelCheck: () -> Unit = {},
     // bugfix-0908 T5：数据版本信号（宿主实际变更时递增），替代原万级 joinToString 指纹
     dataVersion: Int = 0,
@@ -129,9 +133,13 @@ internal fun BookSourceScreen(
     @Composable
     fun itemRow(source: BookSourcePart, dragHandle: (@Composable () -> Unit)? = null) {
         val message = debugMessages[source.bookSourceUrl].orEmpty()
+        // Q-N5：进行中的源优先展示七阶段过程文案（如「校验中·搜索」），零值时回落到既有口径
+        val stageText = checkStageTexts[source.bookSourceUrl].orEmpty()
         // P1/B1-②：校验消息优先；空位显示"引用书籍 N 本"
         val subtitle = message.ifBlank {
-            stringResource(R.string.source_book_count, bookCounts[source.bookSourceUrl] ?: 0)
+            stageText.ifBlank {
+                stringResource(R.string.source_book_count, bookCounts[source.bookSourceUrl] ?: 0)
+            }
         }
         BookSourceItemRow(
             title = source.getDisPlayNameGroup(),
@@ -139,9 +147,9 @@ internal fun BookSourceScreen(
             hasExploreUrl = source.hasExploreUrl,
             enabledExplore = source.enabledExplore,
             debugMessage = subtitle,
-            debugInProgress = message.isNotBlank() &&
+            debugInProgress = (message.isNotBlank() &&
                 isChecking &&
-                !message.contains(FINAL_DEBUG_MESSAGE_REGEX),
+                !message.contains(FINAL_DEBUG_MESSAGE_REGEX)) || stageText.isNotBlank(),
             isSelected = source.bookSourceUrl in selectedUrls,
             isSelectMode = isSelectMode,
             palette = palette,
@@ -172,9 +180,15 @@ internal fun BookSourceScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         checkBannerText?.takeIf { it.isNotBlank() }?.let { bannerText ->
             InlineTaskBar(
-                state = InlineTaskState.Running,
+                // Q-N5：结果态不再转圈（动作退化为「关闭结果回执」，不打断任何任务）
+                state = if (checkBannerRunning) InlineTaskState.Running else InlineTaskState.Done,
                 text = bannerText,
-                onCancel = onCancelCheck
+                onCancel = onCancelCheck,
+                actionLabel = if (checkBannerRunning) {
+                    stringResource(R.string.cancel)
+                } else {
+                    stringResource(R.string.close)
+                }
             )
         }
         // 仅在确有校验结果时出现（全未校验时该条无信息量，属噪声）

@@ -22,6 +22,7 @@ import io.legado.app.ui.book.group.GroupEditDialog
 import io.legado.app.ui.book.info.BookInfoNavigator
 import io.legado.app.ui.main.bookshelf.BaseBookshelfFragment
 import io.legado.app.ui.main.bookshelf.BookshelfScreen
+import io.legado.app.ui.main.bookshelf.BookshelfSnapshotStore
 import io.legado.app.ui.main.bookshelf.sortedByBook
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.MainTopBarView
@@ -33,11 +34,18 @@ import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.utils.startActivityForBook
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2) {
+
+    companion object {
+        /** 快照键的样式前缀（style2 = 平铺分组头 + 书） */
+        private const val STYLE_KEY = "style2"
+    }
 
     constructor(position: Int) : this() {
         val bundle = Bundle()
@@ -204,14 +212,31 @@ class BookshelfFragment2() : BaseBookshelfFragment(R.layout.fragment_bookshelf2)
         loading = true
         error = false
         booksJob?.cancel()
+        val sortType = AppConfig.getBookSortByGroupId(currentGroupId)
+        // Q6（R 批 §3.1.5）快照优先：先用上次渲染结果填列表（切分组/冷启动首帧不白屏），
+        // 随后 DB flow 覆盖真值并回写快照；键由分组/排序/渲染配置/分组签名派生 ⇒ 任一变更即失效回源
+        val snapshotKey = BookshelfSnapshotStore.buildKey(
+            style = STYLE_KEY,
+            groupId = currentGroupId,
+            sort = sortType,
+            tagFilter = "",
+            groups = groupList
+        )
+        BookshelfSnapshotStore.read(snapshotKey)?.let {
+            currentBooks = it
+            loading = false
+        }
         booksJob = lifecycleScope.launch {
             try {
-                val sortType = AppConfig.getBookSortByGroupId(currentGroupId)
                 appDb.bookDao.flowByGroup(currentGroupId)
                     .map { list -> list.sortedByBook(sortType) }
                     .collect {
                         currentBooks = it
                         loading = false
+                        // 快照回写走 IO：flow 可能高频发射（如批量更新目录），避免主线程反复写盘
+                        withContext(Dispatchers.IO) {
+                            BookshelfSnapshotStore.save(snapshotKey, it)
+                        }
                     }
             } catch (e: CancellationException) {
                 throw e
