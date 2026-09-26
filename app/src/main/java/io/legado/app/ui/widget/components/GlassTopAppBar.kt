@@ -75,9 +75,15 @@ import java.io.File
  * - statusBars 内嵌：自绘分支 windowInsetsPadding(statusBars)（对齐管理族原实现）
  * 任一扩展槽传入即走自绘分支（渲染路径与 M3 分支同源：TopBarConfig 取色/壁纸/圆角单源）。
  *
+ * ⚠️ 能力边界（顶栏包 §6.2，名实一致声明）：本组件**不渲染真实毛玻璃/模糊**——实现中无 blur shader，
+ * 「Glass」仅指其半透明容器色（顶栏包 `STYLE_REGULAR` 背景 + 透明度合成 + 圆角）。
+ * 真毛玻璃仅在 **View 侧 `MainTopBarView` 于 API ≥ 33** 通过 `setBackdropBlur` 提供；
+ * 层 1 主 Tab 因此必须保留 View 富实现（`CG-主壳方案.md` 方案 A 终态），不得以本组件替换。
+ *
  * ⚠️ 死按钮防线（topbar-icon-semantics-fix AD-03）：[navIcon] 与 [onNavClick] 必须成对传入——
- * 仅当两者均非 null 时才渲染返回键；漏传 [onNavClick] 时导航图标会**静默不渲染**（无任何警告），
- * 导致页面无返回入口。调用方必须保证返回可达性。
+ * 仅当 [onNavClick] 非 null 时才渲染返回位（painter = [navIcon] ?: `ic_back`）；[onNavClick] 为 null
+ * 时**整个返回位不渲染**（即使 [navIcon] 非空，也无任何警告），漏传会导致页面无返回入口。
+ * 调用方必须保证返回可达性。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
