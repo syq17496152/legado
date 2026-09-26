@@ -1,52 +1,43 @@
 package io.legado.app.ui.widget.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
-import io.legado.app.ui.widget.compose.rememberAppSettingPalette
+import io.legado.app.ui.widget.compose.AppManagementListRow
+import io.legado.app.ui.widget.compose.AppManagementMenuAction
+import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 
 /**
- * 列表管理页通用「多选 + 开关 + 动作 + 拖拽排序」行（原 DictRule/AutoTask/TxtTocRule 三页私有行收敛，task 12.1A）。
+ * 列表管理页通用「多选 + 开关 + 动作 + 拖拽排序」行。
  *
- * 规格：72dp 高、surface 底、combinedClickable（长按切换多选或外部透传 [onLongClick]）、
- * secondaryContainer α0.4 选中态（[checked]）。
- * 可选能力：独立 Switch（[onToggleEnable]）、Edit/Delete 快捷按钮（[onEdit]/[onDelete]）、
- * 行尾更多菜单（[moreActions]）、拖拽排序手柄（[dragStartIndex] 非空时显示，配合 [onDrag]/[onDragEnd]）。
+ * **2026-09-26 行组件收敛（用户裁定）**：本组件原为**自绘裸 `Row`**（72dp 高 / 无 Card / 无圆角），
+ * 而「我的」下的其余管理页（书源/订阅源/替换规则/高亮规则等）统一用 `AppManagementScaffold` +
+ * `AppManagementListRow`（Miuix Card 家族：圆角 = `panelRadius` / 底色 = `palette.row` /
+ * 外边距 12dp / `minHeight` 56dp）⇒ 出现「**同脚手架不同行**」。
+ *
+ * 现改为 `AppManagementListRow` 的**薄壳**：视觉、取色、圆角、行距全部由该单源决定；
+ * 本组件只负责把「多选 / 开关 / 编辑 / 删除 / 更多 / 拖拽手柄」六个能力位映射过去，
+ * **不再自带任何像素或色值**（取色随 `AppManagementPalette`，禁用硬编码色）。
+ *
+ * 能力映射口径：
+ * - `checked` → `selected`；`onToggleSelect: (Boolean) -> Unit` → `onToggleSelection = { onToggleSelect(!checked) }`
+ * - `enabled`/`onToggleEnable` → `switchChecked`/`onSwitchChange`
+ * - `onEdit` / `onDelete` → 同名参数（图标由 `AppManagementListRow` 单源决定）
+ * - `moreActions: List<MenuAction>` → `AppManagementMenuAction`（图标**双源**同链透传，漏传即静默丢图标）
+ * - 拖拽手柄改挂 `leadingContent`（**与书源管理一致的行首手柄位**；原实现挂在行尾）
+ *   —— 手柄位从行尾移到行首是本次收敛的**唯一有意视觉变化**，交互（长按拖动 / 回调时机）逐字不变。
+ *
+ * `rowHeight` 仅用于**布局节拍**（各页 `itemHeightPx` 用于由拖动位移换算目标下标），默认 56dp；
+ * 实际渲染高度由 `minHeight = rowHeight` + Card 的 4dp×2 垂直外边距共同决定。
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -65,137 +56,53 @@ fun SettingsSelectableRow(
     dragStartIndex: (() -> Unit)? = null,
     onDrag: (Float) -> Unit = {},
     onDragEnd: () -> Unit = {},
+    rowHeight: Dp = 56.dp,
     modifier: Modifier = Modifier
 ) {
-    var menuVisible by remember { mutableStateOf(false) }
-    // H10/H11: 列表项直色（palette.settings.row），选中态用强调色低透明浮层（替代 M3 secondaryContainer/surface 派生色）
-    val palette = rememberAppSettingPalette()
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(72.dp)
-            .background(
-                if (checked) {
-                    palette.accent.copy(alpha = 0.15f)
-                } else {
-                            Color(palette.row)
-                        }
+    val palette = rememberAppManagementPalette()
+    AppManagementListRow(
+        title = title,
+        subtitle = subtitle,
+        palette = palette,
+        modifier = modifier,
+        selected = checked,
+        onToggleSelection = { onToggleSelect(!checked) },
+        switchChecked = enabled,
+        onSwitchChange = onToggleEnable,
+        minHeight = rowHeight,
+        onClick = onClick,
+        onLongClick = onLongClick ?: { onToggleSelect(!checked) },
+        onEdit = onEdit,
+        onDelete = onDelete,
+        moreActions = moreActions.orEmpty().map { action ->
+            AppManagementMenuAction(
+                text = action.title.toString(),
+                // 顶栏包 §1.2 路径 B：图标双源同链透传（漏传 ⇒ 溢出条目静默无图标）
+                icon = action.icon,
+                iconRes = action.iconRes,
+                checked = action.checked == true,
+                onClick = action.onClick
             )
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick ?: { onToggleSelect(!checked) }
-            )
-            .padding(start = 8.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // 取色纳管（ui-theme-governance-polish §8）
-        Checkbox(
-            checked = checked,
-            onCheckedChange = onToggleSelect,
-            colors = CheckboxDefaults.colors(
-                checkedColor = palette.accent,
-                uncheckedColor = palette.secondaryText
-            )
-        )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 4.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = if (enabled) {
-                    palette.primaryText
-                } else {
-                    palette.primaryText.copy(alpha = 0.5f)
-                }
-            )
-            if (subtitle != null) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = palette.secondaryText
-                )
-            }
-        }
-        // 取色纳管（ui-theme-governance-polish §8）
-        Switch(
-            checked = enabled,
-            onCheckedChange = onToggleEnable,
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = palette.accent,
-                uncheckedTrackColor = palette.secondaryText,
-                checkedThumbColor = palette.onAccent
-            )
-        )
-        if (onEdit != null) {
-            IconButton(onClick = onEdit) {
+        },
+        leadingContent = dragStartIndex?.let {
+            {
                 Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = stringResource(R.string.edit),
-                    tint = palette.secondaryText
-                )
-            }
-        }
-        if (onDelete != null) {
-            IconButton(onClick = onDelete) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = stringResource(R.string.delete),
-                    tint = palette.secondaryText
-                )
-            }
-        }
-        if (moreActions != null) {
-            Box {
-                IconButton(onClick = { menuVisible = true }) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = stringResource(R.string.more_menu),
-                        tint = palette.secondaryText
-                    )
-                }
-                AppDropdownMenu(
-                    expanded = menuVisible,
-                    onDismiss = { menuVisible = false },
-                    actions = moreActions
-                )
-            }
-        }
-        if (dragStartIndex != null) {
-            // 拖拽排序手柄：长按拖动
-            Icon(
-                imageVector = Icons.Default.DragHandle,
-                contentDescription = stringResource(R.string.more_menu),
-                tint = palette.divider,
-                modifier = Modifier
-                    .padding(horizontal = 4.dp)
-                    .pointerInput(title) {
+                    imageVector = Icons.Default.DragHandle,
+                    contentDescription = stringResource(R.string.more_menu),
+                    tint = palette.settings.secondaryText,
+                    modifier = Modifier.pointerInput(title) {
                         detectDragGesturesAfterLongPress(
-                            onDragStart = {
-                                dragStartIndex()
-                            },
+                            onDragStart = { dragStartIndex() },
                             onDrag = { change, dragAmount ->
                                 change.consume()
                                 onDrag(dragAmount.y)
                             },
-                            onDragEnd = {
-                                onDragEnd()
-                            },
-                            onDragCancel = {
-                                onDragEnd()
-                            }
+                            onDragEnd = { onDragEnd() },
+                            onDragCancel = { onDragEnd() }
                         )
                     }
-            )
-            Spacer(modifier = Modifier.width(4.dp))
+                )
+            }
         }
-    }
+    )
 }

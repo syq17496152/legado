@@ -110,7 +110,9 @@ fun AutoTaskScreen(
     var dragIndex by remember { mutableStateOf<Int?>(null) }
     var dragTotalY by remember { mutableFloatStateOf(0f) }
     val listState = rememberLazyListState()
-    val itemHeightPx = with(LocalDensity.current) { 72.dp.toPx() }
+    // 行组件收敛（2026-09-26）：行改由 `AppManagementListRow` 单源渲染 ⇒ 布局节拍 = minHeight 56dp
+    // + Card 垂直外边距 4dp×2 = 64dp（原 72dp）。此值用于把拖动位移换算成目标下标，必须与真实行距一致。
+    val itemHeightPx = with(LocalDensity.current) { 64.dp.toPx() }
 
     LaunchedEffect(items) {
         if (dragIndex == null) {
