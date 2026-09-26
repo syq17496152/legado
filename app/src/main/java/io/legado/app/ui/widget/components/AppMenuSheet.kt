@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.activity.ComponentActivity
 import androidx.viewbinding.ViewBinding
 import android.view.View
@@ -169,9 +170,10 @@ fun RowScope.TopBarActionRow(actions: List<MenuAction>) {
     if (overflowActions.isNotEmpty()) {
         Box {
             IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(container.dp)) {
-                // bugfix-0908f 统一：溢出图标用主 Tab 同款细线资产 ic_more_vert（与 MainTopBarView 一致）
+                // bugfix-0908f 统一：溢出图标用主 Tab 同款细线资产（与 MainTopBarView 一致）；
+                // 顶栏包 §3.2：资产改经 TopBarConfig.Icons 契约取（门禁 20 禁止实现内写死 R.drawable.ic_*）
                 Icon(
-                    painter = androidx.compose.ui.res.painterResource(io.legado.app.R.drawable.ic_more_vert),
+                    painter = painterResource(TopBarConfig.Icons.more),
                     contentDescription = null,
                     modifier = Modifier.size(icon.dp)
                 )

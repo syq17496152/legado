@@ -174,7 +174,8 @@ private fun AppManagementTopAction(
         )
         return
     }
-    val iconRes = action.iconRes ?: R.drawable.ic_more_vert
+    // 顶栏包 §3.2：兜底资产改经 TopBarConfig.Icons 契约取（门禁 20 禁止实现内写死 R.drawable.ic_*）
+    val iconRes = action.iconRes ?: TopBarConfig.Icons.more
     if (menuActions != null) {
         AppManagementMoreActionButton(
             actionsProvider = menuActions,
@@ -241,7 +242,8 @@ private fun AppManagementSearchField(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                painter = painterResource(id = R.drawable.ic_search),
+                // 顶栏包 §3.2：资产经契约取（门禁 20 禁实现内写死）
+                painter = painterResource(id = TopBarConfig.Icons.search),
                 contentDescription = null,
                 tint = palette.settings.secondaryText,
                 modifier = Modifier.size(iconSize.dp)
@@ -277,7 +279,8 @@ private fun AppManagementSearchField(
             if (query.isNotEmpty()) {
                 // 清除按钮尺寸走 AppManagementIconAction 内部单源口径，不覆盖
                 AppManagementIconAction(
-                    iconRes = R.drawable.ic_baseline_close,
+                    // 顶栏包 §3.2：选择态关闭位资产经契约取（原写死 ic_baseline_close）
+                    iconRes = TopBarConfig.Icons.close,
                     contentDescription = null,
                     tint = palette.settings.secondaryText,
                     onClick = { onQueryChange("") }

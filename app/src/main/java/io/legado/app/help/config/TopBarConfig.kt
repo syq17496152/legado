@@ -354,6 +354,14 @@ object TopBarConfig {
         /** 返回位默认资产（Compose 顶栏「默认返回」语义归一目标，见 AD-TB-09）。 */
         @DrawableRes
         val navBack: Int = R.drawable.ic_back
+
+        /**
+         * 选择态关闭位（2026-09-26 顶栏包 §3.2 补齐）：管理族顶栏搜索框清除位 / 多选态 ✕。
+         * 原在 `AppManagementScaffold` 内写死 `R.drawable.ic_baseline_close`，纳入契约后
+         * 由门禁 20（`audit_topbar_hardcode.py`）阻断实现内硬编码。
+         */
+        @DrawableRes
+        val close: Int = R.drawable.ic_baseline_close
     }
 
     /**
