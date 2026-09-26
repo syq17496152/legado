@@ -16,35 +16,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import androidx.recyclerview.widget.SimpleItemAnimator
 import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
-import io.legado.app.base.adapter.ItemViewHolder
-import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.AiGeneratedImage
 import io.legado.app.data.entities.AiImageGroup
 import io.legado.app.data.entities.BookCharacter
-import io.legado.app.databinding.ItemAiGeneratedImageBinding
 import io.legado.app.help.ai.AiImageGalleryManager
 import io.legado.app.help.ai.AiImageGalleryManager.GalleryFilter
 import io.legado.app.help.ai.AiImageService
 import io.legado.app.help.character.BookCharacterIdentityMigrator
 import io.legado.app.help.character.BookCharacterProfileMeta
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
 import io.legado.app.help.readaloud.speech.SpeechVoiceCatalogRepository
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.ui.book.character.compose.AiAvatarPickerGrid
+import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.applyUiLabelStyle
-import io.legado.app.lib.theme.applyUiSectionTitleStyle
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.secondaryTextColor
 import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.lib.theme.themeMutedColorOrDefault
@@ -243,9 +235,23 @@ class BookCharacterEditActivity : BaseActivity<ViewBinding>(
         var currentGroupId: String? = null
         var query = ""
         var dialog: AlertDialog? = null
-        val adapter = GalleryAvatarAdapter { image ->
-            setGalleryAvatar(image)
-            dialog?.dismiss()
+        // CF 6.2（2026-09-26）：图库网格由 View 版 RecyclerView+GalleryAvatarAdapter 换装为 Compose
+        // `LazyVerticalGrid`（`AiAvatarPickerGrid`）⇒ `item_ai_generated_image.xml` 退役。
+        // 过滤结果以 state 驱动重组，替代原 `adapter.setItems(...)`。
+        val gridItems = mutableStateOf<List<AiGeneratedImage>>(emptyList())
+        val gridView = ComposeView(this).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                LegadoComposeTheme {
+                    AiAvatarPickerGrid(
+                        items = gridItems.value,
+                        onPick = { image ->
+                            setGalleryAvatar(image)
+                            dialog?.dismiss()
+                        }
+                    )
+                }
+            }
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -271,21 +277,15 @@ class BookCharacterEditActivity : BaseActivity<ViewBinding>(
             isHorizontalScrollBarEnabled = false
             addView(chipContainer)
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dpToPx()))
-        val recyclerView = RecyclerView(this).apply {
-            layoutManager = GridLayoutManager(this@BookCharacterEditActivity, 3)
-            this.adapter = adapter
-            overScrollMode = RecyclerView.OVER_SCROLL_NEVER
-            (itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
-        }
-        root.addView(recyclerView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 420.dpToPx()))
+        root.addView(gridView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 420.dpToPx()))
 
         fun applyFilter() {
-            adapter.setItems(images.filter { image ->
+            gridItems.value = images.filter { image ->
                 val matchGroup = currentGroupId == null || image.groupId == currentGroupId
                 val text = "${image.name}\n${image.prompt}\n${image.bookName}\n${image.chapterTitle}\n${image.characterName}"
                 val matchQuery = query.isBlank() || text.contains(query, ignoreCase = true)
                 matchGroup && matchQuery
-            })
+            }
         }
 
         fun renderChips() {
@@ -436,55 +436,6 @@ class BookCharacterEditActivity : BaseActivity<ViewBinding>(
                 }
             }.onFailure {
                 toastOnUi(it.localizedMessage ?: "头像导入失败")
-            }
-        }
-    }
-
-    private inner class GalleryAvatarAdapter(
-        private val onPick: (AiGeneratedImage) -> Unit
-    ) : RecyclerAdapter<AiGeneratedImage, ItemAiGeneratedImageBinding>(this@BookCharacterEditActivity) {
-
-        override fun getViewBinding(parent: ViewGroup): ItemAiGeneratedImageBinding {
-            return ItemAiGeneratedImageBinding.inflate(inflater, parent, false).apply {
-                root.radius = UiCorner.scaledDp(12f)
-                root.cardElevation = 0f
-                root.setCardBackgroundColor(root.context.themeCardColorOrDefault())
-            }
-        }
-
-        override fun convert(
-            holder: ItemViewHolder,
-            binding: ItemAiGeneratedImageBinding,
-            item: AiGeneratedImage,
-            payloads: MutableList<Any>
-        ) = binding.run {
-            ImageLoader.load(this@BookCharacterEditActivity, item.localPath)
-                .error(R.drawable.image_loading_error)
-                .into(ivImage)
-            tvName.text = item.name
-            tvPrompt.text = buildList {
-                item.bookName.takeIf { it.isNotBlank() }?.let(::add)
-                item.chapterTitle.takeIf { it.isNotBlank() }?.let(::add)
-                item.characterName.takeIf { it.isNotBlank() }?.let(::add)
-                add(item.prompt.replace(Regex("\\s+"), " ").take(48))
-            }.joinToString(" · ")
-            tvState.text = if (item.favorite) getString(R.string.in_favorites) else getString(R.string.ai_image_gallery_temporary)
-            tvSelected.visibility = android.view.View.GONE
-            tvName.applyUiSectionTitleStyle(this@BookCharacterEditActivity)
-            tvPrompt.applyUiLabelStyle(this@BookCharacterEditActivity)
-            tvPrompt.setTextColor(secondaryTextColor)
-            tvState.applyUiLabelStyle(this@BookCharacterEditActivity)
-            tvState.setTextColor(if (item.favorite) accentColor else primaryTextColor)
-            tvState.background = UiCorner.actionSelector(
-                this@BookCharacterEditActivity.themeCardColorOrDefault(),
-                this@BookCharacterEditActivity.themeMutedColorOrDefault(),
-                UiCorner.actionRadius(this@BookCharacterEditActivity)
-            )
-        }
-
-        override fun registerListener(holder: ItemViewHolder, binding: ItemAiGeneratedImageBinding) {
-            holder.itemView.setOnClickListener {
-                getItem(holder.bindingAdapterPosition - getHeaderCount())?.let(onPick)
             }
         }
     }
