@@ -12,12 +12,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -49,6 +45,9 @@ import io.legado.app.model.SourceQualityReport
 import io.legado.app.model.SourceQualityScorer
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppManagementAction
+import io.legado.app.ui.widget.compose.AppManagementLazyColumn
+import io.legado.app.ui.widget.compose.AppManagementListRow
+import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.AppManagementScaffold
 import io.legado.app.ui.widget.components.AppConfirmDialog
 import io.legado.app.ui.widget.compose.AppSettingPalette
@@ -344,7 +343,12 @@ class SourceQualityReportActivity : AppCompatActivity() {
                     )
                 }
 
-                LazyColumn(modifier = Modifier.weight(1f)) {
+                // 列表容器收敛（2026-09-26）：与书源管理同容器（项间距 8dp + 快速滚动条 + 导航栏内边距），
+                // 行间距不再由页内自绘分隔线承载
+                AppManagementLazyColumn(
+                    palette = palette,
+                    modifier = Modifier.weight(1f)
+                ) {
                     itemsIndexed(filteredResults, key = { _, (s, _) -> keyOf(s) }) { _, (source, report) ->
                         val url = keyOf(source)
                         ReportRow(
@@ -352,7 +356,7 @@ class SourceQualityReportActivity : AppCompatActivity() {
                                 ?: (source as RssSource).sourceName,
                             report = report,
                             checked = selected.value.contains(url),
-                            settings = settings,
+                            palette = palette,
                             onToggle = {
                                 selected.value = if (selected.value.contains(url)) {
                                     selected.value - url
@@ -360,10 +364,6 @@ class SourceQualityReportActivity : AppCompatActivity() {
                                     selected.value + url
                                 }
                             }
-                        )
-                        HorizontalDivider(
-                            color = settings.divider,
-                            modifier = Modifier.padding(start = 52.dp)
                         )
                     }
                 }
@@ -575,14 +575,23 @@ class SourceQualityReportActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 体检结果行。
+     *
+     * **行组件收敛（2026-09-26）**：原为**自绘裸 `Column`**（行高/外边距/自绘 Checkbox 自成一套），
+     * 与「我的」管理族其余列表页的 Miuix Card 行（`AppManagementListRow`）观感不一致。
+     * 现统一换该单源行：勾选槽 → `selected`/`onToggleSelection`，得分 → `trailingBeforeSwitch`，
+     * 原因串 → `subtitle`（行内左侧不再手写 52dp 缩进）。取色全部随 `AppManagementPalette`。
+     */
     @Composable
     private fun ReportRow(
         name: String,
         report: SourceQualityReport,
         checked: Boolean,
-        settings: AppSettingPalette,
+        palette: AppManagementPalette,
         onToggle: () -> Unit
     ) {
+        val settings = palette.settings
         val userState = SourceQualityScorer.toUserState(report)
         val stateText = when (userState) {
             SourceQualityScorer.UserState.USABLE -> stringResource(R.string.import_check_state_usable)
@@ -590,31 +599,26 @@ class SourceQualityReportActivity : AppCompatActivity() {
             SourceQualityScorer.UserState.SUSPECT -> stringResource(R.string.import_check_state_suspect)
             SourceQualityScorer.UserState.UNTESTED -> stringResource(R.string.import_check_state_untested)
         }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onToggle() }
-                .padding(horizontal = 16.dp, vertical = 10.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = checked,
-                    onCheckedChange = { onToggle() },
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = settings.accent,
-                        uncheckedColor = settings.disabledText,
-                        checkmarkColor = settings.onAccent
-                    )
-                )
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    // 源名称主文字色（真机反馈：暗色下名称黑色不可见=M3 onSurface 未跟随主题）
-                    color = settings.primaryText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
+        val reasons = mutableListOf<String>()
+        reasons.add(stateText)
+        report.suspectReasons.forEach { reasons.add(it.name) }
+        report.dimensions.values.firstOrNull { it.state == io.legado.app.model.DimState.FAIL }?.let {
+            reasons.add(it.evidence)
+        }
+        AppManagementListRow(
+            title = name,
+            subtitle = reasons.filter { it.isNotBlank() }.joinToString(" | ").take(50),
+            palette = palette,
+            titleMaxLines = 1,
+            subtitleMaxLines = 1,
+            // 与书源管理基线行同高（56dp）；不叠面板纹理图（BookSourceScreen 同口径）
+            minHeight = 56.dp,
+            drawPanelImage = false,
+            selected = checked,
+            onToggleSelection = onToggle,
+            // 整行点按即切换勾选（与原自绘 Column 的整行 clickable 行为一致）
+            onClick = onToggle,
+            trailingBeforeSwitch = {
                 Text(
                     text = "${report.score} · ${(report.coverage * 100).toInt()}%",
                     style = MaterialTheme.typography.labelMedium,
@@ -625,21 +629,7 @@ class SourceQualityReportActivity : AppCompatActivity() {
                     }
                 )
             }
-            val reasons = mutableListOf<String>()
-            reasons.add(stateText)
-            report.suspectReasons.forEach { reasons.add(it.name) }
-            report.dimensions.values.firstOrNull { it.state == io.legado.app.model.DimState.FAIL }?.let {
-                reasons.add(it.evidence)
-            }
-            Text(
-                text = reasons.filter { it.isNotBlank() }.joinToString(" | ").take(50),
-                style = MaterialTheme.typography.bodySmall,
-                color = settings.secondaryText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 52.dp)
-            )
-        }
+        )
     }
 }
 

@@ -33,11 +33,17 @@ import io.legado.app.ui.widget.compose.rememberAppManagementPalette
  * - `enabled`/`onToggleEnable` → `switchChecked`/`onSwitchChange`
  * - `onEdit` / `onDelete` → 同名参数（图标由 `AppManagementListRow` 单源决定）
  * - `moreActions: List<MenuAction>` → `AppManagementMenuAction`（图标**双源**同链透传，漏传即静默丢图标）
- * - 拖拽手柄改挂 `leadingContent`（**与书源管理一致的行首手柄位**；原实现挂在行尾）
- *   —— 手柄位从行尾移到行首是本次收敛的**唯一有意视觉变化**，交互（长按拖动 / 回调时机）逐字不变。
+ * - 拖拽手柄改挂 `leadingContent`（**与书源管理一致的行首手柄位**；原实现挂在行尾），
+ *   交互（长按拖动 / 回调时机）逐字不变。
  *
- * `rowHeight` 仅用于**布局节拍**（各页 `itemHeightPx` 用于由拖动位移换算目标下标），默认 56dp；
- * 实际渲染高度由 `minHeight = rowHeight` + Card 的 4dp×2 垂直外边距共同决定。
+ * 有意视觉变化（两条）：①拖拽手柄位 行尾 → 行首；②消费页移除行间自绘分隔线——卡片行间距由
+ * 列表容器 `AppManagementLazyColumn` 单源决定（与书源管理一致；卡片行再叠分隔线属「同脚手架不同行」）。
+ *
+ * `rowHeight` 传入 `minHeight`（与书源管理基线同为 56dp）；**实际行距不得在页内用 dp 常量推算**——
+ * 真实高度 = `minHeight` + Card 内边距（上下各 8dp）+ Card 垂直外边距（上下各 4dp）+ 列表项间距，
+ * 且随字体缩放变化。拖拽换序所需的行距必须从 `LazyListState.layoutInfo` **实测**取得（见各页实现），
+ * 硬编码 dp 会随上述任一因素变化而失配 ⇒ 换序错位（2026-09-26 实测修正：旧写死 64dp 与真实
+ * 80dp 不符）。
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -70,6 +76,9 @@ fun SettingsSelectableRow(
         switchChecked = enabled,
         onSwitchChange = onToggleEnable,
         minHeight = rowHeight,
+        // 与「书源管理 / 订阅源 / 替换规则」基线行逐字对齐：不叠面板纹理图（BookSourceScreen 同口径），
+        // 仅保留圆角底色 + 描边 ⇒ 全管理族列表观感单源。
+        drawPanelImage = false,
         onClick = onClick,
         onLongClick = onLongClick ?: { onToggleSelect(!checked) },
         onEdit = onEdit,

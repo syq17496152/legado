@@ -5,14 +5,12 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,8 +29,10 @@ import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsSelectableRow
 import io.legado.app.ui.widget.components.ShelfListSkeleton
 import io.legado.app.ui.widget.compose.AppManagementAction
+import io.legado.app.ui.widget.compose.AppManagementLazyColumn
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementScaffold
+import io.legado.app.ui.widget.compose.measuredRowPitchPx
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import kotlin.math.max
 import kotlin.math.min
@@ -77,10 +77,12 @@ fun TxtTocRuleScreen(
     var localItems by remember { mutableStateOf(items) }
     var dragIndex by remember { mutableStateOf<Int?>(null) }
     var dragTotalY by remember { mutableFloatStateOf(0f) }
+    // 拖拽起始时实测的行节拍（px）：真实行距随字体缩放/副标题行数变化，禁止用页内 dp 常量推算
+    var dragPitchPx by remember { mutableFloatStateOf(0f) }
     val listState = rememberLazyListState()
-    // 行组件收敛（2026-09-26）：行改由 `AppManagementListRow` 单源渲染 ⇒ 布局节拍 = minHeight 56dp
-    // + Card 垂直外边距 4dp×2 = 64dp（原 72dp）。此值用于把拖动位移换算成目标下标，必须与真实行距一致。
-    val itemHeightPx = with(LocalDensity.current) { 64.dp.toPx() }
+    // 兜底行节拍（仅当可视项不足 2 个、拖不动时使用）：minHeight 56 + Card 内边距 8×2 + 外边距 4×2
+    // + 列表项间距 8（AppListSpacing.Normal）= 88dp
+    val fallbackPitchPx = with(LocalDensity.current) { 88.dp.toPx() }
 
     LaunchedEffect(items) {
         if (dragIndex == null) {
@@ -143,7 +145,7 @@ fun TxtTocRuleScreen(
         ),
         onSelectAll = { onSelectAll(!allSelected) },
         onInvertSelection = onRevertSelection
-    ) { contentPalette ->
+    ) { _ ->
         Box(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
             when {
                 isLoading -> ShelfListSkeleton(compact = true)
@@ -184,9 +186,11 @@ fun TxtTocRuleScreen(
                             }
                         }
                 ) {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize()
+                    // 列表容器收敛（2026-09-26）：与书源管理同容器（项间距 8dp + 快速滚动条 + 导航栏内边距），
+                    // 行间距不再由页内自绘分隔线承载
+                    AppManagementLazyColumn(
+                        palette = palette,
+                        state = listState
                     ) {
                         itemsIndexed(localItems, key = { _, item -> item.id }) { index, item ->
                             SettingsSelectableRow(
@@ -200,11 +204,16 @@ fun TxtTocRuleScreen(
                                 onToggleEnable = { checked -> onToggleEnable(index, checked) },
                                 onEdit = { onItemClick(index) },
                                 moreActions = onItemMenuActions(index),
-                                dragStartIndex = { dragIndex = index; dragTotalY = 0f },
+                                dragStartIndex = {
+                                    dragIndex = index
+                                    dragTotalY = 0f
+                                    dragPitchPx = listState.measuredRowPitchPx(fallbackPitchPx)
+                                },
                                 onDrag = { dragAmount ->
                                     dragTotalY += dragAmount
                                     dragIndex?.let { cur ->
-                                        val target = (cur + (dragTotalY / itemHeightPx).roundToInt())
+                                        val pitch = dragPitchPx.takeIf { it > 0f } ?: fallbackPitchPx
+                                        val target = (cur + (dragTotalY / pitch).roundToInt())
                                             .coerceIn(0, localItems.lastIndex)
                                         if (target != cur) {
                                             val list = localItems.toMutableList()
@@ -221,10 +230,6 @@ fun TxtTocRuleScreen(
                                     dragTotalY = 0f
                                     onOrderCommitted(localItems.map { it.id })
                                 }
-                            )
-                            HorizontalDivider(
-                                color = contentPalette.settings.divider,
-                                thickness = 0.5.dp
                             )
                         }
                     }

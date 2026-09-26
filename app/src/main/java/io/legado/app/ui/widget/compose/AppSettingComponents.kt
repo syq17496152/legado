@@ -38,6 +38,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -260,6 +261,25 @@ fun AppManagementLazyColumn(
             touchTargetWidth = AppConfig.fastScrollerTouchTargetDp.dp
         )
     }
+}
+
+/**
+ * 管理族列表「行节拍」实测值（拖拽换序位移 → 目标下标换算专用）。
+ *
+ * 行节拍 = 共享行 `AppManagementListRow` 的真实高度（`minHeight` + Card 内边距上下各 8dp +
+ * 垂直外边距上下各 4dp）+ 列表项间距（`AppManagementLazyColumn` 的 `AppListSpacing.Normal`）。
+ * 该值随字体缩放、行内副标题行数变化 ⇒ **不得在页内用 dp 常量推算**（2026-09-26 实测：
+ * 旧写死 64dp 与真实 88dp 不符 ⇒ 拖拽换序提前跳位）。
+ *
+ * 取相邻可视项 offset 之差，天然含列表项间距；可视项不足 2 个（拖不动）时回退 `fallbackPx`。
+ */
+fun LazyListState.measuredRowPitchPx(fallbackPx: Float): Float {
+    val visible = layoutInfo.visibleItemsInfo
+    if (visible.size >= 2) {
+        val pitch = (visible[1].offset - visible[0].offset).toFloat()
+        if (pitch > 0f) return pitch
+    }
+    return fallbackPx
 }
 
 @OptIn(ExperimentalFoundationApi::class)

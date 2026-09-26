@@ -8,10 +8,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -20,7 +18,6 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,9 +38,10 @@ import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.MetricGrid
 import io.legado.app.ui.widget.components.MetricItem
-import io.legado.app.ui.widget.components.SettingsClickRow
 import io.legado.app.ui.widget.components.ShelfListSkeleton
 import io.legado.app.ui.widget.compose.AppManagementAction
+import io.legado.app.ui.widget.compose.AppManagementLazyColumn
+import io.legado.app.ui.widget.compose.AppManagementListRow
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementScaffold
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
@@ -119,7 +117,7 @@ fun StorageManageScreen(
             )
         )
     ) { _ ->
-        Box(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
+        Box(modifier = Modifier.fillMaxSize()) {
             when {
                 isLoading -> ShelfListSkeleton()
                 loadError != null -> EmptyStatePlaceholder(
@@ -133,7 +131,9 @@ fun StorageManageScreen(
                     title = stringResource(R.string.empty),
                     modifier = Modifier.fillMaxSize()
                 )
-                else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                // 列表容器收敛（2026-09-26）：与书源管理同容器（项间距 8dp + 快速滚动条 + 导航栏内边距），
+                // 行间距不再由页内自绘分隔线承载
+                else -> AppManagementLazyColumn(palette = palette) {
                     item(key = "metrics") {
                         MetricGrid(
                             metrics = listOf(
@@ -152,34 +152,34 @@ fun StorageManageScreen(
                         )
                     }
                     items(items = items, key = { it.name }) { item ->
-                        SettingsClickRow(
-                            icon = null,
+                        // 行组件收敛（2026-09-26）：原 `SettingsClickRow`（另一行族，无 Card 观感）
+                        // → 管理族唯一行 `AppManagementListRow`，与字典规则/TXT目录规则/自动任务同观感；
+                        // 行尾文字取色一并改走面 token `accent`（原 M3 派生键 colorScheme.primary）。
+                        AppManagementListRow(
                             title = item.name,
                             subtitle = item.path,
+                            palette = palette,
+                            // 与书源管理基线行同高（56dp）；不叠面板纹理图（BookSourceScreen 同口径）
+                            minHeight = 56.dp,
+                            drawPanelImage = false,
                             onClick = { detailIndex = items.indexOf(item) },
-                            trailing = {
+                            trailingBeforeSwitch = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = item.size,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.primary,
+                                        color = palette.settings.accent,
                                         maxLines = 1
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     TextButton(onClick = { deleteIndex = items.indexOf(item) }) {
                                         Text(
                                             text = stringResource(R.string.clear),
-                                            color = MaterialTheme.colorScheme.primary
+                                            color = palette.settings.accent
                                         )
                                     }
                                 }
                             }
-                        )
-                        HorizontalDivider(
-                            color = androidx.compose.ui.graphics.Color(
-                                io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
-                            ).copy(alpha = 0.5f),
-                            thickness = 0.5.dp
                         )
                     }
                 }
