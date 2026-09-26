@@ -452,14 +452,43 @@ interface BookDao {
     @Query("update books set customTag = :customTag where bookUrl = :bookUrl")
     fun updateCustomTag(bookUrl: String, customTag: String?)
 
+    /**
+     * 单列更新「最近阅读时间」（R 批 Q8，2026-09-26）。
+     *
+     * 为什么必须有这个 API：`ReadBook.markRecentRead` 原先走 `book.durChapterTime = now; book.update()`，
+     * 而 `Book.update()` = `@Update` **整行写** ⇒ 会把内存快照里的**全部列**回写，覆盖掉并发协程
+     * 在这期间的修改（如 `latestChapterTitle` / `durChapterIndex` / `group` 的更新被静默回滚 = lost update）。
+     * 「只戳时间」的场景（最近在读打点，频率高）用单列写既避免丢更新，也少写 30+ 列。
+     */
+    @Query("update books set durChapterTime = :readTime where bookUrl = :bookUrl")
+    fun updateReadTime(bookUrl: String, readTime: Long)
+
     @Query("update books set `group` = :newGroupId where `group` = :oldGroupId")
     fun upGroup(oldGroupId: Long, newGroupId: Long)
 
     @Query("update books set `group` = `group` - :group where `group` & :group > 0")
     fun removeGroup(group: Long)
 
-    @Query("delete from books where type & ${BookType.notShelf} > 0")
-    fun deleteNotShelfBook()
+    /**
+     * 清理「临时书」（非书架书）——**身份化清理**（R 批 Q7，2026-09-26）。
+     *
+     * 为什么不能全删：临时书由搜索/发现浏览创建，而用户可能**直接从搜索结果进入阅读**——
+     * 这条路径会经 `ReadBook.markRecentRead` 往 `readRecentBooks` 写一条阅读身份记录。
+     * 原实现 `delete from books where type & notShelf > 0`（`MainViewModel.init` 每次启动调用）
+     * 会把这些书一并删掉 ⇒ ①该书的阅读进度、章节缓存索引全部丢失 ②`readRecentBooks` 留下
+     * 「指向已不存在书」的悬空行（`ReadRecentBookDao.recentBooks` 是 inner join ⇒ 条目静默消失）。
+     *
+     * 身份化口径：**凡有阅读身份记录（`readRecentBooks` 命中）的临时书一律保留**，其余照旧清理
+     * ⇒ 既维持「搜索过的书不进书架」的既有语义，又不丢用户真正读过的书。
+     */
+    @Query(
+        """
+        delete from books
+        where type & ${BookType.notShelf} > 0
+        and bookUrl not in (select bookUrl from readRecentBooks)
+        """
+    )
+    fun deleteTempByIdentity()
 }
 
 /** P1/B1-② 书源引用书籍数（查询投影） */

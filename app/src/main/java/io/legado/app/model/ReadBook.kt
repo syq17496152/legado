@@ -12,6 +12,7 @@ import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReadRecord
 import io.legado.app.help.AppWebDav
+import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.HighlightRuleMatcher
 import io.legado.app.help.HighlightTextBuilder
 import io.legado.app.help.ReadRecordDailyHelper
@@ -162,7 +163,10 @@ object ReadBook : CoroutineScope by MainScope() {
         executor.execute {
             kotlin.runCatching {
                 book.durChapterTime = readTime
-                book.update()
+                // R 批 Q8（2026-09-26）：这里只戳时间 ⇒ 必须走**单列写**。
+                // 原 `book.update()` 是 @Update 整行写，会用内存快照回写全部列，把并发协程期间改过的
+                // 其它列（latestChapterTitle / durChapterIndex / group …）静默覆盖回去（lost update）。
+                appDb.bookDao.updateReadTime(book.bookUrl, readTime)
                 appDb.readRecentBookDao.insert(ReadRecentBook(book.bookUrl, readTime))
                 ReadRecordWidgetStore.updateRecentSnapshot(book, readTime)
             }.onFailure {
@@ -1065,7 +1069,10 @@ object ReadBook : CoroutineScope by MainScope() {
                     showCurrentChapterLoadError(index, "Current chapter not found")
                     return@withContext
                 }
-                val content = BookHelp.getContent(book, chapter) ?: downloadAwait(book, chapter)
+                // Q5：失败必须以异常表达 ⇒ 交给外层 catch 走既有 showCurrentChapterLoadError 错误页，
+                // 不再把错误文案当正文塞进阅读器（并继续走缓存/云上传链路）。
+                val content = BookHelp.getContent(book, chapter)
+                    ?: downloadAwait(book, chapter, failOnError = true)
                 val applied = contentLoadFinishAwait(
                     book,
                     chapter,
@@ -1167,18 +1174,32 @@ object ReadBook : CoroutineScope by MainScope() {
         }
     }
 
-    private suspend fun downloadAwait(expectedBook: Book, chapter: BookChapter): String {
+    /**
+     * 下载正文（await 形态）。
+     *
+     * @param failOnError R 批 Q5（2026-09-26）：`true` 时**失败以异常表达**（不再返回错误文案当正文）。
+     *   阅读器 await 路径已用 `true`——失败经外层 `catch (e: Exception)` 走既有的
+     *   `showCurrentChapterLoadError` 错误页，而不是把「获取正文失败\n…」当章节正文渲染并继续走
+     *   缓存/云上传链路（后者只能靠 `LibraryCloudSync.canUpload` 的字符串前缀嗅探兜底）。
+     */
+    private suspend fun downloadAwait(
+        expectedBook: Book,
+        chapter: BookChapter,
+        failOnError: Boolean = false
+    ): String {
         val book = expectedBook
         if (this.book?.bookUrl != book.bookUrl || chapter.bookUrl != book.bookUrl) {
             logContentLoadSkip("book_changed_download_await", chapter.index, book)
+            if (failOnError) throw NoStackTraceException("Load content canceled: book changed")
             return "Load content canceled\nbook changed"
         }
         val bookSource = bookSource?.takeIf { it.bookSourceUrl == book.origin }
         if (bookSource != null) {
-            return CacheBook.getOrCreate(bookSource, book).downloadAwait(chapter)
+            return CacheBook.getOrCreate(bookSource, book).downloadAwait(chapter, failOnError)
         } else {
             logContentLoadSkip("book_source_null_await", chapter.index, book)
             val msg = if (book.isLocal) "无内容" else "没有书源"
+            if (failOnError) throw NoStackTraceException(msg)
             return "加载正文失败\n$msg"
         }
     }

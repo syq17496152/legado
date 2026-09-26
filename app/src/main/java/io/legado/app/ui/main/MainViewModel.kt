@@ -101,7 +101,9 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
     }
 
     init {
-        deleteNotShelfBook()
+        // R 批 Q7（2026-09-26）：临时书改**身份化清理**——保留有阅读身份记录（readRecentBooks）的临时书，
+        // 避免把「从搜索结果直接读过」的书的进度与最近在读记录一并清掉（原 deleteNotShelfBook 全删）。
+        deleteTempByIdentity()
     }
 
     override fun onCleared() {
@@ -412,9 +414,10 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    private fun deleteNotShelfBook() {
+    /** 临时书清理（R 批 Q7）：DAO 侧已改为身份化口径，此处只负责切 IO 线程执行。 */
+    private fun deleteTempByIdentity() {
         execute {
-            appDb.bookDao.deleteNotShelfBook()
+            appDb.bookDao.deleteTempByIdentity()
         }
     }
 

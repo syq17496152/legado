@@ -385,7 +385,15 @@ object CacheBook {
             }.start()
         }
 
-        suspend fun downloadAwait(chapter: BookChapter): String {
+        /**
+         * 下载正文（await 形态）。
+         *
+         * @param failOnError R 批 Q5（2026-09-26）：`true` ⇒ 失败**以异常向上表达**，不再返回
+         *   「获取正文失败\n…」这种「错误文案当正文」的形态。原因：调用方只能靠**字符串前缀**猜失败
+         *   （`LibraryCloudSync.canUpload` 即在嗅探 `获取正文失败`/`加载正文失败`），且错误文案会被
+         *   继续当正文走展示/缓存链路。`CancellationException` 无论何值都照原样抛出（不吞取消）。
+         */
+        suspend fun downloadAwait(chapter: BookChapter, failOnError: Boolean = false): String {
             synchronized(this) {
                 onDownloadSet.add(chapter.index)
                 waitDownloadSet.remove(chapter.index)
@@ -403,6 +411,7 @@ object CacheBook {
                 onError(chapter, e)
                 ReadBook.downloadFailChapters[chapter.index] =
                     (ReadBook.downloadFailChapters[chapter.index] ?: 0) + 1
+                if (failOnError) throw e
                 return "获取正文失败\n${e.localizedMessage}"
             } finally {
                 postEvent(EventBus.UP_DOWNLOAD, book.bookUrl)
