@@ -1,30 +1,18 @@
 package io.legado.app.ui.urlrecord
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,17 +24,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.legado.app.R
-import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.ConfirmDialog
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
-import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
-import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.ui.widget.components.ShelfListSkeleton
+import io.legado.app.ui.widget.compose.AppManagementAction
+import io.legado.app.ui.widget.compose.AppManagementLazyColumn
+import io.legado.app.ui.widget.compose.AppManagementListRow
+import io.legado.app.ui.widget.compose.AppManagementMenuAction
+import io.legado.app.ui.widget.compose.AppManagementPalette
+import io.legado.app.ui.widget.compose.AppManagementScaffold
+import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -63,6 +53,18 @@ data class UrlRecordDisplayItem(
     val errorMsg: String?
 )
 
+/**
+ * URL 访问记录页（S2 列表管理页，位于「我的 → 精准管理」子树）。
+ *
+ * **2026-09-26 行/壳/容器「三件套」收敛（用户裁定：我的子页/子子页必须同脚手架同行）**：
+ * ①壳层由页内自绘 `GlassTopAppBar` + `SettingsSearchBar` + 私有溢出菜单 → `AppManagementScaffold`
+ * （搜索槽 / 顶栏动作分级 / 返回位全部由壳单源承载，与本族其余管理页一致）；
+ * ②列表容器 `LazyColumn` + 行间自绘 0.5dp 分隔线 → `AppManagementLazyColumn`
+ * （项间距 8dp + 快速滚动条 + 导航栏内边距；**行间分隔线清零**，与书源管理一致）；
+ * ③行由自绘裸 `Column` → `AppManagementListRow`（圆角/底色/外边距/行高单源），
+ * 原「方法/状态/耗时/时间」头行改挂共享行的 `headerContent` 槽（`url` = 标题、`domain` = 副标题、
+ * 来源名 = 行尾），信息一条不减。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UrlRecordScreen(
@@ -80,76 +82,82 @@ fun UrlRecordScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var moreMenuVisible by remember { mutableStateOf(false) }
     var clearType by remember { mutableStateOf<ClearType?>(null) }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        GlassTopAppBar(
-            title = stringResource(R.string.url_record),
-            navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-            onNavClick = onBack,
-            actions = {
-                Box {
-                    IconButton(onClick = { moreMenuVisible = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = null)
-                    }
-                    AppDropdownMenu(
-                        expanded = moreMenuVisible,
-                        onDismiss = { moreMenuVisible = false },
-                        actions = listOf(
-                            MenuAction(
-                                icon = Icons.Default.History,
-                                title = stringResource(R.string.record_url_switch),
-                                checked = recordEnabled,
-                                onClick = {
-                                    moreMenuVisible = false
-                                    onToggleRecord(!recordEnabled)
-                                }
-                            ),
-                            MenuAction(
-                                icon = Icons.Default.FilterList,
-                                title = stringResource(R.string.url_record_filter),
-                                onClick = {
-                                    moreMenuVisible = false
-                                    onFilterClick()
-                                }
-                            ),
-                            MenuAction(
-                                icon = Icons.Default.DeleteSweep,
-                                title = stringResource(R.string.clear_7_days_ago),
-                                onClick = {
-                                    moreMenuVisible = false
-                                    clearType = ClearType.SEVEN_DAYS
-                                }
-                            ),
-                            MenuAction(
-                                icon = Icons.Default.DeleteSweep,
-                                title = stringResource(R.string.clear_30_days_ago),
-                                onClick = {
-                                    moreMenuVisible = false
-                                    clearType = ClearType.THIRTY_DAYS
-                                }
-                            ),
-                            MenuAction(
-                                icon = Icons.Default.DeleteForever,
-                                title = stringResource(R.string.clear_all_records),
-                                onClick = {
-                                    moreMenuVisible = false
-                                    clearType = ClearType.ALL
-                                }
-                            )
-                        )
+    val palette = rememberAppManagementPalette()
+    // 顶栏动作（与原自绘溢出菜单逐字同源：记录开关 checked / 过滤 / 三档清除）
+    val menuActions = listOf(
+        MenuAction(
+            icon = Icons.Default.History,
+            title = stringResource(R.string.record_url_switch),
+            checked = recordEnabled,
+            onClick = { onToggleRecord(!recordEnabled) }
+        ),
+        MenuAction(
+            icon = Icons.Default.FilterList,
+            title = stringResource(R.string.url_record_filter),
+            onClick = onFilterClick
+        ),
+        MenuAction(
+            icon = Icons.Default.DeleteSweep,
+            title = stringResource(R.string.clear_7_days_ago),
+            onClick = { clearType = ClearType.SEVEN_DAYS }
+        ),
+        MenuAction(
+            icon = Icons.Default.DeleteSweep,
+            title = stringResource(R.string.clear_30_days_ago),
+            onClick = { clearType = ClearType.THIRTY_DAYS }
+        ),
+        MenuAction(
+            icon = Icons.Default.DeleteForever,
+            title = stringResource(R.string.clear_all_records),
+            onClick = { clearType = ClearType.ALL }
+        )
+    )
+
+    AppManagementScaffold(
+        title = stringResource(R.string.url_record),
+        selectedCount = 0,
+        totalCount = items.size,
+        modifier = modifier,
+        palette = palette,
+        searchQuery = searchKey,
+        searchHint = stringResource(R.string.search),
+        onSearchChange = onSearchChange,
+        onBack = onBack,
+        topActions = buildList {
+            menuActions.filter { it.alwaysShow }.forEach { action ->
+                add(
+                    AppManagementAction(
+                        text = action.title,
+                        icon = action.icon,
+                        // 图标双源同链透传（漏传 iconRes ⇒ iconRes-only 动作静默退化成三点图标）
+                        iconRes = action.iconRes,
+                        onClick = action.onClick
                     )
-                }
+                )
             }
-        )
-
-        SettingsSearchBar(
-            query = searchKey,
-            onQueryChange = onSearchChange,
-            placeholder = stringResource(R.string.search)
-        )
-
+            val overflow = menuActions.filter { !it.alwaysShow }
+            if (overflow.isNotEmpty()) {
+                add(
+                    AppManagementAction(
+                        text = stringResource(R.string.more_menu),
+                        menuActions = {
+                            overflow.map { action ->
+                                AppManagementMenuAction(
+                                    text = action.title,
+                                    icon = action.icon,
+                                    iconRes = action.iconRes,
+                                    checked = action.checked == true,
+                                    onClick = action.onClick
+                                )
+                            }
+                        }
+                    )
+                )
+            }
+        }
+    ) { _ ->
         when {
             isLoading && items.isEmpty() -> ShelfListSkeleton(compact = true)
             items.isEmpty() -> EmptyStatePlaceholder(
@@ -157,21 +165,12 @@ fun UrlRecordScreen(
                 title = stringResource(R.string.url_record_empty),
                 modifier = Modifier.fillMaxSize()
             )
-            else -> LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .navigationBarsPadding()
-            ) {
+            else -> AppManagementLazyColumn(palette = palette) {
                 itemsIndexed(items, key = { _, item -> item.id }) { _, item ->
                     UrlRecordItemRow(
                         item = item,
+                        palette = palette,
                         onClick = { onItemClick(item) }
-                    )
-                    HorizontalDivider(
-                        color = androidx.compose.ui.graphics.Color(
-                            io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
-                        ).copy(alpha = 0.5f),
-                        thickness = 0.5.dp
                     )
                 }
             }
@@ -201,76 +200,71 @@ fun UrlRecordScreen(
 
 private enum class ClearType { SEVEN_DAYS, THIRTY_DAYS, ALL }
 
+/**
+ * URL 记录行：容器/取色/圆角/外边距由共享行 `AppManagementListRow` 单源决定，
+ * 本函数只映射「头行（方法/状态/耗时 + 相对时间）+ URL 标题 + 域名副标题 + 来源名行尾」。
+ */
 @Composable
 private fun UrlRecordItemRow(
     item: UrlRecordDisplayItem,
+    palette: AppManagementPalette,
     onClick: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = item.method,
-                style = MaterialTheme.typography.labelSmall,
-                color = methodColor(item.method),
-                modifier = Modifier.padding(3.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = statusText(item),
-                style = MaterialTheme.typography.labelSmall,
-                color = statusColor(item),
-                modifier = Modifier.padding(3.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "${item.duration}ms",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(3.dp)
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = formatTime(item.timestamp),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(3.dp)
-            )
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = item.url,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = item.domain,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-            )
+    val settings = palette.settings
+    AppManagementListRow(
+        title = item.url,
+        subtitle = item.domain,
+        palette = palette,
+        titleMaxLines = 1,
+        subtitleMaxLines = 1,
+        // 与书源管理基线行同高（56dp）；不叠面板纹理图（BookSourceScreen 同口径）
+        minHeight = 56.dp,
+        drawPanelImage = false,
+        onClick = onClick,
+        headerContent = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = item.method,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = methodColor(item.method),
+                    modifier = Modifier.padding(3.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = statusText(item),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusColor(item),
+                    modifier = Modifier.padding(3.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "${item.duration}ms",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = settings.secondaryText,
+                    modifier = Modifier.padding(3.dp)
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = formatTime(item.timestamp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = settings.secondaryText,
+                    modifier = Modifier.padding(3.dp)
+                )
+            }
+        },
+        trailingBeforeSwitch = {
             item.sourceName?.takeIf { it.isNotBlank() }?.let { sourceName ->
-                Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = sourceName,
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    color = settings.accent
                 )
             }
         }
-    }
+    )
 }
 
 @Composable
