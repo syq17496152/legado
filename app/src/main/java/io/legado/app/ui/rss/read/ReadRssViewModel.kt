@@ -3,7 +3,6 @@ package io.legado.app.ui.rss.read
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
-import android.util.Base64
 import android.webkit.URLUtil
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
@@ -23,6 +22,7 @@ import io.legado.app.help.webView.WebJsExtensions.Companion.JS_URL
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.rss.Rss
 import io.legado.app.utils.ACache
+import io.legado.app.utils.decodeTolerantBase64
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.writeBytes
 import kotlinx.coroutines.Dispatchers.IO
@@ -215,7 +215,9 @@ class ReadRssViewModel(application: Application) : BaseViewModel(application) {
                 url(data)
             }.bytes()
         } else {
-            Base64.decode(data.split(",").toTypedArray()[1], Base64.DEFAULT)
+            // 3.3.3：统一走宽容解码单源（URL-safe/补填充/百分号转义/畸形清洗 + 32MB 上限）。
+            // 原实现 `data.split(",")[1]` + 严格 `Base64.decode` ⇒ 无逗号会越界、畸形载荷直接抛异常
+            decodeTolerantBase64(data.substringAfter(',', data))
         }
     }
 

@@ -14,6 +14,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.dnsoverhttps.DnsOverHttps
 import java.net.IDN
+import java.net.Inet4Address
 import java.net.InetAddress
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -178,7 +179,7 @@ object DohDns : Dns {
         //    直接走系统 DNS，避免无效 DoH 往返（avg 244s 串行等待的根因）
         if (isIdnHost(hostname)) {
             AppLog.putDebug("DohDns: IDN bypass, host=${maskHost(hostname)}")
-            return Dns.SYSTEM.lookup(hostname)
+            return systemLookup(hostname)
         }
         // F5/AD-10 阶段1：注册探测执行器（直连 DoH parallelLookup，旁路 lookup 选路，防探测自证环）
         if (HostAccessStrategy.probeExecutor == null) {
@@ -190,7 +191,7 @@ object DohDns : Dns {
         // 0.5 F5/AD-10 阶段1：健康表退避期内直走系统 DNS（per-host 自适应选路）
         if (HostAccessStrategy.isSystemDnsPreferred(hostname)) {
             AppLog.putDebug("DohDns: health-table system DNS preferred, host=${maskHost(hostname)}")
-            return Dns.SYSTEM.lookup(hostname)
+            return systemLookup(hostname)
         }
         val key = cacheKey(hostname)
         val now = System.currentTimeMillis()
@@ -212,19 +213,19 @@ object DohDns : Dns {
             val ttlRemaining = expiry - now
             if (ttlRemaining in 1..NEGATIVE_CACHE_TTL_MS) {
                 AppLog.putDebug("DohDns: negative cache hit, host=${maskHost(hostname)}")
-                return Dns.SYSTEM.lookup(hostname)
+                return systemLookup(hostname)
             }
             // 过期或 TTL 异常（>30s），清除负缓存允许重新尝试 DoH
             negativeCache.remove(key)
         }
         // 3. 熔断期直接走系统 DNS（DoH 整体不可达时避免无效等待）
         if (now < dohDisabledUntil) {
-            return Dns.SYSTEM.lookup(hostname)
+            return systemLookup(hostname)
         }
         // 4. DoH 三服务器并行（lazy 初始化异常兜底，不逃逸到 OkHttp 连接流程）
         val clients = kotlin.runCatching { dohClients }.getOrElse {
             AppLog.put("DohDns: dohClients init failed, fallback system DNS, error=${it.javaClass.simpleName}")
-            return Dns.SYSTEM.lookup(hostname)
+            return systemLookup(hostname)
         }
         val result = parallelLookup(clients, hostname)
         if (result != null) {
@@ -240,7 +241,7 @@ object DohDns : Dns {
                 // 视为 DoH 解析失败，走负缓存 + 系统DNS + 健康表 per-host 退避
                 negativeCachePut(key)
                 HostAccessStrategy.reportDohQueryFail(hostname)
-                return Dns.SYSTEM.lookup(hostname)
+                return systemLookup(hostname)
             }
             globalFailCount.set(0)
             // V-004-P0-1: 首次 DoH 成功，退出冷启动模式
@@ -250,14 +251,17 @@ object DohDns : Dns {
             }
             lastSuccessServer.set(result.serverIndex)
             negativeCache.remove(key)
-            cachePut(key, validAddresses)
+            // 3.3.4：DoH 返回顺序也可能是 AAAA 在前 ⇒ 统一 IPv4 优先（排序后再入缓存，
+            // 使缓存命中路径同样已排序，无需二次排序）
+            val orderedAddresses = preferIpv4First(validAddresses)
+            cachePut(key, orderedAddresses)
             // F5/AD-10：DoH 解析成功上报健康表（重置 per-host 失败计数+登记候选 IP 供坏 IP 嫌疑标记）
-            HostAccessStrategy.reportDohOk(hostname, validAddresses.mapNotNull { it.hostAddress })
+            HostAccessStrategy.reportDohOk(hostname, orderedAddresses.mapNotNull { it.hostAddress })
             AppLog.putDebug(
                 "DohDns: parallel success server#${result.serverIndex + 1}, " +
-                    "elapsed=${result.elapsedMs}ms, host=${maskHost(hostname)}, ips=${validAddresses.size}"
+                    "elapsed=${result.elapsedMs}ms, host=${maskHost(hostname)}, ips=${orderedAddresses.size}"
             )
-            return validAddresses
+            return orderedAddresses
         }
         // 5. 全服务器失败：写负缓存 30s + 累计熔断计数，达阈值暂停 DoH 5 分钟
         negativeCachePut(key)
@@ -279,8 +283,18 @@ object DohDns : Dns {
         } else {
             AppLog.put("DohDns: all DoH servers failed, fallback system DNS, host=${maskHost(hostname)}")
         }
-        return Dns.SYSTEM.lookup(hostname)
+        return systemLookup(hostname)
     }
+
+    /**
+     * 3.3.4（R 批）：系统 DNS 解析并按 **IPv4 优先**返回。
+     *
+     * 为什么需要：系统 DNS 在双栈域名下常把 AAAA 排在前面，而部分网络（运营商无 IPv6、
+     * 模拟器/NAT 环境、IPv6 出口故障）会**先连 IPv6 黑洞、等超时才回落 IPv4** ⇒ 表现为
+     * 「书源/图片首次加载卡十几秒」。IPv4 优先可消除这段无效等待，同时保留 IPv6 作为后备。
+     */
+    private fun systemLookup(hostname: String): List<InetAddress> =
+        preferIpv4First(Dns.SYSTEM.lookup(hostname))
 
     /**
      * V-004-P0-1: 异步预热 DoH（冷启动熔断 30s 后尝试探测恢复）
@@ -501,4 +515,17 @@ object DohDns : Dns {
     private fun maskHost(hostname: String): String {
         return "${hostname.take(2)}***/${hostname.hashCode()}"
     }
+}
+
+/**
+ * 3.3.4（R 批）：把解析结果整理为「**IPv4 优先**、各族内保持原有顺序」。
+ *
+ * 纯函数（无副作用、无系统调用）便于 JVM 单测；调用点见 [DohDns.systemLookup] 与 DoH 成功分支。
+ * 保留 IPv6：仅在顺序上让 IPv4 先被尝试，IPv6 仍作为连接失败后的后备（不做过滤删除）。
+ */
+internal fun preferIpv4First(addresses: List<InetAddress>): List<InetAddress> {
+    if (addresses.size < 2) return addresses
+    val ipv4 = addresses.filter { it is Inet4Address }
+    if (ipv4.isEmpty() || ipv4.size == addresses.size) return addresses
+    return ipv4 + addresses.filter { it !is Inet4Address }
 }

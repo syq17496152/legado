@@ -27,25 +27,38 @@ fun String.decodeBase64DataUrlBytes(maxBytes: Long = MAX_DATA_URL_BYTES.toLong()
         .trimMatchingDataUrlWrapper()
         .let { it.decodePercentEscapesPreservingPlus() }
         .filterNot { it.isWhitespace() }
-    if (payload.isBlank()) return null
-    if (payload.estimatedBase64Bytes() > maxBytes) return null
-    val paddedPayload = payload.padBase64()
-    fun decode(payload: String): ByteArray? {
-        return runCatching {
-            Base64.decode(payload, Base64.DEFAULT)
-        }.getOrElse {
-            runCatching {
-                Base64.decode(payload, Base64.URL_SAFE)
-            }.getOrNull()
-        }
+    return decodeTolerantBase64(payload, maxBytes)
+}
+
+/**
+ * 宽容 Base64 解码（3.3.3 单源）——**外部来源**的 base64 载荷（正文/网页 data URI 等）一律走这里。
+ *
+ * 为什么必须宽容：`android.util.Base64.decode` 遇到非法字符/缺填充**直接抛异常**，正文里一个畸形
+ * data URI 就能让「保存图片/加载正文」整段失败（甚至崩溃）；而外部数据本就常带 URL-safe 变体、
+ * 换行、HTML 实体或百分号转义。处理链：百分号转义 → 去空白 → 补 `=` → DEFAULT 解码 →
+ * URL_SAFE 变体 → 畸形字符清洗后再试一次；均失败或超 [maxBytes] 返回 null（调用方回落）。
+ */
+fun decodeTolerantBase64(payload: String, maxBytes: Long = MAX_DATA_URL_BYTES.toLong()): ByteArray? {
+    val clean = payload
+        .trim()
+        .let { it.decodePercentEscapesPreservingPlus() }
+        .filterNot { it.isWhitespace() }
+    if (clean.isBlank()) return null
+    if (clean.estimatedBase64Bytes() > maxBytes) return null
+
+    fun decode(value: String): ByteArray? = runCatching {
+        Base64.decode(value, Base64.DEFAULT)
+    }.getOrElse {
+        runCatching { Base64.decode(value, Base64.URL_SAFE) }.getOrNull()
     }
-    decode(paddedPayload)?.takeIf { it.size.toLong() <= maxBytes }?.let { return it }
-    val sanitizedPayload = payload
+
+    decode(clean.padBase64())?.takeIf { it.size.toLong() <= maxBytes }?.let { return it }
+    val sanitized = clean
         .replace(Regex("[^A-Za-z0-9+/=_-]"), "")
         .padBase64()
-    if (sanitizedPayload.isBlank()) return null
-    if (sanitizedPayload.estimatedBase64Bytes() > maxBytes) return null
-    return decode(sanitizedPayload)?.takeIf { it.size.toLong() <= maxBytes }
+    if (sanitized.isBlank()) return null
+    if (sanitized.estimatedBase64Bytes() > maxBytes) return null
+    return decode(sanitized)?.takeIf { it.size.toLong() <= maxBytes }
 }
 
 fun String.estimateBase64DataUrlBytes(): Long? {

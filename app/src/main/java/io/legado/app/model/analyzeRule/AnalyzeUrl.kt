@@ -1,7 +1,6 @@
 package io.legado.app.model.analyzeRule
 
 import android.annotation.SuppressLint
-import android.util.Base64
 import androidx.annotation.Keep
 import androidx.media3.common.MediaItem
 import cn.hutool.core.codec.PercentCodec
@@ -47,6 +46,7 @@ import io.legado.app.utils.EncoderUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.GSONStrict
 import io.legado.app.utils.NetworkUtils
+import io.legado.app.utils.decodeBase64DataUrlBytes
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.get
@@ -708,13 +708,10 @@ class AnalyzeUrl(
         if (!urlNoQuery.startsWith("data:")) {
             return null
         }
-        val dataUriFindResult = AppPattern.dataUriRegex.find(urlNoQuery)
-        if (dataUriFindResult != null) {
-            val dataUriBase64 = dataUriFindResult.groupValues[1]
-            val byteArray = Base64.decode(dataUriBase64, Base64.DEFAULT)
-            return byteArray
-        }
-        return null
+        // 3.3.3：统一走宽容解码单源（data64/补填充/URL-safe/百分号转义/畸形清洗 + 32MB 上限）。
+        // 原实现用 `Base64.decode(..., DEFAULT)` 严格解码 ⇒ 畸形 data URI 直接抛异常打断整条链路；
+        // 返回 null 时由 getByteArrayAwait 回落网络请求
+        return urlNoQuery.decodeBase64DataUrlBytes()
     }
 
     /**

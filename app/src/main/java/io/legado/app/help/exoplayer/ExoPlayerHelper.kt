@@ -34,6 +34,7 @@ import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
 import com.google.gson.reflect.TypeToken
+import io.legado.app.BuildConfig
 import io.legado.app.constant.AppLog
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.videoStreamClient
@@ -64,16 +65,18 @@ object ExoPlayerHelper {
     private const val SPLIT_TAG = "\uD83D\uDEA7"
 
     /**
-     * R4-T6: 浏览器 User-Agent（模拟 Chrome 120 移动版）
+     * R4-T6: 浏览器 User-Agent（模拟 Chrome 移动版）
      *
      * 替换原 `Util.getUserAgent(context, "Legado")` 生成的 `Legado/1.0 (Linux; U; Android 13)`，
      * 部分站点 CDN 拒绝非浏览器 UA（403/401），改用浏览器 UA 提升抓取成功率。
      *
      * P0-5（2026-07-31）：可见性从 private 改为 public，供 M3u8PreCheckDataSource 复用同一 UA
+     * 3.3.7（R 批）：Chrome 版本改为 `BuildConfig.Cronet_Main_Version` 单源（原硬编码 `Chrome/120.0.0.0`
+     * 与内置 Cronet so 版本漂移，CDN 侧按 UA 版本做能力判断时会不一致）
      */
-    const val BROWSER_UA =
+    val BROWSER_UA =
         "Mozilla/5.0 (Linux; Android 13; Pixel 7 Pro) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+            "(KHTML, like Gecko) Chrome/${BuildConfig.Cronet_Main_Version} Mobile Safari/537.36"
 
     private val mapType by lazy {
         object : TypeToken<Map<String, String>>() {}.type

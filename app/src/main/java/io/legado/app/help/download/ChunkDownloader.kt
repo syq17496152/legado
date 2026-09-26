@@ -1,6 +1,7 @@
 package io.legado.app.help.download
 
 import io.legado.app.help.http.videoStreamClient
+import io.legado.app.help.config.AppConfig
 import io.legado.app.help.video.engine.HeaderResolver
 import io.legado.app.model.VideoPlay
 import kotlinx.coroutines.CancellationException
@@ -74,8 +75,6 @@ object ChunkDownloader {
     private const val BUFFER_SIZE = 64 * 1024
     private const val SEG_SAVE_INTERVAL_MS = 5000L
     private const val CLAIM_POLL_MS = 20L
-    private const val CHROME_UA =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
     /** 逻辑分段（三字段均为 Long，>2GB 偏移安全） */
     private class Segment(val start: Long, var end: Long, var downloaded: Long) {
@@ -85,7 +84,9 @@ object ChunkDownloader {
     /** 解析下载请求头：优先任务级 headersJson 还原完整头，其次播放时防盗链头，最后回退默认 UA（旧任务 headersJson 缺失→降级现状行为，零破坏） */
     fun resolveHeaders(headersJson: String? = null): Map<String, String> =
         HeaderResolver.fromJsonHeaders(headersJson).ifEmpty {
-            VideoPlay.currentPlayHeaders ?: mapOf("User-Agent" to CHROME_UA)
+            // 3.3.7：默认 UA 收口到 AppConfig.userAgent 单源（其缺省值用 BuildConfig.Cronet_Main_Version
+            // 派生，与内置 Cronet so 版本一致），替换原硬编码 `Chrome/125.0.0.0`（与 so 版本漂移）
+            VideoPlay.currentPlayHeaders ?: mapOf("User-Agent" to AppConfig.userAgent)
         }
 
     /**

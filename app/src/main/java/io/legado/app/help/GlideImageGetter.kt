@@ -18,9 +18,9 @@ import com.bumptech.glide.load.resource.gif.GifDrawable
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
 import java.lang.ref.WeakReference
+import io.legado.app.utils.decodeTolerantBase64
 import io.legado.app.utils.lifecycle
 import java.io.ByteArrayInputStream
-import kotlin.io.encoding.Base64
 import io.legado.app.utils.SvgUtils
 import java.util.concurrent.ConcurrentHashMap
 import androidx.core.graphics.drawable.toDrawable
@@ -109,12 +109,8 @@ class GlideImageGetter(
         val metadata = source.substring(0, separator)
         val payload = source.substring(separator + 1)
         return if (metadata.contains(";base64", ignoreCase = true)) {
-            val normalized = payload
-                .filterNot(Char::isWhitespace)
-                .replace('-', '+')
-                .replace('_', '/')
-                .let { value -> value.padEnd((value.length + 3) / 4 * 4, '=') }
-            runCatching { Base64.decode(normalized) }.getOrNull()
+            // 3.3.3：base64 统一走宽容解码单源（URL-safe/补填充/百分号转义/畸形清洗 + 32MB 上限）
+            decodeTolerantBase64(payload)
         } else {
             runCatching { Uri.decode(payload).toByteArray(Charsets.UTF_8) }.getOrNull()
         }
