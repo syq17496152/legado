@@ -108,7 +108,9 @@ data class ReadMenuTitleBarActions(
     val onTocRegexClick: () -> Unit,
     val onDelRubyTagClick: () -> Unit,
     val onDelHTagClick: () -> Unit,
-    val onEpubScheduleModeClick: () -> Unit
+    val onEpubScheduleModeClick: () -> Unit,
+    /** Q-N4：AI 净化（与「替换净化」同行区，读菜单溢出列表） */
+    val onAiPurifyClick: () -> Unit
 )
 
 data class ReadMenuActionBarState(
@@ -253,6 +255,7 @@ fun ReadMenuTitleBar(
                             onTocRegexClick = actions.onTocRegexClick,
                             onDelRubyTagClick = actions.onDelRubyTagClick,
                             onDelHTagClick = actions.onDelHTagClick,
+                            onAiPurifyClick = actions.onAiPurifyClick,
                             onEpubScheduleModeClick = actions.onEpubScheduleModeClick
                         )
                         popupHandle = ModernActionPopup.show(
@@ -848,7 +851,9 @@ private fun buildOverflowActions(
     onTocRegexClick: () -> Unit,
     onDelRubyTagClick: () -> Unit,
     onDelHTagClick: () -> Unit,
-    onEpubScheduleModeClick: () -> Unit
+    onEpubScheduleModeClick: () -> Unit,
+    /** Q-N4：AI 净化（读菜单溢出列表，紧邻「替换净化」） */
+    onAiPurifyClick: () -> Unit
 ): List<ModernActionPopup.Action> {
     val actions = mutableListOf<ModernActionPopup.Action>()
     if (isLocalTxt) {
@@ -875,6 +880,8 @@ private fun buildOverflowActions(
         persistent = true,
         invoke = onChangeReplaceRuleClick
     ))
+    // Q-N4：贴「替换净化」送入的 AI 净化入口（对当前选中文字生效，未选中时给出提示）
+    actions.add(ModernActionPopup.Action(title = "AI 净化选中文字", invoke = onAiPurifyClick))
     val isSameTitleRemoved = io.legado.app.model.ReadBook.curTextChapter?.sameTitleRemoved == true
     actions.add(ModernActionPopup.Action(
         title = "移除重复标题",

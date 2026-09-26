@@ -26,6 +26,9 @@ object ContentSelectConfig {
     /** R14（B3）：选中文字直达编辑器并定位到选中位置 */
     const val ACTION_EDIT_HERE = "edit_here"
 
+    /** Q-N4：选中文字交给 AI 净化（去广告/乱码/错别字，不改原意） */
+    const val ACTION_AI_PURIFY = "ai_purify"
+
     private val legacyDefaultActions = setOf(
         ACTION_REPLACE,
         ACTION_COPY,
@@ -61,7 +64,9 @@ object ContentSelectConfig {
         ACTION_GENERATE_IMAGE,
         ACTION_SHARE_IMAGE,
         // R14（B3）：新用户默认可见「编辑此处」；同样不动 legacy 两集合（参与老用户偏好迁移判定）
-        ACTION_EDIT_HERE
+        ACTION_EDIT_HERE,
+        // Q-N4：新用户默认可见「AI 净化」（老用户可在选区菜单配置页自行勾选）
+        ACTION_AI_PURIFY
     )
 
     val defaultOpenValues = listOf("", ACTION_WEB_SEARCH, ACTION_DICT, ACTION_ASK_AI)

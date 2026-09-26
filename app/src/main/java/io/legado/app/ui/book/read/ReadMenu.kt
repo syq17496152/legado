@@ -408,6 +408,7 @@ class ReadMenu @JvmOverloads constructor(
                             onReverseContentClick = { callBack.reverseContent() },
                             onSimulatedReadingClick = { (activity as? BaseReadBookActivity)?.showSimulatedReading() },
                             onChangeReplaceRuleClick = { callBack.changeReplaceRuleState() },
+                            onAiPurifyClick = { callBack.purifySelection() },
                             onSameTitleRemovedClick = { callBack.showSameTitleRemoved() },
                             onReSegmentClick = { callBack.showReSegment() },
                             onImageStyleClick = { callBack.showImageStyle() },
@@ -849,5 +850,8 @@ class ReadMenu @JvmOverloads constructor(
         fun toggleRubyTag()
         fun toggleHTag()
         fun showEpubCoreScheduleMode()
+
+        /** Q-N4：AI 净化（阅读菜单「替换净化」旁入口） */
+        fun purifySelection()
     }
 }

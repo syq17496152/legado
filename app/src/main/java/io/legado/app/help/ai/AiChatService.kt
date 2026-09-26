@@ -273,6 +273,76 @@ object AiChatService {
         }
     }
 
+    /**
+     * 一次性纯文本生成（**无**工具 / 人格 / 世界书 / 上下文注入）。
+     *
+     * 为什么单独开一个函数：`chatStream` 会注入 system / persona / 工具定义 / 会话上下文，
+     * 直接复用它做「文本净化」这类确定性输入输出，会把结果污染成对话或夹带工具调用。
+     * 返回值为模型可见正文（`extractContent`），失败抛 [AiChatException]。
+     */
+    suspend fun generatePlainText(
+        systemPrompt: String,
+        userText: String,
+        modelConfigOverride: AiModelConfig? = null,
+        firstResponseTimeoutMillis: Long = 0L
+    ): String {
+        val endpoint = try {
+            resolveCompletionEndpoint(modelConfigOverride, null)
+        } catch (throwable: Throwable) {
+            throw AiChatException(throwable.message ?: "AI model is not configured", "")
+        }
+        val messages = JSONArray().apply {
+            put(JSONObject().apply {
+                put("role", "system")
+                put("content", systemPrompt)
+            })
+            put(JSONObject().apply {
+                put("role", "user")
+                put("content", userText)
+            })
+        }
+        val body = if (endpoint.apiMode == AI_API_MODE_RESPONSES) {
+            JSONObject().apply {
+                put("model", endpoint.model)
+                put("input", messages)
+                put("stream", false)
+            }
+        } else {
+            JSONObject().apply {
+                put("model", endpoint.model)
+                put("messages", messages)
+                put("stream", false)
+            }
+        }
+        val requestLog = StringBuilder().apply {
+            append("url=${endpoint.chatUrl}").append('\n')
+            append("model=${endpoint.model}").append('\n')
+            append("apiMode=${endpoint.apiMode}").append('\n')
+            append("plainText=true").append('\n')
+        }
+        val response = aiChatHttpClient(firstResponseTimeoutMillis).newCallResponse {
+            url(endpoint.chatUrl)
+            addHeader("Accept", "application/json")
+            endpoint.provider?.apiKey?.trim().takeIf { !it.isNullOrBlank() }?.let {
+                addHeader("Authorization", "Bearer $it")
+            }
+            addHeaders(parseCustomHeaders(endpoint.provider?.headers.orEmpty()))
+            postJson(body.toString())
+        }
+        response.use { rawResponse ->
+            val payload = rawResponse.body?.string().orEmpty()
+            if (!rawResponse.isSuccessful) {
+                throw AiChatException(
+                    message = extractError(payload).ifBlank {
+                        "${rawResponse.code} ${rawResponse.message}"
+                    },
+                    debugLog = requestLog.toSafeDebugLog()
+                )
+            }
+            return extractContent(payload)
+        }
+    }
+
     suspend fun chatStream(
         messages: List<AiChatMessage>,
         onPartial: (String) -> Unit,

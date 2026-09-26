@@ -304,7 +304,9 @@ class ContentSelectMenuConfigDialog : ComposeDialogFragment() {
             // 否则用户在配置页保存一次后该动作会被静默剔除、菜单里消失
             ActionItem(ContentSelectConfig.ACTION_HIGHLIGHT, R.string.highlight),
             // R14（B3）：同为白名单派生项，未登记则用户保存一次后该动作被静默剔除
-            ActionItem(ContentSelectConfig.ACTION_EDIT_HERE, R.string.edit_here)
+            ActionItem(ContentSelectConfig.ACTION_EDIT_HERE, R.string.edit_here),
+            // Q-N4：同为白名单派生项，未登记则用户保存一次后该动作被静默剔除
+            ActionItem(ContentSelectConfig.ACTION_AI_PURIFY, R.string.ai_purify)
         )
         private val knownActionIds = actionItems.map { it.id }.toSet()
 

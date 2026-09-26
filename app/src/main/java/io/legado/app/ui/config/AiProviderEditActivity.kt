@@ -22,6 +22,7 @@ import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
 import io.legado.app.constant.EventBus
+import io.legado.app.help.ai.AiBalanceProvider
 import io.legado.app.help.ai.AiChatService
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.main.ai.AI_API_MODE_CHAT_COMPLETIONS
@@ -52,6 +53,8 @@ class AiProviderEditActivity : BaseActivity<ViewBinding>() {
     private var providerApiKey by mutableStateOf("")
     private var providerHeaders by mutableStateOf("")
     private var promptCache by mutableStateOf(false)
+    private var providerBalanceUrl by mutableStateOf("")
+    private var providerBalanceJsonPath by mutableStateOf("")
     private var apiMode by mutableStateOf(AI_API_MODE_CHAT_COMPLETIONS)
     private var modelList by mutableStateOf<List<AiModelConfig>>(emptyList())
     private var modelSummary by mutableStateOf("")
@@ -157,6 +160,11 @@ class AiProviderEditActivity : BaseActivity<ViewBinding>() {
                     onApiModeClick = { showApiModeSelector() },
                     promptCache = promptCache,
                     onPromptCacheChange = { promptCache = it },
+                    balanceUrl = providerBalanceUrl,
+                    onBalanceUrlChange = { providerBalanceUrl = it },
+                    balanceJsonPath = providerBalanceJsonPath,
+                    onBalanceJsonPathChange = { providerBalanceJsonPath = it },
+                    onQueryBalance = { queryBalance() },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -199,6 +207,8 @@ class AiProviderEditActivity : BaseActivity<ViewBinding>() {
         providerApiKey = provider?.apiKey.orEmpty()
         providerHeaders = provider?.headers.orEmpty()
         promptCache = provider?.promptCache ?: false
+        providerBalanceUrl = provider?.balanceUrl.orEmpty()
+        providerBalanceJsonPath = provider?.balanceJsonPath.orEmpty()
     }
 
     // ── API mode ─────────────────────────────────────────────────────────────
@@ -242,20 +252,27 @@ class AiProviderEditActivity : BaseActivity<ViewBinding>() {
         }
         val providers = AppConfig.aiProviderList.toMutableList()
         val oldProvider = currentProvider()
+        val balanceUrl = providerBalanceUrl.trim()
+        val balanceJsonPath = providerBalanceJsonPath.trim()
         val updated = oldProvider?.copy(
             name = name,
             baseUrl = baseUrl,
             apiKey = apiKey,
             headers = headers,
             apiMode = apiMode,
-            promptCache = promptCache
+            promptCache = promptCache,
+            // 余额查询配置必须逐字段透传，否则保存即丢（本处与 AppConfig.normalizeAiProviders 同源）
+            balanceUrl = balanceUrl,
+            balanceJsonPath = balanceJsonPath
         ) ?: AiProviderConfig(
             name = name,
             baseUrl = baseUrl,
             apiKey = apiKey,
             headers = headers,
             apiMode = apiMode,
-            promptCache = promptCache
+            promptCache = promptCache,
+            balanceUrl = balanceUrl,
+            balanceJsonPath = balanceJsonPath
         )
         val index = providers.indexOfFirst { it.id == updated.id }
         if (index >= 0) providers[index] = updated else providers.add(updated)
@@ -446,6 +463,48 @@ class AiProviderEditActivity : BaseActivity<ViewBinding>() {
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /**
+     * Q-N3：查询当前供应商余额。
+     *
+     * - 未填余额接口地址 ⇒ 直接提示（不发起无意义请求）；
+     * - 先按当前表单落盘（余额查询需要 baseUrl/apiKey 等已保存值），再发一次 GET；
+     * - 失败文案与生图/取模型一致：技术错误经 `ai_balance_query_failed` 包装后展示。
+     */
+    private fun queryBalance() {
+        if (providerBalanceUrl.isBlank()) {
+            toastOnUi(R.string.ai_balance_url_required)
+            return
+        }
+        val provider = saveProvider(showToast = false) ?: return
+        waitDialog.setText(R.string.ai_balance_querying)
+        waitDialog.show()
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { AiBalanceProvider.query(provider) }
+            }
+            waitDialog.dismiss()
+            val balance = result.getOrNull()
+            if (balance == null) {
+                showDialogFragment(
+                    AiBalanceResultDialog.create(
+                        providerName = provider.name,
+                        errorText = getString(
+                            R.string.ai_balance_query_failed,
+                            result.exceptionOrNull()?.localizedMessage ?: "Error"
+                        )
+                    )
+                )
+            } else {
+                showDialogFragment(
+                    AiBalanceResultDialog.create(
+                        providerName = provider.name,
+                        amount = balance.items.firstOrNull()?.remaining ?: Double.NaN
+                    )
+                )
+            }
+        }
+    }
 
     private fun notifyAiConfigChanged() {
         postEvent(EventBus.AI_CONFIG_CHANGED, true)

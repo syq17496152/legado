@@ -11,7 +11,11 @@ data class AiProviderConfig(
     val apiKey: String = "",
     val headers: String? = "",
     val apiMode: String = AI_API_MODE_CHAT_COMPLETIONS,
-    val promptCache: Boolean = false
+    val promptCache: Boolean = false,
+    /** 余额查询接口：可填绝对地址，也可填相对 baseUrl 的路径（如 `user/balance`） */
+    val balanceUrl: String = "",
+    /** 余额取值 JSON 路径：支持 `a.b[0].c` 与减号表达式 `a.b - c[0]`（减号两侧需空白） */
+    val balanceJsonPath: String = ""
 )
 
 const val AI_API_MODE_CHAT_COMPLETIONS = "chat_completions"

@@ -47,4 +47,9 @@
     <item
         android:id="@+id/menu_edit_here"
         android:title="@string/edit_here" />
+
+    <!-- Q-N4：选中文字交给 AI 净化 -->
+    <item
+        android:id="@+id/menu_ai_purify"
+        android:title="@string/ai_purify" />
 </menu>

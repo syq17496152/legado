@@ -1441,7 +1441,10 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
                     apiKey = safeString { provider.apiKey }.trim(),
                     headers = safeString { provider.headers }.trim(),
                     apiMode = normalizeAiApiMode(safeString { provider.apiMode }),
-                    promptCache = safeBoolean(false) { provider.promptCache }
+                    promptCache = safeBoolean(false) { provider.promptCache },
+                    // 余额查询配置必须在此逐字段重建，否则「读取即被丢弃」（本函数按固定字段列表 new 对象）
+                    balanceUrl = safeString { provider.balanceUrl }.trim(),
+                    balanceJsonPath = safeString { provider.balanceJsonPath }.trim()
                 )
             }
         }.distinctBy { it.id }

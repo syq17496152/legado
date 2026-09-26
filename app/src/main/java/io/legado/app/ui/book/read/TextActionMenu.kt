@@ -158,6 +158,7 @@ class TextActionMenu(private val context: Context, private val callBack: CallBac
         R.id.menu_share_image -> ContentSelectConfig.ACTION_SHARE_IMAGE
         R.id.menu_highlight -> ContentSelectConfig.ACTION_HIGHLIGHT
         R.id.menu_edit_here -> ContentSelectConfig.ACTION_EDIT_HERE
+        R.id.menu_ai_purify -> ContentSelectConfig.ACTION_AI_PURIFY
         else -> null
     }
 

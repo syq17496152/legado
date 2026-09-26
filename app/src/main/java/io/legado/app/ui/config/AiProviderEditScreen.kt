@@ -131,6 +131,11 @@ fun AiProviderConfigTab(
     onApiModeClick: () -> Unit,
     promptCache: Boolean,
     onPromptCacheChange: (Boolean) -> Unit,
+    balanceUrl: String,
+    onBalanceUrlChange: (String) -> Unit,
+    balanceJsonPath: String,
+    onBalanceJsonPathChange: (String) -> Unit,
+    onQueryBalance: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val style = rememberAppDialogStyle()
@@ -223,6 +228,30 @@ fun AiProviderConfigTab(
             singleLine = false,
             minLines = 4,
             style = style
+        )
+        // Balance query (Q-N3)：填了接口地址即可查；路径为空时按「整个响应体取数值」口径尝试
+        AiProviderTextField(
+            value = balanceUrl,
+            onValueChange = onBalanceUrlChange,
+            label = stringResource(R.string.ai_balance_url),
+            singleLine = true,
+            keyboardType = KeyboardType.Uri,
+            style = style
+        )
+        AiProviderTextField(
+            value = balanceJsonPath,
+            onValueChange = onBalanceJsonPathChange,
+            label = stringResource(R.string.ai_balance_json_path),
+            singleLine = true,
+            keyboardType = KeyboardType.Text,
+            style = style
+        )
+        LegadoMiuixActionButton(
+            text = stringResource(R.string.ai_query_balance),
+            palette = style.toMiuixPalette(),
+            onClick = onQueryBalance,
+            modifier = Modifier.fillMaxWidth(),
+            cornerRadius = style.actionRadius
         )
     }
 }

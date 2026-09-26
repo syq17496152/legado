@@ -134,6 +134,7 @@ import io.legado.app.ui.book.changesource.ChangeChapterSourceDialog
 import io.legado.app.ui.book.character.BookCharacterManageActivity
 import io.legado.app.ui.book.info.BookInfoStartActivityContract
 import io.legado.app.ui.highlight.HighlightRuleActivity
+import io.legado.app.ui.book.read.config.AiPurifyDialog
 import io.legado.app.ui.book.read.config.AutoReadDialog
 import io.legado.app.ui.book.read.config.TtsPrebuildDialog
 import io.legado.app.ui.book.read.config.BgTextConfigDialog.Companion.BG_COLOR
@@ -1425,8 +1426,29 @@ class ReadBookActivity : BaseReadBookActivity(),
                 openContentEditDialog(selectedReadPositionOrNull(notifyMissing = true))
                 return true
             }
+
+            R.id.menu_ai_purify -> {
+                purifyBySelection()
+                return true
+            }
         }
         return false
+    }
+
+    /**
+     * Q-N4：选中文字 AI 净化。
+     *
+     * 选区为空（如过短的点选）时直接返回，避免把空串发给模型；Epub 原生选区同样走该分支。
+     */
+    private fun purifyBySelection() {
+        val text = selectedText
+        if (text.isBlank()) return
+        purifyText(text)
+    }
+
+    /** Q-N4：统一的净化入口（划词菜单与阅读菜单「AI 净化本段」共用） */
+    private fun purifyText(text: String) {
+        showDialogFragment(AiPurifyDialog.create(text))
     }
 
     /**
@@ -4872,6 +4894,16 @@ class ReadBookActivity : BaseReadBookActivity(),
             ReadBook.saveRead(fullUpdate = true)
             ReadBook.reloadCurrentContent("re-segment")
         }
+    }
+
+    /** Q-N4：阅读菜单（替换净化旁）入口 —— 对当前选中文字发起 AI 净化 */
+    override fun purifySelection() {
+        val text = selectedText
+        if (text.isBlank()) {
+            toastOnUi(R.string.ai_purify_no_selection)
+            return
+        }
+        purifyText(text)
     }
 
     override fun showSameTitleRemoved() {
