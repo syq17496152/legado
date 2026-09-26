@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -63,9 +64,10 @@ import io.legado.app.ui.widget.components.AppMenuSheet
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.SettingsSearchBar
-import io.legado.app.ui.widget.recycler.UpLinearLayoutManager
-import io.legado.app.ui.widget.recycler.VerticalDivider
-import io.legado.app.ui.widget.recycler.scroller.FastScrollRecyclerView
+import io.legado.app.ui.book.searchContent.compose.SearchContentResultList
+import io.legado.app.ui.widget.compose.ComposeLazyListFastScroller
+import io.legado.app.utils.getCompatColor
+import io.legado.app.utils.hexString
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.observeEvent
@@ -79,7 +81,7 @@ import kotlinx.coroutines.withContext
 /**
  * 命中分布条目（F77）：一章的命中聚合，供「按章直达」列表消费。
  *
- * [firstIndex] 是本章第一条命中在结果列表中的下标（列表按章节顺序追加 ⇒ 与 adapter 下标一致）。
+ * [firstIndex] 是本章第一条命中在结果列表中的下标（列表按章节顺序追加 ⇒ 与列表位置一致）。
  */
 private data class ChapterHit(
     val chapterIndex: Int,
@@ -90,16 +92,24 @@ private data class ChapterHit(
 
 
 class SearchContentActivity :
-    VMBaseActivity<ViewBinding, SearchContentViewModel>(),
-    SearchContentAdapter.Callback {
+    VMBaseActivity<ViewBinding, SearchContentViewModel>() {
 
     // CE 5.2（compose 包）：原 activity_search_content.xml 已退役 ⇒ 改 composeShell 工厂创建合成壳，
     // Compose 全权接管页面骨架；**四个 View 内核一律 AndroidView 原样托管**
     // （结果列表 / 进度条 / 底部信息条 / 停止 FAB）。
     override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<SearchContentViewModel>()
-    private val adapter by lazy { SearchContentAdapter(this, this) }
-    private val mLayoutManager by lazy { UpLinearLayoutManager(this) }
+    // CF 6.2（2026-09-26）：结果列表由 View 版 FastScrollRecyclerView + SearchContentAdapter 换装为
+    // Compose LazyColumn（SearchContentResultList）+ ComposeLazyListFastScroller ⇒ item_search_list.xml 退役。
+    private val listState = LazyListState()
+    private var resultItems by mutableStateOf<List<SearchResult>>(emptyList())
+    /** 待回放定位（组合晚于 `onActivityCreated` ⇒ 由组合内 `LaunchedEffect` 在列表就位后消费）。 */
+    private var scrollRequest by mutableIntStateOf(-1)
+    /** 原 `SearchContentAdapter` 的两处取色口径（`getHtmlCompat` 需要十六进制串）。
+     *  ⚠️ 必须 `by lazy`：属性初始化器在 `attachBaseContext` **之前**执行，此时访问主题资源会
+     *  `Unable to instantiate activity`（真机 L2 实测 ⇒ 首次使用时才解析）。 */
+    private val textColorHex by lazy { getCompatColor(R.color.primaryText).hexString.substring(2) }
+    private val accentColorHex by lazy { accentColor.hexString.substring(2) }
     private var durChapterIndex = 0
     private var searchJob: Job? = null
     private var initJob: Job? = null
@@ -119,12 +129,9 @@ class SearchContentActivity :
     private var stopFabVisible by mutableStateOf(false)
     private var focusRequestSignal by mutableIntStateOf(0)
     // 程序化创建的原 XML 节点（组合挂载时创建，由这些字段持有页面级引用）
-    private var resultListView: FastScrollRecyclerView? = null
     private var infoTextView: TextView? = null
     /** 底部信息条文案：组合挂载前先落字段，挂载时回填（原 TextView 的 text 只会更晚被写入，等价）。 */
     private var infoText: String = ""
-    /** 原 `initSearchResultList` 的 `scrollToPosition` 在列表尚未挂载时的待回放定位。 */
-    private var pendingScrollPosition = -1
 
     // search-content-compose 壳层化：菜单动作 ID（原 R.id.menu_xxx，菜单资源已删除）
     private object MenuId {
@@ -152,8 +159,8 @@ class SearchContentActivity :
      *  · `refresh_progress_bar`（2dp，无 visibility 属性 ⇒ 恒在布局中）→ `AndroidView` 托管
      *    `RefreshProgressBar`（**自绘动画条，无 Compose 等价物**）；原实现只切 `isAutoLoading`
      *    ⇒ 这里**保持恒挂载**、仅由 `progressLoading` 驱动动画（不改成条件组合，否则会少 2dp 高度）
-     *  · `recyclerView`（FastScrollRecyclerView + UpLinearLayoutManager + VerticalDivider）
-     *    → `AndroidView` 原样托管（View 版 adapter 仍在）
+     *  · `recyclerView`（**已随 CF 6.2 退役**：FastScrollRecyclerView + UpLinearLayoutManager + VerticalDivider
+     *    + View 版 adapter ⇒ 改为 Compose `SearchContentResultList` + `ComposeLazyListFastScroller`）
      *  · `ll_search_base_info`（48dp 信息条：TextView + 上/下箭头）→ `AndroidView` 程序化构造
      *    （保留 middle 省略 / 长按提示 / 波纹底 / 箭头 36dp 几何 / 导航栏边距）
      *  · `fb_stop`（mini FAB / 16dp 边距 / invisible）→ `AndroidView` 托管同配置 FAB；
@@ -241,9 +248,28 @@ class SearchContentActivity :
                             .weight(1f)
                             .fillMaxWidth()
                     ) {
-                        AndroidView(
-                            modifier = Modifier.fillMaxSize(),
-                            factory = { ctx -> createResultList(ctx) }
+                        LaunchedEffect(scrollRequest) {
+                            if (scrollRequest >= 0) {
+                                listState.scrollToItem(scrollRequest)
+                                scrollRequest = -1
+                            }
+                        }
+                        SearchContentResultList(
+                            items = resultItems,
+                            listState = listState,
+                            textColorHex = textColorHex,
+                            accentColorHex = accentColorHex,
+                            durChapterIndex = durChapterIndex,
+                            onItemClick = { index ->
+                                resultItems.getOrNull(index)?.let { result ->
+                                    if (result.query.isNotBlank()) openSearchResult(result, index)
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        ComposeLazyListFastScroller(
+                            state = listState,
+                            modifier = Modifier.align(Alignment.CenterEnd)
                         )
                         AndroidView(
                             modifier = Modifier
@@ -268,11 +294,11 @@ class SearchContentActivity :
         }
     }
 
-    /** F77：跳到某章的第一条命中（列表按章节顺序追加 ⇒ 下标与 adapter 一致） */
+    /** F77：跳到某章的第一条命中（列表按章节顺序追加 ⇒ 下标与列表位置一致） */
     private fun scrollToChapter(hit: ChapterHit) {
         distSheetExpanded = false
-        if (hit.firstIndex in 0 until adapter.itemCount) {
-            mLayoutManager.scrollToPositionWithOffset(hit.firstIndex, 0)
+        if (hit.firstIndex in 0 until resultItems.size) {
+            scrollRequest = hit.firstIndex
         }
     }
 
@@ -310,29 +336,6 @@ class SearchContentActivity :
             }
         }
     }
-
-    /**
-     * 原 `recycler_view` 的程序化等价物（FastScrollRecyclerView + 上推布局 + 分割线 + View 版 adapter）。
-     *
-     * 组合挂载晚于 `onActivityCreated`（ComposeView 在附着窗口后才组合）⇒ `initSearchResultList`
-     * 可能早于本工厂执行，此时定位请求先入 [pendingScrollPosition]，在此回放。
-     */
-    private fun createResultList(context: Context): FastScrollRecyclerView =
-        FastScrollRecyclerView(context).apply {
-            // 原 XML `android:id="@+id/recycler_view"`；程序化构造必须显式赋 id——
-            // FastScroller.setLayoutParams 以 `require(recyclerViewId != View.NO_ID)` 定位宿主
-            // （无 id 时挂载即抛 IllegalArgumentException，真机实测）
-            id = R.id.recycler_view
-            overScrollMode = View.OVER_SCROLL_NEVER
-            layoutManager = mLayoutManager
-            addItemDecoration(VerticalDivider(context))
-            adapter = this@SearchContentActivity.adapter
-            if (pendingScrollPosition >= 0) {
-                scrollToPosition(pendingScrollPosition)
-                pendingScrollPosition = -1
-            }
-            resultListView = this
-        }
 
     /** 原 `fb_stop` 的程序化等价物（mini 尺寸 / accent 底 / 停止图标 / 原点击语义）。 */
     private fun createStopFab(context: Context): FloatingActionButton =
@@ -389,14 +392,14 @@ class SearchContentActivity :
             context, R.drawable.ic_arrow_drop_up, getString(R.string.go_to_top),
             btc, borderlessBg
         ) {
-            mLayoutManager.scrollToPositionWithOffset(0, 0)
+            scrollRequest = 0
         }
         val toBottom = createNavArrow(
             context, R.drawable.ic_arrow_drop_down, getString(R.string.go_to_bottom),
             btc, borderlessBg
         ) {
-            if (adapter.itemCount > 0) {
-                mLayoutManager.scrollToPositionWithOffset(adapter.itemCount - 1, 0)
+            if (resultItems.isNotEmpty()) {
+                scrollRequest = resultItems.lastIndex
             }
         }
         bar.addView(info)
@@ -450,14 +453,10 @@ class SearchContentActivity :
         list ?: return
         viewModel.searchResultList.addAll(list)
         viewModel.searchResultCounts = list.size
-        adapter.setItems(list)
-        val listView = resultListView
-        if (listView == null) {
-            // 组合尚未挂载：先记定位，待 createResultList 回放（原实现列表恒在场，无此分支）
-            pendingScrollPosition = position
-        } else {
-            listView.scrollToPosition(position)
-        }
+        resultItems = list
+        // 组合晚于本方法（ComposeView 附着窗口后才组合）⇒ 定位经 scrollRequest 交给组合内 LaunchedEffect
+        // 在列表就位后消费（原实现列表恒在场，无此分支）
+        scrollRequest = position.coerceAtLeast(0)
         // F77：既有结果也陈述分布（不重搜也能按章直达）
         renderCoverage()
     }
@@ -480,7 +479,8 @@ class SearchContentActivity :
             withContext(IO) {
                 viewModel.cacheChapterNames.addAll(BookHelp.getChapterFiles(book))
             }
-            adapter.notifyItemRangeChanged(0, adapter.itemCount, true)
+            // CF 6.2：原此处 `adapter.notifyItemRangeChanged(0, count, true)` 带 payloads ⇒ convert 被整段
+            // 跳过（不刷新任何内容，属空转调用）；换 Compose 后不保留
         }
     }
 
@@ -489,7 +489,8 @@ class SearchContentActivity :
             viewModel.book?.bookUrl?.let { bookUrl ->
                 if (book.bookUrl == bookUrl) {
                     viewModel.cacheChapterNames.add(chapter.getFileName())
-                    adapter.notifyItemChanged(chapter.index, true)
+                    // CF 6.2：原 `adapter.notifyItemChanged(chapter.index, true)` 同为带 payloads 的空转调用
+                    // （且误把「章节下标」当「列表位置」）⇒ 不保留
                 }
             }
         }
@@ -499,7 +500,7 @@ class SearchContentActivity :
         // 按章节搜索内容
         if (query.isBlank()) return
         searchJob?.cancel()
-        adapter.clearItems()
+        resultItems = emptyList()
         viewModel.searchResultList.clear()
         viewModel.searchResultCounts = 0
         viewModel.lastQuery = query
@@ -532,7 +533,7 @@ class SearchContentActivity :
                         viewModel.searchResultList.addAll(searchResults)
                         // 原实现借 `tv_current_search_info.post{}` 回主线程（列表/文案均须主线程）
                         runOnUiThread {
-                            adapter.addItems(searchResults)
+                            resultItems = resultItems + searchResults
                         }
                     }
                     // 进度节流：首章即刻出态（让用户马上看到「在搜了」），其后每 10 章刷一次
@@ -547,7 +548,7 @@ class SearchContentActivity :
                     val noSearchResult =
                         SearchResult(resultText = getString(R.string.search_content_empty))
                     runOnUiThread {
-                        adapter.addItem(noSearchResult)
+                        resultItems = resultItems + noSearchResult
                     }
                 }
             }.onFailure {
@@ -616,7 +617,7 @@ class SearchContentActivity :
     private val isLocalBook: Boolean
         get() = viewModel.book?.isLocal == true
 
-    override fun openSearchResult(searchResult: SearchResult, index: Int) {
+    private fun openSearchResult(searchResult: SearchResult, index: Int) {
         searchJob?.cancel()
         postEvent(EventBus.SEARCH_RESULT, viewModel.searchResultList as List<SearchResult>)
         val searchData = Intent()
@@ -627,10 +628,6 @@ class SearchContentActivity :
         searchData.putExtra("index", index)
         setResult(RESULT_OK, searchData)
         finish()
-    }
-
-    override fun durChapterIndex(): Int {
-        return durChapterIndex
     }
 
     private companion object {
