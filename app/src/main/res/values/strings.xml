@@ -1052,6 +1052,7 @@
     <string name="import_check_large_hint">Large collection: structure-only or quick mode is recommended</string>
     <string name="import_check_filtered_title">Filtered sources</string>
     <string name="import_check_filtered_summary">Import %1$d, filtered %2$d. Re-import the same collection to update existing sources</string>
+    <string name="import_empty_source_ignored">%1$d empty source(s) ignored</string>
     <string name="import_check_restore_all">Restore selected</string>
     <string name="import_check_restore_all_confirm">Import all %1$d filtered sources? They failed quality check</string>
     <string name="import_check_import_disabled">Import (disabled after import)</string>

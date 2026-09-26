@@ -20,6 +20,7 @@ import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.plainImportClient
 import io.legado.app.help.source.SourceHelp
+import io.legado.app.help.source.isEmptyConfiguration
 import io.legado.app.model.ImportCheck
 import io.legado.app.model.QualityCheckSession
 import io.legado.app.model.RuleUpdate
@@ -83,6 +84,14 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
 
     /** 校验进度（已校验/总数/已过滤数），驱动导入弹框校验进度展示 */
     val checkProgressLiveData = MutableLiveData<Triple<Int, Int, Int>>()
+
+    /**
+     * 3.3.1（R 批，J10 硬阻断口径）：被忽略的**全空书源**数量
+     *
+     * 语义：解析阶段即从 `allSources` 剔除（不展示、不可勾选、不导入、不参与校验），
+     * 仅以数量回执给弹框标题，避免用户以为「导入的源少了」。
+     */
+    val emptyConfigCount = MutableLiveData(0)
 
     /** 校验进行中标记（弹框关闭取消 + 返回键拦截判断） */
     @Volatile
@@ -298,6 +307,17 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
 
     private fun comparisonSource() {
         execute {
+            // 3.3.1（J10 硬阻断）：全空配置源（无任何抓取入口/规则）在此**一次性剔除**——
+            // 不进列表（无法勾选）、不进校验集、不进导入集；仅留数量回执给弹框标题。
+            // 剔除放在本函数（allSources 定型的唯一收口点）⇒ 两条导入链路（importSelect /
+            // importSelectWithCheck）与「选择新增/选择更新」批量勾选天然都拿不到它。
+            val keptSources = allSources.filterNot { it.isEmptyConfiguration() }
+            val ignoredCount = allSources.size - keptSources.size
+            if (ignoredCount > 0) {
+                allSources.clear()
+                allSources.addAll(keptSources)
+            }
+            emptyConfigCount.postValue(ignoredCount)
             // spinner-fix delta 2026-09-05：批量 IN 查询替代逐条——4MB 合集数千条逐条 Room
             // 事务查询数十秒，是"导入卡住不显示"的真凶；分批 500 规避 SQLite 变量上限
             val existing = allSources.map { it.bookSourceUrl }

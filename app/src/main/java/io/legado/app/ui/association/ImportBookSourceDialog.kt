@@ -109,6 +109,9 @@ class ImportBookSourceDialog() : ComposeDialogFragment(),
     /** 校验进度（已校验/总数/已过滤），来自 checkProgressLiveData 桥接（import-source-quality-filter） */
     private val checkProgressState = mutableStateOf<Triple<Int, Int, Int>?>(null)
 
+    /** 3.3.1：被硬阻断（全空配置）的书源数量，仅在标题追加回执 */
+    private val emptyIgnoredCount = mutableIntStateOf(0)
+
     /** 复核窗口数据（过滤结果非空时弹出） */
     private var reviewOutcome by mutableStateOf<ImportCheckOutcome?>(null)
 
@@ -157,6 +160,9 @@ class ImportBookSourceDialog() : ComposeDialogFragment(),
         }
         viewModel.checkProgressLiveData.observe(viewLifecycleOwner) {
             checkProgressState.value = it
+        }
+        viewModel.emptyConfigCount.observe(viewLifecycleOwner) {
+            emptyIgnoredCount.intValue = it
         }
         viewModel.importSource(source)
     }
@@ -207,6 +213,12 @@ class ImportBookSourceDialog() : ComposeDialogFragment(),
                 "${getString(R.string.import_book_source)} · ${getString(R.string.import_fetching_progress, done, total)}"
             }
             else -> getString(R.string.import_book_source)
+        }
+        // 3.3.1：全空书源被硬阻断时在标题追加回执（否则用户会以为「源少了」）
+        val sheetTitleWithIgnored = if (emptyIgnoredCount.intValue > 0) {
+            "$sheetTitle · ${getString(R.string.import_empty_source_ignored, emptyIgnoredCount.intValue)}"
+        } else {
+            sheetTitle
         }
         val errorMsg = errorLive.value ?: if (successCount.value != null && successCount.value == 0) {
             getString(R.string.wrong_format)
@@ -273,7 +285,7 @@ class ImportBookSourceDialog() : ComposeDialogFragment(),
         )
 
         ImportSourceSheet(
-            title = sheetTitle,
+            title = sheetTitleWithIgnored,
             items = items,
             selected = selectFlags,
             showComment = showComment,

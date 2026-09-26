@@ -1000,6 +1000,7 @@
     <string name="import_check_large_hint">大集合导入建议使用「仅结构」或「快速」模式</string>
     <string name="import_check_filtered_title">已过滤的源</string>
     <string name="import_check_filtered_summary">导入 %1$d 条，过滤 %2$d 条；重新导入同一集合可更新旧源</string>
+    <string name="import_empty_source_ignored">已忽略 %1$d 个空书源</string>
     <string name="import_check_restore_all">导入勾选的源</string>
     <string name="import_check_restore_all_confirm">确定导入全部 %1$d 条被过滤的源？这些源未通过质量校验</string>
     <string name="import_check_import_disabled">导入（导入后自动禁用）</string>
