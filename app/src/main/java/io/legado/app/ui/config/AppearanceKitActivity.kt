@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.config
+package io.legado.app.ui.config
 
 import io.legado.app.ui.widget.components.AppShapes
 import android.os.Bundle
@@ -51,9 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,7 +62,11 @@ import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.signature.ObjectKey
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
-import io.legado.app.databinding.ActivityThemeManageBinding
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.help.config.AppearanceKit
 import io.legado.app.help.config.AppearanceKitManager
 import io.legado.app.help.config.AppearanceKitType
@@ -74,7 +76,6 @@ import io.legado.app.lib.theme.UiCorner
 import io.legado.app.ui.book.cache.WebDavTaskType
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.widget.components.GlassTopAppBar
-import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.ui.widget.compose.AppManagementPalette
@@ -99,11 +100,11 @@ import java.io.FileOutputStream
 import androidx.compose.material3.MaterialTheme
 import io.legado.app.ui.theme.labelXSmall
 
-class AppearanceKitActivity : BaseActivity<ActivityThemeManageBinding>() {
+class AppearanceKitActivity : BaseActivity<ViewBinding>() {
 
-    override val binding: ActivityThemeManageBinding by lazy {
-        ActivityThemeManageBinding.inflate(layoutInflater)
-    }
+    // 原 activity_theme_manage.xml 已退役（CE-a #8）：composeShell 合成壳 + attachComposeContent 单源；
+    // 顶栏由 installGlassTopBar 运行时注入改为**页内直接渲染**
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     // subpage-topbar-unify 二期：顶栏统一组件化（GlassTopAppBar），标题/actions 状态化
     private var topBarTitle by mutableStateOf("")
@@ -125,11 +126,7 @@ class AppearanceKitActivity : BaseActivity<ActivityThemeManageBinding>() {
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initTopBar()
-        binding.tabBar.visibility = View.GONE
-        binding.tvSummary.visibility = View.GONE
-        binding.recyclerView.visibility = View.GONE
-        binding.btnAdd.visibility = View.GONE
-        installComposeContent()
+        initComposeContent()
         refreshKits()
     }
 
@@ -163,14 +160,23 @@ class AppearanceKitActivity : BaseActivity<ActivityThemeManageBinding>() {
                 alwaysShow = true
             ) { showSyncTasks() }
         )
-        installGlassTopBar(binding, { topBarTitle }, { topBarActions }) { finish() }
+        // 顶栏改为页内渲染（见 initComposeContent）
     }
 
-    private fun installComposeContent() {
-        val composeView = ComposeView(this).apply {
-            layoutParams = binding.recyclerView.layoutParams
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
+    @OptIn(ExperimentalMaterial3Api::class)
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = topBarTitle,
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = { TopBarActionRow(topBarActions) }
+                    )
+                }
+                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 LegadoComposeTheme {
                     AppearanceKitScreen(
                         kits = kitsState,
@@ -181,9 +187,9 @@ class AppearanceKitActivity : BaseActivity<ActivityThemeManageBinding>() {
                         onDelete = ::confirmDeleteKit
                     )
                 }
+                }
             }
         }
-        binding.root.addView(composeView, binding.root.indexOfChild(binding.recyclerView))
     }
 
     private fun refreshKits() {

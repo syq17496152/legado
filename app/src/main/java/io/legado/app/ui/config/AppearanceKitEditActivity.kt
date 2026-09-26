@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.config
+package io.legado.app.ui.config
 
 import io.legado.app.ui.widget.components.AppShapes
 import android.os.Bundle
@@ -24,15 +24,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
-import io.legado.app.databinding.ActivityThemeManageBinding
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.help.config.AppearanceKitEditOptions
 import io.legado.app.help.config.AppearanceKitManager
 import io.legado.app.help.config.ComponentRef
@@ -46,18 +50,17 @@ import io.legado.app.ui.widget.compose.rememberAppSettingPalette
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.components.GlassTopAppBar
-import io.legado.app.ui.widget.components.installGlassTopBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import io.legado.app.ui.theme.labelXSmall
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.launch
 
-class AppearanceKitEditActivity : BaseActivity<ActivityThemeManageBinding>() {
+class AppearanceKitEditActivity : BaseActivity<ViewBinding>() {
 
-    override val binding: ActivityThemeManageBinding by lazy {
-        ActivityThemeManageBinding.inflate(layoutInflater)
-    }
+    // 原 activity_theme_manage.xml 已退役（CE-a #8）：composeShell 合成壳 + attachComposeContent 单源；
+    // 顶栏由 installGlassTopBar 运行时注入改为**页内直接渲染**
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private var kitState by mutableStateOf<StoredAppearanceKit?>(null)
     private var dayOptions by mutableStateOf(AppearanceKitEditOptions())
@@ -68,14 +71,24 @@ class AppearanceKitEditActivity : BaseActivity<ActivityThemeManageBinding>() {
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initTopBar()
-        binding.tabBar.visibility = View.GONE
-        binding.tvSummary.visibility = View.GONE
-        binding.recyclerView.visibility = View.GONE
-        binding.btnAdd.visibility = View.GONE
-        val composeView = ComposeView(this).apply {
-            layoutParams = binding.recyclerView.layoutParams
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
+        initComposeContent()
+        loadKit()
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = topBarTitle,
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = { TopBarActionRow(emptyList()) }
+                    )
+                }
+                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 kitState?.let { kit ->
                     AppearanceKitEditScreen(
                         kit = kit,
@@ -88,16 +101,15 @@ class AppearanceKitEditActivity : BaseActivity<ActivityThemeManageBinding>() {
                         onSelect = ::showSelector
                     )
                 }
+                }
             }
         }
-        binding.root.addView(composeView, binding.root.indexOfChild(binding.recyclerView))
-        loadKit()
     }
 
     /** subpage-topbar-unify 二期：子页头部统一为 GlassTopAppBar 单一组件。 */
     private fun initTopBar() {
         topBarTitle = getString(R.string.edit)
-        installGlassTopBar(binding, { topBarTitle }, { emptyList() }) { finish() }
+        // 顶栏改为页内渲染（见 initComposeContent）
     }
 
     private fun loadKit() {

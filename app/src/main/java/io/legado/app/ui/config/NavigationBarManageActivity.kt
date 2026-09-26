@@ -74,8 +74,16 @@ import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.constant.EventBus
-import io.legado.app.databinding.ActivityThemeManageBinding
 import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.config.AppearanceKitManager
 import io.legado.app.help.config.AppConfig
@@ -88,7 +96,6 @@ import io.legado.app.ui.book.cache.WebDavTaskType
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.image.ImageCropContract
 import io.legado.app.ui.widget.components.MenuAction
-import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.AppManagementListRow
@@ -126,9 +133,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), ColorPickerDialogListener {
+class NavigationBarManageActivity : BaseActivity<ViewBinding>(), ColorPickerDialogListener {
 
-    override val binding by viewBinding(ActivityThemeManageBinding::inflate)
+    // 原 activity_theme_manage.xml 已退役（CE-a #8）：composeShell 合成壳 + attachComposeContent 单源；
+    // 顶栏由 installGlassTopBar 运行时注入改为**页内直接渲染**
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private var entriesState by mutableStateOf<List<NavigationBarIconConfig.Entry>>(emptyList())
     private var activeDirNameState by mutableStateOf(NavigationBarIconConfig.DEFAULT_DIR_NAME)
@@ -260,7 +269,7 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initTopBar()
-        initView()
+        initComposeContent()
         loadPackages()
         observeWebDavTasks()
     }
@@ -274,21 +283,20 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
     // T8②（theme-arch-gap）：RECREATE 由基类统一订阅（本页不豁免→整体重建，
     // 重建后 onCreate→initView/loadPackages 已重载），自订阅 loadPackages 冗余已删
 
-    private fun initView() {
-        val container = binding.recyclerView.parent as? ViewGroup ?: return
-        val index = container.indexOfChild(binding.recyclerView)
-        container.removeView(binding.recyclerView)
-        container.removeView(binding.tabBar)
-        container.removeView(binding.tvSummary)
-        container.removeView(binding.btnAdd)
-        val cv = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-            setContent {
+    @OptIn(ExperimentalMaterial3Api::class)
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = getString(R.string.navigation_bar_manage),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = { TopBarActionRow(topBarActions()) }
+                    )
+                }
+                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 NavigationBarPackageManageScreen(
                     entries = entriesState,
                     activeDirName = activeDirNameState,
@@ -308,41 +316,38 @@ class NavigationBarManageActivity : BaseActivity<ActivityThemeManageBinding>(), 
                     entryInfo = ::entryInfo,
                     entryActions = ::entryActions
                 )
+                }
             }
         }
-        container.addView(cv, index.coerceAtMost(container.childCount))
     }
 
     /** subpage-topbar-unify: 子页头部统一为 MainTopBarView(Mode.SUB)，容器切换/同步任务改为 action 插槽图标。 */
     // W3.2：顶栏运行时替换为 GlassTopAppBar（透壁纸语义，W1 模式）。S3 容器/同步任务保留一级图标语义
     private fun initTopBar() {
-        installGlassTopBar(
-            binding,
-            titleProvider = { getString(R.string.navigation_bar_manage) },
-            actionsProvider = {
-                buildList {
-                    if (containerActionVisible) {
-                        add(
-                            MenuAction(
-                                iconRes = R.drawable.ic_outline_cloud_24,
-                                title = getString(R.string.s3_bucket),
-                                alwaysShow = true
-                            ) { showContainerSelector() }
-                        )
-                    }
-                    add(
-                        MenuAction(
-                            iconRes = R.drawable.ic_history,
-                            title = getString(R.string.package_sync_task_menu),
-                            alwaysShow = true
-                        ) { showNavigationBarSyncTasks() }
-                    )
-                }
-            },
-            onBack = { finish() }
-        )
+        // 顶栏改为页内渲染（见 initComposeContent）；此处只做容器按钮等状态准备
         updateContainerMenu()
     }
+
+    /** 顶栏动作（原 `installGlassTopBar` 的 actionsProvider：S3 容器按云类型显隐 + 同步任务）。 */
+    private fun topBarActions(): List<MenuAction> =
+        buildList {
+            if (containerActionVisible) {
+                add(
+                    MenuAction(
+                        iconRes = R.drawable.ic_outline_cloud_24,
+                        title = getString(R.string.s3_bucket),
+                        alwaysShow = true
+                    ) { showContainerSelector() }
+                )
+            }
+            add(
+                MenuAction(
+                    iconRes = R.drawable.ic_history,
+                    title = getString(R.string.package_sync_task_menu),
+                    alwaysShow = true
+                ) { showNavigationBarSyncTasks() }
+            )
+        }
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
         return true

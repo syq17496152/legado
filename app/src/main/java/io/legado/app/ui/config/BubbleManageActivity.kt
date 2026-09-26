@@ -12,15 +12,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.HelpOutline
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.Modifier
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.constant.EventBus
-import io.legado.app.databinding.ActivityThemeManageBinding
 import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.config.AppConfig
@@ -36,7 +46,6 @@ import io.legado.app.ui.book.cache.WebDavTaskType
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.widget.components.MenuAction
-import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
@@ -60,10 +69,12 @@ import kotlinx.coroutines.withContext
 import java.io.FileOutputStream
 import java.util.Locale
 
-class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
+class BubbleManageActivity : BaseActivity<ViewBinding>(),
     ColorPickerDialogListener {
 
-    override val binding by viewBinding(ActivityThemeManageBinding::inflate)
+    // 原 activity_theme_manage.xml 已退役（CE-a #8）：composeShell 合成壳 + attachComposeContent 单源；
+    // 顶栏由 installGlassTopBar 运行时注入改为**页内直接渲染**
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private val entriesState = mutableStateOf<List<BubblePackageManager.Entry>>(emptyList())
     private val summaryState = mutableStateOf("")
@@ -133,49 +144,46 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         observeWebDavTasks()
     }
 
-    // W5.3：顶栏运行时替换为 GlassTopAppBar（透壁纸语义，W1 模式），S3 容器/帮助保留一级图标语义
+    // W5.3：顶栏改为页内渲染（见 initComposeContent）；S3 容器/帮助保留一级图标语义
     private fun initTopBar() {
-        installGlassTopBar(
-            binding,
-            titleProvider = { getString(R.string.bubble_manage) },
-            actionsProvider = {
-                buildList {
-                    if (containerActionVisible) {
-                        add(
-                            MenuAction(
-                                iconRes = R.drawable.ic_outline_cloud_24,
-                                title = getString(R.string.s3_bucket),
-                                alwaysShow = true
-                            ) { showContainerSelector() }
-                        )
-                    }
-                    add(
-                        MenuAction(
-                            iconRes = R.drawable.ic_help,
-                            title = getString(R.string.help),
-                            alwaysShow = true
-                        ) { showBubbleHelp() }
-                    )
-                }
-            },
-            onBack = { finish() }
-        )
+        updateContainerMenu()
     }
 
-    private fun initComposeContent() {
-        val container = binding.recyclerView.parent as? ViewGroup ?: return
-        // W5.3：View 节点全部摘除（titleBar 已由 installGlassTopBar 移除），对齐 W1/W2 迁移模式
-        container.removeView(binding.recyclerView)
-        container.removeView(binding.tabBar)
-        container.removeView(binding.tvSummary)
-        container.removeView(binding.btnAdd)
-        val cv = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
+    /** 顶栏动作（原 `installGlassTopBar` 的 actionsProvider：S3 容器按云类型显隐 + 帮助）。 */
+    private fun topBarActions(): List<MenuAction> =
+        buildList {
+            if (containerActionVisible) {
+                add(
+                    MenuAction(
+                        iconRes = R.drawable.ic_outline_cloud_24,
+                        title = getString(R.string.s3_bucket),
+                        alwaysShow = true
+                    ) { showContainerSelector() }
+                )
+            }
+            add(
+                MenuAction(
+                    iconRes = R.drawable.ic_help,
+                    title = getString(R.string.help),
+                    alwaysShow = true
+                ) { showBubbleHelp() }
             )
-            setContent {
+        }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = getString(R.string.bubble_manage),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = { TopBarActionRow(topBarActions()) }
+                    )
+                }
+                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 BubbleManageScreen(
                     entries = entriesState.value,
                     summary = summaryState.value,
@@ -188,9 +196,9 @@ class BubbleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     onMoreActions = ::bubbleActions,
                     onAddClick = ::showAddActions
                 )
+                }
             }
         }
-        container.addView(cv)
     }
 
     private fun updateContainerMenu() {

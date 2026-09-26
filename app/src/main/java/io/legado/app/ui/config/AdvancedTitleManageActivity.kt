@@ -2,16 +2,15 @@ package io.legado.app.ui.config
 
 import android.net.Uri
 import android.os.Bundle
-import android.view.ViewGroup
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.EventBus
-import io.legado.app.databinding.ActivityThemeManageBinding
 import io.legado.app.help.config.AdvancedTitleConfig
 import io.legado.app.help.config.AdvancedTitlePackageManager
 import io.legado.app.help.config.ReadBookConfig
@@ -30,17 +29,18 @@ import io.legado.app.utils.readBytesLimited
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
+class AdvancedTitleManageActivity : BaseActivity<ViewBinding>(),
     AdvancedTitleConfigDialog.Host {
 
-    override val binding by viewBinding(ActivityThemeManageBinding::inflate)
+    // 原 activity_theme_manage.xml 已退役（CE-a #8）：composeShell 合成壳 + attachComposeContent 单源；
+    // 本页顶栏由 `AdvancedTitleManageScreen` 内的 `AppManagementScaffold` 自带
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private val entriesState = mutableStateOf<List<AdvancedTitlePackageManager.Entry>>(emptyList())
     private val activeIdState = mutableStateOf(AdvancedTitlePackageManager.activeId())
@@ -95,24 +95,8 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     }
 
     private fun initComposeContent() {
-        val container = binding.recyclerView.parent as? ViewGroup ?: return
-        val index = container.indexOfChild(binding.recyclerView)
-        // my-compose-full W3.4：View 节点整体摘除（titleBar 由 AppManagementScaffold 接管，其余共用容器
-        // 节点 removeView 对齐 W1/W2 迁移模式，不再保留 GONE 隐藏残留）
-        container.removeView(binding.titleBar)
-        container.removeView(binding.recyclerView)
-        container.removeView(binding.tabBar)
-        container.removeView(binding.tvSummary)
-        container.removeView(binding.btnAdd)
-        container.addView(
-            ComposeView(this).apply {
-                setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                setContent {
-                    AdvancedTitleManageScreen(
+        binding.root.attachComposeContent {
+            AdvancedTitleManageScreen(
                         entries = entriesState.value,
                         activeId = activeIdState.value,
                         loading = loadingState.value,
@@ -126,11 +110,8 @@ class AdvancedTitleManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                         onEdit = ::editEntry,
                         onMoreActions = ::entryActions,
                         onImport = ::showImportPicker
-                    )
-                }
-            },
-            index
-        )
+            )
+        }
     }
 
     private fun loadEntries() {

@@ -212,9 +212,12 @@ fun MenuActionIcon(action: MenuAction, modifier: Modifier = Modifier) {
 
 /**
  * 运行时顶栏替换（subpage-topbar-unify 二期，共用布局页迁移模式）：
- * 共用布局（如 ActivityThemeManageBinding 14 页）全部迁移前 XML 的 MainTopBarView
+ * 共用布局（如 activity_theme_manage.xml 的 14 页）全部迁移前 XML 的 MainTopBarView
  * 节点必须保留；已迁移页在运行时移除该节点并插入 ComposeView 承载 GlassTopAppBar。
  * 顶栏最终色走 resolvePageBarColorWithAlpha 单源（AD-01 v1.5）。
+ *
+ * ⚠️ CE-a #8（2026-09-26）后**已无调用点**：14 个共用布局页全部改为「页内直接渲染 GlassTopAppBar」，
+ * 共用 XML 亦已退役。本函数保留待「顶栏包 §1/§2」决策是否删除，**禁止新增调用**。
  */
 fun ComponentActivity.installGlassTopBar(
     binding: ViewBinding,

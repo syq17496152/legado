@@ -56,9 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,7 +73,11 @@ import com.jaredrummler.android.colorpicker.ColorPickerDialog
 import com.jaredrummler.android.colorpicker.ColorPickerDialogListener
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
-import io.legado.app.databinding.ActivityThemeManageBinding
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.config.AppearanceKitManager
@@ -107,7 +109,6 @@ import io.legado.app.ui.font.FontSelectDialog
 import io.legado.app.ui.image.ImageCropContract
 import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.components.GlassTopAppBar
-import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.ui.widget.compose.AppManagementCard
@@ -157,11 +158,13 @@ import androidx.compose.material3.MaterialTheme
 import io.legado.app.ui.theme.labelXSmall
 import io.legado.app.ui.theme.bodyTertiary
 
-class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
+class ThemeManageActivity : BaseActivity<ViewBinding>(),
     ColorPickerDialogListener,
     FontSelectDialog.CallBack {
 
-    override val binding by viewBinding(ActivityThemeManageBinding::inflate)
+    // 原 activity_theme_manage.xml 已退役（CE-a #8）：composeShell 合成壳 + attachComposeContent 单源；
+    // 顶栏由 installGlassTopBar 运行时注入（首插 ComposeView + 移除 R.id.title_bar 锚点）改为**页内直接渲染**
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private var entriesState by mutableStateOf<List<ThemePackageManager.Entry>>(emptyList())
 
@@ -268,7 +271,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         initTopBar()
         restorePendingRemoteSyncTasks()
-        initView()
+        initComposeContent()
         lifecycleScope.launch {
             kotlin.runCatching {
                 ThemePackageManager.ensureLocalAppliedTheme(this@ThemeManageActivity, false)
@@ -284,21 +287,27 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         super.onResume()
     }
 
-    private fun initView() {
-        val container = binding.recyclerView.parent as? ViewGroup ?: return
-        val index = container.indexOfChild(binding.recyclerView)
-        container.removeView(binding.recyclerView)
-        container.removeView(binding.tabBar)
-        container.removeView(binding.tvSummary)
-        container.removeView(binding.btnAdd)
-        val cv = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-            setContent {
+    /**
+     * CE-a #8：Compose 承载页面骨架（顶栏 + 内容区）。
+     *
+     * 与原 XML 的对应关系：`title_bar` → 页内 `GlassTopAppBar`；`recycler_view`（原 `0dp + weight=1`
+     * 的列表位）→ `Box(weight(1f))` 承载 `ThemePackageManageScreen`；`tab_bar` / `tv_summary` /
+     * `btn_add` 三节点在迁移前就被运行时摘除（清壳装配），新实现不再重建它们。
+     */
+    @OptIn(ExperimentalMaterial3Api::class)
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = topBarTitle,
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = { TopBarActionRow(topBarActions) }
+                    )
+                }
+                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 ThemePackageManageScreen(
                     entries = entriesState,
                     isNightTheme = isNightTheme,
@@ -320,9 +329,9 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
                     loadError = entriesLoadError,
                     onRetryLoad = ::loadThemes
                 )
+                }
             }
         }
-        container.addView(cv, index.coerceAtMost(container.childCount))
     }
 
     /** subpage-topbar-unify: 子页头部统一为 GlassTopAppBar 二期组件。 */
@@ -330,7 +339,7 @@ class ThemeManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     private fun initTopBar() {
         topBarTitle = getString(R.string.theme_manage_title)
         rebuildTopBarActions()
-        installGlassTopBar(binding, { topBarTitle }, { topBarActions }) { finish() }
+        // 顶栏改为页内渲染（见 initComposeContent）；此处只做标题/动作状态准备
         updateContainerButton()
     }
 

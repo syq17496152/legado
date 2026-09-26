@@ -57,8 +57,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -72,10 +70,18 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.flexbox.FlexboxLayout
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.data.entities.rule.ExploreKind
-import io.legado.app.databinding.ActivityThemeManageBinding
 import io.legado.app.databinding.ItemFilletCompleteTextBinding
 import io.legado.app.databinding.ItemFilletSelectorSingleBinding
 import io.legado.app.databinding.ItemFilletTextBinding
@@ -113,9 +119,11 @@ import io.legado.app.ui.theme.bodySecondary
 import io.legado.app.ui.theme.subtitleLarge
 import io.legado.app.ui.theme.titleLargeX
 
-class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() {
+class DiscoverySuiteManageActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityThemeManageBinding::inflate)
+    // 原 activity_theme_manage.xml 已退役（CE-a #8）：composeShell 合成壳 + attachComposeContent 单源；
+    // 顶栏由 installGlassTopBar 运行时注入改为**页内直接渲染**
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private var configState by mutableStateOf(DiscoverySuiteStore.load())
     private var selectedSuiteIdState by mutableStateOf(DiscoverySuiteStore.selectedSuiteId())
@@ -129,7 +137,6 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
     override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initTopBar()
         onBackPressedDispatcher.addCallback(this) {
             handleBackNavigation()
         }
@@ -139,35 +146,26 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
         loadSourceOptions()
     }
 
-    // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar，标题/动作随 screenModeState 动态桥接
-    //（原 MainTopBarView setTitle+actionsBar 重建链改 Compose 状态驱动）
+    // W7.2（Delta 3→1）：顶栏标题/动作随 screenModeState 动态桥接（原 MainTopBarView setTitle+actionsBar
+    // 重建链改 Compose 状态驱动）；CE-a #8 后顶栏为**页内直接渲染**（见 initComposeContent）⇒
+    // 原「只做状态准备、然后交给 installGlassTopBar 注入」的空 `initTopBar()` 已随之删除。
     private var topBarTitleState by mutableStateOf("")
     private var topBarActionsState by mutableStateOf(listOf<MenuAction>())
 
-    private fun initTopBar() {
-        installGlassTopBar(
-            binding,
-            titleProvider = { topBarTitleState },
-            actionsProvider = { topBarActionsState },
-            onBack = { handleBackNavigation() }
-        )
-    }
-
+    @OptIn(ExperimentalMaterial3Api::class)
     private fun initComposeContent() {
-        val container = binding.recyclerView.parent as? ViewGroup ?: return
-        val index = container.indexOfChild(binding.recyclerView)
-        container.removeView(binding.recyclerView)
-        container.removeView(binding.tabBar)
-        container.removeView(binding.tvSummary)
-        container.removeView(binding.btnAdd)
-        val composeView = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-            setContent {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = topBarTitleState,
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { handleBackNavigation() },
+                        actions = { TopBarActionRow(topBarActionsState) }
+                    )
+                }
+                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 LegadoComposeTheme {
                     when (val mode = screenModeState) {
                         is DiscoverySuiteManageMode.WidgetEditor -> {
@@ -219,9 +217,9 @@ class DiscoverySuiteManageActivity : BaseActivity<ActivityThemeManageBinding>() 
                         }
                     }
                 }
+                }
             }
         }
-        container.addView(composeView, index.coerceAtMost(container.childCount))
     }
 
     private fun handleBackNavigation() {

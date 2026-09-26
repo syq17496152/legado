@@ -14,17 +14,27 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.constant.EventBus
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReadMenuCustomButton
-import io.legado.app.databinding.ActivityThemeManageBinding
 import io.legado.app.databinding.ItemThemePackageBinding
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
@@ -45,8 +55,10 @@ import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.book.read.ReadMenuButtonIconHelper
 import io.legado.app.ui.book.read.ReadMenuButtonConfig
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
-import io.legado.app.ui.widget.components.installGlassTopBar
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.utils.GSON
 import io.legado.app.utils.dpToPx
@@ -56,15 +68,22 @@ import io.legado.app.utils.postEvent
 import io.legado.app.utils.readText
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
+class ReadMenuButtonManageActivity : BaseActivity<ViewBinding>(),
     ItemTouchCallback.Callback {
 
-    override val binding by viewBinding(ActivityThemeManageBinding::inflate)
+    // 原 activity_theme_manage.xml 已退役（CE-a #8）：composeShell 合成壳 + attachComposeContent 单源。
+    // ⚠️ 既有缺陷修复：本页 `initTopBar()` **历史上从未被调用**（`onActivityCreated` 只调 initView/load），
+    // 原 XML 的 `title_bar`（MainTopBarView 默认 BOOKSHELF 模式）只是「看起来有个顶栏」，标题与
+    // 「重置」动作均不可达；换装时一并接上页内 `GlassTopAppBar`（标题 + 重置动作，与原 provider 一致）。
+    override val binding: ViewBinding by lazy { composeShell(this) }
+
+    /** 原 XML 字段节点的程序化等价物（14 个管理页共用布局已退役，见 [ThemeManageShellViews]） */
+    private val shell by lazy { ThemeManageShellViews(this) }
+
     private val adapter = ButtonAdapter()
     private var layout = ReadMenuButtonConfig.defaultLayout()
     private var rowIndex = 0
@@ -143,6 +162,7 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
     override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        initComposeContent()
         initView()
         load()
     }
@@ -152,25 +172,48 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         load()
     }
 
-    // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar（原 MainTopBarView Mode.SUB 消亡）
-    private fun initTopBar() {
-        installGlassTopBar(
-            binding,
-            titleProvider = { getString(R.string.read_menu_button_manage) },
-            actionsProvider = {
-                listOf(
+    /**
+     * CE-a #8：Compose 承载页面骨架（顶栏 + 共用管理族内容区）。
+     *
+     * 与原 XML 的对应关系：`title_bar` → 页内 `GlassTopAppBar`；其余节点（`tab_bar` / `btn_day` /
+     * `btn_night` / `tv_summary` / `recycler_view` / `btn_add`）由 [ThemeManageShellViews] 单源装配，
+     * 以 `AndroidView` 原样托管（本页在 `onActivityCreated` 内就要配置 adapter / ItemTouchHelper /
+     * 段底 / 预览条，且运行时向根 `addView` 插预览条，故必须宿主字段持有同一实例）。
+     */
+    @OptIn(ExperimentalMaterial3Api::class)
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 dead `initTopBar()` 的 provider 迁入页内：标题 + 重置动作逐项不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = getString(R.string.read_menu_button_manage),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = { TopBarActionRow(topBarActions()) }
+                    )
+                }
+                // ---- 原共用布局内容区（`recycler_view` 的 `weight=1` 语义由 Compose 权重表达）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    factory = { shell.root }
+                )
+            }
+        }
+    }
+
+    /** 顶栏动作（原 dead `initTopBar()` 的 actionsProvider：重置逐项不变）。 */
+    private fun topBarActions(): List<MenuAction> {
+        return listOf(
                     MenuAction(
                         iconRes = R.drawable.ic_restore,
                         title = getString(R.string.reset),
                         alwaysShow = true
                     ) { resetLayout() }
-                )
-            },
-            onBack = { finish() }
         )
     }
 
-    private fun initView() = binding.run {
+    private fun initView() = shell.run {
         tabBar.background = UiCorner.opaqueRounded(
             themeMutedColorOrDefault(),
             UiCorner.panelRadius(this@ReadMenuButtonManageActivity)
@@ -220,12 +263,12 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
         layout = ReadMenuButtonConfig.load(this)
         customButtons = appDb.readMenuCustomButtonDao.all().associateBy { it.id }
         adapter.items = currentRow()
-        binding.tvSummary.text = getString(R.string.read_menu_button_summary)
+        shell.tvSummary.text = getString(R.string.read_menu_button_summary)
         updateTabs()
         refreshPreview()
     }
 
-    private fun updateTabs() = binding.run {
+    private fun updateTabs() = shell.run {
         btnDay.isSelected = rowIndex == 0
         btnNight.isSelected = rowIndex == 1
         btnDay.setTextColor(if (rowIndex == 0) accentColor else primaryTextColor)
@@ -247,14 +290,15 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
      *
      * 两条既有铁律决定实现形态：
      * ① 不新增 View 布局页（`ui_gate` 禁 `R.layout.*`）⇒ 全部代码构建；
-     * ② `activity_theme_manage.xml` 被 14 个管理页共用 ⇒ **不改 XML**，只在本页运行时插到
-     *    「添加」按钮之前（该布局里 `recycler_view` 带 `weight=1`，插在它之后不会挤列表）。
+     * ② 原 `activity_theme_manage.xml` 被 14 个管理页共用 ⇒ **不改共用 XML**，只在本页运行时插到
+     *    「添加」按钮之前（该布局里 `recycler_view` 带 `weight=1`，插在它之后不会挤列表）；
+     *    现共用 XML 已退役，容器改由 [ThemeManageShellViews] 单源装配，插入锚点语义不变。
      *
      * 只读：不挂任何点击/长按监听——避免出现第二处编辑入口（与列表编辑职责分离）。
      */
     private fun ensurePreviewBar(): LinearLayout? {
         previewBar?.let { return it }
-        val parent = binding.root as? LinearLayout ?: return null
+        val parent = shell.root
         val title = TextView(this).apply {
             text = getString(R.string.read_menu_preview_title)
             textSize = 12f
@@ -290,7 +334,7 @@ class ReadMenuButtonManageActivity : BaseActivity<ActivityThemeManageBinding>(),
             topMargin = 4.dpToPx()
             bottomMargin = 8.dpToPx()
         }
-        val addIndex = parent.indexOfChild(binding.btnAdd).takeIf { it >= 0 } ?: parent.childCount
+        val addIndex = parent.indexOfChild(shell.btnAdd).takeIf { it >= 0 } ?: parent.childCount
         parent.addView(bar, addIndex, params)
         previewBar = bar
         return bar

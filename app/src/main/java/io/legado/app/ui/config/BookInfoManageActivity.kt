@@ -1,22 +1,22 @@
 package io.legado.app.ui.config
 
 import android.os.Bundle
-import android.view.ViewGroup
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
-import io.legado.app.databinding.ActivityThemeManageBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.help.config.BookInfoComponentConfig
 import io.legado.app.help.config.BookInfoComponentItem
 import io.legado.app.help.config.BookInfoPageStyle
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 
-class BookInfoManageActivity : BaseActivity<ActivityThemeManageBinding>() {
+class BookInfoManageActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityThemeManageBinding::inflate)
+    // 原 activity_theme_manage.xml 已退役（CE-a #8）：composeShell 合成壳 + attachComposeContent 单源；
+    // 本页顶栏由 `BookInfoManageScreen` 内的 `AppManagementScaffold` 自带，无需 installGlassTopBar
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private val styleState = mutableStateOf(BookInfoPageStyle.CLASSIC)
     private val componentsState = mutableStateOf<List<BookInfoComponentItem>>(emptyList())
@@ -25,38 +25,16 @@ class BookInfoManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        hideTopBar()
-
         // Load initial state
         styleState.value = BookInfoComponentConfig.loadStyle()
         componentsState.value = BookInfoComponentConfig.load()
 
-        // Hide legacy XML views (tab_bar, tv_summary, btn_add)
-        binding.tabBar.visibility = android.view.View.GONE
-        binding.tvSummary.visibility = android.view.View.GONE
-        binding.btnAdd.visibility = android.view.View.GONE
-
         initComposeContent()
     }
 
-    // followup F5：统一管理族壳——View TitleBar 摘除（AppManagementScaffold 接管顶栏，返回由 Screen onBack 提供）
-    private fun hideTopBar() {
-        binding.titleBar.visibility = android.view.View.GONE
-    }
-
     private fun initComposeContent() {
-        val container = binding.recyclerView.parent as? ViewGroup ?: return
-        val index = container.indexOfChild(binding.recyclerView)
-        container.removeView(binding.recyclerView)
-
-        val composeView = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setContent {
-                BookInfoManageScreen(
+        binding.root.attachComposeContent {
+            BookInfoManageScreen(
                     style = styleState.value,
                     components = componentsState.value,
                     onBack = { finish() },
@@ -65,9 +43,7 @@ class BookInfoManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                     onReset = ::onReset,
                     onMoveItem = ::onMoveItem
                 )
-            }
         }
-        container.addView(composeView, index)
     }
 
     private fun onStyleChanged(style: BookInfoPageStyle) {

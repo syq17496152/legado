@@ -6,18 +6,28 @@ import android.os.Bundle
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.Modifier
+import androidx.viewbinding.ViewBinding
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.GlassTopAppBar
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.constant.AppLog
-import io.legado.app.databinding.ActivityThemeManageBinding
 import io.legado.app.help.config.ShareNoteTemplateManager
 import io.legado.app.ui.book.read.ShareNoteImageRenderer
 import io.legado.app.ui.code.CodeEditActivity
 import io.legado.app.ui.file.HandleFileContract
-import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
@@ -33,9 +43,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-class ShareNoteTemplateManageActivity : BaseActivity<ActivityThemeManageBinding>() {
+class ShareNoteTemplateManageActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityThemeManageBinding::inflate)
+    // 原 activity_theme_manage.xml 已退役（CE-a #8）：composeShell 合成壳 + attachComposeContent 单源
+    override val binding: ViewBinding by lazy { composeShell(this) }
 
     private val entriesState = mutableStateOf<List<ShareNoteTemplateManager.Entry>>(emptyList())
     private val activeDirNameState = mutableStateOf(ShareNoteTemplateManager.activeDirName())
@@ -97,19 +108,8 @@ class ShareNoteTemplateManageActivity : BaseActivity<ActivityThemeManageBinding>
     override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initTopBar()
         initComposeContent()
         loadTemplates()
-    }
-
-    // my-compose-full W3.3：顶栏运行时替换为 GlassTopAppBar（透壁纸语义，W1 模式），标题字符串资源化
-    private fun initTopBar() {
-        installGlassTopBar(
-            binding,
-            titleProvider = { getString(R.string.share_note_template_manage) },
-            actionsProvider = { emptyList() },
-            onBack = { finish() }
-        )
     }
 
     override fun onResume() {
@@ -123,21 +123,20 @@ class ShareNoteTemplateManageActivity : BaseActivity<ActivityThemeManageBinding>
         super.onDestroy()
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     private fun initComposeContent() {
-        val container = binding.recyclerView.parent as? ViewGroup ?: return
-        val index = container.indexOfChild(binding.recyclerView)
-        // W3.3：共用容器节点 removeView 摘除（titleBar 由 installGlassTopBar 已移除），对齐 W1/W2 模式
-        container.removeView(binding.recyclerView)
-        container.removeView(binding.tabBar)
-        container.removeView(binding.tvSummary)
-        container.removeView(binding.btnAdd)
-        val cv = ComposeView(this).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setContent {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = getString(R.string.share_note_template_manage),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = { TopBarActionRow(emptyList()) }
+                    )
+                }
+                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 ShareNoteTemplateManageScreen(
                     entries = entriesState.value,
                     activeDirName = activeDirNameState.value,
@@ -149,12 +148,9 @@ class ShareNoteTemplateManageActivity : BaseActivity<ActivityThemeManageBinding>
                     onMoreActions = ::templateActions,
                     onAddClick = ::showAddActions
                 )
+                }
             }
         }
-        // bugfix-0908f T3：index 在 removeView 之前计算，4 次移除后 childCount 收敛为 1，
-        // 裸 index=3 越界崩溃（IndexOutOfBoundsException index=3 count=1）——
-        // coerceAtMost 对齐同批 ThemeManage/TopBarManage/NavigationBarManage 写法
-        container.addView(cv, index.coerceAtMost(container.childCount))
     }
 
     private fun loadTemplates() {

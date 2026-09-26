@@ -12,16 +12,26 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReadAloudBgmGroup
 import io.legado.app.data.entities.ReadAloudBgmTrack
-import io.legado.app.databinding.ActivityThemeManageBinding
 import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
@@ -35,12 +45,13 @@ import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.lib.theme.themeMutedColorOrDefault
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
-import io.legado.app.ui.widget.components.installGlassTopBar
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -51,9 +62,14 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
-class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
+class ReadAloudBgmManageActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityThemeManageBinding::inflate)
+    // 原 activity_theme_manage.xml 已退役（CE-a #8）：composeShell 合成壳 + attachComposeContent 单源；
+    // 顶栏由 installGlassTopBar 运行时注入（首插 ComposeView + 移除 R.id.title_bar 锚点）改为**页内直接渲染**
+    override val binding: ViewBinding by lazy { composeShell(this) }
+
+    /** 原 XML 字段节点的程序化等价物（14 个管理页共用布局已退役，见 [ThemeManageShellViews]） */
+    private val shell by lazy { ThemeManageShellViews(this) }
 
     private val adapter = BgmAdapter()
     private var groups: List<ReadAloudBgmGroup> = emptyList()
@@ -144,7 +160,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     override fun manageBackgroundAlphaEnabled(): Boolean = true
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initTopBar()
+        initComposeContent()
         initView()
         load()
     }
@@ -156,13 +172,39 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
         super.onDestroy()
     }
 
-    // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar（原 MainTopBarView Mode.SUB 消亡）
-    private fun initTopBar() {
-        installGlassTopBar(
-            binding,
-            titleProvider = { "智能音频" }, // 简化说明:沿承原实现硬编码标题，无既有字符串资源 | 升级路径:补资源后替换
-            actionsProvider = {
-                listOf(
+    /**
+     * CE-a #8：Compose 承载页面骨架（顶栏 + 共用管理族内容区）。
+     *
+     * 与原 XML 的对应关系：`title_bar` → 页内 `GlassTopAppBar`；其余节点（`tab_bar` / `btn_day` /
+     * `btn_night` / `tv_summary` / `recycler_view` / `btn_add`）由 [ThemeManageShellViews] 单源装配，
+     * 以 `AndroidView` 原样托管（本页在 `onActivityCreated` 内就要配置 adapter / 段底 / 批量栏 /
+     * 分组快捷栏 / 空态主操作，且运行时向根 `addView` 动态插栏，故必须宿主字段持有同一实例）。
+     */
+    @OptIn(ExperimentalMaterial3Api::class)
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = "智能音频", // 简化说明:沿承原实现硬编码标题，无既有字符串资源 | 升级路径:补资源后替换
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = { TopBarActionRow(topBarActions()) }
+                    )
+                }
+                // ---- 原共用布局内容区（`recycler_view` 的 `weight=1` 语义由 Compose 权重表达）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    factory = { shell.root }
+                )
+            }
+        }
+    }
+
+    /** 顶栏动作（原 `installGlassTopBar` 的 actionsProvider：导入/导出/分组/管理分组逐项不变）。 */
+    private fun topBarActions(): List<MenuAction> {
+        return listOf(
                     MenuAction(
                         iconRes = R.drawable.ic_download,
                         title = getString(R.string.import_str),
@@ -183,13 +225,10 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                         title = getString(R.string.group_manage),
                         alwaysShow = true
                     ) { showGroupManage() }
-                )
-            },
-            onBack = { finish() }
         )
     }
 
-    private fun initView() = binding.run {
+    private fun initView() = shell.run {
         tabBar.visibility = View.VISIBLE
         tabBar.background = UiCorner.opaqueRounded(
             themeCardColorOrDefault(),
@@ -275,11 +314,12 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
      * 把默认态改对（只展开「默认分组」，见 [buildRows]）之后，还需要一个
      * 「一键看全部 / 一键收干净」的出口，否则逐个展开同样费事。
      *
-     * 插入位置=摘要与列表之间（`activity_theme_manage.xml` 被 14 个管理页共用 ⇒ 不改 XML）。
+     * 插入位置=摘要与列表之间（原 `activity_theme_manage.xml` 被 14 个管理页共用 ⇒ 不改共用 XML；
+     * 现共用 XML 已退役，容器改由 [ThemeManageShellViews] 单源装配，插入锚点语义不变）。
      */
     private fun ensureGroupActionBar(): LinearLayout? {
         groupActionBar?.let { return it }
-        val parent = binding.root as? LinearLayout ?: return null
+        val parent = shell.root
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END
@@ -294,7 +334,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
             rightMargin = 18.dpToPx()
             topMargin = 4.dpToPx()
         }
-        val index = parent.indexOfChild(binding.tvSummary).takeIf { it >= 0 }?.plus(1)
+        val index = parent.indexOfChild(shell.tvSummary).takeIf { it >= 0 }?.plus(1)
             ?: parent.childCount
         parent.addView(bar, index, params)
         groupActionBar = bar
@@ -346,12 +386,12 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
      */
     private fun updateEmptyAction() {
         val empty = tracks.isEmpty()
-        binding.btnAdd.visibility = if (empty) View.VISIBLE else View.GONE
+        shell.btnAdd.visibility = if (empty) View.VISIBLE else View.GONE
         if (empty) {
-            binding.btnAdd.text = getString(R.string.read_aloud_bgm_import_audio)
-            binding.btnAdd.setOnClickListener { showImportActions() }
+            shell.btnAdd.text = getString(R.string.read_aloud_bgm_import_audio)
+            shell.btnAdd.setOnClickListener { showImportActions() }
         } else {
-            binding.btnAdd.setOnClickListener(null)
+            shell.btnAdd.setOnClickListener(null)
         }
     }
 
@@ -411,7 +451,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
      * （列表规模 ≤ 几十，直接遍历绑定中的 Holder 最省事且无陈旧引用风险）。
      */
     private fun refreshPreviewButton(trackId: Long, playing: Boolean) {
-        val recycler = binding.recyclerView
+        val recycler = shell.recyclerView
         for (index in 0 until recycler.childCount) {
             val holder = recycler.getChildViewHolder(recycler.getChildAt(index)) as? TrackHolder ?: continue
             if (holder.boundTrackId == trackId) holder.applyPreviewState(playing)
@@ -476,9 +516,9 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
                     withContext(Dispatchers.IO) {
                         importAudioPackage(uri, normalized, replaceOld = replaceOld) { count ->
                             // F52：ZIP 循环在 IO 线程 ⇒ 进度回主线程刷摘要（`View.post` 线程安全且不阻塞循环）
-                            binding.tvSummary.post {
+                            shell.tvSummary.post {
                                 if (importing) {
-                                    binding.tvSummary.text =
+                                    shell.tvSummary.text =
                                         getString(R.string.read_aloud_bgm_import_progress, count)
                                 }
                             }
@@ -543,7 +583,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
             adapter.submit(buildRows())
             updateBatchActionBar()
             updateEmptyAction()
-            binding.tvSummary.text = if (importing) {
+            shell.tvSummary.text = if (importing) {
                 importingText.ifBlank { "正在导入…" }
             } else if (tracks.isEmpty()) {
                 if (currentAssetType == ReadAloudBgmTrack.TYPE_SFX) {
@@ -570,7 +610,7 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
         load()
     }
 
-    private fun updateAssetTabs() = binding.run {
+    private fun updateAssetTabs() = shell.run {
         val bgmSelected = currentAssetType == ReadAloudBgmTrack.TYPE_BGM
         btnDay.isSelected = bgmSelected
         btnNight.isSelected = !bgmSelected
@@ -587,8 +627,8 @@ class ReadAloudBgmManageActivity : BaseActivity<ActivityThemeManageBinding>() {
     private fun setImporting(value: Boolean, text: String = "") {
         importing = value
         importingText = if (value) text else ""
-        binding.recyclerView.alpha = if (value) 0.45f else 1f
-        binding.tvSummary.text = if (value) text.ifBlank { "正在导入…" } else binding.tvSummary.text
+        shell.recyclerView.alpha = if (value) 0.45f else 1f
+        shell.tvSummary.text = if (value) text.ifBlank { "正在导入…" } else shell.tvSummary.text
         updateBatchActionBar()
     }
 

@@ -11,16 +11,26 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
+import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.base.attachComposeContent
+import io.legado.app.base.composeShell
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.AiReadAloudUsageRecord
-import io.legado.app.databinding.ActivityThemeManageBinding
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
@@ -31,9 +41,11 @@ import io.legado.app.lib.theme.themeMutedColorOrDefault
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppSemanticColors
+import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
-import io.legado.app.ui.widget.components.installGlassTopBar
+import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.ui.widget.compose.ComposeConfirmDialog
 import io.legado.app.utils.ColorUtils
@@ -42,7 +54,6 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
-import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.writeToOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -52,9 +63,14 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class AiReadAloudUsageRecordActivity : BaseActivity<ActivityThemeManageBinding>() {
+class AiReadAloudUsageRecordActivity : BaseActivity<ViewBinding>() {
 
-    override val binding by viewBinding(ActivityThemeManageBinding::inflate)
+    // 原 activity_theme_manage.xml 已退役（CE-a #8）：composeShell 合成壳 + attachComposeContent 单源；
+    // 顶栏由 installGlassTopBar 运行时注入（首插 ComposeView + 移除 R.id.title_bar 锚点）改为**页内直接渲染**
+    override val binding: ViewBinding by lazy { composeShell(this) }
+
+    /** 原 XML 字段节点的程序化等价物（14 个管理页共用布局已退役，见 [ThemeManageShellViews]） */
+    private val shell by lazy { ThemeManageShellViews(this) }
 
     private val adapter = UsageAdapter()
     private val selectedIds = linkedSetOf<Long>()
@@ -62,9 +78,11 @@ class AiReadAloudUsageRecordActivity : BaseActivity<ActivityThemeManageBinding>(
     private var typeFilter: String = ""
     private var currentBookOnly = false
 
-    // F31：选中态批量操作栏按需插入（**条件挂载**；宿主 activity_theme_manage.xml 为 14 页共用，
-    // 不改布局文件 ⇒ 其他页零影响）。F30 摘要则完全不新增 View（改用 Spannable 多行），
-    // 规避共用容器下动态插入视图的高度测量异常（实测该页插入视图会被撑满整屏、把列表挤出可视区）。
+    // F31：选中态批量操作栏按需插入（**条件挂载**；原 activity_theme_manage.xml 为 14 页共用，
+    // 运行时插栏即已共享容器，不改共用 XML ⇒ 其他页零影响；现共用 XML 已退役，容器改由
+    // [ThemeManageShellViews] 单源装配，插栏语义与插入锚点保持不变）。
+    // F30 摘要则完全不新增 View（改用 Spannable 多行），规避共用容器下动态插入视图的高度测量异常
+    // （实测该页插入视图会被撑满整屏、把列表挤出可视区）。
     private var batchBar: LinearLayout? = null
     private var summaryContainer: LinearLayout? = null
 
@@ -74,18 +92,44 @@ class AiReadAloudUsageRecordActivity : BaseActivity<ActivityThemeManageBinding>(
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        initTopBar()
+        initComposeContent()
         initView()
         load()
     }
 
-    // W7.2（Delta 3→1）：顶栏归一 installGlassTopBar（原 MainTopBarView Mode.SUB 消亡）
-    private fun initTopBar() {
-        installGlassTopBar(
-            binding,
-            titleProvider = { "消耗记录" }, // 简化说明:沿承原实现硬编码标题，无既有字符串资源 | 升级路径:补资源后替换
-            actionsProvider = {
-                listOf(
+    /**
+     * CE-a #8：Compose 承载页面骨架（顶栏 + 共用管理族内容区）。
+     *
+     * 与原 XML 的对应关系：`title_bar` → 页内 `GlassTopAppBar`；其余节点（`tab_bar` / `btn_day` /
+     * `btn_night` / `tv_summary` / `recycler_view` / `btn_add`）由 [ThemeManageShellViews] 单源装配，
+     * 以 `AndroidView` 原样托管（本页在 `onActivityCreated` 内就要配置 adapter / 点击 / 动态插入栏，
+     * 故必须宿主字段持有同一实例）。
+     */
+    @OptIn(ExperimentalMaterial3Api::class)
+    private fun initComposeContent() {
+        binding.root.attachComposeContent {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
+                LegadoTheme {
+                    GlassTopAppBar(
+                        title = "消耗记录", // 简化说明:沿承原实现硬编码标题，无既有字符串资源 | 升级路径:补资源后替换
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = { finish() },
+                        actions = { TopBarActionRow(topBarActions()) }
+                    )
+                }
+                // ---- 原共用布局内容区（`recycler_view` 的 `weight=1` 语义由 Compose 权重表达）----
+                AndroidView(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    factory = { shell.root }
+                )
+            }
+        }
+    }
+
+    /** 顶栏动作（原 `installGlassTopBar` 的 actionsProvider：筛选/书架过滤/删除/清空逐项不变）。 */
+    private fun topBarActions(): List<MenuAction> {
+        return listOf(
                     MenuAction(
                         iconRes = R.drawable.ic_screen,
                         title = getString(R.string.filter),
@@ -114,13 +158,10 @@ class AiReadAloudUsageRecordActivity : BaseActivity<ActivityThemeManageBinding>(
                         title = getString(R.string.clear),
                         alwaysShow = true
                     ) { confirmClearAll() }
-                )
-            },
-            onBack = { finish() }
         )
     }
 
-    private fun initView() = binding.run {
+    private fun initView() = shell.run {
         tabBar.visibility = View.GONE
         btnAdd.text = "全选"
         btnAdd.background = UiCorner.actionSelector(
@@ -140,13 +181,13 @@ class AiReadAloudUsageRecordActivity : BaseActivity<ActivityThemeManageBinding>(
     /**
      * F30/F31 落点：批量操作栏按需插入共用容器；**摘要不新增 View**（Spannable 多行承载）。
      *
-     * 为什么摘要不用自建视图：宿主 `activity_theme_manage.xml` 是 14 页共用容器，且其
-     * `recyclerView` 为 `height=0dp + weight=1`；实测动态插入的同级视图会被**测量成整屏高度**，
+     * 为什么摘要不用自建视图：宿主共用容器（原 `activity_theme_manage.xml`，现 [ThemeManageShellViews]）
+     * 的 `recyclerView` 为 `height=0dp + weight=1`；实测动态插入的同级视图会被**测量成整屏高度**，
      * 把列表与「全选」整体挤出可视区（真机层级取证：插入视图 bounds = (27,183)-(693,1280)）。
      * 故摘要改为在既有 `tvSummary` 内用 Spannable 排两行 + 按模型明细，零新增视图、零布局风险。
      */
     private fun initSummarySection() {
-        val container = binding.tvSummary.parent as? LinearLayout ?: return
+        val container = shell.tvSummary.parent as? LinearLayout ?: return
         summaryContainer = container
         batchBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -207,7 +248,7 @@ class AiReadAloudUsageRecordActivity : BaseActivity<ActivityThemeManageBinding>(
         }
         val modelLine = buildModelLine()
         val text = if (modelLine.isEmpty()) "$line1\n$line2" else "$line1\n$line2\n$modelLine"
-        binding.tvSummary.text = emphasizeTotal(text, totalLabel, line1.length + 1 + line2.length - totalLabel.length)
+        shell.tvSummary.text = emphasizeTotal(text, totalLabel, line1.length + 1 + line2.length - totalLabel.length)
         renderBatchBar()
     }
 
@@ -257,7 +298,7 @@ class AiReadAloudUsageRecordActivity : BaseActivity<ActivityThemeManageBinding>(
             return
         }
         if (bar.parent == null) {
-            val addIndex = container.indexOfChild(binding.btnAdd)
+            val addIndex = container.indexOfChild(shell.btnAdd)
             val target = if (addIndex >= 0) addIndex else container.childCount
             container.addView(bar, target.coerceIn(0, container.childCount))
         }
