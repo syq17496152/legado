@@ -92,6 +92,13 @@ object ReadTipConfig {
             ReadBookConfig.config.headerMode = value
         }
 
+    /** R 批 §3.3.2：页眉返回按钮开关（默认关；开启后页眉最左侧渲染返回图标） */
+    var showHeaderBackButton: Boolean
+        get() = ReadBookConfig.config.showHeaderBackButton
+        set(value) {
+            ReadBookConfig.config.showHeaderBackButton = value
+        }
+
     /**
      * 按槽位下标（0..5 = 页眉左/中/右、页脚左/中/右）读写槽位值与自定义模板。
      *

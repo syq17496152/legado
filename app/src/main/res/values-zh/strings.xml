@@ -684,6 +684,8 @@
     <string name="main_activity">主界面</string>
     <string name="selectText">长按选择文本</string>
     <string name="header">页眉</string>
+    <string name="read_header_back_button">页眉返回按钮</string>
+    <string name="read_header_back_button_hint">开启后页眉左侧显示返回图标，点击退出阅读</string>
     <string name="main_body">正文</string>
     <string name="footer">页脚</string>
     <string name="select_end">文本选择结束位置</string>

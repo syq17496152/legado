@@ -714,6 +714,8 @@
     <string name="main_activity">Start page</string>
     <string name="selectText">Long Tap to select text</string>
     <string name="header">Header</string>
+    <string name="read_header_back_button">Header back button</string>
+    <string name="read_header_back_button_hint">Show a back icon at the header left; tap it to exit reading</string>
     <string name="main_body">Content</string>
     <string name="footer">Footer</string>
     <string name="select_end">Select end</string>

@@ -11,6 +11,7 @@ import android.view.ViewConfiguration
 import android.view.WindowInsets
 import android.widget.FrameLayout
 import android.widget.Magnifier
+import androidx.activity.ComponentActivity
 import io.legado.app.R
 import io.legado.app.constant.PageAnim
 import io.legado.app.data.entities.BookProgress
@@ -427,6 +428,17 @@ class ReadView(context: Context, attrs: AttributeSet) :
      * 单击
      */
     private fun onSingleTapUp() {
+        // R 批 §3.3.2：页眉返回按钮优先命中（开关关闭/图标隐藏时 rect 为 null ⇒ 落到既有九宫格，
+        // 零行为变化）。返回语义刻意复用**系统返回键同链路**（本仓有 6 级拦截：收起朗读面板/AI 面板/
+        // 退出搜索结果/恢复阅读进度/停自动翻页/尊重 disableReturnKey），而非上游的直 finish。
+        val headerBackRect = curPage.headerBackHitRect()
+        if (headerBackRect != null) {
+            headerBackRect.offset(curPage.x.toInt(), curPage.y.toInt())
+            if (headerBackRect.contains(startX.toInt(), startY.toInt())) {
+                (activity as? ComponentActivity)?.onBackPressedDispatcher?.onBackPressed()
+                return
+            }
+        }
         when {
             isTextSelected -> Unit
             mcRect.contains(startX, startY) -> if (!isAbortAnim) {

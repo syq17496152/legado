@@ -20,9 +20,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -99,6 +102,10 @@ internal fun TipConfigContent(
     var footerLeft by rememberSaveable { mutableIntStateOf(ReadTipConfig.tipFooterLeft) }
     var footerMiddle by rememberSaveable { mutableIntStateOf(ReadTipConfig.tipFooterMiddle) }
     var footerRight by rememberSaveable { mutableIntStateOf(ReadTipConfig.tipFooterRight) }
+    // R 批 §3.3.2：页眉返回按钮开关（默认关 ⇒ 旧行为零变化）
+    var showHeaderBackButton by rememberSaveable {
+        mutableStateOf(ReadTipConfig.showHeaderBackButton)
+    }
     // R12：模板编辑令牌 —— 编辑保存后自增，令下方模板行（读取 ReadTipConfig）重新取值。
     // 模板串本身不另存一份状态（避免与配置双源），只用令牌驱动重读。
     var templateTick by rememberSaveable { mutableIntStateOf(0) }
@@ -244,6 +251,37 @@ internal fun TipConfigContent(
             onMiddleClick = { chooseTip(context.getString(R.string.middle)) { headerMiddle = it; ReadTipConfig.tipHeaderMiddle = it } },
             onRightClick = { chooseTip(context.getString(R.string.right)) { headerRight = it; ReadTipConfig.tipHeaderRight = it } }
         )
+        // R 批 §3.3.2：页眉返回按钮（默认关）—— 与「页眉」同组，紧随其后
+        TipSection(style = style) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.read_header_back_button),
+                        color = style.primaryText,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize
+                    )
+                    Text(
+                        text = stringResource(R.string.read_header_back_button_hint),
+                        color = style.secondaryText,
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Switch(
+                    checked = showHeaderBackButton,
+                    onCheckedChange = {
+                        showHeaderBackButton = it
+                        ReadTipConfig.showHeaderBackButton = it
+                        postEvent(EventBus.UP_CONFIG, arrayListOf(2))
+                    },
+                    colors = SwitchDefaults.colors(checkedTrackColor = style.accent)
+                )
+            }
+        }
         // 页脚
         TipPlacementSection(
             title = stringResource(R.string.footer),

@@ -2,8 +2,10 @@ package io.legado.app.ui.book.read.page
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
@@ -101,6 +103,20 @@ class PageView(context: Context) : FrameLayout(context) {
             return binding.vwRoot.paddingStart
         }
 
+    /**
+     * R 批 §3.3.2：页眉返回按钮在本页坐标系下的命中矩形。
+     * 返回 null ⇒ 不参与命中（开关关闭 / 图标隐藏 / 非主视图 / 页眉隐藏 / 尚未布局）⇒ 行为与现状完全一致。
+     */
+    fun headerBackHitRect(): Rect? {
+        val iv = binding.ivHeaderBack
+        if (!isMainView || iv.isGone || binding.llHeader.isGone) return null
+        if (iv.width <= 0 || iv.height <= 0) return null
+        val rect = Rect()
+        iv.getDrawingRect(rect)
+        offsetDescendantRectToMyCoords(iv, rect)
+        return rect
+    }
+
     init {
         if (!isInEditMode) {
             upStyle()
@@ -146,6 +162,9 @@ class PageView(context: Context) : FrameLayout(context) {
             tvHeaderLeft.setColor(tipColor)
             tvHeaderMiddle.setColor(tipColor)
             tvHeaderRight.setColor(tipColor)
+            // R 批 §3.3.2：页眉返回按钮（默认关 ⇒ 零变化）——显隐由开关驱动、取色走 tipColor（禁硬编码）
+            ivHeaderBack.isGone = !ReadTipConfig.showHeaderBackButton
+            ivHeaderBack.imageTintList = ColorStateList.valueOf(tipColor)
             tvFooterLeft.setColor(tipColor)
             tvFooterMiddle.setColor(tipColor)
             tvFooterRight.setColor(tipColor)
@@ -252,7 +271,8 @@ class PageView(context: Context) : FrameLayout(context) {
             }
         }
         ReadTipConfig.apply {
-            tvHeaderLeft.isGone = tipHeaderLeft == none
+            // 开关开启时左槽由返回图标占位 ⇒ 文本槽即使为「不显示」也保留行高（对齐上游 ivHeaderBack 口径）
+            tvHeaderLeft.isGone = tipHeaderLeft == none && !ReadTipConfig.showHeaderBackButton
             tvHeaderRight.isGone = tipHeaderRight == none
             tvHeaderMiddle.isGone = tipHeaderMiddle == none
             tvFooterLeft.isInvisible = tipFooterLeft == none

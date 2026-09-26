@@ -466,6 +466,13 @@ object ReadBookConfig {
             config.showFooterLine = value
         }
 
+    /** R 批 §3.3.2：页眉返回按钮开关（样式包/备份随 Config 一并序列化） */
+    var showHeaderBackButton: Boolean
+        get() = config.showHeaderBackButton
+        set(value) {
+            config.showHeaderBackButton = value
+        }
+
     fun getExportConfig(): Config {
         val exportConfig = durConfig.copy()
         if (shareLayout) {
@@ -495,6 +502,7 @@ object ReadBookConfig {
             exportConfig.footerPaddingTop = shareConfig.footerPaddingTop
             exportConfig.showHeaderLine = shareConfig.showHeaderLine
             exportConfig.showFooterLine = shareConfig.showFooterLine
+            exportConfig.showHeaderBackButton = shareConfig.showHeaderBackButton
             exportConfig.tipHeaderLeft = shareConfig.tipHeaderLeft
             exportConfig.tipHeaderMiddle = shareConfig.tipHeaderMiddle
             exportConfig.tipHeaderRight = shareConfig.tipHeaderRight
@@ -634,6 +642,14 @@ object ReadBookConfig {
         var footerPaddingTop: Int = 6,
         var showHeaderLine: Boolean = false,
         var showFooterLine: Boolean = true,
+        /**
+         * R 批 §3.3.2：页眉返回按钮（**默认关 ⇒ 零用户可感变化**）。
+         * 开启后在页眉最左侧渲染返回图标；点击语义 = **与系统返回键同链路**
+         * （本仓返回键有 6 级拦截：收起朗读面板/AI 面板/退出搜索结果/恢复进度/停自动翻页/尊重
+         * `disableReturnKey`，最后才 finish）——刻意**不走**上游的直 `finish()`，
+         * 否则会跳过这些保护（丢进度/绕过用户设置）。
+         */
+        var showHeaderBackButton: Boolean = false,
         var tipHeaderLeft: Int = ReadTipConfig.time,
         var tipHeaderMiddle: Int = ReadTipConfig.none,
         var tipHeaderRight: Int = ReadTipConfig.battery,
@@ -956,6 +972,7 @@ object ReadBookConfig {
             "footerPaddingTop" to footerPaddingTop,
             "showHeaderLine" to showHeaderLine,
             "showFooterLine" to showFooterLine,
+            "showHeaderBackButton" to showHeaderBackButton,
             "tipHeaderLeft" to tipHeaderLeft,
             "tipHeaderMiddle" to tipHeaderMiddle,
             "tipHeaderRight" to tipHeaderRight,
