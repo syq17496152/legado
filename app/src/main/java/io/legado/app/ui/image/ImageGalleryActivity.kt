@@ -88,7 +88,7 @@ import io.legado.app.utils.toastOnUi
  * 设计参考：design.md §1.1 架构图 + §3.1 数据流 1
  *
  * 架构演进（V4）：
- * - 旧架构：ImageArticlePagerAdapter（外层 ViewPager2 vertical）+ ImagePageAdapter（内层 ViewPager2 horizontal）
+ * - 旧架构（**已退役**）：ImageArticlePagerAdapter（外层 ViewPager2 vertical）+ ImagePageAdapter（内层 ViewPager2 horizontal）
  * - 新架构：单 RecyclerView（垂直长画布）+ ImageCanvasAdapter + ImageCanvasViewModel
  *
  * 核心能力：

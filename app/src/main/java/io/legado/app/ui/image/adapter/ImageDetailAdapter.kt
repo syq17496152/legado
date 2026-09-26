@@ -23,11 +23,11 @@ import io.legado.app.ui.widget.image.PhotoView
  *
  * 设计参考：design.md §1.1 架构图 + AD-02 大图模式容器选择
  *
- * 与 ImagePageAdapter 的区别：
+ * 与旧 `ImagePageAdapter`（**已退役**）的区别：
  * 1. 数据源：从 ImagePlay.allImageUrls 过滤 ImageItem（剥离 ArticleDivider）
  * 2. 采样解码：override 按屏幕尺寸采样（rss-image-load-optimization AD-02，与 ImageCanvasAdapter 缩略图模式一致）
  * 3. 长按保存：通过 OnImageDetailCallback 回调 Activity 处理（保存图片到相册）
- * 4. 旋转能力：保留 PhotoView 缩放/旋转/重置能力（迁移自 ImagePageAdapter）
+ * 4. 旋转能力：保留 PhotoView 缩放/旋转/重置能力（迁移自旧 ImagePageAdapter）
  *
  * @param context Activity Context
  * @param sourceOrigin 订阅源 URL（用于 Referer 注入防盗链）
@@ -93,7 +93,7 @@ open class ImageDetailAdapter(
     }
 
     /**
-     * 大图模式 ViewHolder（迁移自 ImagePageAdapter）
+     * 大图模式 ViewHolder（迁移自已退役的 ImagePageAdapter）
      *
      * 能力：
      * - PhotoView 双指缩放、双击切换缩放、平移（PhotoView 自带）
@@ -259,7 +259,7 @@ open class ImageDetailAdapter(
     }
 
     /**
-     * 大图模式回调接口（与 ImagePageAdapter.OnImagePageCallback 一致）
+     * 大图模式回调接口（与已退役的 ImagePageAdapter.OnImagePageCallback 同语义）
      */
     interface OnImageDetailCallback {
         /** 长按图片回调（弹出保存/分享/复制URL菜单） */

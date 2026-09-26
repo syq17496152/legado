@@ -108,7 +108,7 @@ import kotlinx.coroutines.withContext
  */
 @OptIn(ExperimentalMaterial3Api::class)
 class ChangeBookSourceDialog() : ComposeDialogFragment(),
-    ChangeBookSourceAdapter.CallBack {
+    ChangeBookSourceCallback {
 
     override val dialogSize: AppDialogSize = AppDialogSize.Wide
 

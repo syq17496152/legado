@@ -117,8 +117,8 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 class ChangeChapterSourceDialog() : ComposeDialogFragment(),
-    ChangeChapterSourceAdapter.CallBack,
-    ChangeChapterTocAdapter.Callback {
+    ChangeChapterSourceCallback,
+    ChangeChapterTocCallback {
 
     override val dialogSize: AppDialogSize = AppDialogSize.Wide
 
