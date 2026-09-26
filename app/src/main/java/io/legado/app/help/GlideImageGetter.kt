@@ -1,32 +1,28 @@
 package io.legado.app.help
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.ColorFilter
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.drawable.Animatable
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.text.Html
-import android.util.Size
 import android.widget.TextView
 import androidx.lifecycle.Lifecycle
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.gif.GifDrawable
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
-import io.legado.app.model.analyzeRule.AnalyzeUrl.Companion.paramPattern
-import io.legado.app.utils.GSON
-import io.legado.app.utils.fromJsonObject
 import java.lang.ref.WeakReference
 import io.legado.app.utils.lifecycle
 import java.io.ByteArrayInputStream
 import kotlin.io.encoding.Base64
 import io.legado.app.utils.SvgUtils
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.text.dropLast
-import kotlin.text.endsWith
-import kotlin.text.toIntOrNull
 import androidx.core.graphics.drawable.toDrawable
 import android.graphics.Color
 import com.bumptech.glide.request.RequestOptions
@@ -57,29 +53,32 @@ class GlideImageGetter(
         if (context == null || source.isNullOrBlank()) {
             return emptyDrawable
         }
-        var urlOption: Map<String, String>? = null
-        if (source.startsWith("data")) {
-            var data: String? = null
-            val urlMatcher = paramPattern.matcher(source)
-            if (urlMatcher.find()) {
-                val urlOptionStr = source.substring(urlMatcher.end())
-                urlOption = GSON.fromJsonObject<Map<String, String>>(urlOptionStr).getOrNull()
-                data = if (source.startsWith("data:image/svg")) {
-                    source.take(urlMatcher.start())
-                } else {
-                    AnalyzeUrl(
-                        source,
-                        source = bookSource
-                    ).url
-                }
+        // Q3：源参数解析统一走 ImageSourceOptions（上游移植版，支持 HTML 实体/非字符串参数/大小写不敏感）
+        val parsedSource = ImageSourceOptions.parse(source)
+        val imageSource = parsedSource?.source ?: source
+        if (imageSource.startsWith("data:", ignoreCase = true)) {
+            // 保留 SVG 的 XML 原文；栅格 data URI 仍按书源规则解析 URL（保持一致的书源头/解密链路）
+            val isSvg = imageSource.substringBefore(",").contains("image/svg", ignoreCase = true)
+            val normalizedDataSource = if (isSvg) {
+                imageSource
+            } else {
+                runCatching {
+                    AnalyzeUrl(imageSource, source = bookSource).url
+                }.getOrDefault(imageSource)
             }
-            val inputStream =
-                ByteArrayInputStream(Base64.decode((data ?: source).substringAfter(",")))
-            val (pictureDrawable, size) = SvgUtils.createDrawable(inputStream)
+            val bytes = decodeDataUri(normalizedDataSource) ?: return emptyDrawable
+            if (isSvg) {
+                val (pictureDrawable, size) = SvgUtils.createDrawable(ByteArrayInputStream(bytes))
+                    ?: return emptyDrawable
+                pictureDrawable.bounds = getDrawableRect(parsedSource, size.width, size.height)
+                return pictureDrawable
+            }
+            // 栅格 data URI 原实现走 SVG 解析 ⇒ 必然解不出、静默空白；此处按位图渲染（上游口径）
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 ?: return emptyDrawable
-            val rect = getDrawableRect(size, urlOption)
-            pictureDrawable.bounds = rect
-            return pictureDrawable
+            val drawable = BitmapDrawable(context.resources, bitmap)
+            drawable.bounds = getDrawableRect(parsedSource, bitmap.width, bitmap.height)
+            return drawable
         }
         cacheDrawable[source]?.let {
             return it
@@ -87,16 +86,12 @@ class GlideImageGetter(
         val urlDrawable = GlideUrlDrawable()
         cacheDrawable[source] = urlDrawable
         pendingImages.add(source)
-        val urlMatcher = paramPattern.matcher(source)
-        if (urlMatcher.find()) {
-            val urlOptionStr = source.substring(urlMatcher.end())
-            urlOption = GSON.fromJsonObject<Map<String, String>>(urlOptionStr).getOrNull()
-        }
-        val target = ImageTarget(urlDrawable, source, urlOption)
+        val target = ImageTarget(urlDrawable, source, parsedSource)
         var options = RequestOptions()
         if (sourceOrigin != null) {
             options = options.set(OkHttpModelLoader.sourceOriginOption, sourceOrigin)
         }
+        // 保留带参数段的原始 source 交给 AnalyzeUrl：书源头/解密链路依赖它
         Glide.with(context).lifecycle(lifecycle)
             .load(source)
             .apply(options)
@@ -104,36 +99,35 @@ class GlideImageGetter(
         return urlDrawable
     }
 
-    private fun getDrawableRect(size: Size, urlOption: Map<String, String>?): Rect {
-        val drawableWidth = size.width.coerceAtLeast(1)
-        val drawableHeight = size.height.coerceAtLeast(1)
-        if (urlOption == null) {
-            return Rect(0, 0, drawableWidth, drawableHeight)
-        }
-        val styleWidth = urlOption["width"]
-        val styleType = urlOption["style"]
-        if (styleWidth == null && styleType == null) {
-            return Rect(0, 0, drawableWidth, drawableHeight)
-        }
-        val imgWidth = if (styleWidth?.endsWith("%") == true) {
-            val sWidth = styleWidth.dropLast(1).toIntOrNull() ?: 80
-            availableWidth * sWidth / 100
+    /**
+     * data URI 安全解码：base64（含 URL-safe 变体与缺省填充）优先，否则按 URI 百分号解码。
+     * 原实现直接 `Base64.decode` 且**无异常保护** ⇒ 正文里出现畸形 data URI 会在 TextView 布局期崩溃。
+     */
+    private fun decodeDataUri(source: String): ByteArray? {
+        val separator = source.indexOf(',')
+        if (separator < 0) return null
+        val metadata = source.substring(0, separator)
+        val payload = source.substring(separator + 1)
+        return if (metadata.contains(";base64", ignoreCase = true)) {
+            val normalized = payload
+                .filterNot(Char::isWhitespace)
+                .replace('-', '+')
+                .replace('_', '/')
+                .let { value -> value.padEnd((value.length + 3) / 4 * 4, '=') }
+            runCatching { Base64.decode(normalized) }.getOrNull()
         } else {
-            val sWidth = styleWidth?.toIntOrNull() ?: 0
-            if (sWidth > 0) {
-                sWidth
-            } else {
-                drawableWidth
-            }
+            runCatching { Uri.decode(payload).toByteArray(Charsets.UTF_8) }.getOrNull()
         }
-        val showWidth = availableWidth.takeIf { it in 1..<imgWidth } ?: imgWidth
-        val showHeight = (drawableHeight * showWidth / drawableWidth.toFloat()).toInt()
-        val left = when (styleType) {
-            "center" -> (availableWidth - showWidth) / 2
-            "right" -> availableWidth - showWidth
-            else -> 0
-        }
-        return Rect(left, 0, left + showWidth, showHeight)
+    }
+
+    /** 把纯函数求解出的 [ImageBounds] 落到 Android 的 `Rect`（唯一的平台适配点） */
+    private fun getDrawableRect(
+        parsed: ParsedImageSource?,
+        intrinsicWidth: Int,
+        intrinsicHeight: Int
+    ): Rect {
+        val bounds = resolveImageBounds(parsed, intrinsicWidth, intrinsicHeight, availableWidth)
+        return Rect(bounds.left, bounds.top, bounds.right, bounds.bottom)
     }
 
     private fun notifyImageLoaded(source: String) {
@@ -252,7 +246,7 @@ class GlideImageGetter(
     private inner class ImageTarget(
         private val urlDrawable: GlideUrlDrawable,
         private val source: String,
-        private val urlOption: Map<String, String>?
+        private val parsedSource: ParsedImageSource?
     ) : CustomTarget<Drawable>() {
 
         override fun onResourceReady(
@@ -260,9 +254,8 @@ class GlideImageGetter(
             transition: Transition<in Drawable>?
         ) {
             urlDrawable.setDrawable(drawable)
-            val rect =
-                getDrawableRect(Size(drawable.intrinsicWidth, drawable.intrinsicHeight), urlOption)
-            urlDrawable.bounds = rect
+            urlDrawable.bounds =
+                getDrawableRect(parsedSource, drawable.intrinsicWidth, drawable.intrinsicHeight)
             notifyImageLoaded(source)
         }
 

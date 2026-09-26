@@ -481,7 +481,15 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
             val sourceType = intent.getIntExtra("sourceType", 0)
             val bookUrl = intent.getStringExtra("bookUrl")
             val record = intent.getStringExtra("record")
-            VideoPlay.inBookshelf = intent.getBooleanExtra("inBookshelf", true)
+            // P0-7：真实书架身份改由 VideoPlay.initSource 按**库中 notShelf 位**解析
+            // （resolveVideoBookshelfState），此处只给结构性缺省：
+            // - 无 bookUrl（纯 URL 直连/下载播放）没有书籍身份 ⇒ 恒「已入架」，退出不弹加入书架
+            // - 有 bookUrl ⇒ 先取传入值，随后的 initSource 会用库中身份纠正（旧行为恒 true 会误判临时书）
+            VideoPlay.inBookshelf = if (bookUrl.isNullOrBlank()) {
+                true
+            } else {
+                intent.getBooleanExtra("inBookshelf", true)
+            }
             // T1.13 方案B: 保存 VideoPlay 状态快照到 Activity 字段（解决 8 实例快速切换状态串扰）
             snapshotVideoUrl = VideoPlay.videoUrl
             snapshotVideoTitle = VideoPlay.videoTitle

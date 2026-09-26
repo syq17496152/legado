@@ -35,6 +35,7 @@ import io.legado.app.help.exoplayer.VideoPrefiller
 import io.legado.app.data.entities.RssStar
 import io.legado.app.help.CacheManager
 import io.legado.app.help.book.getDanmaku
+import io.legado.app.help.book.isNotShelf
 import io.legado.app.help.book.update
 import io.legado.app.help.source.isVideoSource
 import io.legado.app.help.coroutine.Coroutine
@@ -795,7 +796,9 @@ object VideoPlay : CoroutineScope by MainScope(){
                 CacheManager.getLong(VIDEO_POS_NAME + mUrl)?.let {
                     player.seekOnStart = it
                 }
-                inBookshelf = true
+                // P0-7：singleUrl 直连同样按书架身份判定（旧行为硬编码 true ⇒ 临时书被当成已入架）；
+                // 无 book 身份（纯 URL 直连/下载播放）时保持「已入架」，与既有 intent 缺省语义一致
+                inBookshelf = book?.let { resolveVideoBookshelfState(it) } ?: true
                 val analyzeUrl = AnalyzeUrl(
                     mUrl,
                     source = source,
@@ -1347,6 +1350,8 @@ object VideoPlay : CoroutineScope by MainScope(){
                 else -> null
             }
         }
+        // P0-7：库中身份先取一次，供书架判定与 book 兜底复用（避免同一 bookUrl 两次 DB 查询）
+        val storedBook = bookUrl?.let { appDb.bookDao.getBook(it) }
         book = bookUrl?.let {
             toc = appDb.bookChapterDao.getChapterList(it)
             volumes.clear()
@@ -1355,8 +1360,11 @@ object VideoPlay : CoroutineScope by MainScope(){
                     volumes.add(t)
                 }
             }
-            appDb.bookDao.getBook(it) ?: appDb.searchBookDao.getSearchBook(it)?.toBook()
+            storedBook ?: appDb.searchBookDao.getSearchBook(it)?.toBook()
         }?.also { b ->
+            // P0-7：书架身份按**库中身份**解析（库中无记录 ⇒ 纯搜索书/临时书 ⇒ 未入架），
+            // 取代旧行为「intent 缺省 true 恒定已入架」——否则仅搜索过的书退出时不再询问加入书架
+            inBookshelf = resolveVideoBookshelfState(storedBook)
             chapterInVolumeIndex = b.chapterInVolumeIndex
             durVolumeIndex = b.durVolumeIndex
             durChapterPos = b.durChapterPos
@@ -2331,3 +2339,18 @@ object VideoPlay : CoroutineScope by MainScope(){
         return book?.getDisplayCover() ?: rssStar?.image ?: rssRecord?.image
     }
 }
+
+/**
+ * P0-7：视频「是否已在书架」身份判定（单源）
+ *
+ * 判定口径：**只有库中存在该书、且未打「未入架」（`BookType.notShelf`）位**才算已在书架。
+ * - 库中无记录（纯搜索书 / 纯 URL 直连）⇒ 返回 false（未入架）
+ * - 与 `VideoBookPreloader` 内 `stored?.isNotShelf == false` 同口径（该书源双轨判定先例）
+ *
+ * 为什么要收口为函数：`inBookshelf` 决定退出播放器时是否走「加入书架」询问链路
+ * （`VideoPlayerActivity.finish()`），历史上由 intent 缺省 `true` 与 singleUrl 分支硬编码 `true`
+ * 决定 ⇒ **仅搜索过、未入架的临时书被当成已入架**，退出时不再询问、也不做临时书清理。
+ *
+ * @param storedBook 从 `bookDao` 读到的库中身份（非 `searchBookDao` 派生的临时对象）
+ */
+internal fun resolveVideoBookshelfState(storedBook: Book?): Boolean = storedBook?.isNotShelf == false
