@@ -236,7 +236,9 @@ class TxtTocRuleActivity : VMBaseActivity<ViewBinding, TxtTocRuleViewModel>(),
             MenuAction(
                 icon = Icons.Default.Delete,
                 title = getString(R.string.delete),
-                tint = androidx.compose.ui.graphics.Color.Unspecified,
+                // 原为 `tint = Color.Unspecified` 占位：该值经 SettingsSelectableRow 薄壳转换后本就不生效
+                // （薄壳不消费 tint），删除项一直没有警示色 ⇒ 改走 danger 通道（与书源管理基线一致）
+                danger = true,
                 onClick = { delRule(index) }
             )
         )

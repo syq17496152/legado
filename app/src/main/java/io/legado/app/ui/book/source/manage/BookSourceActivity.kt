@@ -70,6 +70,7 @@ import io.legado.app.ui.config.ImportCheckConfigDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.login.SourceLoginActivity
 import io.legado.app.ui.qrcode.QrCodeResult
+import io.legado.app.ui.source.recycle.RecycleBinActivity
 import io.legado.app.ui.widget.compose.AppManagementAction
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
 import io.legado.app.ui.widget.compose.AppManagementScaffold
@@ -455,6 +456,12 @@ class BookSourceActivity : VMBaseActivity<ViewBinding, BookSourceViewModel>() {
             },
             AppManagementMenuAction(getString(R.string.group_sources_by_domain)) {
                 setGroupSourcesByDomain(!groupSourcesByDomain)
+            },
+            // 回归修复（3c8aa5c Compose 迁移时丢失入口）：回收站入口必须回到书源管理 ⋮ 菜单——
+            // 该提交同时删掉了 `onRecycleBin` 链路与 `R.string.menu_recycle_bin`，导致
+            // `RecycleBinActivity` 全仓零入口（「其他设置 → 规则回收站」开关开了也进不去页面）⇒ 误删源无法找回。
+            AppManagementMenuAction(getString(R.string.menu_recycle_bin)) {
+                startActivity<RecycleBinActivity>()
             },
             AppManagementMenuAction(getString(R.string.help)) {
                 showHelp("SourceMBookHelp")

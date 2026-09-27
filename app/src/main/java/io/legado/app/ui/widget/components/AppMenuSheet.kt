@@ -47,6 +47,11 @@ import io.legado.app.help.config.TopBarConfig
  * @property icon 图标（ImageVector 源；与 [iconRes] 双源二选一，icon 优先）
  * @property title 标题（调用方传 stringResource，遵守 §6.1 禁硬编码中文）
  * @property tint 图标与文字颜色，默认 null 走主题 onSurfaceVariant
+ * @property danger 危险语义（删除/清空等）。**仅管理族列表行的溢出菜单消费**：
+ * `SettingsSelectableRow` 把它透传给 `AppManagementMenuAction.danger` 渲染警示色
+ * （原状是「行溢出菜单无 danger 通道 ⇒ 删除项只能靠 tint 硬塞色，且经薄壳转换后静默丢失」）。
+ * 直接渲染本模型的 `AppMenuSheet` / `AppDropdownMenu` 不消费该字段（沿用 tint 口径），
+ * 以免改变其余 30+ 处既有菜单观感。
  * @property checked 勾选态（复选类菜单），null 不显示勾选标记
  * @property onClick 点击回调
  */
@@ -54,6 +59,7 @@ data class MenuAction(
     val icon: ImageVector? = null,
     val title: String,
     val tint: androidx.compose.ui.graphics.Color? = null,
+    val danger: Boolean = false,
     val checked: Boolean? = null,
     val header: Boolean = false,
     // 顶栏分级语义（topbar-icon-semantics-fix AD-01）：true=固定显示为顶栏一级图标（不进溢出菜单），

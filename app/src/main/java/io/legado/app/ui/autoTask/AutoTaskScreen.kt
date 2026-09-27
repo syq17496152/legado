@@ -14,7 +14,6 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -233,7 +232,9 @@ fun AutoTaskScreen(
                                         MenuAction(
                                             icon = Icons.Default.Delete,
                                             title = stringResource(R.string.delete),
-                                            tint = MaterialTheme.colorScheme.error,
+                                            // 删除项原用 M3 派生色 tint 硬塞警示色（且薄壳不消费 tint ⇒ 实际无色），
+                                            // 改走 danger 通道：三页行尾菜单语义与书源管理基线一致（禁 M3 派生色）
+                                            danger = true,
                                             onClick = { onDelete(index) }
                                         )
                                     )

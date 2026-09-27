@@ -1,63 +1,39 @@
 package io.legado.app.ui.source.recycle
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.HelpOutline
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Restore
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
 import io.legado.app.help.source.SourceRecycleBinHelp
-import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.ConfirmDialog
 import io.legado.app.ui.widget.components.EmptyStatePlaceholder
-import io.legado.app.ui.widget.components.GlassTopAppBar
-import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.ShelfListSkeleton
-import io.legado.app.ui.widget.compose.rememberAppSettingPalette
+import io.legado.app.ui.widget.compose.AppManagementAction
+import io.legado.app.ui.widget.compose.AppManagementLazyColumn
+import io.legado.app.ui.widget.compose.AppManagementListRow
+import io.legado.app.ui.widget.compose.AppManagementMenuAction
+import io.legado.app.ui.widget.compose.AppManagementScaffold
+import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -72,6 +48,22 @@ data class RecycleBinDisplayItem(
     val isSelected: Boolean
 )
 
+/**
+ * 回收站页（「我的 → 书源管理 → 回收站」子子页）。
+ *
+ * **2026-09-27 行组件收敛第四批（用户裁定：「我的」下的子页/子子页必须同脚手架同行）**：
+ * 原实现是自绘 `GlassTopAppBar` + 页内 `LazyColumn` + 行间自绘 `HorizontalDivider(0.5dp)` +
+ * 私有 `RecycleBinActionBar`（`Surface` 底栏）+ 自绘 `RecycleBinItemRow`（`Checkbox` + 双图标按钮，
+ * 取色走 M3 派生键 `onSurface/onSurfaceVariant/colorScheme.primary/error`）⇒ 与书源管理基线
+ * （`AppManagementScaffold` + `AppManagementLazyColumn` + `AppManagementListRow`）形成「同脚手架不同行」。
+ *
+ * 现按 §3.1 三件套口径整体收敛：壳/容器/行全部换管理族单源，**行间分隔线清零**（卡片行间距由容器承载），
+ * 行的取色/圆角/行高不再自带（M3 派生色usage 一并清零）。
+ *
+ * 交互等价口径：选择模式**常驻**（原实现 `Checkbox` 常显，与字典/TXT目录/自动任务三页一致）；
+ * 长按拖动滑选批量勾选保留；行尾动作（恢复 / 彻底删除）与「清空回收站 / 帮助」收进菜单，
+ * 彻底删除走 `danger` 通道（原实现用 M3 派生色 error 硬塞，且薄壳不消费 tint ⇒ 实际无色）。
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun RecycleBinScreen(
@@ -93,65 +85,76 @@ fun RecycleBinScreen(
     onHelp: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var moreMenuVisible by remember { mutableStateOf(false) }
     var deleteItem by remember { mutableStateOf<RecycleBinDisplayItem?>(null) }
     var deleteSelectionVisible by remember { mutableStateOf(false) }
     var emptyConfirmVisible by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
+    val palette = rememberAppManagementPalette()
+    val allSelected = items.isNotEmpty() && selectionCount >= items.size
+    // 文案在**组合上下文**预取：`AppManagementAction.menuActions` 是普通 lambda（非 @Composable）
+    // ⇒ 其内不得调用 `stringResource`（否则报「@Composable invocations can only happen from …」）
+    val moreMenuLabel = stringResource(R.string.more_menu)
+    val emptyBinLabel = stringResource(R.string.recycle_bin_empty)
+    val helpLabel = stringResource(R.string.help)
 
-    Column(modifier = modifier.fillMaxSize()) {
-        GlassTopAppBar(
-            title = stringResource(R.string.recycle_bin),
-            navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-            onNavClick = onBack,
-            actions = {
-                Box {
-                    IconButton(onClick = { moreMenuVisible = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = null)
-                    }
-                    AppDropdownMenu(
-                        expanded = moreMenuVisible,
-                        onDismiss = { moreMenuVisible = false },
-                        actions = listOf(
-                            MenuAction(
-                                icon = Icons.Default.DeleteSweep,
-                                title = stringResource(R.string.recycle_bin_empty),
-                                onClick = {
-                                    moreMenuVisible = false
-                                    emptyConfirmVisible = true
-                                }
-                            ),
-                            MenuAction(
-                                icon = Icons.Default.HelpOutline,
-                                title = stringResource(R.string.help),
-                                onClick = {
-                                    moreMenuVisible = false
-                                    onHelp()
-                                }
-                            )
+    AppManagementScaffold(
+        title = stringResource(R.string.recycle_bin),
+        selectedCount = selectionCount,
+        totalCount = items.size,
+        modifier = modifier,
+        palette = palette,
+        onBack = onBack,
+        // 顶栏动作：溢出菜单承载「清空回收站 / 帮助」（图标缺省走 TopBarConfig.Icons 契约兜底，
+        // 禁止在实现内写死 R.drawable.ic_more_vert —— 顶栏包 §3.2 / 门禁 G-20）
+        topActions = listOf(
+            AppManagementAction(
+                text = moreMenuLabel,
+                menuActions = {
+                    listOf(
+                        AppManagementMenuAction(
+                            text = emptyBinLabel,
+                            icon = Icons.Default.DeleteSweep,
+                            danger = true,
+                            onClick = { emptyConfirmVisible = true }
+                        ),
+                        AppManagementMenuAction(
+                            text = helpLabel,
+                            icon = Icons.Default.HelpOutline,
+                            onClick = onHelp
                         )
                     )
                 }
-            }
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .weight(1f)
-        ) {
+            )
+        ),
+        // 多选底栏：与字典/TXT目录/自动任务三页同约定（danger 动作作主按钮，其余进溢出）
+        bottomActions = listOf(
+            AppManagementAction(
+                text = stringResource(R.string.recycle_bin_restore),
+                onClick = onRestoreSelection
+            ),
+            AppManagementAction(
+                text = stringResource(R.string.recycle_bin_delete_selection),
+                danger = true,
+                onClick = { deleteSelectionVisible = true }
+            )
+        ),
+        onSelectAll = { onSelectAll(!allSelected) },
+        onInvertSelection = onRevertSelection
+    ) { _ ->
+        Box(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
             when {
                 isLoading -> ShelfListSkeleton(compact = true)
                 items.isEmpty() -> EmptyStatePlaceholder(
                     icon = Icons.Default.Restore,
-                    title = stringResource(R.string.recycle_bin_empty),
+                    // 空态文案修正（docs/UI/AUDIT-OPTIMIZATION-ALIGN.md P1·md#1）：原复用「清空回收站」
+                    // （recycle_bin_empty）作空态标题，语义是动作而非状态 ⇒ 改用「回收站为空」
+                    title = stringResource(R.string.recycle_bin_is_empty),
                     modifier = Modifier.fillMaxSize()
                 )
                 else -> Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .navigationBarsPadding()
                         // 滑选多选：选择模式常驻（与原版 activeSlideSelect 一致），长按拖动批量勾选
                         .pointerInput(Unit) {
                             var slideStart: Int? = null
@@ -179,39 +182,41 @@ fun RecycleBinScreen(
                             )
                         }
                 ) {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize()
+                    AppManagementLazyColumn(
+                        palette = palette,
+                        state = listState
                     ) {
                         itemsIndexed(items, key = { _, item -> item.id }) { index, item ->
-                            RecycleBinItemRow(
-                                item = item,
-                                onToggleSelect = { checked -> onToggleSelect(index, checked) },
-                                onRestore = { onRestore(item) },
-                                onDelete = { deleteItem = item }
-                            )
-                            HorizontalDivider(
-                                color = androidx.compose.ui.graphics.Color(
-                                    io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
-                                ).copy(alpha = 0.5f),
-                                thickness = 0.5.dp
+                            AppManagementListRow(
+                                title = item.name,
+                                subtitle = "${typeText(item.type)} · ${timeText(item.deletedAt)}",
+                                palette = palette,
+                                selected = item.isSelected,
+                                onToggleSelection = { onToggleSelect(index, !item.isSelected) },
+                                minHeight = 56.dp,
+                                drawPanelImage = false,
+                                // 行体点按与复选框同语义（选择模式常驻，行体非破坏性）
+                                onClick = { onToggleSelect(index, !item.isSelected) },
+                                onLongClick = { onToggleSelect(index, true) },
+                                moreActions = listOf(
+                                    AppManagementMenuAction(
+                                        text = stringResource(R.string.recycle_bin_restore),
+                                        icon = Icons.Default.Restore,
+                                        onClick = { onRestore(item) }
+                                    ),
+                                    AppManagementMenuAction(
+                                        text = stringResource(R.string.recycle_bin_delete_selection),
+                                        icon = Icons.Default.Delete,
+                                        danger = true,
+                                        onClick = { deleteItem = item }
+                                    )
+                                )
                             )
                         }
                     }
                 }
             }
         }
-
-        RecycleBinActionBar(
-            selectionCount = selectionCount,
-            totalCount = items.size,
-            onSelectAll = onSelectAll,
-            onRevertSelection = onRevertSelection,
-            onRestoreSelection = onRestoreSelection,
-            onDeleteSelection = {
-                deleteSelectionVisible = true
-            }
-        )
     }
 
     // 单个删除确认
@@ -270,175 +275,12 @@ fun RecycleBinScreen(
                 pendingRestoreItems.joinToString("\n") { it.name },
             confirmText = stringResource(R.string.ok),
             cancelText = stringResource(R.string.cancel),
+            // 覆盖同名规则是破坏性操作（docs/UI/AUDIT-OPTIMIZATION-ALIGN.md P2·md#3：原未传
+            // destructive ⇒ 确认按钮无危险语义）
+            destructive = true,
             onConfirm = onConfirmRestoreOverwrite,
             onDismiss = onDismissRestoreOverwrite
         )
-    }
-}
-
-/** 底部批量操作栏（SelectActionBar 的 Compose 版，主按钮为「恢复」） */
-@Composable
-private fun RecycleBinActionBar(
-    selectionCount: Int,
-    totalCount: Int,
-    onSelectAll: (Boolean) -> Unit,
-    onRevertSelection: () -> Unit,
-    onRestoreSelection: () -> Unit,
-    onDeleteSelection: () -> Unit
-) {
-    val enabled = selectionCount > 0
-    val allSelected = totalCount > 0 && selectionCount >= totalCount
-    var menuVisible by remember { mutableStateOf(false) }
-    // H11: 选择操作栏直色（palette.row），替代 M3 surface 派生色
-    val palette = rememberAppSettingPalette()
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = Color(palette.row),
-        shadowElevation = 8.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .padding(start = 8.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .combinedClickable(
-                        onClick = { onSelectAll(!allSelected) },
-                        onLongClick = { onRevertSelection() },
-                        enabled = totalCount > 0
-                    )
-                    .height(48.dp)
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = allSelected,
-                    onCheckedChange = { onSelectAll(it) },
-                    enabled = totalCount > 0,
-                    colors = CheckboxDefaults.colors()
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = if (allSelected) {
-                        stringResource(R.string.select_cancel_count, selectionCount, totalCount)
-                    } else {
-                        stringResource(R.string.select_all_count, selectionCount, totalCount)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = palette.primaryText
-                )
-            }
-            TextButton(
-                onClick = onRestoreSelection,
-                enabled = enabled
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Restore,
-                    contentDescription = null,
-                    tint = if (enabled) palette.accent
-                    else palette.primaryText.copy(alpha = 0.38f),
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = stringResource(R.string.recycle_bin_restore),
-                    color = if (enabled) palette.accent
-                    else palette.primaryText.copy(alpha = 0.38f)
-                )
-            }
-            Box {
-                IconButton(
-                    onClick = { menuVisible = true },
-                    enabled = enabled
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = null,
-                        tint = if (enabled) palette.primaryText
-                        else palette.primaryText.copy(alpha = 0.38f)
-                    )
-                }
-                AppDropdownMenu(
-                    expanded = menuVisible,
-                    onDismiss = { menuVisible = false },
-                    actions = listOf(
-                        MenuAction(
-                            icon = Icons.Default.Delete,
-                            title = stringResource(R.string.recycle_bin_delete_selection),
-                            tint = MaterialTheme.colorScheme.error,
-                            onClick = {
-                                menuVisible = false
-                                onDeleteSelection()
-                            }
-                        )
-                    )
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun RecycleBinItemRow(
-    item: RecycleBinDisplayItem,
-    onToggleSelect: (Boolean) -> Unit,
-    onRestore: () -> Unit,
-    onDelete: () -> Unit
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 8.dp)
-    ) {
-        Checkbox(
-            checked = item.isSelected,
-            onCheckedChange = onToggleSelect
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = item.name,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Row {
-                Text(
-                    text = typeText(item.type),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = timeText(item.deletedAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        IconButton(onClick = onRestore) {
-            Icon(
-                imageVector = Icons.Default.Restore,
-                contentDescription = stringResource(R.string.recycle_bin_restore),
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-        IconButton(onClick = onDelete) {
-            Icon(
-                imageVector = Icons.Default.Delete,
-                contentDescription = stringResource(R.string.delete),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 

@@ -463,8 +463,10 @@
     <string name="migrate_book_origin_yes">Migrate</string>
     <string name="migrate_book_origin_no">Don\'t migrate</string>
     <string name="recycle_bin">Recycle Bin</string>
+    <string name="menu_recycle_bin">Recycle Bin</string>
     <string name="recycle_bin_restore">Restore</string>
     <string name="recycle_bin_empty">Empty Recycle Bin</string>
+    <string name="recycle_bin_is_empty">Recycle bin is empty</string>
     <string name="recycle_bin_restore_conflict">The target rule already exists. Overwrite it?</string>
     <string name="recycle_bin_delete_msg">Delete this item permanently? It cannot be restored.</string>
     <string name="recycle_bin_delete_selection">Delete Permanently</string>

@@ -32,7 +32,8 @@ import io.legado.app.ui.widget.compose.rememberAppManagementPalette
  * - `checked` → `selected`；`onToggleSelect: (Boolean) -> Unit` → `onToggleSelection = { onToggleSelect(!checked) }`
  * - `enabled`/`onToggleEnable` → `switchChecked`/`onSwitchChange`
  * - `onEdit` / `onDelete` → 同名参数（图标由 `AppManagementListRow` 单源决定）
- * - `moreActions: List<MenuAction>` → `AppManagementMenuAction`（图标**双源**同链透传，漏传即静默丢图标）
+ * - `moreActions: List<MenuAction>` → `AppManagementMenuAction`（图标**双源**同链透传，漏传即静默丢图标；
+ *   危险语义经 `danger` 同链透传，**不得再用 M3 派生色的 `tint` 硬塞警示色**——薄壳不消费 tint）
  * - 拖拽手柄改挂 `leadingContent`（**与书源管理一致的行首手柄位**；原实现挂在行尾），
  *   交互（长按拖动 / 回调时机）逐字不变。
  *
@@ -89,6 +90,8 @@ fun SettingsSelectableRow(
                 // 顶栏包 §1.2 路径 B：图标双源同链透传（漏传 ⇒ 溢出条目静默无图标）
                 icon = action.icon,
                 iconRes = action.iconRes,
+                // 危险语义同链透传（漏传 ⇒ 删除项无警示色；四要素任一漏传即静默退化）
+                danger = action.danger,
                 checked = action.checked == true,
                 onClick = action.onClick
             )

@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
@@ -197,7 +198,18 @@ fun DictRuleScreen(
                                 onToggleSelect = { checked -> onToggleSelect(index, checked) },
                                 onToggleEnable = { checked -> onToggleEnable(index, checked) },
                                 onEdit = { onEdit(index) },
-                                onDelete = { onDelete(index) },
+                                // 行尾控件与书源管理基线行（BookSourceScreen）对齐：仅「开关 + 编辑 + ⋮」。
+                                // 删除是危险动作，收进 ⋮ 菜单而非行内直出——原实现垃圾桶紧邻行首拖拽手柄，
+                                // 长按排序起始极易误触（docs/UI/book/dict-rule/interaction.md 评估 5 /
+                                // OPTIMIZATION.md「行尾控件分层」P1）；经 MenuAction.danger 透传警示色。
+                                moreActions = listOf(
+                                    MenuAction(
+                                        icon = Icons.Default.Delete,
+                                        title = stringResource(R.string.delete),
+                                        danger = true,
+                                        onClick = { onDelete(index) }
+                                    )
+                                ),
                                 dragStartIndex = {
                                     dragIndex = index
                                     dragTotalY = 0f
