@@ -41,6 +41,15 @@ import io.legado.app.utils.share
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
+import io.legado.app.constant.AppPattern
+import io.legado.app.help.rss.RssReadRecordMarker
+import io.legado.app.help.rss.OpmlExporter
+import io.legado.app.help.rss.OpmlImporter
+import io.legado.app.help.rss.OpmlParseResult
+import io.legado.app.help.rss.OpmlParser
+import io.legado.app.utils.EncodingDetect
+import io.legado.app.utils.FileUtils
+import kotlinx.coroutines.withContext
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
@@ -94,6 +103,106 @@ class RssSourceActivity : VMBaseActivity<ViewBinding, RssSourceViewModel>() {
                 onPositive = { sendToClip(url) },
                 onNeutral = { showShibbolethDialog(url, ShibbolethCodec.RSS_SOURCE) }
             )
+        }
+    }
+
+    // W4 / REQ-19（AD-09）：OPML 导入（与 JSON 导入分开的入口 —— 两者解析器完全不同）
+    private val importOpmlDoc = registerForActivityResult(HandleFileContract()) {
+        it.uri?.let { uri -> importOpml(uri) }
+    }
+
+    // W4 / REQ-19：OPML 整库导出落盘回调（与既有 JSON 导出回执分开，避免串用 DirectLink 提示）
+    private val exportOpmlDoc = registerForActivityResult(HandleFileContract()) {
+        if (it.uri != null) {
+            toastOnUi(getString(R.string.opml_export_done, appDb.rssSourceDao.all.size))
+        }
+    }
+
+    /**
+     * W4 / REQ-19：导入 OPML —— 读取（**带上限**，防超大文件 OOM）→ 解析 → 落库 → 回执。
+     *
+     * 编码复用 REQ-09 链：先按 XML 声明里的 `encoding=` 判定，命中 GB 系则走
+     * `EncodingDetect.resolveEncode`（GBK/GB2312 → GB18030 降级），否则默认 UTF-8。
+     */
+    private fun importOpml(uri: android.net.Uri) {
+        lifecycleScope.launch {
+            val bytes = withContext(IO) { readBounded(uri) }
+            if (bytes == null) {
+                toastOnUi(R.string.opml_error_too_large)
+                return@launch
+            }
+            val charset = withContext(IO) { detectOpmlCharset(bytes) }
+            when (val result = withContext(IO) { OpmlParser.parse(bytes, charset) }) {
+                is OpmlParseResult.Ok -> {
+                    val outcome = withContext(IO) {
+                        OpmlImporter.import(result.feeds, result.flattenedGroups)
+                    }
+                    toastOnUi(getString(R.string.opml_import_done, outcome.inserted + outcome.merged))
+                    if (outcome.flattenedGroups > 0) {
+                        toastOnUi(getString(R.string.opml_import_flattened, outcome.flattenedGroups))
+                    }
+                }
+
+                is OpmlParseResult.Error -> toastOnUi(
+                    when (result.reason) {
+                        OpmlParseResult.Reason.TOO_LARGE -> R.string.opml_error_too_large
+                        OpmlParseResult.Reason.TOO_DEEP -> R.string.opml_error_depth
+                        OpmlParseResult.Reason.EMPTY -> R.string.opml_error_empty
+                        OpmlParseResult.Reason.INVALID -> R.string.opml_error_parse
+                    }
+                )
+            }
+        }
+    }
+
+    /** 读取上限受控（超过 [OpmlParser.MAX_BYTES] 立即停止并返回 null）。 */
+    private fun readBounded(uri: android.net.Uri): ByteArray? {
+        val input = contentResolver.openInputStream(uri) ?: return null
+        return input.use { stream ->
+            val out = java.io.ByteArrayOutputStream()
+            val chunk = ByteArray(64 * 1024)
+            var total = 0
+            while (true) {
+                val read = stream.read(chunk)
+                if (read <= 0) break
+                total += read
+                if (total > OpmlParser.MAX_BYTES) return@use null
+                out.write(chunk, 0, read)
+            }
+            out.toByteArray()
+        }
+    }
+
+    /** OPML 字符集：优先 XML 声明的 encoding，GB 系按 REQ-09 链降级，其余 UTF-8。 */
+    private fun detectOpmlCharset(bytes: ByteArray): java.nio.charset.Charset {
+        val head = String(bytes, 0, minOf(bytes.size, 256), Charsets.ISO_8859_1)
+        val declared = Regex("""encoding\s*=\s*["']([^"']+)["']""")
+            .find(head)?.groupValues?.getOrNull(1)
+        val name = EncodingDetect.resolveEncode(declared, bytes)
+        return runCatching { java.nio.charset.Charset.forName(name) }.getOrDefault(Charsets.UTF_8)
+    }
+
+    /**
+     * W4 / REQ-19：整库导出 OPML（UTF-8 + XML 声明）；落盘后交 SAF 选择目标位置。
+     */
+    private fun exportOpmlLibrary() {
+        val sources = appDb.rssSourceDao.all
+        if (sources.isEmpty()) {
+            toastOnUi(R.string.opml_error_empty)
+            return
+        }
+        lifecycleScope.launch {
+            val file = withContext(IO) {
+                val path = "${filesDir}/rssLibrary.opml"
+                FileUtils.delete(path)
+                FileUtils.createFileWithReplace(path).apply {
+                    writeText(OpmlExporter.export(sources), Charsets.UTF_8)
+                }
+            }
+            exportOpmlDoc.launch {
+                mode = HandleFileContract.EXPORT
+                fileData = HandleFileContract.FileData("rssLibrary.opml", file, "text/xml")
+            }
         }
     }
 
@@ -244,11 +353,69 @@ class RssSourceActivity : VMBaseActivity<ViewBinding, RssSourceViewModel>() {
             AppManagementMenuAction(getString(R.string.import_check_config)) {
                 showDialogFragment(ImportCheckConfigDialog())
             },
+            // W4 / REQ-19（AD-09）：导入 OPML（插在「导入校验配置」之后，与设计给定的挂载位一致）
+            AppManagementMenuAction(getString(R.string.opml_import)) {
+                importOpmlDoc.launch {
+                    mode = HandleFileContract.FILE
+                    allowExtensions = arrayOf("opml", "xml")
+                }
+            },
+            // W4 / REQ-18：一键全标已读（双入口之一；另一处在文章阅读页「本订阅标为已读」）
+            // 范围语义：本页提供「全部订阅源」与「按分组」两种，避免用户误以为只影响当前可见项
+            AppManagementMenuAction(getString(R.string.rss_mark_read_all)) {
+                confirmMarkRead(
+                    titleRes = R.string.rss_mark_read_all,
+                    originsProvider = { RssReadRecordMarker.allOrigins() }
+                )
+            },
+            AppManagementMenuAction(getString(R.string.rss_mark_read_by_group)) {
+                val tags = groups.flatMap { it.splitNotBlank(AppPattern.splitGroupRegex).toList() }
+                    .distinct().sorted()
+                if (tags.isEmpty()) {
+                    toastOnUi(R.string.rss_mark_read_no_group)
+                } else {
+                    showComposeActionListDialog(
+                        title = getString(R.string.rss_mark_read_by_group),
+                        labels = tags
+                    ) { index ->
+                        val tag = tags.getOrNull(index)
+                        if (tag != null) {
+                            confirmMarkRead(
+                                titleRes = R.string.rss_mark_read_by_group,
+                                originsProvider = { RssReadRecordMarker.originsOfGroup(tag) }
+                            )
+                        }
+                    }
+                }
+            },
             AppManagementMenuAction(getString(R.string.quality_report_title)) {
                 showQualityReportScopeDialog()
             },
+            // W4 / REQ-19（AD-09）：导出 OPML（整库）—— 既有「导出选中项」只导选中项，不适用整库
+            AppManagementMenuAction(getString(R.string.opml_export_library)) {
+                exportOpmlLibrary()
+            },
             AppManagementMenuAction(getString(R.string.help)) {
                 showHelp("SourceMRssHelp")
+            }
+        )
+    }
+
+    /**
+     * W4 / REQ-18：一键全标已读的**公共确认 + 执行 + 回执**流程（全部 / 按分组共用）。
+     *
+     * @param titleRes 确认框标题（同时用于区分范围语义）
+     * @param originsProvider 惰性取范围（确认后才查库，避免白跑一次查询）
+     */
+    private fun confirmMarkRead(titleRes: Int, originsProvider: suspend () -> List<String>) {
+        showComposeConfirmDialog(
+            title = getString(titleRes),
+            message = getString(R.string.rss_mark_read_confirm_message),
+            onPositive = {
+                lifecycleScope.launch {
+                    val changed = RssReadRecordMarker.markRead(originsProvider())
+                    toastOnUi(getString(R.string.rss_mark_read_done, changed))
+                }
             }
         )
     }

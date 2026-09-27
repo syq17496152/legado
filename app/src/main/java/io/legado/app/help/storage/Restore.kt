@@ -30,6 +30,7 @@ import io.legado.app.data.entities.ReadRecord
 import io.legado.app.data.entities.ReadRecordDetail
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.RssSource
+import io.legado.app.data.entities.RssReadRecord
 import io.legado.app.data.entities.RssStar
 import io.legado.app.data.entities.RuleSub
 import io.legado.app.data.entities.SearchKeyword
@@ -201,6 +202,12 @@ object Restore {
         }
         fileToListT<RssStar>(path, "rssStar.json")?.let {
             withContext(IO) { appDb.rssStarDao.insert(*it.toTypedArray()) }
+        }
+        // W4 / REQ-17（AD-08）：订阅已读记录还原（四处同名同文件铁律的第 ② 处）
+        // 说明：Dao 的 insertRecord 为 `@Insert(onConflict = IGNORE)` ⇒ 已存在的记录不会被覆盖
+        //（恢复语义：只补回缺失的已读状态，不推翻本机更新的阅读进度）。
+        fileToListT<RssReadRecord>(path, "rssReadRecord.json")?.let {
+            withContext(IO) { appDb.rssReadRecordDao.insertRecord(*it.toTypedArray()) }
         }
         fileToListT<ReplaceRule>(path, "replaceRule.json")?.let {
             withContext(IO) { appDb.replaceRuleDao.insert(*it.toTypedArray()) }

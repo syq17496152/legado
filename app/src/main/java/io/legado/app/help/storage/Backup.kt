@@ -425,6 +425,11 @@ object Backup {
         if (selectedFiles.contains("rssStar.json")) {
             writeListToJson(appDb.rssStarDao.all, "rssStar.json", backupPath)
         }
+        // W4 / REQ-17（AD-08）：订阅**已读记录**（四处同名同文件铁律的第 ① 处；
+        // 另三处 = Restore 还原分支 / BackupSelectorConfig.allItems / BackupController.executeWebBackup）
+        if (selectedFiles.contains("rssReadRecord.json")) {
+            writeListToJson(appDb.rssReadRecordDao.getRecords(), "rssReadRecord.json", backupPath)
+        }
         if (selectedFiles.contains("replaceRule.json")) {
             writeListToJson(appDb.replaceRuleDao.all, "replaceRule.json", backupPath)
         }

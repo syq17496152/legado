@@ -117,6 +117,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Login
@@ -151,7 +152,9 @@ import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.InlineTaskBar
 import io.legado.app.ui.widget.components.InlineTaskState
 import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.help.rss.RssReadRecordMarker
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
+import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 
 /**
  * rss阅读界面
@@ -510,6 +513,31 @@ class ReadRssActivity : VMBaseActivity<ViewBinding, ReadRssViewModel>(),
                 title = getString(R.string.read_record),
                 onClick = {
                     showDialogFragment(ReadRecordDialog(viewModel.rssSource?.sourceUrl))
+                }
+            )
+        )
+        // W4 / REQ-18：本订阅一键标为已读（双入口之二在订阅源管理页：全部 / 按分组）。
+        // 范围语义 = **当前源**（origin = 当前订阅源 key）；确认后给结果回执。
+        add(
+            MenuAction(
+                icon = Icons.Filled.Check,
+                title = getString(R.string.rss_mark_read_current_source),
+                onClick = {
+                    val origin = viewModel.rssSource?.sourceUrl
+                    if (origin.isNullOrBlank()) {
+                        toastOnUi(R.string.rss_mark_read_no_source)
+                    } else {
+                        showComposeConfirmDialog(
+                            title = getString(R.string.rss_mark_read_current_source),
+                            message = getString(R.string.rss_mark_read_confirm_message),
+                            onPositive = {
+                                lifecycleScope.launch {
+                                    val changed = RssReadRecordMarker.markRead(listOf(origin))
+                                    toastOnUi(getString(R.string.rss_mark_read_done, changed))
+                                }
+                            }
+                        )
+                    }
                 }
             )
         )

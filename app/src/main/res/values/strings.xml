@@ -1014,6 +1014,24 @@
     <string name="open_in_browser">open in browser</string>
     <!-- W2 / REQ-13：播放失败自动换线路后提示（%1$s = 线路名） -->
     <string name="video_route_self_heal_toast">Playback failed, switched to line: %1$s</string>
+    <!-- W4 / REQ-18：一键全标已读（范围语义 + 确认 + 回执） -->
+    <string name="rss_mark_read_current_source">Mark this feed as read</string>
+    <string name="rss_mark_read_all">Mark all feeds as read</string>
+    <string name="rss_mark_read_by_group">Mark a group as read</string>
+    <string name="rss_mark_read_confirm_message">This marks all articles in the selected range as read. Continue?</string>
+    <string name="rss_mark_read_done">Marked %1$d articles as read</string>
+    <string name="rss_mark_read_no_group">No feed groups yet</string>
+    <string name="rss_mark_read_no_source">Current feed not found</string>
+    <!-- W4 / REQ-19：OPML 导入导出 -->
+    <string name="opml_import">Import OPML</string>
+    <string name="opml_export_library">Export OPML (all feeds)</string>
+    <string name="opml_import_done">Imported %1$d feeds</string>
+    <string name="opml_import_flattened">Flattened %1$d nested groups</string>
+    <string name="opml_export_done">Exported %1$d feeds</string>
+    <string name="opml_error_too_large">OPML file too large (limit 2 MB)</string>
+    <string name="opml_error_depth">OPML nesting too deep (limit 8 levels)</string>
+    <string name="opml_error_parse">Not a valid OPML file</string>
+    <string name="opml_error_empty">No feeds found in this OPML file</string>
     <string name="copy_url">copy url</string>
     <string name="full_screen">full screen</string>
     <string name="open_fun">open function</string>

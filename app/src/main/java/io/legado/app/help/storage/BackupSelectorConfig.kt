@@ -37,6 +37,8 @@ object BackupSelectorConfig {
         BackupItem("bookSource", "bookSource.json", "书源", "数据库"),
         BackupItem("rssSources", "rssSources.json", "订阅源", "数据库"),
         BackupItem("rssStar", "rssStar.json", "订阅收藏", "数据库"),
+        // W4 / REQ-17（AD-08）：订阅已读记录（四处同名同文件铁律的第 ③ 处）
+        BackupItem("rssReadRecord", "rssReadRecord.json", "订阅已读记录", "数据库"),
         BackupItem("replaceRule", "replaceRule.json", "替换规则", "数据库"),
         // B2.5：手动划线。注意**四处必须同名同文件**：本表 + Backup 写出分支 + Restore 还原分支
         // + BackupController.executeWebBackup（Web 备份硬编码全集、不走本表，见 AD-20）

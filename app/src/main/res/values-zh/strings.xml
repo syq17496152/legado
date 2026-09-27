@@ -964,6 +964,24 @@
     <string name="open_in_browser">浏览器打开</string>
     <!-- W2 / REQ-13：播放失败自动换线路后提示（%1$s = 线路名） -->
     <string name="video_route_self_heal_toast">播放失败，已自动切换到线路：%1$s</string>
+    <!-- W4 / REQ-18：一键全标已读（范围语义 + 确认 + 回执） -->
+    <string name="rss_mark_read_current_source">本订阅标为已读</string>
+    <string name="rss_mark_read_all">全部标为已读</string>
+    <string name="rss_mark_read_by_group">按分组标为已读</string>
+    <string name="rss_mark_read_confirm_message">将把所选范围内的全部文章标为已读，是否继续？</string>
+    <string name="rss_mark_read_done">已标记 %1$d 篇文章为已读</string>
+    <string name="rss_mark_read_no_group">暂无订阅分组</string>
+    <string name="rss_mark_read_no_source">未找到当前订阅源</string>
+    <!-- W4 / REQ-19：OPML 导入导出 -->
+    <string name="opml_import">导入 OPML</string>
+    <string name="opml_export_library">导出 OPML（整库）</string>
+    <string name="opml_import_done">已导入 %1$d 个订阅源</string>
+    <string name="opml_import_flattened">已扁平化 %1$d 个嵌套分组</string>
+    <string name="opml_export_done">已导出 %1$d 个订阅源</string>
+    <string name="opml_error_too_large">OPML 文件过大（上限 2MB）</string>
+    <string name="opml_error_depth">OPML 嵌套层级过深（上限 8 层）</string>
+    <string name="opml_error_parse">不是有效的 OPML 文件</string>
+    <string name="opml_error_empty">该 OPML 文件里没有订阅源</string>
     <string name="copy_url">拷贝 URL</string>
     <string name="full_screen">全屏</string>
     <string name="open_fun">打开方式</string>
