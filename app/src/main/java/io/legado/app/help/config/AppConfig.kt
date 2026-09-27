@@ -2277,6 +2277,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.sniffRaceEnabled, true)
         set(value) = appCtx.putPrefBoolean(PreferKey.sniffRaceEnabled, value)
 
+    // W7 8.2 / REQ-30：文章级离线预取（默认关闭）。
+    // 开启后打开文章即把该文章全部图片逐条 `downloadOnly` 落到 Glide 磁盘缓存，
+    // 口径固定为「并发 2 / 单文章 ≤200 张 / 单张失败不阻塞」（见 ImageCanvasViewModel.prefetchArticleImages）。
+    var imageArticlePrefetch: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.imageArticlePrefetch, false)
+        set(value) = appCtx.putPrefBoolean(PreferKey.imageArticlePrefetch, value)
+
     var readUrlInBrowser: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.readUrlOpenInBrowser)
         set(value) {

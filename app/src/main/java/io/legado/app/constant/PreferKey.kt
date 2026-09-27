@@ -472,6 +472,8 @@ object PreferKey {
     const val modernRssPage = "modernRssPage"
     // REQ-12 / tasks 2.3：订阅正文含 <video> 时自动转内置播放器（键名由设计固定，禁改）
     const val rssAutoVideoToPlayer = "rssAutoVideoToPlayer"
+    // W7 8.2 / REQ-30：文章级离线预取开关（打开文章即把该文章全部图片预下到磁盘缓存；默认关）
+    const val imageArticlePrefetch = "imageArticlePrefetch"
     // W2 / REQ-14 / AD-05：视频嗅探赛马化开关（默认开；关闭即回落原串行链，见 ExoPlayerHelper.sniffVideoType）
     const val sniffRaceEnabled = "sniffRaceEnabled"
     const val discoveryPageLayout = "discoveryPageLayout"

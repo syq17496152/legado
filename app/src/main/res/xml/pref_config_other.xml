@@ -200,6 +200,14 @@
             android:title="@string/manga_volume_key_page"
             app:iconSpaceReserved="false" />
 
+        <!-- W7 8.2 / REQ-30：文章级离线预取开关（默认关；设置搜索收录用） -->
+        <io.legado.app.lib.prefs.SwitchPreference
+            android:defaultValue="false"
+            android:key="imageArticlePrefetch"
+            android:summary="@string/image_article_prefetch_summary"
+            android:title="@string/image_article_prefetch"
+            app:iconSpaceReserved="false" />
+
         <!-- video-player-dual-layout R11：videoSetting 条目已迁移至 VIDEO_PLAYER 全局设置页
              （搜索条目改由 MySettingsData 硬编码收录，此处移除防死条目） -->
 

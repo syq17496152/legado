@@ -411,6 +411,14 @@ class OtherConfigFragment : ComposeSettingFragment() {
                 summary = getString(R.string.manga_volume_key_page_summary),
                 defaultValue = true
             ),
+            // W7 8.2 / REQ-30：文章级离线预取（打开文章即把该文章全部图片预下到磁盘缓存；默认关；
+            // XML 处同步登记供设置搜索收录——与 W5 音量键开关同族同形）
+            switch(
+                key = PreferKey.imageArticlePrefetch,
+                title = getString(R.string.image_article_prefetch),
+                summary = getString(R.string.image_article_prefetch_summary),
+                defaultValue = false
+            ),
             SettingActionSpec(
                 key = PreferKey.videoSetting,
                 title = getString(R.string.video_setting),

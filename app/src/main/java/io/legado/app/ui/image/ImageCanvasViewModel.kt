@@ -20,8 +20,10 @@ import io.legado.app.ui.image.adapter.ImageCanvasAdapter
 import io.legado.app.utils.ACache
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.writeBytes
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -309,6 +311,12 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
                 )
             }
 
+            // W7 8.2 / REQ-30：文章级离线预取（开关默认关）。
+            // **挂钩点唯一**（本处，紧跟 `extractImageList` 之后）；不阻断主链路（预取在独立协程内）。
+            if (AppConfig.imageArticlePrefetch) {
+                prefetchArticleImages(imageUrls)
+            }
+
             // H7(sniff-regression-rss-image-crash) 真实崩溃根因修复（模拟器 2026-08-30 复现实锤：
             // FATAL IndexOutOfBoundsException Inconsistency detected，与用户真机崩溃同型）：
             // 原实现 appendItems 在 execute(IO 线程) 内同步更新 StateFlow 数据源，而
@@ -362,6 +370,33 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
     // 包含 9 策略：纯URL列表/ruleImage选择器/<img>标签/<picture><source>/CSS background-image/
     // og:image Meta/Script JSON/JS变量/所有URL正则/单URL兜底
     // 详见：app/src/main/java/io/legado/app/help/image/ImageUrlExtractor.kt
+
+    /**
+     * W7 8.2 / REQ-30：**文章级离线预取** —— 把 [urls] 逐条 `downloadOnly` 落到 Glide 磁盘缓存。
+     *
+     * 口径（设计固定，禁改）：
+     * - **并发 2**（`chunked(2)` + 每批 `coroutineScope{launch{}}` ⇒ 最多 2 条同时在飞）；
+     * - **单文章 ≤200 张**（`take(200)`，防极长文章一次打满网络）；
+     * - **单张失败不阻塞**（`runCatching` 吞掉 —— 未命中最多导致下次仍走网络，不影响主链路）；
+     * - 复用**既有 Glide downloadOnly 通道**（与列表项加载同源），**不另建缓存层**。
+     *
+     * 调用点唯一：[loadImageList] 内 `extractImageList` 之后（受 `AppConfig.imageArticlePrefetch` 门控）。
+     */
+    private fun prefetchArticleImages(urls: List<String>) {
+        val targets = urls.take(200)
+        if (targets.isEmpty()) return
+        Coroutine.async {
+            targets.chunked(2).forEach { batch ->
+                coroutineScope {
+                    batch.forEach { url ->
+                        launch {
+                            kotlin.runCatching { ImageLoader.loadFile(context, url).submit().get() }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * 保存图片到指定目录（用 Glide asFile 加载，支持 Referer/Cookie 注入）
