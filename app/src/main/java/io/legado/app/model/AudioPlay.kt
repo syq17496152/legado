@@ -13,6 +13,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReadRecord
+import io.legado.app.help.ReadRecordDailyHelper
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.getBookSource
 import io.legado.app.help.book.readSimulating
@@ -38,6 +39,10 @@ import kotlin.text.trim
 @SuppressLint("StaticFieldLeak")
 @Suppress("unused")
 object AudioPlay : CoroutineScope by MainScope() {
+
+    /** W3 / REQ-15：听书时长结算节流间隔（播放进度循环 500ms/次 ⇒ 10s 结算一次，避免每秒写库）。 */
+    private const val READ_TIME_SETTLE_INTERVAL_MS = 10_000L
+
     /**
      * 播放模式枚举
      */
@@ -77,6 +82,9 @@ object AudioPlay : CoroutineScope by MainScope() {
     val loadingChapters = arrayListOf<Int>()
     private val readRecord = ReadRecord()
     var readStartTime: Long = System.currentTimeMillis()
+
+    /** W3 / REQ-15：上次结算听书时长的时刻（节流用；见 [upReadTime]）。 */
+    private var lastReadTimeSettleAt = 0L
     val executor = globalExecutor
 
     fun changePlayMode() {
@@ -136,15 +144,38 @@ object AudioPlay : CoroutineScope by MainScope() {
         postEvent(EventBus.AUDIO_BUFFER_PROGRESS, 0)
     }
 
-    fun upReadTime() {
+    /**
+     * W3 / REQ-15（AD-06）：结算听书时长 —— **单源**走 [ReadRecordDailyHelper.record]，
+     * 与阅读共用同一每日统计口径（产品承诺「听得算数」）。
+     *
+     * 三项关键约定：
+     * 1. **先结算再重置**：`readStartTime` 在派发前同步前移到本次结算时刻，保证
+     *    「一次 delta 只记一次」（executor 异步执行，若在任务内更新会与下一次调用竞态重复计数）；
+     * 2. **节流**：真机实证节拍为播放进度循环 500ms/次 ⇒ 无条件结算会把「每秒一次写库」变成常态；
+     *    故非强制调用间隔小于 [READ_TIME_SETTLE_INTERVAL_MS] 时直接返回（暂停/切章用 `force = true` 绕过）；
+     * 3. **保留原语义**：`enableReadRecord` 关闭时整体早退；`record()` 自带 `readTime <= 0` 守卫防重复计数。
+     *
+     * @param force true = 忽略节流（暂停、切章、停止等**必须结清**的时点）
+     */
+    fun upReadTime(force: Boolean = false) {
         if (!AppConfig.enableReadRecord) {
             return
         }
+        val now = System.currentTimeMillis()
+        if (!force && now - lastReadTimeSettleAt < READ_TIME_SETTLE_INTERVAL_MS) {
+            return
+        }
+        val delta = now - readStartTime
+        if (delta <= 0) {
+            return
+        }
+        lastReadTimeSettleAt = now
+        readStartTime = now
         executor.execute {
-            readRecord.readTime = readRecord.readTime + System.currentTimeMillis() - readStartTime
-            readStartTime = System.currentTimeMillis()
-            readRecord.lastRead = System.currentTimeMillis()
+            readRecord.readTime = readRecord.readTime + delta
+            readRecord.lastRead = now
             runBlocking(IO) { appDb.readRecordDao.insert(readRecord) }
+            ReadRecordDailyHelper.record(delta, now, forceWidgetUpdate = false)
         }
     }
 
@@ -279,6 +310,10 @@ object AudioPlay : CoroutineScope by MainScope() {
 
     fun pause(context: Context) {
         if (AudioPlayService.isRun) {
+            // W3 / REQ-15（B5 偏差修复）：**先结算再重置** —— 原实现直接前移 readStartTime，
+            // 使「最后一次结算 → 暂停」之间的听书时长永久丢失（表现为听书时长偏少）。
+            upReadTime(force = true)
+            // 计量关闭时 upReadTime 提前返回 ⇒ 此处兜住重置（保持原语义）
             readStartTime = System.currentTimeMillis()
             context.startService<AudioPlayService> {
                 action = IntentAction.pause
@@ -356,7 +391,8 @@ object AudioPlay : CoroutineScope by MainScope() {
 
     fun next() {
         stopPlay()
-        upReadTime()
+        // W3 / REQ-15：章节切换必须**结清**本段时长（force 绕过节流，否则切章会丢账）
+        upReadTime(force = true)
         when (playMode) {
             PlayMode.LIST_END_STOP -> {
                 if (durChapterIndex + 1 < simulatedChapterSize) {

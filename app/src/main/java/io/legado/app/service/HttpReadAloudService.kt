@@ -148,6 +148,8 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun updateNextPos() {
+        // W3 / REQ-16：HTTP 朗读链路的段落切换（自动推进/错误推进共用）⇒ 写段落锚点
+        persistVoiceParagraphAnchor("http-paragraph")
         readAloudNumber += contentList[nowSpeak].length + 1 - paragraphStartPos
         paragraphStartPos = 0
         if (nowSpeak < contentList.lastIndex) {

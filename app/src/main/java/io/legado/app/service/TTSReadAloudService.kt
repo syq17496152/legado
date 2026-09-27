@@ -645,6 +645,8 @@ class TTSReadAloudService : BaseReadAloudService() {
         }
 
         private fun nextParagraph() {
+            // W3 / REQ-16：系统 TTS 链路的段落切换（正常完成/错误推进共用）⇒ 写段落锚点
+            persistVoiceParagraphAnchor("tts-paragraph")
             //跳过全标点段落
             do {
                 readAloudNumber += contentList[nowSpeak].length + 1 - paragraphStartPos

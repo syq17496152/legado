@@ -38,6 +38,7 @@ import io.legado.app.help.MediaHelp
 import io.legado.app.help.ai.AiReadAloudRoleService
 import io.legado.app.help.ai.AiReadAloudRoleState
 import io.legado.app.help.config.AppConfig
+import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.help.coroutine.Coroutine
@@ -236,6 +237,8 @@ abstract class BaseReadAloudService : BaseService(),
 
     override fun onDestroy() {
         super.onDestroy()
+        // W3 / REQ-16：服务销毁是最后一个写锚点时机（须早于 textChapter/ReadBook 状态被清理）
+        persistVoiceParagraphAnchor("destroy")
         // R22（B4）：释放朗读播放权（模式不匹配会被忽略 ⇒ 不会误清听书占用）
         ListeningPlaybackCoordinator.release(ListeningPlaybackCoordinator.Mode.READ_ALOUD)
         if (useWakeLock) {
@@ -444,15 +447,26 @@ abstract class BaseReadAloudService : BaseService(),
             if (!textChapter.isCompleted) {
                 return@execute
             }
-            readAloudNumber = textChapter.getReadLength(pageIndex) + startPos
+            // W3 / REQ-16（AD-07 v3.0）：**段落级恢复** —— 仅当调用方给的是「章首默认位置」时用
+            // 朗读专用锚点覆盖；显式指定位置（选句朗读 / 面板拖进度 / 选章）优先级更高，不被锚点劫持。
+            var mPageIndex = pageIndex
+            var mStartPos = startPos
+            if (play && !toLast && pageIndex == 0 && startPos == 0) {
+                resolveVoiceAnchorStart(textChapter)?.let { (anchorPage, anchorStart) ->
+                    mPageIndex = anchorPage
+                    mStartPos = anchorStart
+                    this@BaseReadAloudService.pageIndex = anchorPage
+                }
+            }
+            readAloudNumber = textChapter.getReadLength(mPageIndex) + mStartPos
             readAloudByPage = getPrefBoolean(PreferKey.readAloudByPage)
             // P1/B1-③：段中触发对齐句首偏好（每次装配读取一次）
             alignSentenceStart = AppConfig.readAloudAlignSentenceStart
             contentList = textChapter.getNeedReadAloud(0, readAloudByPage, 0)
                 .split("\n")
                 .filter { it.isNotEmpty() }
-            var pos = startPos
-            val page = textChapter.getPage(pageIndex)!!
+            var pos = mStartPos
+            val page = textChapter.getPage(mPageIndex)!!
             if (pos > 0) {
                 for (paragraph in page.paragraphs) {
                     val tmp = pos - paragraph.length - 1
@@ -485,6 +499,69 @@ abstract class BaseReadAloudService : BaseService(),
         }
     }
 
+    /**
+     * W3 / REQ-16（AD-07 v3.0）：把「当前朗读段落起点」写回 **朗读专用锚点**
+     * （`Book.voiceParagraphAnchor` + 归属章节 `voiceParagraphAnchorChapter`）。
+     *
+     * 锚点语义 = **章内字符索引**（`readAloudNumber - paragraphStartPos`：前者为章内累计字符位置、
+     * 后者为段内偏移）⇒ 与 `readAloudByPage` 无关、跨模式可复用，且与多义的 `durChapterPos`
+     * （文字首行索引 / 漫画图片序号）**完全解耦**。
+     *
+     * 写入时机（design 4.2，避免高频写库）：**段落切换 / 暂停 / 服务销毁**；
+     * 与库中现值相同则跳过（省一次写库），异常不抛出（朗读进度持久化失败不得影响朗读本身）。
+     *
+     * @param reason 写入原因（日志归因：next/prev/pause/destroy/…）
+     */
+    internal fun persistVoiceParagraphAnchor(reason: String) {
+        val book = ReadBook.book ?: return
+        val chapter = textChapter ?: return
+        val anchor = readAloudNumber - paragraphStartPos
+        if (anchor <= 0) return
+        val chapterIndex = chapter.chapter.index
+        if (book.voiceParagraphAnchor == anchor && book.voiceParagraphAnchorChapter == chapterIndex) {
+            return
+        }
+        book.voiceParagraphAnchor = anchor
+        book.voiceParagraphAnchorChapter = chapterIndex
+        execute(executeContext = IO) {
+            appDb.bookDao.update(book)
+        }
+        AppLog.putInfo("ReadAloudAnchor: 写入 anchor=$anchor chapter=$chapterIndex reason=$reason")
+    }
+
+    /**
+     * W3 / REQ-16：读回锚点 → 起播位置（页码 + 页内偏移）。
+     *
+     * 返回 null = 无锚点 / **校验冲突**（调用方保持原起播位置 ⇒ 等价「回落段落起点」），冲突三律：
+     * ① 锚点 ≤ 0（无锚点）；② 锚点归属章节 ≠ 当前章节（用户在别的章写过 ⇒ 防跳错位置）；
+     * ③ 锚点越界（> 末段字符位置）或换算页号无效（正文已变动）。任何一条命中都**静默降级**，不抛异常。
+     */
+    private fun resolveVoiceAnchorStart(chapter: TextChapter): Pair<Int, Int>? {
+        val book = ReadBook.book ?: return null
+        val anchor = book.voiceParagraphAnchor
+        if (anchor <= 0) return null
+        if (book.voiceParagraphAnchorChapter != chapter.chapter.index) {
+            AppLog.putInfo(
+                "ReadAloudAnchor: 章节不匹配丢弃 anchor=$anchor " +
+                    "anchorChapter=${book.voiceParagraphAnchorChapter} cur=${chapter.chapter.index}"
+            )
+            return null
+        }
+        val last = chapter.getLastParagraphPosition()
+        if (anchor > last) {
+            AppLog.putInfo("ReadAloudAnchor: 锚点越界丢弃 anchor=$anchor last=$last")
+            return null
+        }
+        val page = chapter.getPageIndexByCharIndex(anchor)
+        if (page < 0) {
+            AppLog.putInfo("ReadAloudAnchor: 页号无效丢弃 anchor=$anchor")
+            return null
+        }
+        val inPage = (anchor - chapter.getReadLength(page)).coerceAtLeast(0)
+        AppLog.putInfo("ReadAloudAnchor: 读回命中 anchor=$anchor page=$page inPage=$inPage")
+        return page to inPage
+    }
+
     @SuppressLint("WakelockTimeout")
     open fun play() {
         // R22（B4）：朗读与听书互斥 —— 起播前终止正在进行的音频播放（两向互斥的唯一入口）
@@ -510,6 +587,8 @@ abstract class BaseReadAloudService : BaseService(),
 
     @CallSuper
     open fun pauseReadAloud(abandonFocus: Boolean = true) {
+        // W3 / REQ-16：暂停是**必须结清**的时点（用户离开朗读的典型动作）⇒ 写段落锚点
+        persistVoiceParagraphAnchor("pause")
         if (useWakeLock) {
             wakeLock.release()
             wifiLock?.release()
@@ -548,6 +627,8 @@ abstract class BaseReadAloudService : BaseService(),
 
     private fun prevP() {
         if (nowSpeak > 0) {
+            // W3 / REQ-16：段落切换写锚点（写"离开的当前段" = 用户最后听到的位置）
+            persistVoiceParagraphAnchor("prev")
             playStop()
             do {
                 nowSpeak--
@@ -574,6 +655,8 @@ abstract class BaseReadAloudService : BaseService(),
 
     private fun nextP() {
         if (nowSpeak < contentList.size - 1) {
+            // W3 / REQ-16：段落切换写锚点
+            persistVoiceParagraphAnchor("next")
             playStop()
             readAloudNumber += contentList[nowSpeak].length.plus(1) - paragraphStartPos
             paragraphStartPos = 0
@@ -806,7 +889,6 @@ abstract class BaseReadAloudService : BaseService(),
             .putText(MediaMetadataCompat.METADATA_KEY_TITLE, ReadBook.curTextChapter?.title ?: "null")
             .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, nTitle)
             .putText(MediaMetadataCompat.METADATA_KEY_ALBUM, ReadBook.book?.author ?: "null")
-//            .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, nowSpeak.toLong())
             .build()
         mediaSessionCompat.setMetadata(metadata)
     }

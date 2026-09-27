@@ -1,4 +1,4 @@
-﻿package io.legado.app.data
+package io.legado.app.data
 
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
@@ -125,7 +125,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 110,
+    version = 111,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -209,6 +209,8 @@ val appDb by lazy {
         // download-manager: 106→107 使用手动 Migration（DatabaseMigrations.migration_106_107），新增 download_tasks 表（下载任务持久化）
         // download-manager-optimize B8: 107→108 使用手动 Migration（migration_107_108），download_tasks 删除 errorMsg/resumePointJson/segmentsJson 僵尸列（建新表迁数据）
         // video-sniff-403-and-rss-classic-fix 4.8e: 108→109 使用手动 Migration（migration_108_109），playHistories 主键扩为 (articleUrl, videoUrl, rssSourceId)（建新表迁数据）
+        // optimize-tts-engine（AD-04/AD-09）: 109→110 使用手动 Migration（migration_109_110），httpTTS 增列 type/script + 建 ttsCastingTemplates 表
+        // next-stage-mainline W3（AD-07）: 110→111 使用手动 Migration（migration_110_111），books 增列 voiceParagraphAnchor/voiceParagraphAnchorChapter（朗读段落锚点）
     ]
 )
 abstract class AppDatabase : RoomDatabase() {

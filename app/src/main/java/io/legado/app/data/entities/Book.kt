@@ -108,6 +108,14 @@ data class Book(
     // 最近一次阅读书籍的时间(打开正文的时间)
     @ColumnInfo(defaultValue = "0")
     var durChapterTime: Long = System.currentTimeMillis(),
+    // W3 / REQ-16（AD-07）：**朗读专用段落锚点** —— 当前朗读段落的起点（章内字符索引）。
+    // 为什么另立字段：`durChapterPos` 是**多义共享字段**（文字=首行字符索引；漫画=图片序号，
+    // 见 ReadManga.kt），朗读若复用会与二者互相覆盖；故朗读进度单独存锚点。
+    @ColumnInfo(defaultValue = "0")
+    var voiceParagraphAnchor: Int = 0,
+    // 锚点归属的章节索引（-1 = 无锚点）；与锚点**成对校验**，防切章后误用旧锚点跳错位置
+    @ColumnInfo(defaultValue = "-1")
+    var voiceParagraphAnchorChapter: Int = -1,
     //字数
     override var wordCount: String? = null,
     // 刷新书架时更新书籍信息

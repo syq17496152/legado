@@ -519,6 +519,11 @@ class AudioPlayService : BaseService(),
                 val durP = exoPlayer.currentPosition
                 //更新buffer位置
                 AudioPlay.playPositionChanged(durP.toInt())
+                // W3 / REQ-15（AD-06）：播放中周期性结清听书时长（节流在 AudioPlay.upReadTime 内部，
+                // 10s 一次写库）；暂停态不结算（避免把暂停时间算作听书时长）。
+                if (!pause) {
+                    AudioPlay.upReadTime()
+                }
                 postEvent(EventBus.AUDIO_BUFFER_PROGRESS, exoPlayer.bufferedPosition.toInt())
                 postEvent(EventBus.AUDIO_PROGRESS, AudioPlay.durChapterPos)
                 postEvent(EventBus.AUDIO_SIZE, exoPlayer.duration.toInt())
