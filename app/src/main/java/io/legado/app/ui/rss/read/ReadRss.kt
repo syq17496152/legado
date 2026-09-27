@@ -22,6 +22,46 @@ import kotlinx.coroutines.withContext
 
 object ReadRss {
     /**
+     * 视频播放上下文的**单一写入点**（REQ-11 / tasks 2.2）。
+     *
+     * 抽出原因：原 `readRss(activity, rssArticle, …)` 与 `readRss(fragment, …)` **各写一遍**同一批
+     * `VideoPlay` 字段；新增的「type=0 正文含 `<video>` 自动转播放器」路径（`ReadRssViewModel`）
+     * 需要与二者**完全一致**的上下文 ⇒ 三处各写一遍必然漂移（本项目已多次发生同类漂移）。
+     *
+     * 语义**保持原样**：`indexOfFirst` 未命中（列表为 null 或找不到）一律兜底 0；找不到时输出
+     * source mismatch WARN（供误配源排查）。
+     */
+    fun prepareVideoPlayContext(
+        rssArticle: RssArticle,
+        rssArticles: List<RssArticle>? = null,
+        sortName: String? = null,
+        sortUrl: String? = null,
+        nextPageUrl: String? = null,
+        page: Int = 1
+    ) {
+        VideoPlay.rssArticles = rssArticles
+        // B3 修复：分离 null 兜底与 -1 兜底，-1 时输出 WARN 并兜底为 0
+        val matchedIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link }
+        VideoPlay.rssArticleIndex = if (matchedIndex == null) {
+            0
+        } else if (matchedIndex < 0) {
+            AppLog.put(
+                "ReadRss: source mismatch WARN, rssArticle.origin=${rssArticle.origin.take(2)}***, " +
+                    "rssArticles[0].origin=${rssArticles.firstOrNull()?.origin?.take(2)}***, fallback index=0"
+            )
+            0
+        } else {
+            matchedIndex
+        }
+        // 阶段8 F9：传递分页上下文给 VideoPlay，支持播放器内分页加载
+        VideoPlay.rssSortName = sortName
+        VideoPlay.rssSortUrl = sortUrl
+        VideoPlay.rssNextPageUrl = nextPageUrl
+        VideoPlay.rssArticlePage = page
+        VideoPlay.rssArticlesHasMore = !nextPageUrl.isNullOrBlank()
+    }
+
+    /**
      * 通过RSS历史记录点击阅读
      */
     fun readRss(activity: AppCompatActivity, record: RssReadRecord) {
@@ -74,26 +114,8 @@ object ReadRss {
         val type = rssArticle.type
         if (type == 2) {
             // 视频播放：从详情页传入 rssArticles 支持播放页上/下一个切换文章（废除 AD-07 简化原则）
-            VideoPlay.rssArticles = rssArticles
-            // B3 修复：分离 null 兜底与 -1 兜底，-1 时输出 WARN 并兜底为 0（配合 B2 source 同步更新）
-            val matchedIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link }
-            VideoPlay.rssArticleIndex = if (matchedIndex == null) {
-                0
-            } else if (matchedIndex < 0) {
-                // 文章不在列表中（如聚合搜索结果与文章列表源不一致），WARN 日志 + 兜底为 0
-                AppLog.put(
-                    "ReadRss: source mismatch WARN, rssArticle.origin=${rssArticle.origin.take(2)}***, " +
-                        "rssArticles[0].origin=${rssArticles.firstOrNull()?.origin?.take(2)}***, fallback index=0"
-                )
-                0
-            } else {
-                matchedIndex
-            }
-            VideoPlay.rssSortName = sortName
-            VideoPlay.rssSortUrl = sortUrl
-            VideoPlay.rssNextPageUrl = nextPageUrl
-            VideoPlay.rssArticlePage = page
-            VideoPlay.rssArticlesHasMore = !nextPageUrl.isNullOrBlank()
+            // REQ-11 / tasks 2.2：播放上下文走**单一写入点**，防多处各写一遍漂移
+            prepareVideoPlayContext(rssArticle, rssArticles, sortName, sortUrl, nextPageUrl, page)
             activity.startActivity<VideoPlayerActivity> {
                 putExtra("sourceKey", rssArticle.origin)
                 putExtra("sourceType", SourceType.rss)
@@ -137,8 +159,7 @@ object ReadRss {
         // 修复场景：用户将图片源(type=1)改为网页模式(type=0)后，旧文章缓存 type 仍为 1 导致路由错误
         val type = rssSource?.type ?: rssArticle.type
         if (type == 2) {
-            //视频播放：设置文章列表到 VideoPlay 单例，支持上下滑动切换文章
-            VideoPlay.rssArticles = rssArticles
+            // 视频播放：设置文章列表到 VideoPlay 单例，支持上下滑动切换文章
             // dual-layout：列表主查询 flowByOriginSort 不含 image 列（CursorWindow 优化），
             // 内存对象 image 恒 null → 播放页信息区无封面。异步单行 getImage 回填，
             // 完成后发 sticky VIDEO_SUB_TITLE 触发播放页信息区重刷
@@ -150,25 +171,8 @@ object ReadRss {
                 }
                 postEvent(EventBus.VIDEO_SUB_TITLE, VideoPlay.videoTitle ?: "")
             }
-            // B3 修复：分离 null 兜底与 -1 兜底，-1 时输出 WARN 并兜底为 0（配合 B2 source 同步更新）
-            val matchedIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link }
-            VideoPlay.rssArticleIndex = if (matchedIndex == null) {
-                0
-            } else if (matchedIndex < 0) {
-                AppLog.put(
-                    "ReadRss: source mismatch WARN, rssArticle.origin=${rssArticle.origin.take(2)}***, " +
-                        "rssArticles[0].origin=${rssArticles.firstOrNull()?.origin?.take(2)}***, fallback index=0"
-                )
-                0
-            } else {
-                matchedIndex
-            }
-            // 阶段8 F9：传递分页上下文给 VideoPlay，支持播放器内分页加载
-            VideoPlay.rssSortName = sortName
-            VideoPlay.rssSortUrl = sortUrl
-            VideoPlay.rssNextPageUrl = nextPageUrl
-            VideoPlay.rssArticlePage = page
-            VideoPlay.rssArticlesHasMore = !nextPageUrl.isNullOrBlank()
+            // REQ-11 / tasks 2.2：播放上下文走**单一写入点**（与 activity 重载、ViewModel 新路由同源）
+            prepareVideoPlayContext(rssArticle, rssArticles, sortName, sortUrl, nextPageUrl, page)
             fragment.startActivity<VideoPlayerActivity> {
                 putExtra("sourceKey", rssArticle.origin)
                 putExtra("sourceType", SourceType.rss)

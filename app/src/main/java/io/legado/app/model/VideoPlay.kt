@@ -1055,20 +1055,38 @@ object VideoPlay : CoroutineScope by MainScope(){
                             if (isValidVideoContentUrl(resolved)) {
                                 resolved
                             } else {
-                                AppLog.putWarn("P3-1: ruleContent返回非视频URL, 降级R5嗅探, len=${resolved.length}, hasScript=${resolved.contains("<script", ignoreCase = true)}")
-                                val sniffCandidate = VideoUrlExtractor.extractWithWebView(
-                                    url = rssArticle.link, source = source,
-                                    delayTime = VideoUrlExtractor.R5_DELAY_TIME,
-                                    timeout = VideoUrlExtractor.R5_TIMEOUT
-                                )
-                                sniffMergedHeaders = sniffCandidate?.headers ?: emptyMap()
-                                val sniffUrl = sniffCandidate?.url
-                                if (sniffUrl != null) {
-                                    AppLog.putInfo("P3-1降级R5嗅探命中, ${VideoUrlExtractor.sanitizeUrl(sniffUrl)}")
-                                    sniffUrl
+                                AppLog.putWarn("P3-1: ruleContent返回非视频URL, 先试精确提取, len=${resolved.length}, hasScript=${resolved.contains("<script", ignoreCase = true)}")
+                                // REQ-10 / tasks 2.1：R5 嗅探（需 WebView 渲染，秒级）之前先用**零成本**的
+                                // `extractPrecise` 在**已取到的正文 HTML** 里精确找直链（标签/Meta/JSON/JS 变量四法）：
+                                // 命中即秒级出地址；未命中才回落原有 R5 嗅探（行为不劣化，不新增网络请求）。
+                                // 注意：不得改动 `extractWithWebView` 的内存去重 key（完整 URL）。
+                                val preciseStart = System.currentTimeMillis()
+                                val precise = kotlin.runCatching {
+                                    VideoUrlExtractor.extractPrecise(content, rssArticle.link)
+                                }.getOrDefault(emptyList())
+                                if (precise.isNotEmpty()) {
+                                    AppLog.putInfo(
+                                        "精确提取命中 ruleContent失败回退: count=${precise.size}, elapsed=${System.currentTimeMillis() - preciseStart}ms, url=${VideoUrlExtractor.sanitizeUrl(precise.first())}"
+                                    )
+                                    precise.first()
                                 } else {
-                                    AppLog.putWarn("P3-1降级R5嗅探未命中, 回退文章链接, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
-                                    rssArticle.link
+                                    AppLog.putInfo(
+                                        "精确提取未命中, 回落R5嗅探: elapsed=${System.currentTimeMillis() - preciseStart}ms"
+                                    )
+                                    val sniffCandidate = VideoUrlExtractor.extractWithWebView(
+                                        url = rssArticle.link, source = source,
+                                        delayTime = VideoUrlExtractor.R5_DELAY_TIME,
+                                        timeout = VideoUrlExtractor.R5_TIMEOUT
+                                    )
+                                    sniffMergedHeaders = sniffCandidate?.headers ?: emptyMap()
+                                    val sniffUrl = sniffCandidate?.url
+                                    if (sniffUrl != null) {
+                                        AppLog.putInfo("P3-1降级R5嗅探命中, ${VideoUrlExtractor.sanitizeUrl(sniffUrl)}")
+                                        sniffUrl
+                                    } else {
+                                        AppLog.putWarn("P3-1降级R5嗅探未命中, 回退文章链接, ${VideoUrlExtractor.sanitizeUrl(rssArticle.link)}")
+                                        rssArticle.link
+                                    }
                                 }
                             }
                         }

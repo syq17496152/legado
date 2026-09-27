@@ -2636,6 +2636,12 @@ Selected text or question:
     <string name="config_category_about">About</string>
 <string name="discover_group_other">Other</string>
 <!-- bottom_bar_hide_search / _summary 已随「底栏悬浮搜索按钮」删除（2026-09-27 用户裁决） -->
+<string name="rss_auto_video_to_player">Auto switch to video player</string>
+<string name="rss_auto_video_to_player_summary">Open the built-in player when the parsed article content contains a video</string>
+<string name="rss_auto_video_enable">Turn on auto video player</string>
+<string name="rss_auto_video_disable">Turn off auto video player</string>
+<string name="rss_auto_video_on">Auto video player enabled</string>
+<string name="rss_auto_video_off">Auto video player disabled</string>
 <string name="discovery_subscription_settings_summary">Manage discovery and subscription entrances and page styles.</string>
 <string name="discovery_suite_manage_title">Discovery suites</string>
 <string name="discovery_suite_empty_title">No discovery suites yet</string>

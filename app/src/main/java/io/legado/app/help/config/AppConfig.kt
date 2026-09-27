@@ -2267,6 +2267,11 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
 
     // 🔴 已删除 `floatingBottomBarHideSearch`（随底栏悬浮搜索按钮一并移除）
 
+    // REQ-12 / tasks 2.3：订阅正文含 <video> 时自动转内置播放器（默认开启；键名禁改）
+    var rssAutoVideoToPlayer: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.rssAutoVideoToPlayer, true)
+        set(value) = appCtx.putPrefBoolean(PreferKey.rssAutoVideoToPlayer, value)
+
     var readUrlInBrowser: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.readUrlOpenInBrowser)
         set(value) {

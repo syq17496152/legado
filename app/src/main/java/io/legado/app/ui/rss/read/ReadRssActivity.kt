@@ -124,6 +124,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Stop
@@ -474,6 +475,30 @@ class ReadRssActivity : VMBaseActivity<ViewBinding, ReadRssViewModel>(),
                 title = getString(R.string.open_in_browser),
                 onClick = {
                     currentWebView.url?.let { openUrl(it) } ?: toastOnUi(R.string.null_url)
+                }
+            )
+        )
+        // REQ-12 / tasks 2.3：RSS 阅读菜单**双入口之二**（另一处在「发现与订阅」设置页）。
+        // 标题随当前状态切换为「关闭 / 开启」，点击即切换并给结果回执（菜单无勾选态展示）。
+        add(
+            MenuAction(
+                icon = Icons.Filled.SmartDisplay,
+                title = getString(
+                    if (AppConfig.rssAutoVideoToPlayer) {
+                        R.string.rss_auto_video_disable
+                    } else {
+                        R.string.rss_auto_video_enable
+                    }
+                ),
+                onClick = {
+                    AppConfig.rssAutoVideoToPlayer = !AppConfig.rssAutoVideoToPlayer
+                    toastOnUi(
+                        if (AppConfig.rssAutoVideoToPlayer) {
+                            R.string.rss_auto_video_on
+                        } else {
+                            R.string.rss_auto_video_off
+                        }
+                    )
                 }
             )
         )

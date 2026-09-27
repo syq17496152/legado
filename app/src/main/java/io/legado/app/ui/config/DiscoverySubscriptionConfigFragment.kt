@@ -10,6 +10,7 @@ import io.legado.app.ui.config.compose.SettingChoiceOption
 import io.legado.app.ui.config.compose.SettingChoiceSpec
 import io.legado.app.ui.config.compose.SettingPageSpec
 import io.legado.app.ui.config.compose.SettingSectionSpec
+import io.legado.app.ui.config.compose.SettingSwitchSpec
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.postEventDelay
@@ -93,6 +94,17 @@ class DiscoverySubscriptionConfigFragment : ComposeSettingFragment() {
                                 KEY_SEARCH_JUMP_MODERN_RSS_PAGE,
                                 KEY_SEARCH_JUMP_RSS_MODE
                             )
+                        ),
+                        // REQ-12 / tasks 2.3：订阅正文（**内容规则解析后**）含视频时自动转内置播放器。
+                        // 双入口之二在 RSS 阅读菜单（ReadRssActivity.buildMenuActions）。
+                        SettingSwitchSpec(
+                            key = PreferKey.rssAutoVideoToPlayer,
+                            title = getString(R.string.rss_auto_video_to_player),
+                            checked = booleanSetting(PreferKey.rssAutoVideoToPlayer, true),
+                            summary = getString(R.string.rss_auto_video_to_player_summary),
+                            onCheckedChange = {
+                                updateBooleanSetting(PreferKey.rssAutoVideoToPlayer, it)
+                            }
                         )
                     )
                 )

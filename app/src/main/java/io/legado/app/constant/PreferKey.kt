@@ -469,6 +469,8 @@ object PreferKey {
     const val discoverySuiteConfig = "discoverySuiteConfig"
     const val selectedDiscoverySuiteId = "selectedDiscoverySuiteId"
     const val modernRssPage = "modernRssPage"
+    // REQ-12 / tasks 2.3：订阅正文含 <video> 时自动转内置播放器（键名由设计固定，禁改）
+    const val rssAutoVideoToPlayer = "rssAutoVideoToPlayer"
     const val discoveryPageLayout = "discoveryPageLayout"
     const val mergedDiscoveryRssTarget = "mergedDiscoveryRssTarget"
     const val modernDiscoverySourceUrl = "modernDiscoverySourceUrl"

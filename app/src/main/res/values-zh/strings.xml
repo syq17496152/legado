@@ -2227,6 +2227,12 @@ bookUrl：%7$s
 <string name="manage_bar_immersion">管理页沉浸顶栏</string>
 <string name="manage_bar_immersion_summary">开启后书源、订阅源、书签等管理页顶栏与背景融为一体，不再使用强调色</string>
 <!-- bottom_bar_hide_search / _summary 已随「底栏悬浮搜索按钮」删除（2026-09-27 用户裁决） -->
+<string name="rss_auto_video_to_player">正文含视频时自动转播放器</string>
+<string name="rss_auto_video_to_player_summary">订阅正文（按内容规则解析后）含视频时，自动打开内置播放器</string>
+<string name="rss_auto_video_enable">开启「自动转视频播放器」</string>
+<string name="rss_auto_video_disable">关闭「自动转视频播放器」</string>
+<string name="rss_auto_video_on">已开启自动转视频播放器</string>
+<string name="rss_auto_video_off">已关闭自动转视频播放器</string>
 <string name="discovery_subscription_settings_summary">管理发现页和订阅页入口与页面样式。</string>
 <string name="discovery_suite_manage_title">发现套件</string>
 <string name="discovery_suite_empty_title">还没有发现套件</string>

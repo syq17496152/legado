@@ -10,19 +10,25 @@ import com.script.rhino.runScriptWithContext
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppConst.imagePathKey
+import io.legado.app.constant.AppLog
+import io.legado.app.constant.SourceType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.RssStar
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.TTS
+import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
+import io.legado.app.help.rss.RssVideoDetector
 import io.legado.app.help.webView.WebJsExtensions.Companion.JS_URL
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.rss.Rss
+import io.legado.app.ui.video.VideoPlayerActivity
 import io.legado.app.utils.ACache
 import io.legado.app.utils.decodeTolerantBase64
+import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.writeBytes
 import kotlinx.coroutines.Dispatchers.IO
@@ -118,6 +124,37 @@ class ReadRssViewModel(application: Application) : BaseViewModel(application) {
         val source = rssSource ?: return
         Rss.getContent(viewModelScope, rssArticle, ruleContent, source)
             .onSuccess(IO) { body ->
+                // REQ-11 / tasks 2.2：type=0（网页模式）下若正文应转视频播放器，则自动跳转内置播放器。
+                //
+                // 检测作用于 **ruleContent 解析后的输出**（`Rss.getContentAwait` 返回的就是规则结果），
+                // 而不是原始响应 HTML —— 用户口径（2026-09-27）：「内容规则解析后可能有视频标签，
+                // 而不是刚开始就有的情况」；解析结果还可能是**规则直抽的直链地址**（无标签），
+                // 两者都由 `RssVideoDetector.detectVideoInBody` 覆盖。
+                //
+                // §14.2 T2 四条防火墙：① **只读**（不改 body）② **不阻断落库**
+                // ③ **可开关**（`AppConfig.rssAutoVideoToPlayer`，默认开）④ 仅在本条链路内生效。
+                //
+                // 诊断日志（2026-09-27 用户要求：功能优化须留可定位日志）：
+                // 每次正文加载输出**一行**判定结论（开关态 / 是否命中 / 命中形态 / 正文长度 / 文章 hash），
+                // 供真机日志排查「为何没转播放器」；URL 一律不落日志（按输出安全规范用 hash 代替）。
+                val autoVideoEnabled = AppConfig.rssAutoVideoToPlayer
+                val directVideoUrl = RssVideoDetector.looksLikeDirectVideoUrl(body)
+                val detected = autoVideoEnabled && RssVideoDetector.detectVideoInBody(body)
+                AppLog.putInfo(
+                    "RssVideoDetect: 开关=$autoVideoEnabled, 命中=$detected, 直链=$directVideoUrl, " +
+                        "bodyLen=${body.length}, articleHash=${rssArticle.link.hashCode()}"
+                )
+                if (detected) {
+                    // 播放上下文走单一写入点（与 ReadRss 两条既有路由同源）
+                    ReadRss.prepareVideoPlayContext(rssArticle)
+                    appCtx.startActivity<VideoPlayerActivity> {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        putExtra("sourceKey", rssArticle.origin)
+                        putExtra("sourceType", SourceType.rss)
+                        putExtra("record", rssArticle.link)
+                        putExtra("videoTitle", rssArticle.title)
+                    }
+                }
                 rssArticle.description = body
                 appDb.rssArticleDao.insert(rssArticle)
                 rssStar?.let {
