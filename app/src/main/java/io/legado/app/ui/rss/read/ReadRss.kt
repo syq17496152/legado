@@ -16,6 +16,7 @@ import io.legado.app.ui.image.ImagePlay
 import io.legado.app.ui.video.VideoPlayerActivity
 import io.legado.app.utils.startActivity
 import io.legado.app.utils.postEvent
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -71,16 +72,100 @@ object ReadRss {
     }
 
     /**
+     * 补齐视频播放的「文章列表上下文」（历史记录 / 收藏页 / 单篇上下文）。
+     *
+     * 为什么需要：沉浸式上下滑切换视频 与 传统式「上一部/下一部」的可见性都由播放器侧
+     * `VideoPlay.rssArticles.size > 1` 决定。列表页与阅读页自动路由已各自补齐，但
+     * **历史记录**（`readRss(activity, record)`）与**收藏页**（只带单篇 star）上下文缺失
+     * ⇒ 从这两个入口进入播放器时两处功能同时失效（与列表路径互不干扰，须分别覆盖）。
+     *
+     * 口径与列表页 `flowByOriginSort`、阅读页自动路由 `getListByOriginSort` 完全一致
+     * （同源 + 同分类）；查不到或未含本篇时把本篇补入并置首，保证播放器侧按 link 匹配能命中。
+     */
+    private suspend fun resolveVideoArticles(
+        rssArticle: RssArticle,
+        given: List<RssArticle>?
+    ): List<RssArticle> {
+        if (given != null && given.size > 1) return given
+        val list = runCatching {
+            appDb.rssArticleDao.getListByOriginSort(rssArticle.origin, rssArticle.sort)
+        }.getOrDefault(emptyList()).toMutableList()
+        if (list.none { it.link == rssArticle.link }) {
+            list.add(0, rssArticle)
+        }
+        return list
+    }
+
+    /**
+     * 启动视频播放页（Fragment 入口）。
+     *
+     * 列表主查询 `flowByOriginSort` 不含 image 列（CursorWindow 优化），内存对象 image 恒 null
+     * ⇒ 播放页信息区无封面；此处异步单行 `getImage` 回填，完成后发 sticky VIDEO_SUB_TITLE
+     * 触发播放页信息区重刷（与原实现同口径）。
+     */
+    private fun startVideoFromFragment(
+        fragment: Fragment,
+        rssArticle: RssArticle,
+        rssArticles: List<RssArticle>,
+        sortName: String?,
+        sortUrl: String?,
+        nextPageUrl: String?,
+        page: Int
+    ) {
+        fragment.viewLifecycleOwner.lifecycleScope.launch(IO) {
+            rssArticles.forEach { article ->
+                if (article.image.isNullOrBlank()) {
+                    article.image = appDb.rssArticleDao.getImage(article.origin, article.link)
+                }
+            }
+            postEvent(EventBus.VIDEO_SUB_TITLE, VideoPlay.videoTitle ?: "")
+        }
+        prepareVideoPlayContext(rssArticle, rssArticles, sortName, sortUrl, nextPageUrl, page)
+        fragment.startActivity<VideoPlayerActivity> {
+            putExtra("sourceKey", rssArticle.origin)
+            putExtra("sourceType", SourceType.rss)
+            putExtra("record", rssArticle.link)
+            putExtra("videoTitle", rssArticle.title) // R3 title 修复：传递标题给 VideoPlayerActivity
+        }
+    }
+
+    /** 启动视频播放页（Activity 入口；同时服务列表路径与历史记录路径） */
+    private fun startVideoFromActivity(
+        activity: AppCompatActivity,
+        rssArticle: RssArticle,
+        rssArticles: List<RssArticle>,
+        sortName: String?,
+        sortUrl: String?,
+        nextPageUrl: String?,
+        page: Int
+    ) {
+        prepareVideoPlayContext(rssArticle, rssArticles, sortName, sortUrl, nextPageUrl, page)
+        activity.startActivity<VideoPlayerActivity> {
+            putExtra("sourceKey", rssArticle.origin)
+            putExtra("sourceType", SourceType.rss)
+            putExtra("record", rssArticle.link)
+            putExtra("videoTitle", rssArticle.title)
+        }
+    }
+
+    /**
      * 通过RSS历史记录点击阅读
      */
     fun readRss(activity: AppCompatActivity, record: RssReadRecord) {
         val type = record.type
         if (type == 2) {
-            activity.startActivity<VideoPlayerActivity> {
-                putExtra("sourceKey", record.origin)
-                putExtra("sourceType", SourceType.rss)
-                putExtra("record", record.record)
-                putExtra("videoTitle", record.title) // R3 title 修复：传递标题给 VideoPlayerActivity
+            // 历史记录入口只带「单篇」上下文（`record` 不含列表）⇒ 按同源同分类补齐，
+            // 否则播放器侧 `rssArticles.size > 1` 不成立，沉浸式上下滑 与 传统式上一部下一部
+            // 同时失效（与列表点击、阅读页自动路由是相互独立的第三条链路）。
+            val article = record.toRssArticle()
+            activity.lifecycleScope.launch(IO) {
+                val articles = resolveVideoArticles(article, null)
+                withContext(Dispatchers.Main) {
+                    startVideoFromActivity(
+                        activity, article, articles,
+                        sortName = article.sort, sortUrl = null, nextPageUrl = null, page = 1
+                    )
+                }
             }
             return
         }
@@ -122,14 +207,17 @@ object ReadRss {
         }
         val type = rssArticle.type
         if (type == 2) {
-            // 视频播放：从详情页传入 rssArticles 支持播放页上/下一个切换文章（废除 AD-07 简化原则）
-            // REQ-11 / tasks 2.2：播放上下文走**单一写入点**，防多处各写一遍漂移
-            prepareVideoPlayContext(rssArticle, rssArticles, sortName, sortUrl, nextPageUrl, page)
-            activity.startActivity<VideoPlayerActivity> {
-                putExtra("sourceKey", rssArticle.origin)
-                putExtra("sourceType", SourceType.rss)
-                putExtra("record", rssArticle.link)
-                putExtra("videoTitle", rssArticle.title)
+            // 视频播放：`rssArticles` 支持播放页上/下一个切换文章（废除 AD-07 简化原则）。
+            // 调用方可能只带单篇（如搜索结果、收藏页单篇转文章）⇒ 统一在 IO 线程补齐同源同分类列表，
+            // 保证播放器侧 `size > 1` 成立（沉浸式上下滑 / 传统式上一部下一部）。
+            activity.lifecycleScope.launch(IO) {
+                val articles = resolveVideoArticles(rssArticle, rssArticles)
+                withContext(Dispatchers.Main) {
+                    startVideoFromActivity(
+                        activity, rssArticle, articles,
+                        sortName = sortName, sortUrl = sortUrl, nextPageUrl = nextPageUrl, page = page
+                    )
+                }
             }
             return
         }
@@ -168,25 +256,17 @@ object ReadRss {
         // 修复场景：用户将图片源(type=1)改为网页模式(type=0)后，旧文章缓存 type 仍为 1 导致路由错误
         val type = rssSource?.type ?: rssArticle.type
         if (type == 2) {
-            // 视频播放：设置文章列表到 VideoPlay 单例，支持上下滑动切换文章
-            // dual-layout：列表主查询 flowByOriginSort 不含 image 列（CursorWindow 优化），
-            // 内存对象 image 恒 null → 播放页信息区无封面。异步单行 getImage 回填，
-            // 完成后发 sticky VIDEO_SUB_TITLE 触发播放页信息区重刷
-            fragment.viewLifecycleOwner.lifecycleScope.launch(IO) {
-                rssArticles?.forEach { article ->
-                    if (article.image.isNullOrBlank()) {
-                        article.image = appDb.rssArticleDao.getImage(article.origin, article.link)
-                    }
+            // 视频播放：设置文章列表到 VideoPlay 单例，支持上下滑动切换文章。
+            // 上下文可能缺失（收藏页只带单篇 star / 单篇搜索结果）⇒ 按同源同分类补齐后再启动。
+            if (rssArticles != null && rssArticles.size > 1) {
+                // 列表路径上下文已完整：同步启动，保持既有启动时序（不引入查库延迟）
+                startVideoFromFragment(fragment, rssArticle, rssArticles, sortName, sortUrl, nextPageUrl, page)
+            } else {
+                // 上下文缺失：Room suspend 查询自带线程切换，`launch` 默认 Main 不会阻塞 UI
+                fragment.viewLifecycleOwner.lifecycleScope.launch {
+                    val articles = resolveVideoArticles(rssArticle, rssArticles)
+                    startVideoFromFragment(fragment, rssArticle, articles, sortName, sortUrl, nextPageUrl, page)
                 }
-                postEvent(EventBus.VIDEO_SUB_TITLE, VideoPlay.videoTitle ?: "")
-            }
-            // REQ-11 / tasks 2.2：播放上下文走**单一写入点**（与 activity 重载、ViewModel 新路由同源）
-            prepareVideoPlayContext(rssArticle, rssArticles, sortName, sortUrl, nextPageUrl, page)
-            fragment.startActivity<VideoPlayerActivity> {
-                putExtra("sourceKey", rssArticle.origin)
-                putExtra("sourceType", SourceType.rss)
-                putExtra("record", rssArticle.link)
-                putExtra("videoTitle", rssArticle.title) // R3 title 修复：传递标题给 VideoPlayerActivity
             }
             return
         }
