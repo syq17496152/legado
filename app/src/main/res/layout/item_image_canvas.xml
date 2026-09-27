@@ -41,4 +41,44 @@
         android:textSize="@dimen/text_11sp"
         android:visibility="gone" />
 
+    <!-- W7 8.3 逐项占位（REQ-29）：加载/降级期间显示，消除静默黑屏；成功或终态失败即隐藏 -->
+    <ProgressBar
+        android:id="@+id/pb_item_loading"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:indeterminateTint="@color/white"
+        android:visibility="gone" />
+
+    <!-- W7 8.3 逐项失败（REQ-29）：原因（分类文案，与 footer 同口径）+ 原地重试 -->
+    <LinearLayout
+        android:id="@+id/layout_item_error"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tv_item_error"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxWidth="280dp"
+            android:maxLines="3"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/text_14sp" />
+
+        <Button
+            android:id="@+id/btn_item_retry"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/retry"
+            android:textColor="@android:color/white" />
+
+    </LinearLayout>
+
 </FrameLayout>

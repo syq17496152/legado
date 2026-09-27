@@ -496,6 +496,11 @@ class ImageCanvasAdapter(
         private val onItemClick: (listPosition: Int, sharedView: View) -> Unit
     ) : RecyclerView.ViewHolder(binding.root) {
 
+        init {
+            // W7 8.3：逐项「原地重试」入口（仅终态失败时该视图可见）
+            binding.btnItemRetry.setOnClickListener { retryFromScratch() }
+        }
+
         /** 当前绑定的图片 URL（用于 Glide 失败时触发降级链） */
         private var currentUrl: String? = null
 
@@ -553,6 +558,12 @@ class ImageCanvasAdapter(
             binding.ssivView.visibility = View.GONE
             binding.ssivView.recycle()
             binding.photoView.visibility = View.VISIBLE
+
+            // W7 8.3 逐项呈现（REQ-29）：每次绑定复位为「加载中」——
+            // 显示逐项占位（此前加载期间底色纯黑，用户无法区分「在加载」与「已坏」），
+            // 并隐藏上一轮复用残留的逐项失败层（不新增状态机，仅复位两个 View 的可见性）。
+            hideItemError()
+            showItemLoading()
 
             // 共享元素动画 transitionName（与 ImageDetailActivity 接收端匹配）
             binding.photoView.transitionName = "shared_image_$position"
@@ -789,6 +800,7 @@ class ImageCanvasAdapter(
             // W6 7.1/7.2：统一绑定入口（内部按「视图高是否被截断」分流，见 bindImage KDoc）
             ImagePyramidLoader.bindImage(binding.ssivView, file, imgW, imgH, screenW, viewH)
             hideFallbackHint()
+            hideItemLoading() // W7 8.3：加载成功 ⇒ 收起逐项占位
             binding.ssivView.setOnClickListener {
                 onItemClick(currentPosition, binding.photoView)
             }
@@ -858,6 +870,7 @@ class ImageCanvasAdapter(
                     ): Boolean {
                         if (currentUrl != url) return false
                         hideFallbackHint()
+                        hideItemLoading() // W7 8.3：加载成功 ⇒ 收起逐项占位
                         return false
                     }
 
@@ -961,6 +974,9 @@ class ImageCanvasAdapter(
                         // 已预热过，直接进入降级4（网页模式回退）
                         retryCount = 4
                         showFallbackHint(4)
+                        // W7 8.3：进入终态失败 ⇒ 收起占位并给出逐项原因与原地重试
+                        hideItemLoading()
+                        showItemError(e)
                         AppLog.putDebugWithTag(
                             AppLog.TAG_IMAGE_CANVAS,
                             "E1 fallback-4 webModeFallback (preheated skip) position=$position articleIndex=${item.articleIndex} url=/path/$urlHash reason=${e?.message?.take(80)}",
@@ -984,6 +1000,9 @@ class ImageCanvasAdapter(
                     // 通过回调让 Activity 弹出 alert DSL 询问用户是否切换到网页模式
                     retryCount = 4
                     showFallbackHint(4)
+                    // W7 8.3：进入终态失败 ⇒ 收起占位并给出逐项原因与原地重试
+                    hideItemLoading()
+                    showItemError(e)
                     AppLog.putDebugWithTag(
                         AppLog.TAG_IMAGE_CANVAS,
                         "E1 fallback-4 webModeFallback position=$position articleIndex=${item.articleIndex} url=/path/${url.hashCode()} reason=${e?.message?.take(80)}",
@@ -1016,6 +1035,77 @@ class ImageCanvasAdapter(
          */
         private fun hideFallbackHint() {
             binding.tvFallbackHint.visibility = View.GONE
+        }
+
+        // ==================== W7 8.3 逐项加载态呈现（REQ-29） ====================
+        //
+        // 设计约束（tasks §8 8.3）：**不新增状态机** —— `LoadState` 5 态与 footer 级
+        // ERROR 分类文案保持原样，此处只补「逐项」呈现：占位垫底 + 终态失败原因 + 原地重试。
+
+        /** 显示逐项占位（加载 / 降级重试期间；目的是消除「静默黑屏」） */
+        private fun showItemLoading() {
+            binding.pbItemLoading.visibility = View.VISIBLE
+        }
+
+        /** 收起逐项占位（加载成功，或已转为终态失败） */
+        private fun hideItemLoading() {
+            binding.pbItemLoading.visibility = View.GONE
+        }
+
+        /**
+         * 显示逐项失败（原因 + 原地重试）。
+         *
+         * 文案**复用 footer 同口径的 [classifyError] 分类**（网络 / 解析 / 源），
+         * 不直接把 `Throwable.message` 抛给用户（可能带出内部路径）。
+         */
+        private fun showItemError(e: Throwable?) {
+            val ctx = itemView.context
+            val category = classifyError(e ?: Throwable("unknown"))
+            binding.tvItemError.text = ctx.getString(
+                when (category) {
+                    ErrorCategory.NETWORK -> R.string.image_load_error_network
+                    ErrorCategory.PARSE -> R.string.image_load_error_parse
+                    ErrorCategory.SOURCE -> R.string.image_load_error_source
+                }
+            )
+            // 语义色单源（AD-14）：danger 真值只从 AppSemanticColors 取，禁止页内写死色值
+            binding.tvItemError.setTextColor(AppSemanticColors.Danger.toArgb())
+            binding.layoutItemError.visibility = View.VISIBLE
+        }
+
+        /** 隐藏逐项失败层（重新绑定 / 重试发起时调用） */
+        private fun hideItemError() {
+            binding.layoutItemError.visibility = View.GONE
+        }
+
+        /**
+         * 逐项「原地重试」——从降级链起点重新加载当前项。
+         *
+         * 与自动降级链的区别：降级链每 URL 只允许预热一次（防「预热→重载→再预热」死循环）；
+         * 用户**主动**重试时应清掉该 URL 的预热标记，让第 3 级（WebView 预热）重新可用，
+         * 否则重试会直接落到第 4 级（网页模式），失去重试意义。
+         */
+        private fun retryFromScratch() {
+            val url = currentUrl ?: return
+            val item = currentItem ?: return
+            retryCount = 0
+            preheatedUrlHashes.remove(url.hashCode())
+            hideItemError()
+            showItemLoading()
+            // Activity 销毁后禁止发起 Glide 加载（异步路径兜底）
+            if (!isGlideUsable()) return
+            val sourceOrigin = resolveSourceOrigin()
+            val effectiveReferer = extractReferer(sourceHeaderMap) ?: resolveArticleLink(item.articleIndex)
+            val opts = buildRequestOptions(
+                sourceOrigin, effectiveReferer,
+                skipMemory = true, bypassFailCache = true
+            )
+            loadImage(url, opts, currentPosition)
+            AppLog.putDebugWithTag(
+                AppLog.TAG_IMAGE_CANVAS,
+                "W7-8.3 itemRetry: pos=$currentPosition url=/path/${url.hashCode()}",
+                level = AppLog.Level.INFO
+            )
         }
 
         /**
