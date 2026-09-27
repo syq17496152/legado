@@ -12,6 +12,12 @@ import kotlinx.coroutines.CancellationException
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
+import io.legado.app.data.entities.BookChapter
+import io.legado.app.data.entities.Cache
+import io.legado.app.data.entities.CoverGalleryGroup
+import io.legado.app.data.entities.CoverGalleryImage
+import io.legado.app.data.repository.CoverGalleryRepository
+import io.legado.app.help.book.BookHelp
 import io.legado.app.help.source.SourceQueryCache
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.data.entities.BookSource
@@ -38,13 +44,18 @@ import io.legado.app.help.config.ThemeConfig
 import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
 import io.legado.app.model.BookCover
 import io.legado.app.model.localBook.LocalBook
+import io.legado.app.ui.book.read.config.HighlightRuleStore
 import io.legado.app.utils.ACache
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.compress.ZipUtils
+import io.legado.app.utils.createFolderIfNotExist
 import io.legado.app.utils.defaultSharedPreferences
+import io.legado.app.utils.externalFiles
 import io.legado.app.utils.fromJsonArray
+import io.legado.app.utils.fromJsonObject
+import io.legado.app.utils.getFile
 import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefInt
 import io.legado.app.utils.getPrefString
@@ -306,6 +317,16 @@ object Restore {
                 AppLog.put("恢复阅读界面出错\n${it.localizedMessage}", it)
             }
         }
+        // ===== REQ-05 / 1.2.7 备份↔恢复对等性补全（此前「只备份不还原」的 5 类） =====
+        // 缺口实情：这些类别在 `BackupSelectorConfig.allItems` 里可勾选、备份侧也会写出，
+        // 但 Restore 侧从未读回 ⇒ 换设备/重装后静默丢失（用户报障 #1 根因之一）。
+        // 顺序：背景图先落盘，再由下方 config 段恢复的配置去引用它们。
+        restoreHighlightRule(path)
+        restoreRuntimeSourceCache(path)
+        restoreBackgroundImages(path)
+        restoreBookCache(path)
+        restoreCoverGallery(path)
+
         //AppWebDav.downBgs()
         appCtx.getSharedPreferences(path, "config")?.all?.let { map ->
             val edit = appCtx.defaultSharedPreferences.edit()
@@ -370,6 +391,121 @@ object Restore {
             ThemeConfig.applyDayNight(appCtx)
         }
     }
+
+    // ===================== REQ-05 / 1.2.7 补全的 5 类还原实现 =====================
+
+    /** 高亮规则（`highlightRule.json` + `highlightRuleBg/` 背景图）：原只备份不还原。 */
+    private fun restoreHighlightRule(path: String) {
+        File(path, HighlightRuleStore.backupFileName).takeIf { it.exists() }?.runCatching {
+            GSON.fromJsonObject<HighlightRuleStore.BackupData>(readText()).getOrThrow().let {
+                // backupRootPath 供 HighlightRuleStore 从 `highlightRuleBg/` 找回规则背景图
+                HighlightRuleStore.restoreBackupData(appCtx, it, path)
+            }
+        }?.onFailure {
+            AppLog.put("恢复高亮规则出错\n${it.localizedMessage}", it)
+        }
+    }
+
+    /** 书源运行数据（`runtimeSourceCache.json`）：原只备份不还原。 */
+    private suspend fun restoreRuntimeSourceCache(path: String) {
+        fileToListT<Cache>(path, "runtimeSourceCache.json")?.let {
+            withContext(IO) { appDb.cacheDao.insert(*it.toTypedArray()) }
+        }
+    }
+
+    /**
+     * 背景图片（`bg` 条目）：原只备份不还原。
+     *
+     * 反向映射对齐 `Backup.stageBackgroundImageFiles` 的写出布局：
+     * ① **阅读背景**平铺在备份根目录下（按文件名）⇒ 还原到 `externalFiles/bg/`
+     *   （`Backup.getReadBackgroundImageFiles()` 对相对名正是从该目录取值）；
+     * ② **主题背景 / 主题配置背景**放在备份根目录的 `<prefKey>/` 子目录下
+     *   ⇒ 还原到 `externalFiles/<prefKey>/`。
+     * 仅处理图片扩展名，避免把根目录下的 JSON/XML 配置一并搬到图片目录。
+     */
+    private fun restoreBackgroundImages(path: String) {
+        val root = File(path)
+        val readBgDir = appCtx.externalFiles.getFile(Backup.READ_BG_DIR).createFolderIfNotExist()
+        root.listFiles()?.filter { it.isFile && it.isImageFile() }?.forEach { file ->
+            file.copyTo(File(readBgDir, file.name), overwrite = true)
+        }
+        listOf(PreferKey.bgImage, PreferKey.bgImageN).forEach { prefKey ->
+            val sourceDir = File(root, prefKey)
+            if (!sourceDir.isDirectory) return@forEach
+            val targetDir = appCtx.externalFiles.getFile(prefKey).createFolderIfNotExist()
+            sourceDir.listFiles()?.filter { it.isFile && it.isImageFile() }?.forEach { file ->
+                file.copyTo(File(targetDir, file.name), overwrite = true)
+            }
+        }
+    }
+
+    /**
+     * 书籍缓存（`book_cache` 条目）：原只备份不还原。
+     *
+     * 对齐 `Backup.stageBookCache` / `stageBookChapterForCache`：
+     * ① `bookChapterCache.json`（章节表）⇒ `bookChapterDao.insert`（REPLACE 幂等）；
+     * ② `book_cache/<folderName>/`（章节正文 `.nb` 缓存）⇒ 复制回 `BookHelp.cachePath/<folderName>/`。
+     * 说明：备份侧的 `bookCacheIndex.json` 是**信息性索引**（书名/作者/章节清单），
+     * 还原不依赖它（目录名即 `getFolderNameNoCache()`，与读取侧一致），故不再读入。
+     */
+    private suspend fun restoreBookCache(path: String) {
+        fileToListT<BookChapter>(path, "bookChapterCache.json")?.let {
+            withContext(IO) { appDb.bookChapterDao.insert(*it.toTypedArray()) }
+        }
+        val sourceDir = File(path, Backup.bookCacheFolderName)
+        if (!sourceDir.isDirectory) return
+        withContext(IO) {
+            val cacheDir = File(BookHelp.cachePath).createFolderIfNotExist()
+            sourceDir.listFiles()?.filter { it.isDirectory }?.forEach { bookDir ->
+                bookDir.copyRecursively(File(cacheDir, bookDir.name), overwrite = true)
+            }
+        }
+    }
+
+    /**
+     * 封面图集（`封面图集` 条目）：原只备份不还原。
+     *
+     * 对齐 `Backup.stageCoverGallery`（布局 `封面图集/<分组目录名>/<图片文件>`）：
+     * 逐分组目录重建分组 + 图片落回 `externalFiles/covers/`，再插入 `cover_gallery_images`。
+     * **幂等**：同名分组已存在则复用其 id（重复恢复不会产生同名分组副本）。
+     */
+    private suspend fun restoreCoverGallery(path: String) = withContext(IO) {
+        val sourceRoot = File(path, CoverGalleryRepository.backupDirName)
+        if (!sourceRoot.isDirectory) return@withContext
+        val coversDir = appCtx.externalFiles.getFile("covers").createFolderIfNotExist()
+        val existingGroups = appDb.coverGalleryDao.allGroups.associateBy { it.name }
+        var maxGroupOrder = appDb.coverGalleryDao.getMaxGroupOrder() ?: -1
+        sourceRoot.listFiles()?.filter { it.isDirectory }?.sortedBy { it.name }?.forEach { groupDir ->
+            val imageFiles = groupDir.listFiles()
+                ?.filter { it.isFile && it.isImageFile() }
+                ?.sortedBy { it.name }
+            if (imageFiles.isNullOrEmpty()) return@forEach
+            val groupId = existingGroups[groupDir.name]?.id ?: run {
+                maxGroupOrder += 1
+                appDb.coverGalleryDao.insertGroup(
+                    CoverGalleryGroup(name = groupDir.name, order = maxGroupOrder)
+                )
+            }
+            var order = appDb.coverGalleryDao.getMaxImageOrder(groupId)?.plus(1) ?: 0
+            imageFiles.forEach { imageFile ->
+                val target = File(coversDir, imageFile.name)
+                imageFile.copyTo(target, overwrite = true)
+                appDb.coverGalleryDao.insertImage(
+                    CoverGalleryImage(
+                        groupId = groupId,
+                        path = target.absolutePath,
+                        order = order
+                    )
+                )
+                order += 1
+            }
+        }
+        // 默认封面可能指向刚恢复的图集 ⇒ 刷新默认封面缓存
+        BookCover.upDefaultCover()
+    }
+
+    private fun File.isImageFile(): Boolean =
+        extension.lowercase() in setOf("jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif")
 
     private inline fun <reified T> fileToListT(path: String, fileName: String): List<T>? {
         try {

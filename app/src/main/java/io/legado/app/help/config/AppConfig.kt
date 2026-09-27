@@ -2259,13 +2259,13 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             )
         }
 
+    // 默认 true：底栏悬浮搜索按钮删除后（用户裁决 2026-09-27），顶栏搜索成为「书架 / 我的」
+    // 两模式的搜索入口 ⇒ 默认必须可见，否则用户无从搜索（用户仍可在顶栏包里关掉）。
     var defaultTopBarShowSearch: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.defaultTopBarShowSearch, false)
+        get() = appCtx.getPrefBoolean(PreferKey.defaultTopBarShowSearch, true)
         set(value) = appCtx.putPrefBoolean(PreferKey.defaultTopBarShowSearch, value)
 
-    var floatingBottomBarHideSearch: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.floatingBottomBarHideSearch, true)
-        set(value) = appCtx.putPrefBoolean(PreferKey.floatingBottomBarHideSearch, value)
+    // 🔴 已删除 `floatingBottomBarHideSearch`（随底栏悬浮搜索按钮一并移除）
 
     var readUrlInBrowser: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.readUrlOpenInBrowser)

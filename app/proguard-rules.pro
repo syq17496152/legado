@@ -213,6 +213,16 @@ cn.hutool.core.util.**{*;}
 -keep class internal.org.jni_zero.** { *; }
 -dontwarn internal.org.jni_zero.**
 
+# 通用 native 方法 keep 兜底（REQ-06 / next-stage-mainline 1.2.2）
+# 背景：上方 keep 规则按「已知 JNI 类」逐类列举，仍属**白名单式**防御 —— 新增任何含
+#   native 方法声明的类（第三方 so / 自研 JNI）若未被显式列举，R8 会移除其 native 方法声明
+#   → 运行时 `UnsatisfiedLinkError`（本项目已有 libcronet.so SIGABRT 同类记录，见上方 V1-V3）。
+# 作用：保留**所有声明了 native 方法**的类的类名与这些 native 方法名（方法名不可混淆，否则
+#   JNI 按符号名查找失败）；这是 R8 官方推荐的 native 兜底范式，与白名单规则互补而非替代。
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
+
 # Throwable
 -keepnames class * extends java.lang.Throwable
 -keepclassmembernames,allowobfuscation class * extends java.lang.Throwable{*;}

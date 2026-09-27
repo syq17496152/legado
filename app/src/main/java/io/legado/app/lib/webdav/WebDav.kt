@@ -475,7 +475,9 @@ open class WebDav(
             }
             val document = Jsoup.parse(body)
             val exception = document.getElementsByTag("s:exception").firstOrNull()?.text()
+            // REQ-08：s:message 可能缺失/空白 ⇒ 非空兜底，避免抛出 "null" 文案
             val message = document.getElementsByTag("s:message").firstOrNull()?.text()
+                ?.takeIf { it.isNotBlank() }
             if (exception == "ObjectNotFound") {
                 throw ObjectNotFoundException(
                     message ?: "$path doesn't exist. code:${response.code}"

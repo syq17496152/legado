@@ -607,18 +607,20 @@ class BackupConfigFragment : ComposeSettingFragment() {
                 }
                 AppLog.put("备份出错\n${e.localizedMessage}", e)
                 appCtx.toastOnUi(
+                    // REQ-08：Throwable.localizedMessage 可能为 null/空白 ⇒ 非空兜底，避免 toast 显示 "null"
                     appCtx.getString(
                         R.string.backup_fail,
-                        e.localizedMessage
+                        e.localizedMessage?.takeIf { it.isNotBlank() } ?: "未知错误"
                     )
                 )
             } catch (e: Throwable) {
                 ensureActive()
                 AppLog.put("备份出错\n${e.localizedMessage}", e)
                 appCtx.toastOnUi(
+                    // REQ-08：Throwable.localizedMessage 可能为 null/空白 ⇒ 非空兜底，避免 toast 显示 "null"
                     appCtx.getString(
                         R.string.backup_fail,
-                        e.localizedMessage
+                        e.localizedMessage?.takeIf { it.isNotBlank() } ?: "未知错误"
                     )
                 )
             } finally {

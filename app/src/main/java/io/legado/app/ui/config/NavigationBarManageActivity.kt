@@ -604,15 +604,8 @@ class NavigationBarManageActivity : BaseActivity<ViewBinding>(), ColorPickerDial
                             }
                         }
                     )
-                    add(
-                        NavBarEditRow(
-                            getString(R.string.search),
-                            getString(if (config.hideSearchInFloatingStyle) R.string.disabled else R.string.enabled)
-                        ) {
-                            config.hideSearchInFloatingStyle = !config.hideSearchInFloatingStyle
-                            refreshEditDialog()
-                        }
-                    )
+                    // 🔴 已移除底栏包「搜索按钮显隐」行：底栏悬浮搜索按钮已按用户裁决删除（2026-09-27），
+                    // 该配置项（含 `hideSearchInFloatingStyle` 字段）随之取消。
                 }
                 if (config.layoutMode == "standard") {
                     add(

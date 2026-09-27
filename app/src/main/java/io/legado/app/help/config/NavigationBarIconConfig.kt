@@ -112,7 +112,6 @@ object NavigationBarIconConfig {
         var wallpaperPath: String? = null,
         var borderColor: Int? = null,
         var borderAlpha: Int = 100,
-        var hideSearchInFloatingStyle: Boolean = true,
         var icons: MutableMap<String, String> = linkedMapOf()
     )
 
@@ -213,7 +212,7 @@ object NavigationBarIconConfig {
     fun currentSignature(isNight: Boolean): String {
         val dirName = activeDirName(isNight)
         if (dirName == DEFAULT_DIR_NAME) {
-            return "$isNight|$DEFAULT_DIR_NAME|${MainLayoutPresetConfig.defaultBottomLayoutMode()}|${MainLayoutPresetConfig.floatingBottomBarHideSearch()}"
+            return "$isNight|$DEFAULT_DIR_NAME|${MainLayoutPresetConfig.defaultBottomLayoutMode()}"
         }
         val configFile = File(localDir(isNight, dirName), packageFileName)
         return "$isNight|$dirName|${configFile.lastModified()}"
@@ -225,7 +224,6 @@ object NavigationBarIconConfig {
         AppConfig.bottomBarLayoutMode = config.layoutMode
         AppConfig.bottomBarSidebarGravity = config.sidebarGravity
         AppConfig.bottomBarEffectMode = config.effectMode
-        AppConfig.floatingBottomBarHideSearch = config.layoutMode == "floating" && config.hideSearchInFloatingStyle
         AppConfig.liquidGlassLevel = config.opacity
         AppConfig.frostedGlassLevel = config.opacity
         if (config.layoutMode == "sidebar") {
@@ -243,7 +241,6 @@ object NavigationBarIconConfig {
         AppConfig.bottomBarLayoutMode = config.layoutMode
         AppConfig.bottomBarSidebarGravity = config.sidebarGravity
         AppConfig.bottomBarEffectMode = config.effectMode
-        AppConfig.floatingBottomBarHideSearch = config.layoutMode == "floating" && config.hideSearchInFloatingStyle
         AppConfig.liquidGlassLevel = config.opacity
         AppConfig.frostedGlassLevel = config.opacity
         if (config.layoutMode == "sidebar") {
@@ -714,7 +711,6 @@ object NavigationBarIconConfig {
                 sidebarGravity = "start",
                 effectMode = if (layoutMode == "standard") "solid" else "glass",
                 opacity = 76,
-                hideSearchInFloatingStyle = layoutMode == "floating" && MainLayoutPresetConfig.floatingBottomBarHideSearch(),
                 updatedAt = 0L
             ),
             Source.BUILTIN,
@@ -1304,7 +1300,6 @@ object NavigationBarIconConfig {
         val sidebarBackgroundPath = runCatching { config.sidebarBackgroundPath }.getOrNull()
         val wallpaperPath = runCatching { config.wallpaperPath }.getOrNull()
         val borderAlpha = runCatching { config.borderAlpha }.getOrDefault(100).coerceIn(0, 100)
-        val hideSearchInFloatingStyle = runCatching { config.hideSearchInFloatingStyle }.getOrDefault(false)
         config.layoutMode = layoutMode
         config.sidebarGravity = sidebarGravity
         config.effectMode = resolvedEffectMode
@@ -1312,7 +1307,6 @@ object NavigationBarIconConfig {
         config.sidebarBackgroundPath = sidebarBackgroundPath
         config.wallpaperPath = wallpaperPath?.takeIf { it.isNotBlank() }
         config.borderAlpha = borderAlpha
-        config.hideSearchInFloatingStyle = layoutMode == "floating" && hideSearchInFloatingStyle
         config.icons = icons.toMutableMap()
         return config
     }

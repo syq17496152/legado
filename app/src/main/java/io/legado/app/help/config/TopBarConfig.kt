@@ -69,7 +69,8 @@ object TopBarConfig {
         var cornerScale: Float? = null,
         var expandFiltersByDefault: Boolean = false,
         var hideFilterToggleWhenExpanded: Boolean = false,
-        var showSearchInDefaultStyle: Boolean = false,
+        // 默认 true：底栏悬浮搜索按钮删除后，顶栏搜索是「书架 / 我的」的搜索入口（用户裁决 2026-09-27）
+        var showSearchInDefaultStyle: Boolean = true,
         var updatedAt: Long = System.currentTimeMillis()
     )
 

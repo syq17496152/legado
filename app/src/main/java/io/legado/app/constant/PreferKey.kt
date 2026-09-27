@@ -439,7 +439,9 @@ object PreferKey {
     const val currentAppearanceKitId = "currentAppearanceKitId"
     const val defaultTopBarStyle = "defaultTopBarStyle"
     const val defaultTopBarShowSearch = "defaultTopBarShowSearch"
-    const val floatingBottomBarHideSearch = "floatingBottomBarHideSearch"
+    // 🔴 已删除 `floatingBottomBarHideSearch`（2026-09-27 用户裁决：删除底栏悬浮搜索按钮）。
+    // 该键在非 floating 模式会被底栏套装静默回退，且其存在意义已随按钮删除而消失；
+    // 旧备份中的该键由 `BackupConfig.ignorePrefKeys` 忽略，不再写回。
     const val navigationBarPackageDay = "navigationBarPackageDay"
     const val navigationBarPackageNight = "navigationBarPackageNight"
     const val topBarPackageDay = "topBarPackageDay"

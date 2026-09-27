@@ -63,7 +63,9 @@ object BackupConfig {
         PreferKey.bitmapCacheSize,
         PreferKey.webServiceWakeLock,
         PreferKey.readAloudWakeLock,
-        PreferKey.audioPlayWakeLock
+        PreferKey.audioPlayWakeLock,
+        // 已删除的旧键（2026-09-27 底栏悬浮搜索按钮裁决）：旧备份里的该键不得写回
+        "floatingBottomBarHideSearch"
     )
 
     //阅读配置

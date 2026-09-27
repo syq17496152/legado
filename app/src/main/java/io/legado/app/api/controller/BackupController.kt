@@ -11,6 +11,7 @@ import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.storage.Backup
 import io.legado.app.help.storage.BackupAES
+import io.legado.app.help.storage.BackupRestoreLock
 import io.legado.app.help.storage.BookCacheSelectorConfig
 import io.legado.app.model.BookCover
 import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
@@ -128,7 +129,8 @@ object BackupController {
             return NanoHTTPD.newFixedLengthResponse(
                 NanoHTTPD.Response.Status.INTERNAL_ERROR,
                 "application/json",
-                GSON.toJson(ReturnData().setErrorMsg("备份失败: ${error.message}"))
+                // REQ-08：底层异常 message 可能为 null/空白 ⇒ 非空兜底，避免前端显示 "备份失败: null"
+                GSON.toJson(ReturnData().setErrorMsg("备份失败: ${error.message?.takeIf { it.isNotBlank() } ?: "未知错误"}"))
             )
         }
 
@@ -165,10 +167,20 @@ object BackupController {
     }
 
     /**
-     * 执行 Web 备份，返回 ZIP 字节数组
-     * 独立于 Backup.backupLocked，自行控制备份和打包流程
+     * 执行 Web 备份，返回 ZIP 字节数组（对外入口）
+     *
+     * REQ-07 / R9：纳入备份/恢复共享锁。实证此前**未纳锁** ⇒ 与定时/手动备份可并发，
+     * 而本方法内部直接调用 `Backup.stageBackgroundImageFiles` 等 Backup 落盘实现并读写同一批
+     * 数据库 ⇒ 与其并发会造成工作目录/数据竞争。此处与 `Restore.restoreLocked`/`Backup.backupLocked`
+     * 同口径：对外入口加锁、内部实现不加锁。
+     *
+     * 注意：`BackupRestoreLock` **不可重入** —— 调用本方法时不得已持有该锁。
      */
-    private suspend fun executeWebBackup(): ByteArray? {
+    private suspend fun executeWebBackup(): ByteArray? =
+        BackupRestoreLock.withStorageLock { executeWebBackupUnlocked() }
+
+    /** 未加锁的 Web 备份实现：仅供 [executeWebBackup] 在持有共享锁时调用。 */
+    private suspend fun executeWebBackupUnlocked(): ByteArray? {
         val aes = BackupAES()
         FileUtils.delete(webBackupPath)
 
@@ -191,6 +203,15 @@ object BackupController {
             writeListToJson(appDb.httpTTSDao.all, "httpTTS.json", webBackupPath)
             writeListToJson(appDb.keyboardAssistsDao.all, "keyboardAssists.json", webBackupPath)
             writeListToJson(appDb.dictRuleDao.all, "dictRule.json", webBackupPath)
+
+            // ===== REQ-05 / 1.2.7 对等性补全（Web 备份此前漏写的类别） =====
+            // Web 备份**硬编码全集、不走 BackupSelectorConfig 选择器** ⇒ 选择器加了新条目它不会自动跟上，
+            // 必须逐条登记。实测此前漏写 5 类：手动划线 / 自动任务 / 选角模板 / 封面图集 / 书源运行数据。
+            writeListToJson(appDb.bookHighlightDao.all, "highlights.json", webBackupPath)
+            writeListToJson(appDb.autoTaskRuleDao.all(), "autoTask.json", webBackupPath)
+            writeListToJson(appDb.ttsCastingTemplateDao.all(), "ttsCastingTemplates.json", webBackupPath)
+            Backup.stageCoverGallery(webBackupPath)
+            Backup.stageRuntimeSourceCaches(webBackupPath)
 
             // 服务器配置加密存储
             GSON.toJson(appDb.serverDao.all).let { json ->

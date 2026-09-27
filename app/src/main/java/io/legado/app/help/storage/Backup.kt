@@ -85,10 +85,10 @@ data class BookCacheIndex(
  */
 object Backup {
 
-    private const val runtimeSourceCacheFileName = "runtimeSourceCache.json"
-    private const val bookCacheFolderName = "book_cache"
+    internal const val runtimeSourceCacheFileName = "runtimeSourceCache.json"
+    internal const val bookCacheFolderName = "book_cache"
     private const val bookCacheIndexFileName = "bookCacheIndex.json"
-    private const val READ_BG_DIR = "bg"
+    internal const val READ_BG_DIR = "bg"
 
     val backupPath: String by lazy {
         appCtx.filesDir.getFile("backup").createFolderIfNotExist().absolutePath
@@ -97,39 +97,11 @@ object Backup {
 
     private const val TAG = "Backup"
 
-    private val backupFileNames by lazy {
-        arrayOf(
-            "bookshelf.json",
-            "bookmark.json",
-            "bookGroup.json",
-            "bookSource.json",
-            "rssSources.json",
-            "rssStar.json",
-            "replaceRule.json",
-            // B2.5：手动划线（与 BackupSelectorConfig 条目、导出分支同名同文件）
-            "highlights.json",
-            HighlightRuleStore.backupFileName,
-            // R8（B2，2026-09-23）：自动任务规则（与 BackupSelectorConfig 条目、导出/恢复分支同名同文件）
-            "autoTask.json",
-            "readRecord.json",
-            "readRecordDetail.json",
-            "searchHistory.json",
-            "sourceSub.json",
-            "txtTocRule.json",
-            "httpTTS.json",
-            "keyboardAssists.json",
-            "dictRule.json",
-            "servers.json",
-            DirectLinkUpload.ruleFileName,
-            ReadBookConfig.configFileName,
-            ReadBookConfig.shareConfigFileName,
-            ThemeConfig.configFileName,
-            BookCover.configFileName,
-            "config.xml",
-            "videoConfig.xml",
-            CoverGalleryRepository.backupDirName
-        )
-    }
+    // 🔴 已删除死清单 `backupFileNames`（2026-09-27 / REQ-05 对等性修复）
+    // 该 lazy 数组**全仓零运行时引用**（仅被注释文字与本单测的历史 KDoc 提及），
+    // 是「同一批文件名写在第 3 处」的漂移源头：它既不参与写出、也不参与还原，
+    // 却让读者以为「清单已覆盖」。真实三处 = `BackupSelectorConfig.allItems`（勾选）
+    // + `Backup.backup()` 写出分支 + `Restore.restore()` 还原分支（AD-20 四处表另含 Web 备份）。
 
     /**
      * F-P0-2 备份选择器：获取所有背景图片文件
@@ -188,7 +160,7 @@ object Backup {
         return appDb.cacheDao.getRuntimeSourceCaches()
     }
 
-    private fun stageRuntimeSourceCaches(rootPath: String) {
+    internal fun stageRuntimeSourceCaches(rootPath: String) {
         val runtimeCaches = getRuntimeSourceCaches()
         FileUtils.createFileIfNotExist(rootPath + File.separator + runtimeSourceCacheFileName)
             .writeText(GSON.toJson(runtimeCaches))
@@ -228,7 +200,7 @@ object Backup {
     /**
      * F-P0-2 备份选择器：备份封面图集到临时目录
      */
-    private fun stageCoverGallery(rootPath: String) {
+    internal fun stageCoverGallery(rootPath: String) {
         val groups = appDb.coverGalleryDao.allGroups
         if (groups.isEmpty()) return
         val imagesByGroup = appDb.coverGalleryDao.allImages.groupBy { it.groupId }

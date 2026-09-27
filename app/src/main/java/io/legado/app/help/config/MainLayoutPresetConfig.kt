@@ -41,12 +41,9 @@ object MainLayoutPresetConfig {
             }
     }
 
+    // 默认 true：底栏悬浮搜索按钮删除后，顶栏搜索是「书架 / 我的」的搜索入口（用户裁决 2026-09-27）
     fun defaultTopBarShowSearch(): Boolean {
-        return appCtx.getPrefBoolean(PreferKey.defaultTopBarShowSearch, false)
-    }
-
-    fun floatingBottomBarHideSearch(): Boolean {
-        return appCtx.getPrefBoolean(PreferKey.floatingBottomBarHideSearch, true)
+        return appCtx.getPrefBoolean(PreferKey.defaultTopBarShowSearch, true)
     }
 
     fun apply(context: Context, preset: String, notify: Boolean = true) {
@@ -66,8 +63,7 @@ object MainLayoutPresetConfig {
         context.putPrefString(PreferKey.navigationBarPackageNight, NavigationBarIconConfig.DEFAULT_DIR_NAME)
         context.putPrefString(PreferKey.topBarPackageDay, TopBarConfig.DEFAULT_DIR_NAME)
         context.putPrefString(PreferKey.topBarPackageNight, TopBarConfig.DEFAULT_DIR_NAME)
-        context.putPrefBoolean(PreferKey.defaultTopBarShowSearch, false)
-        context.putPrefBoolean(PreferKey.floatingBottomBarHideSearch, true)
+        context.putPrefBoolean(PreferKey.defaultTopBarShowSearch, true)
         AppConfig.bottomBarLayoutMode = bottomLayoutMode
         AppConfig.bottomBarSidebarGravity = "start"
         AppConfig.bottomBarEffectMode = if (bottomLayoutMode == "standard") "solid" else "glass"

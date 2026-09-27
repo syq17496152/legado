@@ -106,9 +106,9 @@
     <dimen name="main_bottom_indicator_margin_start">6dp</dimen>
     <dimen name="main_bottom_indicator_corner_radius">20dp</dimen>
     <dimen name="bookshelf_tag_indicator_width">44dp</dimen>
-    <dimen name="main_search_button_size">48dp</dimen>
+    <!-- main_search_button_size / _icon_size 已随底栏悬浮搜索按钮删除（2026-09-27）；
+         _elevation 仍被 AI 悬浮球复用（MainActivity.createAiFloatingBall） -->
     <dimen name="main_search_button_elevation">14dp</dimen>
-    <dimen name="main_search_button_icon_size">22dp</dimen>
     <dimen name="main_sidebar_panel_padding_horizontal">18dp</dimen>
     <dimen name="main_sidebar_panel_padding_vertical">18dp</dimen>
     <dimen name="main_sidebar_header_padding_top">28dp</dimen>

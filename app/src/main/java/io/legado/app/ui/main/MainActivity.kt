@@ -241,9 +241,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     private val bottomBarCornerRadius by lazy {
         resources.getDimension(R.dimen.main_bottom_bar_corner_radius)
     }
-    private val searchButtonCornerRadius by lazy {
-        resources.getDimension(R.dimen.main_bottom_bar_corner_radius)
-    }
     private val bottomIndicatorCornerRadius by lazy {
         resources.getDimension(R.dimen.main_bottom_indicator_corner_radius)
     }
@@ -536,23 +533,14 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         bindSideNavigationButtons()
         bottomNavigationView.menu.findItem(getBottomNavigationItemId(initialPage))?.isChecked = true
         applyBottomNavigationIcons()
-        searchButton.setOnClickListener {
-            startActivity(Intent(this@MainActivity, SearchActivity::class.java))
-        }
+        // 底栏悬浮搜索按钮已按用户裁决删除（2026-09-27）：搜索入口保留在主 Tab 顶栏
+        // （`MainTopBarView.searchButton`）与侧边导航（`sideSearchButton`），底栏不再有搜索按钮。
         sideSearchButton.setOnClickListener {
             closeSideNavigation()
             startActivity(Intent(this@MainActivity, SearchActivity::class.java))
         }
         sideSearchButton.setOnLongClickListener {
             closeSideNavigation()
-            if (AppConfig.aiAssistantEnabled) {
-                startActivity(Intent(this@MainActivity, AiChatActivity::class.java))
-            } else {
-                toastOnUi(R.string.ai_enable_summary)
-            }
-            true
-        }
-        searchButton.setOnLongClickListener {
             if (AppConfig.aiAssistantEnabled) {
                 startActivity(Intent(this@MainActivity, AiChatActivity::class.java))
             } else {
@@ -727,7 +715,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         contentContainer.invalidate()
         bottomNavigationGlassView.invalidate()
         bottomNavigationIndicatorGlassView.invalidate()
-        searchButtonGlassView.invalidate()
     }
 
     private fun syncLiquidGlassSampleBackground() = binding.run {
@@ -790,10 +777,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
     private fun isStandardBottomMode(): Boolean {
         return AppConfig.bottomBarLayoutMode == "standard"
-    }
-
-    private fun isFloatingSearchHidden(): Boolean {
-        return AppConfig.bottomBarLayoutMode == "floating" && AppConfig.floatingBottomBarHideSearch
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
@@ -908,8 +891,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     private fun applyBottomNavigationShape(standardMode: Boolean) = binding.run {
-        val searchHidden = isFloatingSearchHidden()
-        searchButtonContainer.isVisible = !standardMode && !searchHidden
         val horizontalPadding = resources.getDimensionPixelSize(R.dimen.main_bottom_nav_horizontal_padding)
         val standardContentHeight = resources.getDimensionPixelSize(R.dimen.main_bottom_standard_height)
         val floatingContentHeight = resources.getDimensionPixelSize(R.dimen.main_bottom_bar_height)
@@ -949,22 +930,12 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             clear(R.id.bottom_navigation_glass, ConstraintSet.END)
             clear(R.id.bottom_navigation_glass, ConstraintSet.BOTTOM)
             clear(R.id.bottom_navigation_glass, ConstraintSet.TOP)
-            if (standardMode) {
-                connect(R.id.bottom_navigation_glass, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
-                setMargin(R.id.bottom_navigation_glass, ConstraintSet.END, 0)
-                connect(R.id.bottom_navigation_glass, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
-                connect(R.id.bottom_navigation_glass, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
-            } else if (searchHidden) {
-                connect(R.id.bottom_navigation_glass, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
-                setMargin(R.id.bottom_navigation_glass, ConstraintSet.END, 0)
-                connect(R.id.bottom_navigation_glass, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
-                connect(R.id.bottom_navigation_glass, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
-            } else {
-                connect(R.id.bottom_navigation_glass, ConstraintSet.END, R.id.search_button_container, ConstraintSet.START)
-                setMargin(R.id.bottom_navigation_glass, ConstraintSet.END, resources.getDimensionPixelSize(R.dimen.main_bottom_bar_gap))
-                connect(R.id.bottom_navigation_glass, ConstraintSet.BOTTOM, R.id.search_button_container, ConstraintSet.BOTTOM)
-                connect(R.id.bottom_navigation_glass, ConstraintSet.TOP, R.id.search_button_container, ConstraintSet.TOP)
-            }
+            // 底栏搜索按钮删除后，标准/浮动两模式的玻璃底栏均铺满父容器宽度
+            // （原先浮动模式为给搜索按钮让位而止于其 START 处，该分支已随按钮一并移除）
+            connect(R.id.bottom_navigation_glass, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END)
+            setMargin(R.id.bottom_navigation_glass, ConstraintSet.END, 0)
+            connect(R.id.bottom_navigation_glass, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM)
+            connect(R.id.bottom_navigation_glass, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP)
             applyTo(bottomControls)
         }
     }
@@ -985,9 +956,10 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     }
 
     private fun shouldShowAiFloatingBall(): Boolean {
-        return (isStandardBottomMode() || isFloatingSearchHidden()) &&
-                AppConfig.aiAssistantEnabled &&
-                !isSidebarMode()
+        // 底栏搜索按钮删除（用户裁决 2026-09-27）⇒ 底栏在**任何模式**下都不再有搜索入口；
+        // 原判据 `standardMode || floatingSearchHidden` 的补偿语义（「底栏无搜索入口即显示
+        // AI 悬浮球」）因此对标准/浮动两模式均成立（侧边栏模式仍排除，其自带搜索行）。
+        return AppConfig.aiAssistantEnabled && !isSidebarMode()
     }
 
     private fun createAiFloatingBall(): FrameLayout {
@@ -1512,7 +1484,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
         binding.run {
             val standardMode = isStandardBottomMode()
             val bottomPillRadius = measuredPillRadius(bottomNavigationGlass, bottomBarCornerRadius)
-            val searchPillRadius = measuredPillRadius(searchButtonContainer, searchButtonCornerRadius)
             val indicatorPillRadius = measuredPillRadius(
                 bottomNavigationIndicatorContainer,
                 bottomIndicatorCornerRadius
@@ -1521,9 +1492,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 bottomNavigationGlassView.visibility = android.view.View.GONE
                 bottomNavigationIndicatorContainer.visibility = android.view.View.GONE
                 bottomNavigationIndicatorGlassView.visibility = android.view.View.GONE
-                searchButtonGlassView.visibility = android.view.View.GONE
                 bottomNavigationShellOverlay.visibility = android.view.View.VISIBLE
-                searchButtonShellOverlay.visibility = if (standardMode) android.view.View.GONE else android.view.View.VISIBLE
                 bottomNavigationShellOverlay.background = if (standardMode) {
                     createStandardBottomShellDrawable()
                 } else {
@@ -1532,12 +1501,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                         oval = false
                     )
                 }
-                searchButtonShellOverlay.background = createEInkBottomShellDrawable(
-                    cornerRadius = searchPillRadius,
-                    oval = true
-                )
                 bottomNavigationView.setBackgroundColor(Color.TRANSPARENT)
-                searchButton.setBackgroundColor(Color.TRANSPARENT)
                 syncSearchButtonTint()
                 return
             }
@@ -1545,8 +1509,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             if (standardMode) {
                 bottomNavigationGlassView.visibility = android.view.View.GONE
                 bottomNavigationIndicatorGlassView.visibility = android.view.View.GONE
-                searchButtonGlassView.visibility = android.view.View.GONE
-                searchButtonShellOverlay.visibility = android.view.View.GONE
                 bottomNavigationShellOverlay.isVisible = true
                 bottomNavigationIndicatorContainer.isVisible = true
                 bottomNavigationIndicatorContainer.alpha = 1f
@@ -1565,9 +1527,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             if (effectMode == "solid") {
                 bottomNavigationGlassView.visibility = android.view.View.GONE
                 bottomNavigationIndicatorGlassView.visibility = android.view.View.GONE
-                searchButtonGlassView.visibility = android.view.View.GONE
                 bottomNavigationShellOverlay.isVisible = true
-                searchButtonShellOverlay.isVisible = !standardMode
                 bottomNavigationIndicatorContainer.isVisible = true
                 bottomNavigationIndicatorContainer.alpha = 1f
                 bottomNavigationIndicatorContainer.scaleX = 1f
@@ -1576,12 +1536,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                     cornerRadius = bottomPillRadius,
                     oval = false
                 )
-                searchButtonShellOverlay.background = createSolidBottomShellDrawable(
-                    cornerRadius = searchPillRadius,
-                    oval = true
-                )
                 bottomNavigationView.setBackgroundColor(Color.TRANSPARENT)
-                if (!standardMode) searchButton.setBackgroundColor(Color.TRANSPARENT)
                 syncSearchButtonTint()
                 bottomNavigationIndicatorOverlay.background =
                     createSolidBottomIndicatorDrawable(indicatorPillRadius)
@@ -1593,13 +1548,10 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             bottomNavigationIndicatorContainer.scaleX = 0.82f
             bottomNavigationIndicatorContainer.scaleY = 0.82f
             bottomNavigationShellOverlay.isVisible = true
-            searchButtonShellOverlay.isVisible = !standardMode
             bottomNavigationView.setBackgroundColor(Color.TRANSPARENT)
-            if (!standardMode) searchButton.setBackgroundResource(R.drawable.bg_main_search_button)
             syncSearchButtonTint()
             bottomNavigationGlassView.visibility = android.view.View.VISIBLE
             bottomNavigationIndicatorGlassView.visibility = android.view.View.VISIBLE
-            searchButtonGlassView.visibility = if (standardMode) android.view.View.GONE else android.view.View.VISIBLE
             val glassLevel = when (effectMode) {
                 "frosted" -> bottomBarOpacityLevel(AppConfig.frostedGlassLevel)
                 else -> bottomBarOpacityLevel(AppConfig.liquidGlassLevel)
@@ -1636,12 +1588,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 oval = false,
                 selected = false
             )
-            searchButtonShellOverlay.background = createLiquidGlassShellDrawable(
-                glassLevel = glassLevel,
-                cornerRadius = searchPillRadius,
-                oval = true,
-                selected = false
-            )
             bottomNavigationIndicatorOverlay.background = createLiquidGlassShellDrawable(
                 glassLevel = glassLevel,
                 cornerRadius = indicatorPillRadius,
@@ -1667,20 +1613,6 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
                 touchEffectEnabled = true,
                 pixelSafePill = true
             )
-            if (!standardMode) {
-                setupLiquidGlassView(
-                    liquidGlassView = searchButtonGlassView,
-                    cornerRadius = searchPillRadius,
-                    refractionHeight = refractionHeight,
-                    refractionOffset = refractionOffset,
-                    blurRadius = blurRadius,
-                    dispersion = (dispersion + 0.04f).coerceAtMost(1f),
-                    tintAlpha = tintAlpha,
-                    elasticEnabled = true,
-                    touchEffectEnabled = true,
-                    pixelSafePill = false
-                )
-            }
             setupLiquidGlassView(
                 liquidGlassView = bottomNavigationIndicatorGlassView,
                 cornerRadius = indicatorPillRadius,
@@ -1754,10 +1686,9 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
     private fun syncSearchButtonTint() = binding.run {
         val hasCustomSearchIcon = NavigationBarIconConfig.hasCurrentSingleIcon(NavigationBarIconConfig.EXTRA_SEARCH)
         val drawable = searchSingleDrawable()
-        searchButtonIcon.setImageDrawable(drawable.copyForImageView())
+        // 底栏悬浮搜索按钮已删除 ⇒ 只同步侧边导航搜索行与 AI 悬浮球图标
         sideSearchButton.setImageDrawable(drawable.copyForImageView())
         val tint = if (hasCustomSearchIcon) null else bottomNavigationView.createThemeColorStateList()
-        searchButtonIcon.imageTintList = tint
         sideSearchButton.imageTintList = tint
         aiFloatingBall?.let(::syncAiFloatingBallIcon)
     }

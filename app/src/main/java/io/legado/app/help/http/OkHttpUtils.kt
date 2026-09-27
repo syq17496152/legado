@@ -153,22 +153,48 @@ fun Request.Builder.get(url: String, encodedQuery: String?) {
 
 private val formContentType = "application/x-www-form-urlencoded".toMediaType()
 
-fun Request.Builder.postForm(encodedForm: String) {
-    post(encodedForm.toRequestBody(formContentType))
+/**
+ * 提交表单（REQ-09 / AD-14：新增可选 [charset]，默认 UTF-8 ⇒ 既有调用点行为零变化）。
+ * 指定非 UTF-8 时同步改写 MediaType 的 charset 与请求体字节编码，使目标站能正确识别。
+ */
+fun Request.Builder.postForm(encodedForm: String, charset: Charset = Charsets.UTF_8) {
+    val mediaType = if (charset == Charsets.UTF_8) {
+        formContentType
+    } else {
+        "application/x-www-form-urlencoded; charset=${charset.name()}".toMediaType()
+    }
+    post(encodedForm.toByteArray(charset).toRequestBody(mediaType))
 }
 
 @Suppress("unused")
-fun Request.Builder.postForm(form: Map<String, String>, encoded: Boolean = false) {
-    val formBody = FormBody.Builder()
-    form.forEach {
-        if (encoded) {
-            formBody.addEncoded(it.key, it.value)
-        } else {
-            formBody.add(it.key, it.value)
+fun Request.Builder.postForm(
+    form: Map<String, String>,
+    encoded: Boolean = false,
+    charset: Charset = Charsets.UTF_8
+) {
+    if (charset == Charsets.UTF_8) {
+        // 既有默认路径（UTF-8）保持原实现，确保零变化
+        val formBody = FormBody.Builder()
+        form.forEach {
+            if (encoded) {
+                formBody.addEncoded(it.key, it.value)
+            } else {
+                formBody.add(it.key, it.value)
+            }
         }
+        post(formBody.build())
+        return
     }
-    post(formBody.build())
+    // 非 UTF-8：FormBody 固定以 UTF-8 编码 ⇒ 按 charset 自建表单体（form-urlencode）
+    val body = form.entries.joinToString("&") { (key, value) ->
+        if (encoded) "$key=$value" else "${formEncode(key, charset)}=${formEncode(value, charset)}"
+    }
+    postForm(body, charset)
 }
+
+/** form-urlencode（与 `FormBody` 同语义：空格编成 `+`）。 */
+private fun formEncode(value: String, charset: Charset): String =
+    java.net.URLEncoder.encode(value, charset.name())
 
 fun Request.Builder.postMultipart(type: String?, form: Map<String, Any>) {
     val multipartBody = MultipartBody.Builder()

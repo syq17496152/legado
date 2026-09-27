@@ -260,10 +260,6 @@ class MainTopBarView @JvmOverloads constructor(
         return TopBarConfig.currentConfig(context, AppConfig.isNightTheme).style == TopBarConfig.STYLE_REGULAR
     }
 
-    private fun isFloatingSearchHidden(): Boolean {
-        return AppConfig.bottomBarLayoutMode == "floating" && AppConfig.floatingBottomBarHideSearch
-    }
-
     fun isOverlayMode(): Boolean {
         return isRegularStyle()
     }
@@ -445,13 +441,14 @@ class MainTopBarView @JvmOverloads constructor(
         titleRow.setPadding(0, resources.getDimensionPixelSize(R.dimen.bookshelf_title_row_margin_top), 0, 0)
         updateTitleRowControlHeight(resources.getDimensionPixelSize(R.dimen.bookshelf_title_select_height))
         val config = TopBarConfig.currentConfig(context, AppConfig.isNightTheme)
-        // 顶栏搜索按钮：包自身开启，或悬浮底栏隐藏了搜索时自动顶上来，保证搜索始终可达。
-        val showSearch = config.showSearchInDefaultStyle || isFloatingSearchHidden()
+        // 顶栏搜索按钮：由**顶栏包自身**配置决定（原「悬浮底栏隐藏搜索时自动顶上来」的补偿联动
+        // 已随底栏悬浮搜索按钮的删除而失效 —— 用户裁决 2026-09-27）。为保证「书架 / 我的」两模式
+        // 的搜索始终可达，`defaultTopBarShowSearch` 的默认值已同步改为 true（用户仍可在顶栏包里关掉）。
         searchEntry.isVisible = false
         titleSelect.isVisible = true
         titleSpacer.isVisible = true
         if (mode == Mode.BOOKSHELF || mode == Mode.MY) {
-            searchButton.isVisible = showSearch
+            searchButton.isVisible = config.showSearchInDefaultStyle
         }
         titleSelect.background = ContextCompat.getDrawable(context, R.drawable.bg_discover_embedded_action)
         listOf(moreButton, searchButton, filterButton, starButton, refreshButton, loginButton, filterToggleButton).forEach {

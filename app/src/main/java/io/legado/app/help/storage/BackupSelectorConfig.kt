@@ -38,7 +38,8 @@ object BackupSelectorConfig {
         BackupItem("rssSources", "rssSources.json", "订阅源", "数据库"),
         BackupItem("rssStar", "rssStar.json", "订阅收藏", "数据库"),
         BackupItem("replaceRule", "replaceRule.json", "替换规则", "数据库"),
-        // B2.5：手动划线。注意**三处必须同名同文件**：本表 + Backup.backupFileNames + Backup 导出分支
+        // B2.5：手动划线。注意**四处必须同名同文件**：本表 + Backup 写出分支 + Restore 还原分支
+        // + BackupController.executeWebBackup（Web 备份硬编码全集、不走本表，见 AD-20）
         BackupItem("highlight", "highlights.json", "划线批注", "数据库"),
         // R8（B2，2026-09-23）：自动任务规则（类别归「数据库」，与 Backup.kt 清单 / Restore 分支同名同文件）
         BackupItem("autoTask", "autoTask.json", "自动任务", "数据库"),

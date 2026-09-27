@@ -36,6 +36,8 @@ import java.util.zip.ZipFile
 object AppearanceKitManager {
 
     const val KIT_FLOATING = "builtin_floating"
+
+    /** 历史内置套件 id（"无搜索悬浮底栏"）：套件本体已移除，常量保留用于把旧 pref 重映射到 [KIT_FLOATING]。 */
     const val KIT_FLOATING_NO_SEARCH = "builtin_floating_no_search"
     const val KIT_REGULAR = "builtin_regular"
     const val KIT_SIDEBAR = "builtin_sidebar"
@@ -75,20 +77,13 @@ object AppearanceKitManager {
                 summary = "悬浮底栏 + 默认顶栏",
                 type = AppearanceKitType.BUILTIN,
                 binding = KitBinding(
-                    preset = MainLayoutPresetConfig.PRESET_DEFAULT,
-                    floatingBottomBarHideSearch = true
+                    preset = MainLayoutPresetConfig.PRESET_DEFAULT
                 )
             ),
-            AppearanceKit(
-                id = KIT_FLOATING_NO_SEARCH,
-                name = "无搜索悬浮底栏",
-                summary = "悬浮底栏(隐藏搜索) + 顶栏显示搜索",
-                type = AppearanceKitType.BUILTIN,
-                binding = KitBinding(
-                    preset = MainLayoutPresetConfig.PRESET_DEFAULT,
-                    floatingBottomBarHideSearch = true
-                )
-            ),
+            // 🔴 已移除内置套件 `KIT_FLOATING_NO_SEARCH`（"无搜索悬浮底栏"）：
+            // 底栏悬浮搜索按钮删除后（用户裁决 2026-09-27），它与 `KIT_FLOATING` 的绑定完全相同
+            // ⇒ 保留会变成「两个名字不同、行为一致」的误导性重复项。旧 pref 里的该 id 由
+            // `currentKitId()` 重映射到 `KIT_FLOATING`（常量本身保留以兼容历史数据）。
             AppearanceKit(
                 id = KIT_REGULAR,
                 name = "常规底栏",
@@ -299,10 +294,12 @@ object AppearanceKitManager {
     fun currentKitId(): String {
         return appCtx.getPrefString(PreferKey.currentAppearanceKitId, "")
             ?.takeIf { it.isNotBlank() }
+            // 旧数据兼容：已移除的 `KIT_FLOATING_NO_SEARCH` 重映射到 `KIT_FLOATING`
+            ?.let { if (it == KIT_FLOATING_NO_SEARCH) KIT_FLOATING else it }
             ?: when (MainLayoutPresetConfig.currentPreset()) {
                 MainLayoutPresetConfig.PRESET_REGULAR -> KIT_REGULAR
                 MainLayoutPresetConfig.PRESET_SIDEBAR -> KIT_SIDEBAR
-                else -> if (AppConfig.floatingBottomBarHideSearch) KIT_FLOATING_NO_SEARCH else KIT_FLOATING
+                else -> KIT_FLOATING
             }
     }
 
@@ -677,8 +674,6 @@ object AppearanceKitManager {
             AppConfig.isNightTheme = currentNight
         }
         NavigationBarIconConfig.applyCurrentBottomConfig(currentNight)
-        // 主题包显式携带的"底栏隐藏悬浮搜索"覆盖在底栏配置之后生效(隐藏时顶栏会自动显示搜索)。
-        binding.floatingBottomBarHideSearch?.let { AppConfig.floatingBottomBarHideSearch = it }
         ThemeConfig.applyTheme(context)
         BookCover.upDefaultCover()
     }
@@ -803,8 +798,7 @@ object AppearanceKitManager {
             dayNavigationBar = currentNavigationRef(false),
             nightNavigationBar = currentNavigationRef(true),
             dayCoverCollection = currentCoverRef(false),
-            nightCoverCollection = currentCoverRef(true),
-            floatingBottomBarHideSearch = AppConfig.floatingBottomBarHideSearch
+            nightCoverCollection = currentCoverRef(true)
         )
     }
 
@@ -1026,9 +1020,9 @@ data class KitBinding(
     var dayNavigationBar: ComponentRef? = null,
     var nightNavigationBar: ComponentRef? = null,
     var dayCoverCollection: ComponentRef? = null,
-    var nightCoverCollection: ComponentRef? = null,
-    // 悬浮底栏是否隐藏搜索按钮(隐藏时顶栏自动显示搜索)。可空：旧主题包无此字段时不改变现状。
-    var floatingBottomBarHideSearch: Boolean? = null
+    var nightCoverCollection: ComponentRef? = null
+    // 🔴 已移除 `floatingBottomBarHideSearch`（底栏悬浮搜索按钮删除，2026-09-27）。
+    // 旧主题包/旧索引中的该字段由 Gson 静默忽略（未知字段不报错）。
 ) {
     fun mergeImported(imported: KitBinding): KitBinding {
         return copy(
@@ -1039,8 +1033,7 @@ data class KitBinding(
             dayNavigationBar = imported.dayNavigationBar ?: dayNavigationBar,
             nightNavigationBar = imported.nightNavigationBar ?: nightNavigationBar,
             dayCoverCollection = imported.dayCoverCollection ?: dayCoverCollection,
-            nightCoverCollection = imported.nightCoverCollection ?: nightCoverCollection,
-            floatingBottomBarHideSearch = imported.floatingBottomBarHideSearch ?: floatingBottomBarHideSearch
+            nightCoverCollection = imported.nightCoverCollection ?: nightCoverCollection
         )
     }
 

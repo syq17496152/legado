@@ -2635,8 +2635,7 @@ Selected text or question:
     <string name="config_category_tools">Tools</string>
     <string name="config_category_about">About</string>
 <string name="discover_group_other">Other</string>
-<string name="bottom_bar_hide_search">Hide main search bar</string>
-<string name="bottom_bar_hide_search_summary">Hide the search button on the floating bottom bar. Only applies to floating mode; for custom navigation bar packs, edit in bottom bar manager</string>
+<!-- bottom_bar_hide_search / _summary 已随「底栏悬浮搜索按钮」删除（2026-09-27 用户裁决） -->
 <string name="discovery_subscription_settings_summary">Manage discovery and subscription entrances and page styles.</string>
 <string name="discovery_suite_manage_title">Discovery suites</string>
 <string name="discovery_suite_empty_title">No discovery suites yet</string>

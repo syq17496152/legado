@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -228,6 +229,10 @@ fun DownloadManageScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
+                    // 用户报障 #3：标签栏此前无水平留白 ⇒ 左右贴边，与列表内容左缘（16dp）不对齐。
+                    // 取值复用顶栏族同源同值 `bookshelf_tag_bar_margin_horizontal`(16dp)，与
+                    // MainTopBarView 的标签栏留白完全一致；下方列表 contentPadding 亦为 16dp。
+                    .padding(horizontal = dimensionResource(R.dimen.bookshelf_tag_bar_margin_horizontal))
                     .height(38.dp)
             )
 

@@ -19,6 +19,7 @@ import io.legado.app.help.http.decompressed
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.plainImportClient
+import io.legado.app.help.source.BookSourceIncrementalParser
 import io.legado.app.help.source.SourceHelp
 import io.legado.app.help.source.isEmptyConfiguration
 import io.legado.app.model.ImportCheck
@@ -29,7 +30,6 @@ import io.legado.app.model.SourceQualityReport
 import io.legado.app.model.SourceQualityScorer
 import io.legado.app.model.SourceQualitySession
 import io.legado.app.utils.GSON
-import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.inputStream
 import io.legado.app.utils.isAbsUrl
@@ -211,14 +211,10 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
                     }
                 }
 
-                mText.isJsonArray() -> GSON.fromJsonArray<BookSource>(mText).getOrThrow()
-                    .let { items ->
-                        val source = items.firstOrNull() ?: return@let
-                        if (source.bookSourceUrl.isEmpty()) {
-                            throw NoStackTraceException("不是书源")
-                        }
-                        allSources.addAll(items)
-                    }
+                // REQ-05 / AD-13：改增量（流式）解析 —— 不再把整份原始 JSON 文本与整表
+                // 反序列化的中间 List 副本同时常驻；超限在读取阶段拒绝、失败不留半成品
+                mText.isJsonArray() -> BookSourceIncrementalParser
+                    .parseBookSourcesIncrementalInto(mText.byteInputStream(), allSources)
 
                 mText.isAbsUrl() -> {
                     importSourceUrls(listOf(mText))
@@ -227,13 +223,8 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
                 mText.isUri() -> {
                     val uri = Uri.parse(mText)
                     uri.inputStream(context).getOrThrow().use { inputS ->
-                        GSON.fromJsonArray<BookSource>(inputS).getOrThrow().let {
-                            val source = it.firstOrNull() ?: return@let
-                            if (source.bookSourceUrl.isEmpty()) {
-                                throw NoStackTraceException("不是书源")
-                            }
-                            allSources.addAll(it)
-                        }
+                        BookSourceIncrementalParser
+                            .parseBookSourcesIncrementalInto(inputS, allSources)
                     }
                 }
 
@@ -294,14 +285,15 @@ class ImportBookSourceViewModel(app: Application) : BaseViewModel(app) {
             } else {
                 url(url)
             }
-        }.decompressed().byteStream().use {
-            GSON.fromJsonArray<BookSource>(it).getOrThrow().let { list ->
-                val source = list.firstOrNull() ?: throw NoStackTraceException("不是书源")
-                if (source.bookSourceUrl.isEmpty()) {
-                    throw NoStackTraceException("不是书源")
-                }
-                list
-            }
+        }.decompressed().byteStream().use { stream ->
+            // REQ-05 / AD-13：增量解析替代一次性整表反序列化。
+            // 本方法按原设计**返回 List 供上层并发聚合**（allSources 非线程安全，禁止并行写），
+            // 故此处保留一个本地列表；消除的是「原始字节 + 整表反序列化中间副本」双份常驻。
+            val list = arrayListOf<BookSource>()
+            val count = BookSourceIncrementalParser.parseBookSourcesIncrementalInto(stream, list)
+            // 语义与原实现一致：空表 / 首条 URL 为空均抛「不是书源」
+            if (count == 0) throw NoStackTraceException("不是书源")
+            list
         }
     }
 
