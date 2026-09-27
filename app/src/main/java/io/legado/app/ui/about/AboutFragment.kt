@@ -1,6 +1,7 @@
 package io.legado.app.ui.about
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -108,7 +109,11 @@ class AboutFragment : ComposeSettingFragment() {
                 )
             ),
             // 优化 6：页脚构建信息（灰字），版本口径与"更新日志"行一致，另附 versionCode 与构建类型
-            footer = { AboutBuildFooter() }
+            // W-Final 10.2 / REQ-35：页脚上方追加「定位句 + 四条承诺」（文案纪律：只陈述已交付能力）
+            footer = {
+                AboutPositioningBlock()
+                AboutBuildFooter()
+            }
         )
     }
 
@@ -145,6 +150,50 @@ class AboutFragment : ComposeSettingFragment() {
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+    }
+
+    /**
+     * W-Final 10.2 / REQ-35：about 页**定位句 + 四条承诺**。
+     *
+     * 文案纪律（tasks §10，用户 2026-09-27 批评「品牌化别吹过头」的落地）：
+     * ① 只陈述**已交付能力**（可与代码/REQ 逐条核对）；② 禁竞品对比夸张词（唯一/代差/碾压…）；
+     * ③ 不平移纲领原文的定性判断为结论；④ 每条承诺均有对应能力；⑤ 平实、克制、可核对。
+     *
+     * 取色/排版**复用同页既有实现** [AboutBuildFooter]（`rememberAppSettingPalette()` +
+     * `MaterialTheme.typography`）⇒ 零新增 token、零硬编码色（K1 取色归属三步通过）。
+     */
+    @Composable
+    private fun AboutPositioningBlock() {
+        val palette = rememberAppSettingPalette()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.about_positioning),
+                color = palette.primaryText,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+            // 四条承诺：零账号 / 跨内容 / 你的图书馆 / 无广告 —— 逐条对应已交付能力
+            listOf(
+                R.string.about_promise_no_account,
+                R.string.about_promise_cross_content,
+                R.string.about_promise_your_library,
+                R.string.about_promise_no_ads,
+            ).forEach { res ->
+                Text(
+                    text = "· " + stringResource(res),
+                    color = palette.secondaryText,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 

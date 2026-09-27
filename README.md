@@ -10,7 +10,7 @@
 
 自定义书源规则引擎 | CSS / JSONPath / XPath / 正则 / JS 五种解析
 
-本仓库 fork 自 **lyc — [Luoyacheng/legado-E](https://github.com/Luoyacheng/legado-E)（阅读Sigma，本项目功能基座）**，UI 体系深度对齐 **Archive — [Rimchars/legado](https://github.com/Rimchars/legado)（阅读Archive）**，并在此基础上扩展更多功能（详见下方「与上游参考版本的功能对比」）。
+**全内容阅读器**：文字、漫画、图片订阅与视频在一个应用里读完 —— 零账号、无广告，数据只存在你的设备上。
 
 </div>
 
@@ -51,7 +51,7 @@
 
 ## 与上游参考版本的功能对比
 
-> 本项目功能基座继承自 **lyc（阅读Sigma，[legado-E](https://github.com/Luoyacheng/legado-E)）**，UI Compose 化参照 **Archive（阅读Archive，[Rimchars/legado](https://github.com/Rimchars/legado)）**。下表中行为本项目相对两参考版本**额外实现或增强**的功能项。
+> 下表中行为本项目在发展过程中**额外实现或增强**的功能项；项目血缘与参考项目见文末「致谢」。
 
 
 ---

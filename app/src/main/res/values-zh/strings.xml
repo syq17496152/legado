@@ -1472,6 +1472,12 @@
     <!-- W7 8.2 / REQ-30：文章级离线预取开关 -->
     <string name="image_article_prefetch">文章图片预下载</string>
     <string name="image_article_prefetch_summary">打开文章时提前把其中的图片下载到本地，之后离线也能查看</string>
+    <!-- W-Final 10.2 / REQ-35：about 页定位句 + 四条承诺（文案纪律：只陈述已交付能力，禁竞品夸张词） -->
+    <string name="about_positioning">全内容阅读器：文字、漫画、图片订阅与视频，一个应用读完</string>
+    <string name="about_promise_no_account">零账号：所有功能本地可用，无需注册或登录</string>
+    <string name="about_promise_cross_content">跨内容：书源、订阅源与本地书籍统一在同一书架与搜索里</string>
+    <string name="about_promise_your_library">你的图书馆：数据与配置保存在本机，可导出与备份</string>
+    <string name="about_promise_no_ads">无广告：应用内不含广告位与推广内容</string>
     <string name="disable_manga_scale">禁用漫画缩放</string>
     <string name="disable_manga_click_scroll">禁用点击翻页</string>
     <string name="enable_auto_page_scroll">开启自动翻页</string>
