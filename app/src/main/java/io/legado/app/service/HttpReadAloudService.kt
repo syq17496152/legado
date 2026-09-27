@@ -35,6 +35,9 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.exoplayer.InputStreamDataSource
 import io.legado.app.help.http.okHttpClient
+import io.legado.app.help.player.PlaybackErrorAction
+import io.legado.app.help.player.PlaybackErrorPolicy
+import io.legado.app.help.player.PlaybackErrorSession
 import io.legado.app.help.readaloud.prebuild.TtsCacheKeys
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
@@ -100,7 +103,11 @@ class HttpReadAloudService : BaseReadAloudService(),
 
     /** F5/2.14：静音替代提示去重（服务会话级，一次朗读会话至多提示一次） */
     private var silentFallbackToasted: Boolean = false
-    private var playErrorNo = 0
+    /**
+     * W2 / REQ-13：朗读错误自愈记账（上限 3 次 + 冷却 60s）。
+     * 取代原 `playErrorNo` 硬编码阈值 5：判据来源统一到 [PlaybackErrorPolicy]（与视频/听书同表）。
+     */
+    private val playbackErrorSession = PlaybackErrorSession()
     private val downloadTaskActiveLock = Mutex()
 
     override fun onCreate() {
@@ -750,7 +757,7 @@ class HttpReadAloudService : BaseReadAloudService(),
 
             Player.STATE_ENDED -> {
                 // 结束
-                playErrorNo = 0
+                playbackErrorSession.reset()
                 updateNextPos()
                 exoPlayer.stop()
                 exoPlayer.clearMediaItems()
@@ -773,7 +780,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) return
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-            playErrorNo = 0
+            playbackErrorSession.reset()
         }
         // 段落停顿静音项不推进段落指针 (R7.1)
         if (mediaItem?.localConfiguration?.uri?.lastPathSegment?.startsWith("pause_") == true) {
@@ -783,14 +790,34 @@ class HttpReadAloudService : BaseReadAloudService(),
         upPlayPos()
     }
 
+    /**
+     * 朗读播放错误（W2 / REQ-13 / AD-04：接入统一三态裁决）。
+     *
+     * 与既有行为的**合并点**（非叠加）：原「连续 5 次错误才停」的硬编码阈值改由
+     * [PlaybackErrorSession] 统一记账（上限 3 次 + 冷却 60s，与视频侧同一预置决策），
+     * 因此「推进到下一段落」的自愈动作与「连续错误则暂停」的终止动作**沿用原代码**，只换判据来源：
+     * - [PlaybackErrorAction.SELF_HEAL] / [PlaybackErrorAction.DEGRADE] ⇒ 删除坏缓存文件 + 推进下一段落
+     *   （HTTP 朗读链路的既有自愈动作：换段落即重新合成，等价「换源」）；
+     * - [PlaybackErrorAction.ABORT]（不可自愈类 / 预算耗尽 / 冷却中）⇒ 非空提示 + `pauseReadAloud()`。
+     *
+     * 输出安全：本方法只记录**段落长度**，不回显段落正文（原实现把正文写进日志）。
+     */
     override fun onPlayerError(error: PlaybackException) {
         super.onPlayerError(error)
-        AppLog.put("朗读错误\n${contentList[nowSpeak]}", error)
+        AppLog.put("朗读错误, 段落长度=${contentList.getOrNull(nowSpeak)?.length ?: 0}", error)
         deleteCurrentSpeakFile()
-        playErrorNo++
-        if (playErrorNo >= 5) {
-            toastOnUi("朗读连续5次错误, 最后一次错误代码(${error.localizedMessage})")
-            AppLog.put("朗读连续5次错误, 最后一次错误代码(${error.localizedMessage})", error)
+        val kind = PlaybackErrorPolicy.classify(error.errorCode)
+        val action = playbackErrorSession.decide(kind)
+        // 诊断日志（日志子规范：功能优化须留可定位日志；仅技术字段，无正文/URL）
+        AppLog.putInfo(
+            "ReadAloudSelfHeal: kind=$kind, action=$action, " +
+                "code=${error.errorCode}(${error.errorCodeName}), " +
+                "attempts=${playbackErrorSession.attempts}/${PlaybackErrorPolicy.MAX_ATTEMPTS}, " +
+                "cooling=${playbackErrorSession.isCoolingDown()}, speakIdx=$nowSpeak"
+        )
+        if (action == PlaybackErrorAction.ABORT) {
+            toastOnUi("朗读连续错误, 最后一次错误代码(${error.localizedMessage})")
+            AppLog.put("朗读连续错误, 最后一次错误代码(${error.localizedMessage})", error)
             pauseReadAloud()
         } else {
             if (exoPlayer.hasNextMediaItem()) {

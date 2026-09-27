@@ -171,6 +171,18 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     /**
+     * W2 / REQ-13：播放失败的 **DEGRADE 档** —— 丢弃当前播放地址，**重新经书源规则取新地址**后续播。
+     *
+     * 与 [loadOrUpPlayUrl] 的区别：后者在同地址非空时直接原地重播（等价自愈档）；本方法先清空地址，
+     * 强制重跑书源正文规则（换链），用于「当前链接已被源站判定失效（404/解析失败）」的场景。
+     * 不在此处 stop/release —— 由既有 play 通道接管（与 [AudioPlayService] 的播放权协调器保持一致）。
+     */
+    fun reloadPlayUrl() {
+        durPlayUrl = ""
+        loadOrUpPlayUrl()
+    }
+
+    /**
      * 加载播放URL
      */
     private fun loadPlayUrl() {

@@ -1012,6 +1012,8 @@
     <string name="chapter_pay">pay</string>
     <string name="double_page_horizontal">Tablet/Landscape Dual Page</string>
     <string name="open_in_browser">open in browser</string>
+    <!-- W2 / REQ-13：播放失败自动换线路后提示（%1$s = 线路名） -->
+    <string name="video_route_self_heal_toast">Playback failed, switched to line: %1$s</string>
     <string name="copy_url">copy url</string>
     <string name="full_screen">full screen</string>
     <string name="open_fun">open function</string>

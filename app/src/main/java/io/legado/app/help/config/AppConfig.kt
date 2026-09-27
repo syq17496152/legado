@@ -2272,6 +2272,11 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.rssAutoVideoToPlayer, true)
         set(value) = appCtx.putPrefBoolean(PreferKey.rssAutoVideoToPlayer, value)
 
+    // W2 / REQ-14 / AD-05：视频嗅探赛马化（默认开启；关闭即回落原串行链 ⇒ 零回归回滚点）
+    var sniffRaceEnabled: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.sniffRaceEnabled, true)
+        set(value) = appCtx.putPrefBoolean(PreferKey.sniffRaceEnabled, value)
+
     var readUrlInBrowser: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.readUrlOpenInBrowser)
         set(value) {

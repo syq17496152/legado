@@ -28,6 +28,8 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import io.legado.app.help.exoplayer.ExoPlayerHelper
 import io.legado.app.help.exoplayer.HlsKeyDataSourceFactory
 import io.legado.app.help.exoplayer.PlayerInstancePool
+import io.legado.app.help.player.PlaybackErrorAction
+import io.legado.app.help.player.PlaybackErrorPolicy
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.EventBus
 import io.legado.app.model.VideoPlay
@@ -580,6 +582,9 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             // exoplayer-resilience Layer 2：新播放重置不可恢复错误计数
             // 理由：新播放/切换视频/切回 ExoPlayer 时给新的累计机会，避免历史失败影响当前播放
             unrecoverableFailCount = 0
+            // W2 / REQ-13：新播放会话复位「播放错误自愈」记账（与上方各计数同口径 ⇒ 不跨会话串扰）
+            VideoPlay.routeSelfHealSession.reset()
+            VideoPlay.lastPlaybackErrorKind = null
             // T1.12: 重置嗅探状态变量（解决 Bug-13：切换视频时状态变量未重置导致降级链错乱）
             // 在 prepareAsyncInternal 入口重置，确保每次新播放都从干净状态开始
             currentSniffResult = ExoPlayerHelper.SniffResult.UNKNOWN
@@ -1057,6 +1062,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 "ExoFallback: SSL handshake failed, prompt retry/browser (WebView channel removed), " +
                     "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
             )
+            // W2 / REQ-13：既有链路已放弃该 URL ⇒ 询问策略（可能由上层换线路自愈接管）
+            if (handleTerminalErrorByPolicy(error)) return
             val errorInfo = buildString {
                 appendLine("播放失败：SSL 握手失败（CDN 拒绝 TLS 连接）")
                 appendLine("播放地址: ${ExoPlayerHelper.sanitizeUrl(currentUrl)}")
@@ -1120,6 +1127,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                     "ExoFallback: terminal fallback failed (${error.errorCodeName}), prompt error, " +
                         "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
                 )
+                // W2 / REQ-13：既有降级链已到末端 ⇒ 询问策略（可能由上层换线路自愈接管）
+                if (handleTerminalErrorByPolicy(error)) return
                 val errorInfo = buildString {
                     appendLine("播放失败：视频格式不支持或地址已失效")
                     appendLine("错误码: ${error.errorCode} (${error.errorCodeName})")
@@ -1131,6 +1140,8 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             }
 
             if (unrecoverableFailCount >= FALLBACK_RETRY_THRESHOLD) {
+                // W2 / REQ-13：既有重试/降级链已耗尽 ⇒ 询问策略（DEGRADE 时先走既有降级链，ABORT 才提示）
+                if (handleTerminalErrorByPolicy(error)) return
                 // T1.2 + Phase 2 (3.5)：重试耗尽后发送 VIDEO_PLAY_ERROR 事件（UI 统一错误提示）
                 // AD-02: 所有失败场景必须有 UI 提示，不能静默
                 // Phase 2：原"再触发 VIDEO_FALLBACK_WEBVIEW 自动降级"已随 WebView 播放器删除
@@ -1210,8 +1221,49 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
                 appendLine("建议: $suggestion")
             }
         }
+        // W2 / REQ-13：通用终端点 —— 既有链路未接管的错误在此统一交给策略裁决，
+        // 可能由上层「换线路自愈」接管（返回 true 则不弹错误提示）
+        if (handleTerminalErrorByPolicy(error)) return
         AppLog.put(errorInfo, error)
         postEvent(EventBus.VIDEO_PLAY_ERROR, errorInfo)
+    }
+
+    /**
+     * W2 / REQ-13（AD-04）：**终端点**错误裁决 —— 与既有重试链**合并而非叠加**。
+     *
+     * 调用点全部位于「既有链路已对该错误放弃」的终端点（统一错误提示之前），因此：
+     * - 既有分支（416/403 补头 / 7001 重建 / 4003 重建 / 指数退避 / 降级链）**逐行未改**，
+     *   不存在「两套重试同时生效」的双重重试；
+     * - 本方法只做三件事：① 错误分类归因（统一日志，后续新增错误码不再需要往长链里加 if）；
+     *   ② 会话记账（上限 3 次 + 冷却 60s ⇒ 「全线路失败有上限不循环」）；
+     *   ③ [PlaybackErrorAction.DEGRADE] 且降级链仍有下一档时，替终端提示执行一次既有
+     *   [tryNextFallback]（换播放方式）；
+     * - 不可自愈类（解码 / DRM / 未知）裁决为 [PlaybackErrorAction.ABORT]，**不换线**；
+     * - 无论结果如何都把错误大类写入 [VideoPlay.lastPlaybackErrorKind]，供 UI 侧「换线路自愈」判据。
+     *
+     * @return true = 已由策略接管（调用方须立刻 `return`，不再弹统一错误提示）
+     */
+    private fun handleTerminalErrorByPolicy(error: PlaybackException): Boolean {
+        val kind = PlaybackErrorPolicy.classify(error.errorCode)
+        VideoPlay.lastPlaybackErrorKind = kind
+        val session = VideoPlay.routeSelfHealSession
+        val action = session.decide(kind)
+        AppLog.putInfo(
+            "ExoPlaybackSelfHeal: kind=$kind, action=$action, " +
+                "code=${error.errorCode}(${error.errorCodeName}), " +
+                "attempts=${session.attempts}/${PlaybackErrorPolicy.MAX_ATTEMPTS}, " +
+                "cooling=${session.isCoolingDown()}, " +
+                "fallbackIdx=$currentFallbackIndex/${fallbackTypes.size - 1}, " +
+                "urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}"
+        )
+        if (action == PlaybackErrorAction.DEGRADE &&
+            currentFallbackIndex < fallbackTypes.size - 1
+        ) {
+            AppLog.put("ExoPlaybackSelfHeal: policy DEGRADE → tryNextFallback(kind=$kind)")
+            tryNextFallback()
+            return true
+        }
+        return false
     }
 
     /**
@@ -1243,6 +1295,9 @@ class Exo2MediaPlayer(context: Context) : IjkExo2MediaPlayer(context) {
             // A2 修复：首帧渲染成功，置 VideoPlay.hasPlayedSuccessfully = true
             // 后续切换文章 BUFFERING 超时用 12s（CDN 已热），切换源（initSource）时重置为 false
             VideoPlay.hasPlayedSuccessfully = true
+            // W2 / REQ-13：本次起播成功 ⇒ 自愈记账复位（"会话内成功即清零"，避免历史失败压制后续换线）
+            VideoPlay.routeSelfHealSession.reset()
+            VideoPlay.lastPlaybackErrorKind = null
             AppLog.put(
                 "ExoPlayer play success (STATE_READY): urlPath=${ExoPlayerHelper.sanitizeUrl(currentUrl)}, " +
                     "contentType=${currentSniffResult.contentType}, fallbackIndex=$currentFallbackIndex/${fallbackTypes.size}"

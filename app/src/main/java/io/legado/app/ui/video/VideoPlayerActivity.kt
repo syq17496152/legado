@@ -83,6 +83,7 @@ import io.legado.app.help.TextViewTagHandler
 import io.legado.app.help.WebCacheManager
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.player.PlaybackErrorPolicy
 // add-dlna-cast：DLNA/UPnP 投屏（菜单入口 + 本地播放器控制通道 + 会话状态）
 import io.legado.app.help.dlna.CastPhase
 import io.legado.app.help.dlna.DlnaCastManager
@@ -2390,11 +2391,77 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         observeEvent<String>(EventBus.VIDEO_PLAY_ERROR) {
             // R3 阶段5：同步更新设置面板的调试日志
             settingsPanel?.appendDebugLog(it)
+            // W2 / REQ-13（AD-04）：**首线路失败自动换线** —— 播放器终端点已把错误大类写入
+            // `VideoPlay.lastPlaybackErrorKind` 并完成会话记账（上限 3 次 + 冷却 60s）；
+            // 此处是线路上下文唯一持有者（多线路列表 + 播放器实例），故换线动作必须落在这里。
+            // 成功换线 ⇒ 不弹统一错误提示（用户可见：线路名 toast + 线路/集数列表刷新）。
+            if (tryAutoSwitchRouteOnError(it)) return@observeEvent
             // video-sniff-403-and-rss-classic-fix Phase 2 (3.4)：WebView 降级 observe 已删除，
             // 统一走错误对话框"重试/系统浏览器"承接
             showVideoPlayErrorDialog(it)
         }
 
+    }
+
+    /**
+     * W2 / REQ-13（AD-04）：播放失败时的**线路级自愈**（换下一条线路），用户可见。
+     *
+     * 判据（design 3.1 验收 + AD-04，裁决收敛在 `PlaybackErrorPolicy.decideRouteSelfHeal`）：
+     * - SELF_HEAL / DEGRADE ⇒ 可换线；ABORT（解码/DRM/未知等**不可自愈类**）⇒ **不换线**，走错误提示；
+     * - 无多线路（单线路源）或会话预算耗尽（冷却中）⇒ 不换线；
+     * - 换线目标 = 当前线路 +1（末条回卷到首条），与线路选择器语义一致。
+     *
+     * @param errorInfo 统一错误提示文本（仅用于 WARN 日志长度，不回显内容）
+     * @return true = 已换线接管（调用方不再弹错误对话框）
+     */
+    private fun tryAutoSwitchRouteOnError(errorInfo: String): Boolean {
+        val routes = VideoPlay.rssRoutes
+        if (routes.isNullOrEmpty()) return false
+        // 裁决收敛在 PlaybackErrorPolicy（纯函数，JVM 单测锁定）：不可自愈类/预算耗尽/单线路 ⇒ 不换线
+        val decision = PlaybackErrorPolicy.decideRouteSelfHeal(
+            kind = VideoPlay.lastPlaybackErrorKind,
+            routeCount = routes.size,
+            currentIndex = VideoPlay.rssRouteIndex,
+            session = VideoPlay.routeSelfHealSession
+        )
+        if (!decision.allowed) {
+            AppLog.putInfo(
+                "VideoRouteSelfHeal: 跳过换线, kind=${VideoPlay.lastPlaybackErrorKind}, " +
+                    "action=${decision.action}, attempts=${decision.attempts}/" +
+                    "${PlaybackErrorPolicy.MAX_ATTEMPTS}, cooling=${decision.coolingDown}, " +
+                    "routes=${routes.size}, errLen=${errorInfo.length}"
+            )
+            return false
+        }
+        val to = decision.targetIndex
+        AppLog.putInfo(
+            "VideoRouteSelfHeal: 换线 ${VideoPlay.rssRouteIndex}→$to, " +
+                "kind=${VideoPlay.lastPlaybackErrorKind}, action=${decision.action}, " +
+                "attempts=${decision.attempts}/${PlaybackErrorPolicy.MAX_ATTEMPTS}"
+        )
+        val switched = runCatching {
+            if (VideoPlay.isNewRoutesMode()) {
+                // 新模式：异步按需采集（与线路选择器同一入口）
+                VideoPlay.switchToRoute(to, playerView)
+                upRssRoutesView()
+                true
+            } else {
+                // 旧模式：内存切换（与线路选择器同一入口）
+                val episode = VideoPlay.switchRssRoute(to)
+                if (episode != null) {
+                    upRssRoutesView()
+                    VideoPlay.playRssEpisode(playerView, episode)
+                    upRssEpisodesView()
+                    true
+                } else {
+                    false
+                }
+            }
+        }.getOrDefault(false)
+        if (!switched) return false
+        endCastForLocalSwitch()
+        toastOnUi(getString(R.string.video_route_self_heal_toast, routes[to].name))
+        return true
     }
 
     /**

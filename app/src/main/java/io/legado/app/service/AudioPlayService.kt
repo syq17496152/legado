@@ -36,6 +36,9 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.exoplayer.ExoPlayerHelper
 import io.legado.app.help.glide.ImageLoader
+import io.legado.app.help.player.PlaybackErrorAction
+import io.legado.app.help.player.PlaybackErrorPolicy
+import io.legado.app.help.player.PlaybackErrorSession
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.ListeningPlaybackCoordinator
 import io.legado.app.model.ReadAloud
@@ -125,6 +128,9 @@ class AudioPlayService : BaseService(),
     private var dsJob: Job? = null
     private var upNotificationJob: Coroutine<*>? = null
     private var upPlayProgressJob: Job? = null
+
+    /** W2 / REQ-13：听书播放错误自愈记账（上限 3 次 + 冷却 60s；与播放会话同生命周期）。 */
+    private val playbackErrorSession = PlaybackErrorSession()
     private var cover: Bitmap =
         BitmapFactory.decodeResource(appCtx.resources, R.drawable.icon_read_book)
 
@@ -157,6 +163,8 @@ class AudioPlayService : BaseService(),
                 IntentAction.play, IntentAction.playNew -> {
                     exoPlayer.stop()
                     upPlayProgressJob?.cancel()
+                    // W2 / REQ-13：新播放会话复位错误自愈记账（切章/切书不继承历史失败预算）
+                    playbackErrorSession.reset()
                     pause = false
                     position = when (action) {
                         IntentAction.playNew -> 0
@@ -406,10 +414,51 @@ class AudioPlayService : BaseService(),
     }
 
     /**
-     * 播放错误事件
+     * 播放错误事件（W2 / REQ-13 / AD-04：**由「零自愈」补齐为「有界自愈」**）。
+     *
+     * 裁决走 [PlaybackErrorPolicy] 单一来源（与视频侧 `Exo2MediaPlayer` 终端点同表）：
+     * - [PlaybackErrorAction.SELF_HEAL]（网络抖动 / 直播追帧）：**同源原地续播**（保留位置重新 prepare）；
+     * - [PlaybackErrorAction.DEGRADE]（HTTP 状态 / 资源 / 解析类）：**重新经书源规则取播放地址**（换链）后由
+     *   既有播放通道续播（不在本回调内 release/stop，避免与既有播放权协调器冲突）；
+     * - [PlaybackErrorAction.ABORT]（解码 / DRM / 未知，**不可自愈类不换线**）与预算耗尽（上限 3 次 + 冷却
+     *   60s，见 [PlaybackErrorSession]）：走原有终止逻辑（状态置 STOP + 非空错误提示）。
+     *
+     * 会话生命周期：`IntentAction.play/playNew` 与 `onDestroy` 处复位记账，避免跨章节/跨书串扰。
      */
     override fun onPlayerError(error: PlaybackException) {
         super.onPlayerError(error)
+        val kind = PlaybackErrorPolicy.classify(error.errorCode)
+        val action = playbackErrorSession.decide(kind)
+        // 诊断日志（日志子规范：功能优化须留可定位日志；仅技术字段，无 URL/Cookie）
+        AppLog.putInfo(
+            "AudioPlaybackSelfHeal: kind=$kind, action=$action, " +
+                "code=${error.errorCode}(${error.errorCodeName}), " +
+                "attempts=${playbackErrorSession.attempts}/${PlaybackErrorPolicy.MAX_ATTEMPTS}, " +
+                "cooling=${playbackErrorSession.isCoolingDown()}"
+        )
+        when (action) {
+            PlaybackErrorAction.SELF_HEAL -> {
+                val resumed = runCatching {
+                    exoPlayer.seekTo(exoPlayer.currentPosition.coerceAtLeast(0L))
+                    exoPlayer.prepare()
+                }.isSuccess
+                AppLog.put("AudioPlaybackSelfHeal: SELF_HEAL 原地续播, ok=$resumed")
+                if (!resumed) handleAudioPlayFatal(error)
+            }
+
+            PlaybackErrorAction.DEGRADE -> {
+                AppLog.put("AudioPlaybackSelfHeal: DEGRADE 重新取播放地址（换链）")
+                AudioPlay.reloadPlayUrl()
+            }
+
+            PlaybackErrorAction.ABORT -> handleAudioPlayFatal(error)
+        }
+    }
+
+    /**
+     * 播放失败的终止档（原有行为，逐行保留）：状态置 STOP + 加载态复位 + 非空错误提示。
+     */
+    private fun handleAudioPlayFatal(error: PlaybackException) {
         AudioPlay.status = Status.STOP
         postEvent(EventBus.AUDIO_STATE, Status.STOP)
         AudioPlay.upLoading(false)

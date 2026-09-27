@@ -30,6 +30,9 @@ object ReadRss {
      *
      * 语义**保持原样**：`indexOfFirst` 未命中（列表为 null 或找不到）一律兜底 0；找不到时输出
      * source mismatch WARN（供误配源排查）。
+     *
+     * W1 2.2 补强（2026-09-27 L2 真机缺陷回归）：`rssArticles` 为 null 时**兜底为「仅含本篇」的列表**
+     * —— 否则播放器侧解析不到文章（详见函数体内注释与 `RssVideoRouteTest.playContextMustBeResolvableByPlayer`）。
      */
     fun prepareVideoPlayContext(
         rssArticle: RssArticle,
@@ -39,7 +42,13 @@ object ReadRss {
         nextPageUrl: String? = null,
         page: Int = 1
     ) {
-        VideoPlay.rssArticles = rssArticles
+        // W1 2.2 补强（2026-09-27 L2 真机缺陷）：调用方 `ReadRssViewModel` 只有「单篇文章」上下文，
+        // 若原样写入 null，`VideoPlay.startPlay` 的解析式
+        // `rssStar ?: rssRecord ?: rssArticles?.getOrNull(rssArticleIndex)` 三项全空 ⇒ 静默 return，
+        // 表现为「自动进了播放器但一直不播」（真机日志 `VideoPlay: rssArticle is null in startPlay`）。
+        // 兜底为「仅含本篇」的列表：既能被解析到（indexOfFirst 命中 ⇒ 索引 0），又诚实表达
+        // 「本路由无上下滑动上下文」（rssArticlesHasMore=false）。
+        VideoPlay.rssArticles = rssArticles ?: listOf(rssArticle)
         // B3 修复：分离 null 兜底与 -1 兜底，-1 时输出 WARN 并兜底为 0
         val matchedIndex = rssArticles?.indexOfFirst { it.link == rssArticle.link }
         VideoPlay.rssArticleIndex = if (matchedIndex == null) {

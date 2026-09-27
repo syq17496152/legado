@@ -36,8 +36,11 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import com.google.gson.reflect.TypeToken
 import io.legado.app.BuildConfig
 import io.legado.app.constant.AppLog
+import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.videoStreamClient
+import io.legado.app.help.player.SniffRace
+import io.legado.app.help.player.SniffRaceLimiter
 import io.legado.app.model.VideoPlay
 import io.legado.app.utils.GSON
 import io.legado.app.utils.externalCache
@@ -63,6 +66,12 @@ import java.util.concurrent.TimeUnit
 object ExoPlayerHelper {
 
     private const val SPLIT_TAG = "\uD83D\uDEA7"
+
+    /**
+     * W2 / REQ-14 / AD-05：嗅探赛马资源闸（连续失败 3 次 → 冷却 60s 内不赛马，回落串行链）。
+     * 进程级单例语义：冷却跨播放会话生效，避免「网络全断时每本书都重打两路请求」。
+     */
+    private val sniffRaceLimiter = SniffRaceLimiter()
 
     /**
      * R4-T6: 浏览器 User-Agent（模拟 Chrome 移动版）
@@ -438,9 +447,106 @@ object ExoPlayerHelper {
             )
         }
 
-        // T1.3: AtomicBoolean 防双回调竞态（withTimeoutOrNull 超时后 sniffWithRangeRequestR4 仍在执行）
-        // 场景：超时返回 UNKNOWN 后，sniffWithRangeRequestR4 的 OkHttp execute() 完成，又返回一个结果
-        // 修复：只有第一个结果被使用，后续结果被丢弃
+        // W2 / REQ-14 / AD-05：嗅探赛马化（并发上限 2 / 先到结构化取消 / 连续失败 3 次冷却 60s）。
+        // 四段确定性短路（本地文件 / 非法 scheme / HTML 接口 / .m3u8 后缀）**原地保留在赛马之前**——
+        // 短路是零成本判断，赛马无收益且会引入噪音（详设 §3.3①）。
+        // 开关关闭或处于冷却期 ⇒ 回落原串行链（零回归回滚点，行为与改造前逐行等价）。
+        if (!AppConfig.sniffRaceEnabled || !sniffRaceLimiter.canRace()) {
+            return sniffVideoTypeSerial(url, headers, startTime)
+        }
+        val raceResult = SniffRace.race(
+            url = url,
+            headers = headers,
+            strategies = buildSniffStrategies(url),
+            maxConcurrent = SniffRace.DEFAULT_MAX_CONCURRENT,
+            totalTimeoutMs = SNIFF_TIMEOUT_MS
+        )
+        if (raceResult == null) {
+            // 全灭且无兜底（原「Range 超时 + 后缀也 UNKNOWN」等价路径）
+            sniffRaceLimiter.noteFailure()
+            AppLog.put(
+                "sniffVideoType: race all-miss (${System.currentTimeMillis() - startTime}ms), " +
+                    "urlPath=${sanitizeUrl(url)}"
+            )
+            return SniffResult.UNKNOWN
+        }
+        if (raceResult.value.contentType == SniffResult.TYPE_UNKNOWN) {
+            sniffRaceLimiter.noteFailure()
+        } else {
+            sniffRaceLimiter.noteSuccess()
+        }
+        // 单条归因日志（验收需要：胜出策略 / 置信度 / 耗时）
+        AppLog.put(
+            "sniffVideoType: race winner=${raceResult.strategyName}, " +
+                "confidence=${raceResult.confidence}, elapsed=${raceResult.elapsedMs}ms, " +
+                "contentType=${raceResult.value.contentType}, " +
+                "urlPath=${sanitizeUrl(url)}"
+        )
+        return raceResult.value
+    }
+
+    /**
+     * W2 / REQ-14：赛马策略集（列表序 = 兜底优先级序）。
+     *
+     * 1. `Extension`（**零请求**、置信度 0.4、**不抢占**）：URL 后缀兜底。瞬时返回，
+     *    作为「Range 慢/失败」时的即刻兜底 —— 正是「省去空等」的收益来源；
+     * 2. `Range`（网络、置信度 0.9、可抢占）：既有权威嗅探（7 维交叉验证），内部逻辑零改动；
+     * 3. `M3u8PreCheck`（网络、置信度 0.85、可抢占）：**仅在后缀无法判定类型时**加入 ——
+     *    针对「伪装成动态接口的 m3u8」（无后缀）提前命中，避免 Range 对 m3u8 清单做容器嗅探而失败；
+     *    后缀已可判定（.mp4/.m3u8/...）时不发这一路额外请求（控请求面）。
+     */
+    private fun buildSniffStrategies(url: String): List<SniffRace.Strategy<SniffResult>> {
+        val strategies = ArrayList<SniffRace.Strategy<SniffResult>>(3)
+        strategies += SniffRace.strategy(
+            name = "Extension",
+            confidence = EXTENSION_STRATEGY_CONFIDENCE,
+            timeoutMs = EXTENSION_STRATEGY_TIMEOUT_MS,
+            canWin = false,
+            networkBound = false
+        ) { u, _ -> sniffByExtensionFallback(u, "race-extension") }
+        strategies += SniffRace.strategy(
+            name = "Range",
+            confidence = RANGE_STRATEGY_CONFIDENCE,
+            timeoutMs = SNIFF_TIMEOUT_MS
+        ) { u, h -> sniffWithRangeRequestR4(u, h).takeIf { it.contentType != SniffResult.TYPE_UNKNOWN } }
+        if (guessTypeByUrl(url) == null) {
+            strategies += SniffRace.strategy(
+                name = "M3u8PreCheck",
+                confidence = M3U8_PRECHECK_STRATEGY_CONFIDENCE,
+                timeoutMs = M3U8_PRECHECK_STRATEGY_TIMEOUT_MS
+            ) { u, h -> m3u8PreCheckAsSniffResult(u, h) }
+        }
+        return strategies
+    }
+
+    /**
+     * W2 / REQ-14：m3u8 预检结果 → 嗅探结果（预检 Success 即权威：已与 CDN 握手并验证 `#EXTM3U`/MIME）。
+     * 其余（Fail / Rejected / 超时）返回 null ⇒ 不参与抢占，也不覆盖 Range 的结论。
+     */
+    private suspend fun m3u8PreCheckAsSniffResult(
+        url: String,
+        headers: Map<String, String>
+    ): SniffResult? = when (val r = M3u8PreCheckDataSource(headers).preCheck(url)) {
+        is M3u8PreCheckDataSource.PreCheckResult.Success -> SniffResult(
+            contentType = C.TYPE_HLS,
+            mimeType = MimeTypes.APPLICATION_M3U8,
+            finalUrl = r.finalUrl
+        )
+        else -> null
+    }
+
+    /**
+     * W2 / REQ-14：**原串行链**（改造前逐行语义），供「开关关闭 / 赛马冷却期」回落使用。
+     *
+     * T1.3: AtomicBoolean 防双回调竞态（withTimeoutOrNull 超时后 sniffWithRangeRequestR4 仍在执行）
+     * 场景：超时返回 UNKNOWN 后，sniffWithRangeRequestR4 的 OkHttp execute() 完成，又返回一个结果
+     * 修复：只有第一个结果被使用，后续结果被丢弃
+     */
+    private suspend fun sniffVideoTypeSerial(
+        url: String,
+        headers: Map<String, String>,
+        startTime: Long
+    ): SniffResult {
         val hasResult = AtomicBoolean(false)
         return withTimeoutOrNull(SNIFF_TIMEOUT_MS) {
             withContext(Dispatchers.IO) {
@@ -923,6 +1029,18 @@ object ExoPlayerHelper {
      * 超时后由 sniffByExtensionFallback（URL 后缀兜底）+ buildFallbackTypes（HLS 优先）接管。
      */
     private const val SNIFF_TIMEOUT_MS = 5000L
+
+    // W2 / REQ-14：赛马策略参数（置信度仅用于归因与兜底排序；耗时预算各自独立）
+    /** 后缀兜底策略：零请求、瞬时（80ms 仅作上限保护），不抢占。 */
+    private const val EXTENSION_STRATEGY_TIMEOUT_MS = 80L
+    private const val EXTENSION_STRATEGY_CONFIDENCE = 0.4f
+
+    /** 权威 Range 嗅探：与既有串行链同预算、同逻辑。 */
+    private const val RANGE_STRATEGY_CONFIDENCE = 0.9f
+
+    /** m3u8 预检：与既有 `.m3u8` 短路分支的 preCheck 同预算（3s）。 */
+    private const val M3U8_PRECHECK_STRATEGY_TIMEOUT_MS = 3000L
+    private const val M3U8_PRECHECK_STRATEGY_CONFIDENCE = 0.85f
 
     /**
      * URL 后缀→MIME 类型映射

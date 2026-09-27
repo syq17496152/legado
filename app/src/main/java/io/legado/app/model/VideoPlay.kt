@@ -20,6 +20,8 @@ import io.legado.app.constant.EventBus
 import io.legado.app.constant.SourceType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
+import io.legado.app.help.player.PlaybackErrorKind
+import io.legado.app.help.player.PlaybackErrorSession
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
@@ -755,6 +757,22 @@ object VideoPlay : CoroutineScope by MainScope(){
     var danmakuFile: File? = null
     var danmakuStr: String? = null
     var danmakuShow = true
+
+    // ==================== W2 / REQ-13：播放错误自愈（AD-04 三态裁决）====================
+
+    /**
+     * 播放错误自愈的**会话级记账**（上限 3 次 + 冷却 60s）。
+     *
+     * 单一实例由两侧共用：
+     * - 播放器侧（`Exo2MediaPlayer.onPlayerError` 终端点）消耗预算并记录错误大类；
+     * - UI 侧（`VideoPlayerActivity` 的统一错误观察点）据此决定「换线路自愈」还是弹错误框。
+     * 播放器成功起播（STATE_READY）与新播放会话（prepareAsyncInternal）均复位，避免跨会话串扰。
+     */
+    val routeSelfHealSession = PlaybackErrorSession()
+
+    /** 最近一次播放失败的大类（技术分类，不含任何业务信息）；供换线自愈裁决使用。 */
+    @Volatile
+    var lastPlaybackErrorKind: PlaybackErrorKind? = null
 
     /**
      * 开始播放
