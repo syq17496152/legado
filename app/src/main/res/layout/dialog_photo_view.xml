@@ -4,12 +4,11 @@
     android:layout_height="match_parent"
     android:background="@color/background">
 
-    <io.legado.app.ui.widget.image.PhotoView
-        android:id="@+id/photo_view"
+    <!-- W6 7.3：呈现轨收敛为 SSIV（原 io.legado.app.ui.widget.image.PhotoView，scaleType=centerInside
+         ⇒ SSIV 默认 SCALE_TYPE_CENTER_INSIDE 语义等价） -->
+    <com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
+        android:id="@+id/ssiv_view"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scaleType="centerInside" />
+        android:layout_height="match_parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
-
-

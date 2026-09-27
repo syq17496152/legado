@@ -665,7 +665,7 @@ class ImageCanvasAdapter(
          * Phase 3.2 图片金字塔加载入口（封装以便降级链复用）
          *
          * 流程：Glide downloadOnly 落地磁盘缓存（原始字节，不经内存解码，长图无 OOM 风险）
-         * → decodeBounds 探测原始尺寸（仅读文件头）→ 按 isLongImage 路由 SSIV/PhotoView
+         * → decodeBounds 探测原始尺寸（仅读文件头）→ 统一走 SSIV 呈现轨（W6 7.2 收敛）
          *
          * @param url 图片 URL
          * @param requestOptions 防盗链头选项（sourceOriginOption/refererOption）
@@ -751,20 +751,19 @@ class ImageCanvasAdapter(
             }
             val imgW = bounds[0]
             val imgH = bounds[1]
-            if (ImagePyramidLoader.isLongImage(imgW, imgH, screenH)) {
-                // Phase 3.2: 长图 → SSIV 金字塔（BitmapRegionDecoder 区域解码）
-                showSsivImage(file, imgW, imgH, screenW, screenH, position)
-            } else {
-                // 普通图 → PhotoView（Phase 3.5 渐进式 thumbnail(0.1f)）
-                loadIntoPhotoView(file, url, imgW, imgH, screenW, screenH, position)
-            }
+            // W6 7.2 / REQ-25（AD-10）：**取消长图/普通图双轨判定** —— 统一走 SSIV 呈现轨。
+            // 收敛理由：双轨导致同一页内手势/双击/回弹行为随图尺寸而变（普通图 PhotoView 轨
+            // 与长图 SSIV 轨各一套），统一后「呈现轨 = 单一入口 bindImage」。
+            // 回滚点：恢复 `if (ImagePyramidLoader.isLongImage(...))` 分支（本提交独立 revert）。
+            showSsivImage(file, imgW, imgH, screenW, screenH, position)
         }
 
         /**
-         * 长图 SSIV 展示（Phase 3.2 + 3.3）
+         * SSIV 统一展示（W6 7.2 收敛后**两条轨共用**）
          *
-         * - 高度按宽高比全量展开（上限 20 倍屏高兜底，防极端尺寸撑爆布局）
-         * - SSIV 区域解码，内存占用与图片尺寸无关
+         * - 高度按宽高比展开（上限 [ImagePyramidLoader.SSIV_MAX_HEIGHT_SCREEN_MULTIPLIER] 倍屏高，
+         *   防极端尺寸撑爆布局）；普通图因宽高比小而不受上限影响，视图高 = 折算高
+         * - SSIV 区域解码，内存占用与图片尺寸无关（长图不再全量解码）
          * - 单击进入横向浏览（SSIV 消费触摸事件，需单独挂监听）
          */
         private fun showSsivImage(
@@ -787,20 +786,25 @@ class ImageCanvasAdapter(
             Glide.with(itemView.context).clear(binding.photoView)
             binding.photoView.visibility = View.GONE
             binding.ssivView.visibility = View.VISIBLE
-            ImagePyramidLoader.bindLongImage(binding.ssivView, file, imgW, imgH, screenW, viewH)
+            // W6 7.1/7.2：统一绑定入口（内部按「视图高是否被截断」分流，见 bindImage KDoc）
+            ImagePyramidLoader.bindImage(binding.ssivView, file, imgW, imgH, screenW, viewH)
             hideFallbackHint()
             binding.ssivView.setOnClickListener {
                 onItemClick(currentPosition, binding.photoView)
             }
             AppLog.putDebugWithTag(
                 AppLog.TAG_IMAGE_CANVAS,
-                "Pyramid: long image routed to SSIV position=$position imgW=$imgW imgH=$imgH viewH=$viewH",
+                "Pyramid: unified track bound position=$position imgW=$imgW imgH=$imgH viewH=$viewH",
                 level = AppLog.Level.INFO
             )
         }
 
         /**
          * 普通图 PhotoView 展示（Phase 3.3 + 3.5）
+         *
+         * ⚠️ **W6 7.2 起本函数已无调用点**（呈现轨已收敛为 SSIV 单轨）——
+         * 按 W6 批次约定**保留一版作为回滚点**，由 **W7 8.4** 在 `PhotoView` 收口时一并删除；
+         * 期间新增图片需求**禁止**再走本函数。
          *
          * - 3.3 高度自适应：按原始宽高比折算（比解码后 bitmap 更早更准，无布局二次跳动）
          * - 3.5 渐进式：thumbnail(0.1f) 先加载 10% 分辨率模糊图，再加载清晰原图

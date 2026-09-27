@@ -117,6 +117,27 @@ object ImagePyramidLoader {
         imgH: Int,
         viewW: Int,
         viewH: Int
+    ) = bindImage(ssiv, file, imgW, imgH, viewW, viewH)
+
+    /**
+     * W6 7.1 / REQ-26（AD-10）：**长图/普通图统一绑定入口** —— 呈现轨收敛的单一出口。
+     *
+     * 分流判据 = 「视图高是否被上限截断」（`viewW * imgH / imgW > viewH`）：
+     * - **未截断**：`CENTER_INSIDE` 等比填满视图，整图可见、不变形不裁剪（= 原普通图 fitCenter 语义）；
+     * - **已截断**（极端长图）：`SCALE_TYPE_CUSTOM` + `minScale = viewW / imgW` 宽度优先填充，
+     *   初始定位顶部，平移查看剩余部分（= 原长图语义）。
+     *
+     * 与 [bindLongImage] **同一实现**（后者为冻结的兼容入口，纯委托，零行为变化）。
+     *
+     * @param viewH 视图高度：统一轨由 [ssivDisplayHeight] 计算（普通图因宽高比小而不受上限影响）
+     */
+    fun bindImage(
+        ssiv: SubsamplingScaleImageView,
+        file: File,
+        imgW: Int,
+        imgH: Int,
+        viewW: Int,
+        viewH: Int
     ) {
         ssiv.recycle()
         val capped = imgW > 0 && viewW.toLong() * imgH / imgW > viewH
@@ -137,5 +158,33 @@ object ImagePyramidLoader {
             ssiv.setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE)
         }
         ssiv.setImage(ImageSource.uri(file.toUri().toString()))
+    }
+
+    /**
+     * W6 7.1 / REQ-26：**普通图绑定**（等比整图可见，不裁剪不变形）。
+     *
+     * 与 [bindImage] 的差别：**不做截断分流** —— 无论视图高是否被上限截断都用 `CENTER_INSIDE`
+     * （整图缩进视图内，可能留边），用于「必须以整图可见为前提」的消费点；
+     * 长图滚动轨请用 [bindImage]（被截断时改为宽度优先填充 + 平移）。
+     */
+    fun bindNormalImage(
+        ssiv: SubsamplingScaleImageView,
+        file: File
+    ) {
+        ssiv.recycle()
+        ssiv.setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE)
+        ssiv.setImage(ImageSource.uri(file.toUri().toString()))
+    }
+
+    /**
+     * 绑定内存 Bitmap（`ImageProvider` 命中缓存的场景，无落盘文件可绑）。
+     *
+     * 说明：`ImageSource.bitmap` 会在 SSIV 内部再走一次解码/拷贝，成本高于直接 setImageBitmap，
+     * 故**仅在确实没有文件**时使用。
+     */
+    fun bindNormalBitmap(ssiv: SubsamplingScaleImageView, bitmap: android.graphics.Bitmap) {
+        ssiv.recycle()
+        ssiv.setMinimumScaleType(SubsamplingScaleImageView.SCALE_TYPE_CENTER_INSIDE)
+        ssiv.setImage(ImageSource.bitmap(bitmap))
     }
 }

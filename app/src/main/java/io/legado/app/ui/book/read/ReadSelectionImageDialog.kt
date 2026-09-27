@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
@@ -42,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
+import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.data.entities.AiGeneratedImage
@@ -50,8 +50,8 @@ import io.legado.app.help.ai.AiImagePromptRewriter
 import io.legado.app.help.ai.AiImageService
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
-import io.legado.app.help.glide.ImageLoader
 import io.legado.app.model.ReadBook
+import io.legado.app.ui.image.ImagePyramidLoader
 import io.legado.app.ui.widget.compose.AppDialogFrame
 import io.legado.app.ui.widget.compose.AppDialogSize
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
@@ -59,9 +59,9 @@ import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
 import io.legado.app.ui.widget.compose.LegadoMiuixPalette
 import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 import io.legado.app.ui.widget.compose.toMiuixPalette
-import io.legado.app.ui.widget.image.PhotoView
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -139,16 +139,14 @@ class ReadSelectionImageDialog() : ComposeDialogFragment() {
 
                                 currentImage != null -> {
                                     val target = currentImage
+                                    // W6 7.3（AD-10/AD-21）：预览轨收敛为 SSIV（原为 PhotoView + Glide into）
                                     AndroidView(
-                                        factory = { ctx ->
-                                            PhotoView(ctx).apply {
-                                                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                                        factory = { ctx -> SubsamplingScaleImageView(ctx) },
+                                        update = { ssiv ->
+                                            val file = File(target!!.localPath)
+                                            if (file.exists()) {
+                                                ImagePyramidLoader.bindNormalImage(ssiv, file)
                                             }
-                                        },
-                                        update = { photoView ->
-                                            ImageLoader.load(requireContext(), target!!.localPath)
-                                                .error(R.drawable.image_loading_error)
-                                                .into(photoView)
                                         },
                                         modifier = Modifier.fillMaxSize()
                                     )
