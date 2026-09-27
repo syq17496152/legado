@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.ViewModel
@@ -45,7 +46,6 @@ abstract class RssArticlesShellFragment<VM : ViewModel> : VMBaseFragment<VM>(0) 
     protected val refreshLayout: SwipeRefreshLayout by lazy {
         SwipeRefreshLayout(requireContext()).apply {
             id = R.id.refresh_layout
-            addView(recyclerView)
         }
     }
 
@@ -64,5 +64,33 @@ abstract class RssArticlesShellFragment<VM : ViewModel> : VMBaseFragment<VM>(0) 
             AndroidView(modifier = Modifier.fillMaxSize(), factory = { refreshLayout })
         }
         return root
+    }
+
+    /**
+     * **Compose 列表装配**（CF 6.2 RSS 文章五样式族）：把 Compose 列表挂进 `refreshLayout`，
+     * 从而继续复用「下拉刷新」这层 View 壳（`refreshLayout` 仍是原 `SwipeRefreshLayout`）。
+     *
+     * 两个必须配套的点：
+     * ①`SwipeRefreshLayout` 的 `canChildScrollUp` 依赖**直接子级**能否上滚，而 ComposeView 自身不滚动
+     *   ⇒ 子类必须用 `setOnChildScrollUpCallback` 把列表的 `canScrollBackward` 喂回去，否则列表滚到
+     *   中间也会被判「可下拉刷新」（误触刷新）；
+     * ②`clipToPadding` 语义差异：Compose 的 `contentPadding` 等价于 `clipToPadding = true`，
+     *   故底部留白改用列表的 `contentPadding`（见 `RssArticlesComposeList` 的 `bottomPadding`），
+     *   不再对列表 View 设 padding。
+     *
+     * ⚠️ **必须 `clearExistingChildren = false`**：`SwipeRefreshLayout` 在构造期就把下拉指示器
+     * （`mCircleView`）作为子视图加入，`removeAllViews()` 会连带删除它并破坏该控件的内部子视图契约
+     * （2026-09-26 实测：内容已组合、日志正常，但整屏空白）。原 XML 亦是把 ComposeView **追加**为
+     * `SwipeRefreshLayout` 的子级 ⇒ 此处保持同口径。
+     */
+    protected fun installComposeList(content: @Composable () -> Unit) {
+        refreshLayout.attachComposeContent(clearExistingChildren = false) { content() }
+    }
+
+    /** View 路径（`articleStyle == 5` 自由布局）装配：列表 View 作为 `refreshLayout` 子级（与原 XML 同口径） */
+    protected fun installRecyclerList() {
+        if (recyclerView.parent == null) {
+            refreshLayout.addView(recyclerView)
+        }
     }
 }

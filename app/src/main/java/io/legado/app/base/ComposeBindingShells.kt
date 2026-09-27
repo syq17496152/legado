@@ -45,10 +45,22 @@ fun composeShell(context: Context): ViewBinding {
  * 沿用 `AiImageProviderEditActivity`（W5.2 首次清壳）建立的既有写法，避免每页重复三行样板。
  * 行为等价性：策略仍是 `DisposeOnViewTreeLifecycleDestroyed`、`layoutParams` 仍是全屏 MATCH_PARENT，
  * 与旧壳布局中 ComposeView 的声明属性一一对应。
+ *
+ * @param clearExistingChildren 是否先 `removeAllViews()`（默认 `true`，即「清壳」语义）。
+ *   **对宿主自带框架级子视图的容器必须传 `false`**：典型是 `SwipeRefreshLayout`——它在构造期就把
+ *   下拉指示器（`mCircleView`）作为子视图加入，`removeAllViews()` 会连带把它删掉，破坏该控件的
+ *   内部子视图契约（2026-09-26 CF 6.2 RSS 文章列表实测：内容已组合但整屏空白）。此类容器应传
+ *   `false` 并把 ComposeView 追加为**额外子视图**（与「XML 里声明 ComposeView 作为 SwipeRefreshLayout
+ *   子级」的既有写法同口径）。
  */
-fun View.attachComposeContent(content: @Composable () -> Unit) {
+fun View.attachComposeContent(
+    clearExistingChildren: Boolean = true,
+    content: @Composable () -> Unit
+) {
     val container = this as? ViewGroup ?: return
-    container.removeAllViews()
+    if (clearExistingChildren) {
+        container.removeAllViews()
+    }
     val composeView = ComposeView(context).apply {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         layoutParams = ViewGroup.LayoutParams(
