@@ -404,6 +404,13 @@ class OtherConfigFragment : ComposeSettingFragment() {
                 title = getString(R.string.show_manga_ui),
                 defaultValue = true
             ),
+            // W5 6.3 / REQ-22：音量键翻页开关（与 showMangaUi 同族同形，XML 处同步登记供设置搜索收录）
+            switch(
+                key = PreferKey.mangaVolumeKeyPage,
+                title = getString(R.string.manga_volume_key_page),
+                summary = getString(R.string.manga_volume_key_page_summary),
+                defaultValue = true
+            ),
             SettingActionSpec(
                 key = PreferKey.videoSetting,
                 title = getString(R.string.video_setting),

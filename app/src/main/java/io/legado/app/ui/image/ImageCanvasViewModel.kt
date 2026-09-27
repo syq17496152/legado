@@ -14,6 +14,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
+import io.legado.app.help.image.ImageFileNameBuilder
 import io.legado.app.help.image.ImageUrlExtractor
 import io.legado.app.ui.image.adapter.ImageCanvasAdapter
 import io.legado.app.utils.ACache
@@ -21,7 +22,6 @@ import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.writeBytes
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import java.util.Date
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -372,7 +372,13 @@ class ImageCanvasViewModel(application: Application) : BaseViewModel(application
      */
     fun saveImage(imageUrl: String, sourceOrigin: String?, uri: Uri) {
         execute {
-            val fileName = "${AppConst.fileNameFormat.format(Date(System.currentTimeMillis()))}.jpg"
+            // W5 6.5 / REQ-24：语义化命名（来源/文章/序号 + 去非法字符），并对目标目录已有名去重
+            // （原实现为秒级时间戳 ⇒ 无辨识度且同秒保存会因 createFileIfNotExist 静默覆盖）
+            val fileName = ImageFileNameBuilder.uniqueNameFor(
+                context,
+                uri,
+                ImageFileNameBuilder.build(ImagePlay.nameContextOf(imageUrl), imageUrl)
+            )
             // 用 Glide asFile() 加载图片到缓存文件（支持 sourceOrigin 注入 Referer/Cookie）
             val file = ImageLoader.loadFile(context, imageUrl).apply {
                 sourceOrigin?.let { origin ->

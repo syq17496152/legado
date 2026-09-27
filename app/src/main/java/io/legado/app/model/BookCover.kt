@@ -12,11 +12,11 @@ import com.bumptech.glide.load.Transformation
 import com.bumptech.glide.load.engine.DiskCacheStrategy
 import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
+import com.bumptech.glide.load.resource.bitmap.DownsampleStrategy
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
 import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.RequestOptions
 import com.bumptech.glide.request.target.Target
-import com.bumptech.glide.request.target.Target.SIZE_ORIGINAL
 import io.legado.app.R
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.entities.BaseSource
@@ -31,6 +31,7 @@ import io.legado.app.help.glide.OkHttpModelLoader
 import io.legado.app.model.analyzeRule.AnalyzeRule
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
+import io.legado.app.ui.image.ImagePyramidLoader
 import io.legado.app.utils.BitmapUtils
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
@@ -145,11 +146,19 @@ object BookCover {
         if (sourceOrigin != null) {
             options = options.set(OkHttpModelLoader.sourceOriginOption, sourceOrigin)
         }
+        // REQ-21（W5 6.2）：取消 `skipMemoryCache(true)` —— 原实现使每次翻回都重新解码/重下；
+        // 解码高由 `SIZE_ORIGINAL`（条漫可达数万像素 ⇒ OOM 风险）收敛为
+        // **不超过 NORMAL_MAX_HEIGHT_SCREEN_MULTIPLIER 倍屏高**（与 ImagePyramidLoader 同口径）：
+        // 盒子取 (屏宽, 4×屏高) + FIT_CENTER ⇒ 解码高 = min(按屏宽折算高, 4 屏高)，
+        // 对 ≤4 屏的图**零变化**（Glide 不放大），超限长图按 4 屏收敛。
+        val metrics = context.resources.displayMetrics
+        val maxDecodeHeight =
+            metrics.heightPixels * ImagePyramidLoader.NORMAL_MAX_HEIGHT_SCREEN_MULTIPLIER
         return ImageLoader.load(context, path)
             .apply(options)
-            .override(context.resources.displayMetrics.widthPixels, SIZE_ORIGINAL)
-            .diskCacheStrategy(DiskCacheStrategy.ALL)
-            .skipMemoryCache(true).let {
+            .override(metrics.widthPixels, maxDecodeHeight)
+            .downsample(DownsampleStrategy.FIT_CENTER)
+            .diskCacheStrategy(DiskCacheStrategy.ALL).let {
                 if (transformation != null) {
                     it.transform(transformation)
                 } else {

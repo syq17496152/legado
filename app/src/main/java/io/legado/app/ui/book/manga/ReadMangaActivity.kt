@@ -974,6 +974,10 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // REQ-22（W5 6.3）：音量键翻页可关闭（全局开关，默认开）。关闭后不消费事件 ⇒ 交回系统调音量。
+        if (!AppConfig.mangaVolumeKeyPage) {
+            return super.onKeyDown(keyCode, event)
+        }
         when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_UP -> {
                 scrollToPrev()

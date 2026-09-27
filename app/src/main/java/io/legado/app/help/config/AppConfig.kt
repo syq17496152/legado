@@ -2709,11 +2709,18 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val showMangaUi: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.showMangaUi, true)
 
-    //禁用漫画缩放
+    //禁用漫画缩放（默认 false：新装/未改配置用户开箱即可缩放；书籍级 mangaDisableScale 覆盖语义不变）
     var disableMangaScale: Boolean
-        get() = appCtx.getPrefBoolean(PreferKey.disableMangaScale, true)
+        get() = appCtx.getPrefBoolean(PreferKey.disableMangaScale, false)
         set(value) {
             appCtx.putPrefBoolean(PreferKey.disableMangaScale, value)
+        }
+
+    //音量键翻页（漫画页；默认 true 保持既有行为；关闭后音量键交回系统）
+    var mangaVolumeKeyPage: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.mangaVolumeKeyPage, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.mangaVolumeKeyPage, value)
         }
 
     var disableMangaPageAnim: Boolean

@@ -1458,6 +1458,11 @@
     <string name="group_sources_by_domain">按域名分组显示</string>
     <string name="theme_config">主题配置</string>
     <string name="show_manga_ui">漫画浏览</string>
+    <!-- W5 6.3 / REQ-22：音量键翻页开关 -->
+    <string name="manga_volume_key_page">音量键翻页</string>
+    <string name="manga_volume_key_page_summary">漫画页用音量键翻页；关闭后音量键交回系统调节音量</string>
+    <!-- W5 6.4 / REQ-23：图片真分享失败提示 -->
+    <string name="image_share_failed">分享图片失败：%1$s</string>
     <string name="disable_manga_scale">禁用漫画缩放</string>
     <string name="disable_manga_click_scroll">禁用点击翻页</string>
     <string name="enable_auto_page_scroll">开启自动翻页</string>

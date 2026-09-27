@@ -56,6 +56,8 @@ import io.legado.app.base.attachComposeContent
 import io.legado.app.base.composeShell
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
+import io.legado.app.help.image.ImageFileNameBuilder
+import io.legado.app.help.image.ImageShareHelper
 import io.legado.app.help.webView.SilentSslWebViewClient
 import io.legado.app.R
 import io.legado.app.lib.dialogs.alert
@@ -1355,10 +1357,15 @@ class ImageGalleryActivity : VMBaseActivity<ViewBinding, ImageCanvasViewModel>()
     }
 
     /**
-     * 分享图片（简化实现：复制 URL 到剪贴板）
+     * 分享图片（W5 6.4 / REQ-23：原为「复制 URL 到剪贴板」，改 **FileProvider + ACTION_SEND 真分享**）
      */
     private fun shareImage(imageUrl: String) {
-        sendToClip(imageUrl)
+        ImageShareHelper.shareImage(
+            this,
+            imageUrl,
+            ImagePlay.rssSource?.sourceUrl,
+            ImageFileNameBuilder.build(ImagePlay.nameContextOf(imageUrl), imageUrl)
+        )
     }
 
     override fun onDestroy() {

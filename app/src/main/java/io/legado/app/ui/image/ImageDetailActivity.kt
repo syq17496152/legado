@@ -39,6 +39,8 @@ import io.legado.app.constant.AppLog
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
+import io.legado.app.help.image.ImageFileNameBuilder
+import io.legado.app.help.image.ImageShareHelper
 import io.legado.app.ui.file.FileManageActivity
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.image.adapter.ImageDetailAdapter
@@ -50,7 +52,6 @@ import io.legado.app.utils.dpToPx
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.writeBytes
-import java.util.Date
 
 /**
  * 图片大图模式 Activity（V4 实施 Phase 1.3）
@@ -477,7 +478,12 @@ class ImageDetailActivity : BaseActivity<ViewBinding>(),
     private fun saveImageInternal(imageUrl: String, uri: Uri) {
         val sourceOrigin = ImagePlay.rssSource?.sourceUrl
         Coroutine.async<Unit> {
-            val fileName = "${AppConst.fileNameFormat.format(Date(System.currentTimeMillis()))}.jpg"
+            // W5 6.5 / REQ-24：语义化命名 + 目标目录重名消解（原为秒级时间戳，同秒保存会静默覆盖）
+            val fileName = ImageFileNameBuilder.uniqueNameFor(
+                this@ImageDetailActivity,
+                uri,
+                ImageFileNameBuilder.build(ImagePlay.nameContextOf(imageUrl), imageUrl)
+            )
             // 用 Glide asFile() 加载图片到缓存文件（支持 sourceOrigin 注入 Referer/Cookie）
             val file = ImageLoader.loadFile(this@ImageDetailActivity, imageUrl).apply {
                 sourceOrigin?.let { origin ->
@@ -522,13 +528,16 @@ class ImageDetailActivity : BaseActivity<ViewBinding>(),
     }
 
     /**
-     * 分享图片（简化实现：复制 URL 到剪贴板）
-     *
-     * TODO 后续可扩展为 Intent.ACTION_SEND 真实分享图片文件
+     * 分享图片（W5 6.4 / REQ-23：改为 **FileProvider + ACTION_SEND 真分享**；
+     * 原实现是「复制 URL 到剪贴板」，收件方拿不到图片本体且链接常带防盗链）
      */
     private fun shareImage(imageUrl: String) {
-        sendToClip(imageUrl)
-        toastOnUi("图片链接已复制到剪贴板")
+        ImageShareHelper.shareImage(
+            this,
+            imageUrl,
+            ImagePlay.rssSource?.sourceUrl,
+            ImageFileNameBuilder.build(ImagePlay.nameContextOf(imageUrl), imageUrl)
+        )
     }
 
     /**

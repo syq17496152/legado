@@ -3,6 +3,7 @@ package io.legado.app.ui.image
 import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.data.entities.RssSource
+import io.legado.app.help.image.ImageNameContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -47,6 +48,26 @@ object ImagePlay {
     val loadedArticleIndices: MutableSet<Int> = ConcurrentHashMap.newKeySet()
     /** 已预加载的文章索引集合（V3 B-6/E3：ConcurrentHashMap.newKeySet 线程安全，协程并发读写安全） */
     val preloadedArticles: MutableSet<Int> = ConcurrentHashMap.newKeySet()
+
+    /**
+     * W5 6.5 / REQ-24：推导某张图片的**语义命名上下文**（来源名 / 所属文章标题 / 全局序号）。
+     *
+     * 单源理由：保存（`ImageCanvasViewModel`、`ImageDetailActivity`）与分享（W5 6.4）
+     * 都需要同一套语义信息 ⇒ 从状态持有者 `ImagePlay` 统一推导，避免各处各写一套查找逻辑。
+     * 序号 = 该 URL 在多文章拼接序列（[allImageUrls]）中的位置（1 起）；查不到时为 null（由命名器回落）。
+     */
+    fun nameContextOf(url: String): ImageNameContext {
+        val items = _allImageUrls.value
+        val position = items.indexOfFirst { it is ImageCanvasItem.ImageItem && it.url == url }
+        val articleIndex = (items.getOrNull(position) as? ImageCanvasItem.ImageItem)?.articleIndex
+            ?: rssArticleIndex
+        val articleTitle = rssArticles?.getOrNull(articleIndex)?.title
+        return ImageNameContext(
+            sourceName = rssSource?.sourceName,
+            articleTitle = articleTitle,
+            index = position.takeIf { it >= 0 }?.plus(1)
+        )
+    }
 
     /**
      * 追加图片项到 allImageUrls（V3 B-6 StateFlow 封装，线程安全）

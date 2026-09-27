@@ -281,6 +281,7 @@ object PreferKey {
     const val readAloudByMediaButton = "readAloudByMediaButton"
     const val showMangaUi = "showMangaUi"
     const val disableMangaScale = "disableMangaScale"
+    const val mangaVolumeKeyPage = "mangaVolumeKeyPage"
     const val disableMangaPageAnim = "disableMangaPageAnim"
     const val paddingDisplayCutouts = "paddingDisplayCutouts"
     const val autoCheckNewBackup = "autoCheckNewBackup"
