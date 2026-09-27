@@ -70,6 +70,20 @@ import io.legado.app.utils.gone
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.toastOnUi
+// W7 8.1 / REQ-28：漫画当前页长按 → 保存 / 分享（复用 W5 语义化命名 + FileProvider 分享）
+import android.net.Uri
+import io.legado.app.constant.AppConst
+import io.legado.app.constant.AppLog
+import io.legado.app.help.glide.ImageLoader
+import io.legado.app.help.image.ImageFileNameBuilder
+import io.legado.app.help.image.ImageNameContext
+import io.legado.app.help.image.ImageShareHelper
+import io.legado.app.ui.file.HandleFileContract
+import io.legado.app.ui.widget.compose.showComposeActionListDialog
+import io.legado.app.utils.ACache
+import io.legado.app.utils.writeBytes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import io.legado.app.utils.toggleSystemBar
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
@@ -86,6 +100,16 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     private val mLayoutManager by lazy {
         MangaLayoutManager(this)
     }
+    // W7 8.1 / REQ-28：长按存图的 SAF 目录选择（与 ImageGalleryActivity 同口径：记住目录，下次免选）
+    private val selectImageDir = registerForActivityResult(HandleFileContract()) {
+        it.uri?.let { dir ->
+            ACache.get().put(AppConst.imagePathKey, dir.toString())
+            pendingSaveImageUrl?.let { url -> saveMangaImageTo(url, dir) }
+        }
+        pendingSaveImageUrl = null
+    }
+    private var pendingSaveImageUrl: String? = null
+
     private val mAdapter: MangaAdapter by lazy {
         MangaAdapter(this)
     }
@@ -248,6 +272,68 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         }
     }
 
+    /**
+     * W7 8.1 / REQ-28：漫画**当前页长按** → 保存 / 分享。
+     *
+     * 根因（实证）：`WebtoonRecyclerView.longTapListener`（声明 `WebtoonRecyclerView.kt:44`、
+     * 调用 `:258`）此前**全仓零赋值** ⇒ 长按事件空转、用户长按无任何反馈。
+     *
+     * 取值口径与宿主既有实现一致：当前页 = 屏幕中心项（`findCenterViewPosition`）。
+     * 复用 W5 交付（**禁另起一套**）：命名走 `ImageFileNameBuilder`（语义化 + 目录内去重），
+     * 分享走 `ImageShareHelper`（FileProvider + `ACTION_SEND`）。
+     */
+    private fun showMangaPageActions() {
+        val url = (mAdapter.getItem(binding.recyclerView.findCenterViewPosition()) as? MangaPage)?.mImageUrl
+        if (url.isNullOrBlank()) {
+            toastOnUi(R.string.manga_image_unavailable)
+            return
+        }
+        showComposeActionListDialog(
+            title = getString(R.string.manga_image_actions),
+            labels = listOf(getString(R.string.save_image), getString(R.string.share_image))
+        ) { which ->
+            when (which) {
+                0 -> requestSaveMangaImage(url)
+                1 -> ImageShareHelper.shareImage(this, url, null, mangaImageFileName(url))
+            }
+        }
+    }
+
+    /** 已记忆的保存目录优先；无则拉起 SAF 目录选择（与图库页同口径） */
+    private fun requestSaveMangaImage(imageUrl: String) {
+        val path = ACache.get().getAsString(AppConst.imagePathKey)
+        if (path.isNullOrEmpty()) {
+            pendingSaveImageUrl = imageUrl
+            selectImageDir.launch(null)
+        } else {
+            saveMangaImageTo(imageUrl, Uri.parse(path))
+        }
+    }
+
+    /** 落盘：Glide 缓存文件 → 目标目录（文件名由 [mangaImageFileName] 语义化 + 目录内去重） */
+    private fun saveMangaImageTo(imageUrl: String, dirUri: Uri) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            kotlin.runCatching {
+                val fileName = ImageFileNameBuilder.uniqueNameFor(
+                    this@ReadMangaActivity, dirUri, mangaImageFileName(imageUrl)
+                )
+                val file = ImageLoader.loadFile(this@ReadMangaActivity, imageUrl).submit().get()
+                dirUri.writeBytes(this@ReadMangaActivity, fileName, file.readBytes())
+            }.onSuccess {
+                toastOnUi(R.string.save_success)
+            }.onFailure {
+                // 保存失败多为目录授权失效 ⇒ 清掉记忆路径，下次重新选目录（与图库页同口径）
+                ACache.get().remove(AppConst.imagePathKey)
+                AppLog.put("漫画保存图片失败", it, true)
+                toastOnUi(getString(R.string.image_share_failed, it.localizedMessage.orEmpty()))
+            }
+        }
+    }
+
+    /** 语义化命名上下文：以书名为主（无则回落通用名），保证事后可辨认来源 */
+    private fun mangaImageFileName(imageUrl: String): String =
+        ImageFileNameBuilder.build(ImageNameContext(sourceName = ReadManga.book?.name), imageUrl)
+
     private fun initRecyclerView() {
         val mangaColorFilter =
             GSON.fromJsonObject<MangaColorFilterConfig>(AppConfig.mangaColorFilter).getOrNull()
@@ -265,6 +351,12 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             setHasFixedSize(true)
             setDisableClickScroll(mangaDisableClickScroll)
             setDisableMangaScale(mangaDisableScale)
+            // W7 8.1 / REQ-28：长按当前页 → 保存 / 分享。
+            // 根因：`WebtoonRecyclerView.longTapListener`（声明 :44、调用 :258）此前**全仓零赋值** ⇒ 长按空转。
+            longTapListener = {
+                showMangaPageActions()
+                true
+            }
             setRecyclerViewPreloader(AppConfig.mangaPreDownloadNum)
             setPreScrollListener { _, _, _, position ->
                 if (mAdapter.isNotEmpty()) {

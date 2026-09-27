@@ -1463,6 +1463,12 @@
     <string name="manga_volume_key_page_summary">漫画页用音量键翻页；关闭后音量键交回系统调节音量</string>
     <!-- W5 6.4 / REQ-23：图片真分享失败提示 -->
     <string name="image_share_failed">分享图片失败：%1$s</string>
+    <!-- W7 8.1 / REQ-28：漫画当前页长按菜单与结果回执 -->
+    <string name="manga_image_actions">图片操作</string>
+    <string name="manga_image_unavailable">当前页图片不可用</string>
+    <string name="save_image">保存图片</string>
+    <string name="share_image">分享图片</string>
+    <string name="save_success">保存成功</string>
     <string name="disable_manga_scale">禁用漫画缩放</string>
     <string name="disable_manga_click_scroll">禁用点击翻页</string>
     <string name="enable_auto_page_scroll">开启自动翻页</string>
