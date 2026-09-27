@@ -25,6 +25,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -34,8 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.viewbinding.ViewBinding
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.ItemTouchHelper
-import androidx.recyclerview.widget.LinearLayoutManager
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.base.attachComposeContent
@@ -55,6 +55,7 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.ui.book.group.GroupManageDialog
 import io.legado.app.ui.book.group.GroupSelectDialog
 import io.legado.app.ui.book.info.BookInfoNavigator
+import io.legado.app.ui.book.manage.compose.ArrangeBookList
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.SelectActionBar
@@ -67,10 +68,6 @@ import io.legado.app.ui.widget.components.SettingsSearchBar
 import io.legado.app.ui.widget.compose.AppUiTokens
 import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.ui.widget.dialog.WaitDialog
-import io.legado.app.ui.widget.recycler.DragSelectTouchHelper
-import io.legado.app.ui.widget.recycler.ItemTouchCallback
-import io.legado.app.ui.widget.recycler.VerticalDivider
-import io.legado.app.ui.widget.recycler.scroller.FastScrollRecyclerView
 import io.legado.app.utils.cnCompare
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.isAbsUrl
@@ -95,7 +92,6 @@ class BookshelfManageActivity :
     VMBaseActivity<ViewBinding, BookshelfManageViewModel>(),
     PopupMenu.OnMenuItemClickListener,
     SelectActionBar.CallBack,
-    BookAdapter.CallBack,
     SourcePickerDialog.Callback,
     GroupSelectDialog.CallBack {
 
@@ -103,31 +99,30 @@ class BookshelfManageActivity :
     override val binding: ViewBinding by lazy { composeShell(this) }
     override val viewModel by viewModels<BookshelfManageViewModel>()
 
-    /**
-     * 原 XML `recycler_view` 的程序化等价物（CE-b）。**必须是 Activity 字段**：`onActivityCreated` 的
-     * `initRecyclerView()` 就要设 layoutManager / adapter / 两个拖拽助手，工厂内创建会扑空（见交接文档 §8-㉕）。
-     */
-    private val recyclerView: FastScrollRecyclerView by lazy {
-        FastScrollRecyclerView(this).apply {
-            // XML `android:id="@+id/recycler_view"`：程序化构造必须显式赋 id
-            // （`FastScroller.setLayoutParams` 以 view id 定位宿主，缺 id 挂载即抛 IllegalArgumentException）
-            id = R.id.recycler_view
-            // XML `android:scrollbars="none"` 的程序化等价
-            isVerticalScrollBarEnabled = false
-            isHorizontalScrollBarEnabled = false
-        }
-    }
-
     /** 原 XML `select_action_bar`（批量操作底栏）的程序化等价物（CE-b） */
     private val selectActionBar: SelectActionBar by lazy { SelectActionBar(this) }
-    override val groupList: ArrayList<BookGroup> = arrayListOf()
+    val groupList: ArrayList<BookGroup> = arrayListOf()
+    /** 行内「分组」键的 requestCode（原 `BookAdapter.groupRequestCode`，与底栏「移至分组」的 22 区分） */
+    private val rowGroupRequestCode = 12
     private val groupRequestCode = 22
     private val addToGroupRequestCode = 34
     private val removeToGroupRequestCode = 42
-    private val adapter by lazy { BookAdapter(this, this) }
-    private val itemTouchCallback by lazy { ItemTouchCallback(adapter) }
+
+    /**
+     * CF 6.2：`item_arrange_book` 退役后列表状态单源 ——
+     * ①`booksState` = DB 全量（未过滤）；②`selectedUrls` = 选择态（按 bookUrl，宿主持有，
+     * 供底栏计数与全部批量操作读取）；③`listState` = 滚动状态（Activity 持有 ⇒ 旋转/进程重建可恢复，
+     * 对齐 View 侧 `RecyclerView` 自带布局态保存的既有行为，见交接文档 §8-64）。
+     */
+    private var booksState by mutableStateOf<List<Book>>(emptyList())
+    private var selectedUrls by mutableStateOf<Set<String>>(emptySet())
+    private val listState = LazyListState()
+    private var pendingScrollIndex: Int? = null
+    private var pendingScrollOffset: Int = 0
+
+    /** 行内「分组」键作用的书（原 `BookAdapter.actionItem`） */
+    private var actionItem: Book? = null
     private var booksFlowJob: Job? = null
-    private var books: List<Book>? = null
     // L-B8 顶栏 Compose 状态
     private var composeTitle by mutableStateOf("")
     private var composeSearchQuery by mutableStateOf("")
@@ -167,10 +162,22 @@ class BookshelfManageActivity :
             upTitle()
         }
         initComposeContent()
-        initRecyclerView()
+        pendingScrollIndex = savedInstanceState?.getInt(KEY_SCROLL_INDEX)
+        pendingScrollOffset = savedInstanceState?.getInt(KEY_SCROLL_OFFSET) ?: 0
+        initDragMode()
         initOtherView()
         initGroupData()
         upBookDataByGroupId()
+    }
+
+    /**
+     * 滚动位置保存（CF 6.2 换装 Compose 后必须显式补：View 侧 `RecyclerView` 带 id 时自带布局态保存，
+     * `LazyListState` 不会 —— 见交接文档 §8-64）。
+     */
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt(KEY_SCROLL_INDEX, listState.firstVisibleItemIndex)
+        outState.putInt(KEY_SCROLL_OFFSET, listState.firstVisibleItemScrollOffset)
     }
 
     override fun observeLiveBus() {
@@ -188,12 +195,53 @@ class BookshelfManageActivity :
     }
 
     override fun selectAll(selectAll: Boolean) {
-        adapter.selectAll(selectAll)
+        selectedUrls = if (selectAll) visibleBooks.map { it.bookUrl }.toSet() else emptySet()
+        upSelectCount()
     }
 
     override fun revertSelection() {
-        adapter.revertSelection()
+        val reverted = visibleBooks.map { it.bookUrl }.toSet()
+        selectedUrls = reverted - selectedUrls + (selectedUrls - reverted)
+        upSelectCount()
     }
+
+    /** 选择区间（原 `BookAdapter.checkSelectedInterval`：把首尾已选项之间的项全部选中） */
+    private fun checkSelectedInterval() {
+        val positions = visibleBooks.mapIndexedNotNull { index, book ->
+            index.takeIf { book.bookUrl in selectedUrls }
+        }
+        if (positions.isEmpty()) return
+        val lo = positions.min()
+        val hi = positions.max()
+        val add = visibleBooks.subList(lo, hi + 1).map { it.bookUrl }
+        selectedUrls = selectedUrls + add
+        upSelectCount()
+    }
+
+    /** 行内点击/复选框切换选择（原 Adapter `selectedBooks` 语义） */
+    private fun toggleSelect(book: Book) {
+        selectedUrls = if (book.bookUrl in selectedUrls) {
+            selectedUrls - book.bookUrl
+        } else {
+            selectedUrls + book.bookUrl
+        }
+        upSelectCount()
+    }
+
+    /** 当前展示（已按搜索词过滤）的列表 */
+    private val visibleBooks: List<Book>
+        get() = booksState.filter {
+            composeSearchQuery.isEmpty() || it.contains(composeSearchQuery)
+        }
+
+    /** 当前选中项（原 `BookAdapter.selection`：以**当前展示列表**为序，保证批量操作顺序稳定） */
+    private val selection: List<Book>
+        get() = visibleBooks.filter { it.bookUrl in selectedUrls }
+
+    /** 分组名解析（原 `BookAdapter.getGroupName` 的双层位掩码口径，逐字保留） */
+    private fun groupNameOf(book: Book): String =
+        groupList.filter { it.groupId > 0 && it.groupId and book.group > 0 }
+            .joinToString(",") { it.groupName }
 
     override fun onClickSelectBarMainAction() {
         selectGroup(groupRequestCode, 0)
@@ -209,7 +257,8 @@ class BookshelfManageActivity :
      * 与原 XML（`activity_arrange_book.xml`）的**逐一对应关系**：
      *  · 根 `ConstraintLayout` → `composeShell` 合成壳（`binding.root`）
      *  · `compose_top_bar`(ComposeView) → 页内直接渲染 `GlassTopAppBar`（内容逐行不变，含 F41 模式提示 secondRow）
-     *  · `recycler_view`(`FastScrollRecyclerView`，`0dp` + 上下约束) → `Box(weight 1f)` 内 `AndroidView` 原样托管
+     *  · 原列表节点（`0dp` + 上下约束）→ **CF 6.2 后为 Compose `ArrangeBookList`**（`weight(1f)`；
+     *    此前 CE-b 阶段曾以程序化 View 列表 + `AndroidView` 托管，该实现已随 `item_arrange_book` 退役）
      *  · `select_action_bar`(View 批量底栏) → `AndroidView` 托管程序化 `SelectActionBar`（恒贴底）
      */
     private fun initComposeContent() {
@@ -266,21 +315,39 @@ class BookshelfManageActivity :
                             query = composeSearchQuery,
                             onQueryChange = {
                                 composeSearchQuery = it
-                                upBookData()
                             },
                             placeholder = getString(R.string.screen) + " • " + viewModel.groupName
                         )
                     }
-                    // ---- 列表（原 recycler_view，0dp + 上下约束）----
-                    Box(
+                    // ---- 列表（原 recycler_view；CF 6.2：item_arrange_book 退役 ⇒ Compose LazyColumn）----
+                    ArrangeBookList(
+                        books = visibleBooks,
+                        selectedUrls = selectedUrls,
+                        dragMode = dragModeState,
+                        openBookInfoByClickTitle = openBookInfoByClickTitle,
+                        groupNameOf = ::groupNameOf,
+                        onToggleSelect = ::toggleSelect,
+                        onOpenBook = ::openBook,
+                        onDeleteBook = ::deleteBook,
+                        onSelectGroup = { book ->
+                            actionItem = book
+                            selectGroup(rowGroupRequestCode, book.group)
+                        },
+                        onOrderCommitted = { ordered ->
+                            viewModel.updateBook(*ordered.toTypedArray())
+                        },
+                        listState = listState,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                    ) {
-                        AndroidView(
-                            modifier = Modifier.fillMaxSize(),
-                            factory = { recyclerView }
-                        )
+                    )
+                    // 旋转/进程重建后的滚动恢复（须等数据到达再滚，否则会被钳到 0 —— 见交接文档 §8-64）
+                    LaunchedEffect(visibleBooks.size, pendingScrollIndex) {
+                        val index = pendingScrollIndex ?: return@LaunchedEffect
+                        if (visibleBooks.isNotEmpty()) {
+                            listState.scrollToItem(index, pendingScrollOffset)
+                            pendingScrollIndex = null
+                        }
                     }
                     // ---- 批量操作底栏（原 select_action_bar，恒贴底）----
                     AndroidView(factory = { selectActionBar })
@@ -316,7 +383,7 @@ class BookshelfManageActivity :
             onClick = {
                 openBookInfoByClickTitle = !openBookInfoByClickTitle
                 AppConfig.openBookInfoByClickTitle = openBookInfoByClickTitle
-                adapter.notifyItemRangeChanged(0, adapter.itemCount)
+                // CF 6.2：原 `adapter.notifyItemRangeChanged(...)` 由 Compose 状态驱动取代（本状态即组合输入）
             }
         )
         // 分组切换（动态加载，等价原 menu_book_group 子菜单）
@@ -339,24 +406,13 @@ class BookshelfManageActivity :
         return actions
     }
 
-    private fun initRecyclerView() {
-        recyclerView.setEdgeEffectColor(primaryColor)
-        recyclerView.layoutManager = LinearLayoutManager(this)
-        recyclerView.addItemDecoration(VerticalDivider(this))
-        recyclerView.adapter = adapter
-        // F41：可拖拽态（排序模式）——同时驱动「行尾手柄可见」与「顶栏模式提示条」
+    /**
+     * F41 排序模式（可拖拽）初值 —— 原 `initRecyclerView()` 里「recyclerView 装配 + 两个拖拽助手」
+     * 已随 `item_arrange_book` 退役并入 Compose 列表（`ArrangeBookList` 的 `dragMode`），
+     * 本函数只剩状态初始化（顶栏模式提示条 + 行尾手柄可见性同源）。
+     */
+    private fun initDragMode() {
         dragModeState = AppConfig.bookshelfSort == 3
-        itemTouchCallback.isCanDrag = dragModeState
-        adapter.dragHandleVisible = dragModeState
-        val dragSelectTouchHelper: DragSelectTouchHelper =
-            DragSelectTouchHelper(adapter.dragSelectCallback).setSlideArea(16, 50)
-        dragSelectTouchHelper.attachToRecyclerView(recyclerView)
-        // When this page is opened, it is in selection mode
-        dragSelectTouchHelper.activeSlideSelect()
-        // Note: need judge selection first, so add ItemTouchHelper after it.
-        val touchHelper = ItemTouchHelper(itemTouchCallback)
-        touchHelper.attachToRecyclerView(recyclerView)
-        adapter.onStartDrag = { holder -> touchHelper.startDrag(holder) }
     }
 
     private fun initOtherView() {
@@ -389,7 +445,7 @@ class BookshelfManageActivity :
                 groupList.clear()
                 groupList.addAll(it)
                 composeGroupNames = groupList.map { g -> g.groupName }
-                adapter.notifyDataSetChanged()
+                // CF 6.2：原 `adapter.notifyDataSetChanged()` 由 `composeGroupNames` 状态驱动取代
             }
         }
     }
@@ -424,25 +480,9 @@ class BookshelfManageActivity :
                 AppLog.put("书架管理界面获取书籍列表失败\n${it.localizedMessage}", it)
             }.flowOn(IO)
                 .conflate().collect {
-                    books = it
-                    upBookData()
-                    itemTouchCallback.isCanDrag = bookSort == 3
+                    booksState = it
+                    dragModeState = bookSort == 3
                 }
-        }
-    }
-
-    private fun upBookData() {
-        books?.let { books ->
-            val searchKey = composeSearchQuery
-            if (searchKey.isNullOrEmpty()) {
-                adapter.setItems(books)
-            } else {
-                books.filter {
-                    it.contains(searchKey.toString())
-                }.let {
-                    adapter.setItems(it)
-                }
-            }
         }
     }
 
@@ -450,16 +490,16 @@ class BookshelfManageActivity :
         when (item?.itemId) {
             R.id.menu_del_selection -> alertDelSelection()
             R.id.menu_update_enable ->
-                viewModel.upCanUpdate(adapter.selection, true)
+                viewModel.upCanUpdate(selection, true)
 
             R.id.menu_update_disable ->
-                viewModel.upCanUpdate(adapter.selection, false)
+                viewModel.upCanUpdate(selection, false)
 
             R.id.menu_add_to_group -> selectGroup(addToGroupRequestCode, 0)
             R.id.menu_remove_to_group -> selectGroup(removeToGroupRequestCode, 0)
             R.id.menu_change_source -> showDialogFragment<SourcePickerDialog>()
-            R.id.menu_clear_cache -> viewModel.clearCache(adapter.selection)
-            R.id.menu_check_selected_interval -> adapter.checkSelectedInterval()
+            R.id.menu_clear_cache -> viewModel.clearCache(selection)
+            R.id.menu_check_selected_interval -> checkSelectedInterval()
         }
         return false
     }
@@ -477,13 +517,13 @@ class BookshelfManageActivity :
             customView { view }
             okButton {
                 LocalConfig.deleteBookOriginal = checkBox.isChecked
-                viewModel.deleteBook(adapter.selection, checkBox.isChecked)
+                viewModel.deleteBook(selection, checkBox.isChecked)
             }
             noButton()
         }
     }
 
-    override fun selectGroup(requestCode: Int, groupId: Long) {
+    fun selectGroup(requestCode: Int, groupId: Long) {
         showDialogFragment(
             GroupSelectDialog(groupId, requestCode)
         )
@@ -491,20 +531,20 @@ class BookshelfManageActivity :
 
     override fun upGroup(requestCode: Int, groupId: Long) {
         when (requestCode) {
-            groupRequestCode -> adapter.selection.let { books ->
+            groupRequestCode -> selection.let { books ->
                 val array = Array(books.size) {
                     books[it].copy(group = groupId)
                 }
                 viewModel.updateBook(*array)
             }
 
-            adapter.groupRequestCode -> {
-                adapter.actionItem?.let {
+            rowGroupRequestCode -> {
+                actionItem?.let {
                     viewModel.updateBook(it.copy(group = groupId))
                 }
             }
 
-            addToGroupRequestCode -> adapter.selection.let { books ->
+            addToGroupRequestCode -> selection.let { books ->
                 val array = Array(books.size) { index ->
                     val book = books[index]
                     book.copy(group = book.group or groupId)
@@ -512,7 +552,7 @@ class BookshelfManageActivity :
                 viewModel.updateBook(*array)
             }
 
-            removeToGroupRequestCode -> adapter.selection.let { books ->
+            removeToGroupRequestCode -> selection.let { books ->
                 val array = Array(books.size) { index ->
                     val book = books[index]
                     book.copy(group = book.group and groupId.inv())
@@ -522,15 +562,15 @@ class BookshelfManageActivity :
         }
     }
 
-    override fun upSelectCount() {
-        selectActionBar.upCountView(adapter.selection.size, adapter.getItems().size)
+    fun upSelectCount() {
+        selectActionBar.upCountView(selection.size, visibleBooks.size)
     }
 
-    override fun updateBook(vararg book: Book) {
+    fun updateBook(vararg book: Book) {
         viewModel.updateBook(*book)
     }
 
-    override fun deleteBook(book: Book) {
+    fun deleteBook(book: Book) {
         alert(titleResource = R.string.draw, messageResource = R.string.sure_del) {
             var checkBox: CheckBox? = null
             if (book.isLocal) {
@@ -553,13 +593,19 @@ class BookshelfManageActivity :
         }
     }
 
-    override fun openBook(book: Book) {
+    fun openBook(book: Book) {
         BookInfoNavigator.open(this, book)
     }
 
     override fun sourceOnClick(source: BookSource) {
-        viewModel.changeSource(adapter.selection, source)
+        viewModel.changeSource(selection, source)
         viewModel.batchChangeSourceState.value = true
+    }
+
+    companion object {
+        /** 列表滚动位置保存键（CF 6.2：Compose 列表需宿主显式保存/恢复，见 `onSaveInstanceState`） */
+        private const val KEY_SCROLL_INDEX = "arrange_scroll_index"
+        private const val KEY_SCROLL_OFFSET = "arrange_scroll_offset"
     }
 
 }
