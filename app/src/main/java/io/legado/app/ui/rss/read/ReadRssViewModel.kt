@@ -145,8 +145,27 @@ class ReadRssViewModel(application: Application) : BaseViewModel(application) {
                         "bodyLen=${body.length}, articleHash=${rssArticle.link.hashCode()}"
                 )
                 if (detected) {
-                    // 播放上下文走单一写入点（与 ReadRss 两条既有路由同源）
-                    ReadRss.prepareVideoPlayContext(rssArticle)
+                    // 播放上下文走单一写入点（与 ReadRss 两条既有路由同源）。
+                    //
+                    // 2026-09-27 用户报障修复：本路由此前只有「单篇文章」上下文，单一写入点内的
+                    // W2 兜底（`rssArticles ?: listOf(rssArticle)`）会让列表退化为 **1 篇**，
+                    // 击穿播放器侧 `size > 1` 的文章模式判定（VideoFragment.isArticleMode /
+                    // VideoPlayerActivity 的 hasPrev/hasNext）⇒ **沉浸式上下滑切视频 与
+                    // 传统式上一部下一部同时失效**。此处按列表页同口径（flowByOriginSort 的
+                    // 同 SQL：同源 + 同分类）补齐完整文章列表。
+                    val contextArticles = runCatching {
+                        appDb.rssArticleDao.getListByOriginSort(rssArticle.origin, rssArticle.sort)
+                    }.getOrDefault(emptyList()).toMutableList()
+                    // 本判定早于落库（§14.2 T2 防火墙②：不阻断落库）⇒ 首读文章可能尚未入库，
+                    // 须补入并置首，否则单一写入点按 link 匹配失败会兜底 index=0 而指向别的文章
+                    if (contextArticles.none { it.link == rssArticle.link }) {
+                        contextArticles.add(0, rssArticle)
+                    }
+                    ReadRss.prepareVideoPlayContext(
+                        rssArticle,
+                        rssArticles = contextArticles,
+                        sortName = rssArticle.sort
+                    )
                     appCtx.startActivity<VideoPlayerActivity> {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         putExtra("sourceKey", rssArticle.origin)

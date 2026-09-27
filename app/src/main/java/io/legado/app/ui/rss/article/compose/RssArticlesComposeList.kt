@@ -194,6 +194,16 @@ fun RssArticlesComposeList(
 ) {
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val topPadding = with(LocalDensity.current) { topPaddingPx.toDp() }
+    // 2026-09-27 用户报障修复：样式 3 的间距在**旧 View 实现里是像素(px)** ——
+    // `RecyclerView.setPadding(20,0,20,0)` + `ItemDecoration(20,30,20,30)` ⇒ 左右间距 40px、
+    // 上下间距 60px、阵列外沿左右 40px / 上下 30px。换装 Compose 时若直接写 `40.dp/30.dp/60.dp`，
+    // 会按屏幕密度整体放大（本机 ×1.5、普通手机 ×2.75~3）⇒ 卡片变窄、整页松散
+    // （用户体感「跟原来没改 Compose 时完全不一样」）。此处按 px→dp **等价换算**还原旧观感。
+    val px40 = with(LocalDensity.current) { 40.toDp() }
+    val px30 = with(LocalDensity.current) { 30.toDp() }
+    val px60 = with(LocalDensity.current) { 60.toDp() }
+    val px8 = with(LocalDensity.current) { 8.toDp() }
+    val px4 = with(LocalDensity.current) { 4.toDp() }
     val threshold = if (style == 3 && isPreload) PRELOAD_THRESHOLD else 0
     val shouldLoadMore by remember(items, isLoading, hasMore, threshold) {
         derivedStateOf {
@@ -217,16 +227,16 @@ fun RssArticlesComposeList(
             columns = StaggeredGridCells.Fixed(if (landscape) 3 else 2),
             state = stateHolder.staggered!!,
             modifier = modifier,
-            // 原 RecyclerView：左右各 20dp 内边距 + ItemDecoration 20/30 ⇒ 条目间距左右 40dp、上下 60dp，
-            // 阵列外沿 40dp（左右）/ 30dp（上下）
+            // 原 RecyclerView：左右各 20px 内边距 + ItemDecoration 20/30（均为 **px**）⇒ 条目间距
+            // 左右 40px、上下 60px，阵列外沿左右 40px / 上下 30px；此处用 px→dp 等价值还原
             contentPadding = PaddingValues(
-                start = 40.dp,
-                end = 40.dp,
-                top = topPadding + 30.dp,
-                bottom = bottomPadding + 30.dp
+                start = px40,
+                end = px40,
+                top = topPadding + px30,
+                bottom = bottomPadding + px30
             ),
-            horizontalArrangement = Arrangement.spacedBy(40.dp),
-            verticalItemSpacing = 60.dp
+            horizontalArrangement = Arrangement.spacedBy(px40),
+            verticalItemSpacing = px60
         ) {
             staggeredItems(items = items, key = key) { item ->
                 RssArticleCardRow(
@@ -244,9 +254,11 @@ fun RssArticlesComposeList(
             columns = GridCells.Fixed(if (style == 2) 2 else 3),
             state = stateHolder.grid!!,
             modifier = modifier,
+            // 同源问题（2026-09-27 用户报障）：旧实现样式 2/4 的 `setPadding(8,0,8,0)` /
+            // `(4,0,4,0)` 同样是 **px**，此前按 dp 搬运 ⇒ 外沿随密度放大
             contentPadding = PaddingValues(
-                start = if (style == 2) 8.dp else 4.dp,
-                end = if (style == 2) 8.dp else 4.dp,
+                start = if (style == 2) px8 else px4,
+                end = if (style == 2) px8 else px4,
                 top = topPadding,
                 bottom = bottomPadding
             )

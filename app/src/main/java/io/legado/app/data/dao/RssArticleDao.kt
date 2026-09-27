@@ -49,6 +49,24 @@ interface RssArticleDao {
     fun flowByOriginSort(origin: String, sort: String): Flow<List<RssArticle>>
 
     /**
+     * 同源同分类文章列表（一次性读取版，无 Flow）。
+     *
+     * 用途：`ReadRssViewModel` 的「正文含视频自动转内置播放器」路由只有**单篇文章**上下文，
+     * 直接写入会让 `VideoPlay.rssArticles` 退化为 1 篇，击穿播放器侧 `size > 1` 的
+     * 文章模式判定（沉浸式上下滑切视频 / 传统式上一部下一部**同时失效**）。
+     * 本查询补齐与列表页 `flowByOriginSort` **同口径**的上下文（同样不 select
+     * content/description/image/variable，规避 CursorWindow 2MB 溢出）。
+     */
+    @Query(
+        """select t1.link, t1.sort, t1.origin, t1.`order`, t1.title,
+            t1.`group`, t1.pubDate, t1.type, t1.durPos, ifNull(t2.read, 0) as read
+        from rssArticles as t1 left join rssReadRecords as t2
+        on t1.link = t2.record  where t1.origin = :origin and t1.sort = :sort
+        order by `order` desc"""
+    )
+    suspend fun getListByOriginSort(origin: String, sort: String): List<RssArticle>
+
+    /**
      * F28（ui-subpage-optimization）：存在未读文章的订阅源集合（sourceUrl 去重）。
      *
      * 未读口径与列表主查询 [flowByOriginSort] 完全一致——rssArticles.read 列无写入方，
