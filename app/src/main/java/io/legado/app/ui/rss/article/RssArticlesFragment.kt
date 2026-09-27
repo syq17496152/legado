@@ -400,11 +400,16 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
                         prefetchHorizon = PREFETCH_FIRST_SCREEN
                         gateFirstScreen(newList)
                     }
+                    // 2026-09-27 用户报障修复：`articlesState` 是**单一数据源**（`articles` getter 读它）。
+                    // 此前只在 Compose 分支赋值 ⇒ **样式 5（自由布局，View 路径）恒为空列表**，
+                    // `readRss` 把空列表交给播放器 ⇒ `VideoPlay.rssArticles` 为空 ⇒
+                    // 「上滑下滑切上/下一个视频」与「传统式上一部下一部」同时失效（用户真机报障）。
+                    // 统一前置赋值：两条渲染路径共用同一份列表，消除口径漂移。
+                    articlesState.value = newList
                     if (useComposeList) {
                         // Compose 列表按 key 做条目复用与首项锚定 ⇒ 不再需要
                         // 「isResumed 全量刷新 vs DiffUtil 差异化更新」这套 View 复用防护
                         //（原注释：RecyclerView 复用机制下切换标签走差异更新会报 ViewHolder 状态混乱）
-                        articlesState.value = newList
                         consumePendingScroll()
                         delay(200) // 200毫秒防抖
                         return@collect
