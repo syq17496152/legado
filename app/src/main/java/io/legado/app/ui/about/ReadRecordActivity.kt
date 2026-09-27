@@ -53,8 +53,9 @@ class ReadRecordActivity : BaseActivity<ActivityReadRecordBinding>() {
     }
 
     private fun initComposeHost() {
+        // 顶栏包 §5.2（2026-09-27）：布局内的 `TitleBar@id/title_bar` 已整体退役（本页与
+        // ReadRecordFragment 两条宿主都改用 Compose 顶栏）⇒ 不再需要置 GONE 的历史占位操作。
         binding.scrollView.visibility = android.view.View.GONE
-        binding.titleBar.visibility = android.view.View.GONE
         binding.composeHost.visibility = android.view.View.VISIBLE
         binding.composeHost.setContent {
             LegadoTheme {

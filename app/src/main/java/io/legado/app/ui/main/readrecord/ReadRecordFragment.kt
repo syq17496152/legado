@@ -180,8 +180,8 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
 
     override fun onFragmentCreated(view: View, savedInstanceState: Bundle?) {
         // read-record-header-unify AD-01：本页已改造为独立子页（ReadRecordStatsActivity 承载），
-        // 顶栏统一为子页单源 GlassTopAppBar——运行时替换共享布局的 title_bar / top_bar 节点
-        // （activity_read_record.xml 与 ReadRecordActivity 共用，故不改 XML 文件）
+        // 顶栏统一为子页单源 GlassTopAppBar；布局内的旧 View 顶栏节点已于顶栏包 §5.2（2026-09-27）
+        // 整批退役（本页与 ReadRecordActivity 两条宿主都改用 Compose 顶栏）⇒ 直接安装即可，无需先摘节点
         installComposeTopBar()
         binding.scrollView.applyMainBottomBarPadding(withInitialPadding = true)
         installContentDayFilter()
@@ -290,7 +290,8 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
     }
 
     /**
-     * 顶栏单源安装（AD-01）：以 ComposeView + GlassTopAppBar 运行时替换共享布局的旧顶栏节点。
+     * 顶栏单源安装（AD-01）：以 ComposeView + GlassTopAppBar 提供本页头部的唯一实现。
+     * 布局内的旧 View 顶栏节点已于顶栏包 §5.2 退役 ⇒ 本函数只负责**插入**（不再摘旧节点）。
      *
      * 第一行：左侧返回箭头 + 标题「阅读记录」+ 右侧组件配置动作（一级直出）；
      * 第二行（secondRow）：年份入口 + 月份 chip，两段各显式 38dp；
@@ -298,10 +299,10 @@ class ReadRecordFragment() : BaseFragment(R.layout.activity_read_record), MainFr
      */
     private fun installComposeTopBar() {
         val container = binding.root as? ViewGroup ?: return
-        // 顶栏包 §5.3（2026-09-26）：共享布局里的残留节点 `MainTopBarView@id/top_bar` 已从
-        // activity_read_record.xml 删除（历史 `gone` 空壳，仅制造「10 个声明 5 个空壳」的认知混乱），
-        // 故此处不再有 topBar 需要摘除；`title_bar` 仍是布局内的真实节点，照旧摘除后插入 Compose 顶栏。
-        (binding.titleBar.parent as? ViewGroup)?.removeView(binding.titleBar)
+        // 顶栏包 §5.2（2026-09-27）：布局内的 `TitleBar@id/title_bar` 已**整体退役** —— 两个宿主
+        // 都已改用 Compose 顶栏（本 Fragment 运行时摘除、`ReadRecordActivity` 置 GONE）⇒ 该节点在
+        // 两条渲染路径上均不参与显示，属历史占位（连同 §5.3 的残留 `MainTopBarView@id/top_bar` 一起清零）。
+        // ⇒ 此处不再需要「先摘旧顶栏节点」这一步。
         val topBarView = ComposeView(requireContext()).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
