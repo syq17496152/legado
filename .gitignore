@@ -249,3 +249,8 @@ git_log.txt
 /.trae/memory/ai_memory_main.md.bak*
 # Trae Hook 运行时状态（不跟踪）
 .trae/.hook-state/
+
+# === 前端独立仓库 legadoM-web（2026-09-28）===
+# modules/web 已迁移为独立 git 仓库（remote: syq17496152/legadoM-web），主仓库不再跟踪其内容；
+# 本地目录与文件保持不变，仅做「主仓库忽略 + 目录内关联远端」。
+/modules/web/
