@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.viewbinding.ViewBinding
 import com.google.android.material.tabs.TabLayout
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
@@ -385,8 +386,15 @@ class BookSourceEditActivity :
             setText(R.string.source_tab_content)
         })
         shell.recyclerView.setEdgeEffectColor(primaryColor)
-        if (adapter.editEntityMaxLine < 999) {
-            shell.recyclerView.layoutManager = NoChildScrollLinearLayoutManager(this) //启用后会阻止RecyclerView跟随光标滚动,行数少时,用的TextView跟随
+        // 回归修复（2026-09-28）：原 XML 的 `app:layoutManager="...LinearLayoutManager"` 是永久兜底，
+        // CE-a 程序化重建时被丢弃 ⇒ 当 `AppConfig.sourceEditMaxLine` 取默认值（Int.MAX_VALUE ≥ 999）时
+        // 旧写法分支不成立、RecyclerView 无布局管理器 ⇒ 六个 Tab 下的编辑项**全部不渲染**。
+        // 故 layoutManager 必须**无条件**赋值，条件只用于选择变体：行数少时用
+        // NoChildScrollLinearLayoutManager（阻止 RecyclerView 跟随光标滚动，改由 TextView 跟随）。
+        shell.recyclerView.layoutManager = if (adapter.editEntityMaxLine < 999) {
+            NoChildScrollLinearLayoutManager(this)
+        } else {
+            LinearLayoutManager(this)
         }
         shell.recyclerView.adapter = adapter
         shell.recyclerView.viewTreeObserver.addOnGlobalFocusChangeListener { _, newFocus ->
