@@ -2,155 +2,58 @@ package io.legado.app.api.controller
 
 import fi.iki.elonen.NanoHTTPD
 import io.legado.app.api.ReturnData
-import io.legado.app.constant.PreferKey
-import io.legado.app.data.appDb
-import io.legado.app.help.DirectLinkUpload
-import io.legado.app.help.book.BookHelp
-import io.legado.app.help.book.getFolderNameNoCache
-import io.legado.app.help.config.ReadBookConfig
-import io.legado.app.help.config.ThemeConfig
-import io.legado.app.help.storage.Backup
-import io.legado.app.help.storage.BackupAES
-import io.legado.app.help.storage.BackupRestoreLock
-import io.legado.app.help.storage.BookCacheSelectorConfig
-import io.legado.app.model.BookCover
-import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
-import io.legado.app.ui.book.read.config.HighlightRuleStore
-import io.legado.app.utils.FileUtils
+import io.legado.app.service.kernel.BackupKernel
 import io.legado.app.utils.GSON
-import io.legado.app.utils.compress.ZipUtils
-import io.legado.app.utils.createFolderIfNotExist
-import io.legado.app.utils.defaultSharedPreferences
-import io.legado.app.utils.externalFiles
-import io.legado.app.utils.getFile
-import io.legado.app.utils.getSharedPreferences
-import io.legado.app.utils.outputStream
-import io.legado.app.utils.writeToOutputStream
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import splitties.init.appCtx
-import java.io.ByteArrayInputStream
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
 import java.io.File
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
-import androidx.core.content.edit
+import java.io.FileInputStream
+import java.io.FilterInputStream
 
 /**
  * F-P0-2 备份选择器（借鉴蛋蛋Max）
  * Web端备份控制器，提供一键备份功能，支持下载ZIP备份文件
  *
- * 独立于 Backup.backupLocked 实现，因为 backupLocked 会在完成后删除临时文件
- * 这里自行控制备份流程，在 ZIP 打包后立即读取字节数据
+ * web-mcp-productization 一期 §2.3.3：**业务已全量下沉到 [BackupKernel]**，本类只剩
+ * 「把内核产物包成 HTTP 下载响应 + 失败话术映射」：
+ * - 内核返回 `File`（不再返回 `Response`）⇒ MCP 等非 HTTP 通道也能复用同一备份实现；
+ * - `runBlocking` 在此仅作**同步边界**（路由 handler 非挂起，design §1.4.3 明确允许：
+ *   要清零的是 **Kernel 内部**的 `runBlocking`，门禁 G-22 亦只拦 `service/kernel/`）。
  */
 object BackupController {
 
-    private val backupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    data class BackupItemInfo(
-        val fileName: String,
-        val displayName: String,
-        val description: String,
-        val count: Int,
-        val size: Long
-    )
-
-    data class BackupOverview(
-        val fileName: String,
-        val totalSize: Long,
-        val createTime: Long,
-        val items: List<BackupItemInfo>
-    )
-
-    private data class BackupItemDef(
-        val fileName: String,
-        val displayName: String,
-        val description: String,
-        val counter: () -> Int
-    )
-
-    private data class ConfigItemDef(
-        val fileName: String,
-        val displayName: String,
-        val description: String
-    )
-
-    /** Web 备份专用临时目录 */
-    private val webBackupPath: String by lazy {
-        appCtx.filesDir.getFile("web_backup").createFolderIfNotExist().absolutePath
-    }
-
-    /** 缓存最近一次备份的 ZIP 字节数据 */
-    @Volatile
-    private var cachedBackupZip: ByteArray? = null
-
-    /** 缓存最近一次备份的概览信息 */
-    @Volatile
-    private var cachedBackupOverview: BackupOverview? = null
-
     /**
-     * 执行备份并返回 ZIP 文件
+     * 执行备份并返回 ZIP 文件流。
+     *
+     * 与原实现的行为等价点：超时 → 500 + `备份超时`；失败 → 500 + `备份失败: …`（REQ-08 非空兜底）；
+     * 成功 → `application/zip` + `Content-Disposition`。
+     * 差异点（详见内核文档）：超时由「放弃等待、备份继续在后台跑」改为**取消该次备份**。
      */
     fun backup(): NanoHTTPD.Response {
-        val errorRef = AtomicReference<Throwable?>(null)
-        val latch = CountDownLatch(1)
-
-        backupScope.launch {
-            try {
-                val zipBytes = executeWebBackup()
-                if (zipBytes != null) {
-                    cachedBackupZip = zipBytes
-                    cachedBackupOverview = generateBackupOverview()
-                } else {
-                    errorRef.set(RuntimeException("ZIP打包失败"))
-                }
-            } catch (e: Throwable) {
-                errorRef.set(e)
-            } finally {
-                latch.countDown()
-            }
-        }
-
-        val completed = latch.await(120, TimeUnit.SECONDS)
-
-        if (!completed) {
-            return NanoHTTPD.newFixedLengthResponse(
-                NanoHTTPD.Response.Status.INTERNAL_ERROR,
-                "application/json",
-                GSON.toJson(ReturnData().setErrorMsg("备份超时"))
-            )
-        }
-
-        val error = errorRef.get()
-        if (error != null) {
-            return NanoHTTPD.newFixedLengthResponse(
-                NanoHTTPD.Response.Status.INTERNAL_ERROR,
-                "application/json",
+        val result = runCatching { runBlocking { BackupKernel.backup() } }
+        val file = result.getOrNull()
+        if (file == null) {
+            val error = result.exceptionOrNull() ?: RuntimeException("备份文件生成失败")
+            val message = if (error is CancellationException) {
+                "备份超时"
+            } else {
                 // REQ-08：底层异常 message 可能为 null/空白 ⇒ 非空兜底，避免前端显示 "备份失败: null"
-                GSON.toJson(ReturnData().setErrorMsg("备份失败: ${error.message?.takeIf { it.isNotBlank() } ?: "未知错误"}"))
+                "备份失败: ${error.message?.takeIf { it.isNotBlank() } ?: "未知错误"}"
+            }
+            return jsonResponse(
+                NanoHTTPD.Response.Status.INTERNAL_ERROR,
+                ReturnData().setErrorMsg(message)
             )
         }
-
-        val zipBytes = cachedBackupZip
-        if (zipBytes != null && zipBytes.isNotEmpty()) {
-            return NanoHTTPD.newFixedLengthResponse(
-                NanoHTTPD.Response.Status.OK,
-                "application/zip",
-                ByteArrayInputStream(zipBytes),
-                zipBytes.size.toLong()
-            ).apply {
-                addHeader("Content-Disposition", "attachment; filename=\"backup.zip\"")
-            }
-        }
-
         return NanoHTTPD.newFixedLengthResponse(
-            NanoHTTPD.Response.Status.INTERNAL_ERROR,
-            "application/json",
-            GSON.toJson(ReturnData().setErrorMsg("备份文件生成失败"))
-        )
+            NanoHTTPD.Response.Status.OK,
+            "application/zip",
+            // 流关闭（NanoHTTPD 发送完毕）后删除临时包，避免残包堆积
+            TempFileInputStream(file),
+            file.length()
+        ).apply {
+            addHeader("Content-Disposition", "attachment; filename=\"backup.zip\"")
+        }
     }
 
     /**
@@ -159,371 +62,32 @@ object BackupController {
     fun getBackupPreview(): ReturnData {
         val returnData = ReturnData()
         return try {
-            val overview = cachedBackupOverview ?: generateBackupOverview()
-            returnData.setData(overview)
+            returnData.setData(runBlocking { BackupKernel.preview() })
         } catch (e: Exception) {
             returnData.setErrorMsg("获取备份预览失败: ${e.message}")
         }
     }
 
-    /**
-     * 执行 Web 备份，返回 ZIP 字节数组（对外入口）
-     *
-     * REQ-07 / R9：纳入备份/恢复共享锁。实证此前**未纳锁** ⇒ 与定时/手动备份可并发，
-     * 而本方法内部直接调用 `Backup.stageBackgroundImageFiles` 等 Backup 落盘实现并读写同一批
-     * 数据库 ⇒ 与其并发会造成工作目录/数据竞争。此处与 `Restore.restoreLocked`/`Backup.backupLocked`
-     * 同口径：对外入口加锁、内部实现不加锁。
-     *
-     * 注意：`BackupRestoreLock` **不可重入** —— 调用本方法时不得已持有该锁。
-     */
-    private suspend fun executeWebBackup(): ByteArray? =
-        BackupRestoreLock.withStorageLock { executeWebBackupUnlocked() }
+    private fun jsonResponse(
+        status: NanoHTTPD.Response.Status,
+        returnData: ReturnData
+    ): NanoHTTPD.Response = NanoHTTPD.newFixedLengthResponse(
+        status,
+        "application/json",
+        GSON.toJson(returnData)
+    )
 
-    /** 未加锁的 Web 备份实现：仅供 [executeWebBackup] 在持有共享锁时调用。 */
-    private suspend fun executeWebBackupUnlocked(): ByteArray? {
-        val aes = BackupAES()
-        FileUtils.delete(webBackupPath)
+    /** 读取内核产出的临时 zip；`close()` 时顺带删除该文件（响应跑完即回收）。 */
+    private class TempFileInputStream(
+        private val file: File
+    ) : FilterInputStream(FileInputStream(file)) {
 
-        withContext(Dispatchers.IO) {
-            // 数据库导出
-            writeListToJson(appDb.bookDao.all, "bookshelf.json", webBackupPath)
-            writeListToJson(appDb.bookmarkDao.all, "bookmark.json", webBackupPath)
-            writeListToJson(appDb.bookGroupDao.all, "bookGroup.json", webBackupPath)
-            writeListToJson(appDb.bookSourceDao.all, "bookSource.json", webBackupPath)
-            writeListToJson(appDb.rssSourceDao.all, "rssSources.json", webBackupPath)
-            writeListToJson(appDb.rssStarDao.all, "rssStar.json", webBackupPath)
-            writeListToJson(appDb.replaceRuleDao.all, "replaceRule.json", webBackupPath)
-            FileUtils.createFileIfNotExist(webBackupPath + File.separator + HighlightRuleStore.backupFileName)
-                .writeText(GSON.toJson(HighlightRuleStore.createBackupData(appCtx)))
-            writeListToJson(appDb.readRecordDao.all, "readRecord.json", webBackupPath)
-            writeListToJson(appDb.readRecordDao.getAllDetailsList(), "readRecordDetail.json", webBackupPath)
-            writeListToJson(appDb.searchKeywordDao.all, "searchHistory.json", webBackupPath)
-            writeListToJson(appDb.ruleSubDao.all, "sourceSub.json", webBackupPath)
-            writeListToJson(appDb.txtTocRuleDao.all, "txtTocRule.json", webBackupPath)
-            writeListToJson(appDb.httpTTSDao.all, "httpTTS.json", webBackupPath)
-            writeListToJson(appDb.keyboardAssistsDao.all, "keyboardAssists.json", webBackupPath)
-            writeListToJson(appDb.dictRuleDao.all, "dictRule.json", webBackupPath)
-
-            // ===== REQ-05 / 1.2.7 对等性补全（Web 备份此前漏写的类别） =====
-            // Web 备份**硬编码全集、不走 BackupSelectorConfig 选择器** ⇒ 选择器加了新条目它不会自动跟上，
-            // 必须逐条登记。实测此前漏写 5 类：手动划线 / 自动任务 / 选角模板 / 封面图集 / 书源运行数据。
-            writeListToJson(appDb.bookHighlightDao.all, "highlights.json", webBackupPath)
-            writeListToJson(appDb.sceneBookmarkDao.all, "sceneBookmarks.json", webBackupPath)
-            writeListToJson(appDb.autoTaskRuleDao.all(), "autoTask.json", webBackupPath)
-            writeListToJson(appDb.ttsCastingTemplateDao.all(), "ttsCastingTemplates.json", webBackupPath)
-            Backup.stageCoverGallery(webBackupPath)
-            Backup.stageRuntimeSourceCaches(webBackupPath)
-            // W4 / REQ-17（AD-08）：订阅已读记录（四处同名同文件铁律的第 ④ 处）
-            // Web 备份硬编码全集、不走选择器 ⇒ 选择器加了新条目它不会自动跟上，必须在此显式登记
-            writeListToJson(appDb.rssReadRecordDao.getRecords(), "rssReadRecord.json", webBackupPath)
-
-            // 服务器配置加密存储
-            GSON.toJson(appDb.serverDao.all).let { json ->
-                aes.runCatching {
-                    encryptBase64(json)
-                }.getOrDefault(json).let {
-                    FileUtils.createFileIfNotExist(webBackupPath + File.separator + "servers.json")
-                        .writeText(it)
-                }
-            }
-
-            // 阅读配置
-            GSON.toJson(ReadBookConfig.getBackupConfigList()).let {
-                FileUtils.createFileIfNotExist(webBackupPath + File.separator + ReadBookConfig.configFileName)
-                    .writeText(it)
-            }
-            GSON.toJson(ReadBookConfig.getBackupShareConfig()).let {
-                FileUtils.createFileIfNotExist(webBackupPath + File.separator + ReadBookConfig.shareConfigFileName)
-                    .writeText(it)
-            }
-
-            // 主题配置
-            GSON.toJson(ThemeConfig.configList).let {
-                FileUtils.createFileIfNotExist(webBackupPath + File.separator + ThemeConfig.configFileName)
-                    .writeText(it)
-            }
-
-            // 直链上传配置
-            DirectLinkUpload.getConfig()?.let {
-                FileUtils.createFileIfNotExist(webBackupPath + File.separator + DirectLinkUpload.ruleFileName)
-                    .writeText(GSON.toJson(it))
-            }
-
-            // 封面规则配置
-            BookCover.getConfig()?.let {
-                FileUtils.createFileIfNotExist(webBackupPath + File.separator + BookCover.configFileName)
-                    .writeText(GSON.toJson(it))
-            }
-
-            // 应用主配置
-            appCtx.getSharedPreferences(webBackupPath, "config")?.let { sp ->
-                val edit = sp.edit()
-                appCtx.defaultSharedPreferences.all.forEach { (key, value) ->
-                    when (key) {
-                        PreferKey.webDavPassword -> {
-                            edit.putString(key, aes.runCatching {
-                                encryptBase64(value.toString())
-                            }.getOrDefault(value.toString()))
-                        }
-                        else -> when (value) {
-                            is Int -> edit.putInt(key, value)
-                            is Boolean -> edit.putBoolean(key, value)
-                            is Long -> edit.putLong(key, value)
-                            is Float -> edit.putFloat(key, value)
-                            is String -> edit.putString(key, value)
-                        }
-                    }
-                }
-                edit.commit()
-            }
-
-            // 视频播放配置
-            appCtx.getSharedPreferences(webBackupPath, "videoConfig")?.let { sp ->
-                sp.edit(commit = true) {
-                    appCtx.getSharedPreferences(VIDEO_PREF_NAME, android.content.Context.MODE_PRIVATE).all.forEach { (key, value) ->
-                        when (value) {
-                            is Int -> putInt(key, value)
-                            is Boolean -> putBoolean(key, value)
-                            is Long -> putLong(key, value)
-                            is Float -> putFloat(key, value)
-                            is String -> putString(key, value)
-                        }
-                    }
-                }
-            }
-
-            // 背景图片、高亮规则背景、书籍缓存
-            Backup.stageBackgroundImageFiles(webBackupPath)
-            Backup.stageHighlightRuleBackgroundFiles(webBackupPath)
-            Backup.stageBookCache(webBackupPath)
-            Backup.stageBookChapterForCache(webBackupPath)
-        }
-
-        // 打包 ZIP
-        val backupDir = File(webBackupPath)
-        val files = backupDir.listFiles()?.toList() ?: return null
-        if (files.isEmpty()) return null
-
-        val paths = files.map { it.absolutePath }
-        val tempZip = File(appCtx.externalFiles.absolutePath, "web_backup_tmp.zip")
-        FileUtils.delete(tempZip)
-
-        if (ZipUtils.zipFiles(paths, tempZip.absolutePath)) {
-            val bytes = tempZip.readBytes()
-            FileUtils.delete(tempZip)
-            return bytes
-        }
-
-        return null
-    }
-
-    private suspend fun writeListToJson(list: List<Any>, fileName: String, path: String) {
-        withContext(Dispatchers.IO) {
-            val file = FileUtils.createFileIfNotExist(path + File.separator + fileName)
-            file.outputStream().buffered().use {
-                GSON.writeToOutputStream(it, list)
+        override fun close() {
+            try {
+                super.close()
+            } finally {
+                file.delete()
             }
         }
-    }
-
-    /**
-     * 生成备份概览信息
-     */
-    private fun generateBackupOverview(): BackupOverview {
-        val items = mutableListOf<BackupItemInfo>()
-        var totalSize = 0L
-
-        val backupItems = listOf(
-            BackupItemDef(HighlightRuleStore.backupFileName, "高亮规则", "阅读高亮规则和分组配置") {
-                HighlightRuleStore.load(appCtx).size
-            },
-            BackupItemDef("bookshelf.json", "书架书籍", "书架上的所有书籍信息") {
-                appDb.bookDao.all.size
-            },
-            BackupItemDef("bookmark.json", "书签", "书籍阅读书签") {
-                appDb.bookmarkDao.all.size
-            },
-            BackupItemDef("bookGroup.json", "书籍分组", "书架分组信息") {
-                appDb.bookGroupDao.all.size
-            },
-            BackupItemDef("bookSource.json", "书源", "网络小说书源") {
-                appDb.bookSourceDao.all.size
-            },
-            BackupItemDef("rssSources.json", "订阅源", "订阅源") {
-                appDb.rssSourceDao.all.size
-            },
-            BackupItemDef("rssStar.json", "订阅收藏", "订阅收藏内容") {
-                appDb.rssStarDao.all.size
-            },
-            // W4 / REQ-17：概览与备份内容保持一致（否则用户在概览里看不到该类别的体量）
-            BackupItemDef("rssReadRecord.json", "订阅已读记录", "订阅文章的已读状态") {
-                appDb.rssReadRecordDao.countRecords
-            },
-            BackupItemDef("replaceRule.json", "替换规则", "正文替换净化规则") {
-                appDb.replaceRuleDao.all.size
-            },
-            // W8 9.5 / REQ-33：名场面书签（概览与备份内容一致，否则用户在概览里看不到该类别体量）
-            BackupItemDef("sceneBookmarks.json", "名场面书签", "一键收藏的名场面与 AI 描述") {
-                appDb.sceneBookmarkDao.all.size
-            },
-            BackupItemDef("readRecord.json", "阅读记录", "阅读时长统计记录") {
-                appDb.readRecordDao.all.size
-            },
-            BackupItemDef("readRecordDetail.json", "阅读详情", "每本书每天的阅读统计") {
-                appDb.readRecordDao.getDetailsCount()
-            },
-            BackupItemDef("searchHistory.json", "搜索历史", "搜索关键词历史") {
-                appDb.searchKeywordDao.all.size
-            },
-            BackupItemDef("sourceSub.json", "订阅源订阅", "订阅源订阅信息") {
-                appDb.ruleSubDao.all.size
-            },
-            BackupItemDef("txtTocRule.json", "TXT目录规则", "本地TXT目录解析规则") {
-                appDb.txtTocRuleDao.all.size
-            },
-            BackupItemDef("httpTTS.json", "TTS配置", "在线朗读引擎配置") {
-                appDb.httpTTSDao.all.size
-            },
-            BackupItemDef("keyboardAssists.json", "键盘辅助", "键盘快捷输入配置") {
-                appDb.keyboardAssistsDao.all.size
-            },
-            BackupItemDef("dictRule.json", "词典规则", "长按查词规则") {
-                appDb.dictRuleDao.all.size
-            },
-            BackupItemDef("servers.json", "服务器配置", "远程服务器配置（加密）") {
-                appDb.serverDao.all.size
-            },
-            BackupItemDef("runtimeSourceCache.json", "书源运行数据", "书源登录信息和运行变量") {
-                appDb.cacheDao.getRuntimeSourceCaches().size
-            }
-        )
-
-        backupItems.forEach { item ->
-            val count = item.counter()
-            val file = File(webBackupPath, item.fileName)
-            val size = if (file.exists()) file.length() else 0L
-            totalSize += size
-
-            items.add(
-                BackupItemInfo(
-                    fileName = item.fileName,
-                    displayName = item.displayName,
-                    description = item.description,
-                    count = count,
-                    size = size
-                )
-            )
-        }
-
-        // 书籍缓存
-        val selectedBooks = BookCacheSelectorConfig.getSelectedBooks()
-        if (selectedBooks.isNotEmpty()) {
-            val cacheDir = File(BookHelp.cachePath)
-            var bookCacheSize = 0L
-            var chapterCount = 0
-            if (cacheDir.exists()) {
-                selectedBooks.forEach { book ->
-                    val folderName = book.getFolderNameNoCache()
-                    val bookFolder = File(cacheDir, folderName)
-                    if (bookFolder.exists()) {
-                        bookCacheSize += bookFolder.walkTopDown().filter { it.isFile }.sumOf { it.length() }
-                        chapterCount += appDb.bookChapterDao.getChapterList(book.bookUrl).size
-                    }
-                }
-            }
-            val indexEstimatedSize = selectedBooks.size * 300L
-            val chapterEstimatedSize = chapterCount * 200L
-            totalSize += bookCacheSize + indexEstimatedSize + chapterEstimatedSize
-            items.add(
-                BackupItemInfo(
-                    fileName = "book_cache",
-                    displayName = "书籍缓存",
-                    description = "已缓存的章节内容文件",
-                    count = selectedBooks.size,
-                    size = bookCacheSize
-                )
-            )
-            items.add(
-                BackupItemInfo(
-                    fileName = "bookCacheIndex.json",
-                    displayName = "书籍缓存索引",
-                    description = "缓存文件的索引信息",
-                    count = selectedBooks.size,
-                    size = indexEstimatedSize
-                )
-            )
-            items.add(
-                BackupItemInfo(
-                    fileName = "bookChapterCache.json",
-                    displayName = "书籍章节目录",
-                    description = "缓存书籍的章节目录数据",
-                    count = chapterCount,
-                    size = chapterEstimatedSize
-                )
-            )
-        }
-
-        val configItems = listOf(
-            ConfigItemDef(ReadBookConfig.configFileName, "阅读样式配置", "阅读界面样式配置"),
-            ConfigItemDef(ReadBookConfig.shareConfigFileName, "共享阅读配置", "跨设备共享的阅读配置"),
-            ConfigItemDef(ThemeConfig.configFileName, "主题配置", "界面主题样式配置"),
-            ConfigItemDef(BookCover.configFileName, "封面规则", "自定义封面生成规则"),
-            ConfigItemDef(DirectLinkUpload.ruleFileName, "直链上传配置", "直链上传规则配置"),
-            ConfigItemDef("config.xml", "应用设置", "应用程序偏好设置"),
-            ConfigItemDef("videoConfig.xml", "视频配置", "视频播放器设置")
-        )
-
-        configItems.forEach { item ->
-            val file = File(webBackupPath, item.fileName)
-            if (file.exists()) {
-                totalSize += file.length()
-                items.add(
-                    BackupItemInfo(
-                        fileName = item.fileName,
-                        displayName = item.displayName,
-                        description = item.description,
-                        count = 1,
-                        size = file.length()
-                    )
-                )
-            }
-        }
-
-        val bgFiles = Backup.getBackgroundImageFiles()
-        val bgSize = bgFiles.sumOf { it.length() }
-        if (bgFiles.isNotEmpty()) {
-            totalSize += bgSize
-            items.add(
-                BackupItemInfo(
-                    fileName = "readConfigBgImages",
-                    displayName = "背景图片",
-                    description = "阅读背景使用的自定义图片文件",
-                    count = bgFiles.size,
-                    size = bgSize
-                )
-            )
-        }
-
-        val highlightRuleBgFiles = HighlightRuleStore.getUsedBgImageFiles(appCtx)
-        val highlightRuleBgSize = highlightRuleBgFiles.sumOf { it.length() }
-        if (highlightRuleBgFiles.isNotEmpty()) {
-            totalSize += highlightRuleBgSize
-            items.add(
-                BackupItemInfo(
-                    fileName = HighlightRuleStore.backupBgDirName,
-                    displayName = "高亮背景图片",
-                    description = "高亮规则使用的自定义背景图片",
-                    count = highlightRuleBgFiles.size,
-                    size = highlightRuleBgSize
-                )
-            )
-        }
-
-        return BackupOverview(
-            fileName = "backup.zip",
-            totalSize = totalSize,
-            createTime = System.currentTimeMillis(),
-            items = items.filter { it.count > 0 || it.size > 0 }
-        )
     }
 }
