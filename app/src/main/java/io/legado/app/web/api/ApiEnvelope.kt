@@ -14,6 +14,7 @@ import okio.Pipe
 import okio.buffer
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.FileNotFoundException
 import java.util.concurrent.TimeoutException
 
 /**
@@ -27,6 +28,9 @@ object ApiEnvelope {
     /** 异常 → (HTTP 状态码, 信封 code) 映射表（REQ-1-301）。 */
     private fun statusCodeOf(e: Throwable): Int = when (e) {
         is IllegalArgumentException -> 400
+        // 未注册/不存在的静态资源：`AssetManager.open` 抛 FileNotFoundException（IOException 子类）。
+        // 改造前该分支落进 serve() 的顶层 catch ⇒ 恒 200 + 纯文本；现在给真实 404（REQ-1-301 明列 404）。
+        is FileNotFoundException -> 404
         is NoSuchElementException -> 404
         is TimeoutCancellationException, is TimeoutException -> 504
         else -> 500
