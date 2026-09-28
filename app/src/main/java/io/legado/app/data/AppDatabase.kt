@@ -44,6 +44,7 @@ import io.legado.app.data.dao.RssReadRecordDao
 import io.legado.app.data.dao.RssSourceDao
 import io.legado.app.data.dao.RssStarDao
 import io.legado.app.data.dao.RuleSubDao
+import io.legado.app.data.dao.SceneBookmarkDao
 import io.legado.app.data.dao.SearchBookDao
 import io.legado.app.data.dao.SearchKeywordDao
 import io.legado.app.data.dao.SourceGroupCoverDao
@@ -105,6 +106,7 @@ import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.RssStar
 import io.legado.app.data.entities.RuleSub
 import io.legado.app.data.entities.UrlRecord
+import io.legado.app.data.entities.SceneBookmark
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.data.entities.SearchKeyword
 import io.legado.app.data.entities.Server
@@ -125,7 +127,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 111,
+    version = 112,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -146,7 +148,7 @@ val appDb by lazy {
         AiReadAloudUsageRecord::class,
         AiAgentSession::class, AiAgentJob::class, AiAgentTrace::class,
         AiMemoryItem::class, AiMemoryFragment::class, AiMemoryItemFts::class, AiMemoryFragmentFts::class,
-        DownloadTaskEntity::class],
+        DownloadTaskEntity::class, SceneBookmark::class],
     views = [BookSourcePart::class],
     autoMigrations = [
         AutoMigration(from = 43, to = 44),
@@ -211,6 +213,7 @@ val appDb by lazy {
         // video-sniff-403-and-rss-classic-fix 4.8e: 108→109 使用手动 Migration（migration_108_109），playHistories 主键扩为 (articleUrl, videoUrl, rssSourceId)（建新表迁数据）
         // optimize-tts-engine（AD-04/AD-09）: 109→110 使用手动 Migration（migration_109_110），httpTTS 增列 type/script + 建 ttsCastingTemplates 表
         // next-stage-mainline W3（AD-07）: 110→111 使用手动 Migration（migration_110_111），books 增列 voiceParagraphAnchor/voiceParagraphAnchorChapter（朗读段落锚点）
+        // next-stage-mainline W8（AD-12）: 111→112 使用手动 Migration（migration_111_112），新建 sceneBookmarks 表（名场面书签）
     ]
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -263,6 +266,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract val aiAgentDao: AiAgentDao
     abstract val aiMemoryDao: AiMemoryDao
     abstract val downloadTaskDao: DownloadTaskDao
+
+    // W8（AD-12）：名场面书签
+    abstract val sceneBookmarkDao: SceneBookmarkDao
 
     companion object {
 

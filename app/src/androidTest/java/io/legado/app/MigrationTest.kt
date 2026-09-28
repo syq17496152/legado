@@ -30,7 +30,7 @@ class MigrationTest {
      * 详见 `docs/project-rules/database-migration-safety.md` R7。
      */
     private val SHIPPED_VERSIONS = listOf(
-        89, 92, 93, 94, 98, 99, 100, 101, 103, 104, 106, 107, 108, 109
+        89, 92, 93, 94, 98, 99, 100, 101, 103, 104, 106, 107, 108, 109, 110, 111
     )
 
     @get:Rule
@@ -99,6 +99,31 @@ class MigrationTest {
                     cursor.moveToFirst() && cursor.count > 0
                 }
                 org.junit.Assert.assertTrue("source_recycle_bin table missing after 101->102", exists)
+                close()
+            }
+    }
+
+    @Test
+    @Throws(IOException::class)
+    fun migrate111To112() {
+        // W8 / REQ-31（AD-12）: sceneBookmarks table added in 111 -> 112（名场面书签）。
+        helper.createDatabase(TEST_DB, 111).apply {
+            close()
+        }
+        Room.databaseBuilder(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+            AppDatabase::class.java,
+            TEST_DB
+        ).addMigrations(*ALL_MIGRATIONS)
+            .build().apply {
+                // Verify the new table is present and usable after migration.
+                val db = openHelper.writableDatabase
+                val exists = db.query(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='sceneBookmarks'"
+                ).use { cursor ->
+                    cursor.moveToFirst() && cursor.count > 0
+                }
+                org.junit.Assert.assertTrue("sceneBookmarks table missing after 111->112", exists)
                 close()
             }
     }

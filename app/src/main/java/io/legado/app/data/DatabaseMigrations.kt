@@ -26,7 +26,7 @@ object DatabaseMigrations {
             migration_97_98, migration_98_99, migration_99_100, migration_100_101,
             migration_101_102, migration_102_103, migration_103_104, migration_104_105,
             migration_105_106, migration_106_107, migration_107_108, migration_108_109,
-            migration_109_110, migration_110_111
+            migration_109_110, migration_110_111, migration_111_112
         )
     }
 
@@ -1495,6 +1495,36 @@ object DatabaseMigrations {
      * 不 DROP 不重建（零数据风险）。用途：朗读进度按「段落」恢复；与 `durChapterPos`
      * （多义：文字首行索引 / 漫画图片序号）**解耦**，避免三方互相覆盖。
      */
+    /**
+     * next-stage-mainline W8（AD-12）：111→112
+     * 新建 `sceneBookmarks`（名场面书签：三路径打标 + AI 描述 + 按书聚合回看）。
+     * **仅 CREATE TABLE**，不 DROP 不重建（零数据风险）；列名/类型/非空与 Room 实体 `SceneBookmark`
+     * 严格一致（id 自增整数主键 + 12 列，全部 NOT NULL；**不写 SQL DEFAULT** —— 默认值全部由实体侧
+     * Kotlin 默认值承担，避免 Room `TableInfo` 校验失配）。
+     */
+    private val migration_111_112 = object : Migration(111, 112) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS `sceneBookmarks` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `time` INTEGER NOT NULL,
+                    `bookUrl` TEXT NOT NULL,
+                    `bookName` TEXT NOT NULL,
+                    `bookAuthor` TEXT NOT NULL,
+                    `chapterIndex` INTEGER NOT NULL,
+                    `chapterName` TEXT NOT NULL,
+                    `contentKind` INTEGER NOT NULL,
+                    `anchor` TEXT NOT NULL,
+                    `text` TEXT NOT NULL,
+                    `desc` TEXT NOT NULL,
+                    `tags` TEXT NOT NULL,
+                    `style` TEXT NOT NULL
+                )"""
+            )
+            AppLog.put("AppDatabase Migration 111→112: 新建 sceneBookmarks（名场面书签）完成")
+        }
+    }
+
     private val migration_110_111 = object : Migration(110, 111) {
         override fun migrate(db: SupportSQLiteDatabase) {
             val statements = listOf(
