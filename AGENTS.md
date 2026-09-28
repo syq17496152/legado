@@ -27,6 +27,9 @@
 | 阅读核心（全局单例） | `app/src/main/java/io/legado/app/model/ReadBook.kt` |
 | 网络书核心 | `app/src/main/java/io/legado/app/model/webBook/WebBook.kt` |
 | 数据库 | `app/src/main/java/io/legado/app/data/AppDatabase.kt`（Room，legado.db，schema 在 `app/schemas/`；**版本号以 AppDatabase.kt `version` 字段为准，文档禁止硬编码快照**） |
+| Web 服务内核（HTTP/WS 宿主） | `app/src/main/java/io/legado/app/web/HttpServer.kt` + `web/api/routes/`（**路由注册表 `ApiRoute`/`ApiRegistry`——新增端点只加一行 `ApiRoute`，禁改 `HttpServer.serve()`**）+ `web/WebAuth.kt` / `web/TokenManager.kt`（三级令牌鉴权） |
+| 业务内核层（Web/前端复用源） | `app/src/main/java/io/legado/app/service/kernel/`（`BookKernel` / `BookSourceKernel` / `RssSourceKernel` / `ReplaceRuleKernel` / `BackupKernel`；**业务逻辑只放这里** —— Web 控制器 / MCP 工具只调 Kernel，`runBlocking` 命中必须为 0） |
+| Web 服务与 MCP 产品化设计 | `docs/specs/web-mcp-productization/`（1 总纲 + 4 分期；一期已交付，二/三/四期实施中） |
 | 依赖版本 | `gradle/libs.versions.toml` |
 
 ## 代码约束
