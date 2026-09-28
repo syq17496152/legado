@@ -192,6 +192,12 @@ class AiConfigFragment : ComposeSettingFragment() {
                             summary = defaultModelSummary(),
                             onClick = ::showDefaultModelSettingsDialog
                         ),
+                        switch(
+                            key = PreferKey.aiSceneDescEnabled,
+                            title = "名场面智能描述",
+                            summary = "打标名场面时用「文章总结」模型生成一句话描述与标签；关闭或未配置 AI 时仅存原文片段",
+                            defaultValue = true
+                        ),
                         SettingActionSpec(
                             key = KEY_IMAGE_GALLERY,
                             title = getString(R.string.ai_image_gallery),
@@ -328,6 +334,7 @@ class AiConfigFragment : ComposeSettingFragment() {
             PreferKey.aiReadAloudRoleModelId,
             PreferKey.aiCurrentImageProviderId -> refreshUi()
             PreferKey.aiReadToolMode -> refreshUi()
+            PreferKey.aiSceneDescEnabled -> refreshUi()
         }
     }
 

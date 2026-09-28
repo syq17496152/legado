@@ -654,6 +654,14 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val aiSummaryModelConfig: AiModelConfig?
         get() = aiModelConfigList.firstOrNull { it.id == aiSummaryModelId }
 
+    /**
+     * W8 名场面书签：是否在打标时调用 AI 生成一句话描述与标签。
+     * 默认**开**；关闭后打标仅存原文片段（核心链路零 AI 依赖）。
+     */
+    var aiSceneDescEnabled: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.aiSceneDescEnabled, true)
+        set(value) = appCtx.putPrefBoolean(PreferKey.aiSceneDescEnabled, value)
+
     var aiReadAloudRoleModelId: String?
         get() = sceneAiModelId(PreferKey.aiReadAloudRoleModelId)
         set(value) = setSceneAiModelId(PreferKey.aiReadAloudRoleModelId, value)

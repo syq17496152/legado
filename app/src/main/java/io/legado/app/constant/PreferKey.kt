@@ -491,6 +491,8 @@ object PreferKey {
     const val aiCurrentModelId = "aiCurrentModelId"
     const val aiAskModelId = "aiAskModelId"
     const val aiSummaryModelId = "aiSummaryModelId"
+    /** W8 名场面书签：打标时是否调用 AI 生成一句话描述与标签（默认开；关闭或未配置 AI 时降级为原文片段） */
+    const val aiSceneDescEnabled = "aiSceneDescEnabled"
     const val aiReadAloudRoleModelId = "aiReadAloudRoleModelId"
     const val aiReadAloudRoleBackupModelId = "aiReadAloudRoleBackupModelId"
     const val aiReadAloudRoleFirstResponseTimeoutSeconds = "aiReadAloudRoleFirstResponseTimeoutSeconds"
