@@ -1,6 +1,55 @@
 /**
- * 公共函数
+ * 访问令牌（web-mcp 一期 · REQ-1-113）
+ *
+ * 写端点 `/addLocalBook` 需要令牌（REQ-1-106 明确：级别只由声明决定，不因页面在
+ * 白名单 `/uploadBook/` 下而放行）。传输页与书架页同源 ⇒ **共用同一个 localStorage 键**，
+ * 用户在哪一页填过，另一页即生效。
  */
+var LEGADO_TOKEN_KEY = 'accessToken';
+
+function getLegadoToken() {
+	try {
+		return localStorage.getItem(LEGADO_TOKEN_KEY) || '';
+	} catch (e) {
+		return '';
+	}
+}
+
+function saveLegadoToken(token) {
+	try {
+		var value = (token || '').replace(/^\s+|\s+$/g, '');
+		if (value === '') {
+			localStorage.removeItem(LEGADO_TOKEN_KEY);
+		} else {
+			localStorage.setItem(LEGADO_TOKEN_KEY, value);
+		}
+		return true;
+	} catch (e) {
+		return false;
+	}
+}
+
+/** 令牌输入条：不回显已保存的令牌，只显示「是否已设置」 */
+function initTokenBar() {
+	var input = document.getElementById('token_input');
+	var btn = document.getElementById('token_save');
+	var tip = document.getElementById('token_tip');
+	if (!input || !btn || !tip) return;
+
+	function refreshTip() {
+		tip.innerHTML = getLegadoToken() ? '已设置（留空保存即清除）' : '未设置（上传前需填写）';
+	}
+
+	btn.onclick = function () {
+		saveLegadoToken(input.value);
+		input.value = '';
+		refreshTip();
+		alert(getLegadoToken() ? '访问令牌已保存' : '访问令牌已清除');
+	};
+
+	refreshTip();
+}
+
 //全局的配置文件 
 var config = {
 	fileTypes: "txt|epub|umd|pdf|mobi|azw3|azw", //允许上传的文件格式 "txt|epub" // |doc|docx|wps|xls|xlsx|et|ppt|pptx|dps
@@ -21,6 +70,8 @@ var filesUpload	= []; //
 
 //初始化表格
 init();
+//初始化访问令牌输入条（web-mcp 一期 · REQ-1-113）
+initTokenBar();
 
 function init(){
 	//判断浏览器的高度预留空表格

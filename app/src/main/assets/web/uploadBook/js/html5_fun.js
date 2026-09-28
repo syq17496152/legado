@@ -155,6 +155,12 @@
             XHR.upload.addEventListener("loadstart", loadstart, false);
             XHR.open("POST", config.url);
     //		XHR.setRequestHeader("Content-Type","application/octet-stream");
+            // 鉴权（web-mcp 一期 · REQ-1-113）：写端点 /addLocalBook 需要令牌，
+            // 裸 XHR 不带 axios 拦截器 ⇒ 必须显式补 Authorization 头。
+            var uploadToken = (typeof getLegadoToken == 'function') ? getLegadoToken() : '';
+            if (uploadToken) {
+                XHR.setRequestHeader("Authorization", "Bearer " + uploadToken);
+            }
             XHR.send(fd);
             XHR.onreadystatechange = function() {
 
@@ -164,6 +170,12 @@
                     if(XHR.status == 200){
                         uploadSuccess(currUploadfile, {}, XHR.status)
                     }else{
+                        // 401/403 给出可操作引导（否则用户只看到红叉）
+                        if (XHR.status == 401) {
+                            alert('未授权：请在 App「Web 服务与 AI 接入」生成访问令牌，并填入本页上方「访问令牌」');
+                        } else if (XHR.status == 403) {
+                            alert('权限不足：上传需要「读写」及以上级别的访问令牌');
+                        }
                         uploadError()
                     }
 

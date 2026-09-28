@@ -1,5 +1,6 @@
 package io.legado.app.web.api
 
+import android.graphics.Bitmap
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoHTTPD.Response
 import io.legado.app.api.ReturnData
@@ -11,6 +12,8 @@ import io.legado.app.web.McpAuditor
 import kotlinx.coroutines.TimeoutCancellationException
 import okio.Pipe
 import okio.buffer
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeoutException
 
 /**
@@ -33,6 +36,7 @@ object ApiEnvelope {
      * 执行 handler 并装信封。
      *
      * - handler 返回 [Response] ⇒ 直接透传（**逃生舱**，如 `/backup` 的 ZIP 流）；
+     * - handler 返回 [ReturnData] 且 `data` 是 [Bitmap] ⇒ 回 `image/png` 二进制（`/cover`、`/image`）；
      * - handler 返回 [ReturnData] ⇒ 按 `code` 组 JSON 响应；
      * - 抛异常 ⇒ 按 [statusCodeOf] 组错误信封（**不再恒 200**）。
      */
@@ -42,7 +46,10 @@ object ApiEnvelope {
         val response = try {
             when (val result = route.handler.handle(ctx)) {
                 is Response -> result
-                is ReturnData -> jsonResponse(result)
+                is ReturnData -> {
+                    val payload = result.data
+                    if (payload is Bitmap) imageResponse(payload) else jsonResponse(result)
+                }
                 else -> error("handler 返回类型非法：${result::class.java.name}（只允许 ReturnData 或 Response）")
             }
         } catch (e: Throwable) {
@@ -66,6 +73,28 @@ object ApiEnvelope {
             elapsedMs = System.currentTimeMillis() - startedAt
         )
         return response
+    }
+
+    /**
+     * 位图负载 → `image/png` 二进制响应（`/cover`、`/image` 用）。
+     *
+     * 🔴 **迁移丢失的既有分支**：改造前 `HttpServer.serve()` 在响应装配点是
+     * `if (returnData.data is Bitmap) → PNG 字节流 else → JSON`；路由注册表化时该分支随
+     * `when(uri)` 一起被删除 ⇒ 两个图片端点退化成 JSON 信封（GSON 序列化 Bitmap 得到 `{}`），
+     * **老页全部书籍封面与正文图片失效**（真机实测 23/23 封面 broken）。
+     * 现收回到信封装配单点，与「大列表走 Pipe 分块」同处同因（决策 #4 / #18）。
+     */
+    private fun imageResponse(bitmap: Bitmap): Response {
+        val outputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+        val byteArray = outputStream.toByteArray()
+        outputStream.close()
+        return NanoHTTPD.newFixedLengthResponse(
+            Response.Status.OK,
+            "image/png",
+            ByteArrayInputStream(byteArray),
+            byteArray.size.toLong()
+        )
     }
 
     /**
