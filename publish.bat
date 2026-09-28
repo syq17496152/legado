@@ -3,7 +3,7 @@ setlocal
 :: ============================================================
 ::  publish.bat - One-click release entry (thin shell)
 ::  Usage: publish.bat [--version 3.26.0901] [--dry-run]
-::                      [--platform gitee^|github^|both]
+::                      [--platform github]
 ::                      [--confirm-stage build|tag] [--l2-evidence <path>]
 ::
 ::  Five stages: version confirm -> 2 APK build -> verify fail-fast

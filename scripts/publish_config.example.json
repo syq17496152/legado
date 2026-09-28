@@ -1,11 +1,4 @@
 {
-  "gitee": {
-    "owner": "Chinashitou",
-    "repo": "legado",
-    "token": "<your-gitee-personal-access-token>",
-    "api_base": "https://gitee.com/api/v5",
-    "target_commitish": "main"
-  },
   "github": {
     "owner": "syq17496152",
     "repo": "legado",
@@ -23,10 +16,5 @@
     "release": "legado_miss_app_*.apk"
   },
   "update_log_path": "app/src/main/assets/updateLog.md",
-  "version_pattern": "3\\.\\d{2}\\.\\d{6}",
-  "retry": {
-    "max_attempts": 3,
-    "backoff_base": 2,
-    "timeout": 300
-  }
+  "version_pattern": "3\\.\\d{2}\\.\\d{6}"
 }

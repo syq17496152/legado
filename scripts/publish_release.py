@@ -4,7 +4,7 @@ APK 一键发布编排器：版本确认 → 双包构建 → 校验强化 → g
 
 用法:
     ai_tests\\venv\\Scripts\\python.exe scripts\\publish_release.py [--version <ver>] [--dry-run]
-        [--platform gitee|github|both] [--config <path>]
+        [--platform github] [--config <path>]
         [--confirm-stage build|tag]     # 非交互确认续跑（可重复；AI 代答场景，L2 不适用）
         [--l2-evidence <L2报告路径>]     # L2 真机门禁证据（文件存在且为当日生成）
 
@@ -17,9 +17,12 @@ APK 一键发布编排器：版本确认 → 双包构建 → 校验强化 → g
                       显式版本第 2 参保证同版本），每包后 bat 内嵌 daemon 清场
     Stage3 校验强化   双包齐全 / Cronet 动态下载双门禁 / apksigner 验签 / 包名版本一致性 /
                       updateLog 当日条目——致命项 fail-fast exit
-    gh release gh CLI 上传双包（test 包带 _debug 后缀命名防同名冲突）；
-                      gitee 走原 requests 层（2026-09-23 用户裁决：默认仅 github，gitee 暂忽略）
+    Stage4 发布       gh release 上传双包（test 包带 _debug 后缀命名防同名冲突）
     Stage5 git tag    tag=版本号，push 前人工确认，形成版本回滚锚点
+
+> **平台口径（2026-09-27 用户裁定）**：**仅 GitHub**。Gitee 发布层（`gitee_*` 五函数 + `retry_on_failure`
+> + requests/urllib3 依赖）已随 W-INF 清理删除 —— Gitee 侧无 `gh` CLI 等价物，且 App 内置 GitHub 加速
+> 通道已覆盖国内下载诉求。若将来恢复 Gitee，须重新引入并补测试。
 
 设计文档: docs/specs/build-release-automation/design.md（AD-01~AD-07）
 配置文件: scripts/publish_config.json（从 publish_config.example.json 复制并填入 token）
@@ -40,19 +43,9 @@ import zipfile
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 
-import requests
-import urllib3
-
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 DEFAULT_CONFIG = SCRIPT_DIR / "publish_config.json"
-
-# Gitee API 层仍走 requests。全局 Session：Windows 环境 Gitee 上传偶发 SSL
-# 证书链验证失败，临时禁用验证 + 过滤警告（GitHub 层已改走 gh CLI，不受此影响）
-# TODO: 后续排查网络环境（代理/防火墙）根因，恢复严格 SSL 验证
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-SESSION = requests.Session()
-SESSION.verify = False
 
 # Stage2 双包构建计划：(包类型, build-legado.bat 参数模板)
 # 参数序: <debug|release> <显式版本号>
@@ -113,8 +106,9 @@ def parse_args():
         description="APK 一键发布编排器（版本确认→双包构建→校验强化→gh release→git tag）")
     parser.add_argument("--version", help="指定版本号（如 3.26.083020），缺省时按公式 bump")
     parser.add_argument("--dry-run", action="store_true", help="全流程模拟预览，无任何副作用")
-    parser.add_argument("--platform", choices=["gitee", "github", "both"], default="github",
-                        help="发布平台（默认 github；2026-09-23 用户裁决：App 内置 GitHub 加速通道，Gitee 暂忽略）")
+    parser.add_argument("--platform", choices=["github"], default="github",
+                        help="发布平台（**仅 github**；2026-09-27 用户裁定：Gitee 发布层已清理，"
+                             "App 内置 GitHub 加速通道覆盖国内下载）")
     parser.add_argument("--config", help=f"配置文件路径（默认 {DEFAULT_CONFIG}）")
     parser.add_argument("--confirm-stage", action="append", choices=["build", "tag"], default=[],
                         metavar="STAGE",
@@ -132,7 +126,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def read_config(config_path: Path, dry_run: bool = False, platform: str = "both") -> dict:
+def read_config(config_path: Path, dry_run: bool = False, platform: str = "github") -> dict:
     """读取配置文件"""
     if not config_path.exists():
         # dry-run 模式下尝试用 example 文件
@@ -146,8 +140,8 @@ def read_config(config_path: Path, dry_run: bool = False, platform: str = "both"
             sys.exit(2)
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = json.load(f)
-    # 校验必需字段
-    platforms_to_check = ["gitee", "github"] if platform == "both" else [platform]
+    # 校验必需字段（平台已收敛为单平台 github，2026-09-27）
+    platforms_to_check = [platform]
     for p in platforms_to_check:
         if p not in cfg:
             log("CONFIG", f"配置缺少 {p} 段", "ERROR")
@@ -583,33 +577,6 @@ def get_upload_name(pkg_type: str, apk_path: Path, version: str) -> str:
     return apk_path.name
 
 
-def retry_on_failure(func, max_attempts: int, backoff_base: int, stage: str, *args, **kwargs):
-    """重试机制（Gitee requests 层）：网络错误/5xx 重试，4xx 鉴权错误立即终止"""
-    last_exc = None
-    for attempt in range(1, max_attempts + 1):
-        try:
-            return func(*args, **kwargs)
-        except requests.exceptions.HTTPError as e:
-            status = e.response.status_code if e.response is not None else 0
-            if 400 <= status < 500:
-                log(stage, f"HTTP {status} 鉴权/请求错误，不重试: {e}", "ERROR")
-                return None
-            log(stage, f"HTTP {status}（尝试 {attempt}/{max_attempts}）: {e}", "WARN")
-            last_exc = e
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-            log(stage, f"网络错误（尝试 {attempt}/{max_attempts}）: {e}", "WARN")
-            last_exc = e
-        except Exception as e:
-            log(stage, f"未知错误（尝试 {attempt}/{max_attempts}）: {e}", "ERROR")
-            last_exc = e
-        if attempt < max_attempts:
-            wait = backoff_base ** attempt
-            log(stage, f"等待 {wait}s 后重试...")
-            time.sleep(wait)
-    log(stage, f"重试 {max_attempts} 次后仍失败", "ERROR")
-    return None
-
-
 def confirm(prompt: str, stage: str, confirmed_stages: List[str], dry_run: bool) -> bool:
     """普通确认点（构建前/tag）。
 
@@ -992,107 +959,7 @@ def check_l2_evidence(args) -> None:
     log("L2", "L2 已确认通过")
 
 
-# === Gitee API 层（requests 保留：Gitee 无 gh CLI 等价物）===
-
-def gitee_get_release_by_tag(config: dict, tag: str) -> Optional[dict]:
-    """查询 Gitee Release by tag"""
-    g = config["gitee"]
-    url = f"{g['api_base']}/repos/{g['owner']}/{g['repo']}/releases/tags/{tag}"
-    resp = SESSION.get(url, params={"access_token": g["token"]}, timeout=30)
-    if resp.status_code == 404:
-        return None
-    resp.raise_for_status()
-    return resp.json()
-
-
-def gitee_create_release(config: dict, version: str, body: str) -> Optional[int]:
-    """创建 Gitee Release，返回 release_id"""
-    g = config["gitee"]
-    url = f"{g['api_base']}/repos/{g['owner']}/{g['repo']}/releases"
-    payload = {
-        "access_token": g["token"],
-        "tag_name": version,
-        "name": version,
-        "body": body,
-        "target_commitish": g.get("target_commitish", "main"),
-    }
-    resp = SESSION.post(url, data=payload, timeout=30)
-    resp.raise_for_status()
-    data = resp.json()
-    return data.get("id")
-
-
-def gitee_list_assets(config: dict, release_id: int) -> List[str]:
-    """列出 Gitee Release 已有 asset 名称"""
-    g = config["gitee"]
-    url = f"{g['api_base']}/repos/{g['owner']}/{g['repo']}/releases/{release_id}"
-    resp = SESSION.get(url, params={"access_token": g["token"]}, timeout=30)
-    resp.raise_for_status()
-    data = resp.json()
-    assets = data.get("assets", [])
-    return [a.get("name", "") for a in assets]
-
-
-def gitee_upload_asset(config: dict, release_id: int, apk_path: Path, upload_name: str) -> bool:
-    """上传 Gitee Asset"""
-    g = config["gitee"]
-    url = f"{g['api_base']}/repos/{g['owner']}/{g['repo']}/releases/{release_id}/attach_files"
-    with open(apk_path, "rb") as f:
-        files = {"file": (upload_name, f, "application/vnd.android.package-archive")}
-        data = {"access_token": g["token"]}
-        resp = SESSION.post(url, files=files, data=data, timeout=config["retry"]["timeout"])
-    resp.raise_for_status()
-    return True
-
-
-def gitee_publish(config: dict, version: str, body: str, apks: Dict[str, Path], dry_run: bool) -> Dict[str, bool]:
-    """Gitee 发布流程"""
-    results: Dict[str, bool] = {}
-    g = config["gitee"]
-    log("GITEE", f"owner={g['owner']}/{g['repo']} token={hide_token(g['token'])}")
-
-    if dry_run:
-        log("GITEE", "[dry-run] 将创建 Release tag=" + version)
-        for pkg_type, apk in apks.items():
-            log("GITEE", f"[dry-run] 将上传 {pkg_type}: {apk.name}")
-            results[pkg_type] = True
-        return results
-
-    # 查询 Release 是否已存在
-    existing = retry_on_failure(gitee_get_release_by_tag, 3, 2, "GITEE", config, version)
-    if existing is not None:
-        release_id = existing.get("id")
-        log("GITEE", f"Release 已存在（id={release_id}），复用")
-        existing_assets = set(gitee_list_assets(config, release_id))
-    else:
-        release_id = retry_on_failure(gitee_create_release, 3, 2, "GITEE", config, version, body)
-        if release_id is None:
-            log("GITEE", "创建 Release 失败", "ERROR")
-            for pkg_type in apks:
-                results[pkg_type] = False
-            return results
-        log("GITEE", f"创建 Release 成功（id={release_id}）")
-        existing_assets = set()
-
-    # 上传 APK
-    for pkg_type, apk_path in apks.items():
-        upload_name = get_upload_name(pkg_type, apk_path, version)
-        if upload_name in existing_assets:
-            log("GITEE", f"  {pkg_type}: {upload_name} 已存在，跳过")
-            results[pkg_type] = True
-            continue
-        log("GITEE", f"  {pkg_type}: 上传 {upload_name}...")
-        ok = retry_on_failure(gitee_upload_asset, 3, 2, "GITEE", config, release_id, apk_path, upload_name)
-        results[pkg_type] = ok is not None
-        if ok:
-            log("GITEE", f"  {pkg_type}: 上传成功")
-        else:
-            log("GITEE", f"  {pkg_type}: 上传失败", "ERROR")
-
-    return results
-
-
-# === Stage 4: gh release 发布（GitHub 层改走 gh CLI，Gitee 层保留 requests）===
+# === Stage 4: gh release 发布（GitHub 层走 gh CLI；Gitee 层已随平台收敛清理）===
 
 def gh_run(gh_args: List[str], env: dict, stage: str) -> Optional[subprocess.CompletedProcess]:
     """执行 gh CLI 子命令，3 次指数退避重试；鉴权类失败立即终止。返回 None 表示未找到（404 类）。"""
@@ -1262,24 +1129,16 @@ def main():
     check_l2_evidence(args)
 
     # Stage4 发布（双包全上传；test 包经 get_upload_name 加 _debug 后缀防同名冲突）
+    # 平台口径：仅 GitHub（Gitee 层已随 W-INF 清理，见文件头「平台口径」）
     all_results: Dict[str, Dict[str, bool]] = {}
     exit_code = 0
 
-    if args.platform in ("gitee", "both"):
-        try:
-            all_results["gitee"] = gitee_publish(config, version, body, apks, args.dry_run)
-        except Exception as e:
-            log("GITEE", f"发布异常: {e}", "ERROR")
-            all_results["gitee"] = {k: False for k in apks}
-            exit_code = 1
-
-    if args.platform in ("github", "both"):
-        try:
-            all_results["github"] = github_publish_gh(config, version, body, apks, args.dry_run)
-        except Exception as e:
-            log("GITHUB", f"发布异常: {e}", "ERROR")
-            all_results["github"] = {k: False for k in apks}
-            exit_code = 1
+    try:
+        all_results["github"] = github_publish_gh(config, version, body, apks, args.dry_run)
+    except Exception as e:
+        log("GITHUB", f"发布异常: {e}", "ERROR")
+        all_results["github"] = {k: False for k in apks}
+        exit_code = 1
 
     # Stage5 git tag（发布成功才打 tag；任一平台失败仍允许打 tag 以便排查，由汇总退出码反映）
     stage5_git_tag(version, args.confirm_stage, args.dry_run)
