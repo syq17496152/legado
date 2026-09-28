@@ -9,6 +9,7 @@ import io.legado.app.web.api.ApiEnvelope
 import io.legado.app.web.api.ApiRegistry
 import io.legado.app.web.api.ApiRouteBootstrap
 import io.legado.app.web.utils.AssetsWeb
+import io.legado.app.web.utils.CorsPolicy
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -34,6 +35,8 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
         val ct = ContentType(session.headers["content-type"]).tryUTF8()
         session.headers["content-type"] = ct.contentTypeHeader
         var uri = session.uri
+        // CORS 判定入参（Origin 与 Host 均取自请求头；NanoHTTPD 已统一小写键名）
+        val origin = session.headers["origin"]
 
         LogUtils.d(TAG) {
             "${session.method.name} - $uri - ${session.queryParameterString} - Start($startAt)"
@@ -43,9 +46,11 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
             // ① OPTIONS：浏览器 CORS 预检**不带 Authorization** ⇒ 必须在鉴权前放行（design §1.2.3）
             if (session.method == Method.OPTIONS) {
                 val response = newFixedLengthResponse("")
-                response.addHeader("Access-Control-Allow-Methods", "POST")
-                response.addHeader("Access-Control-Allow-Headers", "content-type")
-                response.addHeader("Access-Control-Allow-Origin", session.headers["origin"])
+                response.addHeader("Access-Control-Allow-Methods", CorsPolicy.ALLOW_METHODS)
+                // 允许头**必须含 authorization**：鉴权后浏览器会为 Bearer 头先发预检
+                response.addHeader("Access-Control-Allow-Headers", CorsPolicy.ALLOW_HEADERS)
+                CorsPolicy.allowOrigin(origin, session.headers["host"], WebAuth.strict)
+                    ?.let { response.addHeader("Access-Control-Allow-Origin", it) }
                 return response
             }
 
@@ -92,8 +97,10 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
                 return assetsWeb.getResponse(uri)
             }
 
-            response.addHeader("Access-Control-Allow-Methods", "GET, POST")
-            response.addHeader("Access-Control-Allow-Origin", session.headers["origin"])
+            response.addHeader("Access-Control-Allow-Methods", CorsPolicy.ALLOW_METHODS)
+            // CORS 收敛（3.3 / REQ-1-303）：同源 + 白名单；过渡期（strict=false）保留旧行为
+            CorsPolicy.allowOrigin(origin, session.headers["host"], WebAuth.strict)
+                ?.let { response.addHeader("Access-Control-Allow-Origin", it) }
             LogUtils.d(TAG) {
                 "${session.method.name} - $uri - ${session.queryParameterString} - End($startAt)"
             }
@@ -102,7 +109,9 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
             LogUtils.d(TAG) {
                 "${session.method.name} - $uri - ${session.queryParameterString} - Error End($startAt)\n$e\n${e.stackTraceStr}"
             }
-            return newFixedLengthResponse(e.message)
+            // 真实状态码（3.2 / REQ-1-301）：改造前此处恒 200 + 纯文本，
+            // 前端只能靠 isSuccess 猜对错 ⇒ 统一走信封（400/404/504/500 由异常类型映射）。
+            return ApiEnvelope.errorResponseOf(e)
         }
     }
 

@@ -46,16 +46,25 @@ object ApiEnvelope {
             LogUtils.d(TAG) {
                 "${ctx.method.name} - ${ctx.uri} - handler 异常\n$e\n${e.stackTraceStr}"
             }
-            val code = statusCodeOf(e)
-            jsonResponse(
-                ReturnData().setErrorMsg(e.localizedMessage ?: e.message ?: "服务器内部错误")
-                    .setCode(code)
-            )
+            errorResponseOf(e)
         } finally {
             // 3.7 异步审计挂点：写端点落库（REST 与 MCP 共用）。审计表在 3.6 建，故此处先留挂点。
             // 注意：审计必须"不阻塞响应"，实现时用独立 Coroutine 投递（见 design §1.4.1）。
         }
     }
+
+    /**
+     * 异常 → 错误信封响应（**真实 HTTP 状态码**，REQ-1-301）。
+     *
+     * `HttpServer.serve()` 的顶层 catch 复用本方法 —— 改造前该分支 `newFixedLengthResponse(e.message)`
+     * **恒 200**，前端只能靠 `isSuccess` 猜对错（本期要清偿的质量债之一，任务 3.2）。
+     */
+    fun errorResponseOf(e: Throwable): Response =
+        jsonResponse(
+            ReturnData()
+                .setErrorMsg(e.localizedMessage ?: e.message ?: "服务器内部错误")
+                .setCode(statusCodeOf(e))
+        )
 
     /** 构造 401 / 403 拒绝响应（供 WebAuth 复用，保证与常规信封同构）。 */
     fun deny(code: Int, message: String): Response =
