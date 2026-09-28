@@ -23,23 +23,24 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
-import androidx.compose.foundation.lazy.staggeredgrid.items as staggeredItems
+import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed as staggeredItemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,6 +58,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import io.legado.app.R
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.ui.widget.recycler.LoadMoreView
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 
 /**
  * 订阅文章列表（Compose 侧）的**滚动状态单源**（CF 6.2 RSS 文章五样式族）。
@@ -169,29 +172,36 @@ class RssArticleListStateHolder(style: Int) {
  *   `indication = null` 保持「零按下反馈」的既有观感。
  *
  * 触底翻页口径：原实现靠 `recyclerView.addOnScrollListener`——瀑布流在 `isPreload` 时提前 5 条、
- * 其余样式在 `!canScrollVertically(1)`（到底）时取下一页；本组件统一为「末个可视项进入末段阈值」
- * （瀑布流预加载 `PRELOAD_THRESHOLD`，其余为 0）。**顺带修掉一个真实死角**：原实现只在滚动事件里判到底，
- * 首页条目少于半屏时永远无法触发翻页（用户只能下拉刷新），新实现按 `hasMore` 守卫自动补齐。
+ * 其余样式在 `!canScrollVertically(1)`（到底）时取下一页；本组件统一为「末个可视项进入末段阈值」，
+ * 阈值由 `RssPagingThresholdResolver.resolve` **单源**给出（瀑布流+预加载=5，其余=1）。
+ * **顺带修掉两个真实死角**：①原实现只在滚动事件里判到底，首页条目少于半屏时永远无法触发翻页
+ * （用户只能下拉刷新），新实现按 `hasMore` 守卫自动补齐；②提前量为 0 时必须滑到**真正的最后一条**才发请求，
+ * 触底后必然出现「网络 RTT + 落库 + Flow 回流 + 重组」的空窗 —— 这是 2026-09-28 用户报障
+ * 「非自由布局四样式快速下滑卡顿」的根因之一。
+ *
+ * 数据/在途/有下一页三态改为 **`State` 入参**（AD-03 落地约束）：`snapshotFlow` 只能观察到 State 支撑的读取，
+ * 若数据入口是普通参数则 `items.size` 变化不被捕获 ⇒ 翻页判定永不重算。
  *
  * @param topPaddingPx 顶部覆盖占位（modern-rss 嵌入时由宿主上报，单位 px）
  * @param bottomPadding 底部留白（主壳底栏 / 导航栏，见 `mainBottomBarContentPadding`）
  */
 @Composable
 fun RssArticlesComposeList(
-    items: List<RssArticle>,
+    itemsState: State<List<RssArticle>>,
     style: Int,
     stateHolder: RssArticleListStateHolder,
     loadMoreView: LoadMoreView,
     topPaddingPx: Int,
     bottomPadding: Dp,
-    isLoading: Boolean,
-    hasMore: Boolean,
+    isLoadingState: State<Boolean>,
+    hasMoreState: State<Boolean>,
     isPreload: Boolean,
     onItemClick: (RssArticle) -> Unit,
     onLoadMore: () -> Unit,
     onCanScrollBackwardChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val items = itemsState.value
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val topPadding = with(LocalDensity.current) { topPaddingPx.toDp() }
     // 2026-09-27 用户报障修复：样式 3 的间距在**旧 View 实现里是像素(px)** ——
@@ -204,24 +214,32 @@ fun RssArticlesComposeList(
     val px60 = with(LocalDensity.current) { 60.toDp() }
     val px8 = with(LocalDensity.current) { 8.toDp() }
     val px4 = with(LocalDensity.current) { 4.toDp() }
-    val threshold = if (style == 3 && isPreload) PRELOAD_THRESHOLD else 0
-    val shouldLoadMore by remember(items, isLoading, hasMore, threshold) {
-        derivedStateOf {
-            items.isNotEmpty() && hasMore && !isLoading &&
-                stateHolder.lastVisibleIndex >= items.lastIndex - threshold
-        }
-    }
-    val canScrollBackward by remember {
-        derivedStateOf { stateHolder.canScrollBackward }
-    }
-    LaunchedEffect(shouldLoadMore) {
-        if (shouldLoadMore) onLoadMore()
-    }
-    LaunchedEffect(canScrollBackward) {
-        onCanScrollBackwardChanged(canScrollBackward)
+    // 翻页提前量：单源纯函数（瀑布流+预加载=5，其余=1；严禁 0）
+    val threshold = RssPagingThresholdResolver.resolve(style, isPreload)
+
+    // 判定脱离组合作用域（AD-03）：`snapshotFlow` 只在判定结果**翻转**时产生一次事件；
+    // 流内读取的 `itemsState / hasMoreState / isLoadingState / layoutInfo` 全部由 State 支撑 ⇒ 数据与滚动变化都会重算。
+    LaunchedEffect(stateHolder, threshold) {
+        snapshotFlow {
+            RssPagingDecision.shouldLoadMore(
+                itemCount = itemsState.value.size,
+                hasMore = hasMoreState.value,
+                isLoading = isLoadingState.value,
+                lastVisibleIndex = stateHolder.lastVisibleIndex,
+                threshold = threshold
+            )
+        }.distinctUntilChanged().filter { it }.collect { onLoadMore() }
     }
 
-    val key: (RssArticle) -> String = { "${it.origin}|${it.link}|${it.sort}" }
+    // 下拉刷新判据同样移出组合作用域：`layoutInfo` 在滚动中每帧被替换，组合期读取会让读取者反复失效
+    LaunchedEffect(stateHolder) {
+        snapshotFlow { stateHolder.canScrollBackward }
+            .distinctUntilChanged()
+            .collect { onCanScrollBackwardChanged(it) }
+    }
+
+    // 稳定 key 预计算（AD-04）：只在**数据变化时**算一次，而非每次组合为每个条目重新拼接字符串
+    val keys = remember(items) { items.map(RssArticleKey::of) }
     when {
         stateHolder.staggered != null -> LazyVerticalStaggeredGrid(
             columns = StaggeredGridCells.Fixed(if (landscape) 3 else 2),
@@ -238,7 +256,7 @@ fun RssArticlesComposeList(
             horizontalArrangement = Arrangement.spacedBy(px40),
             verticalItemSpacing = px60
         ) {
-            staggeredItems(items = items, key = key) { item ->
+            staggeredItemsIndexed(items = items, key = { index, _ -> keys[index] }) { _, item ->
                 RssArticleCardRow(
                     item = item,
                     landscape = landscape,
@@ -263,7 +281,7 @@ fun RssArticlesComposeList(
                 bottom = bottomPadding
             )
         ) {
-            gridItems(items = items, key = key) { item ->
+            gridItemsIndexed(items = items, key = { index, _ -> keys[index] }) { _, item ->
                 if (style == 2) {
                     RssArticleGridRow(item = item, coverHeight = 272.dp, horizontalPadding = 4.dp) { onItemClick(item) }
                 } else {
@@ -280,7 +298,7 @@ fun RssArticlesComposeList(
             modifier = modifier,
             contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding)
         ) {
-            itemsIndexed(items = items, key = { _, item -> key(item) }) { _, item ->
+            itemsIndexed(items = items, key = { index, _ -> keys[index] }) { _, item ->
                 Column(modifier = Modifier.fillMaxWidth()) {
                     if (style == 1) {
                         RssArticleBigCoverRow(item = item, onClick = { onItemClick(item) })
@@ -553,5 +571,5 @@ private fun Modifier.rssRowClickable(
     onClick = onClick
 )
 
-/** 预加载源的提前翻页条数（与原瀑布流分支的阈值 5 一致） */
-private const val PRELOAD_THRESHOLD = 5
+// 注：原 `private const val PRELOAD_THRESHOLD = 5` 已上移至 `RssPaging.kt`
+// 的 `RssPagingThresholdResolver`（连同样式 5 View 路径的引用一并为单源），避免阈值散落两处。

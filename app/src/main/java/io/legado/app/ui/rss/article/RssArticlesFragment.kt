@@ -32,6 +32,7 @@ import io.legado.app.model.VideoPlay
 import io.legado.app.ui.image.ImagePlay
 import io.legado.app.ui.rss.article.compose.RssArticleListStateHolder
 import io.legado.app.ui.rss.article.compose.RssArticlesComposeList
+import io.legado.app.ui.rss.article.compose.RssPagingThresholdResolver
 import io.legado.app.ui.rss.article.free.FreeGridSizeCalculator
 import io.legado.app.ui.rss.article.free.RssFreeGridLayoutManager
 import io.legado.app.ui.rss.read.ReadRss
@@ -86,7 +87,10 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
     private val articlesState = mutableStateOf<List<RssArticle>>(emptyList())
     private val articles: List<RssArticle> get() = articlesState.value
 
-    /** 在途加载（原 `viewModel.isLoading` 的 Compose 可见镜像，用于触底翻页节流） */
+    /**
+     * 在途加载闸（AD-02 **单源**）：页脚转圈显隐、触底翻页守卫、传给 Compose 列表的在途判据
+     * **全部只读此状态**（不再读 `viewModel.isLoading`，消除双源漂移窗口）。
+     */
     private val isLoadingState = mutableStateOf(true)
     /** 是否还有下一页（随 `loadFinallyLiveData` 刷新；`false` ⇒ 页脚「我是有底线的」且不再自动翻页） */
     private val hasMoreState = mutableStateOf(true)
@@ -193,14 +197,14 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
                 WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             }
             RssArticlesComposeList(
-                items = articles,
+                itemsState = articlesState,
                 style = articleStyle,
                 stateHolder = listStateHolder,
                 loadMoreView = loadMoreView,
                 topPaddingPx = topOverlaySpaceState.intValue,
                 bottomPadding = bottomPadding,
-                isLoading = isLoadingState.value,
-                hasMore = hasMoreState.value,
+                isLoadingState = isLoadingState,
+                hasMoreState = hasMoreState,
                 isPreload = isPreload,
                 onItemClick = { readRss(it) },
                 onLoadMore = { scrollToBottom() },
@@ -267,7 +271,7 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
                     if (lastVisible >= 0) {
                         // 预加载源：接近底部时提前取下一页，阈值与瀑布流保持一致（5 条）
                         if (isPreload &&
-                            lastVisible >= adapter.getActualItemCount() - PRELOAD_THRESHOLD
+                            lastVisible >= adapter.getActualItemCount() - RssPagingThresholdResolver.PRELOAD_THRESHOLD
                         ) {
                             scrollToBottom()
                         } else if (!isPreload && lastVisible >= layoutManager.itemCount - 2) {
@@ -562,7 +566,9 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
     }
 
     private fun scrollToBottom(forceLoad: Boolean = false) {
-        if (viewModel.isLoading) return
+        // 在途闸**单源**（AD-02）：唯一判据 = UI 在途闸 `isLoadingState`，不再读 `viewModel.isLoading`
+        //（双源会漂移 ⇒ 在途判定与页脚态可能不一致）
+        if (isLoadingState.value) return
         fullRefresh = false
         // F142：页脚重试走 forceLoad 通道。首页加载失败时 nextPageUrl 恒为 null，原实现直接交给
         // loadMore ⇒ 立即判「没有下一页」把页脚退化成「我是有底线的」，重试其实没有重新拉取。
@@ -595,6 +601,10 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
             refreshLayout.isRefreshing = false
             isLoadingState.value = false
             hasMoreState.value = hasMore
+            // 页脚在途闸**单源**（AD-02）：任何出口（成功 / 失败 / 无下一页）都先无条件收敛转圈，
+            // 再按 hasMore 决定稳定态。修复「翻页成功但仍有下一页时页脚停在转圈态不停」
+            // —— 这是用户报障「一直下一页在转圈」的直接原因（原实现仅在 !hasMore 时动作）。
+            loadMoreView.stopLoad()
             if (!hasMore) {
                 loadMoreView.noMore()
             }
@@ -628,8 +638,8 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
         /** 滚动预取的前瞻条数：可见下沿往后这么多条进入预取窗口 */
         private const val PREFETCH_AHEAD = 20
 
-        /** 预加载源「接近底部」的阈值（条），与瀑布流分支的 5 保持一致 */
-        private const val PRELOAD_THRESHOLD = 5
+        // 注：原 `private const val PRELOAD_THRESHOLD = 5` 已上移至 `RssPaging.kt` 的
+        // `RssPagingThresholdResolver.PRELOAD_THRESHOLD`（Compose 列表与样式 5 View 路径共用单源阈值）。
 
         /** Compose 列表位置恢复的实例状态键（旋转/进程重建） */
         private const val STATE_SCROLL_INDEX = "rssArticlesScrollIndex"
