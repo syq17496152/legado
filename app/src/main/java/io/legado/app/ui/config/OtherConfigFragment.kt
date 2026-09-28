@@ -20,7 +20,6 @@ import io.legado.app.help.config.NavigationBarIconConfig
 import io.legado.app.model.CheckSource
 import io.legado.app.model.ImageProvider
 import io.legado.app.receiver.SharedReceiverActivity
-import io.legado.app.service.WebService
 import io.legado.app.ui.book.read.config.ContentSelectMenuConfigDialog
 import io.legado.app.ui.config.compose.ComposeSettingFragment
 import io.legado.app.ui.config.compose.SettingActionSpec
@@ -170,13 +169,6 @@ class OtherConfigFragment : ComposeSettingFragment() {
                 }
             }
 
-            PreferKey.webPort -> {
-                if (WebService.isRun) {
-                    WebService.stop(requireContext())
-                    WebService.start(requireContext())
-                }
-            }
-
             PreferKey.epubReadEngine -> {
                 postEvent(EventBus.UP_CONFIG, arrayListOf(13))
             }
@@ -259,12 +251,6 @@ class OtherConfigFragment : ComposeSettingFragment() {
                 title = getString(R.string.custom_hosts),
                 summary = getString(R.string.custom_hosts_summary),
                 onClick = ::showCustomHostsDialog
-            ),
-            switch(
-                key = PreferKey.webServiceWakeLock,
-                title = getString(R.string.web_service_wake_lock),
-                summary = getString(R.string.web_service_wake_lock_summary),
-                defaultValue = false
             ),
             SettingActionSpec(
                 key = PreferKey.defaultBookTreeUri,
@@ -436,14 +422,12 @@ class OtherConfigFragment : ComposeSettingFragment() {
                 summary = getString(R.string.auto_refresh_media_toc_summary),
                 defaultValue = true
             ),
-            numberAction(
-                key = PreferKey.webPort,
-                title = getString(R.string.web_port_title),
-                summary = getString(R.string.web_port_summary, AppConfig.webPort.toString()),
-                min = 1024,
-                max = 60000,
-                value = AppConfig.webPort,
-                onSelected = { AppConfig.webPort = it }
+            // 一期 §6.6：端口/WakeLock 控件已迁入「Web 服务与 AI 接入」页（本页只留跳转，避免两处配置漂移）
+            SettingActionSpec(
+                key = KEY_WEB_SERVICE_SETTINGS,
+                title = getString(R.string.web_service_settings_title),
+                summary = getString(R.string.web_service_settings_entry_summary),
+                onClick = { startActivity<WebServiceSettingsActivity>() }
             ),
             SettingActionSpec(
                 key = PreferKey.shrinkDatabase,
@@ -749,6 +733,9 @@ class OtherConfigFragment : ComposeSettingFragment() {
         private const val KEY_MEDIA_BUTTON_ON_EXIT = "mediaButtonOnExit"
         private const val KEY_AUTO_UPDATE_VARIANT = "autoUpdateVariant"
         private const val KEY_DEBUG_TOOLS = "debug_tools"
+
+        /** 一期 §6.6：Web 服务设置入口（跳转项 key，不绑定任何 Preferences 键）。 */
+        private const val KEY_WEB_SERVICE_SETTINGS = "webServiceSettings"
         private val DEFAULT_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" +
                 BuildConfig.Cronet_Main_Version +

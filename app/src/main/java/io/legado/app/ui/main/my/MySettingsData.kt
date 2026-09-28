@@ -18,6 +18,8 @@ import io.legado.app.ui.config.AppearanceKitActivity
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.config.ConfigTag
 import io.legado.app.ui.config.RelaySettingsActivity
+import io.legado.app.ui.config.WebServiceSettingsActivity
+import io.legado.app.ui.config.WebServiceSettingsLogic
 import io.legado.app.ui.dict.rule.DictRuleActivity
 import io.legado.app.ui.highlight.HighlightRuleActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
@@ -279,11 +281,13 @@ private fun collectPreferenceAttr(
 internal fun Context.webServiceUiState(): MyWebServiceUiState {
     return MyWebServiceUiState(
         checked = WebService.isRun,
-        summary = if (WebService.isRun) {
-            WebService.hostAddress
-        } else {
-            getString(R.string.web_service_desc)
-        }
+        // 一期 §6：措辞与设置页共用一处（原实现在「运行中但地址未就绪」时会渲染成空行）
+        summary = WebServiceSettingsLogic.serviceSummaryText(
+            serviceRunning = WebService.isRun,
+            hostAddress = WebService.hostAddress,
+            stoppedText = getString(R.string.web_service_desc),
+            pendingText = getString(R.string.web_address_pending)
+        )
     )
 }
 
@@ -416,16 +420,23 @@ fun AppCompatActivity.showWebServiceOptions() {
     showDialogFragment(
         ComposeActionListDialog.create(
             title = getString(R.string.web_service),
+            // 一期 §6.6：保留复制/打开两个快捷动作，并补「设置」入口 —— 否则新页只能从「其他设置」绕进去
             labels = listOf(
                 getString(R.string.copy_text),
-                getString(R.string.open_in_browser)
+                getString(R.string.open_in_browser),
+                getString(R.string.web_service_settings_title)
             ),
-            descriptions = listOf(url, url),
+            descriptions = listOf(
+                url,
+                url,
+                getString(R.string.web_service_settings_entry_summary)
+            ),
             negativeText = getString(R.string.cancel),
             onSelected = { index ->
                 when (index) {
                     0 -> sendToClip(url)
                     1 -> openUrl(url)
+                    2 -> startActivity<WebServiceSettingsActivity>()
                 }
             }
         )

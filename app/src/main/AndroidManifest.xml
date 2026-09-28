@@ -282,6 +282,11 @@
             android:name=".ui.config.RelaySettingsActivity"
             android:exported="false"
             android:launchMode="singleTop" />
+        <!-- Web 服务与 AI 接入设置页（web-mcp-productization 一期 §6） -->
+        <activity
+            android:name=".ui.config.WebServiceSettingsActivity"
+            android:exported="false"
+            android:launchMode="singleTop" />
         <!-- 现代发现套件管理（7.11h） -->
         <activity
             android:name=".ui.main.explore.DiscoverySuiteManageActivity"
