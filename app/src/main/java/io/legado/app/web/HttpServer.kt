@@ -70,13 +70,34 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
             //    其余一律强制 —— 否则 GET /backup 会被当"读"放行 ⇒ 未授权整包导出（design §1.2.3）。
             var response: Response? = null
             val token = WebAuth.bearerToken(session)
+            val got = if (route != null && !WebAuth.isWhitelisted(uri)) {
+                TokenManager.verify(token)
+            } else {
+                TokenManager.Level.NONE
+            }
             if (route != null && !WebAuth.isWhitelisted(uri)) {
-                val got = TokenManager.verify(token)
                 val required = route.level
                 if ((WebAuth.strict || route.requiresAuthWhenNonStrict) && !WebAuth.allow(got, required)) {
                     response = WebAuth.denyResponse(required, got)
+                    // 3.7 审计：**未授权尝试写面**必须留痕（安全取证的关键一类）
+                    McpAuditor.record(
+                        route = route,
+                        level = got,
+                        postData = postData,
+                        success = false,
+                        errorMsg = if (got == TokenManager.Level.NONE) "unauthorized" else "forbidden",
+                        elapsedMs = System.currentTimeMillis() - startAt
+                    )
                 } else if (token != null && !WebRateLimiter.tryAcquire(WebRateLimiter.keyOf(got, token))) {
                     response = ApiEnvelope.deny(429, "请求过于频繁，请稍后再试")
+                    McpAuditor.record(
+                        route = route,
+                        level = got,
+                        postData = postData,
+                        success = false,
+                        errorMsg = "rate limited",
+                        elapsedMs = System.currentTimeMillis() - startAt
+                    )
                 }
             }
 
@@ -86,7 +107,7 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
                 response = runBlocking {
                     ApiEnvelope.dispatch(
                         route,
-                        ApiContext(session.method, uri, session.parameters, postData, files)
+                        ApiContext(session.method, uri, session.parameters, postData, files, got)
                     )
                 }
             }

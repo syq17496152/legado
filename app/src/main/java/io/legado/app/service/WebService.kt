@@ -27,6 +27,7 @@ import io.legado.app.utils.startService
 import io.legado.app.utils.stopService
 import io.legado.app.utils.toastOnUi
 import io.legado.app.web.HttpServer
+import io.legado.app.web.McpAuditor
 import io.legado.app.web.WebPortPolicy
 import io.legado.app.web.WebSocketServer
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -112,6 +113,8 @@ class WebService : BaseService() {
         }
         isRun = true
         upTile(true)
+        // 一期 3.7：审计保留策略（>7 天清理）。放在服务启动时投递一次，不参与任何请求路径。
+        McpAuditor.purgeExpired()
         networkChangedListener.register()
         networkChangedListener.onNetworkChanged = {
             val addressList = NetworkUtils.getLocalIPAddress()

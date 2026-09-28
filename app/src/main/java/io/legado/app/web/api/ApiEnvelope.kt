@@ -7,6 +7,7 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.utils.GSON
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.stackTraceStr
+import io.legado.app.web.McpAuditor
 import kotlinx.coroutines.TimeoutCancellationException
 import okio.Pipe
 import okio.buffer
@@ -36,7 +37,9 @@ object ApiEnvelope {
      * - 抛异常 ⇒ 按 [statusCodeOf] 组错误信封（**不再恒 200**）。
      */
     suspend fun dispatch(route: ApiRoute, ctx: ApiContext): Response {
-        return try {
+        val startedAt = System.currentTimeMillis()
+        var errorMsg = ""
+        val response = try {
             when (val result = route.handler.handle(ctx)) {
                 is Response -> result
                 is ReturnData -> jsonResponse(result)
@@ -46,11 +49,23 @@ object ApiEnvelope {
             LogUtils.d(TAG) {
                 "${ctx.method.name} - ${ctx.uri} - handler 异常\n$e\n${e.stackTraceStr}"
             }
+            errorMsg = e.localizedMessage ?: e.message ?: "服务器内部错误"
             errorResponseOf(e)
-        } finally {
-            // 3.7 异步审计挂点：写端点落库（REST 与 MCP 共用）。审计表在 3.6 建，故此处先留挂点。
-            // 注意：审计必须"不阻塞响应"，实现时用独立 Coroutine 投递（见 design §1.4.1）。
         }
+        val success = response.status == Response.Status.OK
+        if (!success && errorMsg.isEmpty()) {
+            errorMsg = "HTTP ${response.status.requestStatus}"
+        }
+        // 3.7 异步审计（写面落库；只读端点内部直接跳过）：不阻塞响应，不外泄明文凭证
+        McpAuditor.record(
+            route = route,
+            level = ctx.level,
+            postData = ctx.postData,
+            success = success,
+            errorMsg = errorMsg,
+            elapsedMs = System.currentTimeMillis() - startedAt
+        )
+        return response
     }
 
     /**

@@ -2814,6 +2814,7 @@ bookUrl：%7$s
     <string name="web_service_stopped">已停止</string>
     <string name="web_address_pending">正在获取地址…</string>
     <string name="web_address_unavailable">Web 服务未开启</string>
+    <string name="web_address_hint_when_off">开启 Web 服务后这里会显示访问地址</string>
     <string name="web_address_tap_to_copy">点按地址即复制</string>
     <string name="web_address_copied">地址已复制</string>
     <string name="web_port_range_hint">合法范围 1024–65530</string>

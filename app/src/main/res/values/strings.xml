@@ -3336,6 +3336,7 @@ Selected text or question:
     <string name="web_service_stopped">Stopped</string>
     <string name="web_address_pending">Fetching address…</string>
     <string name="web_address_unavailable">Web service is off</string>
+    <string name="web_address_hint_when_off">Turn the web service on to get an address here</string>
     <string name="web_address_tap_to_copy">Tap the address to copy</string>
     <string name="web_address_copied">Address copied</string>
     <string name="web_port_range_hint">Valid range 1024–65530</string>

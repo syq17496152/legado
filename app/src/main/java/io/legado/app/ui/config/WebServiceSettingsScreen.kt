@@ -38,6 +38,7 @@ import io.legado.app.ui.widget.compose.AppManagementIconAction
 import io.legado.app.ui.widget.compose.AppManagementPalette
 import io.legado.app.ui.widget.compose.AppSettingSectionTitle
 import io.legado.app.ui.widget.compose.LegadoMiuixActionButton
+import io.legado.app.ui.widget.compose.LegadoMiuixPalette
 import io.legado.app.ui.widget.compose.LegadoMiuixSwitch
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
 import io.legado.app.web.TokenManager
@@ -83,6 +84,15 @@ internal fun WebServiceSettingsScreen(
     onGuideGenerateReadonlyToken: () -> Unit
 ) {
     val palette = rememberAppManagementPalette()
+    // 真机缺陷修复（2026-09-29 两次截图实测）：
+    // ① `miuix.surfaceVariant` = `colors.row` ⇒ 与卡面**同色**，非主按钮完全不可见；
+    // ② 换 `rowPressed` 仍不可见 —— `UiCorner.surfaceColor(..., pressed=true)` 只把 alpha +0.08，
+    //    在不透明主题（`layoutAlpha()==1f`）下与未按下值**完全相同** ⇒ 无层次差。
+    // 故次级按钮底改用 `settings.page`（页面根背景面）：它与卡面（`row`）**必然不同值**，
+    // 仍是主题面 token（非硬编码色），日夜/主题色/主题包三态都随主题走。
+    val actionPalette = remember(palette) {
+        palette.miuix.copy(surfaceVariant = palette.settings.page)
+    }
     CompositionLocalProvider(
         LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = palette.settings.bodyFontFamily)
     ) {
@@ -116,6 +126,7 @@ internal fun WebServiceSettingsScreen(
                         AppManagementCard(palette = palette) {
                             FirstLaunchGuide(
                                 palette = palette,
+                                buttons = actionPalette,
                                 onOpenBrowser = onGuideOpenBrowser,
                                 onCopyAddress = onGuideCopyAddress,
                                 onGenerateToken = onGuideGenerateReadonlyToken,
@@ -133,12 +144,14 @@ internal fun WebServiceSettingsScreen(
                     AddressSection(
                         state = state,
                         palette = palette,
+                        buttons = actionPalette,
                         onCopyAddress = onCopyAddress,
                         onOpenBrowser = onOpenBrowser
                     )
                     TokenSection(
                         state = state,
                         palette = palette,
+                        buttons = actionPalette,
                         onGenerateToken = onGenerateToken,
                         onRevokeToken = onRevokeToken
                     )
@@ -267,6 +280,7 @@ private fun ServiceSection(
 private fun AddressSection(
     state: WebServiceSettingsState,
     palette: AppManagementPalette,
+    buttons: LegadoMiuixPalette,
     onCopyAddress: () -> Unit,
     onOpenBrowser: () -> Unit
 ) {
@@ -294,8 +308,9 @@ private fun AddressSection(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
+                // 未开启时**不得**再重复一遍"未开启"（真机截图实测为重复文案）⇒ 给可操作提示
                 text = stringResource(
-                    if (copyable) R.string.web_address_tap_to_copy else R.string.web_address_unavailable
+                    if (copyable) R.string.web_address_tap_to_copy else R.string.web_address_hint_when_off
                 ),
                 color = palette.settings.secondaryText,
                 fontSize = MaterialTheme.typography.bodyTertiary.fontSize
@@ -304,10 +319,11 @@ private fun AddressSection(
         if (copyable) {
             LegadoMiuixActionButton(
                 text = stringResource(R.string.open_in_browser),
-                palette = palette.miuix,
+                palette = buttons,
                 onClick = onOpenBrowser,
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                cornerRadius = palette.miuix.actionRadius
+                primary = true,
+                cornerRadius = buttons.actionRadius
             )
         }
     }
@@ -318,6 +334,7 @@ private fun AddressSection(
 private fun TokenSection(
     state: WebServiceSettingsState,
     palette: AppManagementPalette,
+    buttons: LegadoMiuixPalette,
     onGenerateToken: (TokenManager.Level) -> Unit,
     onRevokeToken: (TokenManager.Level) -> Unit
 ) {
@@ -357,19 +374,19 @@ private fun TokenSection(
                     text = stringResource(
                         if (generated) R.string.web_token_regenerate else R.string.web_token_generate
                     ),
-                    palette = palette.miuix,
+                    palette = buttons,
                     onClick = { onGenerateToken(level) },
                     modifier = Modifier.weight(1f),
-                    cornerRadius = palette.miuix.actionRadius
+                    cornerRadius = buttons.actionRadius
                 )
                 if (generated) {
                     LegadoMiuixActionButton(
                         text = stringResource(R.string.web_token_revoke),
-                        palette = palette.miuix,
+                        palette = buttons,
                         onClick = { onRevokeToken(level) },
                         modifier = Modifier.weight(1f),
                         danger = true,
-                        cornerRadius = palette.miuix.actionRadius
+                        cornerRadius = buttons.actionRadius
                     )
                 }
             }
@@ -429,6 +446,7 @@ private fun SecuritySection(
 @Composable
 private fun FirstLaunchGuide(
     palette: AppManagementPalette,
+    buttons: LegadoMiuixPalette,
     onOpenBrowser: () -> Unit,
     onCopyAddress: () -> Unit,
     onGenerateToken: () -> Unit,
@@ -446,18 +464,18 @@ private fun FirstLaunchGuide(
     ) {
         LegadoMiuixActionButton(
             text = stringResource(R.string.open_in_browser),
-            palette = palette.miuix,
+            palette = buttons,
             onClick = onOpenBrowser,
             modifier = Modifier.weight(1f),
             primary = true,
-            cornerRadius = palette.miuix.actionRadius
+            cornerRadius = buttons.actionRadius
         )
         LegadoMiuixActionButton(
             text = stringResource(R.string.web_first_launch_copy),
-            palette = palette.miuix,
+            palette = buttons,
             onClick = onCopyAddress,
             modifier = Modifier.weight(1f),
-            cornerRadius = palette.miuix.actionRadius
+            cornerRadius = buttons.actionRadius
         )
     }
     Row(
@@ -466,17 +484,17 @@ private fun FirstLaunchGuide(
     ) {
         LegadoMiuixActionButton(
             text = stringResource(R.string.web_first_launch_token),
-            palette = palette.miuix,
+            palette = buttons,
             onClick = onGenerateToken,
             modifier = Modifier.weight(1f),
-            cornerRadius = palette.miuix.actionRadius
+            cornerRadius = buttons.actionRadius
         )
         LegadoMiuixActionButton(
             text = stringResource(R.string.web_first_launch_dismiss),
-            palette = palette.miuix,
+            palette = buttons,
             onClick = onDismiss,
             modifier = Modifier.weight(1f),
-            cornerRadius = palette.miuix.actionRadius
+            cornerRadius = buttons.actionRadius
         )
     }
 }

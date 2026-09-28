@@ -1,6 +1,7 @@
 package io.legado.app.web.api
 
 import fi.iki.elonen.NanoHTTPD
+import io.legado.app.web.TokenManager
 
 /**
  * 单次请求的上下文（web-mcp-productization 一期 · 5.1）。
@@ -17,6 +18,10 @@ class ApiContext(
     val postData: String? = null,
     /** 上传文件表（NanoHTTPD `parseBody` 的 files map；无上传为空表） */
     val files: Map<String, String> = emptyMap(),
+    /**
+     * 本次请求用的令牌级别（一期 3.7 审计用；未携带 / 未校验时取 [TokenManager.Level.NONE]）。
+     */
+    val level: TokenManager.Level = TokenManager.Level.NONE,
 ) {
 
     /** 取参数首值；不存在返回 null。 */

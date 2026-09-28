@@ -26,8 +26,37 @@ object DatabaseMigrations {
             migration_97_98, migration_98_99, migration_99_100, migration_100_101,
             migration_101_102, migration_102_103, migration_103_104, migration_104_105,
             migration_105_106, migration_106_107, migration_107_108, migration_108_109,
-            migration_109_110, migration_110_111, migration_111_112
+            migration_109_110, migration_110_111, migration_111_112, migration_112_113
         )
+    }
+
+    /**
+     * 112 → 113（web-mcp-productization 一期 3.6）：新建 `mcp_audit` 表（写面调用审计）。
+     *
+     * 只建表 + 三索引（**无 DROP / 无 RENAME**，零数据风险）；列顺序与 `McpAudit` 实体逐列一致
+     * （Room 运行时 schema 校验会对齐）。
+     */
+    private val migration_112_113 = object : Migration(112, 113) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS `mcp_audit` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `time` INTEGER NOT NULL,
+                    `source` TEXT NOT NULL,
+                    `channel` TEXT NOT NULL,
+                    `level` TEXT NOT NULL,
+                    `target` TEXT NOT NULL,
+                    `method` TEXT NOT NULL,
+                    `success` INTEGER NOT NULL,
+                    `errorMsg` TEXT NOT NULL,
+                    `elapsedMs` INTEGER NOT NULL
+                )"""
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_mcp_audit_time` ON `mcp_audit` (`time`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_mcp_audit_source` ON `mcp_audit` (`source`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_mcp_audit_level` ON `mcp_audit` (`level`)")
+            AppLog.put("AppDatabase Migration 112→113: 新建 mcp_audit（写面调用审计）完成")
+        }
     }
 
     private val migration_10_11 = object : Migration(10, 11) {
