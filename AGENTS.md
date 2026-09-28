@@ -12,7 +12,7 @@
 | 底层 Gradle 任务 | `./gradlew assembleAppDebug` / `assembleAppRelease`（productFlavors 仅 `app`，App 首字母大写，**不是** `assembleDebug`） |
 | 改签名/strings.xml 后强制重打 | `./gradlew assembleAppRelease --rerun-tasks` |
 | 单元测试 / Lint | `./gradlew test` / `./gradlew lint` |
-| Vue3 Web 前端 | `npm run dev` / `npm run build`（在 `modules/web/` 下；build 含 type-check + vite build + `sync.js`，本地即可完成） |
+| Vue3 Web 前端 | `pnpm dev` / `pnpm build`（在 **`modules/web/` 目录内**，该目录是**独立 git 仓** `legadoM-web`，**主仓库已 `.gitignore` 并零跟踪**；build 含 type-check + vite build + `sync.js`，本地即可完成） |
 
 > `build-legado.bat` **硬编码本机环境**（`JAVA_HOME=C:\Program Files\AdoptOpenJDK\jdk-17.0.0.20-hotspot`、`ANDROID_HOME=C:\Android\Sdk`、`GRADLE_USER_HOME=F:\gh`、`PROJECT_DIR`），换机器需先改头部。完整打包流程见 `docs/project-flow/build-apk-guide.md`。
 

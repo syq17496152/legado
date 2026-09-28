@@ -16,8 +16,8 @@ import kotlinx.coroutines.runBlocking
  *
  * **分发主流程已退化为六步**，不再有端点级 `when (uri)` 分支（SC-1-15，门禁
  * `ai_tests/scripts/audit_api_registry.py` 断言）：
- * ① OPTIONS 预检放行 → ② 请求体解析 → ③ 查表 `ApiRegistry.find` → ④ 鉴权（一期 1.3 挂点）
- * → ⑤ 分发 + 装信封 `ApiEnvelope.dispatch` → ⑥ 未注册落静态资源。
+ * ① OPTIONS 预检放行 → ② 请求体解析 → ③ 查表 `ApiRegistry.find` → ④ 鉴权 + 限流（`WebAuth` / `WebRateLimiter`，
+ * 级别取自 `route.level`）→ ⑤ 分发 + 装信封 `ApiEnvelope.dispatch` → ⑥ 未注册落静态资源。
  */
 class HttpServer(port: Int) : NanoHTTPD(port) {
 
@@ -60,15 +60,27 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
             // ③ 查表：注册表是唯一路由真源（未注册 ⇒ null）
             val route = ApiRegistry.find(session.method, uri)
 
-            // ④ 鉴权：一期 1.3 在此接入 WebAuth.verify / allow（级别取自 route.level）
-            //    当前为纯查表分发（等价于改造前的无鉴权行为）。
+            // ④ 鉴权 + 限流（级别唯一真源 = route.level；未注册 / 白名单路径不经此步）。
+            //    过渡期（webAuthStrict=false）按「**级别**」而非「读写」放行：仅 READONLY 端点免令牌，
+            //    其余一律强制 —— 否则 GET /backup 会被当"读"放行 ⇒ 未授权整包导出（design §1.2.3）。
+            var response: Response? = null
+            val token = WebAuth.bearerToken(session)
+            if (route != null && !WebAuth.isWhitelisted(uri)) {
+                val got = TokenManager.verify(token)
+                val required = route.level
+                if ((WebAuth.strict || route.requiresAuthWhenNonStrict) && !WebAuth.allow(got, required)) {
+                    response = WebAuth.denyResponse(required, got)
+                } else if (token != null && !WebRateLimiter.tryAcquire(WebRateLimiter.keyOf(got, token))) {
+                    response = ApiEnvelope.deny(429, "请求过于频繁，请稍后再试")
+                }
+            }
 
             // ⑤ 分发 + 装信封。runBlocking 是 **HTTP 同步边界**（NanoHTTPD serve 为同步 API），
             //    按设计口径不计入"Kernel 层零 runBlocking"（SC-1-10）。
-            val response: Response? = route?.let {
-                runBlocking {
+            if (response == null && route != null) {
+                response = runBlocking {
                     ApiEnvelope.dispatch(
-                        it,
+                        route,
                         ApiContext(session.method, uri, session.parameters, postData, files)
                     )
                 }
