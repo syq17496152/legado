@@ -2,6 +2,7 @@ package io.legado.app.api.controller
 
 
 import io.legado.app.api.ReturnData
+import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.RssSource
 import io.legado.app.service.kernel.RssSourceKernel
 import io.legado.app.utils.GSON
@@ -31,8 +32,9 @@ object RssSourceController {
         val source = GSON.fromJsonObject<RssSource>(postData).getOrElse {
             return ReturnData().setErrorMsg("转换源失败${it.localizedMessage}")
         }
-        if (!RssSourceKernel.hasValidIdentity(source)) {
-            return ReturnData().setErrorMsg("源名称和URL不能为空")
+        // 校验链（2.3.1 / REQ-1-311）：与书源同口径
+        RssSourceKernel.skipReason(source)?.let {
+            return ReturnData().setErrorMsg(it)
         }
         runBlocking { RssSourceKernel.saveSource(source) }
         return ReturnData().setData("")
@@ -40,11 +42,23 @@ object RssSourceController {
 
     fun saveSources(postData: String?): ReturnData {
         postData ?: return ReturnData().setErrorMsg("数据不能为空")
-        val source = GSON.fromJsonArray<RssSource>(postData).getOrNull()
-        if (source.isNullOrEmpty()) {
+        val validated = try {
+            runBlocking { RssSourceKernel.parseAndValidate(postData) }
+        } catch (e: Exception) {
             return ReturnData().setErrorMsg("转换源失败")
         }
-        return ReturnData().setData(runBlocking { RssSourceKernel.saveSources(source) })
+        if (validated.accepted.isEmpty() && validated.skipped.isEmpty()) {
+            return ReturnData().setErrorMsg("转换源失败")
+        }
+        if (validated.skipped.isNotEmpty()) {
+            AppLog.put(
+                "Web 批量推送订阅源：结构残缺跳过 ${validated.skipped.size} 条（首条原因：${validated.skipped.first().reason}）",
+                null,
+                toast = false
+            )
+        }
+        // `data` 保持"成功数组"形状（老页 ToolBar.vue 以 总数-成功数 计失败数）
+        return ReturnData().setData(runBlocking { RssSourceKernel.saveSources(validated.accepted) })
     }
 
     fun getSource(parameters: Map<String, List<String>>): ReturnData {

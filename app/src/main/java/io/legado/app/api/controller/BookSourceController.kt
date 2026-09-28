@@ -2,6 +2,7 @@ package io.legado.app.api.controller
 
 
 import io.legado.app.api.ReturnData
+import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.BookSource
 import io.legado.app.service.kernel.BookSourceKernel
 import io.legado.app.utils.GSON
@@ -30,8 +31,9 @@ object BookSourceController {
         postData ?: return ReturnData().setErrorMsg("数据不能为空")
         val bookSource = GSON.fromJsonObject<BookSource>(postData).getOrNull()
             ?: return ReturnData().setErrorMsg("转换源失败")
-        if (!BookSourceKernel.hasValidIdentity(bookSource)) {
-            return ReturnData().setErrorMsg("源名称和URL不能为空")
+        // 校验链（2.2.2）与 App 导入页同口径：结构残缺源拒收并给出白话原因
+        BookSourceKernel.skipReason(bookSource)?.let {
+            return ReturnData().setErrorMsg(it)
         }
         runBlocking { BookSourceKernel.saveSource(bookSource) }
         return ReturnData().setData("")
@@ -39,11 +41,24 @@ object BookSourceController {
 
     fun saveSources(postData: String?): ReturnData {
         postData ?: return ReturnData().setErrorMsg("数据为空")
-        val bookSources = GSON.fromJsonArray<BookSource>(postData).getOrNull()
-        if (bookSources.isNullOrEmpty()) {
+        val validated = try {
+            runBlocking { BookSourceKernel.parseAndValidate(postData) }
+        } catch (e: Exception) {
             return ReturnData().setErrorMsg("转换源失败")
         }
-        return ReturnData().setData(runBlocking { BookSourceKernel.saveSources(bookSources) })
+        if (validated.accepted.isEmpty() && validated.skipped.isEmpty()) {
+            return ReturnData().setErrorMsg("转换源失败")
+        }
+        if (validated.skipped.isNotEmpty()) {
+            AppLog.put(
+                "Web 批量推送书源：结构残缺跳过 ${validated.skipped.size} 条（首条原因：${validated.skipped.first().reason}）",
+                null,
+                toast = false
+            )
+        }
+        // 老页口径（已核实 ToolBar.vue:112-129）：`data` 必须是"成功数组"，
+        // 失败数由前端以 `总数 - data.length` 计算 ⇒ 不得改成对象，否则提示整块失效
+        return ReturnData().setData(runBlocking { BookSourceKernel.saveSources(validated.accepted) })
     }
 
     fun getSource(parameters: Map<String, List<String>>): ReturnData {
