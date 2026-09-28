@@ -60,6 +60,7 @@ import io.legado.app.ui.font.FontSelectDialog
 import io.legado.app.data.entities.BookParagraphRule
 import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.SceneBookmark
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.AppWebDav
@@ -73,6 +74,7 @@ import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.ParagraphRuleProcessor
 import io.legado.app.help.book.ReadMenuCustomButtonExecutor
+import io.legado.app.help.book.SceneBookmarkHelper
 import io.legado.app.help.book.library.LibraryChapterManifestV3
 import io.legado.app.help.book.library.LibraryChapterPayloadV3
 import io.legado.app.help.book.library.LibraryCloudBackend
@@ -134,6 +136,7 @@ import io.legado.app.ui.book.changesource.ChangeChapterSourceDialog
 import io.legado.app.ui.book.character.BookCharacterManageActivity
 import io.legado.app.ui.book.info.BookInfoStartActivityContract
 import io.legado.app.ui.highlight.HighlightRuleActivity
+import io.legado.app.ui.scene.SceneBookmarkActivity
 import io.legado.app.ui.book.read.config.AiPurifyDialog
 import io.legado.app.ui.book.read.config.AutoReadDialog
 import io.legado.app.ui.book.read.config.TtsPrebuildDialog
@@ -921,6 +924,8 @@ class ReadBookActivity : BaseReadBookActivity(),
             R.id.menu_download -> showDownloadDialog()
             R.id.menu_tts_prebuild -> showTtsPrebuildDialog()
             R.id.menu_add_bookmark -> addBookmark()
+            R.id.menu_add_scene_bookmark -> addSceneBookmarkFromReadMenu()
+            R.id.menu_scene_bookmark_list -> openSceneBookmarkLibrary()
             R.id.menu_highlight_rule -> startActivity<HighlightRuleActivity>()
             R.id.menu_clear_chapter_highlights -> confirmClearChapterHighlights()
             R.id.menu_simulated_reading -> showSimulatedReading()
@@ -1431,6 +1436,11 @@ class ReadBookActivity : BaseReadBookActivity(),
                 purifyBySelection()
                 return true
             }
+
+            R.id.menu_scene_bookmark -> {
+                addSceneBookmarkBySelection()
+                return true
+            }
         }
         return false
     }
@@ -1513,8 +1523,73 @@ class ReadBookActivity : BaseReadBookActivity(),
         showDialogFragment(dialog)
     }
 
-    // --- HighlightStyleDialog.StyleHost（B2.5 划线样式面板宿主）---
+    // --- W8 9.3（REQ-32）：名场面书签 · 文字路径 ---
 
+    /** 划词菜单入口：以选中文本 + 选区章内坐标创建名场面书签 */
+    private fun addSceneBookmarkBySelection() {
+        val book = ReadBook.book ?: return
+        val pos = binding.readView.getSelectedReadPosition()
+        if (pos == null) {
+            // 与划线同口径（R.string.highlight_not_supported_here 的兄弟分支）：Epub 原生选区无章内坐标 ⇒ 明确提示，不静默
+            toastOnUi(R.string.scene_bookmark_unsupported)
+            return
+        }
+        val text = selectedText
+        if (text.isBlank()) return
+        saveSceneBookmark(
+            book = book,
+            chapterIndex = pos.chapterIndex,
+            chapterPos = pos.chapterPosition,
+            text = text
+        )
+    }
+
+    /** 阅读菜单入口：以当前阅读位置创建名场面书签（无选中文本，描述走章节名兜底） */
+    private fun addSceneBookmarkFromReadMenu() {
+        val book = ReadBook.book ?: return
+        saveSceneBookmark(
+            book = book,
+            chapterIndex = ReadBook.durChapterIndex,
+            chapterPos = ReadBook.durChapterPos,
+            text = ""
+        )
+    }
+
+    /** 阅读菜单入口：查看本书名场面（库页按书过滤） */
+    private fun openSceneBookmarkLibrary() {
+        val book = ReadBook.book ?: return
+        startActivity(SceneBookmarkActivity.bookIntent(this, book.bookUrl, book.name, book.author))
+    }
+
+    private fun saveSceneBookmark(book: Book, chapterIndex: Int, chapterPos: Int, text: String) {
+        val bookmark = SceneBookmark(
+            bookUrl = book.bookUrl,
+            bookName = book.name,
+            bookAuthor = book.author,
+            chapterIndex = chapterIndex,
+            chapterName = sceneChapterName(book.bookUrl, chapterIndex),
+            contentKind = SceneBookmarkHelper.KIND_TEXT,
+            anchor = SceneBookmarkHelper.textAnchor(chapterPos),
+            text = text
+        )
+        // 落库即反馈（AI 描述异步回写，不阻塞阅读；AI 未配置时 desc 取原文片段）
+        SceneBookmarkHelper.addAndDescribe(
+            bookmark = bookmark,
+            onSaved = { toastOnUi(R.string.scene_bookmark_added) }
+        )
+    }
+
+    /** 章节名取值：当前章优先用已加载章节，其它章查库（查不到留空，展示端以书名兜底） */
+    private fun sceneChapterName(bookUrl: String, chapterIndex: Int): String {
+        if (chapterIndex == ReadBook.durChapterIndex) {
+            ReadBook.curTextChapter?.chapter?.title?.takeIf { it.isNotBlank() }?.let { return it }
+        }
+        return kotlin.runCatching {
+            appDb.bookChapterDao.getChapter(bookUrl, chapterIndex)?.title.orEmpty()
+        }.getOrDefault("")
+    }
+
+    // --- HighlightStyleDialog.StyleHost（B2.5 划线样式面板宿主）---
     override fun currentHighlightStyle(): HighlightStyle = editingHighlightStyle
 
     override fun onHighlightStyleChanged(style: HighlightStyle) {

@@ -52,4 +52,9 @@
     <item
         android:id="@+id/menu_ai_purify"
         android:title="@string/ai_purify" />
+
+    <!-- W8 / REQ-32：选中文字加入名场面书签 -->
+    <item
+        android:id="@+id/menu_scene_bookmark"
+        android:title="@string/scene_bookmark_add" />
 </menu>

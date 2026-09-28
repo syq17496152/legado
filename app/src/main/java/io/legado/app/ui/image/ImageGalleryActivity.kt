@@ -56,6 +56,8 @@ import io.legado.app.base.attachComposeContent
 import io.legado.app.base.composeShell
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
+import io.legado.app.data.entities.SceneBookmark
+import io.legado.app.help.book.SceneBookmarkHelper
 import io.legado.app.help.image.ImageFileNameBuilder
 import io.legado.app.help.image.ImageShareHelper
 import io.legado.app.help.webView.SilentSslWebViewClient
@@ -1046,12 +1048,14 @@ class ImageGalleryActivity : VMBaseActivity<ViewBinding, ImageCanvasViewModel>()
 
     /**
      * 长按图片菜单：保存/分享/复制URL（复用 SAF 保存流程，与 ImageDetailActivity 一致）
+     *
+     * W8 9.3（REQ-32）：追加「加入名场面」——锚点取**长按的这张图** URL（图片订阅路径载荷）。
      */
     private fun showImageActionMenu(imageUrl: String) {
         currentImageUrl = imageUrl
         showComposeActionListDialog(
             title = "图片操作",
-            labels = listOf("保存图片", "分享图片", "复制URL")
+            labels = listOf("保存图片", "分享图片", "复制URL", getString(R.string.scene_bookmark_add))
         ) { which ->
             when (which) {
                 0 -> saveImage(imageUrl)
@@ -1060,8 +1064,34 @@ class ImageGalleryActivity : VMBaseActivity<ViewBinding, ImageCanvasViewModel>()
                     sendToClip(imageUrl)
                     toastOnUi("图片链接已复制")
                 }
+                3 -> addSceneBookmarkFromImage(imageUrl)
             }
         }
+    }
+
+    /**
+     * W8 9.3（REQ-32）：图片订阅路径名场面书签。
+     *
+     * 载荷：`bookUrl` = 订阅源 sourceUrl（无源时回落当前文章 link）、`chapterName` = 当前文章标题、
+     * anchor = `{"imageUrl":...}`（跳回时按图 URL 定位）。desc 由 AI 异步回写，未配置 AI 时以章节名兜底。
+     */
+    private fun addSceneBookmarkFromImage(imageUrl: String) {
+        if (imageUrl.isBlank()) return
+        val source = ImagePlay.rssSource
+        val article = ImagePlay.rssArticles?.getOrNull(ImagePlay.rssArticleIndex)
+        val bookmark = SceneBookmark(
+            bookUrl = source?.sourceUrl?.takeIf { it.isNotBlank() } ?: article?.link.orEmpty(),
+            bookName = source?.sourceName.orEmpty(),
+            bookAuthor = ImagePlay.rssSortName.orEmpty(),
+            chapterIndex = ImagePlay.rssArticleIndex,
+            chapterName = article?.title.orEmpty(),
+            contentKind = SceneBookmarkHelper.KIND_IMAGE,
+            anchor = SceneBookmarkHelper.imageAnchor(imageUrl, article?.link.orEmpty())
+        )
+        SceneBookmarkHelper.addAndDescribe(
+            bookmark = bookmark,
+            onSaved = { toastOnUi(R.string.scene_bookmark_added) }
+        )
     }
 
     /**

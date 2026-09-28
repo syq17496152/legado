@@ -159,6 +159,7 @@ class TextActionMenu(private val context: Context, private val callBack: CallBac
         R.id.menu_highlight -> ContentSelectConfig.ACTION_HIGHLIGHT
         R.id.menu_edit_here -> ContentSelectConfig.ACTION_EDIT_HERE
         R.id.menu_ai_purify -> ContentSelectConfig.ACTION_AI_PURIFY
+        R.id.menu_scene_bookmark -> ContentSelectConfig.ACTION_SCENE_BOOKMARK
         else -> null
     }
 

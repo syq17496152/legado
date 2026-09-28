@@ -474,6 +474,10 @@
         <activity
             android:name=".ui.book.bookmark.AllBookmarkActivity"
             android:launchMode="singleTop" />
+        <!-- W8 9.4（REQ-32）：名场面书签库页 -->
+        <activity
+            android:name=".ui.scene.SceneBookmarkActivity"
+            android:launchMode="singleTop" />
         <!-- 缓存界面 -->
         <activity
             android:name=".ui.book.cache.CacheActivity"

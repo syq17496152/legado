@@ -22,6 +22,7 @@ import io.legado.app.ui.dict.rule.DictRuleActivity
 import io.legado.app.ui.highlight.HighlightRuleActivity
 import io.legado.app.ui.replace.ReplaceRuleActivity
 import io.legado.app.ui.rss.source.manage.RssSourceActivity
+import io.legado.app.ui.scene.SceneBookmarkActivity
 import io.legado.app.ui.widget.compose.ComposeActionListDialog
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.putPrefBoolean
@@ -114,6 +115,8 @@ internal fun buildSettingsSections(context: Context): List<MySettingsSectionMode
                 actionRow("videoPlayerSetting", R.string.video_setting, R.string.video_setting_summary),
                 // bugfix-0908 T3：书架媒体页与书架页视频书点击（播放队列注入）功能重复，入口与页面删除
                 actionRow("bookmark", R.string.bookmark, R.string.all_bookmark),
+                // W8 9.4（REQ-32）：名场面书签库入口（防死页面：页面 + 本入口 + handleSettingsRowClick 三处齐备才算完成）
+                actionRow("sceneBookmark", R.string.scene_bookmark_library, R.string.scene_bookmark_summary),
                 actionRow("readRecord", R.string.read_record, R.string.read_record_summary),
                 actionRow("setting", R.string.other_setting, R.string.other_setting_s)
             )
@@ -301,6 +304,8 @@ internal fun Activity.handleSettingsRowClick(key: String, searchTarget: MySettin
         "dictRuleManage" -> startActivity<DictRuleActivity>()
         "txtTocRuleManage" -> startActivity<TxtTocRuleActivity>()
         "bookmark" -> startActivity<AllBookmarkActivity>()
+        // W8 9.4（REQ-32）：名场面书签库（全量视图，无 extra）
+        "sceneBookmark" -> startActivity<SceneBookmarkActivity>()
         "autoTask" -> startActivity<AutoTaskActivity>()
         "preciseManage" -> startActivity<ConfigActivity> {
             putExtra("configTag", ConfigTag.PRECISE_MANAGE)

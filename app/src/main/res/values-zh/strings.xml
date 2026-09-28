@@ -320,6 +320,27 @@
     <string name="color_alpha">不透明度</string>
     <string name="highlight">高亮</string>
     <string name="bookmark_add">添加书签</string>
+    <!-- W8 名场面书签（REQ-32）：三路径打标入口 -->
+    <string name="scene_bookmark_add">加入名场面</string>
+    <string name="scene_bookmark_added">已加入名场面</string>
+    <string name="scene_bookmark_unsupported">当前位置无法加入名场面</string>
+    <string name="scene_bookmark_book">本书名场面</string>
+    <!-- W8 9.4 名场面库页 -->
+    <string name="scene_bookmark_library">名场面书签</string>
+    <string name="scene_bookmark_summary">回看你收藏的精彩瞬间，AI 自动生成描述</string>
+    <string name="scene_bookmark_untitled">未命名</string>
+    <string name="scene_bookmark_empty_title">还没有名场面</string>
+    <string name="scene_bookmark_empty_subtitle">阅读时选中文字，或用阅读菜单「加入名场面」</string>
+    <string name="scene_bookmark_go_read">去阅读</string>
+    <string name="scene_bookmark_regen">重新生成描述</string>
+    <string name="scene_bookmark_regenerating">正在重新生成描述…</string>
+    <string name="scene_bookmark_desc_ready">描述已更新：%1$s</string>
+    <string name="scene_bookmark_delete">删除名场面</string>
+    <string name="scene_bookmark_deleted">已删除</string>
+    <string name="scene_bookmark_clear_book">清空本书名场面</string>
+    <string name="scene_bookmark_clear_book_confirm">确定删除《%1$s》的全部名场面？</string>
+    <string name="scene_bookmark_book_missing">未找到对应的书籍或订阅源</string>
+    <string name="scene_bookmark_image_missing">该名场面没有可打开的图片链接</string>
     <string name="copy_complete">已拷贝</string>
     <string name="bookshelf_management">书架管理</string>
     <string name="search_book_source">搜索书源</string>

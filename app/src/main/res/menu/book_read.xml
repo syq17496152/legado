@@ -55,6 +55,17 @@
         android:title="@string/bookmark_add"
         app:showAsAction="never" />
 
+    <!-- W8 9.3（REQ-32）：文字路径名场面书签（当前阅读位置打标 + 查看本书名场面） -->
+    <item
+        android:id="@+id/menu_add_scene_bookmark"
+        android:title="@string/scene_bookmark_add"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_scene_bookmark_list"
+        android:title="@string/scene_bookmark_book"
+        app:showAsAction="never" />
+
     <!-- F-P1-2 高亮规则管理入口 -->
     <item
         android:id="@+id/menu_highlight_rule"

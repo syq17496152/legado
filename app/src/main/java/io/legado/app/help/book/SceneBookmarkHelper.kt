@@ -42,6 +42,15 @@ object SceneBookmarkHelper {
     /** 锚点键：图片订阅路径的图片 URL（画廊跳回依据） */
     const val ANCHOR_IMAGE_URL = "imageUrl"
 
+    /**
+     * 锚点键：图片订阅路径的**文章链接**。
+     *
+     * 为什么必须一起存：图片滚动浏览依赖 `ImagePlay` 单例预置「来源 + 文章」，而文章由
+     * `subscribe` 源的 `articleRule` 经**链接**取图（`ReadRss.readNoHtml` 同口径）⇒ 只存图片 URL
+     * 无法重建取图上下文，跳回会拿不到图（详见 `ui/scene/SceneBookmarkActivity` 路由实现）。
+     */
+    const val ANCHOR_ARTICLE_LINK = "articleLink"
+
     /** 按书聚合分组（库页 `CollapseSectionHeader` 数据源） */
     data class BookSceneGroup(
         val bookUrl: String,
@@ -60,9 +69,14 @@ object SceneBookmarkHelper {
     fun mangaAnchor(pageIndex: Int): String =
         JSONObject().put(ANCHOR_PAGE_INDEX, pageIndex).toString()
 
-    /** 图片订阅路径锚点：`{"imageUrl":"..."}` */
-    fun imageAnchor(imageUrl: String): String =
-        JSONObject().put(ANCHOR_IMAGE_URL, imageUrl).toString()
+    /** 图片订阅路径锚点：`{"imageUrl":"...","articleLink":"..."}`（articleLink 为空时省略） */
+    fun imageAnchor(imageUrl: String, articleLink: String = ""): String {
+        val json = JSONObject().put(ANCHOR_IMAGE_URL, imageUrl)
+        if (articleLink.isNotBlank()) {
+            json.put(ANCHOR_ARTICLE_LINK, articleLink)
+        }
+        return json.toString()
+    }
 
     /** 读回文字路径段落位置；锚点缺失/损坏返回 null（调用方回退到章节首段） */
     fun chapterPosOf(anchor: String): Int? = optInt(anchor, ANCHOR_CHAPTER_POS)
@@ -74,6 +88,12 @@ object SceneBookmarkHelper {
     fun imageUrlOf(anchor: String): String? {
         val json = parseAnchor(anchor) ?: return null
         return json.optString(ANCHOR_IMAGE_URL).takeIf { it.isNotBlank() }
+    }
+
+    /** 读回图片订阅路径的文章链接；缺失返回 null（老数据无该键） */
+    fun articleLinkOf(anchor: String): String? {
+        val json = parseAnchor(anchor) ?: return null
+        return json.optString(ANCHOR_ARTICLE_LINK).takeIf { it.isNotBlank() }
     }
 
     private fun optInt(anchor: String, key: String): Int? {

@@ -306,7 +306,9 @@ class ContentSelectMenuConfigDialog : ComposeDialogFragment() {
             // R14（B3）：同为白名单派生项，未登记则用户保存一次后该动作被静默剔除
             ActionItem(ContentSelectConfig.ACTION_EDIT_HERE, R.string.edit_here),
             // Q-N4：同为白名单派生项，未登记则用户保存一次后该动作被静默剔除
-            ActionItem(ContentSelectConfig.ACTION_AI_PURIFY, R.string.ai_purify)
+            ActionItem(ContentSelectConfig.ACTION_AI_PURIFY, R.string.ai_purify),
+            // W8 9.3（REQ-32）：同为白名单派生项，未登记则用户保存一次后该动作被静默剔除
+            ActionItem(ContentSelectConfig.ACTION_SCENE_BOOKMARK, R.string.scene_bookmark_add)
         )
         private val knownActionIds = actionItems.map { it.id }.toSet()
 

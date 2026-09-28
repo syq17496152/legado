@@ -29,6 +29,9 @@ object ContentSelectConfig {
     /** Q-N4：选中文字交给 AI 净化（去广告/乱码/错别字，不改原意） */
     const val ACTION_AI_PURIFY = "ai_purify"
 
+    /** W8 9.3（REQ-32）：选中文字加入名场面书签 */
+    const val ACTION_SCENE_BOOKMARK = "scene_bookmark"
+
     private val legacyDefaultActions = setOf(
         ACTION_REPLACE,
         ACTION_COPY,
@@ -66,7 +69,9 @@ object ContentSelectConfig {
         // R14（B3）：新用户默认可见「编辑此处」；同样不动 legacy 两集合（参与老用户偏好迁移判定）
         ACTION_EDIT_HERE,
         // Q-N4：新用户默认可见「AI 净化」（老用户可在选区菜单配置页自行勾选）
-        ACTION_AI_PURIFY
+        ACTION_AI_PURIFY,
+        // W8 9.3（REQ-32）：新用户默认可见「加入名场面」；同样不动 legacy 两集合（参与老用户偏好迁移判定）
+        ACTION_SCENE_BOOKMARK
     )
 
     val defaultOpenValues = listOf("", ACTION_WEB_SEARCH, ACTION_DICT, ACTION_ASK_AI)

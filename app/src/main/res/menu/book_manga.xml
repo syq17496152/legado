@@ -122,4 +122,10 @@
         android:title="@string/enable_manga_gray"
         app:showAsAction="never"/>
 
+    <!-- W8 9.3（REQ-32）：漫画路径名场面书签（当前页打标） -->
+    <item
+        android:id="@+id/menu_add_scene_bookmark"
+        android:title="@string/scene_bookmark_add"
+        app:showAsAction="never" />
+
 </menu>

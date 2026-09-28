@@ -30,10 +30,12 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.SceneBookmark
 import io.legado.app.databinding.ActivityMangaBinding
 import io.legado.app.databinding.ViewLoadMoreBinding
 import io.legado.app.help.book.isImage
 import io.legado.app.help.book.removeType
+import io.legado.app.help.book.SceneBookmarkHelper
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.storage.Backup
 import io.legado.app.lib.dialogs.alert
@@ -779,8 +781,32 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                 mMenu?.findItem(R.id.menu_epaper_manga_setting)?.isVisible = false
                 mAdapter.enableGray(item.isChecked)
             }
+
+            R.id.menu_add_scene_bookmark -> addSceneBookmarkFromManga()
         }
         return super.onCompatOptionsItemSelected(item)
+    }
+
+    /**
+     * W8 9.3（REQ-32）：漫画路径名场面书签 —— 以**当前页下标**装锚点。
+     *
+     * 与文字路径同源：落库即 toast 回执，AI 描述异步回写（未配置 AI 时 desc 取章节名兜底），不阻塞翻页。
+     */
+    private fun addSceneBookmarkFromManga() {
+        val book = ReadManga.book ?: return
+        val bookmark = SceneBookmark(
+            bookUrl = book.bookUrl,
+            bookName = book.name,
+            bookAuthor = book.author,
+            chapterIndex = ReadManga.durChapterIndex,
+            chapterName = ReadManga.curMangaChapter?.chapter?.title.orEmpty(),
+            contentKind = SceneBookmarkHelper.KIND_MANGA,
+            anchor = SceneBookmarkHelper.mangaAnchor(ReadManga.durChapterPos)
+        )
+        SceneBookmarkHelper.addAndDescribe(
+            bookmark = bookmark,
+            onSaved = { toastOnUi(R.string.scene_bookmark_added) }
+        )
     }
 
     override fun openBookInfoActivity() {
