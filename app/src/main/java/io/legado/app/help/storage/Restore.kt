@@ -32,6 +32,7 @@ import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.RssReadRecord
 import io.legado.app.data.entities.RssStar
+import io.legado.app.data.entities.SceneBookmark
 import io.legado.app.data.entities.RuleSub
 import io.legado.app.data.entities.SearchKeyword
 import io.legado.app.data.entities.Server
@@ -173,6 +174,11 @@ object Restore {
         // B2.5：手动划线导入（insert 为 REPLACE → 幂等，重复恢复不会产生重复记录）
         fileToListT<BookHighlight>(path, "highlights.json")?.let {
             withContext(IO) { appDb.bookHighlightDao.insert(*it.toTypedArray()) }
+        }
+        // W8 9.5 / REQ-33：名场面书签还原（`@Insert(REPLACE)` ⇒ 幂等；旧备份无该文件时静默跳过）。
+        // 描述与标签是库内字段，随行一起回填 ⇒ 恢复后 AI 描述保留。
+        fileToListT<SceneBookmark>(path, "sceneBookmarks.json")?.let { list ->
+            withContext(IO) { list.forEach { appDb.sceneBookmarkDao.insert(it) } }
         }
         // R8（B2，2026-09-23）：自动任务规则导入（autoTaskRuleDao 亦为 REPLACE ⇒ 幂等）。
         // 恢复后**必须立即重排**：否则规则已在库里但系统闹钟未建立，用户会以为「恢复了却不跑」。

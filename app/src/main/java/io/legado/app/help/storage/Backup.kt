@@ -462,6 +462,11 @@ object Backup {
         if (selectedFiles.contains("highlights.json")) {
             writeListToJson(appDb.bookHighlightDao.all, "highlights.json", backupPath)
         }
+        // W8 9.5 / REQ-33：名场面书签纳入备份（四处同名同文件铁律的第 ① 处；
+        // 另三处 = Restore 还原分支 / BackupSelectorConfig.allItems / BackupController.executeWebBackup）
+        if (selectedFiles.contains("sceneBookmarks.json")) {
+            writeListToJson(appDb.sceneBookmarkDao.all, "sceneBookmarks.json", backupPath)
+        }
         // R8（B2，2026-09-23）：自动任务规则纳入备份
         // （修复前不在备份范围 ⇒ 换机/重装/清数据后任务全丢，且 cron+脚本无法重建）
         if (selectedFiles.contains("autoTask.json")) {

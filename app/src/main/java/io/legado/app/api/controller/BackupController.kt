@@ -208,6 +208,7 @@ object BackupController {
             // Web 备份**硬编码全集、不走 BackupSelectorConfig 选择器** ⇒ 选择器加了新条目它不会自动跟上，
             // 必须逐条登记。实测此前漏写 5 类：手动划线 / 自动任务 / 选角模板 / 封面图集 / 书源运行数据。
             writeListToJson(appDb.bookHighlightDao.all, "highlights.json", webBackupPath)
+            writeListToJson(appDb.sceneBookmarkDao.all, "sceneBookmarks.json", webBackupPath)
             writeListToJson(appDb.autoTaskRuleDao.all(), "autoTask.json", webBackupPath)
             writeListToJson(appDb.ttsCastingTemplateDao.all(), "ttsCastingTemplates.json", webBackupPath)
             Backup.stageCoverGallery(webBackupPath)
@@ -360,6 +361,10 @@ object BackupController {
             },
             BackupItemDef("replaceRule.json", "替换规则", "正文替换净化规则") {
                 appDb.replaceRuleDao.all.size
+            },
+            // W8 9.5 / REQ-33：名场面书签（概览与备份内容一致，否则用户在概览里看不到该类别体量）
+            BackupItemDef("sceneBookmarks.json", "名场面书签", "一键收藏的名场面与 AI 描述") {
+                appDb.sceneBookmarkDao.all.size
             },
             BackupItemDef("readRecord.json", "阅读记录", "阅读时长统计记录") {
                 appDb.readRecordDao.all.size
