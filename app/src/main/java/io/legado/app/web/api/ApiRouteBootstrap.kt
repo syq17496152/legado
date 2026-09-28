@@ -1,0 +1,50 @@
+package io.legado.app.web.api
+
+import io.legado.app.web.api.routes.BackupRoutes
+import io.legado.app.web.api.routes.BookRoutes
+import io.legado.app.web.api.routes.RuleRoutes
+import io.legado.app.web.api.routes.SourceRoutes
+
+/**
+ * 路由安装入口（web-mcp-productization 一期 · 5.10）。
+ *
+ * **跨期扩展的唯一收口点**：新增端点 = ① Kernel 加 `suspend fun` ② 在 `routes/` 下声明一行
+ * ③（新域时）在本文件追加一行组 —— **`HttpServer.kt` 零改动**（SC-1-14 / REQ-1-505）。
+ *
+ * 三期新增的 6 组路由（Debug / Log / Tts / Content / Console / Settings）挂到此处即可。
+ */
+object ApiRouteBootstrap {
+
+    @Volatile
+    private var installed = false
+
+    /**
+     * 安装全部路由（**幂等**）：重复调用不会重复注册（`ApiRegistry.register` 对重复键会抛异常，
+     * 故这里必须自守，否则二次调用即崩）。
+     */
+    @Synchronized
+    fun install() {
+        if (installed) return
+        ApiRegistry.registerAll(
+            *BookRoutes.routes,
+            *SourceRoutes.routes,
+            *RuleRoutes.routes,
+            *BackupRoutes.routes,
+        )
+        installed = true
+    }
+
+    /** 是否已安装（单测断言用）。 */
+    val isInstalled: Boolean get() = installed
+
+    /**
+     * 复位为"未安装"并清空注册表（**仅供单测**）。
+     *
+     * 存在理由：`install()` 的幂等靠 [installed] 标志位，而单测共享同一 JVM ⇒
+     * 需要能把两者一起回到初态，才能反复验证「安装 28 条」与「幂等」。
+     */
+    internal fun resetForTest() {
+        ApiRegistry.clearForTest()
+        installed = false
+    }
+}

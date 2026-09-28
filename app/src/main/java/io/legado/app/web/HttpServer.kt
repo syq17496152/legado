@@ -1,145 +1,85 @@
 package io.legado.app.web
 
-import android.graphics.Bitmap
 import fi.iki.elonen.NanoHTTPD
-import io.legado.app.api.ReturnData
-import io.legado.app.api.controller.BackupController
-import io.legado.app.api.controller.BookController
-import io.legado.app.api.controller.BookSourceController
-import io.legado.app.api.controller.ReplaceRuleController
-import io.legado.app.api.controller.RssSourceController
-import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.service.WebService
-import io.legado.app.utils.GSON
 import io.legado.app.utils.LogUtils
 import io.legado.app.utils.stackTraceStr
+import io.legado.app.web.api.ApiContext
+import io.legado.app.web.api.ApiEnvelope
+import io.legado.app.web.api.ApiRegistry
+import io.legado.app.web.api.ApiRouteBootstrap
 import io.legado.app.web.utils.AssetsWeb
 import kotlinx.coroutines.runBlocking
-import okio.Pipe
-import okio.buffer
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 
+/**
+ * Web 服务 HTTP 入口（web-mcp-productization 一期 · 5.5 / REQ-1-502）。
+ *
+ * **分发主流程已退化为六步**，不再有端点级 `when (uri)` 分支（SC-1-15，门禁
+ * `ai_tests/scripts/audit_api_registry.py` 断言）：
+ * ① OPTIONS 预检放行 → ② 请求体解析 → ③ 查表 `ApiRegistry.find` → ④ 鉴权（一期 1.3 挂点）
+ * → ⑤ 分发 + 装信封 `ApiEnvelope.dispatch` → ⑥ 未注册落静态资源。
+ */
 class HttpServer(port: Int) : NanoHTTPD(port) {
+
     private val assetsWeb = AssetsWeb("web")
+
+    init {
+        // 路由安装的唯一入口（幂等）。新增端点只改 ApiRouteBootstrap 与 routes 目录，本文件零改动。
+        ApiRouteBootstrap.install()
+    }
 
     override fun serve(session: IHTTPSession): Response {
         WebService.serve()
-        var returnData: ReturnData? = null
+        val startAt = System.currentTimeMillis()
         val ct = ContentType(session.headers["content-type"]).tryUTF8()
         session.headers["content-type"] = ct.contentTypeHeader
         var uri = session.uri
 
-        val startAt = System.currentTimeMillis()
         LogUtils.d(TAG) {
             "${session.method.name} - $uri - ${session.queryParameterString} - Start($startAt)"
         }
 
         try {
-            when (session.method) {
-                Method.OPTIONS -> {
-                    val response = newFixedLengthResponse("")
-                    response.addHeader("Access-Control-Allow-Methods", "POST")
-                    response.addHeader("Access-Control-Allow-Headers", "content-type")
-                    response.addHeader("Access-Control-Allow-Origin", session.headers["origin"])
-                    //response.addHeader("Access-Control-Max-Age", "3600");
-                    return response
-                }
-
-                Method.POST -> {
-                    val files = HashMap<String, String>()
-                    session.parseBody(files)
-                    val postData = files["postData"]
-
-                    returnData = runBlocking {
-                        when (uri) {
-                            "/saveBookSource" -> BookSourceController.saveSource(postData)
-                            "/saveBookSources" -> BookSourceController.saveSources(postData)
-                            "/deleteBookSources" -> BookSourceController.deleteSources(postData)
-                            "/saveBook" -> BookController.saveBook(postData)
-                            "/deleteBook" -> BookController.deleteBook(postData)
-                            "/saveBookProgress" -> BookController.saveBookProgress(postData)
-                            "/addLocalBook" -> BookController.addLocalBook(session.parameters, files)
-                            "/saveReadConfig" -> BookController.saveWebReadConfig(postData)
-                            "/saveRssSource" -> RssSourceController.saveSource(postData)
-                            "/saveRssSources" -> RssSourceController.saveSources(postData)
-                            "/deleteRssSources" -> RssSourceController.deleteSources(postData)
-                            "/saveReplaceRule" -> ReplaceRuleController.saveRule(postData)
-                            "/deleteReplaceRule" -> ReplaceRuleController.delete(postData)
-                            "/testReplaceRule" -> ReplaceRuleController.testRule(postData)
-                            else -> null
-                        }
-                    }
-                }
-
-                Method.GET -> {
-                    val parameters = session.parameters
-
-                    // F-P0-2 备份选择器：/backup 返回 ZIP 文件（非 ReturnData），需特殊处理
-                    if (uri == "/backup") {
-                        val backupResponse = BackupController.backup()
-                        backupResponse.addHeader("Access-Control-Allow-Methods", "GET, POST")
-                        backupResponse.addHeader("Access-Control-Allow-Origin", session.headers["origin"])
-                        return backupResponse
-                    }
-
-                    returnData = when (uri) {
-                        "/getBookSource" -> BookSourceController.getSource(parameters)
-                        "/getBookSources" -> BookSourceController.sources
-                        "/getBookshelf" -> BookController.bookshelf
-                        "/getChapterList" -> BookController.getChapterList(parameters)
-                        "/refreshToc" -> BookController.refreshToc(parameters)
-                        "/getBookContent" -> BookController.getBookContent(parameters)
-                        "/cover" -> BookController.getCover(parameters)
-                        "/image" -> BookController.getImg(parameters)
-                        "/getReadConfig" -> BookController.getWebReadConfig()
-                        "/getRssSource" -> RssSourceController.getSource(parameters)
-                        "/getRssSources" -> RssSourceController.sources
-                        "/getReplaceRules" -> ReplaceRuleController.allRules
-                        "/backupPreview" -> BackupController.getBackupPreview()
-                        else -> null
-                    }
-                }
-
-                else -> Unit
+            // ① OPTIONS：浏览器 CORS 预检**不带 Authorization** ⇒ 必须在鉴权前放行（design §1.2.3）
+            if (session.method == Method.OPTIONS) {
+                val response = newFixedLengthResponse("")
+                response.addHeader("Access-Control-Allow-Methods", "POST")
+                response.addHeader("Access-Control-Allow-Headers", "content-type")
+                response.addHeader("Access-Control-Allow-Origin", session.headers["origin"])
+                return response
             }
 
-            if (returnData == null) {
-                if (uri.endsWith("/"))
-                    uri += "index.html"
+            // ② 请求体解析（仅 POST；GET 不解析，与改造前一致）
+            val files = HashMap<String, String>()
+            var postData: String? = null
+            if (session.method == Method.POST) {
+                session.parseBody(files)
+                postData = files["postData"]
+            }
+
+            // ③ 查表：注册表是唯一路由真源（未注册 ⇒ null）
+            val route = ApiRegistry.find(session.method, uri)
+
+            // ④ 鉴权：一期 1.3 在此接入 WebAuth.verify / allow（级别取自 route.level）
+            //    当前为纯查表分发（等价于改造前的无鉴权行为）。
+
+            // ⑤ 分发 + 装信封。runBlocking 是 **HTTP 同步边界**（NanoHTTPD serve 为同步 API），
+            //    按设计口径不计入"Kernel 层零 runBlocking"（SC-1-10）。
+            val response: Response? = route?.let {
+                runBlocking {
+                    ApiEnvelope.dispatch(
+                        it,
+                        ApiContext(session.method, uri, session.parameters, postData, files)
+                    )
+                }
+            }
+
+            // ⑥ 未注册路径 ⇒ 静态资源（或 404），保证不会误路由到业务 handler（REQ-1-506 / SC-1-19）
+            if (response == null) {
+                if (uri.endsWith("/")) uri += "index.html"
                 return assetsWeb.getResponse(uri)
             }
 
-            val response = if (returnData.data is Bitmap) {
-                val outputStream = ByteArrayOutputStream()
-                (returnData.data as Bitmap).compress(Bitmap.CompressFormat.PNG, 100, outputStream)
-                val byteArray = outputStream.toByteArray()
-                outputStream.close()
-                val inputStream = ByteArrayInputStream(byteArray)
-                newFixedLengthResponse(
-                    Response.Status.OK,
-                    "image/png",
-                    inputStream,
-                    byteArray.size.toLong()
-                )
-            } else {
-                val data = returnData.data
-                if (data is List<*> && data.size > 3000) {
-                    val pipe = Pipe(16 * 1024)
-                    Coroutine.async {
-                        pipe.sink.buffer().outputStream().bufferedWriter(Charsets.UTF_8).use {
-                            GSON.toJson(returnData, it)
-                        }
-                    }
-                    newChunkedResponse(
-                        Response.Status.OK,
-                        "application/json",
-                        pipe.source.buffer().inputStream()
-                    )
-                } else {
-                    newFixedLengthResponse(GSON.toJson(returnData))
-                }
-            }
             response.addHeader("Access-Control-Allow-Methods", "GET, POST")
             response.addHeader("Access-Control-Allow-Origin", session.headers["origin"])
             LogUtils.d(TAG) {
@@ -152,7 +92,6 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
             }
             return newFixedLengthResponse(e.message)
         }
-
     }
 
     companion object {

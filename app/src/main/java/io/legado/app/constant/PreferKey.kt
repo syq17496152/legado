@@ -587,4 +587,16 @@ object PreferKey {
     const val videoGestureGuideShown = "videoGestureGuideShown"
     // F48：发现分类页「长按书籍可预览」一次性提示是否已展示（展示后关闭或首次成功长按即置 true）
     const val exploreShowPreviewHintShown = "exploreShowPreviewHintShown"
+
+    // ===== web-mcp-productization 一期：Web 鉴权（三级令牌 + 过渡开关 + 首启引导）=====
+    // 令牌在 Preferences 中只存 SHA-256 摘要（十六进制），永不落明文（REQ-1-102）
+    const val webTokenReadonly = "webTokenReadonly"
+    const val webTokenManage = "webTokenManage"
+    const val webTokenAdmin = "webTokenAdmin"
+    // 最近一次生成时间（毫秒时间戳），供设置页展示（REQ-1-602）
+    const val webTokenGeneratedAt = "webTokenGeneratedAt"
+    // 过渡开关：false（默认）= 写操作强制令牌 / 读放行；true = 全端点强制（REQ-1-108）
+    const val webAuthStrict = "webAuthStrict"
+    // S2 首启引导卡一次性标志（REQ-1-605）
+    const val webServiceFirstLaunchDone = "webServiceFirstLaunchDone"
 }
