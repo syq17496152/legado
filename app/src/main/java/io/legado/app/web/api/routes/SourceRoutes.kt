@@ -18,13 +18,15 @@ object SourceRoutes {
         ApiRoute(Method.GET, "/getBookSource", Level.READONLY, mcpToolName = "source_get") { ctx ->
             BookSourceController.getSource(ctx.parameters)
         },
-        ApiRoute(Method.GET, "/getBookSources", Level.READONLY, mcpToolName = "source_get_all") { _ ->
+        // `source_get_all` 在 MCP 侧无 1:1 工具（列表变体并入 `source_get`）⇒ 不投影，见 tasks §2.6
+        ApiRoute(Method.GET, "/getBookSources", Level.READONLY) { _ ->
             BookSourceController.sources
         },
         ApiRoute(Method.POST, "/saveBookSource", Level.MANAGE, mcpToolName = "source_save") { ctx ->
             BookSourceController.saveSource(ctx.postData)
         },
-        ApiRoute(Method.POST, "/saveBookSources", Level.MANAGE, mcpToolName = "source_save_multi") { ctx ->
+        // 批量保存变体，MCP 侧无 1:1 工具 ⇒ 不投影（tasks §2.6）
+        ApiRoute(Method.POST, "/saveBookSources", Level.MANAGE) { ctx ->
             BookSourceController.saveSources(ctx.postData)
         },
         ApiRoute(Method.POST, "/deleteBookSources", Level.MANAGE, mcpToolName = "source_delete") { ctx ->
@@ -35,13 +37,15 @@ object SourceRoutes {
         ApiRoute(Method.GET, "/getRssSource", Level.READONLY, mcpToolName = "rss_source_get") { ctx ->
             RssSourceController.getSource(ctx.parameters)
         },
-        ApiRoute(Method.GET, "/getRssSources", Level.READONLY, mcpToolName = "rss_source_get_all") { _ ->
+        // `rss_source_get_all` 无 1:1 工具（并入 `rss_source_get`）⇒ 不投影（tasks §2.6）
+        ApiRoute(Method.GET, "/getRssSources", Level.READONLY) { _ ->
             RssSourceController.sources
         },
         ApiRoute(Method.POST, "/saveRssSource", Level.MANAGE, mcpToolName = "rss_source_save") { ctx ->
             RssSourceController.saveSource(ctx.postData)
         },
-        ApiRoute(Method.POST, "/saveRssSources", Level.MANAGE, mcpToolName = "rss_source_save_multi") { ctx ->
+        // 批量保存变体，MCP 侧无 1:1 工具 ⇒ 不投影（tasks §2.6）
+        ApiRoute(Method.POST, "/saveRssSources", Level.MANAGE) { ctx ->
             RssSourceController.saveSources(ctx.postData)
         },
         ApiRoute(Method.POST, "/deleteRssSources", Level.MANAGE, mcpToolName = "rss_source_delete") { ctx ->

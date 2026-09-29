@@ -177,6 +177,7 @@ ai_tests\venv\Scripts\python.exe ai_tests/scripts/audit_gson_generic_signature.p
 | 错误发生后 | `spec-sedimentation-mechanism.md` |
 
 ## 快速入口
+- **🔴 二期交接（接手 MCP/Web 服务任务前必读）**：[docs/specs/web-mcp-productization/HANDOFF-二期交接文档.md](./docs/specs/web-mcp-productization/HANDOFF-二期交接文档.md)（含当前未编译错误的逐行修复清单 + 剩余任务矩阵 + 关键 API 速查）
 - **文档索引**：[docs/INDEX.md](./docs/INDEX.md)｜**任务导航（14模块代码锚点）**：[docs/project-flow/task-navigation.md](./docs/project-flow/task-navigation.md)
 - **命令/文件/版本速查**：[docs/project-flow/quick-reference.md](./docs/project-flow/quick-reference.md)｜**项目规范目录**：[docs/project-rules/](./docs/project-rules/)
 - **规则引擎详解**：[docs/project-flow/architecture/rule-engine.md](./docs/project-flow/architecture/rule-engine.md)

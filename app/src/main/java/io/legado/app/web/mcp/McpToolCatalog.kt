@@ -3,6 +3,7 @@ package io.legado.app.web.mcp
 import io.legado.app.BuildConfig
 import io.legado.app.web.TokenManager
 import io.legado.app.web.mcp.tools.BackupTools
+import io.legado.app.web.mcp.tools.BookmarkTools
 import io.legado.app.web.mcp.tools.BookshelfTools
 import io.legado.app.web.mcp.tools.ReadingTools
 import io.legado.app.web.mcp.tools.RssTools
@@ -35,6 +36,7 @@ object McpToolCatalog {
         buildList {
             addAll(BookshelfTools.tools)
             addAll(ReadingTools.tools)
+            addAll(BookmarkTools.tools)
             addAll(SourceTools.tools)
             addAll(RssTools.tools)
             addAll(RuleTools.tools)

@@ -27,8 +27,12 @@ fun interface ApiHandler {
  * @param method HTTP 方法
  * @param path 精确路径（如 `/saveBookSource`）；不做前缀匹配，未注册即不可达（REQ-1-506）
  * @param level 访问所需最低令牌级别
- * @param mcpToolName 二期 MCP 投影用工具名；`null` = 本期不投影
- * @param handler 处理体。**必须是最后一个参数** —— 声明处用「命名传 [mcpToolName] + 尾部 lambda」书写，
+ * @param mcpToolName 二期 MCP 投影用工具名；`null` = 本期不投影。**仅作 REST ↔ MCP 对拍**，
+ *        工具元数据的唯一真源仍按域放在 `web/mcp/tools/` 下的域文件（总纲 AD-10 / REQ-2-201）
+ * @param mcpTitle MCP 侧人类可读标题（可选；不填时由域文件声明提供，见 tasks 2.1）
+ * @param mcpDescription MCP 侧给 AI 看的一句话说明（可选，同上）
+ * @param mcpDangerous MCP 侧危险标记（可选，默认 `false`；`true` 触发端侧确认闸门）
+ * @param handler 处理体。**必须是最后一个参数** —— 声明处用「命名传可选参数 + 尾部 lambda」书写，
  *                而 Kotlin 的尾部 lambda 只绑定**最后一个**形参。
  */
 data class ApiRoute(
@@ -36,6 +40,9 @@ data class ApiRoute(
     val path: String,
     val level: TokenManager.Level,
     val mcpToolName: String? = null,
+    val mcpTitle: String? = null,
+    val mcpDescription: String? = null,
+    val mcpDangerous: Boolean = false,
     val handler: ApiHandler,
 ) {
     /** 注册表的唯一键（方法 + 路径）。 */
