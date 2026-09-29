@@ -72,6 +72,27 @@ object ContentRoutes {
             ReturnData().setData(ContentKernel.readStats(ctx.intParam("days", 30)))
         },
 
+        // ---- E4b 阅读目标读取（readonly）----
+        // 三期补记（IF-12 同类）：内核 `ReadStatsKernel.goalGet` 与 MCP 工具 `read_goal_get`
+        // **都已存在**，当时只缺 HTTP 路由 ⇒ 控制台 P10「阅读目标」只能挂降级文案。
+        ApiRoute(Method.GET, "/getReadGoal", Level.READONLY) { _ ->
+            ReturnData().setData(ReadStatsKernel.goalGet())
+        },
+
+        // ---- E4c 阅读目标保存（manage）----
+        // 入参**可只给部分字段**（其余沿用现值）—— 避免"改目标把头像清空"（口径与 MCP 工具 `read_goal_save` 一致）。
+        ApiRoute(Method.POST, "/saveReadGoal", Level.MANAGE) { ctx ->
+            val body = GSON.fromJsonObject<Map<String, Any?>>(ctx.requirePostData()).getOrNull()
+                ?: emptyMap()
+            ReturnData().setData(
+                ReadStatsKernel.goalSave(
+                    userName = body["userName"] as? String,
+                    avatar = body["avatar"] as? String,
+                    dailyGoalMinutes = (body["dailyGoalMinutes"] as? Number)?.toInt(),
+                )
+            )
+        },
+
         // ---- E5 书签列表（readonly）----
         ApiRoute(Method.GET, "/getBookmarks", Level.READONLY, mcpToolName = "bookmark_list") { ctx ->
             ReturnData().setData(
