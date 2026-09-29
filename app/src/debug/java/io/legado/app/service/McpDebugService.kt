@@ -2,10 +2,12 @@ package io.legado.app.service
 
 import android.content.Context
 import android.content.Intent
+import androidx.lifecycle.lifecycleScope
 import io.legado.app.base.BaseService
 import io.legado.app.constant.AppLog
 import io.legado.app.web.HttpServer
-import io.legado.app.web.mcp.McpToolCatalog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import splitties.init.appCtx
 
 /**
@@ -31,12 +33,16 @@ class McpDebugService : BaseService() {
 
     override fun onCreate() {
         super.onCreate()
-        startDebugServer()
+        // 🔴 内腿启动**不得在主线程**（实测事故，2026-09-29）：`HttpServer(port)` 的 init 会触发
+        // `ApiRouteBootstrap.install()`（175 条路由注册），叠加 `McpToolCatalog` 装配与 19 个域文件/14 个内核
+        // 的首次类加载 ⇒ 主线程启动耗时越线，系统打出 `Waited long enough for: ServiceRecord{...McpDebugService}`
+        // （Services ANR 前兆），且用户可感知为「App 启动后长时间卡住」。故一律投递到 IO 线程。
+        lifecycleScope.launch(Dispatchers.IO) { startDebugServer() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        startDebugServer()
+        lifecycleScope.launch(Dispatchers.IO) { startDebugServer() }
         return START_STICKY
     }
 
@@ -55,7 +61,7 @@ class McpDebugService : BaseService() {
             isRun = true
             AppLog.putDebugWithTag(
                 TAG,
-                "MCP 内腿服务已启动：$listenAddress（工具数=${McpToolCatalog.all().size}）",
+                "MCP 内腿服务已启动：$listenAddress",
                 level = AppLog.Level.INFO,
             )
         } catch (e: Throwable) {
