@@ -4,6 +4,7 @@ import androidx.annotation.Keep
 import androidx.core.content.edit
 import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
+import io.legado.app.help.AppCloudStorage
 import io.legado.app.help.DirectLinkUpload
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.getFolderNameNoCache
@@ -11,7 +12,9 @@ import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.storage.Backup
 import io.legado.app.help.storage.BackupAES
+import io.legado.app.help.storage.BackupConfig
 import io.legado.app.help.storage.BackupRestoreLock
+import io.legado.app.help.storage.Restore
 import io.legado.app.help.storage.BookCacheSelectorConfig
 import io.legado.app.model.BookCover
 import io.legado.app.model.VideoPlay.VIDEO_PREF_NAME
@@ -110,6 +113,83 @@ object BackupKernel {
     /** 读取概览：优先用最近一次备份的缓存，未备份过则现算。 */
     suspend fun preview(): BackupOverview =
         cachedBackupOverview ?: generateBackupOverview().also { cachedBackupOverview = it }
+
+    // ============================================================ 二期 §2.16：恢复与备份配置
+
+    /**
+     * `backup_restore`：恢复备份（**默认 dryRun**）。
+     *
+     * 恢复是**破坏性**操作（覆盖当前数据），且 spec §7.3 要求它走**端侧确认闸门** ⇒ 本方法
+     * 默认只做**预检**（返回"将恢复的概览"），不落库。真正恢复需 `dryRun=false` 且提供
+     * `cloudName`（云备份名）或 `path`（本地备份文件路径），二者按优先级取云。
+     *
+     * 与既有实现的关系：恢复体分别委派 `AppCloudStorage.restore(name)` 与
+     * `Restore.restoreLocked(path)`（后者是 `Restore` 唯一公开的按路径恢复入口；
+     * 私有的 `restore(path)` 不可见）。全程持 `BackupRestoreLock` 共享锁 + 120s 墙钟上限。
+     */
+    suspend fun restore(
+        dryRun: Boolean = true,
+        cloudName: String? = null,
+        path: String? = null,
+    ): Map<String, Any?> {
+        val overview = preview()
+        if (dryRun || (cloudName.isNullOrBlank() && path.isNullOrBlank())) {
+            return mapOf(
+                "dryRun" to true,
+                "fileName" to overview.fileName,
+                "totalSize" to overview.totalSize,
+                "itemCount" to overview.items.size,
+                "items" to overview.items,
+                "note" to "干跑：未执行恢复。真正恢复需 dryRun=false 且给出 cloudName 或 path，并经端侧确认。",
+            )
+        }
+        val source = if (!cloudName.isNullOrBlank()) "cloud:$cloudName" else "file:$path"
+        withTimeout(BACKUP_TIMEOUT_MS) {
+            BackupRestoreLock.withStorageLock {
+                if (!cloudName.isNullOrBlank()) {
+                    AppCloudStorage.restore(cloudName)
+                } else {
+                    Restore.restoreLocked(path!!)
+                }
+            }
+        }
+        return mapOf("dryRun" to false, "restored" to true, "source" to source)
+    }
+
+    /** `backup_config_get`：备份忽略配置（键 + 标题 + 当前是否忽略 + 原始映射）。 */
+    suspend fun configGet(): Map<String, Any?> = withContext(Dispatchers.IO) {
+        val keys = BackupConfig.ignoreKeys
+        val titles = BackupConfig.ignoreTitle
+        val current = BackupConfig.ignoreConfig
+        mapOf(
+            "items" to keys.mapIndexed { index, key ->
+                mapOf(
+                    "key" to key,
+                    "title" to titles.getOrNull(index),
+                    "ignored" to (current[key] ?: false),
+                )
+            },
+            "raw" to HashMap(current),
+        )
+    }
+
+    /**
+     * `backup_config_save`：保存备份忽略配置。
+     *
+     * 只接受 `BackupConfig.ignoreKeys` 白名单内的键（防写入无效键污染 `restoreIgnore.json`）；
+     * 命中 0 个已知键时抛错（避免"静默什么都没存"）。
+     */
+    suspend fun configSave(ignore: Map<String, Boolean>): Map<String, Any?> = withContext(Dispatchers.IO) {
+        val allowed = BackupConfig.ignoreKeys.toSet()
+        val accepted = ignore.filterKeys { it in allowed }
+        require(accepted.isNotEmpty()) {
+            "ignore 未命中任何已知配置键（可用键：${allowed.joinToString()}）"
+        }
+        val config = BackupConfig.ignoreConfig
+        accepted.forEach { (key, value) -> config[key] = value }
+        BackupConfig.saveIgnoreConfig()
+        mapOf("saved" to accepted.size, "applied" to accepted)
+    }
 
     /**
      * 在共享锁临界区内产出 zip（**私有**：防绕过 [BackupRestoreLock] 直调，REQ-07 / R9）。

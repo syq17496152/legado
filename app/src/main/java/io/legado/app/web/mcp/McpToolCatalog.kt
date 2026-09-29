@@ -2,13 +2,25 @@ package io.legado.app.web.mcp
 
 import io.legado.app.BuildConfig
 import io.legado.app.web.TokenManager
+import io.legado.app.web.mcp.tools.AiTools
+import io.legado.app.web.mcp.tools.AppearanceTools
+import io.legado.app.web.mcp.tools.AppSettingsTools
+import io.legado.app.web.mcp.tools.AutoTaskTools
 import io.legado.app.web.mcp.tools.BackupTools
 import io.legado.app.web.mcp.tools.BookmarkTools
 import io.legado.app.web.mcp.tools.BookshelfTools
+import io.legado.app.web.mcp.tools.CacheTaskTools
+import io.legado.app.web.mcp.tools.CharacterTools
+import io.legado.app.web.mcp.tools.DiagTools
+import io.legado.app.web.mcp.tools.ExploreTools
+import io.legado.app.web.mcp.tools.MultiformTools
 import io.legado.app.web.mcp.tools.ReadingTools
 import io.legado.app.web.mcp.tools.RssTools
 import io.legado.app.web.mcp.tools.RuleTools
 import io.legado.app.web.mcp.tools.SourceTools
+import io.legado.app.web.mcp.tools.StatsTools
+import io.legado.app.web.mcp.tools.StorageTools
+import io.legado.app.web.mcp.tools.TtsTools
 
 /**
  * MCP 工具目录（web-mcp-productization 二期 · §1.3.2 / REQ-2-203 / REQ-2-206）。
@@ -41,6 +53,18 @@ object McpToolCatalog {
             addAll(RssTools.tools)
             addAll(RuleTools.tools)
             addAll(BackupTools.tools)
+            addAll(TtsTools.tools)
+            addAll(StatsTools.tools)
+            addAll(AutoTaskTools.tools)
+            addAll(DiagTools.tools)
+            addAll(StorageTools.tools)
+            addAll(MultiformTools.tools)
+            addAll(ExploreTools.tools)
+            addAll(CharacterTools.tools)
+            addAll(AiTools.tools)
+            addAll(AppearanceTools.tools)
+            addAll(CacheTaskTools.tools)
+            addAll(AppSettingsTools.tools)
         }.also(::requireUniqueNames)
     }
 
