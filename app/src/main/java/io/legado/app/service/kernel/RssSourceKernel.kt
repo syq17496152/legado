@@ -3,6 +3,7 @@ package io.legado.app.service.kernel
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssArticle
+import io.legado.app.data.entities.RssReadRecord
 import io.legado.app.data.entities.RssSource
 import io.legado.app.data.entities.RssStar
 import io.legado.app.help.rss.OpmlExporter
@@ -228,7 +229,7 @@ object RssSourceKernel {
     }
 
     /**
-     * 标记文章已读 / 未读。
+     * 按**整源（origin）**标记文章已读 / 未读（粒度 = 源；MCP `rss_mark_read` 沿用，行为不变）。
      *
      * 说明（口径来源）：项目**已读状态由 `rssReadRecords` 承担**（`RssArticle.read` 列无写入方，
      * 见 `RssArticleDao` 注释），故"已读"走 [RssReadRecordMarker.markRead]（按 origin 整源标记，
@@ -242,6 +243,50 @@ object RssSourceKernel {
             mapOf("read" to false, "affected" to origins.size)
         }
     }
+
+    /**
+     * 按**文章链接**标记已读 / 未读（三期 E3 / `/markRssRead`，粒度 = 单篇）。
+     *
+     * 与 [markRead] 同表同列（`rssReadRecords`），差别只在粒度："已读"按 `origin + link` 补 / 复用记录；
+     * "未读"删除该链接对应的已读记录。`link` 无法在 `origin` 内定位时按"未读"（无记录可删）。
+     */
+    suspend fun markArticleRead(origin: String, links: List<String>, read: Boolean): Map<String, Any?> =
+        withContext(IO) {
+            if (links.isEmpty()) return@withContext mapOf("read" to read, "affected" to 0)
+            if (read) {
+                val alreadyRead = appDb.rssArticleDao.getReadLinks(origin, links).toHashSet()
+                val now = System.currentTimeMillis()
+                var affected = 0
+                links.forEach { link ->
+                    if (link !in alreadyRead) {
+                        val article = appDb.rssArticleDao.getByLink(origin, link)
+                        appDb.rssReadRecordDao.insertRecord(
+                            RssReadRecord(
+                                record = link,
+                                title = article?.title,
+                                readTime = now,
+                                read = true,
+                                origin = origin,
+                                sort = article?.sort.orEmpty(),
+                                image = article?.image,
+                                type = article?.type ?: 0,
+                                durPos = article?.durPos ?: 0,
+                                pubDate = article?.pubDate,
+                            )
+                        )
+                        affected++
+                    }
+                }
+                mapOf("read" to true, "affected" to affected)
+            } else {
+                // 已知上限：`RssReadRecordDao` **没有单条删除**（只有 deleteAllRecord / deleteRecordsByOrigin）
+                // ⇒ 「未读」标记落在**源粒度**（与既有 `markRead` 同口径），不做逐条删除。
+                // 升级路径：给 DAO 加 `@Query("delete from rssReadRecords where record=:record and origin=:origin")`。
+                val affected = appDb.rssReadRecordDao.countRecordsByOrigin(origin)
+                appDb.rssReadRecordDao.deleteRecordsByOrigin(origin)
+                mapOf("read" to false, "affected" to affected)
+            }
+        }
 
     // ============================================================ OPML / 收藏夹 / 搜索
 

@@ -355,4 +355,20 @@ object BookshelfKernel {
             "size" to json.toByteArray(Charsets.UTF_8).size,
         )
     }
+
+    // ============================================================ 三期 G 组（REST：书架搜索）
+
+    /**
+     * 书架内搜索（三期 REQ-3-501 `GET /searchBookshelf`）。
+     *
+     * 与二期 MCP 工具 `bookshelf_search` **同口径**：书名 / 作者不区分大小写包含，**0 网络请求**；
+     * 复用 [BookKernel.bookshelf] 的排序结果，保证 REST 与 MCP 行为不漂移（AD-3-01）。
+     */
+    suspend fun searchBookshelf(keyword: String): List<Book> {
+        val key = keyword.trim()
+        if (key.isEmpty()) throw IllegalArgumentException("搜索关键词不能为空")
+        return BookKernel.bookshelf().filter {
+            it.name.contains(key, ignoreCase = true) || it.author.contains(key, ignoreCase = true)
+        }
+    }
 }

@@ -8,6 +8,7 @@ import io.legado.app.data.entities.ReadAloudSpeakerGroup
 import io.legado.app.data.entities.ReadAloudSpeakerGroupItem
 import io.legado.app.data.entities.TtsCastingTemplate
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.readaloud.ReadAloudConfigChangeNotifier
 import io.legado.app.help.readaloud.casting.TtsCastingStore
 import io.legado.app.help.readaloud.speech.SpeechRoute
 import io.legado.app.help.readaloud.speech.TtsEngineParamsStore
@@ -145,6 +146,8 @@ object TtsKernel {
                 engineVolume ?: cur.volume,
             )
         }
+        // 三期 REQ-3-303：参数落地后广播变更通知 —— 使 App 端正在朗读的语音即时生效（无需重开）。
+        ReadAloudConfigChangeNotifier.notifySpeech()
         configGet()
     }
 
@@ -173,6 +176,23 @@ object TtsKernel {
             ),
             "previewed" to false,
             "note" to "试听需端侧发声（UI 层控制器）；本工具只回告校验后的目标参数。",
+        )
+    }
+
+    /**
+     * `testTts`（三期 D4 `/testTts`）：按 HTTP TTS 地址试听。
+     *
+     * **如实降级**：真实试听需端侧合成链（`HttpReadAloudService` 的私有 `getEngineSpeakStream`
+     * 依赖完整 [HttpTTS] 实体与播放态上下文，无「无界面」合成入口，且需 `Context`）⇒
+     * 本方法**不返回音频流**，只回告结构化降级说明；真实试听仍在 App 端 UI 层完成。
+     */
+    suspend fun testTts(ttsUrl: String?, contentType: String?, text: String?): Map<String, Any?> = withContext(IO) {
+        mapOf(
+            "supported" to false,
+            "ttsUrl" to DiagKernel.maskUrl(ttsUrl),
+            "contentType" to contentType,
+            "textLength" to (text?.length ?: 0),
+            "note" to "试听需端侧合成链（无无界面合成入口），Web 端暂不返回音频流；请在 App 内试听。",
         )
     }
 

@@ -7,6 +7,7 @@ import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.entities.BookSource
+import io.legado.app.data.entities.Bookmark
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
@@ -17,11 +18,13 @@ import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.utils.GSON
+import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.getPrefString
 import io.legado.app.utils.putPrefString
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 import splitties.init.appCtx
+import java.time.LocalDate
 
 /**
  * ② 阅读域业务内核（web-mcp-productization 二期 · tasks 2.9 / 2.28）。
@@ -390,4 +393,111 @@ object ContentKernel {
     /** 书源对象（换源相关工具复用）。 */
     suspend fun source(sourceUrl: String): BookSource? =
         withContext(IO) { appDb.bookSourceDao.getBookSource(sourceUrl) }
+
+    // ============================================================ E 组（三期 · spec 4.4）：内容面补全
+
+    /** 文章正文 HTML 中的图片地址提取（只出地址，不解析正文内容）。 */
+    private val IMG_SRC_REGEX = Regex("""<img[^>]*?\ssrc\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+
+    /**
+     * `getRssArticles`（三期 E1）：某订阅源某分类的文章列表（DB 已抓取内容；分页切片）。
+     *
+     * 复用 [RssSourceKernel.articles]（与 MCP `rss_articles_list` 同一条链，含已读态）。
+     * 分页口径：`page`（从 1 起）+ `pageSize`；`keyword` 为空即不过滤。
+     */
+    suspend fun rssArticles(
+        origin: String,
+        sort: String,
+        page: Int,
+        pageSize: Int,
+        keyword: String?,
+    ): Map<String, Any?> = withContext(IO) {
+        require(origin.isNotBlank()) { "origin 不能为空" }
+        require(sort.isNotBlank()) { "sort（订阅分类）不能为空" }
+        val size = pageSize.coerceIn(1, 200)
+        val current = page.coerceAtLeast(1)
+        val all = RssSourceKernel.articles(origin, sort, 0, keyword)
+        mapOf(
+            "origin" to origin,
+            "sort" to sort,
+            "page" to current,
+            "pageSize" to size,
+            "total" to all.size,
+            "articles" to all.drop((current - 1) * size).take(size),
+        )
+    }
+
+    /**
+     * `getRssArticleContent`（三期 E2）：订阅文章正文 + 正文内图片地址列表。
+     *
+     * 正文链复用 [RssSourceKernel.articleContent]（按源规则抓取并净化）；
+     * 图片列表为对正文 HTML 的 `img src` 提取（只出地址，不做任何内容解析）。
+     */
+    suspend fun rssArticleContent(origin: String, link: String, sort: String): Map<String, Any?> =
+        withContext(IO) {
+            val base = RssSourceKernel.articleContent(origin, link, sort)
+            val content = base["content"] as? String ?: ""
+            val images = IMG_SRC_REGEX.findAll(content).map { it.groupValues[1] }.distinct().toList()
+            base + mapOf("images" to images)
+        }
+
+    /**
+     * `markRssRead`（三期 E3）：按**文章链接**标记订阅文章已读 / 未读（粒度 = 单篇）。
+     *
+     * 复用 [RssSourceKernel.markArticleRead]（与整源 [RssSourceKernel.markRead] 同表同列，口径一致）。
+     */
+    suspend fun markRssRead(origin: String, links: List<String>, read: Boolean): Map<String, Any?> =
+        withContext(IO) {
+            require(origin.isNotBlank()) { "origin 不能为空" }
+            RssSourceKernel.markArticleRead(origin, links, read)
+        }
+
+    /**
+     * `getReadStats`（三期 E4）：阅读统计（近 N 天明细 + 连续天数 + 累计分钟 + 书时长 Top10）。
+     *
+     * 出参口径：`daily:[{date,minutes}]` / `streakDays` / `totalMinutes` / `topBooks:[{name,minutes}]`。
+     * 连续天数 = 从今日起向前连续有日记录的天数（今日无记录则为 0）。
+     */
+    suspend fun readStats(days: Int): Map<String, Any?> {
+        val window = days.coerceIn(1, 3650)
+        val records = withContext(IO) { appDb.readRecordDailyDao.allDesc }
+        val daily = records.take(window).map { mapOf("date" to it.date, "minutes" to it.readTime / 60_000L) }
+        val dateSet = records.map { it.date }.toHashSet()
+        var streak = 0
+        var cursor = LocalDate.now()
+        while (dateSet.contains(cursor.toString())) {
+            streak++
+            cursor = cursor.minusDays(1)
+        }
+        val topBooks = withContext(IO) { appDb.readRecordDao.allShow }
+            .sortedByDescending { it.readTime }
+            .take(10)
+            .map { mapOf("name" to it.bookName, "minutes" to it.readTime / 60_000L) }
+        return mapOf(
+            "days" to window,
+            "daily" to daily,
+            "streakDays" to streak,
+            "totalMinutes" to records.sumOf { it.readTime } / 60_000L,
+            "topBooks" to topBooks,
+        )
+    }
+
+    /** `saveBookmark`（三期 E6）：保存书签（JSON 体 → 实体后走 [BookmarkKernel.saveBookmark]）。 */
+    suspend fun saveBookmark(json: String): Bookmark = withContext(IO) {
+        val bookmark = GSON.fromJsonObject<Bookmark>(json).getOrThrow()
+        if (bookmark.bookName.isBlank()) throw IllegalArgumentException("书签 bookName 不能为空")
+        BookmarkKernel.saveBookmark(bookmark)
+    }
+
+    /**
+     * `restoreBackup`（三期 E7）：恢复备份。
+     *
+     * 复用二期 [BackupKernel.restore]（**默认 dryRun**：只返回"将恢复概览"、不落库；
+     * `dryRun=false` 时才按 `filePath` 真恢复）。危险级：调用方（`ApiRoute.level=ADMIN`）
+     * 已保证令牌，恢复的端侧确认由前端二次确认承接（spec §7.3）。
+     */
+    suspend fun restoreBackup(filePath: String, dryRun: Boolean): Map<String, Any?> = withContext(IO) {
+        require(filePath.isNotBlank()) { "备份文件为空" }
+        BackupKernel.restore(dryRun = dryRun, path = if (dryRun) null else filePath)
+    }
 }

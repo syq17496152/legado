@@ -4,6 +4,7 @@ import android.os.Build
 import android.os.SystemClock
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
+import io.legado.app.data.appDb
 import io.legado.app.help.CrashHandler
 import io.legado.app.help.MemoryPressure
 import io.legado.app.help.http.NetworkLog
@@ -39,6 +40,7 @@ object DiagReadKernel {
     const val DEFAULT_CRASH_LIMIT = 4000
     const val DEFAULT_TRACE_TAIL = 50
     const val DEFAULT_TRACE_LIMIT = 20000
+    const val DEFAULT_AUDIT_LIMIT = 20
 
     /** externalCache 下网络日志目录与文件名前缀（与 [NetworkLog.persist] 一字不差）。 */
     private const val NETWORK_LOG_DIR = "logs"
@@ -322,4 +324,36 @@ object DiagReadKernel {
             ),
         )
     }
+
+    /**
+     * `getSourceAudit`（三期 B10 · P5 工作台「AI 直播」数据源）：读 `mcp_audit` 中某源最近 [limit] 条。
+     *
+     * 复用一期审计表 [io.legado.app.data.dao.McpAuditDao.recentByTarget]（`LIKE` 匹配）：目标字段在
+     * 写入侧已由一期 `AuditSanitizer` 脱敏，此处再用本内核 [mask] 同口径处理查询键与回传值，
+     * 凭据原文绝不回传。`limit <= 0` ⇒ 用 [DEFAULT_AUDIT_LIMIT]。
+     */
+    suspend fun recentAudit(sourceUrl: String, limit: Int = DEFAULT_AUDIT_LIMIT): Map<String, Any?> =
+        withContext(IO) {
+            val key = mask(sourceUrl)
+            val cap = if (limit > 0) limit else DEFAULT_AUDIT_LIMIT
+            val rows = appDb.mcpAuditDao.recentByTarget("%$key%", cap)
+            mapOf(
+                "sourceUrl" to key,
+                "returned" to rows.size,
+                "records" to rows.map { audit ->
+                    mapOf(
+                        "id" to audit.id,
+                        "time" to audit.time,
+                        "source" to audit.source,
+                        "channel" to audit.channel,
+                        "level" to audit.level,
+                        "target" to mask(audit.target),
+                        "method" to audit.method,
+                        "success" to audit.success,
+                        "errorMsg" to mask(audit.errorMsg),
+                        "elapsedMs" to audit.elapsedMs,
+                    )
+                },
+            )
+        }
 }

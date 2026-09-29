@@ -1,5 +1,6 @@
 package io.legado.app.service.kernel
 
+import io.legado.app.constant.AppConst
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.ui.main.my.buildSettingsSections
@@ -241,4 +242,26 @@ object AppSettingsKernel {
             "isEInkMode" to (normalized == "3"),
         )
     }
+
+    // ============================================================ 三期 G 组（REST：应用信息）
+
+    /**
+     * 应用信息（三期 REQ-3-512 `GET /getAppInfo`）。
+     *
+     * `consoleApiLevel` 为**控制台接口契约级别**（四期 boot 页版本协议用：前端 `manifest.minAppApiLevel`
+     * 与之比对，高于则提示"请升级 App"；接口契约变更时递增）。
+     */
+    suspend fun appInfo(): Map<String, Any?> = withContext(IO) {
+        val info = AppConst.appInfo
+        mapOf(
+            "versionName" to info.versionName,
+            "versionCode" to info.versionCode,
+            "appVariant" to info.appVariant.name,
+            "packageName" to appCtx.packageName,
+            "consoleApiLevel" to CONSOLE_API_LEVEL,
+        )
+    }
+
+    /** 控制台接口契约级别（四期版本协议比对基线；接口契约变更时递增）。 */
+    const val CONSOLE_API_LEVEL: Int = 1
 }
