@@ -110,6 +110,8 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashHandler(this)
+        // MCP 内腿服务（8765）· debug 变体专属（release 为空实现）：web-mcp-productization 二期 tasks 5.1
+        DebugAppHook.onAppCreate()
         // Cronet 500（cronet-bundled）不再暴露 org.chromium.base.ThreadUtils 的线程断言测试钩子
         // hasSubtleSideEffectsSetThreadAssertsDisabledForTesting（150 时代用于禁用线程断言），此处移除调用
         oldConfig = Configuration(resources.configuration)

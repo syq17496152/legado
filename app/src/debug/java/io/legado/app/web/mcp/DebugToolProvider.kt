@@ -1,6 +1,8 @@
 package io.legado.app.web.mcp
 
 import io.legado.app.web.TokenManager
+import io.legado.app.web.mcp.tools.DiagnosticsTools
+import io.legado.app.web.mcp.tools.SourceDebugTools
 
 /**
  * L3 调试观测工具提供者 —— **debug 变体实现（真实）**（web-mcp-productization 二期 · 修正版 §1.6.2）。
@@ -22,7 +24,8 @@ import io.legado.app.web.TokenManager
  */
 object DebugToolProvider {
 
-    val tools: List<McpTool> = listOf(
+    /** 性能指标（一期遗留，实现保持不动）。 */
+    private val perfTools: List<McpTool> = listOf(
         McpTool(
             name = "perf_metrics_get",
             title = "性能指标",
@@ -48,4 +51,12 @@ object DebugToolProvider {
             )
         },
     )
+
+    /**
+     * 14 个 L3 工具（tasks 5.12）：
+     * 性能 1（`perf_metrics_get`）+ 源/订阅调试 9（[SourceDebugTools]）+ 诊断 4（[DiagnosticsTools]）。
+     *
+     * 三者都是 **debug sourceSet** 才有的符号 ⇒ release 包内物理不存在（REQ-2-403）。
+     */
+    val tools: List<McpTool> = perfTools + SourceDebugTools.tools + DiagnosticsTools.tools
 }
