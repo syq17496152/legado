@@ -89,6 +89,17 @@ object AppSettingsTools {
         ) { args ->
             AppSettingsKernel.themeModeSet(args.requireStr("mode"))
         },
+
+        McpTool(
+            name = "legado_ping",
+            title = "连通性自检探针",
+            description = "轻量探针：确认 MCP 通道连通并回传**非敏感**运行时信息" +
+                "（ok / serverTime / versionName / consoleApiLevel / webServiceRunning / mcpEndpoint）。" +
+                "控制台「三段自检」第③段与角色二剧本用它定位「连不上」发生在哪一层。",
+            domain = MCP_DOMAIN_APP,
+            level = TokenManager.Level.READONLY,
+            readOnlyHint = true,
+        ) { AppSettingsKernel.ping() },
     )
 
     /** 复杂入参口径与 REST 门面一致：`prefs` 解析为「键 → 基本类型值」映射。 */

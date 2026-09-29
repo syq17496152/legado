@@ -3,6 +3,7 @@ package io.legado.app.service.kernel
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
+import io.legado.app.service.WebService
 import io.legado.app.ui.main.my.buildSettingsSections
 import io.legado.app.ui.main.my.buildSettingsSubSearchItems
 import io.legado.app.utils.getPrefBoolean
@@ -264,4 +265,27 @@ object AppSettingsKernel {
 
     /** 控制台接口契约级别（四期版本协议比对基线；接口契约变更时递增）。 */
     const val CONSOLE_API_LEVEL: Int = 1
+
+    // ============================================================ 三期 L11（S3 支撑件：连通性自检）
+
+    /**
+     * 连通性自检探针（三期 `L11` / REQ-3-905，REST `/ping` + MCP `legado_ping` 同源）。
+     *
+     * 控制台「三段自检」的第③段用它（① REST 可达性、② MCP `initialize` 由客户端/前端各自完成）；
+     * 四期 SC-4-09（自检）与 SC-4-13（角色一/二剧本）复用**同一实现，不另立**（AD-11）。
+     *
+     * **安全边界（AD-18 同类）**：只回**非敏感**运行时信息 —— 版本 / 契约级别 / 服务与中继是否在跑 /
+     * 服务器时间 / MCP 挂载路径；**绝不含**令牌、访问地址、IP、用户数据。
+     */
+    suspend fun ping(): Map<String, Any?> = withContext(IO) {
+        val info = AppConst.appInfo
+        mapOf(
+            "ok" to true,
+            "serverTime" to System.currentTimeMillis(),
+            "versionName" to info.versionName,
+            "consoleApiLevel" to CONSOLE_API_LEVEL,
+            "webServiceRunning" to WebService.isRun,
+            "mcpEndpoint" to "/mcp",
+        )
+    }
 }

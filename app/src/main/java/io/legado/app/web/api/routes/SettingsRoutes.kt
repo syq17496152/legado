@@ -255,6 +255,12 @@ object SettingsRoutes {
             ReturnData().setData(AppSettingsKernel.appInfo())
         },
 
+        // ============================================================ REQ-3-905 / L11 连通性自检（S3 支撑件）
+        // 控制台三段自检第③段；与 MCP 工具 `legado_ping` 同源（AD-11：唯一实现在 kernel）
+        ApiRoute(Method.GET, "/ping", Level.READONLY, mcpToolName = "legado_ping") { _ ->
+            ReturnData().setData(AppSettingsKernel.ping())
+        },
+
         // ============================================================ REQ-3-513 令牌管理（admin；localhost 限制见类注释降级说明）
         ApiRoute(Method.POST, "/genToken", Level.ADMIN) { ctx ->
             ReturnData().setData(TokenManager.generate(levelOf(ctx.bodyArgsOrEmpty().strOrNull("level"))))
