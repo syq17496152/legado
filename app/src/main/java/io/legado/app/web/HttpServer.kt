@@ -114,6 +114,11 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
 
             // ⑥ 未注册路径 ⇒ 静态资源（或 404），保证不会误路由到业务 handler（REQ-1-506 / SC-1-19）
             if (response == null) {
+                // 四期 §1.2：控制台**按需分发** —— `/console/*` 文件源优先（已安装包），miss 回内置 boot 壳。
+                // 这是「静态资源策略」的前缀分支，**不是端点级分发**（不写路径字面量、不进注册表，见 G-21 口径）。
+                if (uri.startsWith(FileWeb.CONSOLE_PREFIX)) {
+                    return FileWeb.getResponse(uri)
+                }
                 if (uri.endsWith("/")) uri += "index.html"
                 return assetsWeb.getResponse(uri)
             }
