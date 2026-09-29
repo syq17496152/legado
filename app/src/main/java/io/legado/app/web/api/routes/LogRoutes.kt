@@ -1,6 +1,7 @@
 package io.legado.app.web.api.routes
 
 import fi.iki.elonen.NanoHTTPD.Method
+import io.legado.app.api.ReturnData
 import io.legado.app.service.kernel.DiagReadKernel
 import io.legado.app.web.TokenManager.Level
 import io.legado.app.web.api.ApiRoute
@@ -13,29 +14,36 @@ import io.legado.app.web.api.ApiRoute
  *
  * 级别照 V2.5 施工卡：`/getLogs`、`/getNetworkTrace` 为 MANAGE，诊断包 `/downloadDiagnostics`
  * 为 ADMIN。输出安全（URL / 凭据打码）单源在 kernel，本层不重复处理。
+ *
+ * ⚠️ **出参契约（实测修正，2026-09-29）**：`ApiEnvelope.dispatch` 只接受 [ReturnData] 或
+ * `NanoHTTPD.Response`；**裸 `Map` 会 500** ⇒ 每个 handler 必须 `ReturnData().setData(...)`。
  */
 object LogRoutes {
 
     val routes: Array<ApiRoute> = arrayOf(
         // C1 应用日志查询（按级别 / 关键词 / 时间窗过滤，取最近 tail 条）
         ApiRoute(Method.GET, "/getLogs", Level.MANAGE, mcpToolName = "log_query") { ctx ->
-            DiagReadKernel.logQuery(
-                level = ctx.param("level"),
-                keyword = ctx.param("keyword"),
-                since = ctx.param("since")?.toLongOrNull(),
-                tail = ctx.intParam("tail", DiagReadKernel.DEFAULT_LOG_TAIL),
+            ReturnData().setData(
+                DiagReadKernel.logQuery(
+                    level = ctx.param("level"),
+                    keyword = ctx.param("keyword"),
+                    since = ctx.param("since")?.toLongOrNull(),
+                    tail = ctx.intParam("tail", DiagReadKernel.DEFAULT_LOG_TAIL),
+                )
             )
         },
         // C2 网络痕迹查询（`sourceUrl` 作关键词过滤，省略即不过滤）
         ApiRoute(Method.GET, "/getNetworkTrace", Level.MANAGE, mcpToolName = "network_trace_query") { ctx ->
-            DiagReadKernel.networkTraceQuery(
-                keyword = ctx.param("sourceUrl"),
-                tail = ctx.intParam("tail", DiagReadKernel.DEFAULT_TRACE_TAIL),
+            ReturnData().setData(
+                DiagReadKernel.networkTraceQuery(
+                    keyword = ctx.param("sourceUrl"),
+                    tail = ctx.intParam("tail", DiagReadKernel.DEFAULT_TRACE_TAIL),
+                )
             )
         },
         // C3 诊断包（结构化清单；正文按需由 C1/C2 取）
         ApiRoute(Method.GET, "/downloadDiagnostics", Level.ADMIN, mcpToolName = "diagnostics_download") { _ ->
-            DiagReadKernel.diagnosticsDownload()
+            ReturnData().setData(DiagReadKernel.diagnosticsDownload())
         },
     )
 }
