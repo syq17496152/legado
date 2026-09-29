@@ -8,6 +8,7 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.Bookmark
+import io.legado.app.data.entities.SceneBookmark
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
@@ -487,6 +488,18 @@ object ContentKernel {
         val bookmark = GSON.fromJsonObject<Bookmark>(json).getOrThrow()
         if (bookmark.bookName.isBlank()) throw IllegalArgumentException("书签 bookName 不能为空")
         BookmarkKernel.saveBookmark(bookmark)
+    }
+
+    /**
+     * `saveSceneBookmark`（三期补 E6b）：名场面保存。
+     *
+     * 校验口径：`bookUrl` 必填 —— 名场面按**书/源标识**归属（本地书 path / 书源 bookUrl /
+     * 订阅源 sourceUrl），空值会让人误以为"属于全部书"（列表按 `bookUrl` 过滤，见 [BookmarkKernel.sceneBookmarks]）。
+     */
+    suspend fun saveSceneBookmark(json: String): SceneBookmark = withContext(IO) {
+        val bookmark = GSON.fromJsonObject<SceneBookmark>(json).getOrThrow()
+        if (bookmark.bookUrl.isBlank()) throw IllegalArgumentException("名场面 bookUrl 不能为空")
+        BookmarkKernel.saveSceneBookmark(bookmark)
     }
 
     /**

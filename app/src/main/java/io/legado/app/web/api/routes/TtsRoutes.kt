@@ -2,6 +2,7 @@ package io.legado.app.web.api.routes
 
 import fi.iki.elonen.NanoHTTPD.Method
 import io.legado.app.api.ReturnData
+import io.legado.app.data.entities.HttpTTS
 import io.legado.app.service.kernel.AudioKernel
 import io.legado.app.service.kernel.TtsKernel
 import io.legado.app.utils.GSON
@@ -64,6 +65,26 @@ object TtsRoutes {
                     text = str(body, "text"),
                 )
             )
+        },
+
+        // ---- D6 HTTP TTS 全量（readonly）----（三期补记：内核二期已有、当时缺 HTTP 路由 ⇒ 前端只能降级）
+        // 注：本批 7 条补记只补 HTTP 路由（控制台接线），**不新增 MCP 工具** ⇒ 不带 `mcpToolName`。
+        ApiRoute(Method.GET, "/getHttpTtsList", Level.READONLY) { _ ->
+            ReturnData().setData(TtsKernel.httpTtsList())
+        },
+
+        // ---- D7 HTTP TTS 保存（manage；`id` 相同即覆盖，DAO 为 REPLACE 语义）----
+        ApiRoute(Method.POST, "/saveHttpTts", Level.MANAGE) { ctx ->
+            val spec = GSON.fromJsonObject<HttpTTS>(ctx.requirePostData()).getOrThrow()
+            ReturnData().setData(TtsKernel.httpTtsSave(spec))
+        },
+
+        // ---- D8 HTTP TTS 删除（manage）----
+        ApiRoute(Method.POST, "/deleteHttpTts", Level.MANAGE) { ctx ->
+            val body = GSON.fromJsonObject<Map<String, Any?>>(ctx.requirePostData()).getOrThrow()
+            val id = (body["id"] as? Number)?.toLong()
+                ?: throw IllegalArgumentException("参数id不能为空")
+            ReturnData().setData(TtsKernel.httpTtsDelete(id))
         },
 
         // ---- D5 听书控制（manage，端侧指令：下发后回读播放态）----

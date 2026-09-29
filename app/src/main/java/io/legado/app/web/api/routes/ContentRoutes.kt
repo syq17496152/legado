@@ -9,6 +9,7 @@ import io.legado.app.service.kernel.ReadStatsKernel
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.web.TokenManager.Level
+import io.legado.app.web.api.ApiContext
 import io.legado.app.web.api.ApiRoute
 
 /**
@@ -83,6 +84,32 @@ object ContentRoutes {
             ReturnData().setData(ContentKernel.saveBookmark(ctx.requirePostData()))
         },
 
+        // ---- E6d 删除书签（manage，按主键 time 批量）----（三期内核已有、缺路由 ⇒ 补）
+        // 注：本批 7 条补记只补 HTTP 路由（控制台接线），**不新增 MCP 工具** ⇒ 不带 `mcpToolName`
+        // （该字段仅为 REST↔MCP 对拍标注；MCP 工具目录由 `web/mcp/tools/` 独立声明）。
+        ApiRoute(Method.POST, "/deleteBookmark", Level.MANAGE) { ctx ->
+            val times = bodyIds(ctx)
+            if (times.isEmpty()) throw IllegalArgumentException("参数times不能为空")
+            ReturnData().setData(mapOf("deleted" to BookmarkKernel.deleteBookmark(times)))
+        },
+
+        // ---- E5b 名场面列表（readonly）----（三期补记：内核二期已有、当时缺 HTTP 路由 ⇒ 前端只能降级）
+        ApiRoute(Method.GET, "/getSceneBookmarks", Level.READONLY) { ctx ->
+            ReturnData().setData(BookmarkKernel.sceneBookmarks(ctx.param("bookUrl")))
+        },
+
+        // ---- E6b 名场面保存（manage）----
+        ApiRoute(Method.POST, "/saveSceneBookmark", Level.MANAGE) { ctx ->
+            ReturnData().setData(ContentKernel.saveSceneBookmark(ctx.requirePostData()))
+        },
+
+        // ---- E6c 名场面删除（manage，按 id 批量）----
+        ApiRoute(Method.POST, "/deleteSceneBookmark", Level.MANAGE) { ctx ->
+            val ids = bodyIds(ctx)
+            if (ids.isEmpty()) throw IllegalArgumentException("参数ids不能为空")
+            ReturnData().setData(mapOf("deleted" to BookmarkKernel.deleteSceneBookmark(ids)))
+        },
+
         // ---- E7 恢复备份（admin，危险级：默认 dryRun，confirm=true 才真执行）----
         ApiRoute(
             Method.POST,
@@ -125,4 +152,23 @@ object ContentRoutes {
 
     private fun stringList(body: Map<String, Any?>, key: String): List<String> =
         (body[key] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+
+    /**
+     * 批量 id 取值（`{"ids":[...]}` 与 `{"times":[...]}` 两种键名都接受）。
+     *
+     * 松解析：GSON 把 JSON 数字读成 `Double` ⇒ 统一按 [Number] 收敛；字符串数字亦容忍
+     * （前端两种形态都出现过），非法项丢弃（与二期 MCP 工具「类型不匹配按缺失处理」同口径）。
+     */
+    private fun bodyIds(ctx: ApiContext): List<Long> {
+        val body = GSON.fromJsonObject<Map<String, Any?>>(ctx.requirePostData()).getOrNull()
+            ?: return emptyList()
+        val raw = body["ids"] ?: body["times"]
+        return (raw as? List<*>)?.mapNotNull {
+            when (it) {
+                is Number -> it.toLong()
+                is String -> it.toLongOrNull()
+                else -> null
+            }
+        } ?: emptyList()
+    }
 }
