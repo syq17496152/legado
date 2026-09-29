@@ -2824,6 +2824,8 @@ bookUrl：%7$s
     <string name="web_token_level_admin">admin · 完全访问</string>
     <string name="web_token_never_generated">未生成</string>
     <string name="web_token_generated_at">已生成于 %1$s</string>
+    <string name="web_token_generate_confirm_title">确认生成 %1$s 令牌？</string>
+    <string name="web_token_generate_confirm_message">该令牌可读取并修改你的数据。请只为你信任的客户端生成，用完后及时撤销。</string>
     <string name="web_token_generate">生成</string>
     <string name="web_token_regenerate">重新生成</string>
     <string name="web_token_revoke">撤销</string>

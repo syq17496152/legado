@@ -248,10 +248,28 @@ class WebServiceSettingsActivity : BaseActivity<ViewBinding>() {
     }
 
     /**
-     * §6.4 生成令牌：明文**只在本次对话框出现一次**（[TokenManager] 不保存明文）。
-     * 关闭对话框后无法再查看 —— 文案已明示，只能重新生成。
+     * §6.4 生成令牌（四期 REQ-4-403 / REQ-4-404）：
+     * - **readonly**：只读无风险 ⇒ 直接生成；
+     * - **manage / admin**：写权限（可改数据 / 高风险） ⇒ **生成前二次确认**。
+     *
+     * 明文**只在本次对话框出现一次**（[TokenManager] 不保存明文）。
      */
     private fun generateToken(level: TokenManager.Level) {
+        if (level == TokenManager.Level.READONLY) {
+            doGenerateToken(level)
+            return
+        }
+        val levelTitle = getString(WebServiceSettingsLogic.levelTitleRes(level))
+        showComposeConfirmDialog(
+            title = getString(R.string.web_token_generate_confirm_title, levelTitle),
+            message = getString(R.string.web_token_generate_confirm_message),
+            positiveText = getString(R.string.web_token_generate),
+            onPositive = { doGenerateToken(level) }
+        )
+    }
+
+    /** 实际生成 + 明文一次性展示（不含确认逻辑）。 */
+    private fun doGenerateToken(level: TokenManager.Level) {
         val plain = TokenManager.generate(level)
         refresh()
         val levelTitle = getString(WebServiceSettingsLogic.levelTitleRes(level))

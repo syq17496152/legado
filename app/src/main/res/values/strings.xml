@@ -3346,6 +3346,8 @@ Selected text or question:
     <string name="web_token_level_admin">admin · full access</string>
     <string name="web_token_never_generated">Not generated</string>
     <string name="web_token_generated_at">Generated at %1$s</string>
+    <string name="web_token_generate_confirm_title">Generate a %1$s token?</string>
+    <string name="web_token_generate_confirm_message">This token can read and modify your data. Only generate it for a client you trust, and revoke it when no longer needed.</string>
     <string name="web_token_generate">Generate</string>
     <string name="web_token_regenerate">Regenerate</string>
     <string name="web_token_revoke">Revoke</string>
