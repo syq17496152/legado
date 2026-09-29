@@ -57,7 +57,11 @@ internal data class WebServiceSettingsState(
     val wakeLock: Boolean = false,
     val strict: Boolean = false,
     val showFirstLaunchGuide: Boolean = false,
-    val tokenStatuses: List<TokenManager.TokenStatus> = emptyList()
+    val tokenStatuses: List<TokenManager.TokenStatus> = emptyList(),
+    // 四期 §3：公网中继卡片（状态真源 = RelayConfig / RelayState，本页不持有第二份配置）
+    val relayEnabled: Boolean = false,
+    val relayPaired: Boolean = false,
+    val relayConnected: Boolean = false
 )
 
 /**
@@ -81,7 +85,12 @@ internal fun WebServiceSettingsScreen(
     onDismissFirstLaunchGuide: () -> Unit,
     onGuideCopyAddress: () -> Unit,
     onGuideOpenBrowser: () -> Unit,
-    onGuideGenerateReadonlyToken: () -> Unit
+    onGuideGenerateReadonlyToken: () -> Unit,
+    // 四期 §3：公网中继卡片（开关 / 跳原中继设置页）+ §2.2 帮助入口 + §2.1 S7 一键断电
+    onRelayToggle: (Boolean) -> Unit,
+    onOpenRelaySettings: () -> Unit,
+    onOpenHelp: () -> Unit,
+    onShutdownAll: () -> Unit
 ) {
     val palette = rememberAppManagementPalette()
     // 真机缺陷修复（2026-09-29 两次截图实测）：
@@ -155,10 +164,23 @@ internal fun WebServiceSettingsScreen(
                         onGenerateToken = onGenerateToken,
                         onRevokeToken = onRevokeToken
                     )
+                    RelaySection(
+                        state = state,
+                        palette = palette,
+                        buttons = actionPalette,
+                        onRelayToggle = onRelayToggle,
+                        onOpenRelaySettings = onOpenRelaySettings
+                    )
                     SecuritySection(
                         state = state,
                         palette = palette,
-                        onStrictToggle = onStrictToggle
+                        buttons = actionPalette,
+                        onStrictToggle = onStrictToggle,
+                        onShutdownAll = onShutdownAll
+                    )
+                    HelpSection(
+                        palette = palette,
+                        onOpenHelp = onOpenHelp
                     )
                 }
             }
@@ -401,12 +423,91 @@ private fun TokenSection(
     }
 }
 
-/** 安全区：严格模式开关。 */
+/** 公网中继区（四期 §3）：状态 + 开关 + 跳原中继设置页（不引入第二份配置/第二套页面）。 */
+@Composable
+private fun RelaySection(
+    state: WebServiceSettingsState,
+    palette: AppManagementPalette,
+    buttons: LegadoMiuixPalette,
+    onRelayToggle: (Boolean) -> Unit,
+    onOpenRelaySettings: () -> Unit
+) {
+    val relayStateText = stringResource(
+        when {
+            !state.relayEnabled -> R.string.web_relay_state_off
+            state.relayConnected -> R.string.web_relay_state_connected
+            else -> R.string.web_relay_state_paired
+        }
+    )
+    AppSettingSectionTitle(
+        title = stringResource(R.string.web_section_relay),
+        palette = palette.settings
+    )
+    AppManagementCard(palette = palette) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.public_web_relay),
+                    color = palette.settings.primaryText,
+                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = relayStateText,
+                    color = palette.settings.secondaryText,
+                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(top = 3.dp)
+                )
+            }
+            LegadoMiuixSwitch(
+                checked = state.relayEnabled,
+                onCheckedChange = onRelayToggle,
+                palette = palette.miuix
+            )
+        }
+        LegadoMiuixActionButton(
+            text = stringResource(R.string.web_relay_open_settings),
+            palette = buttons,
+            onClick = onOpenRelaySettings,
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            cornerRadius = buttons.actionRadius
+        )
+    }
+}
+
+/** 帮助区（四期 §2.2）：入口挂「网页服务 + MCP」使用帮助（md 资产）。 */
+@Composable
+private fun HelpSection(
+    palette: AppManagementPalette,
+    onOpenHelp: () -> Unit
+) {
+    AppSettingSectionTitle(
+        title = stringResource(R.string.web_section_help),
+        palette = palette.settings
+    )
+    AppManagementCard(palette = palette, onClick = onOpenHelp) {
+        Text(
+            text = stringResource(R.string.web_help_open),
+            color = palette.settings.primaryText,
+            fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(vertical = 6.dp)
+        )
+    }
+}
+
+/** 安全区：严格模式开关 + S7 一键断电（危险动作，红色二次确认在宿主侧）。 */
 @Composable
 private fun SecuritySection(
     state: WebServiceSettingsState,
     palette: AppManagementPalette,
-    onStrictToggle: (Boolean) -> Unit
+    buttons: LegadoMiuixPalette,
+    onStrictToggle: (Boolean) -> Unit,
+    onShutdownAll: () -> Unit
 ) {
     AppSettingSectionTitle(
         title = stringResource(R.string.web_section_security),
@@ -439,6 +540,21 @@ private fun SecuritySection(
                 palette = palette.miuix
             )
         }
+        Spacer(modifier = Modifier.height(14.dp))
+        Text(
+            text = stringResource(R.string.web_shutdown_summary),
+            color = palette.settings.secondaryText,
+            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+            lineHeight = 18.sp
+        )
+        LegadoMiuixActionButton(
+            text = stringResource(R.string.web_shutdown_title),
+            palette = buttons,
+            onClick = onShutdownAll,
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            danger = true,
+            cornerRadius = buttons.actionRadius
+        )
     }
 }
 

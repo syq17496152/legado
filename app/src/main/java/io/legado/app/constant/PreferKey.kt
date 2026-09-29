@@ -17,6 +17,9 @@ object PreferKey {
     const val publicWebRelayPairedWorkerUrl = "publicWebRelayPairedWorkerUrl"
     const val publicWebRelayPermanentShare = "publicWebRelayPermanentShare"
     const val publicWebRelayShareProgressSync = "publicWebRelayShareProgressSync"
+
+    /** 四期 S7「一键断电」待补标记：断电时中继在线吊销未完成则置 true，下次中继连接成功后补吊销并清位。 */
+    const val publicWebRelayRevokePending = "publicWebRelayRevokePending"
     const val editThemeDark = "editThemeDark"
     const val editTemeAuto = "editTemeAuto"
     const val showUnread = "showUnread"

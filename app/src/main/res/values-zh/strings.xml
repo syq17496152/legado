@@ -2842,4 +2842,17 @@ bookUrl：%7$s
     <string name="web_first_launch_copy">复制地址</string>
     <string name="web_first_launch_token">生成只读令牌</string>
     <string name="web_first_launch_dismiss">知道了</string>
+    <string name="web_section_relay">公网中继</string>
+    <string name="web_relay_state_connected">中继已连接</string>
+    <string name="web_relay_state_paired">已配对，未连接</string>
+    <string name="web_relay_state_off">中继未启用</string>
+    <string name="web_relay_open_settings">中继设置</string>
+    <string name="web_section_help">使用帮助</string>
+    <string name="web_help_open">《网页服务 + MCP》使用帮助</string>
+    <string name="web_shutdown_title">关闭服务并吊销全部令牌</string>
+    <string name="web_shutdown_summary">一键断开：停止 Web 服务、吊销三级全部令牌，并清除本机中继身份。已连接的客户端会立即失去访问权限。</string>
+    <string name="web_shutdown_confirm_title">确认断开全部访问？</string>
+    <string name="web_shutdown_confirm_message">将停止 Web 服务、吊销所有令牌并清除本机中继身份，操作不可撤销；之后需重新连接并重新生成令牌。</string>
+    <string name="web_shutdown_confirm_positive">关闭并吊销</string>
+    <string name="web_shutdown_done">已断开：服务已停止，令牌已吊销</string>
 </resources>

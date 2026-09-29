@@ -1,5 +1,6 @@
 package io.legado.app.ui.config
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.lifecycleScope
@@ -12,13 +13,20 @@ import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.service.WebService
+import io.legado.app.service.kernel.RelayKernel
+import io.legado.app.service.relay.RelayConfig
+import io.legado.app.service.relay.RelayConnectionState
+import io.legado.app.service.relay.RelayService
+import io.legado.app.service.relay.RelayStateRepository
 import io.legado.app.ui.widget.compose.showComposeConfirmDialog
 import io.legado.app.ui.widget.compose.showComposeNumberPickerDialog
 import io.legado.app.utils.getPrefBoolean
+import io.legado.app.utils.getPrefString
 import io.legado.app.utils.observeEventSticky
 import io.legado.app.utils.openUrl
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.sendToClip
+import io.legado.app.utils.showHelp
 import io.legado.app.utils.toastOnUi
 import io.legado.app.web.TokenManager
 import io.legado.app.web.WebPortPolicy
@@ -68,7 +76,11 @@ class WebServiceSettingsActivity : BaseActivity<ViewBinding>() {
                 },
                 onGuideCopyAddress = ::copyAddress,
                 onGuideOpenBrowser = ::openAddressInBrowser,
-                onGuideGenerateReadonlyToken = { generateToken(TokenManager.Level.READONLY) }
+                onGuideGenerateReadonlyToken = { generateToken(TokenManager.Level.READONLY) },
+                onRelayToggle = ::setRelayEnabled,
+                onOpenRelaySettings = ::openRelaySettings,
+                onOpenHelp = { showHelp("webMcpHelp") },
+                onShutdownAll = ::shutdownAll
             )
         }
 
@@ -78,6 +90,14 @@ class WebServiceSettingsActivity : BaseActivity<ViewBinding>() {
                 uiState.value = uiState.value.copy(
                     hostAddress = address,
                     serviceRunning = WebService.isRun
+                )
+            }
+        }
+        // 四期 §3.2：中继卡片连接态真源 = RelayState（不引入第二份配置），状态变化即同步渲染
+        lifecycleScope.launch {
+            RelayStateRepository.state.collect { relayState ->
+                uiState.value = uiState.value.copy(
+                    relayConnected = relayState is RelayConnectionState.Connected
                 )
             }
         }
@@ -96,7 +116,67 @@ class WebServiceSettingsActivity : BaseActivity<ViewBinding>() {
             wakeLock = getPrefBoolean(PreferKey.webServiceWakeLock, false),
             strict = TokenManager.strict,
             showFirstLaunchGuide = guideVisible,
-            tokenStatuses = TokenManager.listStatus()
+            tokenStatuses = TokenManager.listStatus(),
+            // 四期 §3.2：中继状态真源 = PreferKey + RelayState（本页只读，不写第二份配置）
+            relayEnabled = getPrefBoolean(PreferKey.publicWebRelayEnabled, false),
+            relayPaired = !getPrefString(PreferKey.publicWebRelayDeviceHandle).isNullOrBlank(),
+            relayConnected = RelayStateRepository.state.value is RelayConnectionState.Connected
+        )
+    }
+
+    /**
+     * 四期 §3.1 中继开关：与 [RelaySettingsActivity] 同语义（开关即启停中继服务），
+     * 开启前必须能取到已配对句柄，否则回执并保持关闭（避免"开关开着却连不上"的假象）。
+     */
+    private fun setRelayEnabled(enabled: Boolean) {
+        if (!enabled) {
+            putPrefBoolean(PreferKey.publicWebRelayEnabled, false)
+            RelayService.stop(this)
+            refresh()
+            return
+        }
+        val config = RelayConfig.load(this).getOrElse {
+            toastOnUi(it.message ?: getString(R.string.public_web_relay_invalid_config))
+            return
+        }
+        runCatching { config.requireDeviceHandle() }.getOrElse {
+            config.identity.secret.fill(0)
+            toastOnUi(it.message ?: getString(R.string.public_web_relay_invalid_config))
+            return
+        }
+        config.identity.secret.fill(0)
+        putPrefBoolean(PreferKey.publicWebRelayEnabled, true)
+        RelayService.start(this)
+        refresh()
+    }
+
+    /** §3.3：**只加导航**，原中继设置页与其路由不变（配对/分享等完整操作仍在原页）。 */
+    private fun openRelaySettings() {
+        startActivity(Intent(this, RelaySettingsActivity::class.java))
+    }
+
+    /**
+     * 四期 §2.1 S7 一键断电：红色二次确认后才执行 [RelayKernel.shutdown]。
+     *
+     * 确认弹窗取消 ⇒ 无任何副作用（不可逆动作必须先确认）。
+     */
+    private fun shutdownAll() {
+        showComposeConfirmDialog(
+            title = getString(R.string.web_shutdown_confirm_title),
+            message = getString(R.string.web_shutdown_confirm_message),
+            positiveText = getString(R.string.web_shutdown_confirm_positive),
+            dangerPositive = true,
+            onPositive = {
+                lifecycleScope.launch {
+                    // 断电①：先吊销三级全部令牌（TokenManager 属 web 鉴权层，Kernel 不得反向依赖 ⇒ 由本层执行）
+                    TokenManager.revokeAll()
+                    // 断电②③④：停 Web 服务 → 中继远端吊销 → 停中继服务并清本机身份
+                    RelayKernel.shutdown()
+                    refresh()
+                    uiState.value = uiState.value.copy(serviceRunning = false)
+                    toastOnUi(getString(R.string.web_shutdown_done))
+                }
+            }
         )
     }
 

@@ -3364,4 +3364,17 @@ Selected text or question:
     <string name="web_first_launch_copy">Copy address</string>
     <string name="web_first_launch_token">Generate read-only token</string>
     <string name="web_first_launch_dismiss">Got it</string>
+    <string name="web_section_relay">Public relay</string>
+    <string name="web_relay_state_connected">Relay connected</string>
+    <string name="web_relay_state_paired">Paired, not connected</string>
+    <string name="web_relay_state_off">Relay off</string>
+    <string name="web_relay_open_settings">Relay settings</string>
+    <string name="web_section_help">Help</string>
+    <string name="web_help_open">Web service + MCP guide</string>
+    <string name="web_shutdown_title">Stop service and revoke all tokens</string>
+    <string name="web_shutdown_summary">One-tap cutoff: stop the web service, revoke all three token levels and clear the relay identity on this device. Existing clients lose access immediately.</string>
+    <string name="web_shutdown_confirm_title">Cut off all access?</string>
+    <string name="web_shutdown_confirm_message">The web service stops, all tokens are revoked and the relay identity is cleared. It cannot be undone; reconnect and regenerate tokens afterwards.</string>
+    <string name="web_shutdown_confirm_positive">Stop and revoke</string>
+    <string name="web_shutdown_done">Access cut off: service stopped, tokens revoked</string>
 </resources>
