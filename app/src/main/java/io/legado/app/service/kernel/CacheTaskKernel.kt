@@ -73,6 +73,12 @@ object CacheTaskKernel {
 
     /** `sync_list`：云端备份名列表 + 本地缓存索引（技术字段）。 */
     suspend fun syncList(): Map<String, Any?> = withContext(IO) {
+        // 前置条件：云存储未配置（WebDAV 无账号 / S3 无容器）时 `getBackupNames` 抛
+        // 「WebDAV not configured」⇒ 转成 400 业务异常（HTTP 层见 ApiEnvelope.statusCodeOf），
+        // 前端据此给「先去设置页配置云存储」的人话引导，而不是看到 500。
+        require(AppCloudStorage.isOk) {
+            "云存储未配置：请在 App「备份与恢复」中配置 WebDAV 或 S3 后重试"
+        }
         val backups = AppCloudStorage.getBackupNames()
         val storageKey = AppCloudStorage.cacheStorageKey()
         val indexItems = CacheCloudIndexStore.readLocal(storageKey)
@@ -91,6 +97,9 @@ object CacheTaskKernel {
      * `restore`（云端备份覆盖恢复，`restore`，危险）/ `delete`（删除云端缓存包，`deleteCachePackage`，危险）。
      */
     suspend fun syncRun(name: String, direction: String): Map<String, Any?> = withContext(IO) {
+        require(AppCloudStorage.isOk) {
+            "云存储未配置：请在 App「备份与恢复」中配置 WebDAV 或 S3 后重试"
+        }
         require(name.isNotBlank()) { "name 不能为空" }
         when (direction) {
             "download" -> {
