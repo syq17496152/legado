@@ -73,9 +73,16 @@ object ConsoleInstaller {
     @Keep
     data class RemoteInfo(
         val version: String,
-        val size: Long,
-        val sha256: String,
-        val minAppApiLevel: Int,
+        val size: Long = 0L,
+        /**
+         * zip 整数哈希（sha256 十六进制）。
+         *
+         * **在线通道**：来自包**旁**的 `manifest.json`（发布侧计算，可信参照）。
+         * **包内** `manifest.json` 该字段**必须留空** —— 包内文件无法携带"包含它自己的 zip 的哈希"
+         * （自引用不可实现）⇒ 本地上传通道**不做 sha256 比对**（见 [verify] 的 `localBypass` 分支）。
+         */
+        val sha256: String = "",
+        val minAppApiLevel: Int = 1,
         val notes: String? = null,
         /** 包内入口文件（默认 index.html）。 */
         val entry: String = DEFAULT_ENTRY,
@@ -483,10 +490,14 @@ object ConsoleInstaller {
         val manifest = expected ?: readManifestFromZip(zip)
             ?: throw ConsoleInstallException("MANIFEST_MISSING", "包内缺 manifest.json（结构不完整）")
 
-        // ② 完整性：zip 实算 sha256 与 manifest 声明比对
-        val actualSha = sha256Hex(zip)
-        if (!actualSha.equals(manifest.sha256, ignoreCase = true)) {
-            throw ConsoleInstallException("SHA_MISMATCH", "包完整性校验失败（sha256 不符）")
+        // ② 完整性：zip 实算 sha256 与 manifest 声明比对。
+        //    **本地上传豁免**：包内 manifest 无法携带"包含它自己的 zip 的哈希"（自引用不可实现）
+        //    ⇒ 本地通道只防损坏，由 **zip 条目 CRC（ZipInputStream）+ 结构/入口/解压校验** 兜底。
+        if (!localBypass) {
+            val actualSha = sha256Hex(zip)
+            if (!actualSha.equals(manifest.sha256, ignoreCase = true)) {
+                throw ConsoleInstallException("SHA_MISMATCH", "包完整性校验失败（sha256 不符）")
+            }
         }
 
         // ③ 来源可信：Ed25519 验签（本地上传通道豁免）
