@@ -98,9 +98,29 @@ object AppSettingsKernel {
         }
     }
 
-    /** `prefs_get`：读取白名单偏好（非白名单键进 `ignored`，不报错）。 */
+    /**
+     * 白名单元数据（`key` / `type` / `values` / `min` / `max`），供 UI 生成控件而不必在前端硬编码键表。
+     * 只含 [settingDefs] 内键 ⇒ 天然不含凭据类键。
+     */
+    private fun availableDefs(): List<Map<String, Any?>> = settingDefs.map { def ->
+        mapOf(
+            "key" to def.key,
+            "type" to def.type,
+            "values" to def.values.toList(),
+            "min" to def.min,
+            "max" to def.max,
+        )
+    }
+
+    /**
+     * `prefs_get`：读取白名单偏好（非白名单键进 `ignored`，不报错）。
+     *
+     * `keys` **省略（空列表）⇒ 读白名单全集**（与 MCP 工具描述一致；此前空列表返回空结果属实现与描述不符，已修正）。
+     * 返回值额外带 `available`（白名单键的元数据）⇒ 控制台可直接按类型渲染控件，无需在前端复制键表。
+     */
     suspend fun prefsGet(keys: List<String>): Map<String, Any?> = withContext(IO) {
         val requested = keys.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+            .ifEmpty { settingDefs.map { it.key } }
         val items = mutableListOf<Map<String, Any?>>()
         val ignored = mutableListOf<String>()
         requested.forEach { key ->
@@ -121,6 +141,7 @@ object AppSettingsKernel {
             "count" to items.size,
             "items" to items,
             "ignored" to ignored,
+            "available" to availableDefs(),
         )
     }
 

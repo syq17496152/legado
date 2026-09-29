@@ -2,6 +2,7 @@ package io.legado.app.web.api
 
 import io.legado.app.web.api.routes.AiRoutes
 import io.legado.app.web.api.routes.AppearanceRoutes
+import io.legado.app.web.api.routes.AppSettingsRoutes
 import io.legado.app.web.api.routes.BackupRoutes
 import io.legado.app.web.api.routes.BookRoutes
 import io.legado.app.web.api.routes.BookshelfRoutes
@@ -70,6 +71,9 @@ object ApiRouteBootstrap {
             // 第 5 轮 UX/IA 重构（IF-20 修复）：订阅管理补全 9 条（收藏/分组/OPML/导入/文章详情）
             // —— 内核与 MCP 工具早已存在，本轮只补 REST 投影；`HttpServer.kt` 仍零改动。
             *RssRoutes.routes,
+            // 第 5 轮 UX/IA 重构（IF-22 修复）：应用设置域补全 4 条（应用偏好读/写、设置检索、主题模式）
+            // —— 同上，内核与 MCP 工具早已存在，此处只补 REST 投影；`HttpServer.kt` 仍零改动。
+            *AppSettingsRoutes.routes,
         )
         installed = true
     }

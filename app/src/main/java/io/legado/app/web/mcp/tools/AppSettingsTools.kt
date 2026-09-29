@@ -32,7 +32,8 @@ object AppSettingsTools {
             name = "app_prefs_get",
             title = "读取应用偏好",
             description = "读取白名单内的应用通用偏好（keys 省略 = 白名单全集）。返回 count/items" +
-                "（每项含 key/type/value）与 ignored（非白名单或无权限的键，不报错）。",
+                "（每项含 key/type/value）、ignored（非白名单或无权限的键，不报错）与 available" +
+                "（白名单键元数据：key/type/values/min/max，供 UI 生成控件）。",
             domain = MCP_DOMAIN_APP,
             level = TokenManager.Level.READONLY,
             readOnlyHint = true,
