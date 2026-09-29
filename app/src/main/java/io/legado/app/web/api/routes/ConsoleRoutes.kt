@@ -60,6 +60,16 @@ object ConsoleRoutes {
                 )
             )
         },
+
+        // REQ-4-110 / SC-4-06：回退到上一可用版本（ADMIN；boot 页「可回退」按钮的落地端点）
+        ApiRoute(Method.POST, "/consoleRollback", Level.ADMIN) { _ ->
+            ReturnData().setData(
+                ConsoleInstaller.rollback().fold(
+                    onSuccess = { mapOf("ok" to true) },
+                    onFailure = { mapOf("ok" to false, "error" to it.message) },
+                )
+            )
+        },
     )
 
     /** 从 JSON 体里取 `channel` 字段（体可能为空或是表单式 ⇒ 返回 null 让调用方回落到 query 参数）。 */

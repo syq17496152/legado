@@ -60,9 +60,15 @@
         stateEl.textContent = text;
 
         var apiOk = last.minAppApiLevelOk !== false;
+        // 三态判定与 App 侧 ConsoleInstaller.State 对齐（NOT_INSTALLED / INSTALLING / INSTALLED / FAILED）；
+        // 「有新版」= 已装且 latest 版本 ≠ 已装版本（**不臆造 UPDATE_AVAILABLE 枚举**，防按钮永久禁用）
+        var installedVer = last.installed && last.installed.version;
+        var latestVer = last.latest && last.latest.version;
+        var hasUpdate = st === 'INSTALLED' && !!latestVer && latestVer !== installedVer;
         btnInstall.disabled = !(st === 'NOT_INSTALLED' && chanOk && apiOk);
-        btnUpdate.disabled = !(st === 'UPDATE_AVAILABLE' && chanOk && apiOk);
-        btnRollback.disabled = true; // 回退：rollback 端点未落地，先禁用（title 注明）
+        btnUpdate.disabled = !(hasUpdate && chanOk && apiOk);
+        // 回退：仅当本机留有上一版（previousAvailable）才可点（REQ-4-110 / SC-4-06）
+        btnRollback.disabled = !last.previousAvailable;
     }
 
     function load() {
@@ -109,7 +115,15 @@
 
     btnInstall.onclick = install;
     btnUpdate.onclick = install;
-    btnRollback.onclick = function () { };
+    // 回退（REQ-4-110 / SC-4-06）：POST /consoleRollback 后按安装同款轮询刷新
+    btnRollback.onclick = function () {
+        hint('正在回退到上一版本…'); showProgress(true); setBar(10);
+        api('/consoleRollback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+            .then(function (d) {
+                if (!d || d.ok !== true) throw new Error((d && d.error) || '回退失败');
+                startPoll();
+            }).catch(function (e) { showProgress(false); hint(e.message, 'err'); });
+    };
     btnUpload.onclick = function () { fileEl.click(); };
 
     // 本地上传兜底（REQ-4-104）：multipart 字段名 file（对齐 ContentRoutes ctx.files["file"] 惯例）
