@@ -44,6 +44,26 @@ object McpToolExecutor {
     ): JsonObject {
         val startedAt = System.currentTimeMillis()
         val elapsed = { System.currentTimeMillis() - startedAt }
+
+        // 端侧确认闸门（tasks 7.3 / 7.4 / 7.7 / REQ-2-501）：`dangerous` 工具必须先经**手机物理确认**。
+        // **为什么不看 `confirm:true` 入参**：调用者可能是被提示注入的 AI，它自己能填 confirm ⇒ 不算人机确认。
+        // 并发口径（tasks 7.5）：闸门只让**本次**调用等待，其它工具调用各自独立执行、不受阻。
+        if (tool.dangerous) {
+            val approved = McpConfirmGate.requestConfirm(
+                title = tool.title.ifBlank { tool.name },
+                message = "AI 请求执行危险操作\n工具：${tool.name}",
+            )
+            if (!approved) {
+                return envelope(
+                    ok = false,
+                    data = null,
+                    errorMsg = "端侧未确认（用户拒绝 / 60s 超时 / 已有待确认请求）：${tool.name}",
+                    elapsedMs = elapsed(),
+                    requestId = requestId,
+                )
+            }
+        }
+
         return try {
             val data = withTimeout(timeoutMs) { tool.invoke(args) }
             envelope(ok = true, data = McpJson.toTree(data), errorMsg = null, elapsedMs = elapsed(), requestId = requestId)

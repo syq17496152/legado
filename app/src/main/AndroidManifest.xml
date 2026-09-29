@@ -287,6 +287,12 @@
             android:name=".ui.config.WebServiceSettingsActivity"
             android:exported="false"
             android:launchMode="singleTop" />
+        <!-- MCP 端侧确认闸门（二期 tasks 7.2）：dangerous 工具执行前必须由人在手机上物理确认 -->
+        <activity
+            android:name=".ui.mcp.McpConfirmActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop" />
         <!-- 现代发现套件管理（7.11h） -->
         <activity
             android:name=".ui.main.explore.DiscoverySuiteManageActivity"
