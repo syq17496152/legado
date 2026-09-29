@@ -14,6 +14,7 @@ import io.legado.app.web.api.routes.DiscoverRoutes
 import io.legado.app.web.api.routes.LogRoutes
 import io.legado.app.web.api.routes.MangaRoutes
 import io.legado.app.web.api.routes.McpRoutes
+import io.legado.app.web.api.routes.RssRoutes
 import io.legado.app.web.api.routes.RuleRoutes
 import io.legado.app.web.api.routes.SettingsRoutes
 import io.legado.app.web.api.routes.SourceRoutes
@@ -66,6 +67,9 @@ object ApiRouteBootstrap {
             *BookshelfRoutes.routes,
             *SettingsRoutes.routes,
             *ConsoleRoutes.routes,
+            // 第 5 轮 UX/IA 重构（IF-20 修复）：订阅管理补全 9 条（收藏/分组/OPML/导入/文章详情）
+            // —— 内核与 MCP 工具早已存在，本轮只补 REST 投影；`HttpServer.kt` 仍零改动。
+            *RssRoutes.routes,
         )
         installed = true
     }
