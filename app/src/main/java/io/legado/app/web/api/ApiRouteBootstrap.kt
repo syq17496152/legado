@@ -2,6 +2,7 @@ package io.legado.app.web.api
 
 import io.legado.app.web.api.routes.BackupRoutes
 import io.legado.app.web.api.routes.BookRoutes
+import io.legado.app.web.api.routes.McpRoutes
 import io.legado.app.web.api.routes.RuleRoutes
 import io.legado.app.web.api.routes.SourceRoutes
 
@@ -30,6 +31,9 @@ object ApiRouteBootstrap {
             *SourceRoutes.routes,
             *RuleRoutes.routes,
             *BackupRoutes.routes,
+            // 二期：MCP 传输入口（3 条：POST/GET/DELETE 同路径）。**不是新服务**，是一条注册路由，
+            // 故 HttpServer.kt 零改动（REQ-2-107 / SC-2-16）。
+            *McpRoutes.routes,
         )
         installed = true
     }
