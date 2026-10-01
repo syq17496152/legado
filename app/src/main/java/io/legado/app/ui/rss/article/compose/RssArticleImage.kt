@@ -15,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
@@ -31,6 +32,7 @@ import io.legado.app.data.appDb
 import io.legado.app.help.CacheManager
 import io.legado.app.help.glide.ImageLoader
 import io.legado.app.help.glide.OkHttpModelLoader
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** 封面图取数通道：`(origin, link) -> image 字段`。文章列表与收藏列表各走自己的 DAO。 */
@@ -63,7 +65,10 @@ val DefaultRssArticleImageQuery: RssArticleImageQuery = { origin, link ->
  * ② 请求必须带 `override(w, h)`：改 Compose 后失去 `Glide.into(ImageView)` 的自动尺寸探测，
  *   不限制解码尺寸会按原图解码（样式 1/2 的整宽大封面会超采样）⇒ 用 `onSizeChanged` 取得实测尺寸后下发；
  * ③ 取数仍走 [RssArticleImageQuery]（单行查库），未加载/取数为空时保持留白（不显示错误占位，
- *   与原实现 `hideWhenBlank` 语义一致）。
+ *   与原实现 `hideWhenBlank` 语义一致）；
+ * ④（2026-10-01 缺陷④）**`DisposableEffect` 的键只能是图源标识 `(origin, link)`**：瀑布流「比例回填 → 盒高变化」
+ *   不得重启本 effect，否则其 `onDispose` 会对**仍在显示**的 Bitmap 执行 `Glide.clear`（退回 Glide `BitmapPool`
+ *   后可被其它请求复用覆写像素）⇒ 图片花屏/形变。该不变式由 `RssArticleImageLifecycleContractTest` 钉死。
  *
  * 视觉等价口径：
  * - 圆角裁剪由 `Modifier.clip(RoundedCornerShape(radiusDp.dp))` 承担（原 `FilletImageView.setCornerRadius` 同值）；
@@ -95,23 +100,29 @@ fun RssArticleImage(
     var boxSize by remember { mutableStateOf(IntSize.Zero) }
     var bitmap by remember(origin, link) { mutableStateOf<Bitmap?>(null) }
 
-    // 尺寸未测量出来前不发起请求（`IntSize.Zero` ⇒ 空 DisposableEffect），测量后 key 变化自动重启。
-    // `bitmap != null` 守卫：瀑布流在比例回填（`onRatioResolved`）后会改变行高 ⇒ `boxSize` 变化会让本
-    // effect 重启；此时已有图，必须跳过以免重复解码（否则每张卡在比例回填后都会多解一次码）。
-    DisposableEffect(origin, link, boxSize, persistRatio) {
-        val width = boxSize.width
-        val height = boxSize.height
-        if (origin.isNullOrBlank() || link.isNullOrBlank() || width <= 0 || height <= 0 || bitmap != null) {
+    // 🔴 缺陷④修复（2026-10-01 用户报障「瀑布样式翻页/上下滑时列表图片严重变形或花掉」）：
+    // **尺寸（boxSize）绝不能作为本 effect 的重启键**。瀑布流条目行高由比例回填驱动（行内
+    // `aspectRatio(1f / ratio)`）⇒ 图片就绪后会改写盒高 ⇒ 若尺寸是键则 effect 立刻重启，其 onDispose 会对
+    // **仍在显示的 Bitmap** 执行 `Glide.clear`，把该 Bitmap 退回 Glide 的 `BitmapPool`——此后任意请求都可
+    // `get()` 它并覆写像素；而 `bitmap != null` 守卫又会跳过重载 ⇒ 屏上持续显示那张「已被归还的 Bitmap」
+    // （表现为他人图片像素 / 半解码垃圾 / 明显形变）。其余样式盒高恒定故不中招，这也解释了「只有瀑布样式」。
+    // 现键收敛为**图源标识** `(origin, link)`：尺寸变化不再重启 ⇒ 只有条目真实解绑/离屏时才 clear。
+    DisposableEffect(origin, link) {
+        if (origin.isNullOrBlank() || link.isNullOrBlank()) {
             onDispose { }
         } else {
             var active = true
             var target: CustomTarget<Bitmap>? = null
             scope.launch {
+                // 等首个非零测量值（同一帧内即满足）后**一次性**取用作为解码 override；
+                // 此后再变不影响本请求（旧尺寸的解码结果由 ContentScale.Crop 裁剪吸收）。
+                val size = snapshotFlow { boxSize }.first { it.width > 0 && it.height > 0 }
+                if (!active) return@launch
                 val image = currentQuery(origin, link)
                 if (!active || image.isNullOrBlank()) return@launch
                 // 比例是布局输入 ⇒ 先用已知缓存回填（避免瀑布流「先估算 → 解码后重排」的整屏跳动）
                 if (persistRatio) currentRatio?.invoke(RssImageAspectRatioStore.get(image))
-                val requestTarget = object : CustomTarget<Bitmap>(width, height) {
+                val requestTarget = object : CustomTarget<Bitmap>(size.width, size.height) {
                     override fun onResourceReady(
                         resource: Bitmap,
                         transition: Transition<in Bitmap>?
@@ -145,6 +156,7 @@ fun RssArticleImage(
                     .into(requestTarget)
             }
             onDispose {
+                // 离屏/解绑必须取消请求（防 target 泄漏）；此刻组合即将离开，清空显示态是允许的
                 active = false
                 target?.let { runCatching { Glide.with(context.applicationContext).clear(it) } }
             }

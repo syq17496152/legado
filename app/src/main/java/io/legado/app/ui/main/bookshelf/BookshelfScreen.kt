@@ -70,6 +70,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.ImageView
 import io.legado.app.R
 import io.legado.app.base.mainBottomBarContentPadding
+import io.legado.app.base.mainBottomBarPadding
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.help.book.isLocal
@@ -261,7 +262,14 @@ private fun ContinueReadingBar(book: Book, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
+            // 缺陷⑤修复（2026-10-01 用户报障「书架左下角『继续阅读』被底栏遮住」）：
+            // 续读条渲染在列表**之外**（外层 Column 末项），而底栏避让此前只做在 Lazy 列表的
+            // contentPadding 上 ⇒ 本条落在底栏覆盖区，肉眼几乎不可见（只有底栏半透明时才隐约看到）。
+            // modifiers 顺序即契约：background（底色铺满，含避让区，与底栏视觉衔接）
+            // → mainBottomBarPadding（内容整体上移到「底栏高 + 导航栏」之上）
+            // → clickable（点击区随内容上移，底栏所在区域不可误触）→ padding（内容内边距）。
             .background(Color(palette.row))
+            .mainBottomBarPadding()
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {

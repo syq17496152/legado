@@ -74,15 +74,23 @@ class RssArticlesViewModel(application: Application) : BaseViewModel(application
         page++
         val pageUrl = nextPageUrl
         if (pageUrl.isNullOrEmpty()) {
+            // 未真正发起请求 ⇒ 回退页码，避免「页码已前进但实页未取」的漂移
+            page--
             isLoading = false
             loadFinallyLiveData.postValue(false)
             return
         }
+        // 缺陷②修复（2026-10-01 用户报障「右上角页码不跟着动」）：滑动翻页也必须同步页码 chip。
+        // 此前仅 loadArticles（首页 / 手动选页）会 postValue ⇒ 滑动翻页时 chip 停在旧页。
+        pageLiveData.postValue(page)
         Rss.getArticles(viewModelScope, sortName, pageUrl, rssSource, page, searchKey).onSuccess(IO) {
             nextPageUrl = it.second
             loadMoreSuccess(it.first)
             isLoading = false
         }.onError {
+            // 缺陷②修复：失败回退页码（与 VideoPlay.loadMoreArticles 既有正确口径一致）⇒ 重试不跳页
+            page--
+            pageLiveData.postValue(page)
             isLoading = false
             loadFinallyLiveData.postValue(false)
             AppLog.put("rss获取内容失败", it)
@@ -91,22 +99,33 @@ class RssArticlesViewModel(application: Application) : BaseViewModel(application
     }
 
     private fun loadMoreSuccess(articles: MutableList<RssArticle>) {
+        val hasMore: Boolean
         if (articles.isEmpty()) {
-            loadFinallyLiveData.postValue(false)
-            return
-        }
-        val firstArticle = articles.first()
-        val dbFirstArticle = appDb.rssArticleDao.get(firstArticle.origin, firstArticle.link, firstArticle.sort)
-        val lastArticle = articles.last()
-        val dbLastArticle = appDb.rssArticleDao.get(lastArticle.origin, lastArticle.link, firstArticle.sort)
-        if (dbFirstArticle != null && dbLastArticle != null) {
-            loadFinallyLiveData.postValue(false)
+            hasMore = false
         } else {
-            articles.forEach {
-                it.order = order--
+            val firstArticle = articles.first()
+            val lastArticle = articles.last()
+            val firstInDb = appDb.rssArticleDao.get(firstArticle.origin, firstArticle.link, firstArticle.sort) != null
+            // 注意：末条必须用**自身**的 sort 查库（此前误用 firstArticle.sort）；同页 sort 同名时等价，但语义应自洽
+            val lastInDb = appDb.rssArticleDao.get(lastArticle.origin, lastArticle.link, lastArticle.sort) != null
+            hasMore = RssLoadMoreOutcome.hasMore(
+                articlesEmpty = false,
+                firstItemInDb = firstInDb,
+                lastItemInDb = lastInDb
+            )
+            if (hasMore) {
+                articles.forEach {
+                    it.order = order--
+                }
+                appDb.rssArticleDao.append(*articles.toTypedArray())
             }
-            appDb.rssArticleDao.append(*articles.toTypedArray())
         }
+        // 缺陷①修复（2026-10-01 用户报障「最多只能翻两页 / 页脚一直刷新翻不动」）：
+        // 三个出口（空结果 / 首末条重复 / **追加成功**）都必须发完成信号。此前「追加成功」分支静默返回
+        // ⇒ 宿主在途闸 isLoadingState 永为 true ⇒ scrollToBottom() 首行守卫恒真（后续翻页全被拦）
+        // 且 loadMoreView 停在转圈态。本函数**只有这一处 postValue 且无提前 return**，
+        // 该不变式由 RssPagingSignalContractTest 以源码契约钉死（防同类漏发信号复发）。
+        loadFinallyLiveData.postValue(hasMore)
     }
 
 }
