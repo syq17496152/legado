@@ -253,7 +253,7 @@ private fun List<Book>.continueReadingBook(): Book? =
 
 /**
  * F4（优化 4）：续读条——书架最高频路径（回到上次阅读）由 2-3 次点击缩到 1 次。
- * 单行条（占位 ≤44dp），数据全部现成（bookName/durChapterIndex），纯展示层。
+ * 单行条（悬空半透明胶囊，可见高 ≈28dp），数据全部现成（bookName/durChapterIndex），纯展示层。
  */
 @Composable
 private fun ContinueReadingBar(book: Book, onClick: () -> Unit) {
@@ -262,30 +262,32 @@ private fun ContinueReadingBar(book: Book, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            // 缺陷⑤修复（2026-10-01 用户报障「书架左下角『继续阅读』被底栏遮住」）：
-            // 续读条渲染在列表**之外**（外层 Column 末项），而底栏避让此前只做在 Lazy 列表的
-            // contentPadding 上 ⇒ 本条落在底栏覆盖区，肉眼几乎不可见（只有底栏半透明时才隐约看到）。
-            // modifiers 顺序即契约：background（底色铺满，含避让区，与底栏视觉衔接）
-            // → mainBottomBarPadding（内容整体上移到「底栏高 + 导航栏」之上）
-            // → clickable（点击区随内容上移，底栏所在区域不可误触）→ padding（内容内边距）。
-            .background(Color(palette.row))
-            .mainBottomBarPadding()
+            // 悬空视觉改造（2026-10-02 用户反馈「样式丑、偏大、太高，想要悬空半透明小条」）：
+            // 先做底栏避让——mainBottomBarPadding(extra = 8.dp)：底栏高 + 导航栏单源 + 8dp 悬空间隙
+            // （间隙并入单源，不另写 bottom padding，符合「底部留白必须走单源」契约），防缺陷⑤回归；
+            // 再给左右/上留白形成「悬空」感，最后裁剪为胶囊 + 半透明底色（0.72f 同 AppearanceKit 口径）。
+            // modifiers 顺序即契约：mainBottomBarPadding（避让 + 悬空间隙）→ padding（左右/上留白）
+            // → clip（胶囊）→ background（半透明底色）→ clickable（点击区随内容）→ padding（内容内边距）。
+            .mainBottomBarPadding(extra = 8.dp)
+            .padding(start = 12.dp, end = 12.dp, top = 6.dp)
+            .clip(AppShapes.Capsule)
+            .background(Color(palette.row).copy(alpha = 0.72f))
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
         Icon(
             imageVector = Icons.Filled.History,
             contentDescription = null,
             tint = palette.accent,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(14.dp),
         )
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(6.dp))
         Text(
             // 章节号按用户可见口径（索引 0 基 ⇒ +1）
             text = stringResource(R.string.bookshelf_continue_reading, book.name, book.durChapterIndex + 1),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            fontSize = 13.sp,
+            fontSize = 12.sp,
             color = palette.primaryText,
             modifier = Modifier.weight(1f),
         )
