@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.ImageView
 import io.legado.app.R
+import io.legado.app.base.mainBottomBarActualHeight
 import io.legado.app.base.mainBottomBarContentPadding
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
@@ -279,8 +280,10 @@ private fun ContinueReadingBar(
     modifier: Modifier = Modifier,
 ) {
     val palette = rememberAppSettingPalette()
-    // 紧贴底栏上沿：底部留白取自避让单源（底栏高 + 导航栏），不加额外间隙；背景透明（不做色块）。
-    val bottomBarInset = mainBottomBarContentPadding().calculateBottomPadding()
+    // 紧贴底栏上沿：底部留白 = 底栏**实际高度**（main_bottom_bar_height + bottom_padding + 导航栏 inset），
+    // **不是**内容留白口径（后者含 ~32dp 视觉余量，会导致悬浮条离底栏过远——用户 2026-10-02 报障）；
+    // 背景透明（不做色块）。
+    val bottomBarInset = mainBottomBarActualHeight()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
