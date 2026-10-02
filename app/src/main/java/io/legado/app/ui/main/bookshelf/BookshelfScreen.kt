@@ -64,13 +64,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import android.widget.ImageView
 import io.legado.app.R
 import io.legado.app.base.mainBottomBarContentPadding
-import io.legado.app.base.mainBottomBarPadding
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookGroup
 import io.legado.app.help.book.isLocal
@@ -193,6 +193,11 @@ fun BookshelfScreen(
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
+            // F4（优化 4）续读候选 + 2026-10-02 二改（用户反馈「不能放在父容器里，要按高度紧贴底栏上部」）：
+            // 续读条**脱离流式布局**改为 Box overlay（见下方），故候选与「列表预留高度」在此先行计算。
+            val continueBook = if (layout >= 2) remember(books) { books.continueReadingBook() } else null
+            // 列表侧为悬浮条预留条高（否则与底栏贴合的半透明条会盖住最后一行）
+            val continueBarReserve = if (continueBook != null) ContinueBarReservedHeight else 0.dp
             val content: @Composable () -> Unit = {
                 if (layout >= 2) {
                     BookGrid(
@@ -205,6 +210,7 @@ fun BookshelfScreen(
                         showReadProgress = showReadProgress,
                         onBookClick = onBookClick,
                         onBookLongClick = onBookLongClick,
+                        extraBottomReserve = continueBarReserve,
                     )
                 } else {
                     BookList(
@@ -219,6 +225,7 @@ fun BookshelfScreen(
                         showLastUpdateTime = showLastUpdateTime,
                         onBookClick = onBookClick,
                         onBookLongClick = onBookLongClick,
+                        extraBottomReserve = continueBarReserve,
                     )
                 }
             }
@@ -226,20 +233,19 @@ fun BookshelfScreen(
             // 对齐 archive BooksFragment.setOnChildScrollUpCallback 行为：
             // 仅当列表/网格处于顶部 (canScrollBackward == false) 时允许下拉刷新，
             // 避免非顶部下拉误触发刷新，且刷新指示器正确显示/隐藏。
-            // F4（优化 4）：网格布局在列表下方补一条续读条（把「回到上次阅读」缩到 1 次点击）
-            val continueBook = if (layout >= 2) remember(books) { books.continueReadingBook() } else null
-            Column(modifier = Modifier.fillMaxSize()) {
-                Box(modifier = Modifier.weight(1f)) {
-                    SwipeRefreshContainer(
-                        onRefresh = onRefresh,
-                        canScrollBackward = if (layout >= 2) gridState.canScrollBackward else listState.canScrollBackward,
-                        content = content
-                    )
-                }
+            // 2026-10-02 二改：续读条脱离流式布局 ⇒ Box overlay——SwipeRefresh 占满全屏，
+            // 续读条 align(BottomCenter) 浮于内容之上、按避让单源算出的高度紧贴底栏上沿，不再挤占内容高度。
+            Box(modifier = Modifier.fillMaxSize()) {
+                SwipeRefreshContainer(
+                    onRefresh = onRefresh,
+                    canScrollBackward = if (layout >= 2) gridState.canScrollBackward else listState.canScrollBackward,
+                    content = content
+                )
                 if (continueBook != null) {
                     ContinueReadingBar(
                         book = continueBook,
                         onClick = { onBookClick(continueBook) },
+                        modifier = Modifier.align(Alignment.BottomCenter),
                     )
                 }
             }
@@ -252,28 +258,36 @@ private fun List<Book>.continueReadingBook(): Book? =
     filter { it.readProgress() != null }.maxByOrNull { it.durChapterTime }
 
 /**
+ * 悬浮续读条在列表底部需额外预留的高度（≈条自身高度：图标 14dp / 文字 12sp + 竖向内边距 6dp×2）。
+ * 仅用于列表底部留白（避免透明条盖住最后一行），不参与底栏避让——后者一律走单源 [mainBottomBarContentPadding]。
+ */
+private val ContinueBarReservedHeight = 30.dp
+
+/**
  * F4（优化 4）：续读条——书架最高频路径（回到上次阅读）由 2-3 次点击缩到 1 次。
- * 单行条（悬空半透明胶囊，可见高 ≈28dp），数据全部现成（bookName/durChapterIndex），纯展示层。
+ * 数据全部现成（bookName/durChapterIndex），纯展示层。
+ *
+ * 2026-10-02 二改（用户反馈「续读条不能在一个父容器里面，要通过计算高度的方式紧贴底栏上部，
+ * 中间哪怕设置成透明色也比现在的好看」）：由「整宽不透明大块 / 悬空胶囊」改为
+ * **悬浮层 + 全宽透明条**——调用方以 Box overlay `align(BottomCenter)` 定位，
+ * 本条仅用避让单源算出「底栏高 + 导航栏」作为底部留白 ⇒ 紧贴底栏上沿、不参与流式布局。
  */
 @Composable
-private fun ContinueReadingBar(book: Book, onClick: () -> Unit) {
+private fun ContinueReadingBar(
+    book: Book,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val palette = rememberAppSettingPalette()
+    // 紧贴底栏上沿：底部留白取自避让单源（底栏高 + 导航栏），不加额外间隙；背景透明（不做色块）。
+    val bottomBarInset = mainBottomBarContentPadding().calculateBottomPadding()
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            // 悬空视觉改造（2026-10-02 用户反馈「样式丑、偏大、太高，想要悬空半透明小条」）：
-            // 先做底栏避让——mainBottomBarPadding(extra = 8.dp)：底栏高 + 导航栏单源 + 8dp 悬空间隙
-            // （间隙并入单源，不另写 bottom padding，符合「底部留白必须走单源」契约），防缺陷⑤回归；
-            // 再给左右/上留白形成「悬空」感，最后裁剪为胶囊 + 半透明底色（0.72f 同 AppearanceKit 口径）。
-            // modifiers 顺序即契约：mainBottomBarPadding（避让 + 悬空间隙）→ padding（左右/上留白）
-            // → clip（胶囊）→ background（半透明底色）→ clickable（点击区随内容）→ padding（内容内边距）。
-            .mainBottomBarPadding(extra = 8.dp)
-            .padding(start = 12.dp, end = 12.dp, top = 6.dp)
-            .clip(AppShapes.Capsule)
-            .background(Color(palette.row).copy(alpha = 0.72f))
+            .padding(bottom = bottomBarInset)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
     ) {
         Icon(
             imageVector = Icons.Filled.History,
@@ -616,13 +630,17 @@ private fun BookGrid(
     showReadProgress: Boolean,
     onBookClick: (Book) -> Unit,
     onBookLongClick: (Book) -> Unit,
+    /** 为悬浮续读条预留的底部额外留白（0 = 无悬浮条） */
+    extraBottomReserve: Dp = 0.dp,
 ) {
     val m = margin.coerceAtLeast(2).dp
     LazyVerticalGrid(
         columns = GridCells.Fixed(spanCount),
         modifier = Modifier.fillMaxSize(),
         state = gridState,
-        contentPadding = mainBottomBarContentPadding(start = m, top = m, end = m, extraBottom = m),
+        contentPadding = mainBottomBarContentPadding(
+            start = m, top = m, end = m, extraBottom = m + extraBottomReserve
+        ),
         horizontalArrangement = Arrangement.spacedBy(m),
         verticalArrangement = Arrangement.spacedBy(m),
     ) {
@@ -788,13 +806,15 @@ private fun BookList(
     showLastUpdateTime: Boolean,
     onBookClick: (Book) -> Unit,
     onBookLongClick: (Book) -> Unit,
+    /** 为悬浮续读条预留的底部额外留白（0 = 无悬浮条） */
+    extraBottomReserve: Dp = 0.dp,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         state = listState,
         contentPadding = mainBottomBarContentPadding(
             top = margin.coerceAtLeast(2).dp,
-            extraBottom = margin.coerceAtLeast(2).dp
+            extraBottom = margin.coerceAtLeast(2).dp + extraBottomReserve
         ),
     ) {
         items(books, key = { it.bookUrl }) { book ->
