@@ -1,6 +1,7 @@
 package io.legado.app.ui.main.bookshelf
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -59,6 +60,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -77,6 +79,7 @@ import io.legado.app.data.entities.BookGroup
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.readProgress
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.NavigationBarIconConfig
 import io.legado.app.ui.main.bookshelf.compose.BookshelfUnreadEmphasis
 import io.legado.app.lib.theme.UiCorner
 import io.legado.app.lib.theme.onAccentFor
@@ -268,10 +271,15 @@ private val ContinueBarReservedHeight = 30.dp
  * F4（优化 4）：续读条——书架最高频路径（回到上次阅读）由 2-3 次点击缩到 1 次。
  * 数据全部现成（bookName/durChapterIndex），纯展示层。
  *
- * 2026-10-02 二改（用户反馈「续读条不能在一个父容器里面，要通过计算高度的方式紧贴底栏上部，
- * 中间哪怕设置成透明色也比现在的好看」）：由「整宽不透明大块 / 悬空胶囊」改为
- * **悬浮层 + 全宽透明条**——调用方以 Box overlay `align(BottomCenter)` 定位，
- * 本条仅用避让单源算出「底栏高 + 导航栏」作为底部留白 ⇒ 紧贴底栏上沿、不参与流式布局。
+ * 迭代轨迹（2026-10-02 用户四轮反馈）：整宽不透明大块 →（否决·仍丑）悬空半透明胶囊 →
+ * （否决·离底栏过远）「脱离内容流 + 按底栏**实际高度**紧贴底栏上沿」（调用方 `Box` overlay
+ * `align(BottomCenter)` 定位，底部留白走 `mainBottomBarActualHeight()` 单源）→
+ * **本轮：配色/造型全面跟随底栏（磨砂玻璃同款）**。
+ *
+ * 「跟底栏一样的配色样式方案」全部走既有单源、零硬编码色：底色 `palette.bottomBar`、
+ * 文字/图标 `palette.bottomBarText`、透明度取底栏图标配置 `opacity`、边框取 `borderColor`+`borderAlpha`、
+ * 圆角 `main_bottom_bar_corner_radius`、左右内缩 `main_bottom_controls_horizontal_padding`
+ * —— 与 `MainActivity.createSolidBottomShellDrawable` / `createStandardBottomShellDrawable` 同口径。
  */
 @Composable
 private fun ContinueReadingBar(
@@ -280,22 +288,37 @@ private fun ContinueReadingBar(
     modifier: Modifier = Modifier,
 ) {
     val palette = rememberAppSettingPalette()
+    // 「跟底栏一样的配色样式方案」（2026-10-02 用户第四轮要求）：底色/文字色/透明度/边框/圆角/左右内缩
+    // 全部取底栏既有单源，与 MainActivity.createSolidBottomShellDrawable 同口径，零硬编码色。
+    val bottomBarConfig = remember(AppConfig.isNightTheme) {
+        NavigationBarIconConfig.currentEntry(AppConfig.isNightTheme).config
+    }
+    val barAlpha = bottomBarConfig.opacity.coerceIn(0, 100) / 100f
+    val barBorderColor = bottomBarConfig.borderColor?.let {
+        Color(it).copy(alpha = bottomBarConfig.borderAlpha.coerceIn(0, 100) / 100f)
+    }
+    val barShape = RoundedCornerShape(dimensionResource(R.dimen.main_bottom_bar_corner_radius))
+    val barSideInset = dimensionResource(R.dimen.main_bottom_controls_horizontal_padding)
     // 紧贴底栏上沿：底部留白 = 底栏**实际高度**（main_bottom_bar_height + bottom_padding + 导航栏 inset），
-    // **不是**内容留白口径（后者含 ~32dp 视觉余量，会导致悬浮条离底栏过远——用户 2026-10-02 报障）；
-    // 背景透明（不做色块）。
+    // **不是**内容留白口径（后者含 ~32dp 视觉余量，会导致悬浮条离底栏过远——用户 2026-10-02 报障）。
     val bottomBarInset = mainBottomBarActualHeight()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
             .padding(bottom = bottomBarInset)
+            .padding(horizontal = barSideInset)
+            .clip(barShape)
+            .background(Color(palette.bottomBar).copy(alpha = barAlpha))
+            .then(barBorderColor?.let { Modifier.border(1.dp, it, barShape) } ?: Modifier)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 6.dp),
     ) {
         Icon(
             imageVector = Icons.Filled.History,
             contentDescription = null,
-            tint = palette.accent,
+            // 跟随底栏配色方案（底栏文字/图标色单源）
+            tint = palette.bottomBarText,
             modifier = Modifier.size(14.dp),
         )
         Spacer(modifier = Modifier.width(6.dp))
@@ -305,7 +328,7 @@ private fun ContinueReadingBar(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             fontSize = 12.sp,
-            color = palette.primaryText,
+            color = palette.bottomBarText,
             modifier = Modifier.weight(1f),
         )
     }
