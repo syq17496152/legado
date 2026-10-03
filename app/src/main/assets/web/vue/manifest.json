@@ -1,0 +1,7 @@
+{
+  "name": "legado-web",
+  "version": "1.0.0",
+  "sha256": "",
+  "minAppApiLevel": 1,
+  "entry": "index.html"
+}

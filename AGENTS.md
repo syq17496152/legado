@@ -12,7 +12,7 @@
 | 底层 Gradle 任务 | `./gradlew assembleAppDebug` / `assembleAppRelease`（productFlavors 仅 `app`，App 首字母大写，**不是** `assembleDebug`） |
 | 改签名/strings.xml 后强制重打 | `./gradlew assembleAppRelease --rerun-tasks` |
 | 单元测试 / Lint | `./gradlew test` / `./gradlew lint` |
-| Vue3 Web 前端 | `npm run dev` / `npm run build`（在 `modules/web/` 下；build 含 type-check + vite build + `sync.js`，本地即可完成） |
+| Vue3 Web 前端 | `pnpm dev` / `pnpm build`（在 **`modules/web/` 目录内**，该目录是**独立 git 仓** `legadoM-web`，**主仓库已 `.gitignore` 并零跟踪**；build 含 type-check + vite build + `sync.js`，本地即可完成） |
 
 > `build-legado.bat` **硬编码本机环境**（`JAVA_HOME=C:\Program Files\AdoptOpenJDK\jdk-17.0.0.20-hotspot`、`ANDROID_HOME=C:\Android\Sdk`、`GRADLE_USER_HOME=F:\gh`、`PROJECT_DIR`），换机器需先改头部。完整打包流程见 `docs/project-flow/build-apk-guide.md`。
 
@@ -27,6 +27,10 @@
 | 阅读核心（全局单例） | `app/src/main/java/io/legado/app/model/ReadBook.kt` |
 | 网络书核心 | `app/src/main/java/io/legado/app/model/webBook/WebBook.kt` |
 | 数据库 | `app/src/main/java/io/legado/app/data/AppDatabase.kt`（Room，legado.db，schema 在 `app/schemas/`；**版本号以 AppDatabase.kt `version` 字段为准，文档禁止硬编码快照**） |
+| Web 服务内核（HTTP/WS 宿主） | `app/src/main/java/io/legado/app/web/HttpServer.kt` + `web/api/routes/`（**路由注册表 `ApiRoute`/`ApiRegistry`——新增端点只加一行 `ApiRoute`，禁改 `HttpServer.serve()`**）+ `web/WebAuth.kt` / `web/TokenManager.kt`（三级令牌鉴权） |
+| 业务内核层（Web/前端复用源） | `app/src/main/java/io/legado/app/service/kernel/`（**24 个 `object` 内核** = 一期 5 个 + 二期 19 个域内核；**业务逻辑只放这里** —— Web 控制器 / MCP 工具只调 Kernel，`runBlocking` 命中必须为 0，依赖方向由门禁 **G-22** 守） |
+| MCP 协议核与工具目录 | `app/src/main/java/io/legado/app/web/mcp/`（`McpServer` / `McpToolCatalog`（**只聚合，不含实现**）/ `McpToolExecutor`（超时 + 信封 + 1MB 截断 + **端侧确认闸门**）/ `McpConfirmGate` + `tools/` **19 个域文件**）；`service/kernel/SourceStepTracer`（三端共用调试步进器）；**L3 调试工具按变体拆**（`src/debug/` 真实 / `src/release/` 空实现，门禁 **G-24**）；**`web/mcp/` 禁 import `api.controller`**（门禁 **G-23**） |
+| Web 服务与 MCP 产品化设计 | `docs/specs/web-mcp-productization/`（1 总纲 + 4 分期；**一期已交付；二期 §0–§7 已落地**：19 域 **release 216 / debug 230** 工具 + 内腿 8765（`McpDebugService`）+ 14 个 L3 调试工具 + 端侧确认闸门；§6 真机联调与 §8 收尾进行中；三/四期未开工） |
 | 依赖版本 | `gradle/libs.versions.toml` |
 
 ## 代码约束
@@ -174,6 +178,8 @@ ai_tests\venv\Scripts\python.exe ai_tests/scripts/audit_gson_generic_signature.p
 | 错误发生后 | `spec-sedimentation-mechanism.md` |
 
 ## 快速入口
+- **🔴 二期交接（接手 MCP/Web 服务任务前必读）**：[docs/specs/web-mcp-productization/HANDOFF-二期交接文档.md](./docs/specs/web-mcp-productization/HANDOFF-二期交接文档.md)（含当前未编译错误的逐行修复清单 + 剩余任务矩阵 + 关键 API 速查）
+- **🔴 四期收口交接（**最新，接手先读**）**：[docs/specs/web-mcp-productization/HANDOFF-四期收口-20260929.md](./docs/specs/web-mcp-productization/HANDOFF-四期收口-20260929.md)（导航外壳 IF-09 / 漏接线 IF-12 / 老阅读器桥接 / 体积路线待决策 / 环境与命令速查 / 12 条坑）
 - **文档索引**：[docs/INDEX.md](./docs/INDEX.md)｜**任务导航（14模块代码锚点）**：[docs/project-flow/task-navigation.md](./docs/project-flow/task-navigation.md)
 - **命令/文件/版本速查**：[docs/project-flow/quick-reference.md](./docs/project-flow/quick-reference.md)｜**项目规范目录**：[docs/project-rules/](./docs/project-rules/)
 - **规则引擎详解**：[docs/project-flow/architecture/rule-engine.md](./docs/project-flow/architecture/rule-engine.md)

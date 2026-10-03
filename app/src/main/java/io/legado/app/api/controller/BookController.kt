@@ -1,68 +1,41 @@
 package io.legado.app.api.controller
 
-import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
-import androidx.core.graphics.drawable.toBitmap
-import com.bumptech.glide.Glide
 import io.legado.app.api.ReturnData
-import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookProgress
-import io.legado.app.data.entities.BookSource
-import io.legado.app.help.AppWebDav
-import io.legado.app.help.CacheManager
-import io.legado.app.help.book.BookHelp
-import io.legado.app.help.book.ContentProcessor
-import io.legado.app.help.book.isLocal
-import io.legado.app.help.config.AppConfig
-import io.legado.app.help.glide.ImageLoader
-import io.legado.app.model.BookCover
-import io.legado.app.model.ImageProvider
-import io.legado.app.model.ReadBook
-import io.legado.app.model.localBook.LocalBook
-import io.legado.app.model.webBook.WebBook
-import io.legado.app.service.relay.RelayContentSanitizer
+import io.legado.app.service.kernel.BookKernel
 import io.legado.app.utils.GSON
-import io.legado.app.utils.cnCompare
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.printOnDebug
-import io.legado.app.utils.stackTraceStr
-import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
-import splitties.init.appCtx
-import java.io.File
-import java.util.WeakHashMap
-import java.util.concurrent.TimeUnit
 
+/**
+ * 书籍域 Web 门面（web-mcp-productization 一期 · 2.1.6）。
+ *
+ * 职责被压缩为三件（design §1.4.3）：**解析参数 → 调 [BookKernel] → 装信封**。
+ * 业务逻辑（DAO 访问 / 网络取书 / 图片解码）全在 Kernel，本类**不再出现** `appDb.` / `Dao.`
+ * （门禁 `service/kernel` 依赖方向 + tasks §2.1.6 的 `Grep "Dao\." 命中 0` 判据）。
+ *
+ * **为何保留非 `suspend` 的旧签名**：本类是**共享门面**，除 Web 路由外还被
+ * `api/ReaderProvider.kt`（外部阅读器 ContentProvider）、`service/relay/RelayReadDispatcher.kt`、
+ * `model/AutoTaskProtocol.kt` 调用，其中两处**非挂起上下文**无法调用 suspend 函数 ⇒
+ * 一律改成 suspend 会把改动扩散到 4 个无关调用点。故保留原签名，在门面内以 `runBlocking`
+ * 作为**同步边界**（design §1.4.3 明确允许：要清零的是 **Kernel 内部**的 runBlocking）。
+ */
 object BookController {
 
-    private lateinit var book: Book
-    private var bookSource: BookSource? = null
-    private var bookUrl: String = ""
-    private val defaultCoverCache by lazy { WeakHashMap<Drawable, Bitmap>() }
-
     /**
-     * 书架所有书籍
+     * 书架所有书籍。
+     *
+     * 保留**属性**形态（`ReaderProvider` / `RelayReadDispatcher` 以属性方式访问）。
      */
     val bookshelf: ReturnData
         get() {
-            val books = runBlocking(IO) { appDb.bookDao.all }
-            val returnData = ReturnData()
+            val books = runBlocking { BookKernel.bookshelf() }
             return if (books.isEmpty()) {
-                returnData.setErrorMsg("还没有添加小说")
+                ReturnData().setErrorMsg("还没有添加小说")
             } else {
-                val data = when (AppConfig.bookshelfSort) {
-                    1 -> books.sortedByDescending { it.latestChapterTime }
-                    2 -> books.sortedWith { o1, o2 ->
-                        o1.name.cnCompare(o2.name)
-                    }
-
-                    3 -> books.sortedBy { it.order }
-                    else -> books.sortedByDescending { it.durChapterTime }
-                }
-                returnData.setData(data)
+                ReturnData().setData(books)
             }
         }
 
@@ -70,29 +43,11 @@ object BookController {
      * 获取封面
      */
     fun getCover(parameters: Map<String, List<String>>): ReturnData {
-        val returnData = ReturnData()
         val coverPath = parameters["path"]?.firstOrNull()
-        val ftBitmap = ImageLoader.loadBitmap(appCtx, coverPath)
-            .override(84, 112)
-            .centerCrop()
-            .submit()
         return try {
-            returnData.setData(ftBitmap.get(3, TimeUnit.SECONDS))
+            ReturnData().setData(runBlocking { BookKernel.cover(coverPath) })
         } catch (e: Exception) {
-            try {
-                val defaultBitmap = defaultCoverCache.getOrPut(BookCover.defaultDrawable) {
-                    Glide.with(appCtx)
-                        .asBitmap()
-                        .load(BookCover.defaultDrawable.toBitmap())
-                        .override(84, 112)
-                        .centerCrop()
-                        .submit()
-                        .get()
-                }
-                returnData.setData(defaultBitmap)
-            } catch (e: Exception) {
-                returnData.setErrorMsg(e.localizedMessage ?: "getCover error")
-            }
+            ReturnData().setErrorMsg(e.localizedMessage ?: "getCover error")
         }
     }
 
@@ -106,197 +61,131 @@ object BookController {
         val src = parameters["path"]?.firstOrNull()
             ?: return returnData.setErrorMsg("图片链接为空")
         val width = parameters["width"]?.firstOrNull()?.toInt() ?: 640
-        if (this.bookUrl != bookUrl) {
-            this.book = runBlocking(IO) { appDb.bookDao.getBook(bookUrl) }
-                ?: return returnData.setErrorMsg("bookUrl不对")
-            this.bookSource = runBlocking(IO) { appDb.bookSourceDao.getBookSource(book.origin) }
+        return try {
+            returnData.setData(runBlocking { BookKernel.image(bookUrl, src, width) })
+        } catch (e: Exception) {
+            returnData.setErrorMsg(e.localizedMessage ?: "bookUrl不对")
         }
-        this.bookUrl = bookUrl
-        val bitmap = runBlocking {
-            ImageProvider.cacheImage(book, src, bookSource)
-            ImageProvider.getImage(book, src, width)
-        }
-        return returnData.setData(bitmap)
     }
 
     /**
      * 更新目录
      */
     fun refreshToc(parameters: Map<String, List<String>>): ReturnData {
-        val returnData = ReturnData()
-        try {
-            val bookUrl = parameters["url"]?.firstOrNull()
-            if (bookUrl.isNullOrEmpty()) {
-                return returnData.setErrorMsg("参数url不能为空，请指定书籍地址")
-            }
-            val book = runBlocking(IO) { appDb.bookDao.getBook(bookUrl) }
-                ?: return returnData.setErrorMsg("未在数据库找到对应书籍，请先添加")
-            if (book.isLocal) {
-                val toc = LocalBook.getChapterList(book)
-                runBlocking(IO) {
-                    appDb.bookChapterDao.delByBook(book.bookUrl)
-                    appDb.bookChapterDao.insert(*toc.toTypedArray())
-                    appDb.bookDao.update(book)
-                }
-                return returnData.setData(toc)
-            } else {
-                val bookSource = runBlocking(IO) { appDb.bookSourceDao.getBookSource(book.origin) }
-                    ?: return returnData.setErrorMsg("未找到对应书源,请换源")
-                val toc = runBlocking {
-                    if (book.tocUrl.isBlank()) {
-                        WebBook.getBookInfoAwait(bookSource, book)
-                    }
-                    WebBook.getChapterListAwait(bookSource, book).getOrThrow()
-                }
-                runBlocking(IO) {
-                    appDb.bookChapterDao.delByBook(book.bookUrl)
-                    appDb.bookChapterDao.insert(*toc.toTypedArray())
-                    appDb.bookDao.update(book)
-                }
-                return returnData.setData(toc)
-            }
+        val bookUrl = parameters["url"]?.firstOrNull()
+        if (bookUrl.isNullOrEmpty()) {
+            return ReturnData().setErrorMsg("参数url不能为空，请指定书籍地址")
+        }
+        return try {
+            ReturnData().setData(runBlocking { BookKernel.refreshToc(bookUrl) })
         } catch (e: Exception) {
-            return returnData.setErrorMsg(e.localizedMessage ?: "refresh toc error")
+            ReturnData().setErrorMsg(e.localizedMessage ?: "refresh toc error")
         }
     }
 
     /**
-     * 获取目录
+     * 获取目录（未缓存则触发一次目录刷新，行为与改造前一致）
      */
     fun getChapterList(parameters: Map<String, List<String>>): ReturnData {
         val bookUrl = parameters["url"]?.firstOrNull()
-        val returnData = ReturnData()
         if (bookUrl.isNullOrEmpty()) {
-            return returnData.setErrorMsg("参数url不能为空，请指定书籍地址")
+            return ReturnData().setErrorMsg("参数url不能为空，请指定书籍地址")
         }
-        val chapterList = runBlocking(IO) { appDb.bookChapterDao.getChapterList(bookUrl) }
+        val chapterList = runBlocking { BookKernel.chapterList(bookUrl) }
         if (chapterList.isEmpty()) {
             return refreshToc(parameters)
         }
-        return returnData.setData(chapterList)
+        return ReturnData().setData(chapterList)
     }
 
     /**
      * 获取正文
+     *
+     * 可选分页参数 `offset` / `length`（2.1.5 / REQ-1-308，缺省即整章 ⇒ 老页零影响，见决策 #13）。
      */
     fun getBookContent(parameters: Map<String, List<String>>): ReturnData {
         val bookUrl = parameters["url"]?.firstOrNull()
-        val index = parameters["index"]?.firstOrNull()?.toInt()
-        val returnData = ReturnData()
         if (bookUrl.isNullOrEmpty()) {
-            return returnData.setErrorMsg("参数url不能为空，请指定书籍地址")
+            return ReturnData().setErrorMsg("参数url不能为空，请指定书籍地址")
         }
-        if (index == null) {
-            return returnData.setErrorMsg("参数index不能为空, 请指定目录序号")
-        }
-        val book = runBlocking(IO) { appDb.bookDao.getBook(bookUrl) }
-        val chapter = runBlocking(IO) {
-            var chapter = appDb.bookChapterDao.getChapter(bookUrl, index)
-            var wait = 0
-            while (chapter == null && wait < 30) {
-                delay(1000)
-                chapter = appDb.bookChapterDao.getChapter(bookUrl, index)
-                wait++
+        val index = parameters["index"]?.firstOrNull()?.toInt()
+            ?: return ReturnData().setErrorMsg("参数index不能为空, 请指定目录序号")
+        val offset = parameters["offset"]?.firstOrNull()?.toIntOrNull() ?: 0
+        val length = parameters["length"]?.firstOrNull()?.toIntOrNull() ?: BookKernel.CONTENT_NO_LIMIT
+        return try {
+            val content = runBlocking { BookKernel.bookContent(bookUrl, index, offset, length) }
+            if (content == null) {
+                ReturnData().setErrorMsg("未找到")
+            } else {
+                ReturnData().setData(content)
             }
-            chapter
-        }
-        if (book == null || chapter == null) {
-            return returnData.setErrorMsg("未找到")
-        }
-        var content: String? = BookHelp.getContent(book, chapter)
-        if (content != null) {
-            val contentProcessor = ContentProcessor.get(book.name, book.origin)
-            content = runBlocking {
-                contentProcessor.getContent(book, chapter, content, includeTitle = false)
-                    .toString()
-            }
-            return returnData.setData(content)
-        }
-        val bookSource = runBlocking(IO) { appDb.bookSourceDao.getBookSource(book.origin) }
-            ?: return returnData.setErrorMsg("未找到书源")
-        try {
-            content = runBlocking {
-                WebBook.getContentAwait(bookSource, book, chapter).let {
-                    val contentProcessor = ContentProcessor.get(book.name, book.origin)
-                    contentProcessor.getContent(book, chapter, it, includeTitle = false)
-                        .toString()
-                }
-            }
-            returnData.setData(content)
         } catch (e: Exception) {
-            returnData.setErrorMsg(e.stackTraceStr)
+            ReturnData().setErrorMsg(e.localizedMessage ?: "获取正文失败")
         }
-        return returnData
     }
 
     fun getRelayBookCover(parameters: Map<String, List<String>>): ReturnData {
         val bookUrl = parameters["url"]?.firstOrNull()
             ?: return ReturnData().setErrorMsg("bookUrl为空")
-        val book = appDb.bookDao.getBook(bookUrl)
-            ?: return ReturnData().setErrorMsg("bookUrl不对")
-        return getCover(mapOf("path" to listOf(book.getDisplayCover().orEmpty())))
+        return try {
+            ReturnData().setData(runBlocking { BookKernel.relayBookCover(bookUrl) })
+        } catch (e: Exception) {
+            ReturnData().setErrorMsg(e.localizedMessage ?: "bookUrl不对")
+        }
     }
 
     fun getRelayBookContent(parameters: Map<String, List<String>>): ReturnData {
-        val base = getBookContent(parameters)
-        if (!base.isSuccess) return base
-        val content = base.data as? String ?: return ReturnData().setErrorMsg("正文格式无效")
-        return ReturnData().setData(RelayContentSanitizer.removeImages(content))
+        val bookUrl = parameters["url"]?.firstOrNull()
+        if (bookUrl.isNullOrEmpty()) {
+            return ReturnData().setErrorMsg("参数url不能为空，请指定书籍地址")
+        }
+        val index = parameters["index"]?.firstOrNull()?.toInt()
+            ?: return ReturnData().setErrorMsg("参数index不能为空, 请指定目录序号")
+        return try {
+            ReturnData().setData(runBlocking { BookKernel.relayBookContent(bookUrl, index) })
+        } catch (e: Exception) {
+            ReturnData().setErrorMsg(e.localizedMessage ?: "正文格式无效")
+        }
     }
 
     /**
      * 保存书籍
      */
     suspend fun saveBook(postData: String?): ReturnData {
-        val returnData = ReturnData()
-        GSON.fromJsonObject<Book>(postData).getOrNull()?.let { book ->
-            AppWebDav.uploadBookProgress(book)
-            book.save()
-            return returnData.setData("")
-        }
-        return returnData.setErrorMsg("格式不对")
+        val book = GSON.fromJsonObject<Book>(postData).getOrNull()
+            ?: return ReturnData().setErrorMsg("格式不对")
+        BookKernel.saveBook(book)
+        return ReturnData().setData("")
     }
 
     /**
      * 删除书籍
      */
     fun deleteBook(postData: String?): ReturnData {
-        val returnData = ReturnData()
-        GSON.fromJsonObject<Book>(postData).getOrNull()?.let { book ->
-            book.delete()
-            return returnData.setData("")
-        }
-        return returnData.setErrorMsg("格式不对")
+        val book = GSON.fromJsonObject<Book>(postData).getOrNull()
+            ?: return ReturnData().setErrorMsg("格式不对")
+        runBlocking { BookKernel.deleteBook(book) }
+        return ReturnData().setData("")
     }
 
     /**
      * 保存进度
+     *
+     * 校验口径见 [BookKernel.validateProgress]（决策 #12：只做**非负**校验，不做章节越界硬拒）。
      */
     suspend fun saveBookProgress(postData: String?): ReturnData {
-        val returnData = ReturnData()
-        GSON.fromJsonObject<BookProgress>(postData)
+        val bookProgress = GSON.fromJsonObject<BookProgress>(postData)
             .onFailure { it.printOnDebug() }
-            .getOrNull()?.let { bookProgress ->
-                withContext(IO) { appDb.bookDao.getBook(bookProgress.name, bookProgress.author) }?.let { book ->
-                    book.durChapterIndex = bookProgress.durChapterIndex
-                    book.durChapterPos = bookProgress.durChapterPos
-                    book.durChapterTitle = bookProgress.durChapterTitle
-                    book.durChapterTime = bookProgress.durChapterTime
-                    AppWebDav.uploadBookProgress(bookProgress) {
-                        book.syncTime = System.currentTimeMillis()
-                    }
-                    withContext(IO) { appDb.bookDao.update(book) }
-                    ReadBook.book?.let {
-                        if (it.name == bookProgress.name &&
-                            it.author == bookProgress.author
-                        ) {
-                            ReadBook.webBookProgress = bookProgress
-                        }
-                    }
-                    return returnData.setData("")
-                }
-            }
-        return returnData.setErrorMsg("格式不对")
+            .getOrNull()
+            ?: return ReturnData().setErrorMsg("格式不对")
+        BookKernel.validateProgress(bookProgress)?.let {
+            return ReturnData().setErrorMsg(it)
+        }
+        return if (BookKernel.saveBookProgress(bookProgress)) {
+            ReturnData().setData("")
+        } else {
+            ReturnData().setErrorMsg("格式不对")
+        }
     }
 
     /**
@@ -306,42 +195,38 @@ object BookController {
         parameters: Map<String, List<String>>,
         files: Map<String, String>
     ): ReturnData {
-        val returnData = ReturnData()
         val fileName = parameters["fileName"]?.firstOrNull()
-            ?: return returnData.setErrorMsg("fileName 不能为空")
+            ?: return ReturnData().setErrorMsg("fileName 不能为空")
         val fileData = files["fileData"]
-            ?: return returnData.setErrorMsg("fileData 不能为空")
-        kotlin.runCatching {
-            val uri = LocalBook.saveBookFile(File(fileData).inputStream(), fileName)
-            LocalBook.importFile(uri)
-        }.onFailure {
-            return when (it) {
-                is SecurityException -> returnData.setErrorMsg("需重新设置书籍保存位置!")
-                else -> returnData.setErrorMsg("保存书籍错误\n${it.localizedMessage}")
+            ?: return ReturnData().setErrorMsg("fileData 不能为空")
+        return kotlin.runCatching {
+            runBlocking { BookKernel.addLocalBook(fileName, fileData) }
+        }.fold(
+            onSuccess = { ReturnData().setData(true) },
+            onFailure = { error ->
+                when (error) {
+                    is SecurityException -> ReturnData().setErrorMsg("需重新设置书籍保存位置!")
+                    else -> ReturnData().setErrorMsg("保存书籍错误\n${error.localizedMessage}")
+                }
             }
-        }
-        return returnData.setData(true)
+        )
     }
 
     /**
      * 保存web阅读界面配置
      */
     fun saveWebReadConfig(postData: String?): ReturnData {
-        val returnData = ReturnData()
-        postData?.let {
-            CacheManager.put("webReadConfig", postData)
-        } ?: CacheManager.delete("webReadConfig")
-        return returnData.setData("")
+        runBlocking { BookKernel.saveWebReadConfig(postData) }
+        return ReturnData().setData("")
     }
 
     /**
      * 获取web阅读界面配置
      */
     fun getWebReadConfig(): ReturnData {
-        val returnData = ReturnData()
-        val data = CacheManager.get("webReadConfig")
-            ?: return returnData.setErrorMsg("没有配置")
-        return returnData.setData(data)
+        val data = runBlocking { BookKernel.webReadConfig() }
+            ?: return ReturnData().setErrorMsg("没有配置")
+        return ReturnData().setData(data)
     }
 
 }

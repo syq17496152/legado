@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+    <title>控制台引导</title>
+    <!-- 控制台引导壳（四期 §1.1 / REQ-4-101）：FileWeb 未安装/miss 时兜底返回；零外部依赖，颜色仅 :root 定义、规则用 var()。 -->
+    <style>
+        :root{--bg:#f4f5f7;--fg:#1b1d20;--accent:#2f6fed;--on-accent:#fff;--card:#fff;--muted:#6b7076;--border:#dde1e7;--err:#c0392b;--ok:#1f9d55}
+        @media (prefers-color-scheme:dark){:root{--bg:#14161a;--fg:#e8eaed;--accent:#5a8bff;--on-accent:#0b0d10;--card:#1d2025;--muted:#9aa0a6;--border:#2c3036;--err:#ff6b5e;--ok:#3ddc84}}
+        *{box-sizing:border-box}
+        body{margin:0;padding:24px;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+        .card{max-width:520px;margin:0 auto;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
+        h1{font-size:18px;margin:0 0 4px}
+        .state{font-size:13px;color:var(--muted);margin:0}
+        .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+        button{flex:1;min-width:110px;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--fg);font-size:14px;cursor:pointer}
+        button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+        button:disabled{opacity:.5;cursor:not-allowed}
+        input[type=file]{display:none}
+        .progress{height:8px;border-radius:4px;background:var(--border);overflow:hidden;margin-top:16px;display:none}
+        .progress.on{display:block}
+        .bar{height:100%;width:0;background:var(--accent);transition:width .3s}
+        .hint{margin:14px 0 0;font-size:13px;color:var(--muted);white-space:pre-wrap;word-break:break-all}
+        .hint.err{color:var(--err)}
+        .hint.ok{color:var(--ok)}
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h1>Legado 控制台</h1>
+        <p class="state" id="state">正在读取状态…</p>
+        <div class="row">
+            <button id="btnInstall" class="primary" disabled>安装</button>
+            <button id="btnUpdate" disabled>更新</button>
+            <button id="btnRollback" disabled title="回退待四期安装器落地后开放">回退</button>
+        </div>
+        <div class="progress" id="progress"><div class="bar" id="bar"></div></div>
+        <div class="row">
+            <button id="btnUpload">本地上传 zip 安装</button>
+        </div>
+        <input type="file" id="file" accept=".zip,application/zip" />
+        <p class="hint" id="hint"></p>
+    </div>
+    <!-- 绝对路径：本壳由 /console/* miss 兜底返回，相对路径会再次落到本壳自身 -->
+    <script src="/boot/boot.js"></script>
+</body>
+
+</html>

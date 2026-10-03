@@ -1,0 +1,158 @@
+package io.legado.app.web.api
+
+import android.graphics.Bitmap
+import fi.iki.elonen.NanoHTTPD
+import fi.iki.elonen.NanoHTTPD.Response
+import io.legado.app.api.ReturnData
+import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.utils.GSON
+import io.legado.app.utils.LogUtils
+import io.legado.app.utils.stackTraceStr
+import io.legado.app.web.McpAuditor
+import kotlinx.coroutines.TimeoutCancellationException
+import okio.Pipe
+import okio.buffer
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.FileNotFoundException
+import java.util.concurrent.TimeoutException
+
+/**
+ * 信封组装 + 异常→状态码映射 + 异步审计挂点（web-mcp-productization 一期 · 5.3）。
+ *
+ * 红线（REQ-1-302）：`isSuccess` / `errorMsg` / `data` **三字段语义完全不变**（老 vue 页只看这三个）；
+ * `code` 为**新增字段**，与 HTTP 状态码一致（REQ-1-301）。
+ */
+object ApiEnvelope {
+
+    /** 异常 → (HTTP 状态码, 信封 code) 映射表（REQ-1-301）。 */
+    private fun statusCodeOf(e: Throwable): Int = when (e) {
+        is IllegalArgumentException -> 400
+        // 未注册/不存在的静态资源：`AssetManager.open` 抛 FileNotFoundException（IOException 子类）。
+        // 改造前该分支落进 serve() 的顶层 catch ⇒ 恒 200 + 纯文本；现在给真实 404（REQ-1-301 明列 404）。
+        is FileNotFoundException -> 404
+        is NoSuchElementException -> 404
+        is TimeoutCancellationException, is TimeoutException -> 504
+        else -> 500
+    }
+
+    /**
+     * 执行 handler 并装信封。
+     *
+     * - handler 返回 [Response] ⇒ 直接透传（**逃生舱**，如 `/backup` 的 ZIP 流）；
+     * - handler 返回 [ReturnData] 且 `data` 是 [Bitmap] ⇒ 回 `image/png` 二进制（`/cover`、`/image`）；
+     * - handler 返回 [ReturnData] ⇒ 按 `code` 组 JSON 响应；
+     * - 抛异常 ⇒ 按 [statusCodeOf] 组错误信封（**不再恒 200**）。
+     */
+    suspend fun dispatch(route: ApiRoute, ctx: ApiContext): Response {
+        val startedAt = System.currentTimeMillis()
+        var errorMsg = ""
+        val response = try {
+            when (val result = route.handler.handle(ctx)) {
+                is Response -> result
+                is ReturnData -> {
+                    val payload = result.data
+                    if (payload is Bitmap) imageResponse(payload) else jsonResponse(result)
+                }
+                else -> error("handler 返回类型非法：${result::class.java.name}（只允许 ReturnData 或 Response）")
+            }
+        } catch (e: Throwable) {
+            LogUtils.d(TAG) {
+                "${ctx.method.name} - ${ctx.uri} - handler 异常\n$e\n${e.stackTraceStr}"
+            }
+            errorMsg = e.localizedMessage ?: e.message ?: "服务器内部错误"
+            errorResponseOf(e)
+        }
+        val success = response.status == Response.Status.OK
+        if (!success && errorMsg.isEmpty()) {
+            errorMsg = "HTTP ${response.status.requestStatus}"
+        }
+        // 3.7 异步审计（写面落库；只读端点内部直接跳过）：不阻塞响应，不外泄明文凭证
+        McpAuditor.record(
+            route = route,
+            level = ctx.level,
+            postData = ctx.postData,
+            success = success,
+            errorMsg = errorMsg,
+            elapsedMs = System.currentTimeMillis() - startedAt
+        )
+        return response
+    }
+
+    /**
+     * 位图负载 → `image/png` 二进制响应（`/cover`、`/image` 用）。
+     *
+     * 🔴 **迁移丢失的既有分支**：改造前 `HttpServer.serve()` 在响应装配点是
+     * `if (returnData.data is Bitmap) → PNG 字节流 else → JSON`；路由注册表化时该分支随
+     * `when(uri)` 一起被删除 ⇒ 两个图片端点退化成 JSON 信封（GSON 序列化 Bitmap 得到 `{}`），
+     * **老页全部书籍封面与正文图片失效**（真机实测 23/23 封面 broken）。
+     * 现收回到信封装配单点，与「大列表走 Pipe 分块」同处同因（决策 #4 / #18）。
+     */
+    private fun imageResponse(bitmap: Bitmap): Response {
+        val outputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+        val byteArray = outputStream.toByteArray()
+        outputStream.close()
+        return NanoHTTPD.newFixedLengthResponse(
+            Response.Status.OK,
+            "image/png",
+            ByteArrayInputStream(byteArray),
+            byteArray.size.toLong()
+        )
+    }
+
+    /**
+     * 异常 → 错误信封响应（**真实 HTTP 状态码**，REQ-1-301）。
+     *
+     * `HttpServer.serve()` 的顶层 catch 复用本方法 —— 改造前该分支 `newFixedLengthResponse(e.message)`
+     * **恒 200**，前端只能靠 `isSuccess` 猜对错（本期要清偿的质量债之一，任务 3.2）。
+     */
+    fun errorResponseOf(e: Throwable): Response =
+        jsonResponse(
+            ReturnData()
+                .setErrorMsg(e.localizedMessage ?: e.message ?: "服务器内部错误")
+                .setCode(statusCodeOf(e))
+        )
+
+    /** 构造 401 / 403 拒绝响应（供 WebAuth 复用，保证与常规信封同构）。 */
+    fun deny(code: Int, message: String): Response =
+        jsonResponse(ReturnData().setErrorMsg(message).setCode(code))
+
+    /** [ReturnData] → JSON 响应（状态码取 `code`，MIME 固定 `application/json`）。 */
+    fun jsonResponse(data: ReturnData): Response {
+        val status = statusOf(data.code)
+        val payload = data.data
+        // 大列表保护（原 `HttpServer.serve()` 的性能优化，迁移到信封层以免丢失）：
+        // 列表元素 > 3000 时走 Pipe 分块流式序列化，避免在内存里拼出超大 JSON 字符串。
+        return if (payload is List<*> && payload.size > CHUNK_THRESHOLD) {
+            val pipe = Pipe(16 * 1024)
+            Coroutine.async {
+                pipe.sink.buffer().outputStream().bufferedWriter(Charsets.UTF_8).use {
+                    GSON.toJson(data, it)
+                }
+            }
+            NanoHTTPD.newChunkedResponse(
+                status,
+                "application/json",
+                pipe.source.buffer().inputStream()
+            )
+        } else {
+            NanoHTTPD.newFixedLengthResponse(status, "application/json", GSON.toJson(data))
+        }
+    }
+
+    /**
+     * NanoHTTPD 的 `Status` 枚举**不含 504** 等码 ⇒ 未知码用匿名 `IStatus` 兜底，
+     * 保证 `code` 与 HTTP 状态码严格一致。
+     */
+    private fun statusOf(code: Int): Response.IStatus =
+        Response.Status.lookup(code) ?: object : Response.IStatus {
+            override fun getRequestStatus(): Int = code
+            override fun getDescription(): String = code.toString()
+        }
+
+    private const val TAG = "ApiEnvelope"
+
+    /** 列表响应超过该元素数 ⇒ 走分块流式（沿用改造前阈值 3000，保证行为一致）。 */
+    private const val CHUNK_THRESHOLD = 3000
+}

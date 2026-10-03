@@ -84,6 +84,19 @@ abstract class AbsCallBack(
      */
     abstract fun onSuccess(response: Response)
 
+    /** IF-23：onError 幂等（first-wins），避免「决策分支已上报」+「onCanceled 兜底分支再上报」重复报错 */
+    private val errorReported = AtomicBoolean(false)
+
+    /** 幂等错误上报：回调内不得让重复报错/异常逃逸成「既不成功也不失败」的黑洞态 */
+    private fun safeError(error: IOException) {
+        if (errorReported.compareAndSet(false, true)) {
+            onError(error)
+        }
+    }
+
+    /** 脱敏：只保留路径片段（不输出域名 / 完整 URL，遵守输出安全规范） */
+    private fun maskPath(url: String?): String =
+        url?.substringAfter("://")?.substringAfter("/")?.take(30) ?: "unknown"
 
     override fun onRedirectReceived(
         request: UrlRequest,
@@ -92,39 +105,74 @@ abstract class AbsCallBack(
     ) {
         if (followCount > MAX_FOLLOW_COUNT) {
             request.cancel()
-            onError(IOException("Too many redirect"))
+            safeError(IOException("Too many redirect"))
             return
         }
         if (mCall.isCanceled()) {
-            onError(IOException("Cronet Request Canceled"))
+            safeError(IOException("Cronet Request Canceled"))
             request.cancel()
             return
         }
         followCount += 1
         urlResponseInfoChain.add(info)
+
+        // IF-23 修复：base 必须取「本次返回 3xx 的响应 URL」。
+        // 多跳时本实例被复用，originalRequest 仍停在首跳 URL，用它作 base 会把相对 Location 解析到错误地址。
+        val baseUrl = info.url
         val client = okHttpClient
-        if (originalRequest.url.isHttps
-            && newLocationUrl.startsWith("http://")
-            && client.followSslRedirects
-        ) {
-            followRedirect = true
-        } else if (!originalRequest.url.isHttps
-            && newLocationUrl.startsWith("https://")
-            && client.followSslRedirects
-        ) {
-            followRedirect = true
-        } else if (okHttpClient.followRedirects) {
-            followRedirect = true
+        // Location 优先取 Cronet 解析值；为空时回退响应头（Cronet 未给出时仍可自救）
+        val location = runCatching {
+            newLocationUrl.ifBlank { info.allHeaders["Location"]?.lastOrNull().orEmpty() }
+        }.getOrElse { newLocationUrl }
+
+        val decision = RedirectPolicy.decide(
+            baseUrl = baseUrl,
+            location = location,
+            allowCrossScheme = client.followSslRedirects
+        )
+        val resolved = (decision as? RedirectPolicy.Decision.Follow)?.url
+        // 沿用既有门控语义：跨 scheme 由 followSslRedirects 决定，同 scheme 看 followRedirects
+        val crossScheme = resolved != null &&
+                RedirectPolicy.schemeOf(baseUrl) != RedirectPolicy.schemeOf(resolved)
+        val followEnabled = resolved != null && (crossScheme || client.followRedirects)
+
+        if (!followEnabled) {
+            val reason = (decision as? RedirectPolicy.Decision.Reject)?.reason
+                ?: "followRedirects disabled"
+            AppLog.put(
+                "[CronetRedirect] hop=$followCount code=${info.httpStatusCode} " +
+                    "path=${maskPath(baseUrl)} action=reject reason=$reason"
+            )
+            // 不跟随必须“快速失败”：绝不能让无 body 的 3xx 把调用方阻塞到超时
+            safeError(IOException("Redirect not followed: $reason"))
+            request.cancel()
+            return
         }
 
-        if (!followRedirect) {
-            onError(IOException("Too many redirect"))
-        } else {
+        // 回调内任何异常都不得逃逸 —— 否则 request.cancel() 不执行、onCanceled 不触发 ⇒ 请求既不成功也不失败（静默挂死）
+        val built = runCatching {
             val response = toResponse(originalRequest, info, urlResponseInfoChain)
             if (enableCookieJar) {
                 CookieManager.saveResponse(response)
             }
-            redirectRequest = buildRedirectRequest(response, originalRequest.method, newLocationUrl)
+            buildRedirectRequest(response, originalRequest.method, resolved!!)
+        }
+        val exception = built.exceptionOrNull()
+        if (exception == null) {
+            redirectRequest = built.getOrThrow()
+            followRedirect = true
+            AppLog.put(
+                "[CronetRedirect] hop=$followCount code=${info.httpStatusCode} " +
+                    "path=${maskPath(baseUrl)} action=follow"
+            )
+        } else {
+            followRedirect = false
+            redirectRequest = null
+            AppLog.put(
+                "[CronetRedirect] hop=$followCount build redirect failed: " +
+                    "${exception.javaClass.simpleName}: ${exception.message?.take(80)}"
+            )
+            safeError(IOException("Build redirect request failed", exception))
         }
         request.cancel()
     }
@@ -197,19 +245,24 @@ abstract class AbsCallBack(
         val urlPath = info.url.substringAfter("://").substringAfter("/").take(50)
         DebugLog.e(javaClass.name, "onFailed: protocol=$protocol, httpCode=$httpCode, error=${error.message}")
         AppLog.put("Cronet 请求失败: protocol=$protocol, httpCode=$httpCode, path=$urlPath, error=${error.message}")
-        onError(error.asIOException())
+        safeError(error.asIOException())
         eventListener?.callFailed(mCall, error)
         responseCallback?.onFailure(mCall, error)
     }
 
     override fun onCanceled(request: UrlRequest, info: UrlResponseInfo) {
-        if (followRedirect) {
+        val target = redirectRequest
+        if (followRedirect && target != null) {
             followRedirect = false
-            if (enableCookieJar) {
-                val newRequest = CookieManager.loadRequest(redirectRequest!!)
-                buildRequest(newRequest, this)?.start()
-            } else {
-                buildRequest(redirectRequest!!, this)?.start()
+            redirectRequest = null
+            // 发下一跳：构造/启动失败必须上报，绝不能静默（否则退回「既不成功也不失败」的黑洞态）
+            val started = runCatching {
+                val next = if (enableCookieJar) CookieManager.loadRequest(target) else target
+                buildRequest(next, this)?.also { it.start() }
+            }.getOrNull()
+            if (started == null) {
+                AppLog.put("[CronetRedirect] next hop not started (buildRequest null or threw)")
+                safeError(IOException("Cronet next redirect hop not started"))
             }
             return
         }
@@ -218,7 +271,7 @@ abstract class AbsCallBack(
         cancelJob?.cancel()
         //DebugLog.i(javaClass.simpleName, "cancel[${info?.negotiatedProtocol}]${info?.url}")
         eventListener?.callEnd(mCall)
-        onError(IOException("Cronet Request Canceled"))
+        safeError(IOException("Cronet Request Canceled"))
     }
 
     fun startCheckCancelJob(request: UrlRequest) {

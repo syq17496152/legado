@@ -215,7 +215,7 @@ class AnalyzeRule(
             if (result is NativeObject) {
                 val sourceRule = ruleList.first()
                 putRule(sourceRule.putMap)
-                val resolvedRule = sourceRule.makeUpRule(result)
+                val resolvedRule = sourceRule.makeUpRule(result, content)
                 result = if (resolvedRule.paramSize > 1) {
                     // get {{}}
                     resolvedRule.rule
@@ -238,7 +238,7 @@ class AnalyzeRule(
             } else {
                 for (sourceRule in ruleList) {
                     putRule(sourceRule.putMap)
-                    val resolvedRule = sourceRule.makeUpRule(result)
+                    val resolvedRule = sourceRule.makeUpRule(result, content)
                     result ?: continue
                     val rule = resolvedRule.rule
                     if (rule.isNotEmpty()) {
@@ -315,7 +315,7 @@ class AnalyzeRule(
             if (result is NativeObject) {
                 val sourceRule = ruleList.first()
                 putRule(sourceRule.putMap)
-                val resolvedRule = sourceRule.makeUpRule(result)
+                val resolvedRule = sourceRule.makeUpRule(result, content)
                 result = if (resolvedRule.paramSize > 1) {
                     // get {{}}
                     resolvedRule.rule
@@ -331,7 +331,7 @@ class AnalyzeRule(
             } else {
                 for (sourceRule in ruleList) {
                     putRule(sourceRule.putMap)
-                    val resolvedRule = sourceRule.makeUpRule(result)
+                    val resolvedRule = sourceRule.makeUpRule(result, content)
                     result ?: continue
                     val rule = resolvedRule.rule
                     if (rule.isNotBlank() || resolvedRule.replaceRegex.isEmpty()) {
@@ -384,7 +384,7 @@ class AnalyzeRule(
             result = content
             for (sourceRule in ruleList) {
                 putRule(sourceRule.putMap)
-                val resolvedRule = sourceRule.makeUpRule(result)
+                val resolvedRule = sourceRule.makeUpRule(result, content)
                 result ?: continue
                 val rule = resolvedRule.rule
                 result = when (sourceRule.mode) {
@@ -747,8 +747,12 @@ class AnalyzeRule(
         /**
          * 替换@get,{{ }}
          * 返回不可变快照（对齐 LC ResolvedSourceRule），不再原地改写 rule/replaceRegex 等字段——缓存命中的 SourceRule 恒为原始规则定义
+         *
+         * @param result      本段之前的规则输出（仍供 `@js:`/`$1` 等段使用）
+         * @param hostContent 调用方的解析内容（原页面 / 当前列表项）；内联子规则 `{{...}}` 以它求值。
+         *                    缺省回落到 [result] 仅为兼容旧调用点/测试构造，主链路一律显式传入。
          */
-        internal fun makeUpRule(result: Any?): ResolvedSourceRule {
+        internal fun makeUpRule(result: Any?, hostContent: Any? = null): ResolvedSourceRule {
             val infoVal = StringBuilder()
             var resolvedRule = rule
             if (ruleParam.isNotEmpty()) {
@@ -770,10 +774,13 @@ class AnalyzeRule(
                         regType == jsRuleType -> {
                             if (isRule(ruleParam[index])) {
                                 val ruleList = getOrCreateSingleSourceRule(ruleParam[index])
-                                // 修复：SourceRule 为 inner class 绑定创建实例，跨实例复用规则时
-                                // getString(ruleList) 会用创建实例的 content（如列表响应顶层，无目标键）。
-                                // 显式传入当前解析上下文 result（如列表项），确保子规则作用于正确数据。
-                                getString(ruleList, result).let {
+                                // 内联子规则 `{{...}}` 的求值内容必须是**调用方解析内容**（原页面 / 当前列表项），
+                                // 而非本段之前的规则输出 result：否则 {{@@id.nowimg@src}}、{{$.id}} 之类依赖
+                                // 原内容/列表项的子规则会静默取空（fix-analyze-inner-rule-context：订阅列表 JSON
+                                // 栏目全空 + 订阅正文图片地址退化为相对路径）。
+                                // 兼容说明：SourceRule 为 inner class 绑定创建实例，故 hostContent 必须由调用方显式给出，
+                                // 这同时兼顾「规则集合跨实例复用」场景（RssParserByRule 并行 itemRule 逐项求值）。
+                                getString(ruleList, hostContent ?: result).let {
                                     infoVal.insert(0, it)
                                 }
                             } else {

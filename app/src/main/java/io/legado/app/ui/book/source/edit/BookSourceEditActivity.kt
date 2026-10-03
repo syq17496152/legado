@@ -205,9 +205,11 @@ class BookSourceEditActivity :
                     factory = { shell.tabLayout }
                 )
                 // ---- RecyclerView（原 recycler_view：占剩余高度；`0dp` 高度语义由 Compose weight 表达）----
+                // 外层裁剪容器（recyclerViewContainer）见 BookSourceEditShellViews：堵住列表上滑时
+                // item 越界溢出到 TabLayout 区域的重影（CE-a 换装回归修复，2026-10-02）
                 AndroidView(
                     modifier = Modifier.fillMaxWidth().weight(1f),
-                    factory = { shell.recyclerView }
+                    factory = { shell.recyclerViewContainer }
                 )
             }
         }

@@ -235,6 +235,14 @@
                 </tbody>
             </table>
         </div>
+        <!-- 访问令牌（web-mcp 一期 · 写端点 /addLocalBook 需令牌；与书架页共用同一 localStorage 键） -->
+        <div id="token_bar" style="margin:10px 0 0;font-size:13px;color:#333;">
+            <span>访问令牌：</span>
+            <input type="text" id="token_input" placeholder="在 App「Web 服务与 AI 接入」中生成后填入"
+                   style="width:300px;padding:2px 6px;border:1px solid #ccc;">
+            <button type="button" id="token_save" style="padding:2px 10px;cursor:pointer;">保存</button>
+            <span id="token_tip" style="color:#888;margin-left:8px;"></span>
+        </div>
     </div>
 </div>
 

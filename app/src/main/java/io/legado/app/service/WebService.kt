@@ -27,7 +27,12 @@ import io.legado.app.utils.startService
 import io.legado.app.utils.stopService
 import io.legado.app.utils.toastOnUi
 import io.legado.app.web.HttpServer
+import io.legado.app.web.McpAuditor
+import io.legado.app.web.WebPortPolicy
 import io.legado.app.web.WebSocketServer
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import splitties.init.appCtx
 import splitties.systemservices.powerManager
 import splitties.systemservices.wifiManager
@@ -37,7 +42,26 @@ class WebService : BaseService() {
 
     companion object {
         var isRun = false
+
+        /**
+         * 当前访问地址（含协议与端口，取自前台通知正文）。
+         * **外部只读** —— 唯一写入点是 [setHostAddress]，保证与 [hostAddressFlow] 恒同源。
+         */
         var hostAddress = ""
+            private set
+
+        /**
+         * 地址活字牌数据源（一期 6.2 / S1）：网络变化时服务内已被动刷新地址，
+         * 此处把同一值同步为 StateFlow，设置页订阅即可**免轮询**拿到最新地址。
+         */
+        private val _hostAddressFlow = MutableStateFlow("")
+        val hostAddressFlow: StateFlow<String> = _hostAddressFlow.asStateFlow()
+
+        /** 地址唯一写入点：同步静态字段与 StateFlow（避免两条读路径出现分叉）。 */
+        private fun setHostAddress(value: String) {
+            hostAddress = value
+            _hostAddressFlow.value = value
+        }
 
         fun start(context: Context) {
             context.startService<WebService>()
@@ -89,6 +113,8 @@ class WebService : BaseService() {
         }
         isRun = true
         upTile(true)
+        // 一期 3.7：审计保留策略（>7 天清理）。放在服务启动时投递一次，不参与任何请求路径。
+        McpAuditor.purgeExpired()
         networkChangedListener.register()
         networkChangedListener.onNetworkChanged = {
             val addressList = NetworkUtils.getLocalIPAddress()
@@ -101,9 +127,9 @@ class WebService : BaseService() {
                         getPort()
                     )
                 })
-                hostAddress = notificationList.first()
+                setHostAddress(notificationList.first())
             } else {
-                hostAddress = getString(R.string.network_connection_unavailable)
+                setHostAddress(getString(R.string.network_connection_unavailable))
                 notificationList.add(hostAddress)
             }
             startForegroundNotification()
@@ -140,6 +166,8 @@ class WebService : BaseService() {
         if (webSocketServer?.isAlive == true) {
             webSocketServer?.stop()
         }
+        // 服务停止后地址即失效：清空静态字段与 StateFlow，设置页活字牌同步回落为"未运行"
+        setHostAddress("")
         postEvent(EventBus.WEB_SERVICE, "")
         upTile(false)
     }
@@ -167,7 +195,7 @@ class WebService : BaseService() {
                         getPort()
                     )
                 })
-                hostAddress = notificationList.first()
+                setHostAddress(notificationList.first())
                 isRun = true
                 postEvent(EventBus.WEB_SERVICE, hostAddress)
                 startForegroundNotification()
@@ -183,11 +211,7 @@ class WebService : BaseService() {
     }
 
     private fun getPort(): Int {
-        var port = getPrefInt(PreferKey.webPort, 1122)
-        if (port !in 1024..65530) {
-            port = 1122
-        }
-        return port
+        return WebPortPolicy.normalize(getPrefInt(PreferKey.webPort, WebPortPolicy.DEFAULT))
     }
 
     /**

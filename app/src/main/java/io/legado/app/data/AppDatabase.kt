@@ -29,6 +29,7 @@ import io.legado.app.data.dao.CoverGalleryDao
 import io.legado.app.data.dao.DictRuleDao
 import io.legado.app.data.dao.HttpTTSDao
 import io.legado.app.data.dao.KeyboardAssistsDao
+import io.legado.app.data.dao.McpAuditDao
 import io.legado.app.data.dao.PlayHistoryDao
 import io.legado.app.data.dao.SourceRecycleBinDao
 import io.legado.app.data.dao.ParagraphRuleDao
@@ -84,6 +85,7 @@ import io.legado.app.data.entities.DictRule
 import io.legado.app.data.entities.DownloadTaskEntity
 import io.legado.app.data.entities.HttpTTS
 import io.legado.app.data.entities.KeyboardAssist
+import io.legado.app.data.entities.McpAudit
 import io.legado.app.data.entities.ParagraphRule
 import io.legado.app.data.entities.ParagraphRuleVar
 import io.legado.app.data.entities.PlayHistory
@@ -127,7 +129,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 112,
+    version = 113,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -148,7 +150,7 @@ val appDb by lazy {
         AiReadAloudUsageRecord::class,
         AiAgentSession::class, AiAgentJob::class, AiAgentTrace::class,
         AiMemoryItem::class, AiMemoryFragment::class, AiMemoryItemFts::class, AiMemoryFragmentFts::class,
-        DownloadTaskEntity::class, SceneBookmark::class],
+        DownloadTaskEntity::class, SceneBookmark::class, McpAudit::class],
     views = [BookSourcePart::class],
     autoMigrations = [
         AutoMigration(from = 43, to = 44),
@@ -214,6 +216,7 @@ val appDb by lazy {
         // optimize-tts-engine（AD-04/AD-09）: 109→110 使用手动 Migration（migration_109_110），httpTTS 增列 type/script + 建 ttsCastingTemplates 表
         // next-stage-mainline W3（AD-07）: 110→111 使用手动 Migration（migration_110_111），books 增列 voiceParagraphAnchor/voiceParagraphAnchorChapter（朗读段落锚点）
         // next-stage-mainline W8（AD-12）: 111→112 使用手动 Migration（migration_111_112），新建 sceneBookmarks 表（名场面书签）
+        // web-mcp-productization 一期 3.6: 112→113 使用手动 Migration（migration_112_113），新建 mcp_audit 表（写面调用审计）
     ]
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -269,6 +272,9 @@ abstract class AppDatabase : RoomDatabase() {
 
     // W8（AD-12）：名场面书签
     abstract val sceneBookmarkDao: SceneBookmarkDao
+
+    // web-mcp-productization 一期 3.6：写面调用审计
+    abstract val mcpAuditDao: McpAuditDao
 
     companion object {
 

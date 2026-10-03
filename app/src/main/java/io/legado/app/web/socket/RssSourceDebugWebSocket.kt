@@ -7,6 +7,8 @@ import io.legado.app.R
 import io.legado.app.data.appDb
 import io.legado.app.model.Debug
 import io.legado.app.utils.*
+import io.legado.app.web.TokenManager
+import io.legado.app.web.WebAuth
 import kotlinx.coroutines.*
 import kotlinx.coroutines.Dispatchers.IO
 import splitties.init.appCtx
@@ -16,14 +18,20 @@ import java.io.IOException
 /**
  * web端订阅源调试
  */
-class RssSourceDebugWebSocket(handshakeRequest: NanoHTTPD.IHTTPSession) :
-    NanoWSD.WebSocket(handshakeRequest),
+class RssSourceDebugWebSocket(private val handshake: NanoHTTPD.IHTTPSession) :
+    NanoWSD.WebSocket(handshake),
     CoroutineScope by MainScope(),
     Debug.Callback {
 
     private val notPrintState = arrayOf(10, 20, 30, 40)
 
     override fun onOpen() {
+        // 握手鉴权（一期 1.3.2 / REQ-1-109）：令牌由握手 query 参数 `token` 传入；
+        // 缺失 / 非法一律关闭连接，不得进入调试流程（否则任何同网设备可远程驱动 App 调试）。
+        if (WebAuth.verifyWs(handshake.parameters["token"]?.firstOrNull()) == TokenManager.Level.NONE) {
+            close(NanoWSD.WebSocketFrame.CloseCode.ProtocolError, "unauthorized", false)
+            return
+        }
         launch(IO) {
             kotlin.runCatching {
                 while (isOpen) {

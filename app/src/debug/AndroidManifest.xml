@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MCP 内腿（8765）· **debug 变体专属**（web-mcp-productization 二期 · tasks 5.1 / REQ-2-401/402）。
+  与 main 的 `.service.WebService`（1122 对外腿）同款声明；release 变体无此符号 ⇒ 隔离由编译产物保证。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <service
+            android:name=".service.McpDebugService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+    </application>
+</manifest>

@@ -10,6 +10,8 @@ import io.legado.app.ui.book.search.SearchScope
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.isJson
+import io.legado.app.web.TokenManager
+import io.legado.app.web.WebAuth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.MainScope
@@ -19,8 +21,8 @@ import kotlinx.coroutines.launch
 import splitties.init.appCtx
 import java.io.IOException
 
-class BookSearchWebSocket(handshakeRequest: NanoHTTPD.IHTTPSession) :
-    NanoWSD.WebSocket(handshakeRequest),
+class BookSearchWebSocket(private val handshake: NanoHTTPD.IHTTPSession) :
+    NanoWSD.WebSocket(handshake),
     CoroutineScope by MainScope(),
     SearchModel.CallBack {
 
@@ -30,6 +32,12 @@ class BookSearchWebSocket(handshakeRequest: NanoHTTPD.IHTTPSession) :
     private val SEARCH_FINISH = "Search finish"
 
     override fun onOpen() {
+        // 握手鉴权（一期 1.3.2 / REQ-1-109）：令牌由握手 query 参数 `token` 传入；
+        // 缺失 / 非法一律关闭连接，不得进入搜索流程。
+        if (WebAuth.verifyWs(handshake.parameters["token"]?.firstOrNull()) == TokenManager.Level.NONE) {
+            close(NanoWSD.WebSocketFrame.CloseCode.ProtocolError, "unauthorized", false)
+            return
+        }
         launch(IO) {
             kotlin.runCatching {
                 while (isOpen) {

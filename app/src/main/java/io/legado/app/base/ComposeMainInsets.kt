@@ -49,3 +49,21 @@ fun mainBottomBarContentPadding(
 @Composable
 fun Modifier.mainBottomBarPadding(extra: Dp = 0.dp): Modifier =
     padding(bottom = mainBottomBarContentPadding(extraBottom = extra).calculateBottomPadding())
+
+/**
+ * 主壳底栏**实际占位高**（= 底栏上沿到屏幕底的距离）。
+ *
+ * 与 [mainBottomBarContentPadding] 的区别：后者是**内容留白**（`main_content_bottom_bar_padding` = 90dp，
+ * 含视觉余量，供列表滚动末尾避让）；本函数是**底栏真实高度**——`main_bottom_bar_height`（48dp）
+ * + `main_bottom_controls_bottom_padding`（10dp）+ 导航栏 inset。
+ *
+ * 用途：需要「**紧贴底栏上沿**」的悬浮元素（如书架续读条的 overlay 定位）。若误用内容留白口径，
+ * 会多出约 32dp 空档（用户 2026-10-02 报障「离底栏上部还是很远，中间至少有续读条两倍的空档」）。
+ */
+@Composable
+fun mainBottomBarActualHeight(): Dp {
+    val barHeight = dimensionResource(R.dimen.main_bottom_bar_height)
+    val controlsBottomPadding = dimensionResource(R.dimen.main_bottom_controls_bottom_padding)
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    return barHeight + controlsBottomPadding + navBottom
+}
