@@ -5,6 +5,7 @@ import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
+import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import androidx.appcompat.widget.AppCompatSpinner
@@ -108,6 +109,32 @@ class BookSourceEditShellViews(private val context: Context) {
     /** 原 `recycler_view`（`clipToPadding=false`；布局管理器与 adapter 由宿主装配）。 */
     val recyclerView: RecyclerView = RecyclerView(context).apply {
         clipToPadding = false
+    }
+
+    /**
+     * RecyclerView 的外层裁剪容器（CE-a 换装回归修复，2026-10-02）。
+     *
+     * 现象：列表上滑时，滚出顶部的 item 内容溢出绘制到上方 `TabLayout`/参数行区域，与 Tab 标签重叠成重影。
+     * 根因（实测 dumpsys + 截图 + 像素取证）：①`RecyclerView` 因 `clipToPadding=false` 不在自身
+     * `dispatchDraw` 中设置 canvas 裁剪，子 View 的负坐标部分不被自身裁剪；②换装 Compose 后，
+     * 其承载层 `AndroidViewsHandler` 不按 `elevation` 排序兄弟 View，原 XML 时代负责遮挡的
+     * `TabLayout`(3dp elevation) 不再浮在列表之上。
+     *
+     * 修复：外层 `FrameLayout`（`clipToPadding` 默认 true）在 `dispatchDraw` 中裁剪到自身边界，
+     * 堵住溢出；容器无 padding ⇒ RecyclerView 自身的底部 inset 留白语义不变。
+     */
+    val recyclerViewContainer: FrameLayout = FrameLayout(context).apply {
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+        addView(
+            recyclerView,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
     }
 
     // ==================== 构造助手 ====================

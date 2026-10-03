@@ -12,6 +12,7 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.EditText
@@ -122,6 +123,33 @@ class RssSourceEditActivity :
     private val paramRowView: HorizontalScrollView by lazy { createParamRow() }
     private val tabLayoutView: TabLayout by lazy { createTabLayout() }
     private val recyclerView: RecyclerView by lazy { createRecyclerView() }
+
+    /**
+     * RecyclerView 的外层裁剪容器（CE 5.2 换装回归修复，2026-10-02）。
+     *
+     * 现象：列表上滑时，滚出顶部的 item 内容溢出绘制到上方 `TabLayout`/参数行区域，与 Tab 标签重叠成重影
+     * （滚回顶部即消失、切后台回前台自愈）。根因：①`RecyclerView` 因 `clipToPadding=false` 不在自身
+     * `dispatchDraw` 中设置 canvas 裁剪，子 View 的负坐标部分不被自身裁剪；②Compose 的 `AndroidViewsHandler`
+     * 不按 `elevation` 排序兄弟 View，原 XML 时代负责遮挡的 `TabLayout`(3dp elevation) 不再浮在列表之上。
+     *
+     * 修复：外层 `FrameLayout`（`clipToPadding` 默认 true）在 `dispatchDraw` 中裁剪到自身边界，堵住溢出；
+     * 容器无 padding ⇒ RecyclerView 自身的底部 inset 留白语义不变。
+     */
+    private val recyclerViewContainer: FrameLayout by lazy {
+        FrameLayout(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            addView(
+                recyclerView,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+    }
     // 多选框/参数行内节点（宿主读写它们的状态）
     private val cbIsEnable: ThemeCheckBox by lazy { checkBox(R.string.is_enable, true) }
     private val cbSingleUrl: ThemeCheckBox by lazy { checkBox(R.string.single_url, false) }
@@ -281,11 +309,12 @@ class RssSourceEditActivity :
                     factory = { tabLayoutView }
                 )
                 // ---- RecyclerView（原 recycler_view：占剩余高度、clipToPadding=false）----
+                // 外层裁剪容器见 recyclerViewContainer：堵住列表上滑时 item 越界溢出到 TabLayout 区域的重影
                 AndroidView(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
-                    factory = { recyclerView }
+                    factory = { recyclerViewContainer }
                 )
             }
         }
