@@ -31,11 +31,16 @@ class AssetsWeb(rootPath: String) {
         }
         val assetPath = (rootPath + path).replace("/+".toRegex(), File.separator)
         val inputStream = assetManager.open(assetPath)
-        return NanoHTTPD.newChunkedResponse(
+        val response = NanoHTTPD.newChunkedResponse(
             NanoHTTPD.Response.Status.OK,
             mimeOf(assetPath),
             inputStream
         )
+        // 缓存策略（2026-10-04 真机卡顿修复）：此前**不带任何缓存头** ⇒ 每次打开控制台都重下全部资源
+        //（首屏约 900KB gzip），真机体验极差。Vite 产物文件名带内容哈希 ⇒ `/assets/*` 可长缓存；
+        // index.html 必须每次回源，否则升级后仍引用旧哈希文件。
+        response.addHeader("Cache-Control", cacheControlOf(path))
+        return response
     }
 
     companion object {
@@ -48,6 +53,21 @@ class AssetsWeb(rootPath: String) {
          */
         internal fun isSafePath(path: String): Boolean =
             path.startsWith("/") && !path.contains("..") && !path.contains('\u0000')
+
+        /**
+         * 缓存策略（2026-10-04 真机卡顿修复）。
+         *
+         * 判定依据 = **路径是否位于 Vite 产物目录 `/assets/`**：该目录下文件名带内容哈希
+         * （如 `vendor-Beqdr9ys.js`）⇒ 内容与文件名一一对应，可 `immutable` 长缓存。
+         * 其余（`index.html`、`favicon.ico` 等）一律 `no-cache`：每次都回源校验，
+         * 保证 App 升级后立即引用新哈希产物，不会拿到旧页面。
+         */
+        internal fun cacheControlOf(path: String): String =
+            if (path.contains("/assets/")) {
+                "public, max-age=31536000, immutable"
+            } else {
+                "no-cache"
+            }
 
         /**
          * MIME 判定（3.4 / REQ-1-304）。
