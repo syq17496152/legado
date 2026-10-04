@@ -1,19 +1,127 @@
 <!DOCTYPE html>
 <html lang="zh" class="">
-    <head>
-        <meta charset="UTF-8" />
-        <link rel="icon" href="./favicon.ico" />
-    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-      <script type="module" crossorigin src="./assets/index-enJM9F0q.js"></script>
-      <link rel="modulepreload" crossorigin href="./assets/vendor-Bmms4Qrb.js">
-      <link rel="modulepreload" crossorigin href="./assets/vendor-ep-Cpcrx4uf.js">
-      <link rel="modulepreload" crossorigin href="./assets/vendor-axios-Djv5XBeH.js">
-      <link rel="modulepreload" crossorigin href="./assets/vendor-hotkeys-BxEwhL3V.js">
-      <link rel="stylesheet" crossorigin href="./assets/vendor-ep-jLX3bBgi.css">
-      <link rel="stylesheet" crossorigin href="./assets/index-TM9_APO7.css">
-    </head>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="./favicon.ico" />
+    <!-- viewport-fit=cover：让刘海屏/底部手势条区域可用（配合 safe-area-inset 使用） -->
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover" />
+    <!-- 跟随系统亮暗，避免移动端浏览器地址栏与页面背景不一致 -->
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#141414" media="(prefers-color-scheme: dark)" />
+    <title>运行控制台</title>
+    <style>html,body{background:#18181b;margin:0;padding:0}#app-skeleton{z-index:9999;background:#18181b;justify-content:center;align-items:center;transition:opacity .2s;display:flex;position:fixed;inset:0}#app-skeleton.hidden{opacity:0;pointer-events:none}#app-skeleton.boot-error{justify-content:center;align-items:flex-start;padding:12vh 24px 24px}.skeleton-spinner{border:3px solid #3f3f46;border-top-color:#818cf8;border-radius:50%;width:32px;height:32px;animation:.7s linear infinite spin}.skeleton-error{color:#fafafa;background:#18181bf5;border:1px solid #ef444447;border-radius:12px;width:min(560px,100%);padding:20px;box-shadow:0 18px 50px #00000047}.skeleton-error__title{font-size:18px;font-weight:700}.skeleton-error__message{white-space:pre-wrap;word-break:break-word;color:#e4e4e7;margin-top:12px;line-height:1.6}.skeleton-error__hint{color:#a1a1aa;margin-top:14px;font-size:13px;line-height:1.6}@media (prefers-color-scheme:light){html,body,#app-skeleton{background:#f4f4f5}.skeleton-spinner{border-color:#6366f1 #e4e4e7 #e4e4e7}.skeleton-error{color:#18181b;background:#fffffff5;border-color:#ef444438;box-shadow:0 18px 50px #18181b29}.skeleton-error__message{color:#27272a}.skeleton-error__hint{color:#52525b}}@keyframes spin{to{transform:rotate(360deg)}}</style>
+    <script>
+      // 防闪白：挂载前按系统偏好预设 data-theme（App.vue 挂载后按应用偏好覆盖）
+      (function () {
+        try {
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+        } catch (e) {
+          /* ignore */
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="./assets/index-CyaKYmZG.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-hePW80VL.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-D6hwKDpf.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-axios-Cwt1K6go.js">
+    <link rel="modulepreload" crossorigin href="./assets/axios-Cg0rUD9V.js">
+    <link rel="modulepreload" crossorigin href="./assets/useTransport-DPLC6Atd.js">
+    <link rel="modulepreload" crossorigin href="./assets/useAppConfig-D-uMgnug.js">
+    <link rel="modulepreload" crossorigin href="./assets/navigation-CMj3oqtr.js">
+    <link rel="modulepreload" crossorigin href="./assets/useOverlay-DE-kNMoB.js">
+    <link rel="modulepreload" crossorigin href="./assets/preload-helper-BaNbYf_w.js">
+    <link rel="modulepreload" crossorigin href="./assets/_plugin-vue_export-helper-BDNMzG2s.js">
+    <link rel="modulepreload" crossorigin href="./assets/useSync-B8F3cyO3.js">
+    <link rel="modulepreload" crossorigin href="./assets/useNavigationBridge-UGwCWhbW.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-ep-CJ5BZKpK.js">
+    <link rel="modulepreload" crossorigin href="./assets/api-DHVTjuL8.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-hotkeys-OawZcFdk.js">
+    <link rel="modulepreload" crossorigin href="./assets/consoleNav-BuO87Z5I.js">
+    <link rel="modulepreload" crossorigin href="./assets/router-DOtJUQF6.js">
+    <link rel="stylesheet" crossorigin href="./assets/vendor-DDN3vr1t.css">
+    <link rel="stylesheet" crossorigin href="./assets/vendor-ep-nJkAdCNz.css">
+    <link rel="stylesheet" crossorigin href="./assets/api-DcohHJXl.css">
+    <link rel="stylesheet" crossorigin href="./assets/router-CNjsCnsM.css">
+    <link rel="stylesheet" crossorigin href="./assets/index-D-xjtX9_.css">
+  </head>
 
-    <body>
-        <div id="app"></div>
-    </body>
+  <body>
+    <!-- 骨架屏：Vue 挂载完成后由 main.ts 隐藏 -->
+    <div id="app-skeleton"><div class="skeleton-spinner"></div></div>
+    <div id="app"></div>
+    <!-- 启动兜底：15s 未挂载或未捕获异常时展示错误面板（供开发者定位；不引入外部 CDN 依赖） -->
+    <script>
+      (function () {
+        var BOOT_TIMEOUT_MS = 15000;
+        var state = { stage: 'html-ready', errorShown: false };
+
+        function escapeHtml(value) {
+          return String(value).replace(/[&<>"']/g, function (ch) {
+            if (ch === '&') return '&amp;';
+            if (ch === '<') return '&lt;';
+            if (ch === '>') return '&gt;';
+            if (ch === '"') return '&quot;';
+            return '&#39;';
+          });
+        }
+
+        function renderBootError(message) {
+          if (state.errorShown) return;
+          // 仅作为「挂载前」兜底：应用已挂载后的运行期异常只进 console，不遮挡界面
+          if (state.stage === 'app-mounted') return;
+          state.errorShown = true;
+          var skeleton = document.getElementById('app-skeleton');
+          if (!skeleton) return;
+          skeleton.classList.remove('hidden');
+          skeleton.classList.add('boot-error');
+          skeleton.innerHTML =
+            '<div class="skeleton-error">' +
+            '<div class="skeleton-error__title">应用启动失败</div>' +
+            '<div class="skeleton-error__message">' +
+            escapeHtml(message) +
+            '</div>' +
+            '<div class="skeleton-error__hint">请按 F12 打开 DevTools 查看报错；若页面脚本未启动，请检查资源文件是否完整。</div>' +
+            '</div>';
+        }
+
+        function formatReason(reason) {
+          if (!reason) return '未知错误';
+          if (typeof reason === 'string') return reason;
+          if (reason instanceof Error) return reason.stack || reason.message || String(reason);
+          try {
+            return JSON.stringify(reason, null, 2);
+          } catch (e) {
+            return String(reason);
+          }
+        }
+
+        window.__LEGADO_SET_BOOT_STAGE = function (stage) {
+          state.stage = stage;
+        };
+        window.__LEGADO_SHOW_BOOT_ERROR = function (message) {
+          renderBootError(message);
+        };
+
+        window.addEventListener('error', function (event) {
+          renderBootError(
+            (event.error && event.error.stack) ||
+              event.message ||
+              '资源加载失败: ' + (event.filename || 'unknown file'),
+          );
+        });
+        window.addEventListener('unhandledrejection', function (event) {
+          renderBootError('未处理的 Promise 异常:\n' + formatReason(event.reason));
+        });
+        window.setTimeout(function () {
+          if (state.stage !== 'app-mounted' && !state.errorShown) {
+            renderBootError(
+              '前端入口在 ' + BOOT_TIMEOUT_MS / 1000 + 's 内没有完成挂载，当前阶段: ' + state.stage,
+            );
+          }
+        }, BOOT_TIMEOUT_MS);
+      })();
+    </script>
+  </body>
 </html>

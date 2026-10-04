@@ -1,6 +1,6 @@
 {
   "name": "legado-web",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "sha256": "",
   "minAppApiLevel": 1,
   "entry": "index.html"

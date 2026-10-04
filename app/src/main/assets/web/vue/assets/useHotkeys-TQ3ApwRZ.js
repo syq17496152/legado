@@ -1,0 +1,1 @@
+import{Mi as e,Pi as t}from"./vendor-D6hwKDpf.js";import{t as n}from"./vendor-hotkeys-OawZcFdk.js";var r=r=>{let i=Object.keys(r);t(()=>{i.forEach(e=>n(e,t=>r[e]?.(t)))}),e(()=>{i.forEach(e=>n.unbind(e))})};export{r as t};
