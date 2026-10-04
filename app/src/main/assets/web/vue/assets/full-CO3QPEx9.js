@@ -1,0 +1,1 @@
+import{a as e,i as t,n,o as r,r as i,s as a,t as o}from"./vendor-opencc-Bf010B22.js";export{o as Converter,r as ConverterFactory,a as CustomConverter,t as HTMLConverter,i as Locale,e as Trie,n as default};

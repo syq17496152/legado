@@ -1,0 +1,1 @@
+import{Gn as e,Hn as t}from"./vendor-Beqdr9ys.js";import{t as n}from"./vendor-hotkeys-OawZcFdk.js";var r=r=>{let i=Object.keys(r);e(()=>{i.forEach(e=>n(e,t=>r[e]?.(t)))}),t(()=>{i.forEach(e=>n.unbind(e))})};export{r as t};

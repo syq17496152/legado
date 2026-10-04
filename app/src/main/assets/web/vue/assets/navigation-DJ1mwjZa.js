@@ -1,0 +1,1 @@
+import{_t as e,hr as t}from"./vendor-Beqdr9ys.js";var n=e(`navigation`,()=>{let e=t(`bookshelf`),n=t(null);function r(t){n.value=t??null,e.value=`search`}function i(t){e.value=t}return{activeView:e,searchInitSource:n,navigateToSearch:r,setActiveView:i}});export{n as t};
