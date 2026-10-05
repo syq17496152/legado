@@ -1016,6 +1016,7 @@
     <string name="download_dir_saved">Download directory saved</string>
     <string name="download_dir_reset_default">Download directory reset to default</string>
     <string name="video_download_no_url">video address unavailable, cannot download</string>
+    <string name="video_favorite_no_context">Cannot favorite: no article info</string>
     <string name="downloading">downloading</string>
     <string name="unknown_state">unknown</string>
     <string name="disable_source">disable source</string>

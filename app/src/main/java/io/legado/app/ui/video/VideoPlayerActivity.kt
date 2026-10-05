@@ -514,6 +514,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
                 dispatchLayoutMode()
                 initView()
                 upView()
+                // video-live-favorite-fix AD-03：首次进入即刷新收藏按钮状态
+                // （修复「顶栏星标此前只在收藏增删改后才刷新 ⇒ 首次进入恒不显示」）
+                upStarMenu()
                 // AD-04: 恢复播放进度
                 restorePlayHistory()
                 // video-source-multiline-l0-preload AD-02：进入播放器即步进预取"前方一部"目录
@@ -773,13 +776,19 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
         panel.show(supportFragmentManager, VideoSettingsPanel.TAG)
     }
 
-    /** W2-B2：传统布局收藏图标同步（当前未被调用，收藏状态由 Compose 顶栏 upStarMenu 驱动；如启用需在收藏状态变化处接线） */
+    /**
+     * 传统布局收藏按钮同步（video-live-favorite-fix AD-03 接线：此前从未被调用）。
+     *
+     * 可见性口径与 Compose 顶栏完全一致（`VideoPlay.canFavoriteCurrent()`）——
+     * 书源视频/单 URL 直连不出现收藏入口；订阅源视频恒出现。
+     * 用 INVISIBLE 而非 GONE：该按钮与其它动作按钮均分权重，GONE 会让其余按钮变宽（布局跳动）。
+     */
     private fun upLegacyStarState() {
-        if (VideoPlay.rssStar != null) {
-            binding.ivActionStar.setImageResource(R.drawable.ic_star)
-        } else {
-            binding.ivActionStar.setImageResource(R.drawable.ic_star_border)
-        }
+        binding.ivActionStar.setImageResource(
+            if (VideoPlay.rssStar != null) R.drawable.ic_star else R.drawable.ic_star_border
+        )
+        binding.actionStar.visibility =
+            if (VideoPlay.canFavoriteCurrent()) View.VISIBLE else View.INVISIBLE
     }
 
     /**
@@ -2135,10 +2144,13 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
      */
     private fun upStarMenu() {
         val isStarred = VideoPlay.rssStar != null
-        starVisible = VideoPlay.rssStar != null || VideoPlay.rssRecord != null
+        // AD-03：可见性单源化——订阅源视频模式恒可见（不再依赖「是否已有记录/收藏」，
+        // 修复「首次进入顶栏永不显示收藏按钮」）；书源/单 URL 保持不可见。
+        starVisible = VideoPlay.canFavoriteCurrent()
         starChecked = isStarred
-        // R3 阶段2：同步更新当前 Fragment 的收藏按钮状态
+        // 三处状态同步：沉浸式悬浮星标 + 传统布局动作区图标
         currentFragment?.updateStarState(isStarred)
+        upLegacyStarState()
     }
 
     /**
@@ -2276,6 +2288,9 @@ class VideoPlayerActivity : VMBaseActivity<ActivityVideoPlayerBinding, VideoPlay
 
         observeEvent<ArrayList<Int>>(EventBus.UP_VIDEO_INFO) {
             AppLog.put("VideoRoutesDiag UP_VIDEO_INFO: viewPager=$useViewPagerMode, articles=${VideoPlay.rssArticles?.size}, routes=${VideoPlay.rssRoutes?.size}, episodes=${VideoPlay.rssEpisodes?.size}, book=${if (VideoPlay.book != null) 1 else 0}")
+            // video-live-favorite-fix AD-03：切文章/切线路/切集后收藏状态同步刷新
+            // （保证上滑到下一篇直播后星标可见性与实心态立即正确，而非等到下次收藏动作）
+            upStarMenu()
             if (useViewPagerMode) {
                 // 文章列表模式：文章数量不变，只需更新当前 Fragment 的集数/线路选择器
                 if (!VideoPlay.rssArticles.isNullOrEmpty()) {

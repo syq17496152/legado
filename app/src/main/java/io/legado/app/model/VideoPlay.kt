@@ -45,6 +45,7 @@ import io.legado.app.help.gsyVideo.ExoVideoManager
 import io.legado.app.help.gsyVideo.ExoVideoManager.Companion.FULLSCREEN_ID
 import io.legado.app.help.gsyVideo.FloatingPlayer
 import io.legado.app.help.gsyVideo.VideoPlayer
+import io.legado.app.help.video.VideoFavoriteResolver
 import io.legado.app.help.video.VideoPlaybackPipeline
 import io.legado.app.help.video.VideoPlaylistHolder
 import io.legado.app.help.video.VideoUrlExtractor
@@ -1541,6 +1542,12 @@ object VideoPlay : CoroutineScope by MainScope(){
                 }
             }
         }
+        // video-live-favorite-fix AD-04：记录链兜底——订阅源视频若既无收藏又无阅读记录，
+        // 此处「先查后插」补一条（不依赖 ReadRss 的 fire-and-forget 写入时序），
+        // 保证收藏/历史/续播三处均可用。
+        if (source is RssSource) {
+            ensureReadRecord()
+        }
         // A5 预热：initSource 完成后异步预加载当前文章 HTML，加速 startPlay 首帧
         // 场景：用户点击视频列表项 → initSource → 预加载 HTML → startPlay 命中 preloadedHtmls 缓存跳过网络请求
         prewarmCurrentArticleHtml(record)
@@ -2020,6 +2027,9 @@ object VideoPlay : CoroutineScope by MainScope(){
             if (rssStar == null) {
                 rssRecord = appDb.rssReadRecordDao.getRecord(article.link, article.origin)
             }
+            // video-live-favorite-fix AD-04：与 initSource 同款记录链兜底——上滑切换到的下一篇
+            // 直播此前从未被点击读取，库中无记录 ⇒ 不兜底则 rssRecord 被置空、收藏再次失效、历史续播丢失。
+            ensureReadRecord()
             withContext(Main) {
                 // 2.7/R-P1-5：token 过期（期间用户已再次切换）→ 丢弃迟到回调，不执行 startPlay
                 if (switchTokenCounter.get() != token) {
@@ -2373,6 +2383,65 @@ object VideoPlay : CoroutineScope by MainScope(){
 
     fun getDisplayCover(): String? {
         return book?.getDisplayCover() ?: rssStar?.image ?: rssRecord?.image
+    }
+
+    // ==================== video-live-favorite-fix：收藏判定与派生（AD-01 / AD-03 / AD-04）====================
+    // 唯一权威源：判定/派生逻辑收口到纯函数 VideoFavoriteResolver，本处仅做薄封装，
+    // 供 VideoPlayerViewModel / VideoPlayerActivity / VideoFragment 三处共用（消除口径漂移）。
+
+    /**
+     * 当前可收藏条目（收藏实体 > 阅读记录 > 文章列表当前项）。
+     * 直播/视频源「首次点入无记录」场景由第三级兜底保证可用。
+     */
+    fun currentRssArticle(): RssArticle? = VideoFavoriteResolver.pickArticle(
+        star = rssStar,
+        record = rssRecord,
+        articles = rssArticles,
+        index = rssArticleIndex
+    )
+
+    /**
+     * 收藏按钮是否可见/可用（订阅源视频模式且拿到当前条目恒为 true）。
+     * 书源视频（收藏语义走书架）与单 URL 直连恒为 false，保持既有语义不变。
+     */
+    fun canFavoriteCurrent(): Boolean = VideoFavoriteResolver.canFavorite(
+        singleUrl = singleUrl,
+        hasBook = book != null,
+        isRssSource = source is RssSource,
+        article = currentRssArticle()
+    )
+
+    /** 由当前条目构造收藏实体（标题=文章标题、分组=默认分组）；无上下文时返回 null。 */
+    fun buildCurrentStar(): RssStar? = VideoFavoriteResolver.buildStar(currentRssArticle())
+
+    /**
+     * AD-04：阅读记录链兜底——**先查后插**（不依赖入口是否已写记录、不依赖写入时序）。
+     *
+     * 触发点：`initSource` 记录解析后、`switchToArticle` 查询后。
+     * 语义：仅在「既无收藏、又无阅读记录」且能拿到当前条目时补一条记录，
+     *       与既有 `ReadRss`「点击阅读即留历史记录」完全一致；冲突（同 link 异源）时如实为空，
+     *       不阻断播放主链路（失败静默 + AppLog）。
+     */
+    private suspend fun ensureReadRecord() {
+        if (rssStar != null || rssRecord != null) return
+        val article = currentRssArticle() ?: return
+        val link = article.link
+        val origin = article.origin
+        if (link.isBlank() || origin.isBlank()) return
+        // 先查：命中原记录（可能是他人写入/上次会话写入）直接复用
+        appDb.rssReadRecordDao.getRecord(link, origin)?.let {
+            rssRecord = it
+            return
+        }
+        // 未命中才插（OnConflictStrategy.IGNORE 容忍同 link 异源冲突）
+        val record = VideoFavoriteResolver.buildRecord(article) ?: return
+        kotlin.runCatching {
+            appDb.rssReadRecordDao.insertRecord(record)
+        }.onFailure {
+            AppLog.put("ensureReadRecord: 插入阅读记录失败", it)
+        }
+        rssRecord = appDb.rssReadRecordDao.getRecord(link, origin)
+        AppLog.put("ensureReadRecord: 兜底写入阅读记录, recordNotNull=${rssRecord != null}")
     }
 }
 

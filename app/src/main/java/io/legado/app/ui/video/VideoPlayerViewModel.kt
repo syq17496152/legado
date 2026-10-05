@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.MutableLiveData
 import com.script.rhino.runScriptWithContext
+import io.legado.app.R
 import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
@@ -25,15 +26,31 @@ class VideoPlayerViewModel(application: Application) : BaseViewModel(application
         }
     }
 
+    /**
+     * 收藏当前播放条目（video-live-favorite-fix AD-02 三段式）。
+     *
+     * ① 已收藏（`rssStar != null`）→ 不改数据，直接回调（调用方弹编辑框）；
+     * ② 有阅读记录（`rssRecord != null`）→ 记录转收藏入库（字段更全，保持既有优先）；
+     * ③ 均无 → 用**当前播放条目直接构造**收藏入库（独立收藏路径，修复「无记录即静默空转」）。
+     *
+     * 三段都不成立（拿不到任何文章上下文）→ 返回 false，由调用方给出 toast（REQ-6：不静默）。
+     */
     fun addFavorite(success: () -> Unit) {
         execute {
-            VideoPlay.rssStar ?: VideoPlay.rssRecord?.toStar()?.let {
-                appDb.rssStarDao.insert(it)
-                VideoPlay.rssStar = it
+            if (VideoPlay.rssStar == null) {
+                val star = VideoPlay.rssRecord?.toStar() ?: VideoPlay.buildCurrentStar()
+                    ?: return@execute false
+                appDb.rssStarDao.insert(star)
+                VideoPlay.rssStar = star
             }
-        }.onSuccess {
+            true
+        }.onSuccess { ok ->
             upStarMenuData.postValue(true)
-            success.invoke()
+            if (ok) {
+                success.invoke()
+            } else {
+                context.toastOnUi(R.string.video_favorite_no_context)
+            }
         }
     }
 

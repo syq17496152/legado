@@ -2784,6 +2784,7 @@ bookUrl：%7$s
     <string name="source_parse_concurrency">源解析并发数</string>
 
     <string name="video_download_no_url">视频地址不可用，无法下载</string>
+    <string name="video_favorite_no_context">无法收藏：未获取到文章信息</string>
 
     <string name="check_rss_source_config_summary">订阅检查超时：%1$ss\n检查项：%2$s\n去重：%3$s</string>
 

@@ -1464,8 +1464,9 @@ class VideoFragment : Fragment() {
         btnStar?.setImageResource(
             if (isStarred) R.drawable.ic_star else R.drawable.ic_star_border
         )
-        val showStar = VideoPlay.book == null && !VideoPlay.singleUrl
-        if (showStar) {
+        // video-live-favorite-fix AD-03：可见性与顶栏同源（`VideoPlay.canFavoriteCurrent()`）——
+        // 旧口径 `book == null && !singleUrl` 与顶栏 `rssStar/rssRecord != null` 不一致，已收敛。
+        if (VideoPlay.canFavoriteCurrent()) {
             btnStar?.visible()
         } else {
             btnStar?.gone()
