@@ -39,6 +39,15 @@
             app:entryValues="@array/page_mode_values"
             app:iconSpaceReserved="false" />
 
+        <!-- add-rss-article-refresh-to-top：本文件仅作「设置搜索索引」用（渲染走 DiscoverySubscriptionConfigFragment 的 Compose spec），
+             键名必须与 PreferKey.rssArticleRefreshToTop 一致 -->
+        <io.legado.app.lib.prefs.SwitchPreference
+            android:defaultValue="true"
+            android:key="rssArticleRefreshToTop"
+            android:title="@string/rss_article_refresh_to_top"
+            android:summary="@string/rss_article_refresh_to_top_summary"
+            app:iconSpaceReserved="false" />
+
     </io.legado.app.lib.prefs.PreferenceCategory>
 
 </androidx.preference.PreferenceScreen>

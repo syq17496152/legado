@@ -24,6 +24,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.RssArticle
 import io.legado.app.databinding.ViewLoadMoreBinding
+import io.legado.app.help.config.AppConfig
 import io.legado.app.help.image.RssImageRatioStore
 import io.legado.app.help.source.autoNextPageEnabled
 import io.legado.app.lib.theme.accentColor
@@ -101,6 +102,15 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
     /** 旋转/进程重建后的位置恢复目标（-1 = 无待恢复）；**须等数据到达后再滚**，否则空表会被钳到 0 */
     private var pendingScrollIndex = -1
     private var pendingScrollOffset = 0
+
+    /**
+     * 「刷新后回到顶部」意图（由刷新入口置位、下一次数据发射消费，consume-once）。
+     *
+     * 是否真的回顶由 [RssArticleRefreshScrollPolicy] 四条件共同判定（开关开启 / 携带刷新意图 /
+     * 无待恢复的旋转位置 / 列表非空）；消费语义为「无论是否回顶都清零」，避免悬挂标志被后续
+     * 无关发射（如阅读产生的已读态写库）误消费成「突然跳顶」。
+     */
+    private var scrollTopOnNextData = false
 
     // 仅样式 5（自由布局 / View 路径）使用
     private val adapter: RssArticlesAdapter5 by lazy {
@@ -414,11 +424,23 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
                         // Compose 列表按 key 做条目复用与首项锚定 ⇒ 不再需要
                         // 「isResumed 全量刷新 vs DiffUtil 差异化更新」这套 View 复用防护
                         //（原注释：RecyclerView 复用机制下切换标签走差异更新会报 ViewHolder 状态混乱）
+                        // ⚠️ 必须先读待恢复下标再消费：consumePendingScroll() 会把它置为 -1 ⇒ 顺序颠倒会让
+                        // 「旋转恢复优先」恒不成立（红队第 5 轮指出）
+                        val restoringPosition = pendingScrollIndex > 0
                         consumePendingScroll()
+                        // 刷新后回顶（开关控制）；旋转/进程重建恢复是更具体的用户意图 ⇒ 优先于回顶
+                        if (decideRefreshScrollToTop(restoringPosition, newList.isNotEmpty())) {
+                            scrollToTop()
+                        }
                         delay(200) // 200毫秒防抖
                         return@collect
                     }
-                    if (!isResumed || fullRefresh || newList.isEmpty()) {
+                    // View 路径：本帧若判定需要回顶，改走**同步整表替换**分支 ——
+                    // setItems(..., skipDiff = true) 内部走 Coroutine.async + handler.post **异步派发** DiffUtil，
+                    // 紧接着的 scrollToPosition(0) 会被随后的差异派发按 key 锚回而静默覆盖（AD-05 v1.1）。
+                    // 注意：不可用 `fullRefresh = true` 代替本判定 —— 该字段无条件生效，会让开关关闭时也整表替换。
+                    val refreshScrollToTop = decideRefreshScrollToTop(false, newList.isNotEmpty())
+                    if (!isResumed || fullRefresh || newList.isEmpty() || refreshScrollToTop) {
                         AppLog.put("RssFree[数据] setItems(newList) size=${newList.size} isResumed=$isResumed fullRefresh=$fullRefresh")
                         adapter.setItems(newList)
                     } else {
@@ -446,6 +468,10 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
                                 else { null }
                             }
                         }, true)
+                    }
+                    // 回顶须在列表数据落定之后（同步整表替换分支已就位）
+                    if (refreshScrollToTop) {
+                        scrollToTop()
                     }
                     delay(200) // 200毫秒防抖
                 }
@@ -508,8 +534,30 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
         super.onPause()
     }
 
+    /**
+     * 消费「刷新后回到顶部」意图（consume-once）：**无论是否回顶都清零标志**，避免悬挂标志被后续
+     * 无关发射（如阅读产生的已读态写库）误消费成「突然跳顶」。
+     *
+     * @param restoringPosition 是否存在待执行的旋转/进程重建位置恢复（恢复优先于回顶）
+     * @param hasItems          本次发射结果是否非空（空表不回顶）
+     * @return 是否需要执行回顶（调用方据返回值调用 [scrollToTop]）
+     */
+    private fun decideRefreshScrollToTop(restoringPosition: Boolean, hasItems: Boolean): Boolean {
+        val scrollTop = RssArticleRefreshScrollPolicy.shouldScrollToTop(
+            enabled = AppConfig.rssArticleRefreshToTop,
+            refreshPending = scrollTopOnNextData,
+            restoringPosition = restoringPosition,
+            hasItems = hasItems
+        )
+        scrollTopOnNextData = false
+        return scrollTop
+    }
+
     private fun loadArticles(fullRefresh: Boolean = false) {
         this.fullRefresh = fullRefresh
+        // 刷新入口（下拉刷新 / 登录后刷新 / 首次取数）置位「回顶」意图；
+        // 页码切换（loadArticles(targetPage)）与触底翻页（viewModel.loadMore）不经此处 ⇒ 不置位
+        scrollTopOnNextData = true
         isLoadingState.value = true
         activityViewModel.rssSource?.let {
             viewModel.loadArticles(it)
@@ -594,6 +642,9 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
 
     override fun observeLiveBus() {
         viewModel.loadErrorLiveData.observe(viewLifecycleOwner) {
+            // 加载失败不会产生本次刷新的数据发射 ⇒ 丢弃回顶意图，避免悬挂标志被后续无关发射
+            //（如用户阅读产生的已读态写库）误消费成「突然跳顶」
+            scrollTopOnNextData = false
             isLoadingState.value = false
             loadMoreView.error(it)
         }

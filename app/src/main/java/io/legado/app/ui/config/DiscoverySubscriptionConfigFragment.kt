@@ -105,6 +105,17 @@ class DiscoverySubscriptionConfigFragment : ComposeSettingFragment() {
                             onCheckedChange = {
                                 updateBooleanSetting(PreferKey.rssAutoVideoToPlayer, it)
                             }
+                        ),
+                        // add-rss-article-refresh-to-top：文章列表换装 Compose 后按条目 key 锚定首项，
+                        // 刷新时新文章被顶到视口上方 ⇒ 提供开关让用户选择「老模式（回顶）/ 新模式（保持定位）」
+                        SettingSwitchSpec(
+                            key = PreferKey.rssArticleRefreshToTop,
+                            title = getString(R.string.rss_article_refresh_to_top),
+                            checked = booleanSetting(PreferKey.rssArticleRefreshToTop, true),
+                            summary = getString(R.string.rss_article_refresh_to_top_summary),
+                            onCheckedChange = {
+                                updateBooleanSetting(PreferKey.rssArticleRefreshToTop, it)
+                            }
                         )
                     )
                 )

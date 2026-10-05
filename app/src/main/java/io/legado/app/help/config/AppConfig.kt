@@ -2940,6 +2940,21 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             appCtx.putPrefBoolean(PreferKey.rssSortAscending, value)
         }
 
+    /**
+     * 订阅文章列表：刷新（下拉刷新 / 登录后刷新 / 进入列表首次取数）取到新数据后是否自动回到顶部第一条。
+     *
+     * - true（默认，老模式）：回顶 —— 与文章列表换装 Compose 之前的观感一致，新刷出的文章直接可见；
+     * - false（新模式）：保持当前「按条目 key 锚定刷新前位置」的行为。
+     *
+     * 读取点唯一：`ui/rss/article/RssArticlesFragment`（经 `RssArticleRefreshScrollPolicy` 判定）；
+     * 写入点唯一：订阅设置页开关（`DiscoverySubscriptionConfigFragment`）。
+     */
+    var rssArticleRefreshToTop: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.rssArticleRefreshToTop, true)
+        set(value) {
+            appCtx.putPrefBoolean(PreferKey.rssArticleRefreshToTop, value)
+        }
+
     var searchThreadCount: Int
         get() = appCtx.getPrefInt(PreferKey.searchThreadCount, 32)
         set(value) {

@@ -368,6 +368,9 @@ object PreferKey {
     // 订阅源排序（C-01 启用，原为死代码 C-05）：0=手动/1=名称/2=启用/3=类型/4=分组/5=URL/6=更新时间（与 bookSourceSort 语义统一）
     const val rssSort = "rssSort"
     const val rssSortAscending = "rssSortAscending"
+    // 订阅文章列表：用户刷新（下拉/登录后/首次取数）并取到新数据后是否自动回到顶部第一条
+    // true（默认，老模式）= 回顶；false（新模式）= 按条目 key 锚定刷新前位置
+    const val rssArticleRefreshToTop = "rssArticleRefreshToTop"
     // M2 SourceContentFilter：BookSource 视频源 WebView 资源过滤（借鉴 RssSource contentWhitelist/contentBlacklist 机制）
     const val bookSourceContentBlacklist = "bookSourceContentBlacklist"
     const val bookSourceContentWhitelist = "bookSourceContentWhitelist"

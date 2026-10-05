@@ -1827,6 +1827,8 @@
         <string name="duration_zero">0秒</string>
         <string name="modern_discovery_page">发现页模式</string>
         <string name="modern_rss_page">新版订阅页</string>
+        <string name="rss_article_refresh_to_top">刷新后回到顶部</string>
+        <string name="rss_article_refresh_to_top_summary">文章列表刷新获取到新数据后，自动回到顶部第一条；关闭则保持刷新前的位置。</string>
         <string name="move_down">下移</string>
         <string name="move_up">上移</string>
         <string name="navigation_bar_config_missing">底栏配置不存在。</string>

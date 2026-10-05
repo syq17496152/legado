@@ -2238,6 +2238,8 @@
         <string name="duration_zero">0 s</string>
         <string name="modern_discovery_page">Discovery page mode</string>
         <string name="modern_rss_page">Modern RSS page</string>
+        <string name="rss_article_refresh_to_top">Back to top after refresh</string>
+        <string name="rss_article_refresh_to_top_summary">After the article list fetches new data, jump back to the first item at the top; turn off to keep the previous scroll position.</string>
         <string name="move_down">Move down</string>
         <string name="move_up">Move up</string>
         <string name="navigation_bar_config_missing">Bottom bar theme config is missing.</string>
