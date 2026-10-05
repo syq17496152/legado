@@ -112,6 +112,15 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
      */
     private var scrollTopOnNextData = false
 
+    /**
+     * Compose 列表「强制回顶」请求计数（经 `RssArticlesComposeList` 的 `LaunchedEffect` 通道执行）。
+     *
+     * 为什么必须走副作用通道而不能直接 `scrollToItem(0)`：数据写入 `articlesState` 与滚动若发生在
+     * 同一次组合**之前**，LazyList 会先以**旧数据**消费该次滚动并记录旧首条 key，随后新数据到达时
+     * 按 key 把旧首条锚回视口顶 ⇒ 回顶被静默吞掉（2026-10-05 模拟器 L2 实证：刷新后首条仍为旧条目）。
+     */
+    private val scrollTopRequestState = mutableIntStateOf(0)
+
     // 仅样式 5（自由布局 / View 路径）使用
     private val adapter: RssArticlesAdapter5 by lazy {
         RssArticlesAdapter5(requireContext(), this@RssArticlesFragment)
@@ -216,6 +225,7 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
                 isLoadingState = isLoadingState,
                 hasMoreState = hasMoreState,
                 isPreload = isPreload,
+                scrollTopRequest = scrollTopRequestState.intValue,
                 onItemClick = { readRss(it) },
                 onLoadMore = { scrollToBottom() },
                 onCanScrollBackwardChanged = { composeCanScrollBackward = it },
@@ -602,12 +612,16 @@ class RssArticlesFragment() : RssArticlesShellFragment<RssArticlesViewModel>(),
             }
     }
 
-    /** 跳到列表顶部（页码切换后；Compose/View 两条路径各自实现） */
+    /**
+     * 跳到列表顶部（页码切换 / 刷新后回顶；两条路径各自实现）。
+     *
+     * Compose 路径改为**递增请求计数**（由 `RssArticlesComposeList` 的 `LaunchedEffect` 在本次组合
+     * 应用后消费）—— 立即 `scrollToItem(0)` 会被随后的新数据按条目 key 锚回旧首条，回顶失效；
+     * 详见 [scrollTopRequestState] 注释。
+     */
     private fun scrollToTop() {
         if (useComposeList) {
-            viewLifecycleOwner.lifecycleScope.launch {
-                listStateHolder.scrollToItem(0)
-            }
+            scrollTopRequestState.intValue++
         } else {
             recyclerView.scrollToPosition(0)
         }

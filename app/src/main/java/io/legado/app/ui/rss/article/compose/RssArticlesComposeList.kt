@@ -196,6 +196,7 @@ fun RssArticlesComposeList(
     isLoadingState: State<Boolean>,
     hasMoreState: State<Boolean>,
     isPreload: Boolean,
+    scrollTopRequest: Int,
     onItemClick: (RssArticle) -> Unit,
     onLoadMore: () -> Unit,
     onCanScrollBackwardChanged: (Boolean) -> Unit,
@@ -236,6 +237,15 @@ fun RssArticlesComposeList(
         snapshotFlow { stateHolder.canScrollBackward }
             .distinctUntilChanged()
             .collect { onCanScrollBackwardChanged(it) }
+    }
+
+    // 宿主「强制回顶」请求（add-rss-article-refresh-to-top）：**必须在本次组合（已含新数据）应用后**执行。
+    // 若在数据写入前直接 `scrollToItem(0)`，该次滚动会先以旧数据被消费并记录旧首条 key，
+    // 新数据到达时按 key 把旧首条锚回视口顶 ⇒ 回顶被静默吞掉（2026-10-05 模拟器 L2 实证）。
+    LaunchedEffect(scrollTopRequest) {
+        if (scrollTopRequest > 0) {
+            stateHolder.scrollToItem(0)
+        }
     }
 
     // 稳定 key 预计算（AD-04）：只在**数据变化时**算一次，而非每次组合为每个条目重新拼接字符串
