@@ -596,7 +596,7 @@ object SourceQualityChecker {
 
         // 列表试采（平移自 CheckRssSourceService：Rss.getArticlesAwait 首入口）
         val start = System.currentTimeMillis()
-        val entryUrl = source.sortUrl?.lineSequence()?.firstOrNull { it.isNotBlank() } ?: source.sourceUrl
+        val entryUrl = firstRssEntryUrl(source.sortUrl, source.sourceUrl)
         val articlesResult = kotlin.runCatching {
             Rss.getArticlesAwait(sortName = "", sortUrl = entryUrl, rssSource = source, page = 1)
         }
@@ -938,4 +938,19 @@ object SourceQualityChecker {
     const val SCHEMA_VERSION = 1
     const val PROBE_URL_CN = "https://www.baidu.com"
     const val PROBE_URL_INTL = "https://www.google.com/generate_204"
+}
+
+/**
+ * 取订阅源 `sortUrl` 的首个入口地址（用于 L3 列表试采）。
+ *
+ * `sortUrl` 行常见为 `分类名::地址`（Legado 约定）；若整行当 URL 用，
+ * `NetworkUtils.getAbsoluteURL` 会以 `分类名:` 为协议解析 ⇒ `MalformedURLException: unknown protocol`。
+ * `@js:`/`<js>` 规则串原样保留（其内部可能自带 `::` 分隔，不能被切）。
+ *
+ * 纯函数，供 JVM 单测覆盖。
+ */
+internal fun firstRssEntryUrl(sortUrl: String?, fallback: String): String {
+    val first = sortUrl?.lineSequence()?.firstOrNull { it.isNotBlank() } ?: return fallback
+    if (first.startsWith("@js:", true) || first.startsWith("<js>", true)) return first
+    return first.substringAfter("::", first)
 }

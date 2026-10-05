@@ -14,6 +14,7 @@ import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setRuleData
 import io.legado.app.model.analyzeRule.RuleData
 import io.legado.app.utils.NetworkUtils
+import io.legado.app.utils.isAbsUrl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -37,6 +38,10 @@ object RssParserByRule {
         ruleData: RuleData
     ): Pair<MutableList<RssArticle>, String?> {
         val sourceUrl = rssSource.sourceUrl
+        // 相对地址解析基址：`sortUrl` 可能是 `@js:`/`<js>` 规则或相对模板（不是合法绝对地址），
+        // 用它当基址会让「下一页/规则内相对地址」解析失败并抛 MalformedURLException。
+        // 此时回落到「规则求值后实际请求到的 URL」(redirectUrl)；sortUrl 本身是绝对地址时沿用，既有源零变化。
+        val listBaseUrl = resolveListBaseUrl(sortUrl, redirectUrl)
         AppLog.putDebugWithTag(AppLog.TAG_RSS, "开始解析RSS XML sourceHash=${rssSource.sourceUrl.hashCode()} sortName=$sortName bodyLen=${body?.length ?: 0}", level = AppLog.Level.INFO)
         var nextUrl: String? = null
         if (body.isNullOrBlank()) {
@@ -54,7 +59,7 @@ object RssParserByRule {
             // 循环外的 analyzeRule 用于获取列表集合/下一页/规则拆分（串行执行，结果不可变，可安全共享）
             val analyzeRule = AnalyzeRule(ruleData, rssSource)
             analyzeRule.setCoroutineContext(currentCoroutineContext())
-            analyzeRule.setContent(body).setBaseUrl(sortUrl)
+            analyzeRule.setContent(body).setBaseUrl(listBaseUrl)
             analyzeRule.setRedirectUrl(redirectUrl)
             var reverse = false
             if (ruleArticles.startsWith("-")) {
@@ -71,7 +76,7 @@ object RssParserByRule {
                 } else {
                     nextUrl = analyzeRule.getString(rssSource.ruleNextPage)
                     if (nextUrl.isNotEmpty()) {
-                        nextUrl = NetworkUtils.getAbsoluteURL(sortUrl, nextUrl)
+                        nextUrl = NetworkUtils.getAbsoluteURL(listBaseUrl, nextUrl)
                     }
                 }
                 Debug.log(sourceUrl, "└$nextUrl")
@@ -105,7 +110,7 @@ object RssParserByRule {
                             // 硬性前提1：独立 AnalyzeRule 实例
                             val itemRule = AnalyzeRule(ruleData, rssSource)
                             itemRule.setCoroutineContext(currentCoroutineContext())
-                            itemRule.setBaseUrl(sortUrl)
+                            itemRule.setBaseUrl(listBaseUrl)
                             itemRule.setRedirectUrl(redirectUrl)
                             try {
                                 getItem(
@@ -186,3 +191,15 @@ object RssParserByRule {
         return rssArticle
     }
 }
+
+/**
+ * 选择 RSS 列表解析时的「相对地址基址」。
+ *
+ * - `sortUrl` 本身是绝对地址（http/https）⇒ 沿用（既有源行为零变化）；
+ * - 否则（`@js:` / `<js>` 规则串、`/path?pg={{page}}` 相对模板）⇒ 用「规则求值后实际请求到的 URL」，
+ *   避免以非法基址调用 `URL(base)` 抛 `MalformedURLException` 致「下一页/规则内相对地址」解析失败。
+ *
+ * 纯函数，供 JVM 单测覆盖。
+ */
+internal fun resolveListBaseUrl(sortUrl: String, resolvedUrl: String): String =
+    if (sortUrl.isAbsUrl()) sortUrl else resolvedUrl.ifBlank { sortUrl }
