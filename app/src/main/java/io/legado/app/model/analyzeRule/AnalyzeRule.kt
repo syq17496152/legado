@@ -440,6 +440,11 @@ class AnalyzeRule(
             return when (it) {
                 is List<*> -> it as List<Any>
                 is String -> {
+                    // IF-01（2026-10-07）：脚本/规则返回「JSON 数组字符串」时展开为多元素。
+                    // 旧实现一律 `listOf(it)`（恒 1 个元素）⇒「JSON 响应体 + JS 解密合成列表」
+                    // （`<js>` 返回 `JSON.stringify(list)`）型订阅源恒取不到数据。
+                    // 非数组字符串（HTML 片段/纯文本）未命中 ⇒ 仍走下方原语义，存量源零变化。
+                    jsonArrayStringToList(it)?.let { list -> return list }
                     // log-compliance-cleanup 2.4: 裸 Log.d 收编 AppLog（类型包装过程细节=DEBUG，仅 recordLog 开时记录）
                     AppLog.putDebugWithTag(
                         AppLog.TAG_ANALYZE,
