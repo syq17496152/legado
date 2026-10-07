@@ -148,6 +148,29 @@ class RssArticleListStateHolder(style: Int) {
 }
 
 /**
+ * 订阅文章列表（Compose 侧样式 0~4）**留白单源**（2026-10-07 用户报障修复）。
+ *
+ * 为什么必须是**固定 dp** 而非「px 数值再做 px→dp 换算」：CF 6.2 换装 Compose 时间距曾写成
+ * `with(LocalDensity.current) { 40.toDp() }`（伪 dp）—— 换算结果随屏幕像素密度**反向**变化：
+ * 手机（density ≈ 2.75）`40px → 14.5dp`，低密度设备（模拟器 / 平板，density ≈ 1.0~1.5）
+ * `40px → 26.7~40dp` ⇒ 瀑布流外沿留白被放大、卡片明显压窄（用户体感「其他样式宽留白太多」）。
+ *
+ * 现口径**对齐用户已认可的「自由」布局（`articleStyle = 5`，View 路径）** —— 其
+ * `RecyclerView.setPadding(4,4,4,4)`（px）+ 算法 `FreeGridSizeCalculator.SPACING_DP = 4`（dp）
+ * 即「紧凑且与屏幕密度无关」。
+ *
+ * 本对象**不依赖任何 Android API**（纯 `const val Int`），可被 JVM 单测直接断言取值。
+ */
+object RssArticleListSpacing {
+
+    /** 外沿留白（dp）：内容（卡片 / 行）距屏幕左右边缘的视觉留白 */
+    const val OUTER_DP = 4
+
+    /** 条目间距（dp）：相邻条目之间的视觉空隙（横向与纵向**同心**） */
+    const val GAP_DP = 4
+}
+
+/**
  * 订阅文章列表（CF 6.2：`item_rss_article` ~ `item_rss_article_4` 五样式族换装 Compose）。
  *
  * 换装前的形态：宿主 `RssArticlesFragment` 挂一个 `RecyclerViewAtPager2`，按 `articleStyle`
@@ -155,16 +178,19 @@ class RssArticleListStateHolder(style: Int) {
  * 换装后样式 **0~4 走本组件**（线性 / 两列网格 / 瀑布流 / 三列网格），样式 **5（自由布局，
  * `FreeGridSizeCalculator` 尺寸算法冻结区）保留原 View 路径** —— **每条样式只有一条路径**。
  *
- * 逐项等价口径（对照 5 个已退役 XML）：
- * - **样式 0**（`item_rss_article`）：100dp 定高行、16dp 内边距；标题 16sp 粗体 2 行（已读转 `tv_text_summary`）、
- *   日期 12sp 斜体、右侧 110×68 圆角 12dp 封面（未加载留白）。
- * - **样式 1**（`item_rss_article_1`）：整宽封面 220dp（左右上各 12dp 外边距）+ 标题 15sp 粗体 2 行 +
- *   日期 11sp + 末尾 8dp `bg_divider_line` 分隔块。
- * - **样式 2**（`item_rss_article_2`）：两列网格，条目内边距 l4/t8/b6/r4；封面 272dp、标题 13sp、日期 11sp。
- * - **样式 4**（`item_rss_article_4`）：三列网格，条目内边距 l2/t8/b6/r2；封面 182dp（其余同上）。
+ * 逐项等价口径（对照 5 个已退役 XML；**左右留白为 2026-10-07 收窄后的口径**，其余尺寸/字号沿用 XML 事实）：
+ * - **样式 0**（`item_rss_article`）：100dp 定高行、纵向 16dp 内边距 + **左右 `OUTER_DP`(4dp)**（原 16dp）；
+ *   标题 16sp 粗体 2 行（已读转 `tv_text_summary`）、日期 12sp 斜体、右侧 110×68 圆角 12dp 封面（未加载留白）。
+ * - **样式 1**（`item_rss_article_1`）：整宽封面 220dp（上 12dp / **左右 `OUTER_DP`(4dp)** 外边距，原左右各 12dp）+
+ *   标题 15sp 粗体 2 行 + 日期 11sp + 末尾 8dp `bg_divider_line` 分隔块。
+ * - **样式 2**（`item_rss_article_2`）：两列网格，条目**纵向**内边距 t8/b6；封面 272dp、标题 13sp、日期 11sp。
+ * - **样式 4**（`item_rss_article_4`）：三列网格，条目**纵向**内边距 t8/b6；封面 182dp（其余同上）。
+ * - **样式 2/4 的横向留白**：外沿 = 容器头尾 `contentPadding = OUTER_DP`，条目间距 =
+ *   容器 `horizontalArrangement = spacedBy(GAP_DP)`；条目自身横向内边距归零（原 l4/r4、l2/r2）。
  * - **样式 3**（`item_rss_article_3` + `layout-land` 变体）：瀑布流卡片（12dp 圆角 + `card_bg_water`
  *   底色 + 0.8dp `card_border_water` 描边），封面高度按**真实宽高比**回填；竖屏 2 列 / 横屏 3 列，
- *   横屏下标题 16sp/5 行、日期 14sp（原 XML 是两个变体，此处按配置折叠为同一实现）。
+ *   横屏下标题 16sp/5 行、日期 14sp（原 XML 是两个变体，此处按配置折叠为同一实现）；
+ *   横向与纵向间距同为 `GAP_DP`（原为 px 等价的 40px 横向 / 60px 纵向 —— 随屏幕密度反向放大）。
  * - 线性样式的行间分隔线沿用原 `VerticalDivider`（即 `@drawable/ic_divider` ⇒ `@color/bg_divider_line`）；
  *   Compose 侧以 `HorizontalDivider` 落在条目内，高度 1dp（原 drawable 为 1px 且不占布局高度，
  *   每行多出不到 1dp，属可接受差异）。
@@ -205,16 +231,13 @@ fun RssArticlesComposeList(
     val items = itemsState.value
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val topPadding = with(LocalDensity.current) { topPaddingPx.toDp() }
-    // 2026-09-27 用户报障修复：样式 3 的间距在**旧 View 实现里是像素(px)** ——
-    // `RecyclerView.setPadding(20,0,20,0)` + `ItemDecoration(20,30,20,30)` ⇒ 左右间距 40px、
-    // 上下间距 60px、阵列外沿左右 40px / 上下 30px。换装 Compose 时若直接写 `40.dp/30.dp/60.dp`，
-    // 会按屏幕密度整体放大（本机 ×1.5、普通手机 ×2.75~3）⇒ 卡片变窄、整页松散
-    // （用户体感「跟原来没改 Compose 时完全不一样」）。此处按 px→dp **等价换算**还原旧观感。
-    val px40 = with(LocalDensity.current) { 40.toDp() }
-    val px30 = with(LocalDensity.current) { 30.toDp() }
-    val px60 = with(LocalDensity.current) { 60.toDp() }
-    val px8 = with(LocalDensity.current) { 8.toDp() }
-    val px4 = with(LocalDensity.current) { 4.toDp() }
+    // 2026-10-07 用户报障修复（rss-list-padding-tighten）：间距改用**固定 dp 单源**
+    // [RssArticleListSpacing]（外沿 OUTER_DP / 间距 GAP_DP），对齐用户已认可的「自由」布局紧凑口径。
+    // 历史写法「`N px` 数值再做 px→dp 换算」（`40.toDp()` / `30.toDp()` / `60.toDp()` / `8.toDp()` /
+    // `4.toDp()`）会使留白随屏幕像素密度**反向**放大（手机 40px≈14.5dp，低密度模拟器/平板可达
+    // 26.7~40dp）⇒ 卡片被压窄（用户体感「其他样式宽留白太多」）。
+    val outer = RssArticleListSpacing.OUTER_DP.dp
+    val gap = RssArticleListSpacing.GAP_DP.dp
     // 翻页提前量：单源纯函数（瀑布流+预加载=5，其余=1；严禁 0）
     val threshold = RssPagingThresholdResolver.resolve(style, isPreload)
 
@@ -255,16 +278,16 @@ fun RssArticlesComposeList(
             columns = StaggeredGridCells.Fixed(if (landscape) 3 else 2),
             state = stateHolder.staggered!!,
             modifier = modifier,
-            // 原 RecyclerView：左右各 20px 内边距 + ItemDecoration 20/30（均为 **px**）⇒ 条目间距
-            // 左右 40px、上下 60px，阵列外沿左右 40px / 上下 30px；此处用 px→dp 等价值还原
+            // 留白单源（rss-list-padding-tighten）：外沿左右 = OUTER_DP；横向间距与纵向间距同为 GAP_DP
+            // （用户 2026-10-07 裁定「瀑布上下间距与左右一致」）。
             contentPadding = PaddingValues(
-                start = px40,
-                end = px40,
-                top = topPadding + px30,
-                bottom = bottomPadding + px30
+                start = outer,
+                end = outer,
+                top = topPadding + gap,
+                bottom = bottomPadding + gap
             ),
-            horizontalArrangement = Arrangement.spacedBy(px40),
-            verticalItemSpacing = px60
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            verticalItemSpacing = gap
         ) {
             staggeredItemsIndexed(items = items, key = { index, _ -> keys[index] }) { _, item ->
                 RssArticleCardRow(
@@ -282,20 +305,21 @@ fun RssArticlesComposeList(
             columns = GridCells.Fixed(if (style == 2) 2 else 3),
             state = stateHolder.grid!!,
             modifier = modifier,
-            // 同源问题（2026-09-27 用户报障）：旧实现样式 2/4 的 `setPadding(8,0,8,0)` /
-            // `(4,0,4,0)` 同样是 **px**，此前按 dp 搬运 ⇒ 外沿随密度放大
+            // 留白单源（rss-list-padding-tighten）：外沿左右 = OUTER_DP；条目间距由容器横向排列给出 GAP_DP
+            // （条目自身横向内边距已归零，避免「外沿/间距」双重叠加）
             contentPadding = PaddingValues(
-                start = if (style == 2) px8 else px4,
-                end = if (style == 2) px8 else px4,
+                start = outer,
+                end = outer,
                 top = topPadding,
                 bottom = bottomPadding
-            )
+            ),
+            horizontalArrangement = Arrangement.spacedBy(gap)
         ) {
             gridItemsIndexed(items = items, key = { index, _ -> keys[index] }) { _, item ->
                 if (style == 2) {
-                    RssArticleGridRow(item = item, coverHeight = 272.dp, horizontalPadding = 4.dp) { onItemClick(item) }
+                    RssArticleGridRow(item = item, coverHeight = 272.dp) { onItemClick(item) }
                 } else {
-                    RssArticleGridRow(item = item, coverHeight = 182.dp, horizontalPadding = 2.dp) { onItemClick(item) }
+                    RssArticleGridRow(item = item, coverHeight = 182.dp) { onItemClick(item) }
                 }
             }
             item(span = { GridItemSpan(maxLineSpan) }) {
@@ -357,7 +381,8 @@ fun RssArticleListRow(
             .fillMaxWidth()
             .height(100.dp)
             .rssRowClickable(onClick, onLongClick)
-            .padding(16.dp),
+            // 留白单源：左右收窄至 OUTER_DP（原 16dp 四边）；纵向保持 16dp（行高 100dp 与 68dp 封面不变）
+            .padding(horizontal = RssArticleListSpacing.OUTER_DP.dp, vertical = 16.dp),
         verticalAlignment = Alignment.Top
     ) {
         Column(
@@ -401,6 +426,8 @@ private fun RssArticleBigCoverRow(
     item: RssArticle,
     onClick: () -> Unit
 ) {
+    // 留白单源：左右收窄至 OUTER_DP（原 12dp）；纵向 top 沿用原 XML（12dp / 10dp / 分隔块 8dp）
+    val outer = RssArticleListSpacing.OUTER_DP.dp
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -411,7 +438,7 @@ private fun RssArticleBigCoverRow(
             link = item.link,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 12.dp, end = 12.dp, top = 12.dp)
+                .padding(start = outer, end = outer, top = 12.dp)
                 .height(220.dp),
             radiusDp = 12
         )
@@ -422,7 +449,7 @@ private fun RssArticleBigCoverRow(
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             color = readTitleColor(item.read),
-            modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp)
+            modifier = Modifier.padding(start = outer, end = outer, top = 12.dp)
         )
         Text(
             text = item.pubDate.orEmpty(),
@@ -430,7 +457,7 @@ private fun RssArticleBigCoverRow(
             overflow = TextOverflow.Ellipsis,
             fontSize = 11.sp,
             color = colorResource(R.color.primaryText),
-            modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp)
+            modifier = Modifier.padding(start = outer, end = outer, top = 10.dp)
         )
         Box(
             modifier = Modifier
@@ -447,14 +474,14 @@ private fun RssArticleBigCoverRow(
 private fun RssArticleGridRow(
     item: RssArticle,
     coverHeight: Dp,
-    horizontalPadding: Dp,
     onClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .rssRowClickable(onClick)
-            .padding(start = horizontalPadding, end = horizontalPadding, top = 8.dp, bottom = 6.dp)
+            // 横向留白已上移到容器（外沿 OUTER_DP + 横向排列 GAP_DP）⇒ 此处只保留纵向
+            .padding(top = 8.dp, bottom = 6.dp)
     ) {
         RssArticleImage(
             origin = item.origin,
