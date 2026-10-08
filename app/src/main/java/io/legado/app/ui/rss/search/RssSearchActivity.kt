@@ -147,9 +147,13 @@ class RssSearchActivity :
      */
     private fun initComposeContent() {
         binding.root.attachComposeContent {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // ---- 顶栏区（原 binding.composeTopBar 内容，逐行不变）----
-                LegadoTheme {
+            // 宿主主题作用域（fix-compose-theme-scope-and-cache-icon AD-01）：必须包住**全部内容**。
+            // 内容区 `RssSearchResultScreen` 读 M3 派生色（onPrimary/primary）；`LegadoComposeTheme`
+            // 只透传外层 colorScheme 并覆盖字体族、**不提供色板** ⇒ 若作用域只覆盖顶栏，结果区会回落
+            // M3 默认亮色基线（夜间/自定义主题下标签与强调底色不随主题）。
+            LegadoTheme {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // ---- 顶栏区（原 binding.composeTopBar 内容，逐行不变）----
                     Column {
                         GlassTopAppBar(
                             title = getString(R.string.search),
@@ -197,63 +201,63 @@ class RssSearchActivity :
                             actionLabel = getString(R.string.rss_search_stop)
                         )
                     }
-                }
-                // ---- 进度条（原 refresh_progress_bar：2dp 高，搜索中才参与布局）----
-                if (progressLoading) {
-                    AndroidView(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(2.dp),
-                        factory = { ctx -> RefreshProgressBar(ctx) },
-                        update = { it.isAutoLoading = true }
-                    )
-                }
-                // ---- 内容区（原 content_view > compose_results）----
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                ) {
-                    RssSearchResultScreen(
-                        articles = searchResults,
-                        isLoading = isSearching,
-                        hasSearched = hasSearched,
-                        scrollToTopSignal = resultScrollToTopSignal,
-                        // 修复 4：结果标题/摘要按当前关键词高亮（复用共享 highlightMatches，口径与设置搜索一致）
-                        highlightQuery = composeSearchQuery.trim(),
-                        onArticleClick = { showArticleInfo(it) }
-                    )
-                    // 输入帮助覆盖层（搜索历史）：复用书源搜索 Compose 组件，订阅源无书架概念传空列表
-                    if (inputHelpVisible) {
-                        Box(
+                    // ---- 进度条（原 refresh_progress_bar：2dp 高，搜索中才参与布局）----
+                    if (progressLoading) {
+                        AndroidView(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) { /* 只挡点击，不响应（对齐原 ll_input_help 的 clickable 语义） */ }
-                        ) {
-                            SearchInputHelpScreen(
-                                bookshelfBooks = emptyList(),
-                                historyKeywords = historyKeywords,
-                                onBookClick = { },
-                                onHistoryClick = { searchHistory(it) },
-                                onHistoryDelete = { deleteHistory(it) },
-                                onClearHistory = { alertClearHistory() }
-                            )
-                        }
+                                .fillMaxWidth()
+                                .height(2.dp),
+                            factory = { ctx -> RefreshProgressBar(ctx) },
+                            update = { it.isAutoLoading = true }
+                        )
                     }
-                    // 停止 FAB（原 fb_start_stop）
-                    AndroidView(
+                    // ---- 内容区（原 content_view > compose_results）----
+                    Box(
                         modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(16.dp)
-                            .navigationBarsPadding(),
-                        factory = { ctx -> createStopFab(ctx) },
-                        update = { fab ->
-                            fab.visibility = if (stopFabVisible) View.VISIBLE else View.INVISIBLE
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        RssSearchResultScreen(
+                            articles = searchResults,
+                            isLoading = isSearching,
+                            hasSearched = hasSearched,
+                            scrollToTopSignal = resultScrollToTopSignal,
+                            // 修复 4：结果标题/摘要按当前关键词高亮（复用共享 highlightMatches，口径与设置搜索一致）
+                            highlightQuery = composeSearchQuery.trim(),
+                            onArticleClick = { showArticleInfo(it) }
+                        )
+                        // 输入帮助覆盖层（搜索历史）：复用书源搜索 Compose 组件，订阅源无书架概念传空列表
+                        if (inputHelpVisible) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) { /* 只挡点击，不响应（对齐原 ll_input_help 的 clickable 语义） */ }
+                            ) {
+                                SearchInputHelpScreen(
+                                    bookshelfBooks = emptyList(),
+                                    historyKeywords = historyKeywords,
+                                    onBookClick = { },
+                                    onHistoryClick = { searchHistory(it) },
+                                    onHistoryDelete = { deleteHistory(it) },
+                                    onClearHistory = { alertClearHistory() }
+                                )
+                            }
                         }
-                    )
+                        // 停止 FAB（原 fb_start_stop）
+                        AndroidView(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(16.dp)
+                                .navigationBarsPadding(),
+                            factory = { ctx -> createStopFab(ctx) },
+                            update = { fab ->
+                                fab.visibility = if (stopFabVisible) View.VISIBLE else View.INVISIBLE
+                            }
+                        )
+                    }
                 }
             }
         }

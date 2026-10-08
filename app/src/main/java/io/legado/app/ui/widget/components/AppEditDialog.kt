@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import io.legado.app.ui.widget.compose.AppUiTokens
 
 /**
  * 编辑对话框字段模型。
@@ -51,6 +52,8 @@ fun AppEditDialog(
     modifier: Modifier = Modifier
 ) {
     val values = remember(fields) { mutableStateListOf(*fields.map { it.initial }.toTypedArray()) }
+    // 弹层取色单源（AD-06）：确认钮走 AppDialogStyle 直色，禁 M3 派生色
+    val style = AppUiTokens.dialogStyle()
     AlertDialog(
         modifier = modifier,
         onDismissRequest = onDismiss,
@@ -88,7 +91,7 @@ fun AppEditDialog(
             TextButton(onClick = { onConfirm(values.toList()) }) {
                 Text(
                     text = confirmText,
-                    color = MaterialTheme.colorScheme.primary
+                    color = style.accent
                 )
             }
         },

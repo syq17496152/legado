@@ -239,7 +239,9 @@ class CacheActivity : VMBaseActivity<ViewBinding, CacheViewModel>() {
                         exportProgressOf = { ExportBookService.exportProgress[it] },
                         onDownloadToggle = {
                             // M7 合并后 `this` 被 ColumnScope 遮蔽 ⇒ 显式限定 Activity 接收者
-                            if (CacheBook.cacheBookMap[it.bookUrl]?.isStop() == false) {
+                            // 判定与行尾图标同源（cacheToggleAction）⇒ 不会出现"图标显示停止、点击却启动"
+                            val action = cacheToggleAction(CacheBook.cacheBookMap[it.bookUrl]?.isStop())
+                            if (action == CacheToggleAction.Stop) {
                                 CacheBook.remove(this@CacheActivity, it.bookUrl)
                             } else {
                                 CacheBook.start(this@CacheActivity, it, 0, it.lastChapterIndex)

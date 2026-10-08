@@ -29,9 +29,13 @@ import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 fun AppModalBottomSheet(
     onDismiss: () -> Unit,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    dragHandle: @Composable (() -> Unit)? = {
-        BottomSheetDefaults.DragHandle()
-    },
+    /**
+     * 顶部拖拽把手；null（默认）时自绘**主题色**把手。
+     *
+     * ⚠ 不可沿用 M3 `BottomSheetDefaults.DragHandle()` 的默认色：其取 `onSurfaceVariant`
+     * （M3 派生色），既不随主题背景直读、真值还取决于宿主是否提供主题作用域（AD-06 未纳管取色）。
+     */
+    dragHandle: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val dialogStyle = rememberAppDialogStyle()
@@ -43,6 +47,7 @@ fun AppModalBottomSheet(
         contentColor = dialogStyle.primaryText,
         tonalElevation = 8.dp,
         dragHandle = dragHandle
+            ?: { BottomSheetDefaults.DragHandle(color = dialogStyle.secondaryText) }
     ) {
         Column(
             modifier = Modifier

@@ -44,6 +44,7 @@ import io.legado.app.data.entities.RssEpisode
 import io.legado.app.model.VideoPlay
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogFrame
+import io.legado.app.ui.widget.compose.AppUiTokens
 import io.legado.app.ui.widget.compose.BookCoverImage
 import io.legado.app.ui.widget.compose.ComposeDialogFragment
 
@@ -95,7 +96,8 @@ class VideoBookDetailSheet : ComposeDialogFragment() {
         val book = VideoPlay.book ?: return
         val routes = VideoPlay.rssRoutes ?: return
         var selectedRoute by remember { mutableIntStateOf(VideoPlay.rssRouteIndex) }
-        val palette = MaterialTheme.colorScheme
+        // 弹层取色单源（AD-06）：走 AppDialogStyle 直色（ThemeStore 链），禁 M3 派生色
+        val palette = AppUiTokens.dialogStyle()
         Column(Modifier.padding(horizontal = 16.dp)) {
             // 上半区：封面 + 书名 + 作者
             Row(verticalAlignment = Alignment.Top) {
@@ -109,7 +111,7 @@ class VideoBookDetailSheet : ComposeDialogFragment() {
                     Text(
                         text = book.name,
                         style = MaterialTheme.typography.titleMedium,
-                        color = palette.onSurface,
+                        color = palette.primaryText,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -117,7 +119,7 @@ class VideoBookDetailSheet : ComposeDialogFragment() {
                         Text(
                             text = book.getRealAuthor(),
                             style = MaterialTheme.typography.bodySmall,
-                            color = palette.onSurfaceVariant,
+                            color = palette.secondaryText,
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     }
@@ -128,7 +130,7 @@ class VideoBookDetailSheet : ComposeDialogFragment() {
                 Text(
                     text = book.intro!!,
                     style = MaterialTheme.typography.bodySmall,
-                    color = palette.onSurfaceVariant,
+                    color = palette.secondaryText,
                     maxLines = Int.MAX_VALUE,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
@@ -142,7 +144,7 @@ class VideoBookDetailSheet : ComposeDialogFragment() {
                 Text(
                     text = stringResource(R.string.video_route_label),
                     style = MaterialTheme.typography.labelMedium,
-                    color = palette.onSurfaceVariant,
+                    color = palette.secondaryText,
                     modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
                 )
                 LazyRow(
@@ -155,8 +157,8 @@ class VideoBookDetailSheet : ComposeDialogFragment() {
                             modifier = Modifier
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(
-                                    if (selected) palette.primary
-                                    else palette.surfaceVariant
+                                    if (selected) palette.accent
+                                    else palette.fieldSurface
                                 )
                                 .clickable {
                                     selectedRoute = index
@@ -168,8 +170,8 @@ class VideoBookDetailSheet : ComposeDialogFragment() {
                             Text(
                                 text = routes.getOrNull(index)?.name ?: "",
                                 style = MaterialTheme.typography.labelLarge,
-                                color = if (selected) palette.onPrimary
-                                else palette.onSurfaceVariant
+                                color = if (selected) palette.onAccent
+                                else palette.secondaryText
                             )
                         }
                     }
@@ -180,7 +182,7 @@ class VideoBookDetailSheet : ComposeDialogFragment() {
             Text(
                 text = stringResource(R.string.video_episode_label),
                 style = MaterialTheme.typography.labelMedium,
-                color = palette.onSurfaceVariant,
+                color = palette.secondaryText,
                 modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
             )
             LazyVerticalGrid(
@@ -198,8 +200,8 @@ class VideoBookDetailSheet : ComposeDialogFragment() {
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(
-                                if (selected) palette.primary.copy(alpha = 0.15f)
-                                else palette.surfaceVariant
+                                if (selected) palette.accent.copy(alpha = 0.15f)
+                                else palette.fieldSurface
                             )
                             .clickable {
                                 val idx = episodes.indexOf(episode)
@@ -214,7 +216,7 @@ class VideoBookDetailSheet : ComposeDialogFragment() {
                         Text(
                             text = episode.title,
                             style = MaterialTheme.typography.labelMedium,
-                            color = if (selected) palette.primary else palette.onSurface,
+                            color = if (selected) palette.accent else palette.primaryText,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )

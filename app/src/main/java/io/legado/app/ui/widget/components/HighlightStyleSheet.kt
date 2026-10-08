@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.legado.app.R
+import io.legado.app.ui.widget.compose.AppUiTokens
 import io.legado.app.help.HighlightStyle
 import io.legado.app.help.HighlightStyle.Deco
 import io.legado.app.help.HighlightStyle.FillShape
@@ -72,6 +73,9 @@ fun HighlightStyleSheet(
     fontDisplayName: String,
     scrollable: Boolean = true,
 ) {
+    // 弹层取色单源（AD-06）：文字/强调色走 AppDialogStyle 直色，禁 M3 派生色
+    // （命名 dialogStyle 以避免与本组件的样式参数 `style: HighlightStyle` 冲突）
+    val dialogStyle = AppUiTokens.dialogStyle()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -87,7 +91,7 @@ fun HighlightStyleSheet(
         Text(
             text = stringResource(R.string.highlight_presets),
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = dialogStyle.secondaryText,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
         )
         HighlightStyles.presets.chunked(3).forEach { rowPresets ->
@@ -171,13 +175,13 @@ fun HighlightStyleSheet(
             Text(
                 text = stringResource(R.string.highlight_font),
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = dialogStyle.primaryText,
                 modifier = Modifier.weight(1f)
             )
             Text(
                 text = fontDisplayName,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = dialogStyle.secondaryText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.width(180.dp)
@@ -201,6 +205,8 @@ private fun HighlightPresetSwatch(
         ?: preset.emphasis?.color?.takeIf { it != 0 }
         ?: 0xFF888888.toInt()
     val shape = AppShapes.Chip
+    // 弹层取色单源（AD-06）
+    val dialogStyle = AppUiTokens.dialogStyle()
     Box(
         modifier = Modifier
             .size(40.dp)
@@ -208,7 +214,7 @@ private fun HighlightPresetSwatch(
             .background(Color(repColor))
             .then(
                 if (selected) {
-                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, shape)
+                    Modifier.border(2.dp, dialogStyle.accent, shape)
                 } else {
                     Modifier.border(1.dp, androidx.compose.ui.graphics.Color(
             io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
@@ -275,6 +281,8 @@ private fun HighlightChannelRow(
     onExtra: () -> Unit,
     onPickColor: () -> Unit,
 ) {
+    // 弹层取色单源（AD-06）：命名 dialogStyle 以避免与参数 `style: HighlightStyle` 冲突
+    val dialogStyle = AppUiTokens.dialogStyle()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -289,7 +297,7 @@ private fun HighlightChannelRow(
         Text(
             text = stringResource(channel.labelRes),
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = dialogStyle.primaryText,
             modifier = Modifier.weight(1f)
         )
         // 行内「额外项」：下划线线型 / R1a 填充形状（点击循环切换）
@@ -304,7 +312,7 @@ private fun HighlightChannelRow(
             Text(
                 text = extraLabel,
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
+                color = dialogStyle.accent,
                 modifier = Modifier
                     .clip(AppShapes.Chip)
                     .clickable(onClick = onExtra)
@@ -333,6 +341,8 @@ private fun HighlightSliderSubRow(
     max: Float,
     onValueChange: (Float) -> Unit,
 ) {
+    // 弹层取色单源（AD-06）
+    val dialogStyle = AppUiTokens.dialogStyle()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -342,7 +352,7 @@ private fun HighlightSliderSubRow(
         Text(
             text = stringResource(labelRes),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = dialogStyle.secondaryText,
             modifier = Modifier.width(60.dp)
         )
         Slider(
@@ -354,7 +364,7 @@ private fun HighlightSliderSubRow(
         Text(
             text = String.format(Locale.getDefault(), "%.1f", value),
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = dialogStyle.secondaryText,
             textAlign = TextAlign.End,
             modifier = Modifier.width(36.dp)
         )

@@ -22,6 +22,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.widget.TextViewCompat
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
+import io.legado.app.ui.widget.compose.AppUiTokens
 import io.legado.app.utils.setMarkdown
 import io.noties.markwon.Markwon
 import io.noties.markwon.image.glide.GlideImagesPlugin
@@ -42,6 +43,8 @@ fun AppTextDialog(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // 弹层取色单源（AD-06）：正文/确认钮走 AppDialogStyle 直色，禁 M3 派生色
+    val style = AppUiTokens.dialogStyle()
     AlertDialog(
         modifier = modifier,
         onDismissRequest = onDismiss,
@@ -59,7 +62,7 @@ fun AppTextDialog(
                     Text(
                         text = text,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = style.secondaryText
                     )
                 }
             }
@@ -68,7 +71,7 @@ fun AppTextDialog(
             TextButton(onClick = onDismiss) {
                 Text(
                     text = confirmText,
-                    color = MaterialTheme.colorScheme.primary
+                    color = style.accent
                 )
             }
         }

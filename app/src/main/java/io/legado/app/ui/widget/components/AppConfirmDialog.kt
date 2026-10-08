@@ -28,12 +28,14 @@ fun AppConfirmDialog(
     modifier: Modifier = Modifier,
     destructive: Boolean = false,
 ) {
+    // 弹层取色单源（AD-06）：确认钮走 AppDialogStyle 直色，禁 M3 派生色
+    val style = AppUiTokens.dialogStyle()
     val confirmColor = if (destructive) {
         // A2.2.0/A2.2.1：destructive 确认钮从 M3 colorScheme.error（主题推导、日/夜分叉）
         // 收口到 AppDialogStyle.danger（语义色单源 #D44848，AD-14），与全站危险操作色一致
-        AppUiTokens.dialogStyle().danger
+        style.danger
     } else {
-        MaterialTheme.colorScheme.primary
+        style.accent
     }
     AlertDialog(
         onDismissRequest = onDismiss,

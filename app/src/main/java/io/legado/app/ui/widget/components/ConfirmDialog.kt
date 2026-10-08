@@ -25,6 +25,8 @@ fun ConfirmDialog(
     destructive: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    // 弹层取色单源（AD-06）：文字/强调色走 AppDialogStyle 直色（ThemeStore 链），禁 M3 派生色
+    val style = AppUiTokens.dialogStyle()
     AlertDialog(
         modifier = modifier,
         onDismissRequest = onDismiss,
@@ -34,7 +36,7 @@ fun ConfirmDialog(
                 Text(
                     text = it,
                     textAlign = TextAlign.Start,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = style.secondaryText
                 )
             }
         },
@@ -43,9 +45,9 @@ fun ConfirmDialog(
                 Text(
                     text = confirmText,
                     color = if (destructive) {
-                        AppUiTokens.dialogStyle().danger
+                        style.danger
                     } else {
-                        MaterialTheme.colorScheme.primary
+                        style.accent
                     }
                 )
             }

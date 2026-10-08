@@ -107,9 +107,14 @@ class ExploreShowActivity : VMBaseActivity<ViewBinding, ExploreShowViewModel>() 
     private fun initComposeContent() {
         composeBottomLoading.value = true
         binding.root.attachComposeContent {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // ---- 顶栏（原 compose_top_bar，内容逐行不变）----
-                LegadoTheme {
+            // 宿主主题作用域（fix-compose-theme-scope-and-cache-icon AD-01）：必须包住**全部内容**。
+            // `LegadoComposeTheme` 只透传外层 `MaterialTheme.colorScheme` 并覆盖字体族、**不提供色板**；
+            // `attachComposeContent` 也不注入主题 ⇒ 若作用域只覆盖顶栏，内容区（列表 + ⋮ 弹层）的
+            // `MaterialTheme.colorScheme` 会回落 M3 默认亮色基线（onSurface≈近黑），导致夜间主题下
+            // `AppMenuSheet` 弹层出现黑字黑图标（用户报障现象）。
+            LegadoTheme {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // ---- 顶栏（原 compose_top_bar，内容逐行不变）----
                     GlassTopAppBar(
                         title = intent.getStringExtra("exploreName").orEmpty(),
                         navIcon = Icons.AutoMirrored.Filled.ArrowBack,
@@ -124,43 +129,44 @@ class ExploreShowActivity : VMBaseActivity<ViewBinding, ExploreShowViewModel>() 
                             )
                         }
                     )
-                }
-                // ---- 列表区（原 content_view + compose_list）----
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                ) {
-                    LegadoComposeTheme {
-                        ExploreShowComposeScreen(
-                            books = composeBooks,
-                            isLoading = composeBottomLoading.value,
-                            isLoadingPrevious = composeTopLoading.value,
-                            hasMore = composeHasMore.value,
-                            hasPrevious = composeHasPrevious.value,
-                            errorMessage = composeBottomError.value,
-                            previousErrorMessage = composeTopError.value,
-                            scrollToTopSignal = composeScrollToTopSignal.intValue,
-                            keepPositionAfterPrependSignal = composeKeepPositionAfterPrependSignal.intValue,
-                            prependedItemCount = composePrependedItemCount.intValue,
-                            bookshelfTick = bookshelfTick.intValue,
-                            isInBookshelf = { book -> isInBookshelf(book) },
-                            lifecycle = lifecycle,
-                            onBookClick = { book -> showBookInfo(book) },
-                            onBookMore = { book -> moreSheetBook.value = book },
-                            showPreviewHint = previewHintVisible.value,
-                            onPreviewHintDismiss = { dismissPreviewHint() },
-                            previewRequest = previewRequestBook.value,
-                            onPreviewRequestHandled = { previewRequestBook.value = null },
-                            onLoadMore = { scrollToBottom(forceLoad = composeBottomError.value != null) },
-                            onLoadPrevious = { scrollToTop(forceLoad = composeTopError.value != null) }
-                        )
-                        moreSheetBook.value?.let { book ->
-                            AppMenuSheet(
-                                title = book.name,
-                                actions = buildBookActions(book),
-                                onDismiss = { moreSheetBook.value = null }
+                    // ---- 列表区（原 content_view + compose_list）----
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        // 字体层：色板由外层 LegadoTheme 提供，本组件仅覆盖 UI 字体族
+                        LegadoComposeTheme {
+                            ExploreShowComposeScreen(
+                                books = composeBooks,
+                                isLoading = composeBottomLoading.value,
+                                isLoadingPrevious = composeTopLoading.value,
+                                hasMore = composeHasMore.value,
+                                hasPrevious = composeHasPrevious.value,
+                                errorMessage = composeBottomError.value,
+                                previousErrorMessage = composeTopError.value,
+                                scrollToTopSignal = composeScrollToTopSignal.intValue,
+                                keepPositionAfterPrependSignal = composeKeepPositionAfterPrependSignal.intValue,
+                                prependedItemCount = composePrependedItemCount.intValue,
+                                bookshelfTick = bookshelfTick.intValue,
+                                isInBookshelf = { book -> isInBookshelf(book) },
+                                lifecycle = lifecycle,
+                                onBookClick = { book -> showBookInfo(book) },
+                                onBookMore = { book -> moreSheetBook.value = book },
+                                showPreviewHint = previewHintVisible.value,
+                                onPreviewHintDismiss = { dismissPreviewHint() },
+                                previewRequest = previewRequestBook.value,
+                                onPreviewRequestHandled = { previewRequestBook.value = null },
+                                onLoadMore = { scrollToBottom(forceLoad = composeBottomError.value != null) },
+                                onLoadPrevious = { scrollToTop(forceLoad = composeTopError.value != null) }
                             )
+                            moreSheetBook.value?.let { book ->
+                                AppMenuSheet(
+                                    title = book.name,
+                                    actions = buildBookActions(book),
+                                    onDismiss = { moreSheetBook.value = null }
+                                )
+                            }
                         }
                     }
                 }

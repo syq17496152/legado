@@ -17,6 +17,7 @@ import androidx.fragment.app.Fragment
 import io.legado.app.R
 import io.legado.app.ui.config.ConfigActivity
 import io.legado.app.ui.widget.components.MenuAction
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
 import io.legado.app.utils.defaultSharedPreferences
@@ -79,23 +80,29 @@ abstract class ComposeSettingFragment : Fragment(),
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 refreshTick.intValue
-                LegadoComposeTheme {
-                    SettingSpecScreen(
-                        page = buildPageSpec(),
-                        scrollTargetKey = scrollTargetKey.value,
-                        drawPanelImage = drawPanelImage,
-                        searchActive = searchActive.value,
-                        searchQuery = searchQuery.value,
-                        onSearchQueryChange = { searchQuery.value = it },
-                        onSearchClose = {
-                            searchActive.value = false
-                            searchQuery.value = ""
-                        },
-                        highlightTargetKey = highlightTargetKey.value,
-                        onTargetReady = ::handleTargetReady,
-                        onTargetMissing = ::consumeMissingTarget,
-                        onItemClick = ::handleItemClick
-                    )
+                // 宿主主题作用域（fix-compose-theme-scope-and-cache-icon AD-01）：`LegadoComposeTheme`
+                // 只透传外层 colorScheme 并覆盖字体族、**不提供色板** ⇒ 必须外层补 `LegadoTheme`，
+                // 否则设置页内的 `SettingsSearchBar`（读 M3 onSurface/onSurfaceVariant）等会回落
+                // M3 默认亮色基线，夜间/自定义主题下文字与光标色不随主题。
+                LegadoTheme {
+                    LegadoComposeTheme {
+                        SettingSpecScreen(
+                            page = buildPageSpec(),
+                            scrollTargetKey = scrollTargetKey.value,
+                            drawPanelImage = drawPanelImage,
+                            searchActive = searchActive.value,
+                            searchQuery = searchQuery.value,
+                            onSearchQueryChange = { searchQuery.value = it },
+                            onSearchClose = {
+                                searchActive.value = false
+                                searchQuery.value = ""
+                            },
+                            highlightTargetKey = highlightTargetKey.value,
+                            onTargetReady = ::handleTargetReady,
+                            onTargetMissing = ::consumeMissingTarget,
+                            onItemClick = ::handleItemClick
+                        )
+                    }
                 }
             }
         }

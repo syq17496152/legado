@@ -286,36 +286,39 @@ class NavigationBarManageActivity : BaseActivity<ViewBinding>(), ColorPickerDial
     @OptIn(ExperimentalMaterial3Api::class)
     private fun initComposeContent() {
         binding.root.attachComposeContent {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
-                LegadoTheme {
+            // 宿主主题作用域（fix-compose-theme-scope-and-cache-icon AD-01）：必须包住**全部内容**。
+            // 列表 `NavigationBarPackageManageScreen` 读 M3 派生色（onSurface）；`LegadoComposeTheme`
+            // 只透传外层 colorScheme、**不提供色板** ⇒ 若作用域只覆盖顶栏，条目文字会回落 M3 默认基线。
+            LegadoTheme {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
                     GlassTopAppBar(
                         title = getString(R.string.navigation_bar_manage),
                         navIcon = Icons.AutoMirrored.Filled.ArrowBack,
                         onNavClick = { finish() },
                         actions = { TopBarActionRow(topBarActions()) }
                     )
-                }
-                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                NavigationBarPackageManageScreen(
-                    entries = entriesState,
-                    activeDirName = activeDirNameState,
-                    isNightMode = isNightMode,
-                    summaryText = summaryTextState,
-                    bottomNavSummary = bottomNavSummary(bottomNavItemsState),
-                    onSwitchDayNight = { night ->
-                        if (night != isNightMode) {
-                            isNightMode = night
-                            loadPackages()
-                        }
-                    },
-                    onAdd = ::showAddDialog,
-                    onManageBottomNavItems = ::showBottomNavItemsDialog,
-                    onApply = ::applyPackage,
-                    onEdit = { entry -> showEditDialog(entry) },
-                    entryInfo = ::entryInfo,
-                    entryActions = ::entryActions
-                )
+                    Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                        NavigationBarPackageManageScreen(
+                            entries = entriesState,
+                            activeDirName = activeDirNameState,
+                            isNightMode = isNightMode,
+                            summaryText = summaryTextState,
+                            bottomNavSummary = bottomNavSummary(bottomNavItemsState),
+                            onSwitchDayNight = { night ->
+                                if (night != isNightMode) {
+                                    isNightMode = night
+                                    loadPackages()
+                                }
+                            },
+                            onAdd = ::showAddDialog,
+                            onManageBottomNavItems = ::showBottomNavItemsDialog,
+                            onApply = ::applyPackage,
+                            onEdit = { entry -> showEditDialog(entry) },
+                            entryInfo = ::entryInfo,
+                            entryActions = ::entryActions
+                        )
+                    }
                 }
             }
         }
@@ -1535,95 +1538,99 @@ class NavigationBarEditDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val style = rememberAppDialogStyle()
-                CompositionLocalProvider(
-                    LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
-                ) {
-                    var name by rememberSaveable { mutableStateOf(initialName) }
-                    val palette = rememberAppManagementPalette()
-                    AppDialogFrame(
-                        title = dialogTitle,
-                        content = {
-                            Column {
-                                // F115：配置行之上先看效果——标题下固定迷你底栏预览条
-                                previewProvider?.invoke()?.let { NavBarMiniPreview(it, palette) }
-                                OutlinedTextField(
-                                    value = name,
-                                    onValueChange = { name = it },
-                                    label = { Text(stringResource(R.string.navigation_bar_name)) },
-                                    singleLine = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                                )
-                                val rows = rowsProvider?.invoke().orEmpty()
-                                rows.forEach { row ->
-                                    AppManagementListRow(
-                                        title = row.title,
-                                        subtitle = row.value,
-                                        palette = palette,
-                                        onClick = row.onClick
-                                    )
-                                }
-                                val iconRows = iconRowsProvider?.invoke().orEmpty()
-                                iconRows.forEach { iconRow ->
-                                    Row(
+                // 宿主主题作用域（AD-01 / G-37）：必须在 setContent 顶层提供 —— 本弹框内的
+                // OutlinedTextField / Text 等读取 M3 派生色，缺作用域会回落 M3 默认亮色基线。
+                LegadoTheme {
+                    val style = rememberAppDialogStyle()
+                    CompositionLocalProvider(
+                        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
+                    ) {
+                        var name by rememberSaveable { mutableStateOf(initialName) }
+                        val palette = rememberAppManagementPalette()
+                        AppDialogFrame(
+                            title = dialogTitle,
+                            content = {
+                                Column {
+                                    // F115：配置行之上先看效果——标题下固定迷你底栏预览条
+                                    previewProvider?.invoke()?.let { NavBarMiniPreview(it, palette) }
+                                    OutlinedTextField(
+                                        value = name,
+                                        onValueChange = { name = it },
+                                        label = { Text(stringResource(R.string.navigation_bar_name)) },
+                                        singleLine = true,
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = stringResource(iconRow.titleRes),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            modifier = Modifier.weight(1f)
+                                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                                    )
+                                    val rows = rowsProvider?.invoke().orEmpty()
+                                    rows.forEach { row ->
+                                        AppManagementListRow(
+                                            title = row.title,
+                                            subtitle = row.value,
+                                            palette = palette,
+                                            onClick = row.onClick
                                         )
-                                        iconRow.previews.forEach { preview ->
-                                            AndroidView(
-                                                factory = { context ->
-                                                    ImageView(context).apply {
-                                                        scaleType = ImageView.ScaleType.CENTER_INSIDE
-                                                        val d = context.resources.displayMetrics.density
-                                                        setPadding((8 * d).toInt(), (8 * d).toInt(), (8 * d).toInt(), (8 * d).toInt())
-                                                    }
-                                                },
-                                                update = { iv ->
-                                                    iv.contentDescription = preview.contentDesc
-                                                    iv.setImageDrawable(preview.drawable)
-                                                },
-                                                modifier = Modifier
-                                                    .size(44.dp)
-                                                    .clip(RoundedCornerShape(8.dp))
-                                                    .clickable(onClick = preview.onClick)
+                                    }
+                                    val iconRows = iconRowsProvider?.invoke().orEmpty()
+                                    iconRows.forEach { iconRow ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = stringResource(iconRow.titleRes),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.weight(1f)
                                             )
-                                            Spacer(modifier = Modifier.width(8.dp))
+                                            iconRow.previews.forEach { preview ->
+                                                AndroidView(
+                                                    factory = { context ->
+                                                        ImageView(context).apply {
+                                                            scaleType = ImageView.ScaleType.CENTER_INSIDE
+                                                            val d = context.resources.displayMetrics.density
+                                                            setPadding((8 * d).toInt(), (8 * d).toInt(), (8 * d).toInt(), (8 * d).toInt())
+                                                        }
+                                                    },
+                                                    update = { iv ->
+                                                        iv.contentDescription = preview.contentDesc
+                                                        iv.setImageDrawable(preview.drawable)
+                                                    },
+                                                    modifier = Modifier
+                                                        .size(44.dp)
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .clickable(onClick = preview.onClick)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                            }
                                         }
                                     }
                                 }
+                            },
+                            actions = {
+                                val miuixPalette = style.toMiuixPalette()
+                                LegadoMiuixActionButton(
+                                    text = stringResource(R.string.cancel),
+                                    palette = miuixPalette,
+                                    onClick = { dismissAllowingStateLoss() },
+                                    cornerRadius = style.actionRadius
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                LegadoMiuixActionButton(
+                                    text = stringResource(R.string.ok),
+                                    palette = miuixPalette,
+                                    onClick = {
+                                        dismissAllowingStateLoss()
+                                        onSave?.invoke(name)
+                                    },
+                                    primary = true,
+                                    cornerRadius = style.actionRadius
+                                )
                             }
-                        },
-                        actions = {
-                            val miuixPalette = style.toMiuixPalette()
-                            LegadoMiuixActionButton(
-                                text = stringResource(R.string.cancel),
-                                palette = miuixPalette,
-                                onClick = { dismissAllowingStateLoss() },
-                                cornerRadius = style.actionRadius
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            LegadoMiuixActionButton(
-                                text = stringResource(R.string.ok),
-                                palette = miuixPalette,
-                                onClick = {
-                                    dismissAllowingStateLoss()
-                                    onSave?.invoke(name)
-                                },
-                                primary = true,
-                                cornerRadius = style.actionRadius
-                            )
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
@@ -1670,28 +1677,31 @@ class NavigationBarItemsDialog : ComposeDialogFragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                val style = rememberAppDialogStyle()
-                CompositionLocalProvider(
-                    LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
-                ) {
-                    AppDialogFrame(
-                        title = stringResource(R.string.bottom_bar_items_manage),
-                        content = {
-                            BottomNavItemsManageContent(
-                                initialItems = initialItems,
-                                onItemsChange = { changeCallback?.invoke(it) }
-                            )
-                        },
-                        actions = {
-                            LegadoMiuixActionButton(
-                                text = stringResource(R.string.ok),
-                                palette = style.toMiuixPalette(),
-                                onClick = { dismissAllowingStateLoss() },
-                                primary = true,
-                                cornerRadius = style.actionRadius
-                            )
-                        }
-                    )
+                // 宿主主题作用域（AD-01 / G-37）：同上，必须在 setContent 顶层提供。
+                LegadoTheme {
+                    val style = rememberAppDialogStyle()
+                    CompositionLocalProvider(
+                        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = style.bodyFontFamily)
+                    ) {
+                        AppDialogFrame(
+                            title = stringResource(R.string.bottom_bar_items_manage),
+                            content = {
+                                BottomNavItemsManageContent(
+                                    initialItems = initialItems,
+                                    onItemsChange = { changeCallback?.invoke(it) }
+                                )
+                            },
+                            actions = {
+                                LegadoMiuixActionButton(
+                                    text = stringResource(R.string.ok),
+                                    palette = style.toMiuixPalette(),
+                                    onClick = { dismissAllowingStateLoss() },
+                                    primary = true,
+                                    cornerRadius = style.actionRadius
+                                )
+                            }
+                        )
+                }
                 }
             }
         }

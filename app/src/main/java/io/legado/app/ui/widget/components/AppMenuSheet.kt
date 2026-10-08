@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -40,6 +41,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import io.legado.app.help.config.TopBarConfig
+import io.legado.app.ui.theme.LegadoTheme
+import io.legado.app.ui.widget.compose.rememberAppDialogStyle
 
 /**
  * 菜单动作项，由 [AppMenuSheet] / [AppDropdownMenu] 数据驱动渲染
@@ -90,12 +93,15 @@ fun AppMenuSheet(
     modifier: Modifier = Modifier,
     content: (@Composable ColumnScope.() -> Unit)? = null
 ) {
+    // 取色单源（AD-06）：弹层文字/图标一律走 AppDialogStyle 直色（ThemeStore 链），
+    // 禁止 MaterialTheme.colorScheme 派生色（其真值取决于宿主是否提供主题作用域，H9/H11 铁律）。
+    val dialogStyle = rememberAppDialogStyle()
     AppModalBottomSheet(onDismiss = onDismiss, sheetState = sheetState) {
         if (title != null) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = dialogStyle.primaryText,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -115,7 +121,7 @@ fun AppMenuSheet(
                 Text(
                     text = action.title,
                     style = MaterialTheme.typography.labelMedium,
-                    color = action.tint ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = action.tint ?: dialogStyle.secondaryText,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp, vertical = 10.dp)
@@ -131,13 +137,15 @@ fun AppMenuSheet(
                 ) {
                     MenuActionIcon(
                         action = action,
-                        modifier = Modifier.width(24.dp)
+                        modifier = Modifier.width(24.dp),
+                        // 图标与文字同源（不依赖 M3 是否把 contentColor 透传到 LocalContentColor）
+                        defaultTint = dialogStyle.primaryText
                     )
                     Spacer(modifier = Modifier.width(20.dp))
                     Text(
                         text = action.title,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = action.tint ?: MaterialTheme.colorScheme.onSurface,
+                        color = action.tint ?: dialogStyle.primaryText,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
@@ -201,18 +209,28 @@ fun RowScope.TopBarActionRow(actions: List<MenuAction>) {
  * contentColor 作用域，菜单场景=菜单内容色；显式 action.tint 仍最优先。
  */
 @Composable
-fun MenuActionIcon(action: MenuAction, modifier: Modifier = Modifier) {
+fun MenuActionIcon(
+    action: MenuAction,
+    modifier: Modifier = Modifier,
+    /**
+     * 默认色（可选扩展，默认 null 时既有调用点零改动）：弹层场景传 `AppDialogStyle.primaryText`
+     * 以保证**图标与文字同源**且不依赖 M3 `ModalBottomSheet` 是否把 `contentColor` 透传到
+     * `LocalContentColor`（AD-06）；顶栏/下拉菜单场景不传 ⇒ 沿用 `LocalContentColor.current` 继承口径。
+     */
+    defaultTint: Color? = null
+) {
+    val resolvedTint = action.tint ?: defaultTint ?: LocalContentColor.current
     when {
         action.icon != null -> Icon(
             imageVector = action.icon,
             contentDescription = action.title,
-            tint = action.tint ?: LocalContentColor.current,
+            tint = resolvedTint,
             modifier = modifier
         )
         action.iconRes != null -> Icon(
             painter = androidx.compose.ui.res.painterResource(action.iconRes),
             contentDescription = action.title,
-            tint = action.tint ?: LocalContentColor.current,
+            tint = resolvedTint,
             modifier = modifier
         )
     }
@@ -243,13 +261,17 @@ fun ComponentActivity.installGlassTopBar(
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
         setContent {
-            io.legado.app.ui.widget.compose.LegadoComposeTheme {
-                GlassTopAppBar(
-                    title = titleProvider(),
-                    navIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                    onNavClick = onBack,
-                    actions = { TopBarActionRow(actionsProvider()) }
-                )
+            // 宿主主题作用域（AD-01 / G-37）：顶层必须是 LegadoTheme（提供色板）；
+            // LegadoComposeTheme 只透传色板并覆盖字体族，仅可作内层字体层。
+            LegadoTheme {
+                io.legado.app.ui.widget.compose.LegadoComposeTheme {
+                    GlassTopAppBar(
+                        title = titleProvider(),
+                        navIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        onNavClick = onBack,
+                        actions = { TopBarActionRow(actionsProvider()) }
+                    )
+                }
             }
         }
     }

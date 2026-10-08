@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.jaredrummler.android.colorpicker.ColorPickerDialog
+import io.legado.app.ui.widget.compose.AppUiTokens
 import io.legado.app.R
 import io.legado.app.utils.ColorUtils
 
@@ -77,6 +78,8 @@ fun ColorPickerSheet(
     }
 
     val currentColor = pickedPreset ?: hslToColor(hue, saturation / 100f, lightness / 100f)
+    // 弹层取色单源（AD-06）：文字/强调色走 AppDialogStyle 直色（ThemeStore 链），禁 M3 派生色
+    val style = AppUiTokens.dialogStyle()
 
     AppModalBottomSheet(onDismiss = onDismiss) {
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
@@ -88,7 +91,7 @@ fun ColorPickerSheet(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = style.primaryText,
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -109,7 +112,7 @@ fun ColorPickerSheet(
                 Text(
                     text = "#${Integer.toHexString(currentColor).uppercase().padStart(6, '0').takeLast(6)}",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = style.secondaryText
                 )
             }
 
@@ -134,7 +137,7 @@ fun ColorPickerSheet(
                             .border(
                                 width = if (selected) 3.dp else 1.dp,
                                 color = if (selected) {
-                                    MaterialTheme.colorScheme.primary
+                                    style.accent
                                 } else {
                                     androidx.compose.ui.graphics.Color(
                                 io.legado.app.lib.theme.rememberThemeUiPalette().dividerColor
@@ -267,11 +270,13 @@ private fun HslSlider(
     trackBrush: Brush,
     onValueChange: (Float) -> Unit
 ) {
+    // 弹层取色单源（AD-06）
+    val style = AppUiTokens.dialogStyle()
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = "$label  ${value.toInt()}",
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = style.secondaryText
         )
         Box(
             modifier = Modifier
@@ -293,7 +298,7 @@ private fun HslSlider(
                 onValueChange = onValueChange,
                 valueRange = valueRange,
                 colors = SliderDefaults.colors(
-                    thumbColor = MaterialTheme.colorScheme.primary,
+                    thumbColor = style.accent,
                     activeTrackColor = Color.Transparent,
                     inactiveTrackColor = Color.Transparent
                 ),

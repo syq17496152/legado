@@ -128,8 +128,11 @@ private fun CacheBookItemRow(
                 )
             }
             if (!book.isLocal) {
+                // 状态派生必须放在**行级 body**（随 refreshTick 重组重算）；禁止下沉进 IconButton 的
+                // content lambda——Kotlin 2.x 强跳过会记忆化该 lambda，tick 变化时其参数未变 ⇒ 子组件
+                // 被跳过 ⇒ 状态永不重算（真机实证症状：点「开始」确实开始缓存，但图标一直是三角）。
+                val running = isCacheRunning(CacheBook.cacheBookMap[book.bookUrl]?.isStop())
                 IconButton(onClick = onDownloadToggle) {
-                    val running = CacheBook.cacheBookMap[book.bookUrl]?.isStop() == false
                     Icon(
                         imageVector = if (running) Icons.Filled.Stop else Icons.Filled.PlayArrow,
                         contentDescription = stringResource(R.string.start),
