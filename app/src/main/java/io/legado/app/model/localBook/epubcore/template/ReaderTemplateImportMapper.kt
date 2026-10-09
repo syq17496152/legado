@@ -76,8 +76,11 @@ internal object ReaderTemplateImportMapper {
      * 导入单模板 JSON（形态①）。
      *
      * @param source `readerTemplate.json` 文本。
+     * @param remapBuiltinIds 是否把 `builtin.*`（或缺失）id 改名为 `user.<uuid>`。
+     *   用户导入必须为 `true`（C7：避免与内置 id 冲突）；**内置目录加载必须为 `false`**
+     *   —— 内置模板 id 本就必须与 `assets/reader/<id>/` 目录名一致，改名会让目录校验必然失败。
      */
-    fun importTemplateJson(source: String): ImportResult {
+    fun importTemplateJson(source: String, remapBuiltinIds: Boolean = true): ImportResult {
         val report = ArrayList<ReportEntry>()
         val root = runCatching { JsonParser.parseString(source) }
             .getOrElse { error ->
@@ -122,7 +125,7 @@ internal object ReaderTemplateImportMapper {
         }
 
         val originId = json.get("id")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
-        val newId = remapId(originId, report)
+        val newId = remapId(originId, report, remapBuiltinIds)
 
         val rawType = json.get("type")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
         val type = if (rawType.isBlank()) {
@@ -206,8 +209,9 @@ internal object ReaderTemplateImportMapper {
         return null
     }
 
-    /** C7：内置 id 改名，避免与"恢复内置"冲突。 */
-    private fun remapId(originId: String, report: MutableList<ReportEntry>): String {
+    /** C7：内置 id 改名，避免与"恢复内置"冲突；内置目录加载时 `remapBuiltinIds=false` 原样保留。 */
+    private fun remapId(originId: String, report: MutableList<ReportEntry>, remapBuiltinIds: Boolean): String {
+        if (!remapBuiltinIds) return originId
         if (originId.isNotBlank() && !originId.startsWith("builtin.")) return originId
         val newId = "user.${UUID.randomUUID()}"
         report += ReportEntry(

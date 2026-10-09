@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "templates": [
+    "builtin.neon-night",
+    "builtin.minimal-ink",
+    "builtin.paper-scroll"
+  ]
+}

@@ -82,6 +82,16 @@ class ReaderTemplateImportMapperTest {
     }
 
     @Test
+    fun `内置目录加载保留 builtin id 不改名`() {
+        val result = ReaderTemplateImportMapper.importTemplateJson(
+            archiveV1Json(id = "builtin.neon-night"),
+            remapBuiltinIds = false
+        )
+        assertEquals("builtin.neon-night", result.template!!.id)
+        assertFalse("内置加载不得出现 id-renamed", "id-renamed" in codes(result))
+    }
+
+    @Test
     fun `缺省 type 默认 paged 并记录`() {
         val json = """
             {
