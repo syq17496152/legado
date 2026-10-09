@@ -39,8 +39,8 @@ object AppPattern {
     //书源调试信息中的各种符号
     val debugMessageSymbolRegex = Regex("[⇒◇┌└≡]")
 
-    //本地书籍支持类型
-    val bookFileRegex = Regex(".*\\.(txt|epub|umd|pdf|mobi|azw3|azw)", RegexOption.IGNORE_CASE)
+    //本地书籍支持类型（只增不删；md/markdown 为 epub-md-rich-rendering 阶段 3.3 新增）
+    val bookFileRegex = Regex(".*\\.(txt|epub|umd|pdf|mobi|azw3|azw|md|markdown)", RegexOption.IGNORE_CASE)
     //压缩文件支持类型
     val archiveFileRegex = Regex(".*\\.(zip|rar|7z)$", RegexOption.IGNORE_CASE)
 

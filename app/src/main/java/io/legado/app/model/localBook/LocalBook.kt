@@ -27,6 +27,7 @@ import io.legado.app.help.book.getLocalUri
 import io.legado.app.help.book.getRemoteUrl
 import io.legado.app.help.book.isArchive
 import io.legado.app.help.book.isEpub
+import io.legado.app.help.book.isMarkdown
 import io.legado.app.help.book.isMobi
 import io.legado.app.help.book.isPdf
 import io.legado.app.help.book.isUmd
@@ -124,6 +125,10 @@ object LocalBook {
                 EpubFile.getChapterList(book)
             }
 
+            book.isMarkdown -> {
+                MdFile.getChapterList(book)
+            }
+
             book.isUmd -> {
                 UmdFile.getChapterList(book)
             }
@@ -175,6 +180,10 @@ object LocalBook {
             when {
                 book.isEpub -> {
                     EpubFile.getContent(book, chapter)
+                }
+
+                book.isMarkdown -> {
+                    MdFile.getContent(book, chapter)
                 }
 
                 book.isUmd -> {
@@ -275,6 +284,7 @@ object LocalBook {
     fun upBookInfo(book: Book) {
         when {
             book.isEpub -> EpubFile.upBookInfo(book)
+            book.isMarkdown -> MdFile.upBookInfo(book)
             book.isUmd -> UmdFile.upBookInfo(book)
             book.isPdf -> PdfFile.upBookInfo(book)
             book.isMobi -> MobiFile.upBookInfo(book)
