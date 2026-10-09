@@ -1,7 +1,16 @@
 package io.legado.app.model.localBook
 
+import io.legado.app.model.localBook.epubcore.style.EpubCssCompat
 import java.util.Locale
 
+/**
+ * EPUB 样式解析（canvas 管线）。
+ *
+ * **旧属性兼容（阶段 1.5）**：属性名归一与「未知属性忽略」策略统一由
+ * [EpubCssCompat] 提供（与 epubcore 管线**同一单源**），避免双栈对旧声明处理不一致。
+ * [parseDeclarations] 仅做别名归一（**不丢弃**，行内样式与 `@font-face` 依赖完整声明）；
+ * 丢弃发生在 [normalizeSupportedDeclarations]。
+ */
 internal object EpubCss {
 
     private val supportedProperties = setOf(
@@ -266,7 +275,12 @@ internal object EpubCss {
     fun normalizeSupportedDeclarations(style: String): List<Declaration> {
         return parseDeclarations(style)
             .expandBoxShorthand()
-            .filter { it.name in supportedProperties }
+            // 未知属性忽略：前缀旧声明按基名归一后仍可命中（阶段 1.5 兼容层）。
+            .mapNotNull { declaration ->
+                val canonical = EpubCssCompat.resolvePropertyName(declaration.name) { it in supportedProperties }
+                    ?: return@mapNotNull null
+                if (canonical == declaration.name) declaration else declaration.copy(name = canonical)
+            }
     }
 
     fun declarations(style: String): LinkedHashMap<String, String> {
@@ -290,8 +304,9 @@ internal object EpubCss {
                 .trim()
                 .replace("\"", "'")
             if (name.isNotBlank() && value.isNotBlank()) {
-                val normalizedName = if (name == "duokan-text-indent") "text-indent" else name
-                val normalizedValue = if (name == "duokan-text-indent") {
+                // 旧/私有属性归一单源：与 epubcore 管线共用 EpubCssCompat（阶段 1.5）。
+                val normalizedName = EpubCssCompat.normalizePropertyName(name).canonical
+                val normalizedValue = if (normalizedName == "text-indent" && name != "text-indent") {
                     splitValueList(value).lastOrNull().orEmpty().ifBlank { value }
                 } else {
                     value
