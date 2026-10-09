@@ -1,0 +1,150 @@
+/*
+ * md-reader.css —— Markdown 富排版规格（epub-md-rich-rendering 阶段 3.7）
+ *
+ * 取向前提：**内容规格优先**（对标 KOReader 的 md/HTML 版式基线），不引入任何第三方版权素材；
+ * 全部尺寸用相对单位，字号/行高由宿主以 CSS 变量下发（`--md-font-size` / `--md-line-height`），
+ * 使阅读器主题（字号、行距、日夜、字体）**一处生效**，与 canvas 路径的阅读设置同源。
+ *
+ * 主题：`:root` 提供日/夜两套变量；宿主通过 `<html data-md-theme="night">` 切换，
+ * 无 JS 依赖（避免渲染前闪白）。
+ */
+
+:root {
+  --md-font-size: 18px;
+  --md-line-height: 1.7;
+  --md-font-family: -apple-system, "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
+  --md-code-font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  --md-text-color: #1a1a1a;
+  --md-bg-color: #ffffff;
+  --md-muted-color: #666666;
+  --md-border-color: #dcdcdc;
+  --md-quote-bg: #f5f5f5;
+  --md-code-bg: #f6f8fa;
+  --md-link-color: #0b6bcb;
+  --md-table-stripe: #fafafa;
+  --md-inline-padding: 0.15em 0.35em;
+  --md-block-gap: 0.85em;
+}
+
+html[data-md-theme="night"] {
+  --md-text-color: #cccccc;
+  --md-bg-color: #121212;
+  --md-muted-color: #9a9a9a;
+  --md-border-color: #3a3a3a;
+  --md-quote-bg: #1e1e1e;
+  --md-code-bg: #1c1c1c;
+  --md-link-color: #6db3f2;
+  --md-table-stripe: #191919;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--md-bg-color);
+  color: var(--md-text-color);
+  font-size: var(--md-font-size);
+  line-height: var(--md-line-height);
+  font-family: var(--md-font-family);
+  /* 允许长单词/长 URL 断行，避免横向溢出（与 canvas 路径的断行策略一致） */
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* 标题：仅收紧上下间距，不改变字号层级语义（层级字号用相对值，随 `--md-font-size` 缩放） */
+h1, h2, h3, h4, h5, h6 {
+  margin: 1.2em 0 0.6em;
+  line-height: 1.35;
+  font-weight: 700;
+}
+h1 { font-size: 1.6em; }
+h2 { font-size: 1.35em; }
+h3 { font-size: 1.18em; }
+h4 { font-size: 1.08em; }
+h5, h6 { font-size: 1em; }
+
+p { margin: 0 0 var(--md-block-gap); }
+
+/* 列表：缩进用 em 跟随字号；嵌套间距收紧避免"章内过大留白" */
+ul, ol { margin: 0 0 var(--md-block-gap); padding-left: 1.6em; }
+li { margin: 0.2em 0; }
+li > ul, li > ol { margin: 0.2em 0; }
+
+/* 引用：左侧边框 + 浅底，不参与正文测量之外的分栏（防跨页装饰错位） */
+blockquote {
+  margin: 0 0 var(--md-block-gap);
+  padding: 0.4em 0.9em;
+  border-left: 3px solid var(--md-border-color);
+  background: var(--md-quote-bg);
+  color: var(--md-muted-color);
+}
+
+/* 代码：行内与块级分治；块级横向滚动而非换行（保持代码可读） */
+code {
+  font-family: var(--md-code-font-family);
+  background: var(--md-code-bg);
+  padding: var(--md-inline-padding);
+  border-radius: 3px;
+  font-size: 0.92em;
+}
+pre {
+  margin: 0 0 var(--md-block-gap);
+  padding: 0.75em 0.9em;
+  background: var(--md-code-bg);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 0.9em;
+  /* 块级代码保持原样换行语义 */
+  white-space: pre;
+}
+
+/* 表格：整块横向滚动（窄屏不挤压列宽），表头加粗 + 斑马纹 */
+table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  margin: 0 0 var(--md-block-gap);
+  border-collapse: collapse;
+  overflow-x: auto;
+}
+th, td {
+  border: 1px solid var(--md-border-color);
+  padding: 0.35em 0.6em;
+}
+th { font-weight: 700; background: var(--md-table-stripe); }
+tbody tr:nth-child(even) { background: var(--md-table-stripe); }
+
+hr {
+  margin: 1.2em 0;
+  border: 0;
+  border-top: 1px solid var(--md-border-color);
+}
+
+a { color: var(--md-link-color); text-decoration: none; }
+img { max-width: 100%; height: auto; }
+
+/* 任务列表（GFM）：去掉默认项目符号，勾选态用字符表达（不依赖字体图标） */
+li.task-list-item { list-style: none; margin-left: -1.2em; }
+li.task-list-item input { margin-right: 0.4em; }
+
+/* 富渲染产物：mermaid SVG 与公式块都不得溢出容器 */
+.mermaid { text-align: center; overflow-x: auto; }
+.mermaid svg { max-width: 100%; height: auto; }
+.katex-display { overflow-x: auto; overflow-y: hidden; }
+.katex { font-size: 1.05em; }
+
+/* 富渲染降级态：渲染失败时保留可读的代码块外观并给出视觉提示 */
+.md-rich-fallback {
+  border-left: 3px solid var(--md-border-color);
+  background: var(--md-code-bg);
+  color: var(--md-muted-color);
+  padding: 0.6em 0.9em;
+  margin: 0 0 var(--md-block-gap);
+  font-family: var(--md-code-font-family);
+  font-size: 0.9em;
+  white-space: pre-wrap;
+}
