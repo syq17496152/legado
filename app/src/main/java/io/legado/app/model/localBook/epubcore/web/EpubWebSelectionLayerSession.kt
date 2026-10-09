@@ -79,6 +79,9 @@ class EpubWebSelectionLayerSession(
     private val archive: EpubArchive
 ) : Closeable {
 
+    /** 压缩包回源单一实现（与布局会话/可见 WebView 后端共用，阶段 2.3）。 */
+    private val archiveWebResponse = EpubArchiveWebResponse(archive)
+
     private val mutex = Mutex()
     private val handler = Handler(Looper.getMainLooper())
     private var webView: WebView? = null
@@ -166,7 +169,7 @@ class EpubWebSelectionLayerSession(
                     return@runOnUI
                 }
                 val view = ensureWebView()
-                val baseUrl = buildBaseUrl(request.chapterHref)
+                val baseUrl = archiveWebResponse.baseUrl(request.chapterHref)
                 fun evaluateSelection() {
                     if (token != currentToken) return
                     view.measure(
@@ -1067,68 +1070,14 @@ class EpubWebSelectionLayerSession(
     }
 
     private fun archiveResponse(url: String?, request: EpubWebLayoutRequest): WebResourceResponse? {
-        val path = archivePath(url) ?: return emptyResponse()
-        if (path == ReaderFontPath) return readerFontResponse(request)
-        return runCatching {
-            if (!archive.exists(path)) return emptyResponse()
-            val bytes = archive.readBytes(path)
-            WebResourceResponse(
-                mimeType(path),
-                if (path.endsWith(".css", true) || path.endsWith(".html", true) || path.endsWith(".xhtml", true)) "UTF-8" else null,
-                ByteArrayInputStream(bytes)
-            )
-        }.getOrElse {
-            emptyResponse()
-        }
-    }
-
-    private fun readerFontResponse(request: EpubWebLayoutRequest): WebResourceResponse {
-        val fontPath = request.readerFontPath?.takeIf { it.isNotBlank() } ?: return emptyResponse()
-        return runCatching {
-            val inputStream = if (fontPath.startsWith("content://", ignoreCase = true)) {
-                appCtx.contentResolver.openInputStream(Uri.parse(fontPath))
-            } else {
-                java.io.File(fontPath.removePrefix("file://")).inputStream()
-            } ?: return emptyResponse()
-            WebResourceResponse(mimeType(fontPath), null, inputStream)
-        }.getOrElse {
-            emptyResponse()
-        }
-    }
-
-    private fun emptyResponse(): WebResourceResponse {
-        return WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
-    }
-
-    private fun archivePath(url: String?): String? {
-        if (url.isNullOrBlank()) return null
-        val uri = runCatching { Uri.parse(url) }.getOrNull() ?: return null
-        if (!uri.host.equals(Host, ignoreCase = true)) return null
-        val path = uri.path?.trimStart('/') ?: return null
-        if (path.isBlank()) return null
-        return EpubPath.normalize(Uri.decode(path))
-    }
-
-    private fun buildBaseUrl(chapterHref: String): String {
-        return "https://$Host/${Uri.encode(EpubPath.stripFragment(chapterHref), "/")}"
-    }
-
-    private fun mimeType(path: String): String {
-        return when (path.substringAfterLast('.', "").lowercase()) {
-            "css" -> "text/css"
-            "html", "htm" -> "text/html"
-            "xhtml", "xml" -> "application/xhtml+xml"
-            "svg" -> "image/svg+xml"
-            "jpg", "jpeg" -> "image/jpeg"
-            "png" -> "image/png"
-            "gif" -> "image/gif"
-            "webp" -> "image/webp"
-            "ttf" -> "font/ttf"
-            "otf" -> "font/otf"
-            "woff" -> "font/woff"
-            "woff2" -> "font/woff2"
-            else -> URLConnection.guessContentTypeFromName(path) ?: "application/octet-stream"
-        }
+        // 单一回源源：与布局会话/可见 WebView 后端共用（阶段 2.3 收口，避免三份实现漂移）。
+        val fontPath = request.readerFontPath
+        return archiveWebResponse.responseFor(
+            url = url,
+            readerFont = fontPath
+                ?.takeIf { it.isNotBlank() }
+                ?.let { EpubArchiveWebResponse.ReaderFontBinding(entityPath = it) }
+        )
     }
 
     private fun String.cssString(): String {
@@ -1179,8 +1128,6 @@ class EpubWebSelectionLayerSession(
     }
 
     private companion object {
-        private const val Host = "epub.local"
-        private const val ReaderFontPath = "__legado_reader_font__"
         private const val WebViewBlank = "about:blank"
         private const val MaxReadyAttempts = 6
         private const val ReadyRetryDelayMillis = 80L
