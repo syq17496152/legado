@@ -15,6 +15,7 @@ object LocalConfig : SharedPreferences
 by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
 
     private const val versionCodeKey = "appVersionCode"
+    private const val versionNameKey = "appVersionName"
 
     /**
      * 本地密码,用来对需要备份的敏感信息加密,如 webdav 配置等
@@ -88,6 +89,20 @@ by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
         set(value) {
             edit { putLong(versionCodeKey, value) }
         }
+
+    /**
+     * 上一版本名（unify-changelog-and-release）。
+     *
+     * 用于「更新版本后」弹窗按「上一版本 → 当前版本」区间展示更新说明。
+     * 与 [versionCode] 同法持久化，在 `MainActivity.upVersion()` 中「先读旧值（= 上一版本）再写回当前值」；
+     * 首轮升级（或从旧版本升级）该键为空 ⇒ 展示侧兜底仅取最新一天。
+     */
+    var appVersionName: String
+        get() = getString(versionNameKey, "") ?: ""
+        set(value) {
+            edit { putString(versionNameKey, value) }
+        }
+
     var lastCheckUpdate: Long
         get() = getLong("lastCheckUpdate", 0)
         set(value) {

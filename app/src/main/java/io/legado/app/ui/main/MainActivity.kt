@@ -133,6 +133,7 @@ import splitties.views.bottomPadding
 import java.io.File
 import kotlin.coroutines.resume
 import io.legado.app.help.update.AppUpdate
+import io.legado.app.help.update.UpdateLogDigest
 import io.legado.app.ui.about.UpdateDialog
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.utils.dpToPx
@@ -2191,7 +2192,11 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             block.resume(null)
             return@sc
         }
+        // unify-changelog-and-release：先取「上一版本名」（此刻 LocalConfig.versionCode 仍是旧值），
+        // 再写回当前版本号与版本名，供下次升级时确定区间起点。
+        val preVersionName = LocalConfig.appVersionName
         LocalConfig.versionCode = appInfo.versionCode
+        LocalConfig.appVersionName = appInfo.versionName
         if (LocalConfig.isFirstOpenApp) {
             val help = String(assets.open("web/help/md/appHelp.md").readBytes())
             val dialog = TextDialog(getString(R.string.help), help, TextDialog.Mode.MD)
@@ -2200,12 +2205,19 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             }
             showDialogFragment(dialog)
         } else if (!BuildConfig.BUILD_DEBUG) {
+            // 按「上一版本 → 当前版本」区间展示（去日期 + 按分节合并），
+            // 不再整份展示 updateLog.md 全量历史；无可展示内容则不弹窗。
             val log = String(assets.open("updateLog.md").readBytes())
-            val dialog = TextDialog(getString(R.string.update_log), log, TextDialog.Mode.MD)
-            dialog.setOnDismissListener {
+            val digest = UpdateLogDigest.digest(log, preVersionName, appInfo.versionName)
+            if (digest == null) {
                 block.resume(null)
+            } else {
+                val dialog = TextDialog(getString(R.string.update_log), digest, TextDialog.Mode.MD)
+                dialog.setOnDismissListener {
+                    block.resume(null)
+                }
+                showDialogFragment(dialog)
             }
-            showDialogFragment(dialog)
         } else {
             block.resume(null)
         }

@@ -83,6 +83,10 @@ TRIVIAL_KEYWORDS = (
 CONTRAST_TAIL_MARKS = ("现在", "现已", "改为", "调整为")
 CONTRAST_HEAD_MARKS = ("此前", "原来", "原先", "之前")
 
+# 输出层分节规范顺序（unify-changelog-and-release）：跨天合并后按此顺序渲染；
+# 源文件中的自定义分节名（非下列四类）按首次出现顺序追加在后，保证通用性。
+SECTION_ORDER = ("### 新增", "### 优化", "### 修复", "### 其它")
+
 
 def strip_ws(text: str) -> str:
     """去掉所有空白（字数判定口径：Unicode 码点数，中文按 1 计）"""
@@ -406,10 +410,14 @@ def dedup_items(items: List[str]) -> Tuple[List[str], int]:
     return kept, dropped
 
 
-def clean_day_block(date_str: str, blocks: List[str]) -> Tuple[str, Dict[str, int]]:
+def clean_day_block(date_str: str,
+                    blocks: List[str]) -> Tuple[str, Dict[str, List[str]], Dict[str, int]]:
     """清洗单天：C3 事务剔除 → C2 去重 → C4 前后对比截断 → C5 超长压缩
 
-    返回 (清洗后块文本, 统计)。标题沿用该日首个块的原文（保留其括号说明）。
+    返回 (带日期标题的块文本, 分节→清理后条目, 统计)。
+    - **块文本沿用原口径（含 `**YYYY/MM/DD（…）**` 标题）**：仅供 V3 单天字数门禁使用；
+    - **分节→条目**（保持分节首次出现顺序）：供 `clean_release_notes` 做**跨天合并**
+      （unify-changelog-and-release：输出层去日期 + 按分类合并）。
     """
     stats = {"dropped": 0, "deduped": 0, "truncated": 0}
     title = blocks[0].splitlines()[0].strip()
@@ -431,6 +439,7 @@ def clean_day_block(date_str: str, blocks: List[str]) -> Tuple[str, Dict[str, in
                 section_items[section_order[-1]].append(s[2:].strip())
 
     lines = [title]
+    cleaned_sections: Dict[str, List[str]] = {}
     for name in section_order:
         cleaned: List[str] = []
         for item in section_items[name]:
@@ -448,9 +457,10 @@ def clean_day_block(date_str: str, blocks: List[str]) -> Tuple[str, Dict[str, in
                 stats["truncated"] += 1
             final.append(new2)
         if final:
+            cleaned_sections[name] = final
             lines.append(name)
             lines.extend(f"- {i}" for i in final)
-    return "\n".join(lines), stats
+    return "\n".join(lines), cleaned_sections, stats
 
 
 def clean_release_notes(content: str, version: str,
@@ -499,11 +509,14 @@ def clean_release_notes(content: str, version: str,
         grouped[d].append(b)
 
     total = {"dropped": 0, "deduped": 0, "truncated": 0}
-    rendered: List[str] = []
+    day_texts: List[str] = []                     # 门禁口径：带日期的逐天文本
+    merged: Dict[str, List[str]] = {}             # 输出口径：跨天按分节合并
+    merged_order: List[str] = []                  # 分节首次出现顺序
     for d in order:  # order 已是倒序（结构门禁保证）
-        text, stats = clean_day_block(d, grouped[d])
+        text, sections, stats = clean_day_block(d, grouped[d])
         for k in total:
             total[k] += stats[k]
+        # V3 单天字数门禁：沿用「含日期标题」的原口径，确保门禁语义零变化
         chars = day_char_count(text)
         if chars > MAX_DAY_CHARS:
             log("CLEAN", f"清洗后仍超长: {d} 实际{chars}字 限制{MAX_DAY_CHARS}字", "ERROR")
@@ -512,8 +525,26 @@ def clean_release_notes(content: str, version: str,
             if line.startswith("- ") and len(strip_ws(line[2:])) > MAX_ITEM_CHARS:
                 log("CLEAN", f"清洗后仍有超长条目({d}): {strip_ws(line[2:])[:30]}...", "ERROR")
                 sys.exit(1)
-        rendered.append(text)
+        day_texts.append(text)
+        for name, items in sections.items():
+            if name not in merged:
+                merged[name] = []
+                merged_order.append(name)
+            merged[name].extend(items)
 
+    # 跨天去重（C2，输出层）：同日去重已在 clean_day_block 完成，此处处理跨天重复
+    for name in list(merged.keys()):
+        deduped, dropped = dedup_items(merged[name])
+        total["deduped"] += dropped
+        merged[name] = deduped
+
+    # 渲染：规范分节顺序优先（新增/优化/修复/其它），其余自定义分节按首次出现顺序追加
+    ordered = [s for s in SECTION_ORDER if s in merged] + \
+              [s for s in merged_order if s not in SECTION_ORDER]
+    rendered = [
+        name + "\n" + "\n".join(f"- {i}" for i in merged[name])
+        for name in ordered if merged[name]
+    ]
     body = f"{start_version} → {version}\n\n" + "\n\n".join(rendered)
     if len(body) > MAX_BODY_CHARS:
         log("CLEAN", f"发版正文超长: {len(body)} 字符 限制{MAX_BODY_CHARS}"
@@ -521,13 +552,14 @@ def clean_release_notes(content: str, version: str,
         sys.exit(1)
 
     before_items = sum(1 for _, b in in_range for line in b.splitlines() if line.strip().startswith("- "))
-    after_items = sum(1 for t in rendered for line in t.splitlines() if line.startswith("- "))
+    after_items = sum(len(merged[name]) for name in ordered)
     total["before_items"] = before_items
     total["after_items"] = after_items
-    total["days"] = len(rendered)
+    total["days"] = len(day_texts)
     total["chars"] = len(body)
 
-    log("CLEAN", f"区间 {start_version}({start_date}) → {version}({end_date})，覆盖 {len(rendered)} 天")
+    log("CLEAN", f"区间 {start_version}({start_date}) → {version}({end_date})，覆盖 {len(day_texts)} 天"
+                 f"，合并为 {len(rendered)} 个分节（无日期）")
     log("CLEAN", f"清洗统计: 条目 {before_items} → {after_items}"
                  f"（剔除事务 {total['dropped']} / 去重 {total['deduped']} / 压缩 {total['truncated']}），"
                  f"正文 {len(body)} 字符")
