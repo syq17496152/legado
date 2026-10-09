@@ -2,7 +2,13 @@ package io.legado.app.ui.main.explore
 
 import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.AppShapes
+import io.legado.app.ui.widget.components.EmptyStateAction
+import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.components.MenuAction
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Surface
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -75,6 +81,7 @@ import io.legado.app.ui.widget.compose.SearchBookPreviewOverlay
 import io.legado.app.ui.widget.compose.SearchBookPreviewState
 import io.legado.app.ui.widget.compose.appSettingPanelBackground
 import io.legado.app.ui.widget.compose.rememberAppManagementPalette
+import io.legado.app.ui.widget.compose.AppUiTokens
 import io.legado.app.ui.widget.image.CoverImageView
 import kotlin.math.roundToInt
 import androidx.compose.material3.MaterialTheme
@@ -98,6 +105,12 @@ fun DiscoverySuiteHomeScreen(
     onSearchClick: () -> Unit,
     onSuiteClick: () -> Unit,
     onSuiteSelect: (DiscoverySuite) -> Unit,
+    onAddWidget: () -> Unit,
+    onWidgetLongPress: (DiscoverySuiteWidget) -> Unit,
+    onGenerateStarterSuite: () -> Unit,
+    onCancelStarterSuite: () -> Unit,
+    starterRunning: Boolean,
+    starterProgress: StarterSuiteProgress?,
     onBookClick: (SearchBook) -> Unit,
     onBookPreviewOpen: (SearchBook) -> Unit,
     onTagClick: (DiscoverySuiteWidgetTarget) -> Unit,
@@ -155,35 +168,47 @@ fun DiscoverySuiteHomeScreen(
             DiscoverySuiteSearchBar(
                 selectedSuiteId = selectedSuiteId,
                 suites = suites,
+                hasSuite = selectedSuite != null,
                 renderConfig = renderConfig,
                 onSearchClick = onSearchClick,
                 onSuiteClick = onSuiteClick,
-                onSuiteSelect = onSuiteSelect
+                onSuiteSelect = onSuiteSelect,
+                onAddWidget = onAddWidget
             )
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = bottomBarPadding + 12.dp),
                 content = {
-                    if (selectedSuite == null) {
+                    // 空态与生成态合并为同一分支：套件缺失 或 当前套件无控件 ⇒ 给「一键生成 + 手动创建」
+                    // （F34：原两个分支都是一句文案 + 一个按钮，用户不知道如何起步）
+                    if (selectedSuite == null || selectedSuite.widgets.isEmpty()) {
                         item(key = "suite_empty") {
-                            DiscoverySuiteEmptyState(
-                                title = context.getString(R.string.discovery_suite_empty_title),
-                                summary = context.getString(R.string.discovery_suite_empty_summary),
-                                action = context.getString(R.string.discovery_suite_manage),
-                                renderConfig = renderConfig,
-                                onActionClick = onSuiteClick
-                            )
-                        }
-                    } else if (selectedSuite.widgets.isEmpty()) {
-                        item(key = "suite_no_widgets") {
-                            DiscoverySuiteEmptyState(
-                                title = context.getString(R.string.discovery_suite_no_widgets_title),
-                                summary = context.getString(R.string.discovery_suite_no_widgets_summary),
-                                action = context.getString(R.string.discovery_suite_manage),
-                                renderConfig = renderConfig,
-                                onActionClick = onSuiteClick
-                            )
+                            Box(modifier = Modifier.fillParentMaxSize()) {
+                                if (starterRunning) {
+                                    StarterSuiteProgressPanel(
+                                        progress = starterProgress,
+                                        onCancel = onCancelStarterSuite
+                                    )
+                                } else {
+                                    DiscoverySuiteEmptyState(
+                                        title = if (selectedSuite == null) {
+                                            context.getString(R.string.discovery_suite_empty_title)
+                                        } else {
+                                            context.getString(R.string.discovery_suite_no_widgets_title)
+                                        },
+                                        summary = if (selectedSuite == null) {
+                                            context.getString(R.string.discovery_suite_empty_summary)
+                                        } else {
+                                            context.getString(R.string.discovery_suite_no_widgets_summary)
+                                        },
+                                        primaryLabel = context.getString(R.string.discovery_suite_generate_once),
+                                        onPrimary = onGenerateStarterSuite,
+                                        secondaryLabel = context.getString(R.string.discovery_suite_manage),
+                                        onSecondary = onSuiteClick
+                                    )
+                                }
+                            }
                         }
                     } else {
                         selectedSuite.widgets.forEach { widget ->
@@ -201,6 +226,7 @@ fun DiscoverySuiteHomeScreen(
                                         onRefreshWidget = onRefreshWidget,
                                         onHorizontalLoadMore = onHorizontalLoadMore,
                                         onRankedLoadMore = onRankedLoadMore,
+                                        onLongPress = { onWidgetLongPress(widget) },
                                         fragment = fragment,
                                         lifecycle = lifecycle
                                     )
@@ -256,10 +282,12 @@ private fun DiscoverySuiteAnimatedWidgetContainer(
 private fun DiscoverySuiteSearchBar(
     selectedSuiteId: String,
     suites: List<DiscoverySuite>,
+    hasSuite: Boolean,
     renderConfig: BookshelfListRenderConfig,
     onSearchClick: () -> Unit,
     onSuiteClick: () -> Unit,
-    onSuiteSelect: (DiscoverySuite) -> Unit
+    onSuiteSelect: (DiscoverySuite) -> Unit,
+    onAddWidget: () -> Unit
 ) {
     val context = LocalContext.current
     val palette = renderConfig.palette
@@ -349,6 +377,16 @@ private fun DiscoverySuiteSearchBar(
                             onClick = onSuiteClick
                         )
                     )
+                    // C1（2026-10-09）：胶囊菜单补「添加控件」——直达编辑器（deep-link），把
+                    // 「发现页→管理列表→详情→＋→编辑器」4 跳压到 2 跳。无套件时不展示（无宿主可加）。
+                    if (hasSuite) {
+                        add(
+                            MenuAction(
+                                title = context.getString(R.string.discovery_suite_add_widget),
+                                onClick = onAddWidget
+                            )
+                        )
+                    }
                     suites.forEach { suite ->
                         val isCurrent = suite.id == selectedSuiteId
                         add(
@@ -384,60 +422,90 @@ private fun SearchGlyph(color: Color) {
     }
 }
 
+/**
+ * 套件空态（统一走共享 [EmptyStatePlaceholder]，ui-standards/components.md §六 归口）。
+ * 主操作为「一键生成套件」，次操作为「手动创建 / 编辑套件」——直接回答"怎么开始"。
+ */
 @Composable
 private fun DiscoverySuiteEmptyState(
     title: String,
     summary: String,
-    action: String,
-    renderConfig: BookshelfListRenderConfig,
-    onActionClick: () -> Unit
+    primaryLabel: String,
+    onPrimary: () -> Unit,
+    secondaryLabel: String,
+    onSecondary: () -> Unit
 ) {
-    val palette = renderConfig.palette
+    EmptyStatePlaceholder(
+        icon = Icons.Filled.Widgets,
+        title = title,
+        subtitle = summary,
+        primaryAction = EmptyStateAction(primaryLabel, onPrimary),
+        secondaryActions = listOf(EmptyStateAction(secondaryLabel, onSecondary)),
+        modifier = Modifier.fillMaxSize()
+    )
+}
+
+/**
+ * 一键生成的进度面板（生成中替换空态显示）。
+ * 取色走 [AppUiTokens] 设置族直色（非 M3 派生色），与空态同族。
+ */
+@Composable
+internal fun StarterSuiteProgressPanel(
+    progress: StarterSuiteProgress?,
+    onCancel: () -> Unit
+) {
+    val palette = AppUiTokens.settingPalette()
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 22.dp, vertical = 96.dp),
+        modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.Center
     ) {
-        Text(
-            text = title,
-            fontSize = MaterialTheme.typography.bodyLargeX.fontSize,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = palette.titleFontFamily,
-            color = palette.primaryText
+        CircularProgressIndicator(
+            modifier = Modifier.size(36.dp),
+            color = palette.accent,
+            strokeWidth = 3.dp
         )
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = summary,
+            text = if (progress == null) {
+                LocalContext.current.getString(R.string.discovery_suite_generate_running, 0, 0)
+            } else {
+                LocalContext.current.getString(
+                    R.string.discovery_suite_generate_running,
+                    progress.done,
+                    progress.total
+                )
+            },
             fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-            fontFamily = palette.bodyFontFamily,
             color = palette.secondaryText
         )
-        Box(
-            modifier = Modifier
-                .height(42.dp)
-                .clip(RoundedCornerShape(palette.actionRadius))
-                .appSettingPanelBackground(
-                    normalColor = palette.rowColor,
-                    panelImage = renderConfig.panelImage,
-                    borderColor = palette.borderColor,
-                    radiusPx = with(LocalDensity.current) { palette.actionRadius.toPx() }
-                )
-                .clickable(onClick = onActionClick)
-                .padding(horizontal = 18.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = action,
-                fontWeight = FontWeight.Medium,
-                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
-                fontFamily = palette.bodyFontFamily,
-                color = palette.accent
-            )
-        }
+        Spacer(modifier = Modifier.height(20.dp))
+        EmptyStatePlaceholderSecondaryButton(
+            label = LocalContext.current.getString(R.string.cancel),
+            onClick = onCancel
+        )
     }
 }
 
+@Composable
+private fun EmptyStatePlaceholderSecondaryButton(label: String, onClick: () -> Unit) {
+    val palette = AppUiTokens.settingPalette()
+    Surface(
+        onClick = onClick,
+        shape = AppShapes.Button,
+        color = Color(palette.row),
+        contentColor = palette.primaryText,
+        tonalElevation = 0.dp
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DiscoverySuiteWidgetSection(
     widget: DiscoverySuiteWidget,
@@ -451,6 +519,7 @@ private fun DiscoverySuiteWidgetSection(
     onRefreshWidget: (DiscoverySuiteWidget) -> Unit,
     onHorizontalLoadMore: (DiscoverySuiteWidget) -> Unit,
     onRankedLoadMore: (DiscoverySuiteWidget, DiscoverySuiteWidgetTarget) -> Unit,
+    onLongPress: () -> Unit,
     fragment: Fragment,
     lifecycle: Lifecycle
 ) {
@@ -460,6 +529,9 @@ private fun DiscoverySuiteWidgetSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            // C3（2026-10-09）：控件区块长按 → 编辑/上移/下移/删除（不改控件内部手势，
+            // 仅承接落在区块空白处的长按）
+            .combinedClickable(onClick = {}, onLongClick = onLongPress)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(11.dp)
     ) {
@@ -535,14 +607,18 @@ private fun DiscoverySuiteWidgetSection(
                     )
                 }
             }
-            isLoading && books.isEmpty() -> Text(
-                text = LocalContext.current.getString(R.string.discovery_suite_widget_loading),
-                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-                fontFamily = palette.bodyFontFamily,
-                color = palette.secondaryText
-            )
+            // P5（2026-10-09 真机实测铁证）：原实现把「已配好书源与标签、但源站没加载出书」与
+            // 「压根没配置」共用同一句 pending 文案 ⇒ 用户以为配置丢了（实测 targets 明明有值）。
+            // 现三支合一，文案归类交给纯函数 suiteWidgetEmptyText（Loading/NotConfigured/NoContent），
+            // 语义单源且被 JVM 单测锁定。
             books.isEmpty() -> Text(
-                text = LocalContext.current.getString(R.string.discovery_suite_widget_pending),
+                text = LocalContext.current.getString(
+                    when (suiteWidgetEmptyText(isLoading, widget.targets.isNotEmpty())) {
+                        SuiteWidgetEmptyText.Loading -> R.string.discovery_suite_widget_loading
+                        SuiteWidgetEmptyText.NotConfigured -> R.string.discovery_suite_widget_pending
+                        SuiteWidgetEmptyText.NoContent -> R.string.discovery_suite_widget_no_content
+                    }
+                ),
                 fontSize = MaterialTheme.typography.bodyMedium.fontSize,
                 fontFamily = palette.bodyFontFamily,
                 color = palette.secondaryText
@@ -1346,6 +1422,21 @@ internal fun Int.withAlphaMultiplier(multiplier: Float): Int {
     val nextAlpha = (alpha * multiplier).roundToInt().coerceIn(alpha, 255)
     return (this and 0x00ffffff) or (nextAlpha shl 24)
 }
+
+/**
+ * 控件"空内容"时的文案归类（P5，纯函数，可 JVM 单测）。
+ *
+ * 背景（2026-10-09 真实源真机实测铁证）：原实现把「已配好书源与标签、但源站没加载出书」与
+ * 「压根没配置」共用同一句 pending 文案 ⇒ 用户看到「将在套件编辑中配置」会以为配置丢了。
+ */
+internal enum class SuiteWidgetEmptyText { Loading, NotConfigured, NoContent }
+
+internal fun suiteWidgetEmptyText(isLoading: Boolean, hasTargets: Boolean): SuiteWidgetEmptyText =
+    when {
+        isLoading -> SuiteWidgetEmptyText.Loading
+        !hasTargets -> SuiteWidgetEmptyText.NotConfigured
+        else -> SuiteWidgetEmptyText.NoContent
+    }
 
 private const val RANDOM_WIDGET_DISPLAY_COUNT = 6
 private const val WATERFALL_WIDGET_DISPLAY_COUNT = 24

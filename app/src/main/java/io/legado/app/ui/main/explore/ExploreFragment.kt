@@ -98,6 +98,7 @@ import io.legado.app.ui.video.VideoBookPreloader
 import io.legado.app.ui.widget.ModernActionPopup
 import io.legado.app.ui.widget.RoundedTagBarView
 import io.legado.app.ui.widget.SourceSelectDialog
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
 import io.legado.app.ui.widget.compose.showComposeActionListDialog
 import io.legado.app.ui.widget.compose.showComposeChoiceListDialog
@@ -207,6 +208,10 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     private val composeSuiteScrollToTopSignal = mutableIntStateOf(0)
     private val composeSuiteConfig = mutableStateOf(DiscoverySuiteStore.load())
     private val composeSelectedSuiteId = mutableStateOf(DiscoverySuiteStore.selectedSuiteId())
+    // 一键生成（A）：运行态 + 进度（源计数），供空态切换为进度面板并可取消
+    private val composeSuiteStarterRunning = mutableStateOf(false)
+    private val composeSuiteStarterProgress = mutableStateOf<StarterSuiteProgress?>(null)
+    private var suiteStarterJob: Job? = null
     private val composeSuiteWidgetBooks = mutableStateMapOf<String, List<SearchBook>>()
     private val composeSuiteRankedWidgetBooks = mutableStateMapOf<String, Map<String, List<SearchBook>>>()
     private val composeSuiteLoadingWidgets = mutableStateMapOf<String, Boolean>()
@@ -292,57 +297,67 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
         binding.composeDiscoverBooks.setContent {
-            LegadoComposeTheme {
-                ExploreModernListScreen(
-                    books = composeDiscoverBooks,
-                    layoutMode = composeDiscoverLayoutMode.intValue,
-                    listItemStyle = composeDiscoverListStyle.intValue,
-                    topPaddingPx = composeDiscoverTopPadding.intValue,
-                    scrollToTopSignal = composeDiscoverScrollToTopSignal.intValue,
-                    isLoading = composeDiscoverLoading.value,
-                    hasMore = composeDiscoverHasMore.value,
-                    isInBookshelf = { book ->
-                        composeDiscoverBookshelfVersion.intValue
-                        isInBookshelf(book)
-                    },
-                    onBookClick = ::showBookInfo,
-                    onLoadMore = { loadDiscoverBooks(reset = false) },
-                    onCanScrollBackwardChanged = { composeDiscoverCanScrollBackward = it },
-                    fragment = this@ExploreFragment,
-                    lifecycle = viewLifecycleOwner.lifecycle
-                )
+            LegadoTheme {
+                LegadoComposeTheme {
+                    ExploreModernListScreen(
+                        books = composeDiscoverBooks,
+                        layoutMode = composeDiscoverLayoutMode.intValue,
+                        listItemStyle = composeDiscoverListStyle.intValue,
+                        topPaddingPx = composeDiscoverTopPadding.intValue,
+                        scrollToTopSignal = composeDiscoverScrollToTopSignal.intValue,
+                        isLoading = composeDiscoverLoading.value,
+                        hasMore = composeDiscoverHasMore.value,
+                        isInBookshelf = { book ->
+                            composeDiscoverBookshelfVersion.intValue
+                            isInBookshelf(book)
+                        },
+                        onBookClick = ::showBookInfo,
+                        onLoadMore = { loadDiscoverBooks(reset = false) },
+                        onCanScrollBackwardChanged = { composeDiscoverCanScrollBackward = it },
+                        fragment = this@ExploreFragment,
+                        lifecycle = viewLifecycleOwner.lifecycle
+                    )
+                }
             }
         }
         binding.composeDiscoverySuite.setViewCompositionStrategy(
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
         binding.composeDiscoverySuite.setContent {
-            LegadoComposeTheme {
-                val suiteConfig = composeSuiteConfig.value
-                val selectedSuite = selectedSuite(suiteConfig)
-                DiscoverySuiteHomeScreen(
-                    selectedSuite = selectedSuite,
-                    suites = suiteConfig.suites,
-                    selectedSuiteId = composeSelectedSuiteId.value,
-                    widgetBooks = composeSuiteWidgetBooks,
-                    rankedWidgetBooks = composeSuiteRankedWidgetBooks,
-                    loadingWidgetIds = composeSuiteLoadingWidgets
-                        .filterValues { it }
-                        .keys,
-                    scrollToTopSignal = composeSuiteScrollToTopSignal.intValue,
-                    onSearchClick = { SearchActivity.start(requireContext(), key = null) },
-                    onSuiteClick = ::openSuiteManagePage,
-                    onSuiteSelect = ::selectDiscoverySuite,
-                    onBookClick = ::showBookInfo,
-                    onBookPreviewOpen = ::showBookInfo,
-                    onTagClick = ::openSuiteTarget,
-                    onRefreshWidget = ::refreshSuiteWidget,
-                    onHorizontalLoadMore = ::loadMoreSuiteHorizontalWidget,
-                    onRankedLoadMore = ::loadMoreSuiteRankedWidget,
-                    onCanScrollBackwardChanged = { composeSuiteCanScrollBackward = it },
-                    fragment = this@ExploreFragment,
-                    lifecycle = viewLifecycleOwner.lifecycle
-                )
+            LegadoTheme {
+                LegadoComposeTheme {
+                    val suiteConfig = composeSuiteConfig.value
+                    val selectedSuite = selectedSuite(suiteConfig)
+                    DiscoverySuiteHomeScreen(
+                        selectedSuite = selectedSuite,
+                        suites = suiteConfig.suites,
+                        selectedSuiteId = composeSelectedSuiteId.value,
+                        widgetBooks = composeSuiteWidgetBooks,
+                        rankedWidgetBooks = composeSuiteRankedWidgetBooks,
+                        loadingWidgetIds = composeSuiteLoadingWidgets
+                            .filterValues { it }
+                            .keys,
+                        scrollToTopSignal = composeSuiteScrollToTopSignal.intValue,
+                        onSearchClick = { SearchActivity.start(requireContext(), key = null) },
+                        onSuiteClick = ::openSuiteManagePage,
+                        onSuiteSelect = ::selectDiscoverySuite,
+                        onAddWidget = ::openSuiteWidgetEditorForCurrent,
+                        onWidgetLongPress = ::showSuiteWidgetActions,
+                        onGenerateStarterSuite = ::generateStarterSuite,
+                        onCancelStarterSuite = ::cancelStarterSuite,
+                        starterRunning = composeSuiteStarterRunning.value,
+                        starterProgress = composeSuiteStarterProgress.value,
+                        onBookClick = ::showBookInfo,
+                        onBookPreviewOpen = ::showBookInfo,
+                        onTagClick = ::openSuiteTarget,
+                        onRefreshWidget = ::refreshSuiteWidget,
+                        onHorizontalLoadMore = ::loadMoreSuiteHorizontalWidget,
+                        onRankedLoadMore = ::loadMoreSuiteRankedWidget,
+                        onCanScrollBackwardChanged = { composeSuiteCanScrollBackward = it },
+                        fragment = this@ExploreFragment,
+                        lifecycle = viewLifecycleOwner.lifecycle
+                    )
+                }
             }
         }
         applyDiscoveryMode(loadData = false)
@@ -481,6 +496,8 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
         saveCurrentSuiteSnapshot()
         suiteLoadJob?.cancel()
         suiteLoadJob = null
+        // 一键生成 Job 随套件模式退出一起取消（spec E3：探测进行中离开页面不产生半成品）
+        cancelStarterSuite()
         clearSuiteRuntimeState()
     }
 
@@ -1352,6 +1369,186 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
     private fun openSuiteManagePage() {
         startActivity<DiscoverySuiteManageActivity>()
     }
+
+    /** C1：胶囊菜单「添加控件」→ 直达管理页编辑器（deep-link），全项目只保留一套控件编辑 UI。 */
+    private fun openSuiteWidgetEditorForCurrent() {
+        val suite = selectedSuite() ?: return
+        openSuiteWidgetEditor(suite.id, null)
+    }
+
+    private fun openSuiteWidgetEditor(suiteId: String, widgetId: String?) {
+        startActivity<DiscoverySuiteManageActivity> {
+            putExtra(DiscoverySuiteManageActivity.EXTRA_SUITE_ID, suiteId)
+            putExtra(DiscoverySuiteManageActivity.EXTRA_WIDGET_ID, widgetId)
+        }
+    }
+
+    /**
+     * 计算「移动一个控件」后的目标顺序（AD-06 瀑布流置底单源）。
+     * 返回 null 表示**移动无效果**（越界 / 单控件 / 被瀑布流置底语义抵消）⇒ 调用方不显示该项。
+     */
+    private fun movedSuiteWidgets(
+        widgets: List<DiscoverySuiteWidget>,
+        widgetId: String,
+        delta: Int
+    ): List<DiscoverySuiteWidget>? {
+        val index = widgets.indexOfFirst { it.id == widgetId }
+        if (index < 0) return null
+        val target = index + delta
+        if (target !in widgets.indices) return null
+        val reordered = widgets.toMutableList().apply { add(target, removeAt(index)) }
+        val normalized = reordered.withWaterfallPinnedBottom()
+        val newIndex = normalized.indexOfFirst { it.id == widgetId }
+        if (newIndex < 0 || newIndex == index) return null
+        return normalized.mapIndexed { i, widget -> widget.copy(order = i) }
+    }
+
+    /** C3：控件区块长按 → 编辑 / 上移 / 下移 / 删除（不可用项直接不出现在菜单里，避免"点了没反应"）。 */
+    private fun showSuiteWidgetActions(widget: DiscoverySuiteWidget) {
+        val suite = selectedSuite() ?: return
+        val widgets = suite.widgets
+        val index = widgets.indexOfFirst { it.id == widget.id }
+        if (index < 0) return
+        val actions = buildList {
+            add(SuiteWidgetAction.Edit to getString(R.string.edit))
+            if (movedSuiteWidgets(widgets, widget.id, -1) != null) {
+                add(SuiteWidgetAction.MoveUp to getString(R.string.discovery_suite_move_up))
+            }
+            if (movedSuiteWidgets(widgets, widget.id, 1) != null) {
+                add(SuiteWidgetAction.MoveDown to getString(R.string.discovery_suite_move_down))
+            }
+            add(SuiteWidgetAction.Delete to getString(R.string.delete))
+        }
+        showComposeActionListDialog(
+            title = widget.title.ifBlank { getString(R.string.discovery_suite_add_widget) },
+            labels = actions.map { it.second },
+            dangerIndices = setOf(actions.lastIndex),
+            onSelected = { which ->
+                when (actions.getOrNull(which)?.first) {
+                    SuiteWidgetAction.Edit -> openSuiteWidgetEditor(suite.id, widget.id)
+                    SuiteWidgetAction.MoveUp -> moveSuiteWidget(suite.id, widget.id, -1)
+                    SuiteWidgetAction.MoveDown -> moveSuiteWidget(suite.id, widget.id, 1)
+                    SuiteWidgetAction.Delete -> confirmDeleteSuiteWidget(suite.id, widget.id)
+                    null -> Unit
+                }
+            }
+        )
+    }
+
+    private fun moveSuiteWidget(suiteId: String, widgetId: String, delta: Int) {
+        val current = DiscoverySuiteStore.load()
+        val suite = current.suites.firstOrNull { it.id == suiteId } ?: return
+        val moved = movedSuiteWidgets(suite.widgets, widgetId, delta) ?: return
+        val updated = current.copy(
+            suites = current.suites.map { if (it.id == suiteId) it.copy(widgets = moved) else it }
+        )
+        if (!DiscoverySuiteStore.save(updated)) {
+            context?.toastOnUi(R.string.discovery_suite_generate_save_failed)
+            return
+        }
+        // AD-07 读回校验：写盘"返回成功"不等于内容按预期落盘（历史静默分支 + sanitize 归一）
+        val expectedIds = moved.map { it.id }
+        val reloadedIds = DiscoverySuiteStore.load()
+            .suites.firstOrNull { it.id == suiteId }
+            ?.widgets
+            ?.map { it.id }
+        if (reloadedIds != expectedIds) {
+            context?.toastOnUi(R.string.discovery_suite_generate_save_failed)
+        }
+        refreshSuiteConfig()
+    }
+
+    private fun confirmDeleteSuiteWidget(suiteId: String, widgetId: String) {
+        val suite = DiscoverySuiteStore.load().suites.firstOrNull { it.id == suiteId } ?: return
+        val widget = suite.widgets.firstOrNull { it.id == widgetId } ?: return
+        showComposeConfirmDialog(
+            title = getString(R.string.delete),
+            message = widget.title.ifBlank { getString(R.string.discovery_suite_add_widget) },
+            positiveText = getString(R.string.yes),
+            negativeText = getString(R.string.no),
+            dangerPositive = true,
+            onPositive = {
+                val latest = DiscoverySuiteStore.load()
+                val updated = latest.copy(
+                    suites = latest.suites.map { item ->
+                        if (item.id == suiteId) {
+                            item.copy(widgets = item.widgets.filterNot { it.id == widgetId })
+                        } else {
+                            item
+                        }
+                    }
+                )
+                if (!DiscoverySuiteStore.save(updated)) {
+                    context?.toastOnUi(R.string.discovery_suite_generate_save_failed)
+                }
+                refreshSuiteConfig()
+            }
+        )
+    }
+
+    /** A：一键生成套件（幂等：进行中再次点击直接忽略，spec E4）。 */
+    private fun generateStarterSuite() {
+        if (suiteStarterJob?.isActive == true) return
+        val titles = DiscoverySuiteStarter.Titles(
+            suiteName = getString(R.string.discovery_suite_default_name),
+            tagBar = getString(R.string.discovery_suite_widget_type_tag_bar),
+            horizontalBooks = getString(R.string.discovery_suite_widget_type_horizontal_books),
+            waterfallBooks = getString(R.string.discovery_suite_widget_type_waterfall_books)
+        )
+        val otherGroupLabel = getString(R.string.discover_group_other)
+        composeSuiteStarterRunning.value = true
+        composeSuiteStarterProgress.value = null
+        suiteStarterJob = viewLifecycleOwner.lifecycleScope.launch {
+            val result = try {
+                runStarterSuite(titles, otherGroupLabel) { progress ->
+                    composeSuiteStarterProgress.value = progress
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                AppLog.put("一键生成套件失败", e)
+                null
+            }
+            composeSuiteStarterRunning.value = false
+            composeSuiteStarterProgress.value = null
+            if (!isAdded) return@launch
+            // spec E15：生成完成后主动刷新一次，保证发现页状态与写盘结果一致
+            refreshSuiteConfig()
+            when (result) {
+                is StarterSuiteResult.Created -> {
+                    val skipped = (result.probeTotal - result.probeUsable).coerceAtLeast(0)
+                    context?.toastOnUi(
+                        if (skipped > 0) {
+                            getString(R.string.discovery_suite_generate_done) + "\n" +
+                                getString(R.string.discovery_suite_generate_skipped, skipped)
+                        } else {
+                            getString(R.string.discovery_suite_generate_done)
+                        }
+                    )
+                    composeSuiteScrollToTopSignal.intValue++
+                }
+                StarterSuiteResult.NoUsableSource -> context?.toastOnUi(
+                    R.string.discovery_suite_generate_none
+                )
+                StarterSuiteResult.SuiteLimitReached -> context?.toastOnUi(
+                    getString(R.string.discovery_suite_generate_limit, MAX_DISCOVERY_SUITE_COUNT)
+                )
+                StarterSuiteResult.SaveFailed -> context?.toastOnUi(
+                    R.string.discovery_suite_generate_save_failed
+                )
+                null -> Unit
+            }
+        }
+    }
+
+    private fun cancelStarterSuite() {
+        suiteStarterJob?.cancel()
+        suiteStarterJob = null
+        composeSuiteStarterRunning.value = false
+        composeSuiteStarterProgress.value = null
+    }
+
+    private enum class SuiteWidgetAction { Edit, MoveUp, MoveDown, Delete }
 
     private fun selectDiscoverySuite(suite: DiscoverySuite) {
         if (suite.id.isBlank() || suite.id == composeSelectedSuiteId.value) return

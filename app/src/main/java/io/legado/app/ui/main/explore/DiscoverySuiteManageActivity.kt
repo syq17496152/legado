@@ -1,27 +1,20 @@
 package io.legado.app.ui.main.explore
 
 import android.os.Bundle
-import android.graphics.Color as AndroidColor
-import android.graphics.drawable.GradientDrawable
-import android.text.TextUtils
-import android.view.Gravity
-import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
 import android.widget.ArrayAdapter
-import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.activity.addCallback
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,12 +27,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -55,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -65,13 +56,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.core.widget.NestedScrollView
 import androidx.lifecycle.lifecycleScope
-import com.google.android.flexbox.FlexboxLayout
 import io.legado.app.R
 import io.legado.app.base.BaseActivity
+import io.legado.app.constant.AppLog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.viewbinding.ViewBinding
 import io.legado.app.base.attachComposeContent
@@ -81,22 +72,21 @@ import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.TopBarActionRow
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSourcePart
-import io.legado.app.data.entities.rule.ExploreKind
 import io.legado.app.databinding.ItemFilletCompleteTextBinding
 import io.legado.app.databinding.ItemFilletSelectorSingleBinding
 import io.legado.app.databinding.ItemFilletTextBinding
-import io.legado.app.databinding.ItemFindBookBinding
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.applyUiBodyTypefaceDeep
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.lib.theme.UiCorner
-import io.legado.app.help.source.exploreKinds
 import io.legado.app.ui.main.bookshelf.compose.BookshelfListRenderConfig
 import io.legado.app.ui.main.bookshelf.compose.rememberBookshelfListRenderConfig
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.components.installGlassTopBar
 import io.legado.app.ui.widget.compose.LegadoComposeTheme
+import io.legado.app.ui.widget.components.EmptyStateAction
+import io.legado.app.ui.widget.components.EmptyStatePlaceholder
 import io.legado.app.ui.widget.compose.AppManagementIconAction
 import io.legado.app.ui.widget.compose.AppManagementListRow
 import io.legado.app.ui.widget.compose.AppManagementMenuAction
@@ -108,7 +98,9 @@ import io.legado.app.ui.widget.compose.showComposeTextInputDialog
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import sh.calvin.reorderable.ReorderableItem
@@ -132,6 +124,10 @@ class DiscoverySuiteManageActivity : BaseActivity<ViewBinding>() {
     private var loadingSourceTagUrlsState by mutableStateOf<Set<String>>(emptySet())
     private var loadedSourceTagUrlsState by mutableStateOf<Set<String>>(emptySet())
     private var screenModeState by mutableStateOf<DiscoverySuiteManageMode>(DiscoverySuiteManageMode.List)
+    // 一键生成（A）：运行态 + 进度，供列表空态切换为进度面板并可取消
+    private var starterRunningState by mutableStateOf(false)
+    private var starterProgressState by mutableStateOf<StarterSuiteProgress?>(null)
+    private var starterJob: Job? = null
 
     // ui-theme-governance-polish P6：管理族宿主接入背景透明度（1.5 封闭清单成员）
     override fun manageBackgroundAlphaEnabled(): Boolean = true
@@ -140,6 +136,16 @@ class DiscoverySuiteManageActivity : BaseActivity<ViewBinding>() {
         onBackPressedDispatcher.addCallback(this) {
             handleBackNavigation()
         }
+        // C1 深链：从发现页胶囊「添加控件 / 编辑控件」直达编辑器（保存后才落盘）。
+        // 参数非法由 refreshConfig() → validatedAgainst(config) 回落 List/Detail（spec E13）。
+        intent?.getStringExtra(EXTRA_SUITE_ID)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { suiteId ->
+                screenModeState = DiscoverySuiteManageMode.WidgetEditor(
+                    suiteId = suiteId,
+                    widgetId = intent.getStringExtra(EXTRA_WIDGET_ID)
+                )
+            }
         initComposeContent()
         refreshConfig()
         updateTitleBar()
@@ -155,67 +161,71 @@ class DiscoverySuiteManageActivity : BaseActivity<ViewBinding>() {
     @OptIn(ExperimentalMaterial3Api::class)
     private fun initComposeContent() {
         binding.root.attachComposeContent {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
-                LegadoTheme {
+            // G-37：宿主内容根必须处于 LegadoTheme 作用域（原仅顶栏包 LegadoTheme，内容区裸奔 ⇒ 门禁拦下）
+            LegadoTheme {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // ---- 顶栏（原 installGlassTopBar 注入的 GlassTopAppBar：标题/返回/动作逐项不变）----
                     GlassTopAppBar(
                         title = topBarTitleState,
                         navIcon = Icons.AutoMirrored.Filled.ArrowBack,
                         onNavClick = { handleBackNavigation() },
                         actions = { TopBarActionRow(topBarActionsState) }
                     )
-                }
-                Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                LegadoComposeTheme {
-                    when (val mode = screenModeState) {
-                        is DiscoverySuiteManageMode.WidgetEditor -> {
-                            val suite = configState.suites.firstOrNull { it.id == mode.suiteId }
-                            val widget = suite?.widgets?.firstOrNull { it.id == mode.widgetId }
-                            DiscoverySuiteWidgetEditorScreen(
-                                suite = suite,
-                                widget = widget,
-                                sourceOptions = sourceTagOptionsState,
-                                loadingOptions = loadingTagsState,
-                                loadingSourceUrls = loadingSourceTagUrlsState,
-                                loadedSourceUrls = loadedSourceTagUrlsState,
-                                onLoadSourceTags = ::loadSourceTags,
-                                validateTargets = ::widgetTargetsError,
-                                onSave = { title, type, targets ->
-                                    saveWidget(mode.suiteId, widget, title, type, targets)
-                                },
-                                onCancel = { closeWidgetEditor(mode.suiteId) }
-                            )
-                        }
-                        is DiscoverySuiteManageMode.Detail -> {
-                            val suite = configState.suites.firstOrNull { it.id == mode.suiteId }
-                            DiscoverySuiteDetailScreen(
-                                suite = suite,
-                                loadingOptions = loadingTagsState,
-                                sourceCount = sourceTagOptionsState.size,
-                                tagOptionCount = sourceTagOptionsState.sumOf { it.tags.size },
-                                onOpacityMultiplierChange = ::updateSuiteOpacityMultiplier,
-                                onEditWidget = { targetSuite, targetWidget ->
-                                    openWidgetEditor(targetSuite, targetWidget)
-                                },
-                                onDeleteWidget = ::confirmDeleteWidget,
-                                onReorderWidgets = ::reorderWidgets
-                            )
-                        }
-                        DiscoverySuiteManageMode.List -> {
-                            DiscoverySuiteListScreen(
-                                config = configState,
-                                selectedSuiteId = selectedSuiteIdState,
-                                loadingOptions = loadingTagsState,
-                                sourceCount = sourceTagOptionsState.size,
-                                tagOptionCount = sourceTagOptionsState.sumOf { it.tags.size },
-                                onOpenSuite = ::openSuiteDetail,
-                                onSetCurrentSuite = ::selectSuite,
-                                onRenameSuite = ::showRenameSuiteDialog,
-                                onAliasSuite = ::showSuiteAliasDialog,
-                                onDeleteSuite = ::confirmDeleteSuite
-                            )
-                        }
+                    Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                        LegadoComposeTheme {
+                            when (val mode = screenModeState) {
+                            is DiscoverySuiteManageMode.WidgetEditor -> {
+                                val suite = configState.suites.firstOrNull { it.id == mode.suiteId }
+                                val widget = suite?.widgets?.firstOrNull { it.id == mode.widgetId }
+                                DiscoverySuiteWidgetEditorScreen(
+                                    suite = suite,
+                                    widget = widget,
+                                    sourceOptions = sourceTagOptionsState,
+                                    loadingOptions = loadingTagsState,
+                                    loadingSourceUrls = loadingSourceTagUrlsState,
+                                    loadedSourceUrls = loadedSourceTagUrlsState,
+                                    onLoadSourceTags = ::loadSourceTags,
+                                    validateTargets = ::widgetTargetsError,
+                                    onSave = { title, type, targets ->
+                                        saveWidget(mode.suiteId, widget, title, type, targets)
+                                    },
+                                    onCancel = { closeWidgetEditor(mode.suiteId) }
+                                )
+                            }
+                            is DiscoverySuiteManageMode.Detail -> {
+                                val suite = configState.suites.firstOrNull { it.id == mode.suiteId }
+                                DiscoverySuiteDetailScreen(
+                                    suite = suite,
+                                    loadingOptions = loadingTagsState,
+                                    sourceCount = sourceTagOptionsState.size,
+                                    onOpacityMultiplierChange = ::updateSuiteOpacityMultiplier,
+                                    onEditWidget = { targetSuite, targetWidget ->
+                                        openWidgetEditor(targetSuite, targetWidget)
+                                    },
+                                    onDeleteWidget = ::confirmDeleteWidget,
+                                    onReorderWidgets = ::reorderWidgets
+                                )
+                            }
+                            DiscoverySuiteManageMode.List -> {
+                                DiscoverySuiteListScreen(
+                                    config = configState,
+                                    selectedSuiteId = selectedSuiteIdState,
+                                    loadingOptions = loadingTagsState,
+                                    sourceCount = sourceTagOptionsState.size,
+                                    starterRunning = starterRunningState,
+                                    starterProgress = starterProgressState,
+                                    onGenerateStarterSuite = ::generateStarterSuite,
+                                    onCancelStarterSuite = ::cancelStarterSuite,
+                                    onCreateSuite = ::showCreateSuiteDialog,
+                                    onOpenSuite = ::openSuiteDetail,
+                                    onSetCurrentSuite = ::selectSuite,
+                                    onRenameSuite = ::showRenameSuiteDialog,
+                                    onAliasSuite = ::showSuiteAliasDialog,
+                                    onDeleteSuite = ::confirmDeleteSuite
+                                )
+                            }
                     }
+                        }
                 }
                 }
             }
@@ -302,6 +312,10 @@ class DiscoverySuiteManageActivity : BaseActivity<ViewBinding>() {
         loadingTagsState = true
         lifecycleScope.launch {
             val options = withContext(IO) {
+                // P2（2026-10-09 真实源真机实测铁证）：原实现 `.take(200)` 硬截断 —— 5540 个启用源里
+                // 只有前 200 个可见可搜，用户几乎找不到想配的源（配合"搜索只在这 200 个里搜"更甚）。
+                // 现放开为**防御性上限**（非正常截断），列表已改懒渲染 ⇒ 全量不影响帧率。
+                // 顺序由 DAO 保证（`order by customOrder asc`，与书源管理页一致，用户可凭习惯定位）。
                 appDb.bookSourceDao.allEnabledPart
                     .filter { it.enabledExplore && it.hasExploreUrl }
                     .take(MAX_MANAGER_SOURCES)
@@ -309,14 +323,13 @@ class DiscoverySuiteManageActivity : BaseActivity<ViewBinding>() {
                         DiscoverySuiteSourceTagOptions(
                             sourceName = source.bookSourceName,
                             sourceUrl = source.bookSourceUrl,
-                            kinds = emptyList(),
                             tags = emptyList()
                         )
                     }
             }
             val loadedByUrl = sourceTagOptionsState.associateBy { it.sourceUrl }
             sourceTagOptionsState = options.map { option ->
-                loadedByUrl[option.sourceUrl]?.takeIf { it.kinds.isNotEmpty() || it.tags.isNotEmpty() }
+                loadedByUrl[option.sourceUrl]?.takeIf { it.tags.isNotEmpty() }
                     ?: option
             }
             loadingTagsState = false
@@ -329,16 +342,17 @@ class DiscoverySuiteManageActivity : BaseActivity<ViewBinding>() {
         val sourceName = sourceTagOptionsState.firstOrNull { it.sourceUrl == sourceUrl }?.sourceName
             ?: return
         loadingSourceTagUrlsState = loadingSourceTagUrlsState + sourceUrl
+        val otherGroupLabel = getString(R.string.discover_group_other)
         lifecycleScope.launch {
             val option = withContext(IO) {
+                // 派生逻辑单源（DiscoverySuiteSourceOptions.kt）：与一键生成共用同一份规则，杜绝两处漂移
                 appDb.bookSourceDao.allEnabledPart
                     .firstOrNull { it.bookSourceUrl == sourceUrl }
                     ?.takeIf { it.enabledExplore && it.hasExploreUrl }
-                    ?.toSourceTagOptions()
+                    ?.buildSourceTagOptions(otherGroupLabel)
                     ?: DiscoverySuiteSourceTagOptions(
                         sourceName = sourceName,
                         sourceUrl = sourceUrl,
-                        kinds = emptyList(),
                         tags = emptyList()
                     )
             }
@@ -348,58 +362,6 @@ class DiscoverySuiteManageActivity : BaseActivity<ViewBinding>() {
             loadedSourceTagUrlsState = loadedSourceTagUrlsState + sourceUrl
             loadingSourceTagUrlsState = loadingSourceTagUrlsState - sourceUrl
         }
-    }
-
-    private suspend fun BookSourcePart.toSourceTagOptions(): DiscoverySuiteSourceTagOptions {
-        return runCatching {
-            buildSourceTagOptions()
-        }.getOrElse {
-            DiscoverySuiteSourceTagOptions(
-                sourceName = bookSourceName,
-                sourceUrl = bookSourceUrl,
-                kinds = emptyList(),
-                tags = emptyList()
-            )
-        }
-    }
-
-    private suspend fun BookSourcePart.buildSourceTagOptions(): DiscoverySuiteSourceTagOptions {
-        val result = ArrayList<DiscoverySuiteTagOption>()
-        var currentGroup = ""
-        val kinds = exploreKinds()
-        kinds.forEachIndexed { index, kind ->
-            if (index == 0 && kind.isSuiteLeadingBlankPlaceholder()) {
-                return@forEachIndexed
-            }
-            val url = kind.normalizedSuiteDiscoverUrl()
-            val action = kind.action?.takeIf { it.isNotBlank() }
-            if (url.isNullOrBlank() && action.isNullOrBlank() && kind.isSuiteDiscoverGroupKind()) {
-                currentGroup = kind.suiteDiscoverGroupTitle()
-                return@forEachIndexed
-            }
-            if (!url.isNullOrBlank()) {
-                result += DiscoverySuiteTagOption(
-                    sourceName = bookSourceName,
-                    sourceUrl = bookSourceUrl,
-                    tagTitle = kind.suiteDiscoverTagText(),
-                    tagUrl = url,
-                    group = currentGroup
-                )
-            }
-        }
-        val tags = if (result.any { it.group.isNotBlank() }) {
-            result.map {
-                if (it.group.isBlank()) it.copy(group = getString(R.string.discover_group_other)) else it
-            }
-        } else {
-            result
-        }
-        return DiscoverySuiteSourceTagOptions(
-            sourceName = bookSourceName,
-            sourceUrl = bookSourceUrl,
-            kinds = kinds,
-            tags = tags.distinctBy { it.key }
-        )
     }
 
     private fun saveConfig(transform: (DiscoverySuiteConfig) -> DiscoverySuiteConfig) {
@@ -493,11 +455,19 @@ class DiscoverySuiteManageActivity : BaseActivity<ViewBinding>() {
     ): String? {
         if (targets.isEmpty()) return getString(R.string.discovery_suite_widget_targets_empty)
         val cleanType = DiscoverySuiteWidgetType.sanitize(type)
+        // 排行榜类强制 N-M 个标签：约束真值与编辑器徽标共用 widgetTargetsConstraint（2.1.2 单源），
+        // 文案区间由约束推导（不再硬编码 3-9），避免两处规则漂移。
         if (cleanType == DiscoverySuiteWidgetType.RankButtons.value ||
             cleanType == DiscoverySuiteWidgetType.RankedList.value
         ) {
-            val count = targets.take(9).size
-            if (count !in 3..9) return getString(R.string.discovery_suite_widget_rank_targets_range)
+            val constraint = widgetTargetsConstraint(cleanType)
+            if (!constraint.accepts(targets.take(constraint.max).size)) {
+                return getString(
+                    R.string.discovery_suite_widget_rank_targets_range,
+                    constraint.min,
+                    constraint.max
+                )
+            }
         }
         return null
     }
@@ -558,11 +528,14 @@ class DiscoverySuiteManageActivity : BaseActivity<ViewBinding>() {
             }
             suite.copy(widgets = widgets)
         }
+        // 保存反馈（2.5.2）：明确下一步（编辑器内无预览，真实效果在发现页）
+        toastOnUi(R.string.discovery_suite_saved_hint)
         closeWidgetEditor(suiteId)
     }
 
     private fun reorderWidgets(suite: DiscoverySuite, orderedWidgets: List<DiscoverySuiteWidget>) {
-        val normalizedWidgets = orderedWidgets.keepWaterfallWidgetsAtBottom()
+        // 瀑布流置底单源（AD-06）：改用 DiscoverySuiteConfig 的共享扩展，三处语义归一
+        val normalizedWidgets = orderedWidgets.withWaterfallPinnedBottom()
         val orderById = normalizedWidgets.mapIndexed { index, widget -> widget.id to index }.toMap()
         updateSuite(suite.id) { current ->
             current.copy(
@@ -607,8 +580,74 @@ class DiscoverySuiteManageActivity : BaseActivity<ViewBinding>() {
         }
     }
 
+    /** A：一键生成套件（列表空态入口；与发现页共用 runStarterSuite；spec E4 幂等）。 */
+    private fun generateStarterSuite() {
+        if (starterJob?.isActive == true) return
+        val titles = DiscoverySuiteStarter.Titles(
+            suiteName = getString(R.string.discovery_suite_default_name),
+            tagBar = getString(R.string.discovery_suite_widget_type_tag_bar),
+            horizontalBooks = getString(R.string.discovery_suite_widget_type_horizontal_books),
+            waterfallBooks = getString(R.string.discovery_suite_widget_type_waterfall_books)
+        )
+        val otherGroupLabel = getString(R.string.discover_group_other)
+        starterRunningState = true
+        starterProgressState = null
+        starterJob = lifecycleScope.launch {
+            val result = try {
+                runStarterSuite(titles, otherGroupLabel) { progress ->
+                    starterProgressState = progress
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                AppLog.put("一键生成套件失败", e)
+                null
+            }
+            starterRunningState = false
+            starterProgressState = null
+            if (isFinishing || isDestroyed) return@launch
+            // spec E15：生成完成后主动刷新一次，保证管理页状态与写盘结果一致
+            refreshConfig()
+            when (result) {
+                is StarterSuiteResult.Created -> {
+                    val skipped = (result.probeTotal - result.probeUsable).coerceAtLeast(0)
+                    toastOnUi(
+                        if (skipped > 0) {
+                            getString(R.string.discovery_suite_generate_done) + "\n" +
+                                getString(R.string.discovery_suite_generate_skipped, skipped)
+                        } else {
+                            getString(R.string.discovery_suite_generate_done)
+                        }
+                    )
+                }
+                StarterSuiteResult.NoUsableSource -> toastOnUi(R.string.discovery_suite_generate_none)
+                StarterSuiteResult.SuiteLimitReached -> toastOnUi(
+                    getString(R.string.discovery_suite_generate_limit, MAX_DISCOVERY_SUITE_COUNT)
+                )
+                StarterSuiteResult.SaveFailed -> toastOnUi(
+                    R.string.discovery_suite_generate_save_failed
+                )
+                null -> Unit
+            }
+        }
+    }
+
+    private fun cancelStarterSuite() {
+        starterJob?.cancel()
+        starterJob = null
+        starterRunningState = false
+        starterProgressState = null
+    }
+
     companion object {
-        private const val MAX_MANAGER_SOURCES = 200
+        /** 深链：目标套件 id（可选）。 */
+        const val EXTRA_SUITE_ID = "discovery_suite_extra_suite_id"
+
+        /** 深链：目标控件 id（null = 新建控件）。 */
+        const val EXTRA_WIDGET_ID = "discovery_suite_extra_widget_id"
+
+        // 候选源**防御上限**（非业务截断）：真实库实测 5701 源，留足余量；列表已懒渲染，全量不卡（P2）。
+        private const val MAX_MANAGER_SOURCES = 8000
     }
 }
 
@@ -646,31 +685,8 @@ private fun DiscoverySuiteManageMode.validatedAgainst(
     }
 }
 
-private data class DiscoverySuiteSourceTagOptions(
-    val sourceName: String,
-    val sourceUrl: String,
-    val kinds: List<ExploreKind>,
-    val tags: List<DiscoverySuiteTagOption>
-)
-
-private data class DiscoverySuiteTagOption(
-    val sourceName: String,
-    val sourceUrl: String,
-    val tagTitle: String,
-    val tagUrl: String,
-    val group: String = ""
-) {
-    val key: String
-        get() = "$sourceUrl\n$tagUrl"
-
-    fun toTarget(): DiscoverySuiteWidgetTarget {
-        return DiscoverySuiteWidgetTarget(
-            sourceUrl = sourceUrl,
-            tagUrl = tagUrl,
-            title = "$sourceName - $tagTitle"
-        )
-    }
-}
+// DiscoverySuiteSourceTagOptions / DiscoverySuiteTagOption 已抽到 DiscoverySuiteSourceOptions.kt
+// （与一键生成共用同一份「源 → 发现标签」派生，禁止第二实现源）
 
 @Composable
 private fun DiscoverySuiteListScreen(
@@ -678,7 +694,11 @@ private fun DiscoverySuiteListScreen(
     selectedSuiteId: String,
     loadingOptions: Boolean,
     sourceCount: Int,
-    tagOptionCount: Int,
+    starterRunning: Boolean,
+    starterProgress: StarterSuiteProgress?,
+    onGenerateStarterSuite: () -> Unit,
+    onCancelStarterSuite: () -> Unit,
+    onCreateSuite: () -> Unit,
     onOpenSuite: (DiscoverySuite) -> Unit,
     onSetCurrentSuite: (DiscoverySuite) -> Unit,
     onRenameSuite: (DiscoverySuite) -> Unit,
@@ -696,11 +716,14 @@ private fun DiscoverySuiteListScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
+            // P7（2026-10-09 真机实测）：原文案「N 个书源 / M 个 Tag」中 M 取自"已加载标签累计"，
+            // 实测随浏览过的源在 0→10→185 之间跳动，用户无法理解其含义 ⇒ 只保留稳定且有意义的
+            // "候选书源数"，去掉会跳动的标签计数（该计数只在编辑器内有行动价值）。
             Text(
                 text = if (loadingOptions) {
-                    "Tag 加载中..."
+                    "书源加载中..."
                 } else {
-                    "${sourceCount} 个书源 / ${tagOptionCount} 个 Tag"
+                    "候选书源 ${sourceCount} 个"
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -776,7 +799,33 @@ private fun DiscoverySuiteListScreen(
         }
         if (config.suites.isEmpty()) {
             item {
-                EmptyManageState(renderConfig = renderConfig)
+                // 空态统一走共享 EmptyStatePlaceholder（components.md §六）；生成中替换为进度面板。
+                // 用 fillParentMaxHeight 承载，避免 fillMaxSize 在 LazyColumn item 内塌陷为零高。
+                Box(modifier = Modifier.fillParentMaxHeight(0.6f)) {
+                    if (starterRunning) {
+                        StarterSuiteProgressPanel(
+                            progress = starterProgress,
+                            onCancel = onCancelStarterSuite
+                        )
+                    } else {
+                        EmptyStatePlaceholder(
+                            icon = Icons.Filled.Widgets,
+                            title = stringResource(R.string.discovery_suite_empty_title),
+                            subtitle = stringResource(R.string.discovery_suite_empty_summary),
+                            primaryAction = EmptyStateAction(
+                                stringResource(R.string.discovery_suite_generate_once),
+                                onGenerateStarterSuite
+                            ),
+                            secondaryActions = listOf(
+                                EmptyStateAction(
+                                    stringResource(R.string.discovery_suite_create),
+                                    onCreateSuite
+                                )
+                            ),
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
             }
         }
         item {
@@ -790,7 +839,6 @@ private fun DiscoverySuiteDetailScreen(
     suite: DiscoverySuite?,
     loadingOptions: Boolean,
     sourceCount: Int,
-    tagOptionCount: Int,
     onOpacityMultiplierChange: (DiscoverySuite, Float) -> Unit,
     onEditWidget: (DiscoverySuite, DiscoverySuiteWidget) -> Unit,
     onDeleteWidget: (DiscoverySuite, DiscoverySuiteWidget) -> Unit,
@@ -823,9 +871,9 @@ private fun DiscoverySuiteDetailScreen(
     ) {
         Text(
             text = if (loadingOptions) {
-                "Tag 加载中..."
+                "书源加载中..."
             } else {
-                "${sourceCount} 个书源 / ${tagOptionCount} 个 Tag"
+                "候选书源 ${sourceCount} 个"
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -979,6 +1027,7 @@ private fun SuiteOpacityMultiplierRow(
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun DiscoverySuiteWidgetEditorScreen(
     suite: DiscoverySuite?,
     widget: DiscoverySuiteWidget?,
@@ -1029,21 +1078,12 @@ private fun DiscoverySuiteWidgetEditorScreen(
             }
         }
     }
+    // 选源（B1）：**编辑既有控件时回填其原源**（保证配置不丢）；新建时**不自动选中任何源、
+    // 不自动联网**——原实现在进页面时替用户选中第一个源并立即拉取标签，既误导又白等网络（P3）。
     var selectedSourceUrl by remember(widget?.id) {
         mutableStateOf(widget?.targets?.firstOrNull()?.sourceUrl.orEmpty())
     }
-    LaunchedEffect(sourceOptions, widget?.id) {
-        if (sourceOptions.isEmpty()) return@LaunchedEffect
-        if (sourceOptions.none { it.sourceUrl == selectedSourceUrl }) {
-            selectedSourceUrl = widget?.targets
-                ?.firstOrNull()
-                ?.sourceUrl
-                ?.takeIf { sourceUrl -> sourceOptions.any { it.sourceUrl == sourceUrl } }
-                ?: sourceOptions.first().sourceUrl
-        }
-    }
     val selectedSource = sourceOptions.firstOrNull { it.sourceUrl == selectedSourceUrl }
-        ?: sourceOptions.firstOrNull()
     val selectedSourceIsLoading = selectedSource?.sourceUrl in loadingSourceUrls
     val selectedSourceLoaded = selectedSource?.sourceUrl in loadedSourceUrls
     LaunchedEffect(selectedSource?.sourceUrl) {
@@ -1052,6 +1092,9 @@ private fun DiscoverySuiteWidgetEditorScreen(
             ?.let(onLoadSourceTags)
     }
     var sourceQuery by remember(widget?.id) { mutableStateOf("") }
+    // P1/P2：源列表改懒列表后需要独立滚动状态 —— 供「搜索词变化即回到顶部」复位
+    // （原实现滚动位置会残留，用户滚动过列表再改搜索词时会误以为"源顺序每次都在变"）。
+    val sourceListState = rememberLazyListState()
     val filteredSources = remember(sourceOptions, sourceQuery) {
         val query = sourceQuery.trim()
         if (query.isBlank()) {
@@ -1062,6 +1105,43 @@ private fun DiscoverySuiteWidgetEditorScreen(
                     it.sourceUrl.contains(query, ignoreCase = true)
             }
         }
+    }
+    // 类型（B3/B4）：类型项 + 约束真值 + 裁剪提示文案（文案先于 lambda 取，避免在非组合 lambda 内调 stringResource）
+    val typeOptions = listOf(
+        DiscoverySuiteWidgetType.RandomBooks.value to
+            stringResource(R.string.discovery_suite_widget_type_random_books),
+        DiscoverySuiteWidgetType.TagBar.value to
+            stringResource(R.string.discovery_suite_widget_type_tag_bar),
+        DiscoverySuiteWidgetType.RankButtons.value to
+            stringResource(R.string.discovery_suite_widget_type_rank_buttons),
+        DiscoverySuiteWidgetType.RankedList.value to
+            stringResource(R.string.discovery_suite_widget_type_ranked_list),
+        DiscoverySuiteWidgetType.WaterfallBooks.value to
+            stringResource(R.string.discovery_suite_widget_type_waterfall_books),
+        DiscoverySuiteWidgetType.HorizontalBooks.value to
+            stringResource(R.string.discovery_suite_widget_type_horizontal_books)
+    )
+    val typeLabelByValue = remember(typeOptions) { typeOptions.toMap() }
+    val trimmedFormat = stringResource(R.string.discovery_suite_type_trimmed)
+    var typeNotice by remember(widget?.id) { mutableStateOf<String?>(null) }
+    val constraint = widgetTargetsConstraint(type)
+    val managementPalette = rememberAppManagementPalette()
+    val onTypeSelected: (String) -> Unit = { newType ->
+        val newConstraint = widgetTargetsConstraint(newType)
+        val kept = selectedKeys.take(newConstraint.max).toSet()
+        val removed = selectedKeys.size - kept.size
+        selectedKeys = kept
+        typeNotice = if (removed > 0) {
+            String.format(
+                trimmedFormat,
+                typeLabelByValue[newType] ?: newType,
+                newConstraint.max,
+                removed
+            )
+        } else {
+            null
+        }
+        type = newType
     }
     Column(
         modifier = Modifier
@@ -1104,159 +1184,196 @@ private fun DiscoverySuiteWidgetEditorScreen(
                         label = "控件标题",
                         renderConfig = renderConfig
                     )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        WidgetTypeChip(
-                            text = "随机推荐",
-                            selected = type == DiscoverySuiteWidgetType.RandomBooks.value,
-                            renderConfig = renderConfig
-                        ) {
-                            type = DiscoverySuiteWidgetType.RandomBooks.value
-                        }
-                        WidgetTypeChip(
-                            text = "Tag 按键栏",
-                            selected = type == DiscoverySuiteWidgetType.TagBar.value,
-                            renderConfig = renderConfig
-                        ) {
-                            type = DiscoverySuiteWidgetType.TagBar.value
-                        }
-                        WidgetTypeChip(
-                            text = "排行榜按钮",
-                            selected = type == DiscoverySuiteWidgetType.RankButtons.value,
-                            renderConfig = renderConfig
-                        ) {
-                            type = DiscoverySuiteWidgetType.RankButtons.value
-                            selectedKeys = selectedKeys.take(9).toSet()
-                        }
-                        WidgetTypeChip(
-                            text = "排行榜列表",
-                            selected = type == DiscoverySuiteWidgetType.RankedList.value,
-                            renderConfig = renderConfig
-                        ) {
-                            type = DiscoverySuiteWidgetType.RankedList.value
-                            selectedKeys = selectedKeys.take(9).toSet()
-                        }
-                        WidgetTypeChip(
-                            text = "瀑布流",
-                            selected = type == DiscoverySuiteWidgetType.WaterfallBooks.value,
-                            renderConfig = renderConfig
-                        ) {
-                            type = DiscoverySuiteWidgetType.WaterfallBooks.value
-                        }
-                        WidgetTypeChip(
-                            text = "横排滑动",
-                            selected = type == DiscoverySuiteWidgetType.HorizontalBooks.value,
-                            renderConfig = renderConfig
-                        ) {
-                            type = DiscoverySuiteWidgetType.HorizontalBooks.value
-                            selectedKeys = selectedKeys.take(1).toSet()
-                        }
-                    }
                     Text(
-                        text = when {
-                            loadingOptions -> "书源加载中..."
-                            sourceOptions.isEmpty() -> "没有可用书源"
-                            selectedSourceIsLoading -> "正在加载当前书源 Tag；已选 ${selectedKeys.size} 个"
-                            selectedSourceLoaded && selectedSource?.tags.isNullOrEmpty() -> "当前书源没有可用 Tag；已选 ${selectedKeys.size} 个"
-                            type == DiscoverySuiteWidgetType.HorizontalBooks.value -> "横排滑动控件只能选择 1 个 Tag；已选 ${selectedKeys.size} 个"
-                            type == DiscoverySuiteWidgetType.RankButtons.value -> "排行榜按钮需要选择 3-9 个 Tag；已选 ${selectedKeys.size} 个"
-                            type == DiscoverySuiteWidgetType.RankedList.value -> "排行榜列表需要选择 3-9 个 Tag；已选 ${selectedKeys.size} 个"
-                            type == DiscoverySuiteWidgetType.WaterfallBooks.value -> "瀑布流控件会固定在所有控件底部；已选 ${selectedKeys.size} 个 Tag"
-                            else -> "先选书源，再选择该书源下的 Tag；已选 ${selectedKeys.size} 个"
-                        },
-                        fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                        text = stringResource(R.string.discovery_suite_widget_type),
+                        fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+                        fontWeight = FontWeight.Medium,
                         fontFamily = palette.bodyFontFamily,
                         color = palette.secondaryText
                     )
-                    if (sourceOptions.isNotEmpty()) {
+                    // P4（2026-10-09 真机实测）：原用横向滚动 Row —— 6 个类型里有 2 个
+                    //（横排滑动 / 瀑布流，恰是最高频的两种）被藏在屏外，用户根本不知道还有得选。
+                    // 改 FlowRow 自动换行 ⇒ 全部类型一屏可见，不再依赖"左右滑动去发现"。
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        typeOptions.forEach { entry ->
+                            WidgetTypeChip(
+                                text = entry.second,
+                                selected = type == entry.first,
+                                renderConfig = renderConfig
+                            ) {
+                                onTypeSelected(entry.first)
+                            }
+                        }
+                    }
+                    // B3：类型说明 + 约束徽标 + 静态骨架预览（原实现只有类型名，用户选型靠猜）
+                    WidgetTypeInfoCard(type = type, renderConfig = renderConfig)
+                    // B4：切类型裁剪已选时的显式提示（原实现静默丢弃）
+                    typeNotice?.let { notice ->
+                        Text(
+                            text = notice,
+                            fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                            fontFamily = palette.bodyFontFamily,
+                            color = palette.accent
+                        )
+                    }
+                }
+            }
+            if (loadingOptions) {
+                item(key = "source_loading") {
+                    Box(modifier = Modifier.padding(horizontal = 18.dp)) {
+                        SourceTagsStatePanel(text = "书源加载中...", renderConfig = renderConfig)
+                    }
+                }
+            } else if (sourceOptions.isEmpty()) {
+                item(key = "source_empty") {
+                    Box(modifier = Modifier.padding(horizontal = 18.dp)) {
+                        SourceTagsStatePanel(
+                            text = "没有可用书源（需在书源中启用发现规则）",
+                            renderConfig = renderConfig
+                        )
+                    }
+                }
+            } else {
+                // B1：书源改**纵向可搜索列表**（原横向 Chip 流，上百源只能左右滑），行副标题显示标签状态。
+                // 🔴 修正（用户检查点 2 反馈「选完书源却没地方选标签」）：书源列表**不得**作为外层 LazyColumn
+                // 的独立行铺开——原实现在 200 个源时会把「标签选择区」顶到几百行之外，用户点完源看不到标签
+                // ⇒ 等价于"没法选"。此处改为**定高内滚列表**，标签选择区紧邻其下（保持旧版"选源即见标签"的相邻性）。
+                item(key = "source_and_tags") {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "选择书源（${filteredSources.size}）",
+                            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = palette.bodyFontFamily,
+                            color = palette.secondaryText
+                        )
                         SuiteEditorTextField(
                             value = sourceQuery,
                             onValueChange = { sourceQuery = it.take(40) },
                             label = "搜索书源",
                             renderConfig = renderConfig
                         )
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // 🔴 P1 性能修复（2026-10-09 真实源真机实测铁证）：原实现是
+                        // `Column + verticalScroll + forEach` **全量渲染** —— 5693 条真实源下滚动
+                        // gfxinfo 实测 Janky 62/62 (100%)、50th=69ms（≈14fps），卡到不可用。
+                        // 改 LazyColumn 只渲染可见行；`heightIn(max = …)` 提供**有限高度约束**
+                        // （外层同为 LazyColumn，无限约束会抛异常），标签选择区仍紧邻其下（保持 A7 相邻性）。
+                        LaunchedEffect(sourceQuery) {
+                            sourceListState.scrollToItem(0)
+                        }
+                        LazyColumn(
+                            state = sourceListState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = SOURCE_PICKER_MAX_HEIGHT),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             items(filteredSources, key = { it.sourceUrl }) { source ->
-                                SourceOptionChip(
-                                    source = source,
-                                    selected = source.sourceUrl == selectedSource?.sourceUrl,
-                                    loading = source.sourceUrl in loadingSourceUrls,
-                                    loaded = source.sourceUrl in loadedSourceUrls,
-                                    renderConfig = renderConfig
-                                ) {
-                                    selectedSourceUrl = source.sourceUrl
-                                    onLoadSourceTags(source.sourceUrl)
-                                }
-                            }
-                        }
-                        if (selectedKeys.isNotEmpty()) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "已选 ${selectedKeys.size} 个",
-                                    fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
-                                    fontFamily = palette.bodyFontFamily,
-                                    color = palette.secondaryText
-                                )
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    CompactAction(text = "清空当前源", renderConfig = renderConfig) {
-                                        val currentKeys = selectedSource?.tags.orEmpty().map { it.key }.toSet()
-                                        selectedKeys = selectedKeys - currentKeys
-                                    }
-                                    CompactAction(text = "清空全部", renderConfig = renderConfig, danger = true) {
-                                        selectedKeys = emptySet()
-                                    }
-                                }
-                            }
-                        }
-                        selectedSource?.let { source ->
-                            when {
-                                source.sourceUrl in loadingSourceUrls -> {
-                                    SourceTagsStatePanel(
-                                        text = "${source.sourceName} Tag 加载中...",
-                                        renderConfig = renderConfig
-                                    )
-                                }
-                                source.sourceUrl !in loadedSourceUrls -> {
-                                    SourceTagsStatePanel(
-                                        text = "${source.sourceName} 尚未加载 Tag",
-                                        renderConfig = renderConfig,
-                                        actionText = "加载",
-                                        onAction = { onLoadSourceTags(source.sourceUrl) }
-                                    )
-                                }
-                                source.tags.isEmpty() -> {
-                                    SourceTagsStatePanel(
-                                        text = "${source.sourceName} 没有可用 Tag",
-                                        renderConfig = renderConfig
-                                    )
-                                }
-                                else -> {
-                                    ClassicDiscoverPreview(
+                                AppManagementListRow(
+                                    title = source.sourceName,
+                                    subtitle = sourceTagStatusText(
                                         source = source,
-                                        selectedKeys = selectedKeys,
-                                        singleSelection = type == DiscoverySuiteWidgetType.HorizontalBooks.value,
-                                        renderConfig = renderConfig,
-                                        onSelectedKeysChange = {
-                                            selectedKeys = if (type == DiscoverySuiteWidgetType.RankButtons.value ||
-                                                type == DiscoverySuiteWidgetType.RankedList.value
-                                            ) {
-                                                it.take(9).toSet()
-                                            } else {
-                                                it
-                                            }
+                                        loadingSourceUrls = loadingSourceUrls,
+                                        loadedSourceUrls = loadedSourceUrls
+                                    ),
+                                    selected = source.sourceUrl == selectedSourceUrl,
+                                    selectionVisible = false,
+                                    palette = managementPalette,
+                                    minHeight = 56.dp,
+                                    // 选中态显式标记（模拟器实测 selected 的底色差过弱，用户看不出选了哪个源）
+                                    trailingBeforeSwitch = if (source.sourceUrl == selectedSourceUrl) {
+                                        {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_check),
+                                                contentDescription = null,
+                                                tint = managementPalette.settings.accent,
+                                                modifier = Modifier.size(20.dp)
+                                            )
                                         }
-                                    )
+                                    } else {
+                                        null
+                                    },
+                                    onClick = {
+                                        selectedSourceUrl = source.sourceUrl
+                                        onLoadSourceTags(source.sourceUrl)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            item(key = "tag_picker") {
+                Column(
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (selectedKeys.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "已选 ${selectedKeys.size} 个",
+                                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+                                fontFamily = palette.bodyFontFamily,
+                                color = palette.secondaryText
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                CompactAction(text = "清空当前源", renderConfig = renderConfig) {
+                                    val currentKeys = selectedSource?.tags.orEmpty().map { it.key }.toSet()
+                                    selectedKeys = selectedKeys - currentKeys
+                                }
+                                CompactAction(text = "清空全部", renderConfig = renderConfig, danger = true) {
+                                    selectedKeys = emptySet()
                                 }
                             }
                         }
+                    }
+                    when {
+                        selectedSource == null -> Text(
+                            text = "请先选择书源，再选择该书源下的标签",
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                            fontFamily = palette.bodyFontFamily,
+                            color = palette.secondaryText
+                        )
+                        selectedSourceIsLoading -> SourceTagsStatePanel(
+                            text = "${selectedSource.sourceName} Tag 加载中...",
+                            renderConfig = renderConfig
+                        )
+                        !selectedSourceLoaded -> SourceTagsStatePanel(
+                            text = "${selectedSource.sourceName} 尚未加载 Tag",
+                            renderConfig = renderConfig,
+                            actionText = "加载",
+                            onAction = { onLoadSourceTags(selectedSource.sourceUrl) }
+                        )
+                        selectedSource.tags.isEmpty() -> SourceTagsStatePanel(
+                            text = "${selectedSource.sourceName} 没有可用 Tag",
+                            renderConfig = renderConfig
+                        )
+                        else -> DiscoverySuiteTagPicker(
+                            tags = selectedSource.tags,
+                            selectedKeys = selectedKeys,
+                            singleSelection = type == DiscoverySuiteWidgetType.HorizontalBooks.value,
+                            renderConfig = renderConfig,
+                            onToggle = { option ->
+                                selectedKeys = toggleSuiteTargetKey(
+                                    selectedKeys = selectedKeys,
+                                    key = option.key,
+                                    singleSelection =
+                                        type == DiscoverySuiteWidgetType.HorizontalBooks.value,
+                                    maxCount = constraint.max
+                                )
+                            }
+                        )
                     }
                 }
             }
@@ -1326,420 +1443,6 @@ private fun SourceTagsStatePanel(
 }
 
 @Composable
-private fun SourceOptionChip(
-    source: DiscoverySuiteSourceTagOptions,
-    selected: Boolean,
-    loading: Boolean,
-    loaded: Boolean,
-    renderConfig: BookshelfListRenderConfig,
-    onClick: () -> Unit
-) {
-    val palette = renderConfig.palette
-    SuiteThemeChipSurface(
-        selected = selected,
-        renderConfig = renderConfig,
-        modifier = Modifier
-            .widthIn(min = 118.dp, max = 172.dp),
-        height = 48.dp,
-        horizontalPadding = 16.dp,
-        onClick = onClick
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = source.sourceName,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                fontFamily = palette.bodyFontFamily,
-                color = if (selected) palette.accent else palette.primaryText
-            )
-            Text(
-                text = when {
-                    loading -> "加载中"
-                    loaded -> "${source.tags.size} 个 Tag"
-                    else -> "未加载"
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = MaterialTheme.typography.labelSmall.fontSize,
-                fontFamily = palette.bodyFontFamily,
-                color = palette.secondaryText
-            )
-        }
-    }
-}
-
-@Composable
-private fun ClassicDiscoverPreview(
-    source: DiscoverySuiteSourceTagOptions,
-    selectedKeys: Set<String>,
-    singleSelection: Boolean,
-    renderConfig: BookshelfListRenderConfig,
-    onSelectedKeysChange: (Set<String>) -> Unit
-) {
-    val palette = renderConfig.palette
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(palette.panelRadius))
-            .appSettingPanelBackground(
-                normalColor = palette.rowColor,
-                panelImage = renderConfig.panelImage,
-                borderColor = palette.borderColor,
-                radiusPx = palette.panelRadiusPx
-            )
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            text = "${source.sourceName} · 经典发现预览 · ${source.tags.size} 个可选 Tag",
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
-            fontWeight = FontWeight.Medium,
-            fontFamily = palette.bodyFontFamily,
-            color = palette.primaryText
-        )
-        AndroidView(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 260.dp, max = 520.dp),
-            factory = { context -> FrameLayout(context) },
-            update = { container ->
-                renderClassicDiscoverPreview(
-                    container = container,
-                    source = source,
-                    selectedKeys = selectedKeys,
-                    singleSelection = singleSelection,
-                    onSelectedKeysChange = onSelectedKeysChange
-                )
-            }
-        )
-    }
-}
-
-private fun renderClassicDiscoverPreview(
-    container: FrameLayout,
-    source: DiscoverySuiteSourceTagOptions,
-    selectedKeys: Set<String>,
-    singleSelection: Boolean,
-    onSelectedKeysChange: (Set<String>) -> Unit
-) {
-    val context = container.context
-    val inflater = LayoutInflater.from(context)
-    val itemBinding = ItemFindBookBinding.inflate(inflater, container, false)
-    val flexbox = itemBinding.flexbox
-    itemBinding.root.setPadding(0, 0, 0, 0)
-    itemBinding.llTitle.isClickable = false
-    itemBinding.tvName.text = source.sourceName
-    itemBinding.rotateLoading.visibility = View.GONE
-    itemBinding.ivStatus.visibility = View.GONE
-    flexbox.visibility = View.VISIBLE
-    flexbox.removeAllViews()
-    val tagsByUrl = source.tags.associateBy { it.tagUrl }
-    source.kinds.forEachIndexed { index, kind ->
-        if (index == 0 && kind.isSuiteLeadingBlankPlaceholder()) {
-            return@forEachIndexed
-        }
-        when (kind.type) {
-            ExploreKind.Type.url -> {
-                val url = kind.normalizedSuiteDiscoverUrl()
-                if (url.isNullOrBlank()) {
-                    addClassicTextPreview(inflater, flexbox, kind, selected = false, enabled = false)
-                } else {
-                    val option = tagsByUrl[url] ?: DiscoverySuiteTagOption(
-                        sourceName = source.sourceName,
-                        sourceUrl = source.sourceUrl,
-                        tagTitle = kind.suiteDiscoverTagText(),
-                        tagUrl = url
-                    )
-                    addClassicUrlTagPreview(
-                        inflater = inflater,
-                        flexbox = flexbox,
-                        kind = kind,
-                        option = option,
-                        selected = option.key in selectedKeys,
-                        onClick = {
-                            onSelectedKeysChange(
-                                if (option.key in selectedKeys) {
-                                    selectedKeys - option.key
-                                } else if (singleSelection) {
-                                    setOf(option.key)
-                                } else {
-                                    selectedKeys + option.key
-                                }
-                            )
-                        }
-                    )
-                }
-            }
-            ExploreKind.Type.select -> addClassicSelectPreview(inflater, flexbox, kind)
-            ExploreKind.Type.text,
-            "password" -> addClassicInputPreview(inflater, flexbox, kind)
-            else -> addClassicTextPreview(inflater, flexbox, kind, selected = false, enabled = false)
-        }
-    }
-    val scrollView = NestedScrollView(context).apply {
-        overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
-        isFillViewport = false
-        addView(
-            itemBinding.root,
-            ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-    }
-    container.removeAllViews()
-    container.addView(
-        scrollView,
-        FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-    )
-}
-
-private fun addClassicUrlTagPreview(
-    inflater: LayoutInflater,
-    flexbox: FlexboxLayout,
-    kind: ExploreKind,
-    option: DiscoverySuiteTagOption,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    val tv = ItemFilletTextBinding.inflate(inflater, flexbox, false).root
-    flexbox.addView(tv)
-    tv.text = if (selected) "✓ ${option.tagTitle}" else option.tagTitle
-    tv.maxLines = 1
-    tv.ellipsize = TextUtils.TruncateAt.END
-    tv.setPadding(14.dpToPx(), 4.dpToPx(), 14.dpToPx(), 4.dpToPx())
-    applyClassicDiscoverFlexStyle(tv, kind)
-    applyClassicDiscoverTagSelectedStyle(tv, selected)
-    tv.setOnClickListener { onClick() }
-}
-
-private fun addClassicTextPreview(
-    inflater: LayoutInflater,
-    flexbox: FlexboxLayout,
-    kind: ExploreKind,
-    selected: Boolean,
-    enabled: Boolean
-) {
-    val tv = ItemFilletTextBinding.inflate(inflater, flexbox, false).root
-    flexbox.addView(tv)
-    tv.text = kind.suiteDiscoverTagText()
-    tv.typeface = flexbox.context.uiTypeface()
-    tv.maxLines = 1
-    tv.ellipsize = TextUtils.TruncateAt.END
-    tv.isEnabled = enabled
-    tv.alpha = if (enabled) 1f else 0.78f
-    applyClassicDiscoverFlexStyle(tv, kind)
-    applyClassicDiscoverTagSelectedStyle(tv, selected)
-}
-
-private fun addClassicSelectPreview(
-    inflater: LayoutInflater,
-    flexbox: FlexboxLayout,
-    kind: ExploreKind
-) {
-    val binding = ItemFilletSelectorSingleBinding.inflate(inflater, flexbox, false)
-    flexbox.addView(binding.root)
-    binding.spName.text = kind.suiteDiscoverTagText()
-    binding.root.applyUiBodyTypefaceDeep(binding.root.context.uiTypeface())
-    val chars = kind.chars?.filterNotNull().orEmpty()
-    val adapter = ArrayAdapter(binding.root.context, R.layout.item_text_common, chars)
-    adapter.setDropDownViewResource(R.layout.item_spinner_dropdown)
-    binding.spType.adapter = adapter
-    val selected = chars.indexOf(kind.default).coerceAtLeast(0)
-    if (chars.isNotEmpty()) {
-        binding.spType.setSelection(selected, false)
-    }
-    binding.spType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-        override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) = Unit
-        override fun onNothingSelected(parent: AdapterView<*>?) = Unit
-    }
-    applyClassicDiscoverFlexStyle(binding.root, kind)
-}
-
-private fun addClassicInputPreview(
-    inflater: LayoutInflater,
-    flexbox: FlexboxLayout,
-    kind: ExploreKind
-) {
-    val input = ItemFilletCompleteTextBinding.inflate(inflater, flexbox, false).root
-    flexbox.addView(input)
-    input.hint = kind.suiteDiscoverTagText()
-    input.setText(kind.default.orEmpty())
-    input.typeface = input.context.uiTypeface()
-    input.isFocusable = false
-    input.isFocusableInTouchMode = false
-    applyClassicDiscoverFlexStyle(input, kind)
-}
-
-private fun applyClassicDiscoverFlexStyle(view: View, kind: ExploreKind) {
-    val style = kind.style()
-    view.layoutParams = FlexboxLayout.LayoutParams(
-        ViewGroup.LayoutParams.WRAP_CONTENT,
-        ViewGroup.LayoutParams.WRAP_CONTENT
-    ).apply {
-        setMargins(3.dpToPx(), 3.dpToPx(), 3.dpToPx(), 3.dpToPx())
-        flexGrow = style.layout_flexGrow
-        flexShrink = style.layout_flexShrink
-        alignSelf = style.alignSelf()
-        flexBasisPercent = style.layout_flexBasisPercent
-        isWrapBefore = style.layout_wrapBefore
-    }
-    when (style.layout_justifySelf) {
-        "flex_start" -> setClassicDiscoverGravity(view, Gravity.START)
-        "flex_end", "right" -> setClassicDiscoverGravity(view, Gravity.END)
-        else -> setClassicDiscoverGravity(view, Gravity.CENTER)
-    }
-}
-
-private fun setClassicDiscoverGravity(view: View, gravity: Int) {
-    when (view) {
-        is TextView -> view.gravity = gravity
-        is LinearLayout -> view.gravity = gravity
-    }
-}
-
-private fun applyClassicDiscoverTagSelectedStyle(tv: TextView, selected: Boolean) {
-    val context = tv.context
-    if (!selected) {
-        tv.background = ContextCompat.getDrawable(context, R.drawable.selector_fillet_btn_bg)
-        tv.setTextColor(context.primaryTextColor)
-        return
-    }
-    val accent = context.accentColor
-    val bg = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        cornerRadius = 16.dpToPx().toFloat()
-        setColor(
-            AndroidColor.argb(
-                34,
-                AndroidColor.red(accent),
-                AndroidColor.green(accent),
-                AndroidColor.blue(accent)
-            )
-        )
-        setStroke(1.dpToPx(), accent)
-    }
-    tv.background = bg
-    tv.setTextColor(accent)
-}
-
-@Composable
-private fun FilterChip(
-    text: String,
-    selected: Boolean,
-    renderConfig: BookshelfListRenderConfig,
-    onClick: () -> Unit
-) {
-    val palette = renderConfig.palette
-    SuiteThemeChipSurface(
-        selected = selected,
-        renderConfig = renderConfig,
-        height = 34.dp,
-        horizontalPadding = 13.dp,
-        onClick = onClick
-    ) {
-        Text(
-            text = text,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            fontFamily = palette.bodyFontFamily,
-            color = if (selected) palette.accent else palette.primaryText
-        )
-    }
-}
-
-@Composable
-private fun EmptyManageState(
-    renderConfig: BookshelfListRenderConfig
-) {
-    val palette = renderConfig.palette
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 72.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "还没有套件",
-            fontSize = MaterialTheme.typography.subtitleLarge.fontSize,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = palette.titleFontFamily,
-            color = palette.primaryText
-        )
-    }
-}
-
-@Composable
-private fun WidgetManageRow(
-    widget: DiscoverySuiteWidget,
-    renderConfig: BookshelfListRenderConfig,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    dragHandle: (@Composable () -> Unit)? = null
-) {
-    val palette = renderConfig.palette
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp)
-            .clip(RoundedCornerShape(palette.panelRadius))
-            .appSettingPanelBackground(
-                normalColor = palette.rowColor,
-                panelImage = renderConfig.panelImage,
-                borderColor = palette.borderColor,
-                radiusPx = palette.panelRadiusPx
-            )
-            .clickable(onClick = onEdit)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        dragHandle?.invoke()
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = widget.title.ifBlank {
-                    when (widget.type) {
-                        DiscoverySuiteWidgetType.TagBar.value -> "Tag 导航"
-                        DiscoverySuiteWidgetType.RankButtons.value -> "排行榜按钮"
-                        DiscoverySuiteWidgetType.RankedList.value -> "排行榜列表"
-                        DiscoverySuiteWidgetType.WaterfallBooks.value -> "瀑布流"
-                        DiscoverySuiteWidgetType.HorizontalBooks.value -> "横排滑动"
-                        else -> "随机推荐"
-                    }
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = palette.bodyFontFamily,
-                color = palette.primaryText
-            )
-            Text(
-                text = "${widget.typeLabel()} · ${widget.targets.size} 个 Tag",
-                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
-                fontFamily = palette.bodyFontFamily,
-                color = palette.secondaryText
-            )
-        }
-        CompactAction(text = "编辑", renderConfig = renderConfig, onClick = onEdit)
-        Spacer(modifier = Modifier.width(8.dp))
-        CompactAction(text = "删除", renderConfig = renderConfig, danger = true, onClick = onDelete)
-    }
-}
-
-@Composable
 private fun WidgetTypeChip(
     text: String,
     selected: Boolean,
@@ -1799,53 +1502,6 @@ private fun SuiteEditorTextField(
     )
 }
 
-@Composable
-private fun TagOptionRow(
-    option: DiscoverySuiteTagOption,
-    checked: Boolean,
-    renderConfig: BookshelfListRenderConfig,
-    onClick: () -> Unit
-) {
-    val palette = renderConfig.palette
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp)
-            .clip(RoundedCornerShape(palette.panelRadius))
-            .appSettingPanelBackground(
-                normalColor = palette.rowColor,
-                panelImage = renderConfig.panelImage,
-                borderColor = palette.borderColor,
-                radiusPx = palette.panelRadiusPx
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Checkbox(checked = checked, onCheckedChange = { onClick() })
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = option.tagTitle,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = MaterialTheme.typography.bodySecondary.fontSize,
-                fontWeight = FontWeight.Medium,
-                fontFamily = palette.bodyFontFamily,
-                color = palette.primaryText
-            )
-            Text(
-                text = listOf(option.group, option.sourceName)
-                    .filter { it.isNotBlank() }
-                    .joinToString(" · "),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                fontSize = MaterialTheme.typography.bodySmall.fontSize,
-                fontFamily = palette.bodyFontFamily,
-                color = palette.secondaryText
-            )
-        }
-    }
-}
 
 @Composable
 private fun EditorBottomBar(
@@ -1940,7 +1596,7 @@ private fun CompactAction(
 }
 
 @Composable
-private fun SuiteThemeChipSurface(
+internal fun SuiteThemeChipSurface(
     selected: Boolean,
     renderConfig: BookshelfListRenderConfig,
     modifier: Modifier = Modifier,
@@ -1956,7 +1612,14 @@ private fun SuiteThemeChipSurface(
             .height(height)
             .clip(RoundedCornerShape(palette.actionRadius))
             .appSettingPanelBackground(
-                normalColor = if (selected) palette.rowPressedColor else palette.rowColor,
+                // P3（2026-10-09 真机实测）：原选中态取 palette.rowPressedColor —— 它与未选中的
+                // rowColor 同出 `UiCorner.surfaceColor` 仅轻微加深，差异过弱 ⇒ 用户看不出选了哪个。
+                // 改用强调色低透明度叠加，选中/未选中一眼可辨（文字侧仍为 accent，见 TagOptionChip）。
+                normalColor = if (selected) {
+                    palette.accent.copy(alpha = SUITE_CHIP_SELECTED_ALPHA).toArgb()
+                } else {
+                    palette.rowColor
+                },
                 panelImage = renderConfig.panelImage,
                 borderColor = palette.borderColor,
                 radiusPx = radiusPx
@@ -1966,6 +1629,83 @@ private fun SuiteThemeChipSurface(
         contentAlignment = Alignment.Center
     ) {
         content()
+    }
+}
+
+/** 编辑器「选择书源」列表的最大可视高度：定高内滚，保证**标签选择区始终紧邻其下**（不被上百行源推远）。 */
+private val SOURCE_PICKER_MAX_HEIGHT = 260.dp
+
+/** 套件 chip（类型/标签）选中态的强调色叠加透明度：兼顾"看得见选中"与不抢内容（P3）。 */
+private const val SUITE_CHIP_SELECTED_ALPHA = 0.18f
+
+/** 编辑器「选择书源」行的副标题：把标签加载状态摊在源名旁，用户无需点开即可判断该源是否可用。 */
+private fun sourceTagStatusText(
+    source: DiscoverySuiteSourceTagOptions,
+    loadingSourceUrls: Set<String>,
+    loadedSourceUrls: Set<String>
+): String {
+    return when {
+        source.sourceUrl in loadingSourceUrls -> "加载中"
+        source.sourceUrl !in loadedSourceUrls -> "未加载"
+        source.tags.isEmpty() -> "无发现标签"
+        else -> "${source.tags.size} 个标签"
+    }
+}
+
+@Composable
+private fun WidgetManageRow(
+    widget: DiscoverySuiteWidget,
+    renderConfig: BookshelfListRenderConfig,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    dragHandle: (@Composable () -> Unit)? = null
+) {
+    val palette = renderConfig.palette
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp)
+            .clip(RoundedCornerShape(palette.panelRadius))
+            .appSettingPanelBackground(
+                normalColor = palette.rowColor,
+                panelImage = renderConfig.panelImage,
+                borderColor = palette.borderColor,
+                radiusPx = palette.panelRadiusPx
+            )
+            .clickable(onClick = onEdit)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        dragHandle?.invoke()
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = widget.title.ifBlank {
+                    when (widget.type) {
+                        DiscoverySuiteWidgetType.TagBar.value -> "Tag 导航"
+                        DiscoverySuiteWidgetType.RankButtons.value -> "排行榜按钮"
+                        DiscoverySuiteWidgetType.RankedList.value -> "排行榜列表"
+                        DiscoverySuiteWidgetType.WaterfallBooks.value -> "瀑布流"
+                        DiscoverySuiteWidgetType.HorizontalBooks.value -> "横排滑动"
+                        else -> "随机推荐"
+                    }
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontSize = MaterialTheme.typography.bodyLarge.fontSize,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = palette.bodyFontFamily,
+                color = palette.primaryText
+            )
+            Text(
+                text = "${widget.typeLabel()} · ${widget.targets.size} 个 Tag",
+                fontSize = MaterialTheme.typography.bodyTertiary.fontSize,
+                fontFamily = palette.bodyFontFamily,
+                color = palette.secondaryText
+            )
+        }
+        CompactAction(text = "编辑", renderConfig = renderConfig, onClick = onEdit)
+        Spacer(modifier = Modifier.width(8.dp))
+        CompactAction(text = "删除", renderConfig = renderConfig, danger = true, onClick = onDelete)
     }
 }
 
@@ -1980,58 +1720,6 @@ private fun DiscoverySuiteWidget.typeLabel(): String {
     }
 }
 
-private fun List<DiscoverySuiteWidget>.keepWaterfallWidgetsAtBottom(): List<DiscoverySuiteWidget> {
-    return filterNot { it.type == DiscoverySuiteWidgetType.WaterfallBooks.value } +
-        filter { it.type == DiscoverySuiteWidgetType.WaterfallBooks.value }
-}
-
-private fun ExploreKind.normalizedSuiteDiscoverUrl(): String? {
-    return url?.trim()?.takeIf {
-        it.isNotBlank() && !it.equals("null", ignoreCase = true)
-    }
-}
-
-private fun ExploreKind.suiteDiscoverTagText(): String {
-    val rawViewName = viewName
-    if (!rawViewName.isNullOrBlank() &&
-        rawViewName.length in 3..28 &&
-        rawViewName.first() == '\'' &&
-        rawViewName.last() == '\''
-    ) {
-        return rawViewName.substring(1, rawViewName.length - 1)
-    }
-    return title.ifBlank { type }
-}
-
-private fun ExploreKind.suiteDiscoverGroupTitle(): String {
-    val raw = suiteDiscoverTagText().trim()
-    if (raw.isBlank()) return "分类"
-    val normalized = raw
-        .replace(Regex("[\\p{So}\\p{Sk}\\uFE0F]+"), " ")
-        .replace(Regex("[\\uFF1A:|/\\\\]+"), " ")
-        .replace(Regex("\\s{2,}"), " ")
-        .trim()
-    return normalized.ifBlank { raw }
-}
-
-private fun ExploreKind.isSuiteDiscoverGroupKind(): Boolean {
-    if (!normalizedSuiteDiscoverUrl().isNullOrBlank()) return false
-    if (!action.isNullOrBlank()) return false
-    if (!isSuiteFullWidthKind()) return false
-    return type == ExploreKind.Type.toggle || action.isNullOrBlank()
-}
-
-private fun ExploreKind.isSuiteLeadingBlankPlaceholder(): Boolean {
-    if (!isSuiteFullWidthKind()) return false
-    if (!normalizedSuiteDiscoverUrl().isNullOrBlank()) return false
-    if (!action.isNullOrBlank()) return false
-    val text = suiteDiscoverTagText().trim()
-    if (text.isNotBlank() && text != ExploreKind.Type.button) return false
-    return type == ExploreKind.Type.button || action.isNullOrBlank()
-}
-
-private fun ExploreKind.isSuiteFullWidthKind(): Boolean {
-    val style = style()
-    return style.layout_flexBasisPercent >= 0.95f ||
-        (style.layout_flexGrow >= 1f && style.layout_flexBasisPercent < 0f)
-}
+// ExploreKind 套件派生扩展（normalizedSuiteDiscoverUrl / suiteDiscoverTagText / suiteDiscoverGroupTitle /
+// isSuiteDiscoverGroupKind / isSuiteLeadingBlankPlaceholder / isSuiteFullWidthKind）已抽到
+// DiscoverySuiteSourceOptions.kt —— 供编辑器与一键生成共用同一份判据。

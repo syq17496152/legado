@@ -75,11 +75,11 @@ enum class DiscoverySuiteWidgetType(val value: String) {
 }
 
 object DiscoverySuiteStore {
-    private const val MAX_CONFIG_CHARS = 96 * 1024
-    private const val MAX_SUITES = 20
+    private const val MAX_CONFIG_CHARS = MAX_DISCOVERY_SUITE_CONFIG_CHARS
+    private const val MAX_SUITES = MAX_DISCOVERY_SUITE_COUNT
     private const val MAX_WIDGETS_PER_SUITE = 50
     private const val MAX_URLS_PER_WIDGET = 30
-    private const val MAX_TARGETS_PER_WIDGET = 30
+    private const val MAX_TARGETS_PER_WIDGET = MAX_WIDGET_TARGET_COUNT
     private const val MAX_NAME_CHARS = 40
     private const val MAX_TITLE_CHARS = 60
     private const val MAX_ID_CHARS = 64
@@ -98,12 +98,19 @@ object DiscoverySuiteStore {
             ?: DiscoverySuiteConfig()
     }
 
-    fun save(config: DiscoverySuiteConfig) {
+    /**
+     * 写盘（AD-07）：返回**是否真正落盘**。
+     *
+     * 原实现超 [MAX_CONFIG_CHARS] 时**静默不写**（无返回、无提示）⇒ 新写入口（一键生成 / 控件上移下移 /
+     * 删除控件）会表现为「点了没反应」。此处把写盘结果可判定化，调用方据此读回校验并给出提示。
+     * 兼容性：`Unit` → `Boolean` 对既有调用点（忽略返回值的写法）零改动。
+     */
+    fun save(config: DiscoverySuiteConfig): Boolean {
         val sanitized = config.sanitize()
         val json = GSON.toJson(sanitized)
-        if (json.length <= MAX_CONFIG_CHARS) {
-            appCtx.putPrefString(PreferKey.discoverySuiteConfig, json)
-        }
+        if (!isDiscoverySuiteConfigWithinLimit(json)) return false
+        appCtx.putPrefString(PreferKey.discoverySuiteConfig, json)
+        return true
     }
 
     fun selectedSuiteId(): String {
@@ -184,12 +191,10 @@ object DiscoverySuiteStore {
                             )
                         }
                         .toList()
-                        .let { widgets ->
-                            val bottomWidgets = widgets.filter { it.type == DiscoverySuiteWidgetType.WaterfallBooks.value }
-                            val regularWidgets = widgets.filterNot { it.type == DiscoverySuiteWidgetType.WaterfallBooks.value }
-                            (regularWidgets + bottomWidgets).mapIndexed { sortedIndex, widget ->
-                                widget.copy(order = sortedIndex)
-                            }
+                        // 瀑布流置底单源（AD-06）：原内联 filterNot+filter 与本文件底部扩展同语义，统一调用
+                        .withWaterfallPinnedBottom()
+                        .mapIndexed { sortedIndex, widget ->
+                            widget.copy(order = sortedIndex)
                         }
                 )
             }
@@ -238,3 +243,70 @@ const val DEFAULT_WIDGET_DISPLAY_LIMIT = 12
 const val DEFAULT_RANDOM_WIDGET_POOL_LIMIT = 36
 const val DEFAULT_RANKED_WIDGET_BOOK_COUNT = 4
 const val DEFAULT_WATERFALL_WIDGET_BOOK_COUNT = 24
+
+/** 单个控件允许绑定的标签数上限（与 [DiscoverySuiteStore] 的裁剪口径单源）。 */
+const val MAX_WIDGET_TARGET_COUNT = 30
+
+/** 套件配置串的最大安全长度（96KB）。超限即拒绝写盘。 */
+const val MAX_DISCOVERY_SUITE_CONFIG_CHARS = 96 * 1024
+
+/** 套件数量上限（与 [DiscoverySuiteStore] 的裁剪口径单源）。 */
+const val MAX_DISCOVERY_SUITE_COUNT = 20
+
+/**
+ * 配置串是否在上限内（纯函数，供 JVM 单测）。
+ * 与 [DiscoverySuiteStore.save] 的写盘判据**同源**，避免"判据与写盘规则分叉"。
+ */
+fun isDiscoverySuiteConfigWithinLimit(json: String): Boolean {
+    return json.length <= MAX_DISCOVERY_SUITE_CONFIG_CHARS
+}
+
+/**
+ * 控件类型的「标签数量」约束（单源真值）。
+ *
+ * 编辑器约束徽标与保存校验（`DiscoverySuiteManageActivity.widgetTargetsError`）共用本判据，
+ * 避免两处规则各自实现后漂移。
+ * 注意：约束的是**标签数**（`targets.size`），与控件的 `displayLimit`（一次展示的书本数）无关。
+ */
+data class WidgetTargetConstraint(val min: Int, val max: Int) {
+    fun accepts(size: Int): Boolean = size in min..max
+}
+
+/** 按控件类型取标签数量约束；未知/历史类型回落「至少 1 个、至多 [MAX_WIDGET_TARGET_COUNT]」。 */
+fun widgetTargetsConstraint(type: String): WidgetTargetConstraint {
+    return when (DiscoverySuiteWidgetType.sanitize(type)) {
+        DiscoverySuiteWidgetType.HorizontalBooks.value -> WidgetTargetConstraint(1, 1)
+        DiscoverySuiteWidgetType.RankButtons.value,
+        DiscoverySuiteWidgetType.RankedList.value -> WidgetTargetConstraint(3, 9)
+        else -> WidgetTargetConstraint(1, MAX_WIDGET_TARGET_COUNT)
+    }
+}
+
+/**
+ * 瀑布流置底（单源）：瀑布流控件固定在所有控件底部。
+ *
+ * 该语义曾被三处各自实现（本文件 `sanitize()` 内联 / 管理页 `reorderWidgets` 的私有扩展 /
+ * 本次新增的发现页长按排序）⇒ 统一收敛到此处（AD-06），保证规则单源可测。
+ */
+fun List<DiscoverySuiteWidget>.withWaterfallPinnedBottom(): List<DiscoverySuiteWidget> {
+    return filterNot { it.type == DiscoverySuiteWidgetType.WaterfallBooks.value } +
+        filter { it.type == DiscoverySuiteWidgetType.WaterfallBooks.value }
+}
+
+/**
+ * 切换编辑器里一个标签的选中态（纯函数，供 JVM 单测）。
+ *
+ * - [singleSelection] = true ⇒ **选中即替换**（横排滑动只允许 1 个标签，spec「横排滑动类型的单选约束」）；
+ * - 否则取消选中直接移除；选中时受 [maxCount] 约束（已达上限则忽略，spec「排行榜类型 3-9 约束」）。
+ */
+fun toggleSuiteTargetKey(
+    selectedKeys: Set<String>,
+    key: String,
+    singleSelection: Boolean,
+    maxCount: Int
+): Set<String> {
+    if (singleSelection) return setOf(key)
+    if (key in selectedKeys) return selectedKeys - key
+    if (selectedKeys.size >= maxCount) return selectedKeys
+    return selectedKeys + key
+}
