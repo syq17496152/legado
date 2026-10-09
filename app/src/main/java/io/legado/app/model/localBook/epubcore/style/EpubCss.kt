@@ -2,6 +2,16 @@ package io.legado.app.model.localBook.epubcore.style
 
 import java.util.Locale
 
+/**
+ * 简化 EPUB 样式解析（迁移自 archive v15）。
+ *
+ * **旧属性兼容（阶段 1.5）**：属性名归一与「未知忽略」策略统一由 [EpubCssCompat] 提供——
+ * 私有/前缀旧声明（如 `duokan-text-indent`、`-epub-writing-mode`）改写为规范名后照常参与渲染；
+ * 不可归一的未知属性**只丢弃该条声明**，不影响同规则内其它声明生效。
+ *
+ * 注意：[parseDeclarations] 保留全部可解析声明（含 `@font-face` 的 `src`/`unicode-range` 等
+ * 非正文属性），**不做丢弃**；丢弃发生在 [parseRules] 的 `supportedOnly` 过滤处。
+ */
 object EpubCss {
 
     data class Rule(
@@ -30,7 +40,7 @@ object EpubCss {
             val end = cleanCss.findMatchingCssBrace(start)
             if (end < 0) break
             val declarations = parseDeclarations(cleanCss.substring(start + 1, end))
-                .filter { it.name in supportedProperties }
+                .mapNotNull(::toRenderableDeclaration)
             if (declarations.isNotEmpty()) {
                 cleanCss.substring(index, start)
                     .split(',')
@@ -44,6 +54,13 @@ object EpubCss {
             index = end + 1
         }
         return rules
+    }
+
+    /** 把一条声明归一为渲染管线可消费的形式；null ⇒ 未知属性，忽略该条（不影响同规则其它声明）。 */
+    private fun toRenderableDeclaration(declaration: Declaration): Declaration? {
+        val canonical = EpubCssCompat.resolvePropertyName(declaration.name) { it in supportedProperties }
+            ?: return null
+        return if (canonical == declaration.name) declaration else declaration.copy(name = canonical)
     }
 
     fun parseDeclarations(style: String): List<Declaration> {
@@ -444,7 +461,11 @@ object EpubCss {
         "border-bottom-right-radius", "border-bottom-left-radius",
         "width", "height", "min-width", "max-width", "min-height", "max-height",
         "list-style", "list-style-type", "list-style-position",
-        "page-break-before", "page-break-after", "page-break-inside"
+        "page-break-before", "page-break-after", "page-break-inside",
+        // 阶段 1.5：旧/私有声明的归一落点（`-epub-writing-mode` 等经 EpubCssCompat 到此），
+        // 使竖排与断行类旧声明不被丢弃（对齐 canvas 管线 supportedProperties 口径）。
+        "writing-mode", "text-orientation", "word-break", "overflow-wrap", "hyphens",
+        "line-break", "text-align-last", "direction", "unicode-bidi"
     )
 
     private val borderStyles = setOf("none", "hidden", "dotted", "dashed", "solid", "double", "groove", "ridge", "inset", "outset")

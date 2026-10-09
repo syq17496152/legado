@@ -154,14 +154,51 @@ class EpubCoreFacade private constructor(
                 }
             }
         val startedAt = SystemClock.elapsedRealtime()
-        val html = readChapterHtml(resolvedChapter, href)
+        // 多级回退（阶段 1.6 / 台账 C1）：内容读取失败不再抛异常，逐级下探到 RAW 终态。
+        val html = runCatching { readChapterHtml(resolvedChapter, href) }
+            .getOrElse {
+                AppLog.putDebug("EPUB fallback: read failed, chapter=${chapter.index}, href=$href, ${it.localizedMessage}", it)
+                return fallbackPages(
+                    stage = EpubRenderFallbackPolicy.Stage.TEXT,
+                    failure = EpubRenderFallbackPolicy.Failure.MALFORMED_CONTENT,
+                    resolvedChapter = resolvedChapter,
+                    href = href,
+                    config = config,
+                    key = key,
+                    html = null
+                )
+            }
         val readAt = SystemClock.elapsedRealtime()
         val document = getWebLayoutSession(backgroundSlot).layout(
             buildWebLayoutRequest(resolvedChapter, config, html)
-        ) ?: error("EPUB Web layout failed")
+        )
+        if (document == null) {
+            return fallbackPages(
+                stage = EpubRenderFallbackPolicy.Stage.WEB_LAYOUT,
+                failure = EpubRenderFallbackPolicy.Failure.LAYOUT_ERROR,
+                resolvedChapter = resolvedChapter,
+                href = href,
+                config = config,
+                key = key,
+                html = html,
+                readMs = readAt - startedAt
+            )
+        }
         val layoutAt = SystemClock.elapsedRealtime()
-        val pages = webLayoutAdapter.toPages(document).takeIf { it.isNotEmpty() }
-            ?: error("EPUB Web layout returned empty page")
+        val pages = webLayoutAdapter.toPages(document)
+        if (pages.isEmpty()) {
+            return fallbackPages(
+                stage = EpubRenderFallbackPolicy.Stage.WEB_LAYOUT,
+                failure = EpubRenderFallbackPolicy.Failure.EMPTY_RESULT,
+                resolvedChapter = resolvedChapter,
+                href = href,
+                config = config,
+                key = key,
+                html = html,
+                readMs = readAt - startedAt,
+                layoutMs = layoutAt - readAt
+            )
+        }
         val adaptedAt = SystemClock.elapsedRealtime()
         AppLog.putDebug(
             "EPUB Web layout summary: chapter=${chapter.index}:${chapter.title}, " +
@@ -171,6 +208,66 @@ class EpubCoreFacade private constructor(
         cache.putPages(key, pages)
         EpubCoreDiskCache.writeLayoutRaw(bookCacheDir, bookSignature, key, io.legado.app.utils.GSON.toJson(document))
         return pages
+    }
+
+    /**
+     * 执行降级链并缓存结果（阶段 1.6）。
+     *
+     * 语义：从失败所在级按 [EpubRenderFallbackPolicy] 下探，直到产出**非空**结果；
+     * 结果同样写入 [cache]，因此**仅首次失败会走完整链路**（后续命中内存缓存）——
+     * 这即是「负向结果的缓存」，避免在同一坏章节上反复触发 WebView 布局。
+     */
+    private fun fallbackPages(
+        stage: EpubRenderFallbackPolicy.Stage,
+        failure: EpubRenderFallbackPolicy.Failure,
+        resolvedChapter: BookChapter,
+        href: String,
+        config: EpubCoreLayoutConfig,
+        key: String,
+        html: String?,
+        readMs: Long = 0L,
+        layoutMs: Long = 0L
+    ): List<EpubCorePage> {
+        var current: EpubRenderFallbackPolicy.Stage? = stage
+        var currentFailure = failure
+        var pages: List<EpubCorePage> = emptyList()
+        val visited = arrayListOf<String>()
+        while (current != null) {
+            visited += "${current.name}:${currentFailure.name}"
+            pages = when (current) {
+                EpubRenderFallbackPolicy.Stage.WEB_LAYOUT -> emptyList()
+                EpubRenderFallbackPolicy.Stage.CANVAS_PAGE -> emptyList()
+                EpubRenderFallbackPolicy.Stage.TEXT -> html
+                    ?.let { EpubFallbackPageFactory.textPages(resolvedChapter.index, href, extractPlainText(it), config) }
+                    .orEmpty()
+                EpubRenderFallbackPolicy.Stage.RAW -> EpubFallbackPageFactory.rawPages(
+                    resolvedChapter.index,
+                    href,
+                    "本章渲染失败（$currentFailure）",
+                    config
+                )
+            }
+            if (pages.isNotEmpty()) break
+            current = EpubRenderFallbackPolicy.nextAfter(current, currentFailure)
+            currentFailure = EpubRenderFallbackPolicy.Failure.LAYOUT_ERROR
+        }
+        if (pages.isEmpty()) {
+            // 理论上不可达（RAW 恒非空）；保底不返回空列表，避免上游再次走 error 分支。
+            pages = EpubFallbackPageFactory.rawPages(
+                resolvedChapter.index, href, "本章渲染失败", config
+            )
+        }
+        cache.putPages(key, pages)
+        AppLog.putDebug(
+            "EPUB render fallback: chapter=${resolvedChapter.index}, href=$href, " +
+                    "chain=${visited.joinToString(" -> ")}, pages=${pages.size}, " +
+                    "read=${readMs}ms, layout=${layoutMs}ms"
+        )
+        return pages
+    }
+
+    private fun extractPlainText(html: String): String {
+        return runCatching { org.jsoup.Jsoup.parse(html).text() }.getOrDefault("")
     }
 
     private fun buildWebLayoutRequest(
