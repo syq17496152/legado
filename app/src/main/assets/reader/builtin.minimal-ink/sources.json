@@ -1,0 +1,8 @@
+{
+  "id": "builtin.minimal-ink",
+  "name": "素笺",
+  "author": "WeAgentChat / Legado（自研）",
+  "license": "随应用分发（自研素材）",
+  "assets": [],
+  "note": "零外部素材：纸感由自研 CSS（细边框、首字下沉、中缝书脊）实现；字体仅使用系统已有衬线族，不随包分发字体文件。"
+}

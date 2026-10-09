@@ -1,0 +1,8 @@
+{
+  "id": "builtin.paper-scroll",
+  "name": "卷轴",
+  "author": "WeAgentChat / Legado（自研）",
+  "license": "随应用分发（自研素材）",
+  "assets": [],
+  "note": "零外部素材：卷轴质感由自研 CSS 渐变与边框实现；滚动视口遵循 data-reader-scroll-viewport 契约。"
+}

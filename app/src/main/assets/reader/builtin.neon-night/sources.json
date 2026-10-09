@@ -1,0 +1,8 @@
+{
+  "id": "builtin.neon-night",
+  "name": "霓虹夜行",
+  "author": "WeAgentChat / Legado（自研）",
+  "license": "随应用分发（自研素材）",
+  "assets": [],
+  "note": "零外部素材：全部视觉由自研 CSS（渐变、伪元素、text-clip）实现；不含任何第三方 IP 素材、不含外部字体文件与网络请求。"
+}
