@@ -32,6 +32,18 @@ class RendererContractTest {
         assertTrue(RenderConfig(100, 200, 16f, 24f, 0).preservePublisherLayout.not())
     }
 
+    // === 失败档（WebView 后端上报 → 宿主按降级链处理） ===
+
+    @Test
+    fun `失败档覆盖引擎不可用结构损坏与布局类失败`() {
+        val failures = RenderFailure.entries.map { it.name }.toSet()
+        assertEquals(
+            "WebView 后端需要上报的失败档不得删减（含结构损坏 MALFORMED_CONTENT）",
+            setOf("ENGINE_UNAVAILABLE", "LAYOUT_ERROR", "EMPTY_RESULT", "TIMEOUT", "MALFORMED_CONTENT"),
+            failures
+        )
+    }
+
     // === 能力矩阵（AD-30 必须实现）===
 
     @Test

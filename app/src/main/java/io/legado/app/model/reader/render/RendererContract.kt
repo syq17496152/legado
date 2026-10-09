@@ -135,7 +135,10 @@ enum class RenderFailure {
     ENGINE_UNAVAILABLE,
     LAYOUT_ERROR,
     EMPTY_RESULT,
-    TIMEOUT
+    TIMEOUT,
+
+    /** 压缩包/OPF 结构损坏，内容不可读（纠错：原实现遗漏该档，WebView 后端无法上报结构损坏）。 */
+    MALFORMED_CONTENT
 }
 
 /** 宿主回调（后端 → 宿主）。全部为「晚到结果必须自行校验代际」的语义。 */
