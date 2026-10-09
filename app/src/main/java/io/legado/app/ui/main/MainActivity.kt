@@ -135,6 +135,7 @@ import kotlin.coroutines.resume
 import io.legado.app.help.update.AppUpdate
 import io.legado.app.help.update.UpdateLogDigest
 import io.legado.app.ui.about.UpdateDialog
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.book.search.SearchActivity
 import io.legado.app.utils.dpToPx
 import kotlin.math.abs
@@ -703,7 +704,10 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
         )
         binding.liquidGlassSampleBackground.setContent {
-            MainThemeBackgroundLayer(version = mainBackgroundVersion)
+            // G-37：宿主入口顶层须带应用主题作用域（背景层不消费色板，此处为口径统一，零观感变化）
+            LegadoTheme {
+                MainThemeBackgroundLayer(version = mainBackgroundVersion)
+            }
         }
         binding.bottomNavigationWallpaper.setViewCompositionStrategy(
             ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed
@@ -1737,14 +1741,17 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
             ?.takeIf { it.isFile && it.canRead() }
         bottomNavigationWallpaper.isVisible = wallpaper != null
         bottomNavigationWallpaper.setContent {
-            ComposeThemeImageLayer(
-                state = ComposeThemeImageState(
-                    file = wallpaper,
-                    animated = wallpaper?.extension.equals("gif", ignoreCase = true),
-                    alpha = alpha,
-                    fallbackColor = Color.TRANSPARENT
+            // G-37：宿主入口顶层须带应用主题作用域（壁纸层不消费色板，此处为口径统一，零观感变化）
+            LegadoTheme {
+                ComposeThemeImageLayer(
+                    state = ComposeThemeImageState(
+                        file = wallpaper,
+                        animated = wallpaper?.extension.equals("gif", ignoreCase = true),
+                        alpha = alpha,
+                        fallbackColor = Color.TRANSPARENT
+                    )
                 )
-            )
+            }
         }
     }
 
