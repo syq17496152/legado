@@ -7,6 +7,8 @@ import io.legado.app.model.localBook.epubcore.archive.EpubPath
 import io.legado.app.model.localBook.epubcore.archive.ZipEpubArchive
 import io.legado.app.model.localBook.epubcore.cache.EpubCoreMemoryCache
 import io.legado.app.model.localBook.epubcore.cache.EpubCoreDiskCache
+import io.legado.app.model.localBook.epubcore.direct.EpubDirectSession
+import io.legado.app.model.localBook.epubcore.direct.EpubReaderContentMode
 import io.legado.app.model.localBook.epubcore.font.EpubFontCatalog
 import io.legado.app.model.localBook.epubcore.font.EpubTypefaceResolver
 import io.legado.app.model.localBook.epubcore.image.EpubImageResolver
@@ -49,6 +51,15 @@ class EpubCoreFacade private constructor(
     private val backgroundWebLayoutSessions = mutableMapOf<Int, EpubWebLayoutSession>()
     private var typefaceResolver: EpubTypefaceResolver? = null
     private val chapters: List<BookChapter> by lazy { buildChapters() }
+
+    /** 章节内容态缓存（LRU）：五态分类 + 渲染参数，避免每次分页重复解析出版方 CSS。 */
+    private val contentModeCache = object : LinkedHashMap<String, EpubReaderContentMode>(
+        4, 0.75f, true
+    ) {
+        override fun removeEldestEntry(
+            eldest: MutableMap.MutableEntry<String, EpubReaderContentMode>?
+        ): Boolean = size > MaxContentModeCache
+    }
 
     fun book(): EpubCoreBook {
         return EpubCoreBook(
@@ -171,6 +182,7 @@ class EpubCoreFacade private constructor(
         val paint = config.textPaint
         val lineHeight = (paint.textSize * config.lineSpacingMultiplier + config.lineSpacingExtraPx)
             .coerceAtLeast(paint.textSize)
+        val mode = contentMode(chapter, html)
         return EpubWebLayoutRequest(
             chapterIndex = chapter.index,
             chapterHref = href,
@@ -191,11 +203,55 @@ class EpubCoreFacade private constructor(
             readerFontUrl = config.readerFontUrl,
             readerFontPath = config.readerFontPath,
             letterSpacingEm = paint.letterSpacing,
-            textFullJustify = config.textFullJustify
+            textFullJustify = config.textFullJustify,
+            preservePublisherLayout = mode.preservePublisherLayout,
+            singlePage = mode.singlePage
         )
     }
 
-    private fun pageCacheKey(chapter: BookChapter, config: EpubCoreLayoutConfig): String {
+    /**
+     * 五态分类 → 章节渲染参数（AD-06/AD-15）。
+     *
+     * 判定证据 = 出版方声明（rendition/spine properties）+ DOM 结构 + screen 相关 CSS 三重来源；
+     * 结果按 href 走 LRU 缓存：同章重复分页（前景/背景槽）不重复解析样式表。
+     */
+    @Synchronized
+    private fun contentMode(
+        chapter: BookChapter,
+        html: String = readChapterHtml(chapter, EpubPath.stripFragment(chapter.url))
+    ): EpubReaderContentMode {
+        val resolvedChapter = resolveChapter(chapter)
+        val href = EpubPath.stripFragment(resolvedChapter.url)
+        contentModeCache[href]?.let { return it }
+        val spineItem = pkg.spine.firstOrNull { EpubPath.stripFragment(it.href) == href }
+        val manifestItem = pkg.manifest.values.firstOrNull { EpubPath.stripFragment(it.href) == href }
+        val mode = EpubChapterContentModeResolver.resolve(
+            chapterHref = href,
+            chapterHtml = html,
+            renditionLayout = spineItem?.rendition?.layout ?: pkg.renditionLayout,
+            spineProperties = spineItem?.properties.orEmpty(),
+            manifestProperties = manifestItem?.properties.orEmpty(),
+            mediaType = manifestItem?.mediaType,
+            packageViewportWidth = pkg.rendition.viewportWidth,
+            packageViewportHeight = pkg.rendition.viewportHeight,
+            resourceHost = EpubDirectSession.HOST,
+            loadStylesheet = { path, maxBytes ->
+                runCatching { archive.readBytes(path, maxBytes) }.getOrNull()
+            }
+        )
+        contentModeCache[href] = mode
+        AppLog.putDebug(
+            "EPUB core content mode: chapter=${chapter.index}, href=$href, mode=${mode.layoutMode.name}, " +
+                    "preserve=${mode.preservePublisherLayout}, single=${mode.singlePage}, vertical=${mode.verticalWriting}"
+        )
+        return mode
+    }
+
+    private fun pageCacheKey(
+        chapter: BookChapter,
+        config: EpubCoreLayoutConfig,
+        mode: EpubReaderContentMode = contentMode(chapter)
+    ): String {
         val href = EpubPath.stripFragment(chapter.url)
         val paint = config.textPaint
         return buildString {
@@ -204,6 +260,8 @@ class EpubCoreFacade private constructor(
             append('|').append(chapter.endFragmentId.orEmpty())
             append('|').append(continuationHrefs(chapter).joinToString(","))
             append("|webLayout:v20-elastic-mono")
+            // 五态分流：同章在「归一化 / 保真 / 单页」下布局不同，必须隔离缓存。
+            append("|content:").append(mode.cacheKey())
             append('|').append(if (config.scrollMode) "scroll" else "paged")
             append('|').append(config.pageWidthPx).append('x').append(config.pageHeightPx)
             append('|').append(config.paddingLeftPx).append(',').append(config.paddingTopPx)
@@ -238,11 +296,13 @@ class EpubCoreFacade private constructor(
         val paint = config.textPaint
         val lineHeight = (paint.textSize * config.lineSpacingMultiplier + config.lineSpacingExtraPx)
             .coerceAtLeast(paint.textSize)
+        val html = readChapterHtml(resolvedChapter, href)
+        val mode = contentMode(resolvedChapter, html)
         val request = EpubWebLayoutRequest(
             chapterIndex = chapter.index,
             chapterHref = href,
             title = chapter.title.ifBlank { resolvedChapter.title },
-            html = readChapterHtml(resolvedChapter, href),
+            html = html,
             startFragmentId = resolvedChapter.startFragmentId,
             endFragmentId = resolvedChapter.endFragmentId,
             viewportWidthPx = config.pageWidthPx,
@@ -258,7 +318,9 @@ class EpubCoreFacade private constructor(
             readerFontUrl = config.readerFontUrl,
             readerFontPath = config.readerFontPath,
             letterSpacingEm = paint.letterSpacing,
-            textFullJustify = config.textFullJustify
+            textFullJustify = config.textFullJustify,
+            preservePublisherLayout = mode.preservePublisherLayout,
+            singlePage = mode.singlePage
         )
         return getSelectionLayerSession().select(
             request = request,
@@ -299,6 +361,7 @@ class EpubCoreFacade private constructor(
 
     override fun close() {
         cache.clear()
+        contentModeCache.clear()
         imageResolver.clear()
         typefaceResolver?.clear()
         typefaceResolver = null
@@ -600,6 +663,7 @@ class EpubCoreFacade private constructor(
 
     companion object {
         private const val MaxBackgroundWebLayoutSessions = 5
+        private const val MaxContentModeCache = 32
         private const val ContinuationHrefsKey = "epubContinuationHrefs"
         private const val FrontMatterFallbackSpineLimit = 20
 

@@ -288,101 +288,11 @@ class EpubWebLayoutSession(
     }
 
     private fun buildReaderCss(request: EpubWebLayoutRequest): String {
-        val color = "#%06X".format(0xFFFFFF and request.textColor)
-        val readerFontFace = if (!request.readerFontFamily.isNullOrBlank() && !request.readerFontUrl.isNullOrBlank()) {
-            """
-            @font-face {
-              font-family: ${request.readerFontFamily.cssString()};
-              src: url('${request.readerFontUrl.cssUrl()}');
-            }
-            """.trimIndent()
-        } else {
-            ""
-        }
-        val justifyCss = if (request.textFullJustify) {
-            """
-              text-align: justify;
-              text-align-last: auto;
-              text-justify: inter-character;
-            """.trimIndent()
-        } else {
-            ""
-        }
-        return """
-            $readerFontFace
-            html {
-              margin: 0 !important;
-              padding: 0 !important;
-              width: ${request.viewportWidthPx}px !important;
-              height: ${request.viewportHeightPx}px !important;
-              overflow: hidden !important;
-              background: transparent !important;
-              font-size: ${request.fontSizePx}px;
-              line-height: ${request.lineHeightPx}px;
-            }
-            :root {
-              font-size: ${request.fontSizePx}px;
-              line-height: ${request.lineHeightPx}px;
-            }
-            body {
-              margin: 0 !important;
-              padding: 0 !important;
-              width: ${request.viewportWidthPx}px !important;
-              height: ${request.viewportHeightPx}px !important;
-              overflow: visible !important;
-              color: $color;
-              font-size: ${request.fontSizePx}px;
-              line-height: ${request.lineHeightPx}px;
-              letter-spacing: ${request.letterSpacingEm}em;
-              $justifyCss
-              -webkit-column-width: ${request.viewportWidthPx}px;
-              column-width: ${request.viewportWidthPx}px;
-              -webkit-column-gap: 0;
-              column-gap: 0;
-              -webkit-column-fill: auto;
-              column-fill: auto;
-            }
-            body, body * {
-              box-sizing: border-box;
-            }
-            p, li, blockquote, div {
-              overflow-wrap: break-word;
-              word-break: break-word;
-              $justifyCss
-            }
-            img, svg, video, canvas {
-              max-width: 100%;
-              height: auto;
-            }
-            body > article,
-            body > section,
-            body > main,
-            body > div.book-wrapper,
-            body > article.book-wrapper {
-              max-width: none !important;
-              width: 100% !important;
-              margin-left: 0 !important;
-              margin-right: 0 !important;
-              padding-left: 0 !important;
-              padding-right: 0 !important;
-              background-color: transparent !important;
-              border-left-width: 0 !important;
-              border-right-width: 0 !important;
-              box-shadow: none !important;
-            }
-        """.trimIndent()
-    }
-
-    private fun String.cssString(): String {
-        return "'${replace("\\", "\\\\").replace("'", "\\'")}'"
+        return EpubWebLayoutCssBuilder.build(request)
     }
 
     private fun String.cssJsString(): String {
         return "'${replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")}'"
-    }
-
-    private fun String.cssUrl(): String {
-        return replace("\\", "\\\\").replace("'", "\\'")
     }
 
     private fun buildLayoutJs(request: EpubWebLayoutRequest, token: Long): String {
@@ -393,11 +303,18 @@ class EpubWebLayoutSession(
         val waitForFonts = request.html.contains("@font-face", ignoreCase = true) ||
             !request.readerFontUrl.isNullOrBlank()
         val settleDelay = if (waitForImages || waitForFonts) 80 else 16
+        val flags = EpubWebLayoutModeFlagsFactory.from(request)
         return """
             (function() {
               var EXPECTED_TOKEN = $token;
               var MAX_GLYPHS = 2600;
               var glyphCount = 0;
+              // 五态分流：保真章节不注入阅读器排版；单页章节不分栏（AD-06/AD-15）。
+              var PRESERVE_PUBLISHER = ${flags.preservePublisherLayout};
+              var SINGLE_PAGE = ${flags.singlePage};
+              var APPLY_READER_FONT = ${flags.applyReaderFont};
+              var APPLY_READER_TYPO = ${flags.applyReaderTypography};
+              var ALLOW_JUSTIFY_STRETCH = ${flags.allowJustifyStretch};
               window.__legadoEpubLayoutToken = EXPECTED_TOKEN;
               function isCurrent() {
                 return window.__legadoEpubLayoutToken === EXPECTED_TOKEN;
@@ -632,17 +549,30 @@ class EpubWebLayoutSession(
                     root.setAttribute('id', 'legado-epub-page-root');
                     root.style.width = PAGE_W + 'px';
                     root.style.height = PAGE_H + 'px';
-                    document.documentElement.style.fontSize = '${request.fontSizePx}px';
-                    document.documentElement.style.lineHeight = '${request.lineHeightPx}px';
-                    root.style.fontSize = '${request.fontSizePx}px';
-                    root.style.lineHeight = '${request.lineHeightPx}px';
-                    root.style.webkitColumnWidth = PAGE_W + 'px';
-                  root.style.columnWidth = PAGE_W + 'px';
-                  root.style.webkitColumnGap = '0px';
-                  root.style.columnGap = '0px';
-                  root.style.webkitColumnFill = 'auto';
-                  root.style.columnFill = 'auto';
-                  root.style.overflow = 'visible';
+                    if (SINGLE_PAGE) {
+                      // 固定版式/媒体/交互：单页独占，不做多栏切分，内容不溢出画布。
+                      root.style.overflow = 'hidden';
+                      root.style.webkitColumnWidth = 'auto';
+                      root.style.columnWidth = 'auto';
+                      root.style.webkitColumnGap = '0px';
+                      root.style.columnGap = '0px';
+                      root.style.webkitColumnFill = 'auto';
+                      root.style.columnFill = 'auto';
+                    } else {
+                      if (APPLY_READER_TYPO) {
+                        document.documentElement.style.fontSize = '${request.fontSizePx}px';
+                        document.documentElement.style.lineHeight = '${request.lineHeightPx}px';
+                        root.style.fontSize = '${request.fontSizePx}px';
+                        root.style.lineHeight = '${request.lineHeightPx}px';
+                      }
+                      root.style.webkitColumnWidth = PAGE_W + 'px';
+                      root.style.columnWidth = PAGE_W + 'px';
+                      root.style.webkitColumnGap = '0px';
+                      root.style.columnGap = '0px';
+                      root.style.webkitColumnFill = 'auto';
+                      root.style.columnFill = 'auto';
+                      root.style.overflow = 'visible';
+                    }
                 }
                 rootBounds = root.getBoundingClientRect();
                 return root;
@@ -1232,7 +1162,7 @@ class EpubWebLayoutSession(
                   var role = nearestTextRole(parent);
                   var tagName = role.tagName;
                   var textScaleX = textScaleXValue(style);
-                  var readerFontInherited = !!(${request.readerFontFamily != null}) && !hasExplicitFontFamily(parent);
+                  var readerFontInherited = APPLY_READER_FONT && !hasExplicitFontFamily(parent);
                     var pending = [];
                   var cursor = 0;
                   while (cursor < rawText.length && count < MAX_ITEMS) {
@@ -1268,7 +1198,7 @@ class EpubWebLayoutSession(
                     var targetLineWidth = Math.max(1, lineRight - lineLeft);
                     var lineId = local.page + ':' + Math.round(local.top * 10);
                     var measuredWidth = measuredTextWidth(lineText, style, letterSpacing);
-                    var allowStretch = ${request.textFullJustify} && !isForbiddenLineEnd(lineText);
+                    var allowStretch = ALLOW_JUSTIFY_STRETCH && !isForbiddenLineEnd(lineText);
                     if (measuredWidth && measuredWidth > targetLineWidth * 0.94 && lineText.length > 1) {
                       var fitLow = startOffset + 1;
                       var fitHigh = Math.min(rawText.length, best + 4);
@@ -1293,7 +1223,7 @@ class EpubWebLayoutSession(
                         lineText = visibleText(info.text);
                         local = localTextRect(info.rect);
                         measuredWidth = lineText ? measuredTextWidth(lineText, style, letterSpacing) : null;
-                        allowStretch = ${request.textFullJustify} && !isForbiddenLineEnd(lineText);
+                        allowStretch = ALLOW_JUSTIFY_STRETCH && !isForbiddenLineEnd(lineText);
                         cursor = Math.max(best, startOffset + 1);
                         if (!lineText || !local) continue;
                         lineId = local.page + ':' + Math.round(local.top * 10);
@@ -1500,10 +1430,10 @@ class EpubWebLayoutSession(
                       root = prepareRoot(root);
                       mark(root, 'body');
                       materializePseudoContent(root);
-                      applyReaderFont(root);
-                      applyReaderInsets(root);
+                      if (APPLY_READER_FONT) applyReaderFont(root);
+                      if (!PRESERVE_PUBLISHER) applyReaderInsets(root);
                       rootBounds = root.getBoundingClientRect();
-                      var pageCount = Math.max(1, Math.ceil(Math.max(root.scrollWidth, document.documentElement.scrollWidth, root.getBoundingClientRect().width) / PAGE_W));
+                      var pageCount = SINGLE_PAGE ? 1 : Math.max(1, Math.ceil(Math.max(root.scrollWidth, document.documentElement.scrollWidth, root.getBoundingClientRect().width) / PAGE_W));
                       var warnings = [];
                       var pages = [];
                       for (var i = 0; i < pageCount; i++) pushPage(pages, i);

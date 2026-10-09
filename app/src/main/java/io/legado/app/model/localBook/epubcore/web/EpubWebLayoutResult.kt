@@ -23,6 +23,13 @@ data class EpubWebLayoutRequest(
     val readerFontPath: String? = null,
     val letterSpacingEm: Float = 0f,
     val textFullJustify: Boolean = false,
+    /**
+     * 保留出版方排版（五态非 REFLOWABLE）：不注入阅读器字体/颜色/行高/安全区，
+     * 也不做「正文容器去边距」归一化，避免破坏出版方盒模型契约（AD-06）。
+     */
+    val preservePublisherLayout: Boolean = false,
+    /** 单页独占视口（固定版式/媒体/交互）：不分栏、内容不溢出，页码恒为 1。 */
+    val singlePage: Boolean = false,
     val timeoutMillis: Long = 12_000L
 )
 
