@@ -86,6 +86,19 @@ class ImageSourceOptionsTest {
         assertEquals("center", parsed.style)
     }
 
+    @Test
+    fun clickPrefersClickThenOnclick() {
+        assertEquals(
+            "java.toast('ok')",
+            ImageSourceOptions.parse("""https://a/b.png,{"click":"java.toast('ok')"}""")!!.click
+        )
+        assertEquals(
+            "onclick()",
+            ImageSourceOptions.parse("""https://a/b.png,{"onclick":"onclick()"}""")!!.click
+        )
+        assertNull(ImageSourceOptions.parse("https://a/b.png")!!.click)
+    }
+
     // ---------- 几何 ----------
 
     @Test
