@@ -61,6 +61,15 @@ val Book.isLocalTxt: Boolean
 val Book.isEpub: Boolean
     get() = isLocal && originName.endsWith(".epub", true)
 
+/**
+ * Markdown 本地书（epub-md-rich-rendering 阶段 3.3）。
+ *
+ * 与 txt 同族（纯文本内容 + 归一化渲染），但内容须经 `MdDocumentBuilder` 转 HTML 后
+ * 进入文本渲染模式 ⇒ 分发上必须早于 `else -> TextFile` 分支。
+ */
+val Book.isMarkdown: Boolean
+    get() = isLocal && (originName.endsWith(".md", true) || originName.endsWith(".markdown", true))
+
 val Book.isUmd: Boolean
     get() = isLocal && originName.endsWith(".umd", true)
 
