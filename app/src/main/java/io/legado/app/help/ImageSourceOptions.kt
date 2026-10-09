@@ -30,6 +30,10 @@ internal data class ParsedImageSource(
     val style: String?
         get() = option("style")
 
+    /** 点击动作：`click` 优先，其次 `onclick`（EPUB 直渲染/气泡管线需要该动作以保留原样）。 */
+    val click: String?
+        get() = option("click") ?: option("onclick")
+
     val width: String?
         get() = option("width")
 }
