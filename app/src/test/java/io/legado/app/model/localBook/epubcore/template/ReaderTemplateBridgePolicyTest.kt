@@ -151,6 +151,23 @@ class ReaderTemplateBridgePolicyTest {
 
     @Test
     fun `上限常量与 blueprint 一致`() {
+        // 4.14 收口：宿主驱动翻页（沙箱跨源 ⇒ 必须由宿主下指令，沙箱内执行）
+        assertNull(
+            verify(
+                type = "goto-page",
+                fields = setOf("pageIndex"),
+                dir = ReaderTemplateBridgePolicy.Direction.TO_WEB
+            )
+        )
+        assertEquals(
+            "goto-page 只允许 pageIndex（多一个字段就是开放通道）",
+            "unexpected-field",
+            verify(
+                type = "goto-page",
+                fields = setOf("pageIndex", "pageCount"),
+                dir = ReaderTemplateBridgePolicy.Direction.TO_WEB
+            )
+        )
         assertEquals("blueprint 明确 MAX_JSON_DEPTH=4", 4, ReaderTemplateBridgePolicy.MaxJsonDepth)
         assertTrue(ReaderTemplateBridgePolicy.MaxRawChars > 0)
         assertTrue(ReaderTemplateBridgePolicy.MaxSelectionRects > 0)

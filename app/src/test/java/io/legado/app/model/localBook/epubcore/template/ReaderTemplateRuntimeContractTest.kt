@@ -145,16 +145,45 @@ class ReaderTemplateRuntimeContractTest {
             runtime.contains("window.${MdRichRenderInjector.StatusGlobal}")
         )
         assertTrue("必须调用可重复运行入口", runtime.contains("status.run"))
-        assertTrue("完成后须回发 renderState（沙箱不能轮询 DOM）", runtime.contains("'inject-done'"))
+        assertTrue(
+            "完成后须回发 renderState 且**带渲染计数**（只看'脚本跑了'在空文档上也会成立）",
+            runtime.contains("'inject-done,mermaid='")
+        )
         assertTrue("未注入时须明确回报，不得静默", runtime.contains("'inject-unavailable'"))
+    }
+
+    @Test
+    fun `宿主放行指令与 Kotlin 侧 TO_WEB 表一致`() {
+        val host = asset("template-host.js")
+        val arrayText = Regex("""\[([^\]]*)]\.indexOf\(type\)""").find(host)?.groupValues?.get(1)
+        assertTrue("未找到宿主侧放行类型数组（post 的准入判据）", !arrayText.isNullOrBlank())
+        val jsTypes = arrayText!!.split(',').map { it.trim().trim('\'', '"') }.filter { it.isNotEmpty() }
+        // 权威源 = Kotlin 策略表（不是测试里再抄一份清单，否则"两侧一起漂"就测不出来）
+        val kotlinTypes = ReaderTemplateBridgePolicy
+            .registeredTypes(ReaderTemplateBridgePolicy.Direction.TO_WEB)
+            .toList()
+        // 两侧不一致即"Kotlin 放行但宿主 JS 拒发"（功能静默失效）或反之（越权通道）
+        assertEquals("宿主放行集合必须与 Kotlin TO_WEB 表逐项相等", kotlinTypes.sorted(), jsTypes.sorted())
+    }
+
+    @Test
+    fun `宿主驱动翻页在流程层有落点`() {
+        val flow = asset("template-browser-flow.js")
+        assertTrue("流程层必须提供 goto（沙箱跨源 ⇒ 只有它能改内部滚动）", flow.contains("function goto("))
+        assertTrue("必须按滚动/分页两类容器分别处理", flow.contains("scrollTop") && flow.contains("scrollLeft"))
+        assertTrue("跳转后必须重新结算", flow.contains("return settle(false);"))
+        val runtime = asset("template-runtime.js")
+        assertTrue("运行时必须把 goto-page 交给流程层", runtime.contains("flow.goto(data.pageIndex)"))
     }
 
     @Test
     fun `init 不进沙箱接收白名单而由 bootstrap 转发`() {
         val runtime = asset("template-runtime.js")
         assertTrue(
-            "接收类型表须保持为注入/重测/主题四类",
-            runtime.contains("RECEIVE_TYPES = ['inject-mermaid', 'inject-katex', 'remeasure', 'set-theme']")
+            "接收类型表须与 Kotlin 侧 TO_WEB 表一致（注入/重测/主题/翻页）",
+            runtime.contains(
+                "RECEIVE_TYPES = ['inject-mermaid', 'inject-katex', 'remeasure', 'set-theme', 'goto-page']"
+            )
         )
         assertFalse("init 不得进入接收白名单（否则与 bootstrap 双重处理同一消息）", runtime.contains("'init',"))
         val bootstrap = ReaderTemplateSandboxDocument.bootstrapScript()

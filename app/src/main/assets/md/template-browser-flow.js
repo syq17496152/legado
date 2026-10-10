@@ -127,8 +127,42 @@
     return result;
   }
 
+  /**
+   * 跳转到指定页并重新结算（宿主驱动翻页，4.14 收口）。
+   *
+   * 为什么必须在沙箱内做：宿主与模板帧**跨源**，宿主读不到也改不了本帧的滚动位置
+   * ⇒ 只能由这里按模板类型操作对应容器，再把新的 `stable` 回发宿主。
+   */
+  function goto(pageIndex) {
+    var target = clampIndex(pageIndex, Number.MAX_SAFE_INTEGER);
+    try {
+      if (isScrollMode()) {
+        var viewport = document.querySelector('[data-reader-scroll-viewport]');
+        var scrollable = viewport || document.scrollingElement || document.documentElement;
+        var visible = scrollable.clientHeight || 1;
+        scrollable.scrollTop = target * visible;
+      } else {
+        var slots = bodySlots();
+        var slot = slots ? slots[0] : null;
+        if (slot) {
+          var pageWidth = slot.clientWidth || 1;
+          slot.scrollLeft = target * pageWidth;
+        }
+      }
+    } catch (error) {
+      if (window.ReaderTemplateRuntime) {
+        window.ReaderTemplateRuntime.send('error', {
+          code: 'template-goto-failed',
+          message: String((error && error.message) || error)
+        });
+      }
+    }
+    return settle(false);
+  }
+
   window.ReaderTemplateFlow = {
     initialize: initialize,
-    settle: settle
+    settle: settle,
+    goto: goto
   };
 })();

@@ -141,10 +141,10 @@
     return session.token;
   }
 
-  /** 宿主 → 沙箱：白名单内的四种指令。 */
+  /** 宿主 → 沙箱：白名单内的指令（与 `template-runtime.js` 的 RECEIVE_TYPES / Kotlin 侧 TO_WEB 表三方一致）。 */
   function post(type, payload) {
     if (!frame || !frame.contentWindow) return false;
-    if (['inject-mermaid', 'inject-katex', 'remeasure', 'set-theme'].indexOf(type) < 0) return false;
+    if (['inject-mermaid', 'inject-katex', 'remeasure', 'set-theme', 'goto-page'].indexOf(type) < 0) return false;
     var message = { type: type, token: session.token, sessionId: session.sessionId };
     if (payload) {
       for (var key in payload) {
