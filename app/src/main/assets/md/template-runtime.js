@@ -33,7 +33,7 @@
     embeddedInteraction: ['id']
   };
 
-  var RECEIVE_TYPES = ['inject-mermaid', 'inject-katex', 'remeasure', 'set-theme'];
+  var RECEIVE_TYPES = ['inject-mermaid', 'inject-katex', 'remeasure', 'set-theme', 'goto-page'];
 
   var state = {
     template: null,
@@ -176,7 +176,13 @@
     try {
       Promise.resolve(status.run())
         .then(function () {
-          send('renderState', { state: 'inject-done' });
+          // 计数随状态回发（同一字段内编码）：宿主/真机 L2 据此判定"图表真的画出来了"，
+          // 而不是只看"脚本跑了"（后者在空文档上也会成立）
+          send('renderState', {
+            state: 'inject-done,mermaid=' + (status.mermaid || 0) +
+              ',math=' + (status.math || 0) +
+              ',code=' + (status.code || 0)
+          });
         })
         .catch(function (error) {
           reportError('rich-render-failed', error);
@@ -200,6 +206,10 @@
           break;
         case 'remeasure':
           flow.settle(true);
+          break;
+        case 'goto-page':
+          // 宿主驱动翻页：沙箱跨源，宿主无法直接操作本帧滚动
+          flow.goto(data.pageIndex);
           break;
         case 'inject-mermaid':
         case 'inject-katex':

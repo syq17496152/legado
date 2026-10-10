@@ -54,13 +54,20 @@ internal object ReaderTemplateBridgePolicy {
         "inject-mermaid" to setOf("srcHash", "options"),
         "inject-katex" to setOf("srcHash", "options"),
         "remeasure" to setOf("revision"),
-        "set-theme" to setOf("themeId")
+        "set-theme" to setOf("themeId"),
+        // 宿主驱动翻页（4.14 收口）：沙箱 iframe **跨源** ⇒ 只有沙箱内部的 JS 能操作
+        // 它自己的滚动视口，宿主只能下指令（否则"点下一页没反应"——N1 同类陷阱）
+        "goto-page" to setOf("pageIndex")
     )
 
     fun allowedFields(direction: Direction, type: String): Set<String>? {
         val table = if (direction == Direction.FROM_WEB) fromWebFields else toWebFields
         return table[type]
     }
+
+    /** 已登记类型全集（供契约测试与 JS 侧表逐项比对，防"某一侧偷偷放行"）。 */
+    fun registeredTypes(direction: Direction): Set<String> =
+        if (direction == Direction.FROM_WEB) fromWebFields.keys else toWebFields.keys
 
     /**
      * 解析前校验：长度 + token。
