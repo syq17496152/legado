@@ -271,4 +271,50 @@ class ReaderTemplateRuntimeContractTest {
         assertTrue(runtime.contains("data-rp-phase"))
         assertTrue("须下发主题", runtime.contains("data-reader-theme"))
     }
+
+    @Test
+    fun `运行时提供响应式收紧竖排判定与素材治理`() {
+        // 4.15 C9/C10/C11：三块能力的状态都只活在沙箱 <html> 上（跨源宿主读不到）⇒
+        // 源码级钉住"运行时真的会写这些开关 + 自证回发"，否则真机只能靠"看起来对不对"判断。
+        val runtime = asset("template-runtime.js")
+        // C9 响应式收紧：自量沙箱帧 ⇒ 断点属性 + 尺寸变量 + 收紧系数
+        assertTrue("C9：须有响应式收紧入口", runtime.contains("function applyViewport()"))
+        assertTrue("C9：须置窄屏开关", runtime.contains("data-rp-narrow"))
+        assertTrue("C9：须置横屏开关", runtime.contains("data-rp-landscape"))
+        assertTrue("C9：须下发帧宽高变量（竖排确定宽高的基准）", runtime.contains("--rp-vp-w") && runtime.contains("--rp-vp-h"))
+        assertTrue("C9：收紧系数须走变量单源", runtime.contains("--rp-chrome-scale"))
+        assertTrue("C9：窄屏断点须有常量口径", runtime.contains("NARROW_WIDTH = 480"))
+        // C10 竖排规格：判定书写方向（显式声明优先，computed 兜底）
+        assertTrue("C10：须有竖排判定入口", runtime.contains("function applyWritingMode()"))
+        assertTrue("C10：须置竖排开关", runtime.contains("data-rp-writing"))
+        assertTrue("C10：须读 computed writing-mode", runtime.contains("writingMode"))
+        assertTrue("C10：须支持作者显式声明", runtime.contains("getAttribute('data-rp-writing')"))
+        // C11 素材治理：按需解码 + 去重 + 就绪后才提交
+        assertTrue("C11：须有素材治理入口", runtime.contains("function materializeMaterials("))
+        assertTrue("C11：须用 img.decode 预解码", runtime.contains(".decode()"))
+        assertTrue("C11：须按 src 去重（同一素材只解码一次）", runtime.contains("state.decodedSrcs[src]"))
+        assertTrue("C11：须有界等待（单图卡住不得拖死分页）", runtime.contains("MATERIAL_TIMEOUT_MS"))
+        assertTrue("C11：须解耦结算（解码就绪后才提交可翻阅页面）", runtime.contains("materializeMaterials(function () {"))
+        assertTrue(
+            "三块状态必须自证回发（跨源读不到 <html>）",
+            runtime.contains("',vp='") && runtime.contains("',writing='") && runtime.contains("',decoded='")
+        )
+    }
+
+    @Test
+    fun `响应式与竖排在结算之前完成且素材治理不吞掉结算`() {
+        // 顺序即正确性：页框量取/分页以 --rp-vp-h 与 data-rp-writing 为依据 ⇒ 滞后一拍就按错尺寸分页；
+        // 而结算必须发生在素材就绪回调内（否则图片未解码就提交了可翻阅页面 = C11 形同虚设）。
+        val runtime = asset("template-runtime.js")
+        val anchor = runtime.indexOf("markDecorations();")
+        assertTrue("未找到 continueInit 的装饰分层调用锚点", anchor >= 0)
+        val iViewport = runtime.indexOf("applyViewport();", anchor)
+        val iWriting = runtime.indexOf("applyWritingMode();", anchor)
+        val iMaterials = runtime.indexOf("materializeMaterials(function () {", anchor)
+        val iSettle = runtime.indexOf("flow.settle(false)", anchor)
+        assertTrue("响应式收紧须在锚点之后", iViewport > anchor)
+        assertTrue("竖排判定须在响应式之后", iWriting > iViewport)
+        assertTrue("素材治理须在竖排之后", iMaterials > iWriting)
+        assertTrue("结算必须发生在素材就绪回调内", iSettle > iMaterials)
+    }
 }

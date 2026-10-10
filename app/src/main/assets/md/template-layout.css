@@ -1,0 +1,85 @@
+/*
+ * template-layout.css —— 模板**布局基线**（epub-md-rich-rendering 阶段 4.15 / C9 响应式收紧 + C10 竖排规格）
+ *
+ * 与 `template-decoration.css`（只动观感、绝不声明几何）**职责分离**：本文件是**几何层**，
+ * 会有意声明尺寸/间距——因为"为正文保留空间"和"竖排确定宽高"本就是布局契约。
+ * 因此本文件里的规则**只由运行时写入 <html> 的状态开关驱动**，作者未声明对应状态时一条都不生效。
+ *
+ * 运行时（`template-runtime.js`）在结算之前把这些开关写到 <html> 上：
+ *   data-rp-narrow     = "1" | "0"              窄屏（帧宽 ≤ 480 CSS px，运行时量取自身帧得到）
+ *   data-rp-landscape  = "1" | "0"              横屏（帧宽 > 帧高）
+ *   data-rp-writing    = "horizontal" | "vertical"   正文字书写方向（读作者 CSS 的 computed writing-mode，
+ *                                              或作者在正文槽位上声明的 data-rp-writing）
+ *   --rp-vp-w / --rp-vp-h                       帧宽/高（带 px 单位）—— 竖排"确定宽高"与图片约束的基准
+ *   --rp-chrome-scale                           页眉/页脚/装饰的收紧系数（宽屏 1 / 窄屏 0.75 / 横屏 0.6）
+ *
+ * 注释中**不得出现** 小于号+斜杠+style 序列：本文件会被内联进沙箱的 `<style>` 标签，
+ * 该序列会提前闭合标签并把后续 CSS 变成 HTML（同 `ReaderTemplateSandboxDocument` 的转义纪律）。
+ */
+
+html {
+  --rp-vp-w: 0px;
+  --rp-vp-h: 0px;
+  --rp-chrome-scale: 1;
+}
+
+/* ===== C9 响应式收紧：窄屏 / 横屏缩小页眉与装饰，为正文保留空间 =====
+ *
+ * 实现口径（**有意选 transform 而非改盒模型**）：
+ * - 收紧对象是 `data-reader-decor`（运行时自动标记的装饰，含页眉/页脚/开篇插画等）
+ *   与作者显式声明的 `data-reader-chrome`；
+ * - 用 `transform: scale()`（**纯视觉、不改变布局盒**）⇒ 观感收紧但**绝不牵动正文测量**
+ *   （4.8d 红线：装饰不得参与正文测量 ⇒ 收紧装饰不会改变页数）；
+ * - 正文槽位及其祖先**永远不在** `data-reader-decor` 集合里（见运行时 markDecorations 的 keep 集合）
+ *   ⇒ 正文不可能被缩放。
+ *
+ * 需要"真的改变页面盒尺寸"的模板：给页眉/页脚加 `data-reader-chrome`，
+ * 并自行消费 `--rp-chrome-scale`（本基线对 `data-reader-chrome` 用同样的视觉缩放作为默认兜底）。
+ */
+html[data-rp-narrow="1"] [data-reader-decor],
+html[data-rp-narrow="1"] [data-reader-chrome],
+html[data-rp-landscape="1"] [data-reader-decor],
+html[data-rp-landscape="1"] [data-reader-chrome] {
+  transform: scale(var(--rp-chrome-scale));
+  transform-origin: center top;
+}
+
+/* ===== C10 竖排规格：竖排须给确定宽高 / 段距走 block 轴 / 接排不重复缩进 / 独立图片按区域约束 =====
+ *
+ * 触发条件由运行时判定：作者在正文槽位上设 `writing-mode: vertical-rl`（或显式 `data-rp-writing="vertical"`）
+ * ⇒ 运行时置 `html[data-rp-writing="vertical"]` ⇒ 本节规格生效。
+ * 古籍竖排类模板（4.12 的内置款）尚未交付，本节是**待消费者**的规格层（AOAdapt 如实登记）。
+ */
+html[data-rp-writing="vertical"] [data-reader-flow="body"] {
+  /* 确定宽高：竖排正文的"行长"沿 block 轴（水平方向），不给确定尺寸则分栏/分页无法收敛 */
+  writing-mode: vertical-rl;
+  inline-size: auto;
+  block-size: var(--rp-vp-h);
+  max-block-size: var(--rp-vp-h);
+  max-inline-size: var(--rp-vp-w);
+  overflow-x: hidden;
+}
+
+/* 段距必须走逻辑属性 margin-block-end：竖排下 block 轴是水平方向，
+   用物理 margin-bottom 会落在行内轴（错轴 ⇒ 段距表现为"字间距"而非"段间距"） */
+html[data-rp-writing="vertical"] [data-reader-flow="body"] > p,
+html[data-rp-writing="vertical"] [data-reader-flow="body"] .reader-paragraph {
+  margin-block-start: 0;
+  margin-block-end: 0.8em;
+}
+
+/* 接排（跨页续排）片段不重复首行缩进：分页前钩子给续排片段标 `data-reader-continued` */
+html[data-rp-writing="vertical"] [data-reader-flow="body"] [data-reader-continued] {
+  text-indent: 0;
+}
+
+/* 独立图片按实际区域（block/inline 逻辑轴）宽度约束：竖排下"区域宽度"是 block 轴，
+   用物理 max-width 会约束错轴 ⇒ 竖排里图片会溢出正文区 */
+html[data-rp-writing="vertical"] [data-reader-flow="body"] > img,
+html[data-rp-writing="vertical"] [data-reader-flow="body"] > figure,
+html[data-rp-writing="vertical"] [data-reader-flow="body"] figure > img {
+  block-size: auto;
+  inline-size: auto;
+  max-block-size: 100%;
+  max-inline-size: 100%;
+}

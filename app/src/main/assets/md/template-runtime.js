@@ -47,8 +47,22 @@
     decoration: 'medium',
     decorCount: 0,
     motion: true,
-    seed: ''
+    seed: '',
+    // 响应式收紧（C9）：帧尺寸与断点判定（运行时量取自身帧得到，不依赖宿主下发）
+    viewport: { w: 0, h: 0, narrow: false, landscape: false },
+    // 竖排规格（C10）：正文字书写方向（读作者 CSS 的 computed writing-mode）
+    writing: 'horizontal',
+    // 素材治理（C11）：正文图片总数 / 已解码数 / **已解码素材 src 去重集合**
+    imgCount: 0,
+    decodedCount: 0,
+    decodedSrcs: {}
   };
+
+  /** 窄屏断点（CSS px）：与 `md/template-layout.css` 的 C9 节同源口径。 */
+  var NARROW_WIDTH = 480;
+
+  /** 素材解码有界等待（毫秒）：单图卡住也必须继续，绝不因一张图把分页永久拖住。 */
+  var MATERIAL_TIMEOUT_MS = 1500;
 
   /**
    * 装饰强度 → `--rp-decor-scale`（4.8d）。字面量与 Kotlin 侧
@@ -234,6 +248,133 @@
     return marked;
   }
 
+  /**
+   * 响应式收紧（4.15 C9）：量取**沙箱自身帧**尺寸并置于 `<html>`，供引擎布局基线
+   * （`md/template-layout.css`）与作者 CSS 消费。
+   *
+   * 为什么不靠宿主下发：沙箱 iframe 已被宿主按 px 定尺寸（见宿主 `sizeSandboxContainer`），
+   * 因此"沙箱自身文档的 clientWidth/Height"就是阅读区尺寸的真值——自量最省一条跨源通道，
+   * 也天然随帧变化（宿主改尺寸后重测即得新值）。判定口径（窄屏 480 / 横屏宽>高）与
+   * `md/template-layout.css` 的 C9 节同源。
+   */
+  function applyViewport() {
+    var root = document.documentElement;
+    var w = root.clientWidth || 0;
+    var h = root.clientHeight || 0;
+    var narrow = w > 0 && w <= NARROW_WIDTH;
+    var landscape = w > 0 && h > 0 && w > h;
+    state.viewport = { w: w, h: h, narrow: narrow, landscape: landscape };
+    root.setAttribute('data-rp-narrow', narrow ? '1' : '0');
+    root.setAttribute('data-rp-landscape', landscape ? '1' : '0');
+    // 变量带 px 单位：布局基线用它做竖排"确定宽高"与图片约束，作者也可直接消费
+    root.style.setProperty('--rp-vp-w', w + 'px');
+    root.style.setProperty('--rp-vp-h', h + 'px');
+    root.style.setProperty('--rp-chrome-scale', narrow ? '0.75' : (landscape ? '0.6' : '1'));
+  }
+
+  /**
+   * 竖排规格（4.15 C10）：判定正文槽位的书写方向并置 `html[data-rp-writing]`，
+   * 由引擎布局基线施加"确定宽高 / 段距走 block 轴 / 接排不重复缩进 / 独立图片按区域约束"。
+   *
+   * 判定优先级：①作者在正文槽位上显式声明 `data-rp-writing`（最直白、可离线验）；
+   * ②否则读作者 CSS 生效后的 computed `writing-mode`（作者用类选择器写竖排时也能识别）。
+   */
+  function applyWritingMode() {
+    var slot = document.querySelector('[data-reader-flow="body"]');
+    var writing = 'horizontal';
+    if (slot) {
+      var explicit = slot.getAttribute('data-rp-writing');
+      if (explicit) {
+        writing = explicit === 'vertical' ? 'vertical' : 'horizontal';
+      } else {
+        try {
+          var computed = window.getComputedStyle(slot).writingMode || '';
+          if (computed.indexOf('vertical') === 0) writing = 'vertical';
+        } catch (error) {
+          writing = 'horizontal';                 // 取不到 computed：按横排兜底，不抛
+        }
+      }
+    }
+    state.writing = writing;
+    document.documentElement.setAttribute('data-rp-writing', writing);
+  }
+
+  /**
+   * 素材治理（4.15 C11）：正文图片**按需解码 + 去重**，**解码就绪后才回调提交可翻阅页面**。
+   *
+   * 三个失守点与对应防线：
+   * 1. **有图即贴**（先提交页面、图片稍后才解码）⇒ 翻页时图片跳变/闪白 ⇒ 先解码再结算；
+   * 2. **同一素材重复解码**（同图多页/多块）⇒ 浪费内存与解码时间 ⇒ `decodedSrcs` 按 src 去重；
+   * 3. **单图卡死拖住整页**（解码永不作数）⇒ 有界等待（`MATERIAL_TIMEOUT_MS`）后照样提交。
+   *
+   * 无图（纯文字章节）时**同步**回调 ⇒ 保持"初始化即结算一次"的既有语义不变
+   * （否则纯文字章节拿不到 stable，宿主只能 8s 超时回落 canvas）。
+   */
+  function materializeMaterials(done) {
+    var slots = document.querySelectorAll('[data-reader-flow="body"]');
+    var pending = [];
+    var total = 0;
+    for (var i = 0; i < slots.length; i++) {
+      var imgs = slots[i].querySelectorAll('img');
+      for (var j = 0; j < imgs.length; j++) {
+        total++;
+        var src = imgs[j].currentSrc || imgs[j].getAttribute('src') || '';
+        if (!src) continue;                       // 无 src 的占位图无需解码
+        if (state.decodedSrcs[src]) continue;     // 同一素材只解码一次（去重）
+        state.decodedSrcs[src] = true;
+        pending.push(imgs[j]);
+      }
+    }
+    state.imgCount = total;
+    state.decodedCount = 0;
+    if (!pending.length) {
+      done();
+      return;
+    }
+    var remaining = pending.length;
+    var finished = false;
+    var timer = setTimeout(finish, MATERIAL_TIMEOUT_MS);
+    function finish() {
+      if (finished) return;                       // 幂等：超时与"全部完成"只取先到者
+      finished = true;
+      clearTimeout(timer);
+      done();
+    }
+    function oneDone() {
+      state.decodedCount++;
+      remaining--;
+      if (remaining <= 0) finish();
+    }
+    for (var k = 0; k < pending.length; k++) {
+      decodeImage(pending[k], oneDone);
+    }
+  }
+
+  /** 单图解码（优先 `img.decode()`；旧内核无该 API 时退化为 load/error 事件等待）。 */
+  function decodeImage(img, done) {
+    try {
+      if (typeof img.decode === 'function') {
+        // 解码失败也必须继续（单图坏掉不该让整页提交不了）
+        img.decode().then(done, done);
+        return;
+      }
+    } catch (error) {
+      // 落到事件兜底
+    }
+    if (img.complete) {
+      done();
+      return;
+    }
+    var settled = false;
+    function once() {
+      if (settled) return;
+      settled = true;
+      done();
+    }
+    img.addEventListener('load', once, false);
+    img.addEventListener('error', once, false);
+  }
+
   /** 分页结果上报（由 template-browser-flow.js 调用）。 */
   function onFlowSettled(pageIndex, pageCount, costMs) {
     state.pageIndex = pageIndex;
@@ -305,7 +446,14 @@
       // 无法区分"沙箱没收到档位"与"模板本来就没有装饰"
       ',decor=' + state.decorCount + ',decorLevel=' + state.decoration +
       // 动效与种子自证（4.15）：改动效/换章后「到底有没有生效」只能靠沙箱回发（跨源读不到 <html>）
-      ',motion=' + (state.motion ? 'running' : 'paused') + ',seed=' + state.seed;
+      ',motion=' + (state.motion ? 'running' : 'paused') + ',seed=' + state.seed +
+      // 响应式/竖排/素材自证（4.15 C9/C10/C11）：这些状态同样只活在沙箱 <html> 上，
+      // 缺了自证就只能靠"看起来对不对"判断（本项目已多次栽在"设置了没反应"的静默失效上）
+      ',vp=' + state.viewport.w + 'x' + state.viewport.h +
+      ',narrow=' + (state.viewport.narrow ? 1 : 0) +
+      ',landscape=' + (state.viewport.landscape ? 1 : 0) +
+      ',writing=' + state.writing +
+      ',imgs=' + state.imgCount + ',decoded=' + state.decodedCount;
   }
 
   function handleMessage(event) {
@@ -319,6 +467,9 @@
           setTheme(data.themeId);
           break;
         case 'remeasure':
+          // 帧尺寸可能已变（宿主改尺寸/富渲染改变文档高）⇒ 重测前刷新响应式断点，
+          // 否则窄屏/横屏收紧会停留在旧判定上
+          applyViewport();
           flow.settle(true);
           break;
         case 'goto-page':
@@ -431,16 +582,23 @@
     // 让首个 `stable` 就带上最终外观（否则会先按默认档位闪一帧，再等下一次重测）
     applyDecoration(config);
     markDecorations();
-    // 立即结算一次：`stable` 是宿主判定"模板渲染成功并拿到页数"的**唯一**信号。
-    // 章节不含富渲染元素时不会有后续 `remeasure` ⇒ 若这里不结算，宿主只能等到 8s 超时回落
-    // canvas（症状：纯文字章节套模板后仍是旧排版，且日志报 sandbox stable timeout）。
-    try {
-      flow.settle(false);
-    } catch (error) {
-      reportError('template-flow-failed', error);
-    }
-    // ready 携带 DOM 事实：正文是否真的进了槽位，在"就绪"这一刻即可判定
-    send('renderState', { state: 'ready' + domFacts() });
+    // 响应式收紧（C9）与竖排规格（C10）：必须在结算之前完成 —— 页框量取与分页都以
+    // `--rp-vp-h` / `data-rp-writing` 为依据，滞后一拍就会按错误尺寸分页
+    applyViewport();
+    applyWritingMode();
+    // 素材治理（C11）：图片按需解码 + 去重，**解码就绪后才提交可翻阅页面**；
+    // 无图（纯文字章节）时同步回调 ⇒ 保持"立即结算一次"的语义不变。
+    // 这一次结算是 `stable` 的唯一来源：章节不含富渲染元素时不会有后续 `remeasure`，
+    // 不结算则宿主只能 8s 超时回落 canvas（症状：纯文字章节套模板后仍是旧排版）。
+    materializeMaterials(function () {
+      try {
+        flow.settle(false);
+      } catch (error) {
+        reportError('template-flow-failed', error);
+      }
+      // ready 携带 DOM 事实：正文是否真的进了槽位，在"就绪"这一刻即可判定
+      send('renderState', { state: 'ready' + domFacts() });
+    });
   }
 
   var flow = window.ReaderTemplateFlow || {
@@ -455,6 +613,9 @@
     setTheme: setTheme,
     applyDecoration: applyDecoration,
     markDecorations: markDecorations,
+    applyViewport: applyViewport,
+    applyWritingMode: applyWritingMode,
+    materializeMaterials: materializeMaterials,
     onFlowSettled: onFlowSettled,
     send: send
   };

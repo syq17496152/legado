@@ -108,6 +108,12 @@ class TemplateRenderBackendContractTest {
             "沙箱必须挂载装饰基线 CSS（否则档位下发到 <html> 也没人执行）",
             s.contains("MdRichRenderInjector.TemplateDecorationCssAsset")
         )
+        // 4.15 C9/C10：布局基线若不挂载，运行时写到 <html> 的 data-rp-narrow / data-rp-writing
+        // 就是死开关 —— 症状同样是"设置了没反应且不报错"
+        assertTrue(
+            "沙箱必须挂载布局基线 CSS（响应式收紧 + 竖排规格）",
+            s.contains("MdRichRenderInjector.TemplateLayoutCssAsset")
+        )
     }
 
     @Test

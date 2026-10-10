@@ -420,6 +420,8 @@ class TemplateRenderBackend(
             append(assetReader.read(MdRichRenderInjector.MdReaderCssAsset).orEmpty())
             // 装饰层基线（4.8d）：按 <html data-rp-decoration> / data-reader-motion 施加强度与动效闸门
             append(assetReader.read(MdRichRenderInjector.TemplateDecorationCssAsset).orEmpty())
+            // 布局层基线（4.15）：响应式收紧（C9）+ 竖排规格（C10），由运行时写在 <html> 上的状态开关驱动
+            append(assetReader.read(MdRichRenderInjector.TemplateLayoutCssAsset).orEmpty())
             if (wantMath) append(katexCss.orEmpty())
             if (wantHighlight) append(highlightCss.orEmpty())
         }
