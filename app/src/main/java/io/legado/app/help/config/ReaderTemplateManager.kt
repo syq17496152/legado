@@ -170,6 +170,19 @@ object ReaderTemplateManager {
     fun effectiveId(preferNight: Boolean): String? =
         resolveEffectiveId(appliedId(), preferNight, availableIds())
 
+    /**
+     * 实际生效的**模板内容**（阅读页渲染入口：一次拿到"该用哪套 + 这套是什么"）。
+     *
+     * 整体开关关闭时返回 null（关闭 ⇒ 完全走既有 canvas 路径，无残留）。
+     * IO 操作（读 assets + 用户库），调用方需在 IO 线程执行。
+     */
+    fun effectiveTemplate(preferNight: Boolean): EpubReaderTemplate? {
+        if (!templatesEnabled()) return null
+        val catalog = loadCatalog()
+        val id = resolveEffectiveId(appliedId(), preferNight, catalog.entries.map { it.id }) ?: return null
+        return catalog.entries.firstOrNull { it.id == id }?.template
+    }
+
     // === 用户动作 ===
 
     /** 应用指定模板；id 不在可用集内（且非"跟随主题"哨兵）时拒绝。 */

@@ -181,7 +181,7 @@
           send('renderState', {
             state: 'inject-done,mermaid=' + (status.mermaid || 0) +
               ',math=' + (status.math || 0) +
-              ',code=' + (status.code || 0)
+              ',code=' + (status.code || 0) + domFacts()
           });
         })
         .catch(function (error) {
@@ -192,6 +192,31 @@
       reportError('rich-render-failed', error);
       send('renderState', { state: 'inject-failed' });
     }
+  }
+
+  /**
+   * DOM 事实（诊断用，**不含正文内容**）：正文槽位数 / 槽位内 HTML 长度 / mermaid 节点数。
+   *
+   * 为什么随状态回发：沙箱跨源 ⇒ 宿主看不到这些事实；缺了它，"图表没画出来"只能靠猜
+   * （是正文没进槽位？还是注入器没找到节点？）。
+   */
+  function domFacts() {
+    var slots = document.querySelectorAll('[data-reader-flow="body"]');
+    var bodyLen = '-1';
+    if (slots.length) {
+      try {
+        bodyLen = String((slots[0].innerHTML || '').length);
+      } catch (error) {
+        bodyLen = '-2';
+      }
+    }
+    var nodes = -1;
+    try {
+      nodes = document.querySelectorAll('pre.mermaid,div.mermaid').length;
+    } catch (error) {
+      nodes = -1;
+    }
+    return ',slots=' + slots.length + ',bodyLen=' + bodyLen + ',nodes=' + nodes;
   }
 
   function handleMessage(event) {
@@ -223,7 +248,59 @@
     }
   }
 
-  /** 宿主 → 沙箱：初始化。 */
+  /**
+   * 安装厂商运行时（mermaid / KaTeX / hljs）。
+   *
+   * ⚠️ 为什么**不能**把厂商脚本内联进 srcdoc：
+   * `mermaid.min.js` 正文里含 "小于号+感叹号+双横线" 序列（实测 11 处）⇒ 一旦内联进 `<script>`，
+   * HTML 解析器会进入 "script data escaped" 态、脚本被截断/变形，`window.mermaid` 永不出现
+   * （症状：沙箱里 `pre.mermaid` 节点在、但 mermaid 计数恒 0，且**不报错**）。
+   * 故改为**按 URL 加载**（`<script src>`）：由宿主经 WebView 请求拦截从 assets 供给，
+   * 体量走浏览器流式加载而非消息体（实测：2.4MB 经 `postMessage` 下发会**静默不达**，
+   * 表现为"init 从未到达沙箱"），也不经过 HTML 解析 ⇒ 两个隐患同时消除。
+   *
+   * ⚠️ 本文件自身会被内联进沙箱 `<script>`（见 `ReaderTemplateSandboxDocument`），
+   * 因此**注释里也不许写字面的该序列**：构造器虽已做 `<\!--` 转义，但源头保持干净更稳妥
+   * （2026-10-10 真机实证：本文件注释里的该序列曾把整个沙箱打死，症状是"零回包"）。
+   */
+  function installVendors(urls, done) {
+    if (!urls || !urls.length) {
+      done();
+      return;
+    }
+    var pending = urls.length;
+    var finished = false;
+    function finish() {
+      if (finished) return;
+      finished = true;
+      done();
+    }
+    // 有界等待：厂商脚本加载失败也必须继续（降级为代码块展示，不白屏）
+    var timer = setTimeout(function () {
+      reportError('vendor-load-timeout', 'vendor load timeout');
+      finish();
+    }, 4000);
+    function oneDone() {
+      pending--;
+      if (pending <= 0) {
+        clearTimeout(timer);
+        finish();
+      }
+    }
+    for (var i = 0; i < urls.length; i++) {
+      (function (url) {
+        var script = document.createElement('script');
+        script.src = url;
+        script.onload = oneDone;
+        script.onerror = function () {
+          reportError('vendor-load-failed', String(url).split('/').pop());
+          oneDone();
+        };
+        (document.head || document.documentElement).appendChild(script);
+      })(urls[i]);
+    }
+  }
+
   function init(config) {
     if (!config || typeof config !== 'object') {
       reportError('template-init-invalid', 'init 配置非法');
@@ -232,6 +309,17 @@
     state.token = String(config.token || '');
     state.sessionId = String(config.sessionId || '');
     state.template = config.template || {};
+    // 到达即回报：区分"消息没到"与"到了但后续失败"（跨源无调试器，只能靠消息自证）
+    send('renderState', { state: 'init-received,vendors=' + (config.vendorUrls ? config.vendorUrls.length : 0) });
+    // 厂商运行时**按 URL 加载**（不走消息体：大脚本经 postMessage 下发实测不可靠，
+    // 且内联进 srcdoc 会被上文所述序列拖入转义态）—— 加载完成后再继续初始化，
+    // 否则 `inject-mermaid` 会在 `window.mermaid` 就位前到达（症状：计数恒 0 且不报错）
+    installVendors(config.vendorUrls, function () {
+      continueInit(config);
+    });
+  }
+
+  function continueInit(config) {
     state.pageIndex = typeof config.pageIndex === 'number' ? config.pageIndex : 0;
     setTheme(config.themeId);
     try {
@@ -243,7 +331,8 @@
     applyFields(config.fields);
     applyBody(config.bodyHtml);
     flow.initialize(config.flow);
-    send('renderState', { state: 'ready' });
+    // ready 携带 DOM 事实：正文是否真的进了槽位，在"就绪"这一刻即可判定
+    send('renderState', { state: 'ready' + domFacts() });
   }
 
   var flow = window.ReaderTemplateFlow || {

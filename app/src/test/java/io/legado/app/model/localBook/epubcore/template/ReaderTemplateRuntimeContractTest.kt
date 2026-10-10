@@ -167,6 +167,24 @@ class ReaderTemplateRuntimeContractTest {
     }
 
     @Test
+    fun `厂商脚本按 URL 加载且不内联`() {
+        val runtime = asset("template-runtime.js")
+        assertTrue("必须提供安装入口", runtime.contains("function installVendors(urls, done)"))
+        assertTrue(
+            "必须用 `<script src>` 按 URL 加载（体量走浏览器流式加载，不经消息体；也不经过 HTML 解析）",
+            runtime.contains("script.src = url")
+        )
+        assertTrue("加载失败必须回报（跨源无调试器，静默失败无从定位）", runtime.contains("'vendor-load-failed'"))
+        assertTrue("加载须有界等待（失败也要继续，不白屏）", runtime.contains("'vendor-load-timeout'"))
+        assertTrue("厂商就位后才继续初始化", runtime.contains("installVendors(config.vendorUrls, function () {"))
+        assertTrue("其余初始化必须在回调内完成", runtime.contains("function continueInit(config)"))
+        assertFalse(
+            "沙箱文档不得内联厂商脚本（srcdoc 由 Kotlin 侧构造，此处锁死脚本侧不引入内联路径）",
+            runtime.contains("document.write")
+        )
+    }
+
+    @Test
     fun `宿主驱动翻页在流程层有落点`() {
         val flow = asset("template-browser-flow.js")
         assertTrue("流程层必须提供 goto（沙箱跨源 ⇒ 只有它能改内部滚动）", flow.contains("function goto("))

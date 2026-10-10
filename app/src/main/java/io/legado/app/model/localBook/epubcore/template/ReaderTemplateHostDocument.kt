@@ -115,8 +115,17 @@ object ReaderTemplateHostDocument {
      */
     const val WebMessageBridgeObjectName = "legadoTemplateBridge"
 
+    /**
+     * 内联 JS 的**标签内**转义（与 `ReaderTemplateSandboxDocument.escapeScriptBody` 同口径）：
+     * `</` 防提前闭合；`<!--` 防解析器进入 "script data escaped" 态（进入后 `</script>` 不闭合，
+     * 后续标签文本变成 JS 语法错误 ⇒ 整段脚本不执行、宿主文档静默失效）。
+     */
+    fun escapeForScriptTag(js: String): String = js
+        .replace("</", "<\\/")
+        .replace("<!--", "<\\!--")
+
     private fun StringBuilder.appendScript(js: String?) {
         if (js.isNullOrBlank()) return
-        append("<script>").append(js.replace("</", "<\\/")).append("</script>")
+        append("<script>").append(escapeForScriptTag(js)).append("</script>")
     }
 }

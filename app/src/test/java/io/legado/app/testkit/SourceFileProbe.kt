@@ -47,6 +47,18 @@ object SourceFileProbe {
         "app/src/main/java/io/legado/app/$relFromMainJava",
     ).readText()
 
+    /**
+     * `src/main/assets/<relFromAssets>` 原始文本（如 `md/template-runtime.js`）。
+     *
+     * 为什么单列：被**内联进 HTML 的资产**（如沙箱 `<script>` 里的 JS）必须用**真资产**做
+     * 结构不变量断言——合成样例曾掩盖真实缺陷（样例里没有 `<` + `!--` 序列，真资产里有）。
+     */
+    fun assetRawText(relFromAssets: String): String = firstFile(
+        "src/main/assets/$relFromAssets",
+        "../app/src/main/assets/$relFromAssets",
+        "app/src/main/assets/$relFromAssets",
+    ).readText()
+
     /** `res/values/<name>`（如 `dimens.xml`）原始文本（同上三候选路径回退）。 */
     fun resValuesRawText(name: String): String = firstFile(
         "src/main/res/values/$name",

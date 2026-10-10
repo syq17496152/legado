@@ -58,6 +58,12 @@ class ReaderTemplateManageShellTest {
             assertTrue("4.9 接线缺失：$mark", text.contains(mark))
         }
         assertTrue("整体开关必须出现在页面上（否则用户无法关闭模板系统）", src(screen).contains("onToggleTemplates"))
+        // 作用范围必须**如实**：当前只接了本地 Markdown ⇒ 文案不得声称在线正文/txt 已生效
+        assertTrue(
+            "摘要必须如实说明当前作用范围",
+            src(screen).contains("当前作用于本地 Markdown 阅读")
+        )
+        assertTrue("必须说明出版 EPUB 不适用", src(screen).contains("出版 EPUB 不适用"))
     }
 
     @Test

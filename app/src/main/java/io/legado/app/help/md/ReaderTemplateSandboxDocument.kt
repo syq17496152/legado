@@ -13,9 +13,11 @@ package io.legado.app.help.md
  *    `var flow = window.ReaderTemplateFlow || {空实现}`，顺序颠倒 ⇒ 分页永远走空实现
  *    （症状：模板渲染正常但页数恒为 1，且没有任何报错）；
  * 2. `template-runtime.js` —— 渲染作者 HTML/CSS、注入槽位与正文；
- * 3. **厂商 JS 各自独立 `<script>`**（mermaid / KaTeX / hljs）—— 与阶段 3.8 的真机铁证同理：
- *    厂商脚本尾部依赖**顶层作用域**的 `var`，一旦被包进任何函数/IIFE 即崩溃失效；
- *    独立 `<script>` 各自是独立顶层程序 ⇒ 合规；
+ * 3. **厂商 JS 不经 srcdoc 内联**（阶段 4.14 真机铁证）：`mermaid.min.js` 正文含 `<!--`
+ *    （实测 11 处）⇒ 内联进 `<script>` 会被 HTML 解析器拖入 "script data escaped" 态而悄悄截断，
+ *    `window.mermaid` 永不出现（症状：沙箱内 `pre.mermaid` 节点在、但渲染计数恒 0 且**不报错**）。
+ *    故厂商脚本改由 `init` 消息携带，沙箱运行时用 `textContent` 逐条安装——既绕开 HTML 解析，
+ *    又保持"各自独立顶层程序"（厂商脚本尾部依赖顶层作用域 `var`，包进函数即失效）；
  * 4. 注入器**运行时**（IIFE，暴露可重复运行入口 `status.run`）—— 在沙箱文档里执行 ⇒
  *    它渲染的正是模板正文（单源，不另写一套）；
  * 5. **bootstrap** —— 把宿主的 `init` 转发给沙箱运行时（`template-runtime.js` 的
@@ -38,8 +40,6 @@ object ReaderTemplateSandboxDocument {
         val flowJs: String? = null,
         /** `template-runtime.js` 原文。 */
         val runtimeJs: String? = null,
-        /** 厂商 JS 原文列表（mermaid / KaTeX / hljs），**逐条独立 `<script>`**。 */
-        val vendorScripts: List<String> = emptyList(),
         /** 注入器运行时（[MdRichRenderInjector.runtimeScript] 的产物）。 */
         val injectorRuntimeJs: String? = null,
         /** 注入器 CSS（KaTeX / 代码高亮样式）。 */
@@ -56,8 +56,10 @@ object ReaderTemplateSandboxDocument {
         // 1 → 2：flow 在前（runtime 加载期即捕获 window.ReaderTemplateFlow）
         appendScript(scripts.flowJs)
         appendScript(scripts.runtimeJs)
-        // 3：厂商脚本逐条独立标签（绝不可合并、绝不可包 IIFE）
-        scripts.vendorScripts.forEach { appendScript(it) }
+        // 3：**厂商脚本不在此内联**——`mermaid.min.js` 正文含 `<!--`（实测 11 处），
+        // 内联进 `<script>` 会让 HTML 解析器进入 "script data escaped" 态、脚本被悄悄截断
+        // （症状：沙箱里 `pre.mermaid` 节点在、mermaid 计数恒 0 且不报错）。
+        // 它们改由 `init` 消息携带，沙箱运行时用 `textContent` 逐条安装（不经过 HTML 解析）。
         // 4：注入器运行时（沙箱内渲染模板正文）
         appendScript(scripts.injectorRuntimeJs)
         // 5：bootstrap（转发 init）
@@ -88,8 +90,22 @@ object ReaderTemplateSandboxDocument {
         append("})();")
     }
 
-    /** 脚本体转义：`</` → `<\/`（防止提前闭合 `<script>`，语义等价）。 */
-    fun escapeScriptBody(js: String): String = js.replace("</", "<\\/")
+    /**
+     * 脚本体转义（**两处都必须做，缺一即文档结构被撕开**）：
+     * - `</` → `<\/`：防止 `</script>` 提前闭合标签；
+     * - `<!--` → `<\!--`：防止 HTML 解析器进入 "script data escaped" 态 —— 一旦进入，
+     *   后续 `</script>` **不再闭合元素**，紧随其后的 `<script>`/`</script>` 标签文本会被
+     *   当成 JS 源码 ⇒ **整段脚本语法错误、一行都不执行**（症状：沙箱静默、连一条回包都没有，
+     *   看起来像 "init 从未到达"）。
+     *
+     * 真机铁证（2026-10-10）：`md/template-runtime.js` 的说明注释里写了该序列，
+     * 于是沙箱文档里 runtime 之后的内容全被吞掉，`window.ReaderTemplateRuntime` 永不出现。
+     *
+     * 两处替换在 JS 里语义等价（注释/字符串/正则中的 `\/` `\!` 都是同值转义）。
+     */
+    fun escapeScriptBody(js: String): String = js
+        .replace("</", "<\\/")
+        .replace("<!--", "<\\!--")
 
     private fun StringBuilder.appendScript(js: String?) {
         if (js.isNullOrBlank()) return

@@ -106,7 +106,11 @@
    *   - onMessage(message): 通过粗筛的消息回调（Kotlin 侧仍需权威校验）
    */
   function init(config) {
-    if (!config || !config.container) throw new Error('template-host: 缺少 container');
+    // 容器可用元素直传，也可用 `containerId` 由本文件自行解析：Kotlin 侧只需构造**纯 JSON**
+    // （对象里带函数/DOM 无法 JSON 化，容器同理 ⇒ 让 JS 自己解析 id 是最小耦合）
+    var container = config && (config.container ||
+      (config.containerId ? document.getElementById(config.containerId) : null));
+    if (!config || !container) throw new Error('template-host: 缺少 container');
     session.token = randomToken();
     session.sessionId = String(config.sessionId || Date.now());
     session.onMessage = config.onMessage || null;
@@ -120,7 +124,7 @@
     frame.style.height = '100%';
     frame.style.border = '0';
     frame.srcdoc = String(config.srcdoc || '');
-    config.container.appendChild(frame);
+    container.appendChild(frame);
 
     window.addEventListener('message', handleSandboxMessage, false);
 
@@ -134,6 +138,9 @@
         bodyHtml: config.bodyHtml || '',
         themeId: config.themeId || 'day',
         pageIndex: config.pageIndex || 0,
+        // 厂商脚本清单必须**显式透传**：沙箱靠它按 URL 加载 mermaid/KaTeX/hljs
+        // （漏传的症状是"看起来一切正常，但图表计数恒 0"——2026-10-10 真机实证）
+        vendorUrls: config.vendorUrls || [],
         flow: config.flow || {}
       }, '*');
     }, { once: true });

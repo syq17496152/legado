@@ -1,5 +1,6 @@
 package io.legado.app.model.localBook.epubcore.template
 
+import io.legado.app.testkit.SourceFileProbe
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -32,10 +33,37 @@ class ReaderTemplateHostChannelTest {
     }
 
     @Test
+    fun `宿主转发 init 必须透传厂商脚本清单`() {
+        // 真机实证（2026-10-10）：宿主转发 init 时漏 `vendorUrls` ⇒ 沙箱 `installVendors` 立即完成、
+        // mermaid 从未加载 ⇒ 症状是"一切正常但图表计数恒 0"（节点在、无报错）
+        val hostJs = SourceFileProbe.assetRawText("md/template-host.js")
+        assertTrue(
+            "沙箱靠 vendorUrls 按 URL 加载 mermaid/KaTeX/hljs ⇒ 转发时不得丢字段",
+            hostJs.contains("vendorUrls: config.vendorUrls")
+        )
+        listOf("template:", "fields:", "bodyHtml:", "themeId:", "flow:", "pageIndex:").forEach {
+            assertTrue("转发 init 必须含 $it", hostJs.contains(it))
+        }
+    }
+
+    @Test
     fun `宿主脚本中的结束标签被转义`() {
         val doc = ReaderTemplateHostDocument.build("var s=\"</script><b>\";")
         assertFalse("作者/宿主脚本不得提前闭合标签", doc.contains("</script><b>"))
         assertTrue("转义形式为 <\\/", doc.contains("<\\/script><b>"))
+    }
+
+    @Test
+    fun `宿主脚本中的转义态序列也被转义`() {
+        // 与沙箱构造器同口径：`<` + `!--` 会让解析器进入 "script data escaped" 态，
+        // 之后 `</script>` 不再闭合 ⇒ 宿主文档整段静默失效（沙箱连容器都不会被创建）
+        val doc = ReaderTemplateHostDocument.build("var a=1;<!-- oops --> var b=2;")
+        assertFalse("宿主文档不得残留转义态序列", doc.contains("<!--"))
+        assertTrue("转义形式为 <\\!--", doc.contains("<\\!--"))
+        assertEquals(
+            "var s='x<\\!--y';",
+            ReaderTemplateHostDocument.escapeForScriptTag("var s='x<!--y';")
+        )
     }
 
     @Test

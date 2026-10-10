@@ -132,6 +132,23 @@ class ReaderTemplateManagerTest {
     }
 
     @Test
+    fun `整体开关关闭即不可用且不显示入口`() {
+        // `effectiveTemplate()` 的第一条判据就是本开关 ⇒ 关闭必须落到"不可用 + 不提示 + 不显示入口"
+        // （4.9 语义：关闭 = 等同没有模板系统、无残留；这里在纯策略层把该语义钉住）
+        val decision = ReaderTemplateAvailabilityPolicy.decide(
+            templatesEnabled = false,
+            contentKind = ReaderTemplateAvailabilityPolicy.ContentKind.TEXT_LIKE,
+            origin = ReaderTemplateAvailabilityPolicy.Origin.BUILTIN,
+            importConfirmed = true,
+            textReadingModeActive = true
+        )
+        assertFalse(decision.usable)
+        assertEquals(ReaderTemplateAvailabilityPolicy.Reason.DISABLED, decision.reason)
+        assertTrue("关闭态连入口都不该显示", !decision.showEntry)
+        assertTrue("关闭态不该弹提示（弹提示本身就是残留）", decision.notice.isBlank())
+    }
+
+    @Test
     fun `默认选定值与策略哨兵及键名三方单源`() {
         assertEquals("空串哨兵", "", ReaderTemplateSelection.FollowTheme)
         assertEquals(ReaderTemplateSelection.FollowTheme, ReaderFeatureDefaults.READER_TEMPLATE_ID)
