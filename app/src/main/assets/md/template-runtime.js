@@ -43,8 +43,16 @@
     token: '',
     sessionId: '',
     themeId: 'day',
-    fields: {}
+    fields: {},
+    decoration: 'medium',
+    decorCount: 0
   };
+
+  /**
+   * 装饰强度 → `--rp-decor-scale`（4.8d）。字面量与 Kotlin 侧
+   * `ReaderTemplateDecorationPolicy.Intensity.cssValue` 一一对应（契约测试锁定）。
+   */
+  var DECOR_SCALE = { none: '0', light: '0.75', medium: '1', strong: '1.25' };
 
   function send(type, payload) {
     var allowed = SEND_TYPES[type];
@@ -150,6 +158,61 @@
     document.documentElement.setAttribute('data-reader-theme', state.themeId);
   }
 
+  /**
+   * 装饰强度与动效闸门（4.8d / AD-33 / TPL-17）：宿主真值写在 <html> 上，
+   * 由引擎装饰基线 CSS（`md/template-decoration.css`）按属性选择器执行。
+   *
+   * 只设属性与变量、**不动 DOM 结构尺寸** ⇒ "装饰变更不得改变正文测量"由构造保证
+   * （策略侧 `decorationChangesLayout` 另做一致性断言）。
+   */
+  function applyDecoration(config) {
+    var root = document.documentElement;
+    var level = config && config.decoration ? String(config.decoration) : 'medium';
+    if (!Object.prototype.hasOwnProperty.call(DECOR_SCALE, level)) level = 'medium';
+    var motion = !!(config && config.motion);
+    state.decoration = level;
+    root.setAttribute('data-rp-decoration', level);
+    root.setAttribute('data-reader-motion', motion ? 'running' : 'paused');
+    root.style.setProperty('--rp-decor-scale', DECOR_SCALE[level]);
+  }
+
+  /**
+   * 装饰**自动分层**：模板根下"既不在正文槽位子树内、也不是其祖先"的元素即装饰。
+   *
+   * 为什么要自动而不只靠作者声明：用户导入的第三方模板（archive 导出）不会按我方契约标注，
+   * 只认显式声明 ⇒ 装饰强度设置对它们**形同虚设**（"设置了没反应"，本项目已多次栽在这类静默失效上）。
+   * 保留显式声明优先：作者可据此表达例外（例如希望某个元素始终不随强度变化）。
+   *
+   * 安全性来自"keep 集合"：正文槽位及其祖先/后代**永不被标记** ⇒ 不可能把正文压暗或隐藏。
+   */
+  function markDecorations() {
+    var root = document.getElementById('reader-template-root');
+    if (!root) return 0;
+    var keep = [];
+    var slots = root.querySelectorAll('[data-reader-flow="body"]');
+    for (var i = 0; i < slots.length; i++) {
+      keep.push(slots[i]);
+      var parent = slots[i].parentElement;
+      while (parent) {
+        keep.push(parent);
+        parent = parent.parentElement;
+      }
+      var inner = slots[i].querySelectorAll('*');
+      for (var j = 0; j < inner.length; j++) keep.push(inner[j]);
+    }
+    var all = root.querySelectorAll('*');
+    var marked = 0;
+    for (var k = 0; k < all.length; k++) {
+      var node = all[k];
+      if (keep.indexOf(node) >= 0) continue;
+      if (node.hasAttribute('data-reader-decor')) continue;
+      node.setAttribute('data-reader-decor', 'auto');
+      marked++;
+    }
+    state.decorCount = marked;
+    return marked;
+  }
+
   /** 分页结果上报（由 template-browser-flow.js 调用）。 */
   function onFlowSettled(pageIndex, pageCount, costMs) {
     state.pageIndex = pageIndex;
@@ -216,7 +279,10 @@
     } catch (error) {
       nodes = -1;
     }
-    return ',slots=' + slots.length + ',bodyLen=' + bodyLen + ',nodes=' + nodes;
+    return ',slots=' + slots.length + ',bodyLen=' + bodyLen + ',nodes=' + nodes +
+      // 装饰自证（4.8d）：装饰档位与实际被标记的装饰元素数 —— 缺了它"选了档位却看不出差别"
+      // 无法区分"沙箱没收到档位"与"模板本来就没有装饰"
+      ',decor=' + state.decorCount + ',decorLevel=' + state.decoration;
   }
 
   function handleMessage(event) {
@@ -333,6 +399,10 @@
     flow.initialize(config.flow);
     applyFields(config.fields);
     applyBody(config.bodyHtml);
+    // 装饰强度/动效闸门 + 装饰自动分层（4.8d）：在结算之前完成，
+    // 让首个 `stable` 就带上最终外观（否则会先按默认档位闪一帧，再等下一次重测）
+    applyDecoration(config);
+    markDecorations();
     // 立即结算一次：`stable` 是宿主判定"模板渲染成功并拿到页数"的**唯一**信号。
     // 章节不含富渲染元素时不会有后续 `remeasure` ⇒ 若这里不结算，宿主只能等到 8s 超时回落
     // canvas（症状：纯文字章节套模板后仍是旧排版，且日志报 sandbox stable timeout）。
@@ -355,6 +425,8 @@
     applyFields: applyFields,
     applyBody: applyBody,
     setTheme: setTheme,
+    applyDecoration: applyDecoration,
+    markDecorations: markDecorations,
     onFlowSettled: onFlowSettled,
     send: send
   };

@@ -591,6 +591,10 @@ object PreferKey {
     // 阅读页面模板**整体开关**（epub-md-rich-rendering 阶段 4.9）：关闭 ⇒ 文本类内容完全走既有
     // canvas 路径（等同没有模板系统，无残留）；开启 ⇒ 按当前选定模板渲染。
     const val readerTemplateEnabled = "readerTemplateEnabled"
+    // 装饰强度（epub-md-rich-rendering 阶段 4.8d / TPL-17②）：0=无 1=轻 2=中 3=强，默认 2（AD-33 默认克制）。
+    const val readerTemplateDecoration = "readerTemplateDecoration"
+    // 专注模式（阶段 4.8d / TPL-17③）：开启 ⇒ 隐藏全部页面装饰，仅留正文（与原型旗舰套件同语义）。
+    const val readerTemplateFocusMode = "readerTemplateFocusMode"
     const val fastScrollerTouchTargetDp = "fastScrollerTouchTargetDp"
     const val readMenuAlpha = "readMenuAlpha"
     // 管理页背景透明度（ui-theme-governance-polish P6）：单 key 不分日夜（管理页日夜同源背景，

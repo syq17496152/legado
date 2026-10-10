@@ -1,0 +1,62 @@
+/*
+ * template-decoration.css —— 模板**装饰层基线**（epub-md-rich-rendering 阶段 4.8d / AD-33 / TPL-17）
+ *
+ * 宿主在沙箱文档的 <html> 上下发两个属性（由 template-runtime.js 在 init 时应用）：
+ *   data-rp-decoration = none | light | medium | strong   （装饰强度，默认 medium）
+ *   data-reader-motion = running | paused                 （动效闸门；专注模式/reduce-motion 为 paused）
+ *
+ * 装饰元素由沙箱运行时**自动标记** `data-reader-decor`（模板根下既不在正文槽位子树内、
+ * 也不是其祖先的元素即装饰）；作者可显式声明该属性覆盖自动判定。
+ *
+ * 两条硬约束（与 ReaderTemplateDecorationPolicy 的断言同源）：
+ * 1. **只改 opacity 与动画，不改尺寸/边距** ⇒ 装饰变更不可能改变正文测量与页数
+ *    （`decorationChangesLayout` 必须为 false，4.18 已把这条钉成判据）；
+ * 2. **用户设置优先于作者 CSS**（`!important`）：装饰强度是用户级设置，
+ *    作者样式不得让"选'无'却仍有装饰"（否则设置形同虚设）。
+ *
+ * 注意：**本文件注释里不得出现 `<` + `!` + `--` 序列**——沙箱文档把 CSS 直接放进 <style>，
+ * 虽不经过脚本转义路径，但保持源头干净是既定纪律（见 ReaderTemplateSandboxDocument KDoc）。
+ */
+
+/* ===== 装饰强度：无 / 轻 / 中 / 强（默认 medium） ===== */
+html[data-rp-decoration="none"] [data-reader-decor] {
+  opacity: 0 !important;
+}
+
+html[data-rp-decoration="light"] [data-reader-decor] {
+  opacity: 0.45 !important;
+}
+
+html[data-rp-decoration="medium"] [data-reader-decor] {
+  opacity: 0.85 !important;
+}
+
+html[data-rp-decoration="strong"] [data-reader-decor] {
+  opacity: 1 !important;
+}
+
+/* ===== 动效闸门：专注模式 / 系统 reduce-motion / 拖动与截图期间暂停 =====
+   恢复**静态帧**（`animation:none` 回到基础样式）而非 `paused`：后者停在随机一帧，
+   同一章节重进会看到不同画面（观感不稳定）。 */
+html[data-reader-motion="paused"] [data-reader-decor],
+html[data-reader-motion="paused"] [data-reader-decor] * {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* 系统级"减少动效"兜底（宿主已按同一判据下发 paused，此处防宿主判据缺失时漏网） */
+@media (prefers-reduced-motion: reduce) {
+  html [data-reader-decor],
+  html [data-reader-decor] * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ===== 装饰尺寸缩放变量（可选契约） =====
+   宿主按档位下发 `--rp-decor-scale`（none 0 / light 0.75 / medium 1 / strong 1.25）。
+   作者可在**不改正文尺寸**的前提下缩放装饰（例如 `transform: scale(var(--rp-decor-scale))`）。
+   引擎不主动施加变换：变换会改变命中测试与滚动高，越界风险交给作者自行控制。 */
+:root {
+  --rp-decor-scale: 1;
+}

@@ -11,6 +11,7 @@ import io.legado.app.constant.PreferKey
 import io.legado.app.data.appDb
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.lib.theme.ThemeRuntimeKeys
+import io.legado.app.model.localBook.epubcore.template.ReaderTemplateDecorationPolicy
 import io.legado.app.utils.GSON
 import io.legado.app.utils.canvasrecorder.CanvasRecorderFactory
 import io.legado.app.utils.fromJsonArray
@@ -2627,6 +2628,31 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var readerTemplateEnabled: Boolean
         get() = appCtx.getPrefBoolean(PreferKey.readerTemplateEnabled, ReaderFeatureDefaults.READER_TEMPLATE_ENABLED)
         set(value) = appCtx.putPrefBoolean(PreferKey.readerTemplateEnabled, value)
+
+    /**
+     * 模板**装饰强度**（epub-md-rich-rendering 阶段 4.8d / TPL-17②）。
+     *
+     * 取值 0=无 / 1=轻 / 2=中 / 3=强；**读时归一**（越界与非法值落回默认"中"），
+     * 使"存了脏值"不会让装饰消失或无限放大（同 4.6 既有偏好文件的容错口径）。
+     */
+    var readerTemplateDecoration: Int
+        get() = ReaderTemplateDecorationPolicy.Intensity.fromLevel(
+            appCtx.getPrefInt(PreferKey.readerTemplateDecoration, ReaderFeatureDefaults.READER_TEMPLATE_DECORATION)
+        ).level
+        set(value) = appCtx.putPrefInt(
+            PreferKey.readerTemplateDecoration,
+            ReaderTemplateDecorationPolicy.Intensity.fromLevel(value).level
+        )
+
+    /**
+     * 模板**专注模式**（阶段 4.8d / TPL-17③）：开启 ⇒ 隐藏全部页面装饰，只留正文。
+     *
+     * 与装饰强度**正交**：专注模式优先级更高（强度设置被临时覆盖而非改写），
+     * 关闭专注即回到用户先前选定的强度（纯策略见 `ReaderTemplateDecorationPolicy.decide`）。
+     */
+    var readerTemplateFocusMode: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.readerTemplateFocusMode, ReaderFeatureDefaults.READER_TEMPLATE_FOCUS_MODE)
+        set(value) = appCtx.putPrefBoolean(PreferKey.readerTemplateFocusMode, value)
 
     val progressBarBehavior: String?
         get() = appCtx.getPrefString(PreferKey.progressBarBehavior, "page")

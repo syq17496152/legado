@@ -4,6 +4,7 @@ import io.legado.app.constant.AppLog
 import io.legado.app.model.localBook.epubcore.template.EpubReaderTemplate
 import io.legado.app.model.localBook.epubcore.template.ReaderBuiltinTemplateCatalog
 import io.legado.app.model.localBook.epubcore.template.ReaderTemplateAvailabilityPolicy
+import io.legado.app.model.localBook.epubcore.template.ReaderTemplateDecorationPolicy
 import io.legado.app.model.localBook.epubcore.template.ReaderTemplateImportMapper
 import io.legado.app.model.localBook.epubcore.template.ReaderTemplatePreferences
 import io.legado.app.model.localBook.epubcore.template.ReaderTemplateRepository
@@ -120,6 +121,47 @@ object ReaderTemplateManager {
 
     /** 导入前的**免责确认**文案（4.9：默认仅内置可信 ⇒ 用户导入须显式确认）。 */
     val importDisclaimer: String get() = ReaderTemplateAvailabilityPolicy.ImportDisclaimer
+
+    // === 装饰强度与专注模式（4.8d / AD-33 / TPL-17） ===
+
+    /** 装饰强度档位（0=无 / 1=轻 / 2=中 / 3=强；读写均已归一，脏值不会落库）。 */
+    fun decorationLevel(): Int = AppConfig.readerTemplateDecoration
+
+    fun setDecorationLevel(level: Int) {
+        AppConfig.readerTemplateDecoration = level
+    }
+
+    /** 专注模式（隐藏全部页面装饰，只留正文）。 */
+    fun focusMode(): Boolean = AppConfig.readerTemplateFocusMode
+
+    fun setFocusMode(enabled: Boolean) {
+        AppConfig.readerTemplateFocusMode = enabled
+    }
+
+    /**
+     * **装饰决策单源**：设置弹层（显示什么档位）与阅读页（实际下发什么）共用同一判据。
+     *
+     * 分成两份判定的后果是"设置里显示中、渲染却是无"这类无法自查的偏差（本项目已有先例）。
+     * `internal`：返回类型属模板包内部策略（仅本模块消费）。
+     */
+    internal fun decorationDecision(reduceMotion: Boolean): ReaderTemplateDecorationPolicy.Decision =
+        ReaderTemplateDecorationPolicy.decide(
+            templatesEnabled = templatesEnabled(),
+            storedIntensity = ReaderTemplateDecorationPolicy.Intensity.fromLevel(decorationLevel()),
+            focusMode = focusMode(),
+            reduceMotion = reduceMotion
+        )
+
+    /** 下发给模板沙箱的装饰档位字面量（`html[data-rp-decoration]`；与引擎装饰基线 CSS 同表）。 */
+    fun decorationCssValue(reduceMotion: Boolean): String =
+        decorationDecision(reduceMotion).intensity.cssValue
+
+    /** 下发给模板沙箱的动效开关（`html[data-reader-motion] = running|paused`）。 */
+    fun decorationMotionEnabled(reduceMotion: Boolean): Boolean =
+        decorationDecision(reduceMotion).motionEnabled
+
+    /** 装饰决策给用户的说明（空串 ⇒ 不打扰）。 */
+    fun decorationNotice(reduceMotion: Boolean): String = decorationDecision(reduceMotion).notice
 
     /** 导出/分享前的**免责提示**（内置为自研合规素材 ⇒ 空串，不打扰用户）。 */
     fun exportNotice(entry: Entry): String =
@@ -242,6 +284,10 @@ object ReaderTemplateManager {
     fun restoreDefaults(): Int {
         val removed = repository.clearUserTemplates()
         preferences.clear()
+        // 装饰强度/专注模式同属"模板偏好"（与弹层文案一致）：恢复默认须一并回到出厂档位，
+        // 否则用户会看到"模板没了但装饰仍是'无'"，无法解释
+        setDecorationLevel(ReaderFeatureDefaults.READER_TEMPLATE_DECORATION)
+        setFocusMode(ReaderFeatureDefaults.READER_TEMPLATE_FOCUS_MODE)
         applyFollowTheme()
         return removed
     }

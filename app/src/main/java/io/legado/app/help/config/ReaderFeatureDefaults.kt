@@ -47,4 +47,22 @@ object ReaderFeatureDefaults {
      * 并在 updateLog 作为**用户可感知变化**登记。
      */
     const val READER_TEMPLATE_ENABLED = false
+
+    /**
+     * 模板**装饰强度**默认值（epub-md-rich-rendering 阶段 4.8d / TPL-17②）。
+     *
+     * 取 `2`（中）而非更强：AD-33「默认克制」是硬约束——装饰是氛围层，
+     * 默认档位必须保证正文是画面主体（正文区 ≥80% 页高）。
+     * 与 `ReaderTemplateDecorationPolicy.DefaultIntensity` **同值双写**（两者皆为"中"），
+     * 由同包测试钉住（避免默认值分叉）。
+     */
+    const val READER_TEMPLATE_DECORATION = 2
+
+    /**
+     * 模板**专注模式**默认值（阶段 4.8d / TPL-17③）。
+     *
+     * 默认 false：专注模式是"我此刻只想看正文"的显式选择，不应替用户决定；
+     * 默认关也与"默认档位=中"自洽（若默认专注，装饰强度设置将形同虚设）。
+     */
+    const val READER_TEMPLATE_FOCUS_MODE = false
 }

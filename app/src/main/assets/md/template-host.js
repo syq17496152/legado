@@ -144,6 +144,11 @@
         // 厂商脚本清单必须**显式透传**：沙箱靠它按 URL 加载 mermaid/KaTeX/hljs
         // （漏传的症状是"看起来一切正常，但图表计数恒 0"——2026-10-10 真机实证）
         vendorUrls: config.vendorUrls || [],
+        // 装饰强度与动效闸门（4.8d）**同样必须显式透传**：本函数是白名单转发，
+        // 漏一个键 ⇒ 沙箱按默认档位渲染（症状：选"无"仍有装饰、选"强"看不出差别，且不报错）
+        // ——2026-10-10 L2 实证（decorLevel 恒 medium，而宿主侧确已下发 strong）
+        decoration: config.decoration || 'medium',
+        motion: config.motion !== false,
         flow: config.flow || {}
       }, '*');
     }, { once: true });

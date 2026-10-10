@@ -74,7 +74,11 @@ class TemplateRenderBackend(
         val bookName: String,
         val chapterTitle: String,
         val progressPercent: Int,
-        val hour: Int
+        val hour: Int,
+        /** 装饰强度字面量（`none|light|medium|strong`，4.8d；见 `ReaderTemplateDecorationPolicy`）。 */
+        val decoration: String = DecorationMedium,
+        /** 装饰动效是否允许（专注模式 / reduce-motion ⇒ false ⇒ 沙箱 `<html data-reader-motion="paused">`）。 */
+        val decorationMotion: Boolean = true
     ) {
         val themeId: String get() = if (dark) ThemeNight else ThemeDay
     }
@@ -303,6 +307,9 @@ class TemplateRenderBackend(
             add("fields", fieldsJson(values))
             addProperty("bodyHtml", content.html)
             addProperty("themeId", values.themeId)
+            // 装饰强度与动效闸门（4.8d）：沙箱 runtime 写到 <html> 上，由 md/template-decoration.css 执行
+            addProperty("decoration", values.decoration)
+            addProperty("motion", values.decorationMotion)
             // 厂商脚本**按 URL 交给沙箱自行加载**（宿主经 shouldInterceptRequest 从 assets 供给）：
             // ①体量走浏览器流式加载，不经消息体（实测 2.4MB postMessage 会静默不达）；
             // ②不内联 srcdoc（`mermaid.min.js` 含 `<!--`，内联会被 HTML 解析器截断）
@@ -383,6 +390,8 @@ class TemplateRenderBackend(
         val css = buildString {
             // 正文排版基线（模板 CSS 是外观层，md-reader.css 提供正文元素基线）
             append(assetReader.read(MdRichRenderInjector.MdReaderCssAsset).orEmpty())
+            // 装饰层基线（4.8d）：按 <html data-rp-decoration> / data-reader-motion 施加强度与动效闸门
+            append(assetReader.read(MdRichRenderInjector.TemplateDecorationCssAsset).orEmpty())
             if (wantMath) append(katexCss.orEmpty())
             if (wantHighlight) append(highlightCss.orEmpty())
         }
@@ -501,7 +510,9 @@ class TemplateRenderBackend(
                 }
                 AppLog.putDebugWithTag(
                     AppLog.TAG_READER_TEMPLATE,
-                    "sandbox ready: chapter=${currentChapter?.chapterIndex}, inject=$type"
+                    // 必须带上原始状态串：沙箱跨源，`decor=/decorLevel=` 等 DOM 事实只在这里出现；
+                    // 纯文字章节没有 inject-done ⇒ 不在此留痕就等于"装饰档位有没有到达沙箱"无从取证
+                    "sandbox ready: chapter=${currentChapter?.chapterIndex}, inject=$type, state=$state"
                 )
             }
 
@@ -633,6 +644,9 @@ class TemplateRenderBackend(
         private const val RuntimeJsAsset = "md/template-runtime.js"
         private const val ThemeNight = "night"
         private const val ThemeDay = "day"
+
+        /** 装饰强度默认字面量（与 `ReaderTemplateDecorationPolicy.Intensity.MEDIUM.cssValue` 同值）。 */
+        private const val DecorationMedium = "medium"
         private const val ReadyComplete = "complete"
         private const val StateReady = "ready"
         private const val StateInjectDonePrefix = "inject-done"

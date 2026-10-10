@@ -2,6 +2,7 @@ package io.legado.app.ui.book.read.config
 
 import android.content.DialogInterface
 import android.os.Bundle
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -33,11 +34,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -54,14 +57,19 @@ import com.github.liuyueyi.quick.transfer.constants.TransType
 import io.legado.app.R
 import io.legado.app.constant.EventBus
 import io.legado.app.constant.PageAnim
+import io.legado.app.help.book.isLocalTxt
+import io.legado.app.help.book.isMarkdown
+import io.legado.app.help.book.isOnLineTxt
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReaderFontWeight
+import io.legado.app.help.config.ReaderTemplateManager
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.uiTypeface
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.font.FontSelectDialog
+import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.compose.AppDialogStyle
 import io.legado.app.ui.widget.compose.AppThemedStepperSlider
 import io.legado.app.ui.widget.compose.LegadoMiuixSlider
@@ -75,6 +83,14 @@ import io.legado.app.utils.showDialogFragment
 import kotlin.math.roundToInt
 import androidx.compose.material3.MaterialTheme
 import io.legado.app.ui.theme.bodyTertiary
+
+/**
+ * 「被模板接管 ⇒ 置灰」的禁用不透明度（4.8d 优先级规则的可视化）。
+ *
+ * 只做视觉弱化（不引入新色值/新组件族成员），与既有 `ReaderTextAction` 的
+ * `enabled=false`（文字降为 secondaryText）同一语义：**让用户一眼看出该项此刻不生效**。
+ */
+private const val DisabledAlpha = 0.45f
 
 class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
     FontSelectDialog.CallBack {
@@ -96,13 +112,22 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                ReadStyleContent()
+                // G-37：宿主入口**顶层**必须有主题作用域——否则内容子树在主题包/夜间下
+                // 回落 M3 默认亮色基线（黑字黑图标）。`ReaderBottomSheetFrame` 只给弹层观感，
+                // 不提供色板作用域。
+                LegadoTheme {
+                    ReadStyleContent()
+                }
             }
         }
     }
 
     @Composable
     private fun ReadStyleContent() {
+        // 模板是否**接管**当前正文排版（4.8d 优先级规则）：
+        // 模板启用 且 当前内容是模板作用域内的形态（在线正文 / 本地 txt / 本地 md）。
+        // 出版 EPUB / 漫画 / 图片 / 视频 / 音频 / PDF **不适用**模板 ⇒ 不得置灰原生排版（否则用户无从排版）
+        val typographyLocked = remember { templateTakesOverTypography() }
         ReaderBottomSheetFrame(maxHeightFraction = maxSheetHeightFraction) { style ->
             Column(
                 modifier = Modifier
@@ -111,15 +136,110 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                TextMetricSection(style = style)
-                AnimAndToolsSection(style = style)
+                if (ReaderTemplateManager.templatesEnabled()) {
+                    TemplateDecorationSection(style = style, typographyLocked = typographyLocked)
+                }
+                TextMetricSection(style = style, typographyLocked = typographyLocked)
+                AnimAndToolsSection(style = style, typographyLocked = typographyLocked)
                 StyleLibrarySection(style = style)
             }
         }
     }
 
+    /**
+     * 页面模板区（4.8d / AD-33 / TPL-17②③）：装饰强度 + 专注模式 + **与原生排版的优先级说明**。
+     *
+     * 只在模板总开关开启时出现（关闭 ⇒ 该项完全不存在，无残留，与 4.9 关闭语义一致）。
+     * 内容不在模板作用域时**只显示说明**、不给出无意义的开关（N1：入口能在但点了没反应）。
+     */
     @Composable
-    private fun AnimAndToolsSection(style: AppDialogStyle) {
+    private fun TemplateDecorationSection(style: AppDialogStyle, typographyLocked: Boolean) {
+        var level by rememberSaveable { mutableIntStateOf(ReaderTemplateManager.decorationLevel()) }
+        var focus by rememberSaveable { mutableStateOf(ReaderTemplateManager.focusMode()) }
+        val reduceMotion = remember { systemReduceMotion() }
+        ReaderSectionCard(style = style, title = null) {
+            Text(
+                text = "页面模板",
+                color = style.primaryText,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = if (typographyLocked) {
+                    "模板已接管正文排版：字号 / 字体 / 行距 / 字重 / 边距由模板决定，下列对应项已置灰；关闭页面模板即恢复。"
+                } else {
+                    "该格式不支持页面模板（仅作用于在线正文 / 本地 txt / 本地 md），装饰设置在此内容上不生效。"
+                },
+                color = style.secondaryText,
+                fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            if (!typographyLocked) return@ReaderSectionCard
+            ReaderSegmentedOptions(
+                options = decorationOptions(),
+                selectedValue = level.toString(),
+                style = style,
+                scrollable = true,
+                pillStyle = true
+            ) { value ->
+                val next = value.toIntOrNull() ?: return@ReaderSegmentedOptions
+                if (next != level) {
+                    level = next
+                    ReaderTemplateManager.setDecorationLevel(next)
+                    reloadAfterTemplatePreferenceChanged()
+                }
+            }
+            ReaderSwitchRow(
+                title = "专注模式",
+                checked = focus,
+                style = style,
+                summary = "隐藏页面装饰，只留正文"
+            ) { checked ->
+                focus = checked
+                ReaderTemplateManager.setFocusMode(checked)
+                reloadAfterTemplatePreferenceChanged()
+            }
+            // 说明只在不打扰时为空（reduce-motion 提示等）；开着专注意味着用户已知道装饰被隐藏
+            ReaderTemplateManager.decorationNotice(reduceMotion).takeIf { it.isNotBlank() }?.let { notice ->
+                Text(
+                    text = notice,
+                    color = style.secondaryText,
+                    fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
+        }
+    }
+
+    private fun decorationOptions(): List<ReaderOption> = listOf(
+        ReaderOption("0", "无"),
+        ReaderOption("1", "轻"),
+        ReaderOption("2", "中"),
+        ReaderOption("3", "强")
+    )
+
+    /** 装饰偏好变更后重载当前章：沙箱里的档位是 init 时下发的，改后必须重渲染才能生效。 */
+    private fun reloadAfterTemplatePreferenceChanged() {
+        postEvent(EventBus.UP_CONFIG, arrayListOf(5))
+    }
+
+    /** 模板是否接管当前正文排版（作用域判定与 `ReaderTemplateAvailabilityPolicy.TEXT_LIKE` 同口径）。 */
+    private fun templateTakesOverTypography(): Boolean {
+        if (!ReaderTemplateManager.templatesEnabled()) return false
+        val book = ReadBook.book ?: return false
+        return book.isOnLineTxt || book.isLocalTxt || book.isMarkdown
+    }
+
+    /** 系统"减少动效"（与 ReadBookActivity 同一判据；取不到按未开启处理）。 */
+    private fun systemReduceMotion(): Boolean {
+        val context = context ?: return false
+        return runCatching {
+            Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+        }.getOrDefault(false)
+    }
+
+    @Composable
+    private fun AnimAndToolsSection(style: AppDialogStyle, typographyLocked: Boolean) {
         var selectedAnim by rememberSaveable { mutableIntStateOf(ReadBook.pageAnim()) }
         var shareLayout by rememberSaveable { mutableIntStateOf(if (ReadBookConfig.shareLayout) 1 else 0) }
         var textWeight by rememberSaveable { mutableIntStateOf(ReadBookConfig.textWeight) }
@@ -145,6 +265,8 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
             FontWeightSlider(
                 value = textWeight,
                 style = style,
+                // 模板接管排版时字重由模板决定 ⇒ 置灰（否则"调了没反应"）
+                enabled = !typographyLocked,
                 onValueChange = { value ->
                     textWeight = value
                     ReadBookConfig.textWeight = value
@@ -161,12 +283,14 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                     text = stringResource(R.string.text_font),
                     style = style,
                     modifier = Modifier.weight(1f),
+                    enabled = !typographyLocked,
                     onClick = { showDialogFragment<FontSelectDialog>() }
                 )
                 ReaderTextAction(
                     text = stringResource(R.string.text_indent),
                     style = style,
                     modifier = Modifier.weight(1f),
+                    enabled = !typographyLocked,
                     onClick = { showTextIndentDialog() }
                 )
                 ReaderTextAction(
@@ -175,6 +299,8 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                     text = stringResource(R.string.layout_config),
                     style = style,
                     modifier = Modifier.weight(1f),
+                    // 版面（边距/页眉页脚）同属原生排版：模板接管时置灰
+                    enabled = !typographyLocked,
                     onClick = {
                         dismissAllowingStateLoss()
                         callBack?.showPaddingConfig()
@@ -208,13 +334,15 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
     private fun FontWeightSlider(
         value: Int,
         style: AppDialogStyle,
+        enabled: Boolean = true,
         onValueChange: (Int) -> Unit,
         onValueChangeFinished: () -> Unit
     ) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 66.dp),
+                .heightIn(min = 66.dp)
+                .alpha(if (enabled) 1f else DisabledAlpha),
             shape = RoundedCornerShape(style.actionRadius),
             color = style.fieldSurface,
             contentColor = style.primaryText,
@@ -252,6 +380,7 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                     },
                     onValueChangeFinished = onValueChangeFinished,
                     palette = style.toMiuixPalette(),
+                    enabled = enabled,
                     valueRange = ReaderFontWeight.MIN.toFloat()..ReaderFontWeight.MAX.toFloat()
                 )
             }
@@ -259,7 +388,7 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
     }
 
     @Composable
-    private fun TextMetricSection(style: AppDialogStyle) {
+    private fun TextMetricSection(style: AppDialogStyle, typographyLocked: Boolean) {
         var textSize by rememberSaveable { mutableIntStateOf(ReadBookConfig.textSize - 5) }
         var letterSpacing by rememberSaveable {
             mutableIntStateOf((ReadBookConfig.letterSpacing * 100).toInt() + 50)
@@ -282,6 +411,7 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                         range = 0..45,
                         style = style,
                         modifier = Modifier.weight(1f),
+                        enabled = !typographyLocked,
                         onValueChange = {
                             textSize = it
                             ReadBookConfig.textSize = it + 5
@@ -295,6 +425,7 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                         range = 0..100,
                         style = style,
                         modifier = Modifier.weight(1f),
+                        enabled = !typographyLocked,
                         onValueChange = {
                             letterSpacing = it
                             ReadBookConfig.letterSpacing = (it - 50) / 100f
@@ -313,6 +444,7 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                         range = 0..20,
                         style = style,
                         modifier = Modifier.weight(1f),
+                        enabled = !typographyLocked,
                         onValueChange = {
                             lineSpacing = it
                             ReadBookConfig.lineSpacingExtra = it
@@ -326,6 +458,7 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                         range = 0..20,
                         style = style,
                         modifier = Modifier.weight(1f),
+                        enabled = !typographyLocked,
                         onValueChange = {
                             paragraphSpacing = it
                             ReadBookConfig.paragraphSpacing = it
@@ -345,10 +478,13 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
         range: IntRange,
         style: AppDialogStyle,
         modifier: Modifier = Modifier,
+        enabled: Boolean = true,
         onValueChange: (Int) -> Unit
     ) {
         Surface(
-            modifier = modifier.heightIn(min = 58.dp),
+            modifier = modifier
+                .heightIn(min = 58.dp)
+                .alpha(if (enabled) 1f else DisabledAlpha),
             shape = RoundedCornerShape(style.actionRadius),
             color = style.fieldSurface,
             contentColor = style.primaryText,
@@ -387,6 +523,7 @@ class ReadStyleDialog : ReaderBottomSheetComposeDialogFragment(),
                     range = range,
                     onValueChange = { onValueChange(it.coerceIn(range)) },
                     palette = style.toMiuixPalette(),
+                    enabled = enabled,
                     trackHeight = 34.dp,
                     thumbSize = 26.dp,
                     endpointWidth = 30.dp

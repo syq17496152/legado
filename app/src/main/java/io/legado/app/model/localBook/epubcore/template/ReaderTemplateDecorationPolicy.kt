@@ -28,11 +28,17 @@ internal object ReaderTemplateDecorationPolicy {
      * @param decorationScale 装饰元素尺寸缩放（相对基准，仅影响装饰本身）。
      * @param motionAllowed 该强度下是否**允许**装饰动效（仍受 reduce-motion 与专注模式约束）。
      */
-    enum class Intensity(val level: Int, val decorationScale: Float, val motionAllowed: Boolean) {
-        NONE(0, 0f, false),
-        LIGHT(1, 0.5f, false),
-        MEDIUM(2, 1f, true),
-        STRONG(3, 1.4f, true);
+    enum class Intensity(
+        val level: Int,
+        val decorationScale: Float,
+        val motionAllowed: Boolean,
+        /** 下发给沙箱的档位字面量（`html[data-rp-decoration]`；与引擎装饰基线 CSS 的取值一致）。 */
+        val cssValue: String
+    ) {
+        NONE(0, 0f, false, "none"),
+        LIGHT(1, 0.5f, false, "light"),
+        MEDIUM(2, 1f, true, "medium"),
+        STRONG(3, 1.4f, true, "strong");
 
         companion object {
             fun fromLevel(level: Int): Intensity = entries.firstOrNull { it.level == level } ?: DefaultIntensity
@@ -83,19 +89,14 @@ internal object ReaderTemplateDecorationPolicy {
                 notice = "专注模式：已隐藏页面装饰"
             )
         }
-        val effective = if (baseline.motionAllowed && reduceMotion) {
-            // 保留装饰观感但停动效（reduce-motion / 省电）
-            intensityWithMotionOff(baseline)
-        } else {
-            baseline
-        }
+        // 动效 = 档位允许 && 未要求减少动效。**档位本身不变**（reduce-motion 只停动效、不降观感）
         return Decision(
             intensity = baseline,
             showDecorations = baseline != Intensity.NONE,
             motionEnabled = baseline.motionAllowed && !reduceMotion,
             nativeTypographyDisabled = true,
             notice = if (baseline.motionAllowed && reduceMotion) "已按系统设置关闭装饰动效" else ""
-        ).copy(intensity = effective)
+        )
     }
 
     /**
@@ -120,11 +121,4 @@ internal object ReaderTemplateDecorationPolicy {
 
     /** 正文布局快照（用于"装饰变更不得影响正文"的一致性断言）。 */
     data class LayoutSnapshot(val contentWidthPx: Int, val contentHeightPx: Int, val pageCount: Int)
-
-    /** 强度 → 动效关闭态（保留视觉强度但不动效）。 */
-    private fun intensityWithMotionOff(intensity: Intensity): Intensity = when (intensity) {
-        Intensity.MEDIUM -> Intensity.MEDIUM
-        Intensity.STRONG -> Intensity.STRONG
-        else -> intensity
-    }
 }
