@@ -62,6 +62,8 @@ object AppLog {
     const val TAG_HLS_REMUX = "HlsRemux"            // HLS 视频转封装诊断（HlsDownloader，正式诊断链）
     const val TAG_RSS_SOURCE_EDIT = "RssSourceEdit" // 订阅源编辑保存
     const val TAG_READER_TEMPLATE = "ReaderTemplate" // 阅读页面模板（epub-md-rich-rendering 4.8a：目录装配/选定诊断，只记数量与 id 不记名称）
+    // 代码编辑器载荷加载（epub-md-rich-rendering 4.8c）：只记字符数/通道/耗时，不记正文
+    const val TAG_CODE_EDIT = "CodeEdit"
     const val TAG_CRASH_REPORT = "CrashReport"      // 崩溃上报（MainActivity）
     const val TAG_DEVICE_INFO = "DeviceInfo"        // ExoPlayer 播放域设备信息（DeviceInfoHelper）
 

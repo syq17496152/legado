@@ -29,7 +29,15 @@ class CodeEditShellMigrationTest {
 
     private val page = "ui/code/CodeEditActivity.kt"
 
+    /**
+     * 面板**视图构造**所在文件（4.8c 按职责拆分：约 190 行程序化 View 构造下沉到独立类，
+     * 为 800 行单文件门禁让路）。控件类型/内边距/取色口径未变 ⇒ 原断言改指此文件。
+     */
+    private val panelPage = "ui/code/CodeEditSearchPanelViews.kt"
+
     private fun src(): String = SourceFileProbe.sourceText(page)
+
+    private fun panelSrc(): String = SourceFileProbe.sourceText(panelPage)
 
     @Test
     fun singleSourceAssemblyAndNoLegacyBinding() {
@@ -71,19 +79,20 @@ class CodeEditShellMigrationTest {
             "编辑器初值字号必须仍读原 XML 口径（@dimen/text_18sp）",
             s.contains("R.dimen.text_18sp")
         )
+        val p = panelSrc()
         assertTrue(
             "查找/替换输入必须是 TextInputLayout + TextInputEditText 成对结构（XML 同构）",
-            s.contains("TextInputLayout(this, null)") && s.contains("TextInputEditText(this)")
+            p.contains("TextInputLayout(context, null)") && p.contains("TextInputEditText(context)")
         )
         assertTrue(
             "正则开关必须仍是 SwitchCompat（XML `<Switch>` 经 AppCompat 膨胀即此类型）",
-            s.contains("SwitchCompat(this)")
+            p.contains("SwitchCompat(context)")
         )
         assertTrue(
             "按钮条必须复刻原 buttonBar 样式属性（容器 buttonBarStyle / 按钮 buttonBarButtonStyle）",
-            s.contains("android.R.attr.buttonBarStyle") &&
-                s.contains("android.R.attr.buttonBarButtonStyle") &&
-                s.contains("AppCompatButton(this, null, android.R.attr.buttonBarButtonStyle)")
+            p.contains("android.R.attr.buttonBarStyle") &&
+                p.contains("android.R.attr.buttonBarButtonStyle") &&
+                p.contains("AppCompatButton(context, null, android.R.attr.buttonBarButtonStyle)")
         )
     }
 
@@ -124,10 +133,6 @@ class CodeEditShellMigrationTest {
             "private fun initComposeContent(",
             "private fun initView(",
             "private fun initDirtyTracking(",
-            "private fun panelText(",
-            "private fun panelButton(",
-            "private fun inputField(",
-            "private fun panelCloseIcon(",
             "private fun buildMenuActions(",
             "private fun setSearchOptions(",
             "private fun search(",
@@ -146,6 +151,15 @@ class CodeEditShellMigrationTest {
             "override fun onRedoClicked(",
         ).forEach { marker ->
             assertTrue("换装不得删改宿主逻辑：缺少 `$marker`", s.contains(marker))
+        }
+        // 面板**视图构造**的等价方法（4.8c 拆分后位于独立类；语义逐行不变，故断言不删只改指）
+        listOf(
+            "private fun panelText(",
+            "private fun panelButton(",
+            "private fun inputField(",
+            "private fun panelCloseIcon(",
+        ).forEach { marker ->
+            assertTrue("面板视图构造不得删改：缺少 `$marker`", panelSrc().contains(marker))
         }
     }
 
@@ -172,8 +186,9 @@ class CodeEditShellMigrationTest {
         assertTrue("脏态跟踪必须仍订阅内容变更事件", s.contains("editor.subscribeEvent(ContentChangeEvent::class.java)"))
         assertTrue("初始化期事件必须仍被吞掉", s.contains("editorInitDone = true"))
         // R30 技术债清偿：面板底色改走运行时面 token，且不得出现静态色/字面色回退
-        assertTrue("面板底色必须走运行时面 token", s.contains("setBackgroundColor(themeCardColorOrDefault())"))
-        assertFalse("不得回退成静态资源色", s.contains("R.color.background_card"))
-        assertFalse("不得用字面色绕门禁", s.contains("Color(0x"))
+        val p = panelSrc()
+        assertTrue("面板底色必须走运行时面 token", p.contains("setBackgroundColor(context.themeCardColorOrDefault())"))
+        assertFalse("不得回退成静态资源色", p.contains("R.color.background_card"))
+        assertFalse("不得用字面色绕门禁", p.contains("Color(0x"))
     }
 }
