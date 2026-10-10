@@ -4,19 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import android.view.Gravity
 import android.view.View
-import android.widget.EditText
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.Space
 import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
-import androidx.appcompat.content.res.AppCompatResources
-import androidx.appcompat.widget.AppCompatButton
-import androidx.appcompat.widget.AppCompatImageView
-import androidx.appcompat.widget.AppCompatTextView
-import androidx.appcompat.widget.SwitchCompat
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -51,7 +41,6 @@ import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.viewbinding.ViewBinding
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
 import io.github.rosemoe.sora.event.ContentChangeEvent
 import io.github.rosemoe.sora.event.PublishSearchResultEvent
 import io.github.rosemoe.sora.event.SelectionChangeEvent
@@ -64,11 +53,11 @@ import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.base.attachComposeContent
 import io.legado.app.base.composeShell
+import io.legado.app.constant.AppLog
 import io.legado.app.constant.PreferKey
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.dialogs.SelectItem
-import io.legado.app.lib.theme.themeCardColorOrDefault
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.code.config.ChangeThemeDialog
 import io.legado.app.ui.code.config.SettingsDialog
@@ -80,7 +69,6 @@ import io.legado.app.ui.widget.components.AppDropdownMenu
 import io.legado.app.ui.widget.components.GlassTopAppBar
 import io.legado.app.ui.widget.components.MenuAction
 import io.legado.app.ui.widget.keyboard.KeyboardToolPop
-import io.legado.app.utils.dpToPx
 import io.legado.app.utils.imeHeight
 import io.legado.app.utils.putPrefBoolean
 import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
@@ -126,197 +114,38 @@ class CodeEditActivity :
     private var readonlyState by mutableStateOf(false)
     /** initData 回调内 setText 会触发内容变更事件，用该标记吞掉初始化自身产生的事件 */
     private var editorInitDone = false
+    /** 载荷请求时刻（4.8c「首屏 <1s」的计时起点；见 `editor ready` 日志）。 */
+    private var payloadRequestedAt = 0L
     private var autoWrapChecked by mutableStateOf(AppConfig.editAutoWrap)
 
     private val isDark
         get() = AppConfig.editTemeAuto && ThemeConfig.isDarkTheme()
     private var themeIndex = -1
 
-    // ==================== CE 5.2：原 XML 搜索/替换面板节点的程序化等价物 ====================
-    // 原 `search_group` 子树在代码里逐项复刻；控件类与被 AppCompat 替换后的实际类型一致
-    // （`TextView`/`ImageView`/`Button` → `AppCompat*`，`Switch` → `SwitchCompat`）。
+    // ==================== CE 5.2：搜索/替换面板（视图构造见 CodeEditSearchPanelViews） ====================
+    // 4.8c 拆分：原 XML `search_group` 的程序化复刻（约 190 行）已下沉到 [CodeEditSearchPanelViews]，
+    // 本类只保留**行为**（搜索/替换流程 + 显隐切换）。控件语义与取色口径逐行不变。
 
-    /** 面板内文本节点（原 `@dimen/text_14sp`；[colorRes] 非 0 时对齐原 `android:textColor`）。 */
-    private fun panelText(colorRes: Int = 0): AppCompatTextView =
-        AppCompatTextView(this).apply {
-            textSize = 14f
-            if (colorRes != 0) {
-                setTextColor(
-                    AppCompatResources.getColorStateList(this@CodeEditActivity, colorRes)
-                )
-            }
-        }
+    /** 面板视图（懒构造：与旧实现同为"首次访问才建"）。 */
+    private val searchViews by lazy { CodeEditSearchPanelViews(this) }
 
-    /** 原 `style="?android:attr/buttonBarButtonStyle"` 的等价值（以该属性为默认样式属性构造）。 */
-    private fun panelButton(textRes: Int, colorRes: Int): AppCompatButton =
-        AppCompatButton(this, null, android.R.attr.buttonBarButtonStyle).apply {
-            setText(textRes)
-            textSize = 14f
-            setTextColor(AppCompatResources.getColorStateList(this@CodeEditActivity, colorRes))
-        }
-
-    /** 原 `TextInputLayout(boxBackgroundMode=none)` + 子 `TextInputEditText` 成对结构。 */
-    private fun inputField(child: EditText): TextInputLayout =
-        TextInputLayout(this, null).apply {
-            boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_NONE
-            addView(
-                child, LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-            )
-        }
-
-    /** 原面板内的关闭图标（`8dp` 内边距 + `ic_baseline_close`）。 */
-    private fun panelCloseIcon(): AppCompatImageView = AppCompatImageView(this).apply {
-        contentDescription = getString(R.string.close)
-        scaleType = ImageView.ScaleType.CENTER
-        setImageResource(R.drawable.ic_baseline_close)
-        val pad = 8.dpToPx()
-        setPadding(pad, pad, pad, pad)
-    }
-
-    /** `wrap_content × wrap_content` 的 LinearLayout 子节点布局参数。 */
-    private fun wrap() = LinearLayout.LayoutParams(
-        LinearLayout.LayoutParams.WRAP_CONTENT,
-        LinearLayout.LayoutParams.WRAP_CONTENT
-    )
-
-    private val tvSearchResultLabel by lazy { panelText().apply { setText(R.string.search_result) } }
-    private val tvSearchResult by lazy { panelText().apply { text = "0" } }
-    private val switchRegex by lazy {
-        SwitchCompat(this).apply {
-            isChecked = true
-            setText(R.string.regex)
-        }
-    }
-    private val tvFindLabel by lazy { panelText(R.color.primaryText).apply { setText(R.string.find) } }
-    private val etFind by lazy { TextInputEditText(this) }
-    private val btnCloseFind by lazy { panelCloseIcon() }
-    private val tvReplaceLabel by lazy {
-        panelText(R.color.primaryText).apply { setText(R.string.replace) }
-    }
-    private val etReplace by lazy { TextInputEditText(this) }
-    private val btnCloseReplace by lazy { panelCloseIcon() }
-    private val btnPrevious by lazy { panelButton(R.string.btn_previous, R.color.primaryText) }
-    private val btnNext by lazy { panelButton(R.string.btn_next, R.color.primaryText) }
-    private val btnReplace by lazy { panelButton(R.string.replace, R.color.primaryText) }
-    private val btnReplaceAll by lazy {
-        panelButton(R.string.replace_all, R.color.selector_btn_text_color).apply {
-            isEnabled = false
-        }
-    }
-
-    /** 原 `replace_group`（默认 `gone`，点击「替换」后才展开）。 */
-    private val replaceGroup by lazy {
-        LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            visibility = View.GONE
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            addView(tvReplaceLabel, wrap())
-            addView(
-                inputField(etReplace), LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
-                )
-            )
-            addView(btnCloseReplace, wrap())
-        }
-    }
-
-    /**
-     * 原 `search_group`（`12dp` 左右内边距 / 默认 `gone`）。
-     *
-     * 面板底原为 XML 静态 `@color/background_card`（R30 技术债，`theme_token_allowlist.json`
-     * 已登记「待 code-side 改造」）⇒ 换装后改走运行时面 token [themeCardColorOrDefault]
-     * （卡片面，`color.md` §六 面 token 归属表），与 Compose 侧 `themeUi.cardColor` 同语义。
-     */
-    private val searchPanel: LinearLayout by lazy {
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            visibility = View.GONE
-            setBackgroundColor(themeCardColorOrDefault())
-            val pad = 12.dpToPx()
-            setPadding(pad, 0, pad, 0)
-            // 行 1：命中计数 + 正则开关
-            addView(
-                LinearLayout(this@CodeEditActivity).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    )
-                    addView(tvSearchResultLabel, wrap())
-                    addView(tvSearchResult, wrap().apply { marginStart = 8.dpToPx() })
-                    addView(
-                        Space(this@CodeEditActivity),
-                        LinearLayout.LayoutParams(0, 0, 1f)
-                    )
-                    addView(switchRegex, wrap())
-                }
-            )
-            // 行 2：查找
-            addView(
-                LinearLayout(this@CodeEditActivity).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    clipChildren = false
-                    clipToPadding = false
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    )
-                    addView(tvFindLabel, wrap())
-                    addView(
-                        inputField(etFind), LinearLayout.LayoutParams(
-                            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
-                        )
-                    )
-                    addView(btnCloseFind, wrap())
-                }
-            )
-            // 行 3：替换（默认收起）
-            addView(replaceGroup)
-            // 行 4：操作按钮条（原 `style="?android:attr/buttonBarStyle"`）
-            addView(
-                LinearLayout(this@CodeEditActivity, null, android.R.attr.buttonBarStyle).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    )
-                    addView(
-                        btnPrevious, LinearLayout.LayoutParams(
-                            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
-                        )
-                    )
-                    addView(
-                        btnNext, LinearLayout.LayoutParams(
-                            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
-                        )
-                    )
-                    addView(
-                        btnReplace, LinearLayout.LayoutParams(
-                            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
-                        )
-                    )
-                    addView(
-                        btnReplaceAll, LinearLayout.LayoutParams(
-                            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
-                        )
-                    )
-                }
-            )
-        }
-    }
+    private val searchPanel get() = searchViews.searchPanel
+    private val switchRegex get() = searchViews.switchRegex
+    private val tvSearchResult get() = searchViews.tvSearchResult
+    private val etFind get() = searchViews.etFind
+    private val btnCloseFind get() = searchViews.btnCloseFind
+    private val etReplace get() = searchViews.etReplace
+    private val btnCloseReplace get() = searchViews.btnCloseReplace
+    private val btnPrevious get() = searchViews.btnPrevious
+    private val btnNext get() = searchViews.btnNext
+    private val btnReplace get() = searchViews.btnReplace
+    private val btnReplaceAll get() = searchViews.btnReplaceAll
+    private val replaceGroup get() = searchViews.replaceGroup
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         softKeyboardTool.attachToWindow(window)
         editor.colorScheme = TextMateColorScheme2.create(ThemeRegistry.getInstance()) //先设置颜色,避免一开始的白屏
+        payloadRequestedAt = System.currentTimeMillis()
         viewModel.initData(intent) {
             editor.apply {
                 viewModel.title?.let {
@@ -330,6 +159,13 @@ class CodeEditActivity :
                 saveVisible = viewModel.writable
                 readonlyState = !viewModel.writable
                 requestFocus()
+                // 4.8c「首屏 <1s」的**可测口径**：从发起 initData 到"文本已进编辑器、可编辑"的耗时。
+                // 大载荷（模板 CSS ≈320KB）在此路径上必须仍在一秒内，否则编辑体验是"点了半天不动"。
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_CODE_EDIT,
+                    "editor ready: chars=${viewModel.initialText.length}, " +
+                        "writable=${viewModel.writable}, costMs=${System.currentTimeMillis() - payloadRequestedAt}"
+                )
                 postDelayed({
                     val pos = cursor.indexer.getCharPosition(viewModel.cursorPosition)
                     setSelection(pos.line, pos.column, true)
@@ -403,14 +239,41 @@ class CodeEditActivity :
                 )
             }
             else -> {
-                val result = Intent().apply {
-                    putExtra("text", text)
-                    putExtra("cursorPosition", cursorPos)
-                }
-                setResult(RESULT_OK, result)
+                setResult(RESULT_OK, buildResult(text, cursorPos))
                 super.finish()
             }
         }
+    }
+
+    /**
+     * 构造回传结果（4.8c **出方向**载荷通道）。
+     *
+     * 真机铁证（2026-10-10）：320KB 模板 CSS 经 result Intent 回传 ⇒
+     * `TransactionTooLargeException (data parcel size 662368 bytes)` ⇒ **进程被杀、用户编辑全部丢失**
+     * （日志里只有 `Process … has died: fore TOP`，没有 FATAL EXCEPTION ⇒ 极易被误判为"偶发闪退"）。
+     * 故大载荷与入方向同口径：写临时文件、只回传路径；**仅当调用方显式开启**文件通道
+     * （其它复用本页的调用方只读 `text` extra，不能改它们的数据形态）。
+     */
+    private fun buildResult(text: String, cursorPos: Int): Intent {
+        val result = Intent().apply { putExtra("cursorPosition", cursorPos) }
+        val optIn = intent.getBooleanExtra(CodeEditPayloadPolicy.ExtraFileChannelOptIn, false)
+        if (!optIn || !CodeEditPayloadPolicy.useFileChannel(text.length)) {
+            return result.apply { putExtra("text", text) }
+        }
+        val payloadFile = CodeEditPayloadStore(this).write(text)
+        if (payloadFile == null) {
+            // 写不进去就回落内联：宁可能溢出 Binder，也不能"保存了却什么都没带回去"
+            AppLog.putDebugWithTag(
+                AppLog.TAG_CODE_EDIT,
+                "result payload file write failed ⇒ fallback inline: chars=${text.length}"
+            )
+            return result.apply { putExtra("text", text) }
+        }
+        AppLog.putDebugWithTag(
+            AppLog.TAG_CODE_EDIT,
+            "result payload via file: chars=${text.length}"
+        )
+        return result.apply { putExtra(CodeEditPayloadPolicy.ExtraTextFile, payloadFile.absolutePath) }
     }
 
     override fun upEdit(fontSize: Int?, autoComplete: Boolean?, autoWarp: Boolean?, editNonPrintable: Int?) {
@@ -456,18 +319,20 @@ class CodeEditActivity :
      * CE 5.2：Compose 承载页面骨架（顶栏 + 编辑器 + 搜索/替换面板）。
      *
      * 与原 XML（`activity_code_edit.xml`）的**逐一对应关系**（三不影响口径）：
-     *  · `compose_top_bar` → 顶部 `LegadoTheme { GlassTopAppBar(…) }`（内容逐行搬入，不再套壳 ComposeView）
-     *  · `editText`（`0dp` + `layout_weight=1`）→ `AndroidView` 托管 [editor] + `Modifier.weight(1f)`
-     *  · `search_group`（`wrap_content` + `gone`）→ `AndroidView` 托管 [searchPanel]；**显隐仍由宿主按
-     *    View 语义切换**（`visibility`）⇒ 视图实例常驻、监听器与搜索订阅语义与原实现一致。
+     *  · `compose_top_bar` → `LegadoTheme { GlassTopAppBar(…) }`；4.8c 起 `LegadoTheme` **上提为宿主入口顶层**（G-37：只包顶栏会让内容子树在主题包/夜间下回落 M3 默认色板），顶栏内容逐行不变
+     *  · `search_group`（`wrap_content` + `gone`）→ 视图构造见 [CodeEditSearchPanelViews]（4.8c 按职责拆分），
+     *    宿主经 `AndroidView` 托管；**显隐仍由宿主按 View 语义切换**（`visibility`）⇒ 视图实例常驻、
+     *    监听器与搜索订阅语义与原实现一致。
      *    原 `layout_gravity=bottom` 在竖向 LinearLayout 中对 `wrap_content` 子节点无几何作用
      *    （`editText` 的 weight 已把面板压到底部）⇒ 等价。
      */
     private fun initComposeContent() {
         binding.root.attachComposeContent {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // ---- 顶栏（原 compose_top_bar，内容逐行不变）----
-                LegadoTheme {
+            // G-37：宿主入口**顶层**必须是主题作用域（原形态只把顶栏包在 LegadoTheme 里 ⇒
+            // 内容子树在主题包/夜间下会回落 M3 默认亮色基线）。上提为承载内容的根作用域，语义与取色不变。
+            LegadoTheme {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // ---- 顶栏（原 compose_top_bar，内容逐行不变）----
                     GlassTopAppBar(
                         title = titleState.ifBlank { getString(R.string.edit_code) },
                         navIcon = Icons.AutoMirrored.Filled.ArrowBack,
@@ -508,7 +373,9 @@ class CodeEditActivity :
                                     // F196：脏态下保存键 accent 高亮（干净态保持既有前景色）
                                     Icon(
                                         Icons.Outlined.Save,
-                                        contentDescription = null,
+                                        // 保存键必须有可读文案：既是无障碍（TalkBack）要求，
+                                        // 也是 4.8c 真机 L2 能定位并点击该按钮的唯一凭据（原为 null ⇒ 无法按描述定位）
+                                        contentDescription = "保存",
                                         tint = if (dirtyState) {
                                             AppUiTokens.settingPalette().accent
                                         } else {
@@ -539,7 +406,6 @@ class CodeEditActivity :
                             }
                         }
                     )
-                }
                 // ---- 编辑器内核（原 editText：match_parent × 0dp + weight 1）----
                 AndroidView(
                     modifier = Modifier
@@ -552,6 +418,7 @@ class CodeEditActivity :
                     modifier = Modifier.fillMaxWidth(),
                     factory = { searchPanel }
                 )
+                }
             }
         }
     }

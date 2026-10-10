@@ -53,13 +53,27 @@ class CodeEditViewModel(application: Application) : BaseViewModel(application) {
         intent: Intent, success: () -> Unit
     ) {
         execute {
+            // 载荷加载耗时（4.8c 的"首屏 <1s"可测口径）：从读取到语言就绪，**不含**渲染
+            val startedAt = System.currentTimeMillis()
             val cacheKey = intent.getStringExtra("cacheKey")
+            val channel: String
             if (cacheKey != null) {
                 val cacheText = CacheManager.getFromMemory(cacheKey) as? String ?: throw Exception("未获取到查看文本")
                 writable = false
                 initialText = cacheText
+                channel = "memory"
             } else {
-                initialText = intent.getStringExtra("text") ?: throw Exception("未获取到待编辑文本")
+                val textFile = intent.getStringExtra(CodeEditPayloadPolicy.ExtraTextFile)
+                if (textFile != null) {
+                    // 大载荷（模板 CSS ≈320KB）走文件通道：不经 Intent/Binder（见 CodeEditPayloadPolicy）。
+                    // 读取与删除由 store 单源承担（读侧不再各写一份 IO 逻辑）
+                    initialText = CodeEditPayloadStore(context).read(textFile)
+                        ?: throw Exception("未获取到待编辑文本（临时载荷读取失败）")
+                    channel = "file"
+                } else {
+                    initialText = intent.getStringExtra("text") ?: throw Exception("未获取到待编辑文本")
+                    channel = "inline"
+                }
             }
             if (isHtmlStr(initialText)) {
                 languageName = "text.html.basic"
@@ -69,6 +83,12 @@ class CodeEditViewModel(application: Application) : BaseViewModel(application) {
             language = TextMateLanguage.create(languageName, AppConfig.editAutoComplete)
             cursorPosition = intent.getIntExtra("cursorPosition", 0)
             title = intent.getStringExtra("title")
+            // 只记字符数/通道/耗时，**不记正文**（模板 CSS 属用户/作者内容）
+            AppLog.putDebugWithTag(
+                AppLog.TAG_CODE_EDIT,
+                "payload loaded: chars=${initialText.length}, channel=$channel, " +
+                    "lang=$languageName, costMs=${System.currentTimeMillis() - startedAt}"
+            )
         }.onSuccess {
             success.invoke()
         }.onError {

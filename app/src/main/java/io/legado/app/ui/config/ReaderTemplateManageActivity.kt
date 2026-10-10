@@ -25,6 +25,8 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReaderTemplateManager
 import io.legado.app.model.localBook.epubcore.template.EpubReaderTemplate
 import io.legado.app.ui.code.CodeEditActivity
+import io.legado.app.ui.code.CodeEditPayloadPolicy
+import io.legado.app.ui.code.CodeEditPayloadStore
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.theme.LegadoTheme
 import io.legado.app.ui.widget.components.GlassTopAppBar
@@ -115,13 +117,38 @@ class ReaderTemplateManageActivity : BaseActivity<ViewBinding>() {
 
     private val editTemplate = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
-        val text = result.data?.getStringExtra("text") ?: return@registerForActivityResult
+        val data = result.data
         val base = editingTemplate
         val field = editingField
         editingTemplate = null
         editingField = null
         if (base == null || field == null) return@registerForActivityResult
+        // 载荷可能走内联 `text` 或**临时文件**（4.8c 出方向）：后者须在 IO 线程读取（并读后即删）
+        val payloadFile = data?.getStringExtra(CodeEditPayloadPolicy.ExtraTextFile)
+        // 内联通道：先同步取（小载荷，无 IO）
+        val inlineText = data?.getStringExtra("text")
+        // 两个通道都为空 = 编辑器判定"未修改"（只回 cursorPosition）⇒ 无内容可存，**不是错误**
+        val hasPayload = payloadFile != null || inlineText != null
         lifecycleScope.launch {
+            if (!hasPayload) return@launch
+            val text = try {
+                when {
+                    payloadFile != null -> withContext(Dispatchers.IO) {
+                        CodeEditPayloadStore(this@ReaderTemplateManageActivity).read(payloadFile)
+                    }
+                    else -> inlineText
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                AppLog.put("Reader template editor payload read failed\n${e.localizedMessage}", e)
+                null
+            }
+            if (text == null) {
+                // 读不到就**明说**：静默当空文本会把用户模板保存成空壳
+                toastOnUi("编辑器结果读取失败，已放弃本次修改")
+                return@launch
+            }
             val saved = withContext(Dispatchers.IO) {
                 ReaderTemplateManager.saveUserTemplate(field.write(base, text))
             }
@@ -334,10 +361,26 @@ class ReaderTemplateManageActivity : BaseActivity<ViewBinding>() {
     private fun launchEditor(entry: ReaderTemplateManager.Entry, field: TemplateField) {
         editingTemplate = entry.template
         editingField = field
+        val text = field.read(entry.template)
         editTemplate.launch(Intent(this, CodeEditActivity::class.java).apply {
             putExtra("title", "${entry.name} · ${field.label}")
-            putExtra("text", field.read(entry.template))
             putExtra("languageName", field.language)
+            // 显式开启文件通道（4.8c）：本页**双向**都能处理大载荷；其它复用编辑器的调用方不受影响
+            putExtra(CodeEditPayloadPolicy.ExtraFileChannelOptIn, true)
+            // 4.8c：大载荷（模板 CSS 可达 ≈320KB）**不走 Intent/Binder**，改交临时文件路径，
+            // 由编辑器在 IO 线程读取（见 CodeEditPayloadPolicy）。小载荷照旧内联 ⇒ 行为零变化。
+            val payloadFile = if (CodeEditPayloadPolicy.useFileChannel(text.length)) {
+                // 注意 receiver 是 Intent ⇒ 必须用限定 this 拿 Activity 上下文
+                CodeEditPayloadStore(this@ReaderTemplateManageActivity).write(text)
+            } else {
+                null
+            }
+            if (payloadFile != null) {
+                putExtra(CodeEditPayloadPolicy.ExtraTextFile, payloadFile.absolutePath)
+            } else {
+                // 小载荷，或临时件写入失败 ⇒ 回落内联（宁可能溢出 Binder，也不能静默丢载荷）
+                putExtra("text", text)
+            }
         })
     }
 
