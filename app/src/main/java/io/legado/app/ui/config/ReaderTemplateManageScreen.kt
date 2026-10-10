@@ -136,7 +136,7 @@ private fun CurrentTemplateCard(
         )
         Text(
             text = if (followTheme) {
-                "跟随主题：浅色用素笺、夜间用霓虹夜行，随日夜自动切换。"
+                "跟随主题：浅色用极简科技、夜间用霓虹夜行，随日夜自动切换。"
             } else {
                 "已指定模板：${entries.firstOrNull { it.id == appliedId }?.name ?: appliedId}"
             },

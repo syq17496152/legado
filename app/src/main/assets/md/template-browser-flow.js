@@ -74,7 +74,11 @@
   function settleManualPagination() {
     var slot = bodySlots() ? bodySlots()[0] : null;
     if (!slot) return { pageIndex: 0, pageCount: 1 };
-    var pageHeight = viewportHeight - chromeHeight + slotEmptyHeight;
+    // ⚠️ 视口高必须**结算时实时读**：`initialize` 那一刻沙箱帧可能还没布局完（实测 vp=0），
+    // 把它缓存下来会让页框算成负数 ⇒ 直接放弃分页（症状：预览/阅读页"页数恒 1 且正文空白"）。
+    // 只缓存 `chromeHeight`（正文注入前的固定占位）——它**必须**在注入前量，才是正确的占位口径。
+    var pageHeight = (currentViewportHeight() || viewportHeight) - chromeHeight + slotEmptyHeight;
+    reportPageFrame(slot, pageHeight);
     if (!(pageHeight > MIN_PAGE_HEIGHT)) return { pageIndex: 0, pageCount: 1 };
     if ((slot.scrollHeight || 0) > pageHeight + 1) {
       freezeSlot(slot, pageHeight);
@@ -86,6 +90,30 @@
     // 否则 `goto` 明明滚过去了，回发的 stable 仍是旧页号 ⇒ 宿主页码/边界判据全部失真
     // （症状："点了下一页，内容动了但页码不变，到底了也切不了章"——2026-10-10 真机实证）
     return { pageIndex: clampIndex(scrollIndex(slot.scrollTop, visible), pageCount), pageCount: pageCount };
+  }
+
+  /**
+   * 页框自证（诊断，随 `renderState` 回发；不算新消息类型，字段仍只用白名单内的 `state`）。
+   *
+   * 为什么值得常驻：模板沙箱**跨源**，宿主读不到它的尺寸与 DOM ⇒ "页数恒 1 / 正文空白 /
+   * 翻页不动"这几类症状在没有这几个数时只能靠猜（本项目已多次因此多跑整轮真机验证）。
+   */
+  function reportPageFrame(slot, pageHeight) {
+    if (!window.ReaderTemplateRuntime) return;
+    var rect = null;
+    try {
+      rect = slot.getBoundingClientRect();
+    } catch (error) {
+      rect = null;
+    }
+    window.ReaderTemplateRuntime.send('renderState', {
+      state: 'page-frame,h=' + Math.round(pageHeight) +
+        ',client=' + Math.round(slot.clientHeight || 0) +
+        ',scroll=' + Math.round(slot.scrollHeight || 0) +
+        ',vp=' + Math.round(viewportHeight) + ',chrome=' + Math.round(chromeHeight) +
+        ',empty=' + Math.round(slotEmptyHeight) +
+        ',top=' + (rect ? Math.round(rect.top) : -1)
+    });
   }
 
   /**
@@ -135,6 +163,11 @@
     if (!(visible > 0)) return 0;
     var value = (offset || 0) / visible;
     return isFinite(value) ? Math.round(value) : 0;
+  }
+
+  /** 当前视口高（实时读；沙箱文档此时可能尚未布局完毕 ⇒ 调用方需容错）。 */
+  function currentViewportHeight() {
+    return document.documentElement.clientHeight || window.innerHeight || 0;
   }
 
   function initialize(flowConfig) {

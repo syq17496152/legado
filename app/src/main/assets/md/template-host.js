@@ -121,7 +121,10 @@
     frame.setAttribute('sandbox', 'allow-scripts');
     frame.setAttribute('referrerpolicy', 'no-referrer');
     frame.style.width = '100%';
-    frame.style.height = '100%';
+    // ⚠️ 帧高用**px 显式值**、不用 `'100%'` 也不用 `'100vh'`：真机实测该 WebView（Compose `AndroidView`
+    // 承载的弹窗预览）里两者都会塌成 0（容器自身的 vh/百分比高度也塌）⇒ 沙箱视口 0 ⇒ 页框算成负数。
+    // 取值优先用容器实测高；容器尚未定尺寸时回落到**宿主文档视口高**（这才是权威可用高）。
+    frame.style.height = (container.clientHeight || document.documentElement.clientHeight || 0) + 'px';
     frame.style.border = '0';
     frame.srcdoc = String(config.srcdoc || '');
     container.appendChild(frame);
