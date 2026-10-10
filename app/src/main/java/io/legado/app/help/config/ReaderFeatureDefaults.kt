@@ -1,5 +1,7 @@
 package io.legado.app.help.config
 
+import io.legado.app.model.localBook.epubcore.template.ReaderTemplateSelection
+
 /**
  * 阅读器功能默认值**单源**（epub-md-rich-rendering 阶段 3.2 配套）。
  *
@@ -19,4 +21,13 @@ object ReaderFeatureDefaults {
      * 4. 关闭后不是"功能消失"而是**可用降级**（回落 canvas 的 `<usehtml>` HTML 渲染）。
      */
     const val MD_RICH_RENDER = true
+
+    /**
+     * 阅读页面模板**默认选定值**（epub-md-rich-rendering 阶段 4.8a）。
+     *
+     * 空串 = 「跟随主题」（按当前日夜取默认款：浅色→素笺 / 暗色→霓虹夜行），
+     * 与 [ReaderTemplateSelection.FollowTheme] 同一哨兵口径。
+     * 默认跟随主题而非固定某套：默认模板暗色款在浅色主题下会与主题冲撞（SP-06）。
+     */
+    const val READER_TEMPLATE_ID = ReaderTemplateSelection.FollowTheme
 }
