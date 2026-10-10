@@ -55,7 +55,10 @@
     // 素材治理（C11）：正文图片总数 / 已解码数 / **已解码素材 src 去重集合**
     imgCount: 0,
     decodedCount: 0,
-    decodedSrcs: {}
+    decodedSrcs: {},
+    // 字段派生（C2）：电量文本（由 Battery Status API 异步填充，取不到则保持空）
+    battery: '',
+    clockTimer: null
   };
 
   /** 窄屏断点（CSS px）：与 `md/template-layout.css` 的 C9 节同源口径。 */
@@ -130,14 +133,77 @@
    */
   function applyFields(fields) {
     state.fields = fields || {};
+    refreshFields();
+  }
+
+  /** 本地时间 HH:mm（沙箱时钟即设备时钟）。 */
+  function localTime() {
+    var now = new Date();
+    var hh = now.getHours();
+    var mm = now.getMinutes();
+    return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
+  }
+
+  /**
+   * 字段真值的**派生源**（4.15 C2 / TPL-15）：宿主经 `init` 提供的字段之外，
+   * `page` / `pageCount` / `percent` / `time` / `battery` 由**沙箱自己**填。
+   *
+   * 为什么必须补：内置模板（霓虹夜行等）页脚声明了 `data-reader-field="page"` 与 `"time"`，
+   * 而宿主的 init 载荷只给 `bookName/chapterTitle/progress/hour` ⇒ 这两个槽位**恒为空**：
+   * 观感上就是"页脚页码与时间永远不显示"，且**不报错**（典型静默失效）。
+   * 页码只有沙箱知道（分页是它算的），时间/电量只有运行环境知道 ⇒ 派生只能放这里。
+   */
+  function derivedField(key) {
+    switch (key) {
+      case 'page': return String(state.pageIndex + 1);
+      case 'pageCount': return String(state.pageCount);
+      case 'percent':
+        return typeof state.fields.progress === 'number' ? String(state.fields.progress) : null;
+      case 'time': return localTime();
+      case 'battery': return state.battery || null;   // 取不到电量不冒写假值
+      default: return null;
+    }
+  }
+
+  /**
+   * 把字段真值写进槽位：**宿主提供的优先，其次派生**；两者都没有则保留作者占位文本
+   * （不写空串——那会把作者的示意文案擦掉）。
+   */
+  function refreshFields() {
     var nodes = document.querySelectorAll('[data-reader-field]');
     for (var i = 0; i < nodes.length; i++) {
       var key = nodes[i].getAttribute('data-reader-field');
-      var value = state.fields[key];
-      if (value === undefined || value === null) continue;
-      nodes[i].textContent = String(value);
+      var supplied = state.fields[key];
+      var value = (supplied === undefined || supplied === null) ? derivedField(key) : String(supplied);
+      if (value === null) continue;
+      nodes[i].textContent = value;
     }
     applyPhase();
+  }
+
+  /** 电量（Battery Status API，增强信息）：取不到就保持空，绝不冒写假值。 */
+  function watchBattery() {
+    try {
+      if (typeof navigator.getBattery !== 'function') return;
+      navigator.getBattery().then(function (manager) {
+        var sync = function () {
+          state.battery = Math.round((manager.level || 0) * 100) + '%';
+          refreshFields();
+        };
+        manager.addEventListener('levelchange', sync, false);
+        sync();
+      }, function () { /* 拒绝授权/不支持：忽略 */ });
+    } catch (error) {
+      /* 电量是增强信息，失败不影响任何主路径 */
+    }
+  }
+
+  /** 时间按分钟刷新（C5 时间驱动：≥15 分钟粒度即可；用分钟让"时钟"看起来在走）。 */
+  function startClock() {
+    if (state.clockTimer) return;
+    state.clockTimer = setInterval(function () {
+      refreshFields();
+    }, 60000);
   }
 
   /** 内容感知：进度百分比与小时/阶段类（4.15 / AD-31）。 */
@@ -379,6 +445,9 @@
   function onFlowSettled(pageIndex, pageCount, costMs) {
     state.pageIndex = pageIndex;
     state.pageCount = pageCount;
+    // 页码/总页数只有沙箱知道（分页是它算的）⇒ 每次结算后回填 `page`/`pageCount` 槽位，
+    // 否则作者的页脚页码永远停在占位文本上（宿主 init 里没有这两个字段）
+    refreshFields();
     send('stable', { pageIndex: pageIndex, pageCount: pageCount });
     if (typeof costMs === 'number') send('metrics', { costMs: costMs });
   }
@@ -453,7 +522,31 @@
       ',narrow=' + (state.viewport.narrow ? 1 : 0) +
       ',landscape=' + (state.viewport.landscape ? 1 : 0) +
       ',writing=' + state.writing +
-      ',imgs=' + state.imgCount + ',decoded=' + state.decodedCount;
+      ',imgs=' + state.imgCount + ',decoded=' + state.decodedCount +
+      // 字段槽位自证（4.15 C2）：`page`/`time` 这类派生字段失效时页面看起来是正常的（只有页码/时间恒空）
+      ',fields=' + populatedFields();
+  }
+
+  /**
+   * 已填充的字段槽位键（诊断）：用于区分"槽位没写"与"槽位写了但值取自占位文本"。
+   *
+   * 为什么需要：`page`/`time` 这类**派生字段**的失效是纯静默的（页面看起来正常，只是页码/时间
+   * 恒空）⇒ 没有这个自证就只能靠肉眼逐模板比对页脚。
+   */
+  function populatedFields() {
+    var nodes = document.querySelectorAll('[data-reader-field]');
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var key = nodes[i].getAttribute('data-reader-field');
+      var text = nodes[i].textContent || '';
+      if (text.length > 0 && !seen[key]) {
+        seen[key] = 1;
+        out.push(key);
+      }
+    }
+    out.sort();
+    return out.join('|');
   }
 
   function handleMessage(event) {
@@ -582,6 +675,9 @@
     // 让首个 `stable` 就带上最终外观（否则会先按默认档位闪一帧，再等下一次重测）
     applyDecoration(config);
     markDecorations();
+    // 字段派生（C2）：电量异步填充；时间按分钟刷新（页码在每次结算后回填）
+    watchBattery();
+    startClock();
     // 响应式收紧（C9）与竖排规格（C10）：必须在结算之前完成 —— 页框量取与分页都以
     // `--rp-vp-h` / `data-rp-writing` 为依据，滞后一拍就会按错误尺寸分页
     applyViewport();
