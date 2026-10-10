@@ -328,9 +328,19 @@
       reportError('template-render-failed', error);
       return;
     }
+    // ⚠️ 顺序即正确性：`flow.initialize` 必须在**正文注入之前**——自研回退分页以"此刻文档高"
+    // 作为页眉/页脚等固定占位（注入后量就把正文自身算进占位，页框会被算成 0 高）
+    flow.initialize(config.flow);
     applyFields(config.fields);
     applyBody(config.bodyHtml);
-    flow.initialize(config.flow);
+    // 立即结算一次：`stable` 是宿主判定"模板渲染成功并拿到页数"的**唯一**信号。
+    // 章节不含富渲染元素时不会有后续 `remeasure` ⇒ 若这里不结算，宿主只能等到 8s 超时回落
+    // canvas（症状：纯文字章节套模板后仍是旧排版，且日志报 sandbox stable timeout）。
+    try {
+      flow.settle(false);
+    } catch (error) {
+      reportError('template-flow-failed', error);
+    }
     // ready 携带 DOM 事实：正文是否真的进了槽位，在"就绪"这一刻即可判定
     send('renderState', { state: 'ready' + domFacts() });
   }
