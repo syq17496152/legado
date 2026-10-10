@@ -35,6 +35,91 @@
   var chromeHeight = 0;
   var slotEmptyHeight = 0;
 
+  /**
+   * 正文在**根壳内**的偏移（= 页眉 + 正文上方装饰，不含冻结页框自身的滚动）。
+   *
+   * 为什么单独维护：C1 首页/续页双结构的**页眉高度不同**（开篇页满幅、续页窄页眉）⇒
+   * "滚动位置"不是跨结构可比量。把它换算成**与结构无关**的"正文偏移量"（[bodyOffset]），
+   * 换壳时只改 `scrollTop` 的补偿量，正文停留位置保持不变（页码因此不跳变）。
+   */
+  var bodyOffset = 0;
+
+  /**
+   * `bodyOffset` 是否已是**权威值**（由 `goto` 按宿主指令算出）。
+   *
+   * ⚠️ 为什么需要（2026-10-10 C1 真机实证）：`goto` 先把正文移到目标页，随后 `settle` 会
+   * **从滚动位置反解**正文偏移。换壳（`applyPageShell` 重挂 `innerHTML`）之后布局**尚未 reflow**
+   * 就开始反解 ⇒ `root.scrollHeight − slot.scrollHeight` 读到未生效的旧布局 ⇒ 反解出 0，
+   * 把刚定位好的正文又拉回第一页（症状：翻到续页后停在首屏、页码恒 1/1）。
+   * 由 `goto` 置位、`settle` 消费并复位 ⇒ **宿主指令是权威**，只有"用户手指拖动"那次才需要反解。
+   */
+  var bodyOffsetAuthoritative = false;
+
+  /**
+   * 流程层记录的"当前结构"（`opening` / `continuation`）。
+   *
+   * 为什么不直接问运行时：运行时的 `pageShell` 是**权威状态**，但流程层需要它自己的副本，
+   * 才能在"同一结构连续换页"时**跳过无谓的 DOM 重建**（每次 `applyPageShell('opening')`
+   * 都会重挂 innerHTML ⇒ 正文注入与富渲染全部白做）。
+   */
+  var flowShell = '';
+
+  /** 最近一次结算结果（供换壳时夹取目标页与复用页高，避免"换壳瞬间用未知量"）。 */
+  var pageCount = 1;
+  var lastPageHeight = 0;
+
+  /**
+   * 页（可翻阅）区高：**由视口与页眉占位推出**，不读槽位 `clientHeight`。
+   *
+   * ⚠️ 为什么不能读槽位尺寸（2026-10-10 C1 真机实证）：`applyPageShell` 刚重挂 `innerHTML` 后，
+   * 外层文档**尚未完成 reflow** ⇒ 读到的是**上一个结构**的尺寸（实测换壳后仍报旧的 3294，
+   * 用它冻结 ⇒ 页框高 = 整段内容高 ⇒ 页数恒 1、翻页失效）。而视口高与页眉占位在 `initialize`
+   * 时已量好、且与结构无关，据此推出的页高是稳定的。
+   */
+  function visibleHeight() {
+    return (currentViewportHeight() || viewportHeight) - chromeHeight + slotEmptyHeight;
+  }
+
+  /**
+   * 允许的正文偏移上限（= 正文内容高 − 页高）。
+   *
+   * 为什么需要：宿主只给"第几页"，而 `goto` 之后用户仍可手指拖动而**不经宿主**（滚动是原生手势）
+   * ⇒ 下次 `goto` 若从自维护的 `bodyOffset` 推算，会把用户拖出的位置丢掉。故先从
+   * `root.scrollHeight − slot.scrollHeight` 反推当前 `bodyOffset`（对冻结页框恒成立），
+   * 再做边界夹取。
+   */
+  function maxBodyOffset(slot, rootEl) {
+    var content = (slot && slot.scrollHeight) || 0;
+    return Math.max(0, content - visibleHeight());
+  }
+
+  /**
+   * 从当前 `scrollTop` 反推正文偏移（跨结构可比量），并夹到合法区间。
+   *
+   * `root.scrollHeight − slot.scrollHeight` 即"页眉 + 正文上方装饰"在**当前结构**下的高
+   * （冻结页框不参与 root 的滚动高）⇒ `scrollTop − 该值` 就是正文偏移。
+   */
+  function readBodyOffset(slot, rootEl) {
+    if (!slot) return 0;
+    var chrome = ((rootEl && rootEl.scrollHeight) || 0) - (slot.scrollHeight || 0);
+    if (!(chrome >= 0) || !isFinite(chrome)) chrome = bodyOffset;
+    var value = (slot.scrollTop || 0) - chrome;
+    return clampBodyOffset(value, slot, rootEl);
+  }
+
+  function clampBodyOffset(value, slot, rootEl) {
+    var max = maxBodyOffset(slot, rootEl);
+    if (!isFinite(value)) return 0;
+    return Math.max(0, Math.min(max, value));
+  }
+
+  /** 按正文偏移定位（与结构无关；`chrome` 为当前结构的页眉高）。 */
+  function applyBodyOffset(slot, rootEl) {
+    var chrome = ((rootEl && rootEl.scrollHeight) || 0) - (slot.scrollHeight || 0);
+    if (!(chrome >= 0) || !isFinite(chrome)) chrome = 0;
+    slot.scrollTop = bodyOffset + chrome;
+  }
+
   function bodySlots() {
     var slots = document.querySelectorAll('[data-reader-flow="body"]');
     return slots.length ? slots : null;
@@ -77,19 +162,34 @@
     // ⚠️ 视口高必须**结算时实时读**：`initialize` 那一刻沙箱帧可能还没布局完（实测 vp=0），
     // 把它缓存下来会让页框算成负数 ⇒ 直接放弃分页（症状：预览/阅读页"页数恒 1 且正文空白"）。
     // 只缓存 `chromeHeight`（正文注入前的固定占位）——它**必须**在注入前量，才是正确的占位口径。
-    var pageHeight = (currentViewportHeight() || viewportHeight) - chromeHeight + slotEmptyHeight;
-    reportPageFrame(slot, pageHeight);
-    if (!(pageHeight > MIN_PAGE_HEIGHT)) return { pageIndex: 0, pageCount: 1 };
-    if ((slot.scrollHeight || 0) > pageHeight + 1) {
-      freezeSlot(slot, pageHeight);
+    var visible = visibleHeight();
+    lastPageHeight = visible;
+    reportPageFrame(slot, visible);
+    if (!(visible > MIN_PAGE_HEIGHT)) return { pageIndex: 0, pageCount: 1 };
+    // 冻结前先把"当前正文偏移"从冻结页框的滚动位置里反解出来（跨结构可比量，见 [bodyOffset]）。
+    // 冻结页框之外（例如刚换壳、尚未冻结）`scrollTop` 恒 0 ⇒ 反解得 0，随后由 `applyBodyOffset` 定位。
+    if ((slot.scrollHeight || 0) > visible + 1) {
+      freezeSlot(slot, visible);
     }
-    var visible = slot.clientHeight || pageHeight;
-    if (!(visible > 0)) return { pageIndex: 0, pageCount: 1 };
-    var pageCount = Math.min(MAX_PAGES, Math.max(1, Math.ceil((slot.scrollHeight || visible) / visible)));
-    // ⚠️ 页码必须**读容器实际滚动位置**，不能回读 `config.pageIndex`（后者是 init 时的静态值）：
-    // 否则 `goto` 明明滚过去了，回发的 stable 仍是旧页号 ⇒ 宿主页码/边界判据全部失真
-    // （症状："点了下一页，内容动了但页码不变，到底了也切不了章"——2026-10-10 真机实证）
-    return { pageIndex: clampIndex(scrollIndex(slot.scrollTop, visible), pageCount), pageCount: pageCount };
+    if (bodyOffsetAuthoritative) {
+      // 宿主 `goto` 已给出权威偏移 ⇒ 直接定位，**不做任何**基于 `scrollHeight` 的读写：
+      // 换壳（重挂 `innerHTML`）之后布局尚未 reflow，此刻读 `root/slot.scrollHeight` 会拿到
+      // 未生效的旧值（真机实测把 667 反解成 0 ⇒ 页面被拉回首屏、页码恒 1/1）。
+      bodyOffsetAuthoritative = false;
+      slot.scrollTop = bodyOffset;
+    } else {
+      // 非宿主驱动（用户在页内拖动）⇒ 从滚动位置**反解**正文偏移（跨结构可比量）
+      if (slotIsFrozen(slot)) bodyOffset = readBodyOffset(slot, root);
+      // 冻结后按"结构无关的正文偏移"定位：换壳导致页眉高变化时，正文停留位置保持不变
+      applyBodyOffset(slot, root);
+      bodyOffset = clampBodyOffset(bodyOffset, slot, root);
+    }
+    // 页数口径与既有实现保持**逐字一致**（`ceil(内容高/页高)`）——口径一变，真机上的
+    // 既有页数断言会整体漂移，无法与历史证据对照
+    var totalPages = Math.min(MAX_PAGES, Math.max(1, Math.ceil((slot.scrollHeight || visible) / visible)));
+    // ⚠️ 页码由**正文偏移**推出（不是读 `scrollTop`）：`scrollTop` 含页眉补偿（换壳后整体平移），
+    // 直接读它会把"换壳"误判成"翻了很多页"（症状：一换结构页码就跳到末页）
+    return { pageIndex: clampIndex(bodyOffset / visible, totalPages), pageCount: totalPages };
   }
 
   /**
@@ -112,7 +212,11 @@
         ',scroll=' + Math.round(slot.scrollHeight || 0) +
         ',vp=' + Math.round(viewportHeight) + ',chrome=' + Math.round(chromeHeight) +
         ',empty=' + Math.round(slotEmptyHeight) +
-        ',top=' + (rect ? Math.round(rect.top) : -1)
+        ',top=' + (rect ? Math.round(rect.top) : -1) +
+        // 结构无关定位（C1）的自证：root 高（页眉+正文+页脚）与正文偏移 —— 缺了它
+        // "换壳后正文错位/页码跳飞"只能靠肉眼比对，无法定位是哪一项量错了
+        ',root=' + Math.round((root && root.scrollHeight) || 0) +
+        ',body=' + Math.round(bodyOffset)
     });
   }
 
@@ -134,6 +238,12 @@
     var visible = scrollable.clientHeight || 1;
     var total = scrollable.scrollHeight || visible;
     var pageCount = Math.max(1, Math.ceil(total / visible));
+    // 宿主 `goto` 已给出权威偏移 ⇒ 只写不读地落到滚动位置：滚动容器的"总高"在滚动模板里
+    // 依赖内容高度，紧接 `goto` 的那次结算同样可能读到未 reflow 的旧值（同 C1 换壳的成因）
+    if (bodyOffsetAuthoritative) {
+      bodyOffsetAuthoritative = false;
+      scrollable.scrollTop = bodyOffset;
+    }
     var scrollTop = scrollable.scrollTop || 0;
     var pageIndex = clampIndex(scrollIndex(scrollTop, visible), pageCount);
     // 结算侧自证：与 `goto-applied` 同口径回发（两者不一致即"滚了但结算读不到"）
@@ -165,6 +275,13 @@
     return isFinite(value) ? Math.round(value) : 0;
   }
 
+  /** 当前生效的页面结构名（诊断用；运行时不具备时回落 `none`）。 */
+  function shellName() {
+    var runtime = window.ReaderTemplateRuntime;
+    if (!runtime || typeof runtime.currentPageShell !== 'function') return 'none';
+    return runtime.currentPageShell();
+  }
+
   /** 当前视口高（实时读；沙箱文档此时可能尚未布局完毕 ⇒ 调用方需容错）。 */
   function currentViewportHeight() {
     return document.documentElement.clientHeight || window.innerHeight || 0;
@@ -172,6 +289,12 @@
 
   function initialize(flowConfig) {
     config = flowConfig || {};
+    // 换章/重开 ⇒ 结构状态归位（C1）：每个章节都从"首页"结构开始（否则上一章的"已切续页"
+    // 会带到新章节的首页，症状是新章开篇失去封面页）
+    bodyOffset = 0;
+    pageCount = 1;
+    // 结构状态以运行为准（runtime 的 `renderShell` 已在 initialize 之前把首页结构挂上）
+    flowShell = shellName();
     root = document.getElementById('reader-template-root');
     // ⚠️ 必须在**正文注入之前**调用（runtime 的 continueInit 已按此顺序）：此刻文档高即固定占位
     var slot = bodySlots() ? bodySlots()[0] : null;
@@ -216,8 +339,22 @@
         }
       }
     }
+    pageCount = result.pageCount;
+    // 兜底复位：分栏路径不消费该标记（它直接写 `scrollLeft`）⇒ 不留悬空状态给下一次结算
+    bodyOffsetAuthoritative = false;
     var costMs = ((window.performance && performance.now) ? performance.now() : Date.now()) - startedAt;
     if (window.ReaderTemplateRuntime) {
+      // 结算自证（C1）：结构（首页/续页）与正文偏移随 stable 一并留痕 ——
+      // "换了壳但页码没动"与"换壳后页码跳飞"两种失守在小屏上肉眼几乎无法区分
+      window.ReaderTemplateRuntime.send('renderState', {
+        state: 'settle,shell=' + shellName() + ',body=' + Math.round(bodyOffset) +
+          ',page=' + result.pageIndex + '/' + result.pageCount +
+          // 诊断（C1 换壳定位）：正文偏移是"与结构无关"的定位量，出问题时必须能一眼看出
+          // 是"偏移没接力上"还是"页高算错"——只有 body 一个数说不清是哪一侧失守。
+          // `slotTop` 取只读布局事实（`offsetTop`，不受冻结页框自身 scrollTop 影响）。
+          ',h=' + Math.round(lastPageHeight) +
+          ',slotTop=' + Math.round((bodySlots() && bodySlots()[0] ? bodySlots()[0].offsetTop : -1))
+      });
       window.ReaderTemplateRuntime.onFlowSettled(result.pageIndex, result.pageCount, costMs);
     }
     if (remeasure) {
@@ -233,13 +370,21 @@
    * ⇒ 只能由这里按模板类型操作对应容器，再把新的 `stable` 回发宿主。
    */
   function goto(pageIndex) {
-    var target = clampIndex(pageIndex, Number.MAX_SAFE_INTEGER);
+    // ⚠️ 先把目标页夹到**当前已知页数**内：`applyPageShell` 会重建 DOM，若目标页非法（如宿主
+    // 号到 999），换壳后 `settle` 才夹取会让"结构"与"页号"短暂不一致（多一次无谓重排）
+    var target = clampIndex(pageIndex, pageCount);
+    // 权威标记必须在**任何**滚动改动之前置位：换壳（`switchShellForPage`）内部也会接力偏移，
+    // 若标记晚置，换壳那一步的反解仍会用未 reflow 的布局（见 [bodyOffsetAuthoritative]）
+    bodyOffsetAuthoritative = true;
     try {
       var container = null;
       var axis = 'y';
       if (isScrollMode()) {
         container = scrollContainer();
       } else {
+        // C1 双结构按页换壳：**首屏 → 续页**、**回到首屏**两个方向都要切
+        // （只切一个方向 = "从第 2 页翻回第 1 页时开篇页不再出现"）
+        switchShellForPage(target);
         var slot = bodySlots() ? bodySlots()[0] : null;
         if (slot) {
           container = slot;
@@ -252,7 +397,14 @@
         if (axis === 'x') {
           container.scrollLeft = target * visible;
         } else {
-          container.scrollTop = target * visible;
+          // 纵移 + 自研回退：按**与结构无关的正文偏移**定位（换壳后页眉高不同，
+          // 沿用 `target * visible` 会把正文停在错位处 —— 见 [bodyOffset]）
+          // 一律记成**权威偏移**（与结构无关），由随后 `settle` 只写不读地落到滚动位置：
+          // 换壳后页眉高不同，`target * visible` 直接写 `scrollTop` 会错位（见 [bodyOffset]）
+          bodyOffset = target * visible;
+          if (slotIsFrozen(container)) {
+            container.scrollTop = bodyOffset;
+          }
         }
         reportGoto(target, axis, container);
       }
@@ -265,6 +417,43 @@
       }
     }
     return settle(false);
+  }
+
+  /** 冻结页框判据（只有冻结后才能按 scrollTop 纵移；未冻结说明内容不足一屏）。 */
+  function slotIsFrozen(element) {
+    return !!(element && element.style && element.style.overflow === 'hidden');
+  }
+
+  /**
+   * 按目标页切换首/续页结构（C1），并把"换壳前的正文偏移"接力下来。
+   *
+   * 为什么由流程层而非运行时自己做：换壳会改变文档高，**必须同步修正滚动量**，
+   * 而滚动量只属流程层（沙箱运行时不碰布局）。
+   */
+  function switchShellForPage(target) {
+    var runtime = window.ReaderTemplateRuntime;
+    if (!runtime || typeof runtime.applyPageShell !== 'function') return false;
+    if (isScrollMode() || isColumnsMode()) return false;
+    var slot = bodySlots() ? bodySlots()[0] : null;
+    if (!slot || !slotIsFrozen(slot)) return false;      // 未冻结 ⇒ 单页内容，无需换壳
+    var want = target <= 0 ? 'opening' : 'continuation';
+    if (want === flowShell) return false;                // 同结构连续换页：不重建 DOM（见 [flowShell]）
+    // 换壳后必须**冻结新页框**（旧壳的冻结内联高属于旧结构）；正文偏移的接力与定位由调用方
+    // （`goto` 的权威偏移 + `settle` 的只写定位）负责 —— 此处读写会拿到未 reflow 的旧布局
+    var pageHeight = visibleHeight() || lastPageHeight;  // 页高由视口推出（见 [visibleHeight] 的口径说明）
+    var changed = runtime.applyPageShell(want);
+    if (changed) {
+      flowShell = want;
+      var fresh = bodySlots() ? bodySlots()[0] : null;
+      if (fresh) {
+        // 新壳刚挂上 ⇒ 页框需重设（旧壳的冻结内联高属于旧结构）。
+        // ⚠️ 这里**不**定位滚动：重挂 `innerHTML` 后布局尚未 reflow，任何基于 `scrollHeight`
+        // 的换算都会读到旧值（真机实测把偏移反解成 0）。定位统一交给随后 `settle` 的权威分支
+        // （`slot.scrollTop = bodyOffset`，只写不读）。
+        freezeSlot(fresh, pageHeight);
+      }
+    }
+    return changed;
   }
 
   /** 滚动容器（滚动模板：天地画框；缺省退回文档滚动元素）。 */

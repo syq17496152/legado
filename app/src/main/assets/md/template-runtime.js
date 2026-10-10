@@ -68,7 +68,15 @@
   var MATERIAL_TIMEOUT_MS = 1500;
 
   /**
-   * 装饰强度 → `--rp-decor-scale`（4.8d）。字面量与 Kotlin 侧
+   * 当前生效的页面结构（`opening` 首页 / `continuation` 续页 / `scroll` 滚动）——
+   * **状态机**，唯一写入点是 [applyPageShell]（见其 KDoc 的理由）。
+   *
+   * 初值取空串（而非 `'opening'`）：[renderShell] 会在**首次** `applyPageShell('opening')`
+   * 时真正挂载，若初值即 `'opening'`，该调用会因"状态未变"直接返回 ⇒ **根壳恒空**。
+   */
+  var pageShell = '';
+
+  /** 装饰强度 → `--rp-decor-scale`（4.8d）。字面量与 Kotlin 侧
    * `ReaderTemplateDecorationPolicy.Intensity.cssValue` 一一对应（契约测试锁定）。
    */
   var DECOR_SCALE = { none: '0', light: '0.75', medium: '1', strong: '1.25' };
@@ -94,12 +102,17 @@
   /** 作者 HTML 拼装（作者代码只作为字符串进入 DOM，不 eval）。 */
   function renderShell() {
     var template = state.template || {};
-    var scrolling = template.type === 'scroll';
-    var html = scrolling ? (template.scrollHtml || '') : (state.pageIndex === 0
-      ? (template.firstPageHtml || '')
-      : (template.otherPageHtml || ''));
     mountStyles(template.css || '');
-    mountMarkup(html);
+    if (template.type === 'scroll') {
+      // 滚动模板是单份 `scrollHtml`（无首/续之分）
+      pageShell = 'scroll';
+      mountMarkup(template.scrollHtml || '');
+      return;
+    }
+    // paged：每个章节都从**首页结构**开始（C1 双结构；续页由流程层按页切换）。
+    // ⚠️ 必须走 `applyPageShell`（不能直接 `mountMarkup`）：该函数是本结构的**唯一**写入点，
+    // 绕过它会留下"DOM 已是首页、状态却是上章续页"的不一致（症状：本章开篇页再也切不回来）
+    applyPageShell('opening');
   }
 
   function mountStyles(css) {
@@ -124,6 +137,51 @@
     } catch (error) {
       reportError('template-render-failed', error);
     }
+  }
+
+  /** 首页结构（paged 的 `firstPageHtml`）；空则视为无首页结构。 */
+  function openingHtml() {
+    return (state.template && state.template.firstPageHtml) || '';
+  }
+
+  /** 续页结构（paged 的 `otherPageHtml`）；空则退回首页结构（作者只写一套时按一套渲染）。 */
+  function continuationHtml() {
+    var other = (state.template && state.template.otherPageHtml) || '';
+    return other || openingHtml();
+  }
+
+  /**
+   * 首页 / 续页**双结构按页换壳**（4.15 C1 / TPL-15）。
+   *
+   * 契约（archive 原文能力）：paged 模板的**首页是"封面/开篇页"**（整幅插画 + 题词 + 大标题），
+   * **续页才是正文页**（窄页眉 + 正文流 + 页脚）。它们是**两套 HTML**，不是同一套加类名 ——
+   * 所以必须真的换 DOM，只在首屏渲染一套就交差等于"开篇仪式感缺失"。
+   *
+   * **为什么换壳只发生在页边界（而不是每页重渲染）**：自研回退分页是"**单 DOM + 冻结页框 + 滚动**"
+   * （见 `template-browser-flow.js`）——正文在 DOM 里是连续流，页只是滚动窗口。因此
+   * ①结构与"第几页"只能按**开篇段 / 正文段**二分（首屏换不回：首屏内容已滚到窗口之外，
+   * 重新换壳需要"按页无限延伸"的排版模型，属 4.19 的主干重建，AOAdapt 已登记）；
+   * ②换壳会改变文档高 ⇒ 必须由**流程层**在 `goto` 里同步修正滚动偏移（见 `flow.setShell`）。
+   *
+   * 返回值：`true` 表示壳**真的换了**（流程层据此修正滚动偏移）。
+   */
+  function applyPageShell(which) {
+    var target = which === 'continuation' ? 'continuation' : 'opening';
+    var template = state.template || {};
+    if (template.type === 'scroll') return false;   // 滚动模板是单份 scrollHtml，无首/续之分
+    if (target === pageShell) return false;
+    pageShell = target;
+    mountMarkup(target === 'opening' ? openingHtml() : continuationHtml());
+    // ⚠️ 关键：换壳会**整块替换根壳 innerHTML**（新壳里当然没有正文）⇒ 必须把正文注入回来，
+    // 否则翻到续页就是"页眉页脚还在、正文全空"（2026-10-10 C1 真机实证：slot 高塌成 16px、页数 1/1）。
+    // 用 `applyBody` 一并回填字段槽位（新壳里的页码/时间等占位同样需要真值）。
+    applyBody(state.bodyHtml);
+    return true;
+  }
+
+  /** 当前生效结构（诊断/契约用）。 */
+  function currentPageShell() {
+    return pageShell;
   }
 
   /**
@@ -222,6 +280,8 @@
 
   /** 正文本体（`data-reader-flow="body"`）注入：模板只负责外观，正文由宿主提供。 */
   function applyBody(bodyHtml) {
+    // 缓存正文 HTML：换壳（C1）会整块替换根壳，必须能把它再注入回来
+    if (bodyHtml !== undefined) state.bodyHtml = bodyHtml || '';
     var containers = document.querySelectorAll('[data-reader-flow="body"]');
     if (!containers.length) {
       // 模板未声明正文槽位 ⇒ 视为作者错误，保留当前显示并报错（不静默吞掉）
@@ -229,7 +289,7 @@
       return;
     }
     for (var i = 0; i < containers.length; i++) {
-      containers[i].innerHTML = bodyHtml || '';
+      containers[i].innerHTML = state.bodyHtml;
     }
     state.revision++;
     send('contentChanged', { revision: state.revision });
@@ -709,6 +769,8 @@
     setTheme: setTheme,
     applyDecoration: applyDecoration,
     markDecorations: markDecorations,
+    applyPageShell: applyPageShell,
+    currentPageShell: currentPageShell,
     applyViewport: applyViewport,
     applyWritingMode: applyWritingMode,
     materializeMaterials: materializeMaterials,
