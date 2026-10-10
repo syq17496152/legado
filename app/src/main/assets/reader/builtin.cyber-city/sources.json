@@ -1,0 +1,8 @@
+{
+  "id": "builtin.cyber-city",
+  "name": "赛博都市",
+  "author": "WeAgentChat / Legado（自研）",
+  "license": "随应用分发（自研素材）",
+  "assets": [],
+  "note": "零外部素材：楼群剪影/窗光/路面网格全部由自研 CSS 渐变与掩膜绘制（本批未使用 CC0 纹理文件，与零素材口径保持一致）；无第三方 IP 素材、无网络请求。"
+}

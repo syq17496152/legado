@@ -3,6 +3,14 @@
   "templates": [
     "builtin.neon-night",
     "builtin.minimal-ink",
-    "builtin.paper-scroll"
+    "builtin.paper-scroll",
+    "builtin.terminal",
+    "builtin.glass",
+    "builtin.minimal-tech",
+    "builtin.cyber-city",
+    "builtin.data-stream",
+    "builtin.ink",
+    "builtin.star-chart",
+    "builtin.pixel-grid"
   ]
 }

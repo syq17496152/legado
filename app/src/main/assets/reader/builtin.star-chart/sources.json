@@ -1,0 +1,8 @@
+{
+  "id": "builtin.star-chart",
+  "name": "星图",
+  "author": "WeAgentChat / Legado（自研）",
+  "license": "随应用分发（自研素材）",
+  "assets": [],
+  "note": "零外部素材：星盘刻度环、黄道刻线与星轨弧全部由自研 CSS（conic 刻度 + 径向环 + 掩膜）绘制；本批未引入 PD 星图素材（留待成套美术批次），无第三方 IP 素材与网络请求。"
+}

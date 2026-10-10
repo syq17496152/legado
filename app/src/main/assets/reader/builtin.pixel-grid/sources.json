@@ -1,0 +1,8 @@
+{
+  "id": "builtin.pixel-grid",
+  "name": "像素格",
+  "author": "WeAgentChat / Legado（自研）",
+  "license": "随应用分发（自研素材）",
+  "assets": [],
+  "note": "零外部素材：像素框、网格底纹与方块标题全部由自研 CSS 实现；等宽字形使用系统字体栈（未打包 OFL 像素字体文件，避免与零素材口径冲突），无第三方 IP 素材与网络请求。"
+}

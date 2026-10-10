@@ -107,7 +107,15 @@
     var total = scrollable.scrollHeight || visible;
     var pageCount = Math.max(1, Math.ceil(total / visible));
     var scrollTop = scrollable.scrollTop || 0;
-    var pageIndex = clampIndex(Math.floor(scrollTop / visible), pageCount);
+    var pageIndex = clampIndex(scrollIndex(scrollTop, visible), pageCount);
+    // 结算侧自证：与 `goto-applied` 同口径回发（两者不一致即"滚了但结算读不到"）
+    if (window.ReaderTemplateRuntime) {
+      window.ReaderTemplateRuntime.send('renderState', {
+        state: 'scroll-settle,top=' + (scrollTop || 0).toFixed(2) +
+          ',visible=' + Math.round(visible) + ',total=' + Math.round(total) +
+          ',index=' + pageIndex + ',viaViewport=' + (viewport ? 1 : 0)
+      });
+    }
     return { pageIndex: pageIndex, pageCount: pageCount };
   }
 
@@ -116,11 +124,17 @@
     return Math.max(0, Math.min(pageCount - 1, Math.floor(value)));
   }
 
-  /** 由滚动偏移与可见尺寸推出页码（容器不可滚动时返回 0）。 */
+  /**
+   * 由滚动偏移与可见尺寸推出页码（容器不可滚动时返回 0）。
+   *
+   * ⚠️ 必须**四舍五入**、不能用 `Math.floor`：`scrollTop`/`clientHeight` 可能是小数
+   * （真机实测 `scrollTop=782.x`、可见高 783 ⇒ `floor(0.9995)=0`），floor 会把"已翻到第 2 页"
+   * 一律判成第 1 页 —— 症状是"内容明明翻过去了，页码/边界判据却停在第一页"（2026-10-10 铁证）。
+   */
   function scrollIndex(offset, visible) {
     if (!(visible > 0)) return 0;
-    var index = Math.floor((offset || 0) / visible);
-    return isFinite(index) ? index : 0;
+    var value = (offset || 0) / visible;
+    return isFinite(value) ? Math.round(value) : 0;
   }
 
   function initialize(flowConfig) {
@@ -188,31 +202,26 @@
   function goto(pageIndex) {
     var target = clampIndex(pageIndex, Number.MAX_SAFE_INTEGER);
     try {
+      var container = null;
+      var axis = 'y';
       if (isScrollMode()) {
-        var viewport = document.querySelector('[data-reader-scroll-viewport]');
-        var scrollable = viewport || document.scrollingElement || document.documentElement;
-        var visible = scrollable.clientHeight || 1;
-        scrollable.scrollTop = target * visible;
+        container = scrollContainer();
       } else {
         var slot = bodySlots() ? bodySlots()[0] : null;
         if (slot) {
+          container = slot;
           // 分栏模板横移；自研回退（页框已冻结为纵向裁切）纵移 —— 用错轴 = "点翻页没反应"
-          if (isColumnsMode()) {
-            slot.scrollLeft = target * (slot.clientWidth || 1);
-          } else {
-            slot.scrollTop = target * (slot.clientHeight || 1);
-          }
-          // 翻页结果**自证**：沙箱跨源（宿主读不到它的滚动位置），"有没有真的滚过去"
-          // 只能用消息回发；缺了它只能靠猜（症状与"点击没到宿主"完全一样）
-          if (window.ReaderTemplateRuntime) {
-            window.ReaderTemplateRuntime.send('renderState', {
-              state: 'goto-applied,target=' + target +
-                ',top=' + Math.round(slot.scrollTop || 0) +
-                ',client=' + Math.round(slot.clientHeight || 0) +
-                ',scroll=' + Math.round(slot.scrollHeight || 0)
-            });
-          }
+          axis = isColumnsMode() ? 'x' : 'y';
         }
+      }
+      if (container) {
+        var visible = (axis === 'x' ? container.clientWidth : container.clientHeight) || 1;
+        if (axis === 'x') {
+          container.scrollLeft = target * visible;
+        } else {
+          container.scrollTop = target * visible;
+        }
+        reportGoto(target, axis, container);
       }
     } catch (error) {
       if (window.ReaderTemplateRuntime) {
@@ -223,6 +232,27 @@
       }
     }
     return settle(false);
+  }
+
+  /** 滚动容器（滚动模板：天地画框；缺省退回文档滚动元素）。 */
+  function scrollContainer() {
+    return document.querySelector('[data-reader-scroll-viewport]') ||
+      document.scrollingElement || document.documentElement;
+  }
+
+  /**
+   * 翻页结果**自证**：沙箱跨源（宿主读不到它的滚动位置），"有没有真的滚过去"只能用消息回发；
+   * 缺了它只能靠猜——"点击没到宿主""轴用错""容器不可滚"三种原因的症状完全一样。
+   */
+  function reportGoto(target, axis, container) {
+    if (!window.ReaderTemplateRuntime) return;
+    window.ReaderTemplateRuntime.send('renderState', {
+      state: 'goto-applied,target=' + target + ',axis=' + axis +
+        ',top=' + (container.scrollTop || 0).toFixed(2) +
+        ',left=' + (container.scrollLeft || 0).toFixed(2) +
+        ',client=' + Math.round(container.clientHeight || 0) +
+        ',scroll=' + Math.round(container.scrollHeight || 0)
+    });
   }
 
   window.ReaderTemplateFlow = {

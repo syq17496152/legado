@@ -1,0 +1,8 @@
+{
+  "id": "builtin.minimal-tech",
+  "name": "极简科技",
+  "author": "WeAgentChat / Legado（自研）",
+  "license": "随应用分发（自研素材）",
+  "assets": [],
+  "note": "零外部素材：全部视觉由自研 CSS（细线框、掩膜渐变、进度条）实现；无第三方 IP 素材、无外部字体与网络请求。"
+}

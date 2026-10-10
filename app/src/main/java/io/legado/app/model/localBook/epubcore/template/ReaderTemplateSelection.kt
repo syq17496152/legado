@@ -26,10 +26,10 @@ internal object ReaderTemplateSelection {
     /**
      * 浅色主题默认款偏好序列。
      *
-     * 设计指定浅色默认款为「极简科技」（A4），但其尚未交付 ⇒ 一期先回落「素笺」；
-     * A4 交付后把 `builtin.minimal-tech` 插到首位即可生效（无需改本文件其它逻辑）。
+     * 设计指定浅色默认款为「极简科技」（A4）；A4（`builtin.minimal-tech`）已随 4.12 交付 ⇒
+     * 插到首位生效；其后为「素笺」兜底（老用户若只保留旧套系也不会落空）。
      */
-    val DayPreference = listOf("builtin.minimal-ink")
+    val DayPreference = listOf("builtin.minimal-tech", "builtin.minimal-ink")
 
     fun isFollowTheme(appliedTemplateId: String): Boolean = appliedTemplateId.isBlank()
 

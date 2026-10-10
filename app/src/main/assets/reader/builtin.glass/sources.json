@@ -1,0 +1,8 @@
+{
+  "id": "builtin.glass",
+  "name": "玻璃拟态",
+  "author": "WeAgentChat / Legado（自研）",
+  "license": "随应用分发（自研素材）",
+  "assets": [],
+  "note": "零外部素材：磨砂面板与光斑全部由自研 CSS（backdrop-filter + radial-gradient）实现；无第三方 IP 素材、无外部字体与网络请求。"
+}
