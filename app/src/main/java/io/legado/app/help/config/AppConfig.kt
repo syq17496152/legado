@@ -2618,6 +2618,16 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
             ?: ReaderFeatureDefaults.READER_TEMPLATE_ID
         set(value) = appCtx.putPrefString(PreferKey.readerTemplate, value)
 
+    /**
+     * 阅读页面模板**整体开关**（epub-md-rich-rendering 阶段 4.9）。
+     *
+     * 关闭 ⇒ 文本类内容完全走既有 canvas 路径（等同没有模板系统、无残留）；
+     * 默认值见 [ReaderFeatureDefaults.READER_TEMPLATE_ENABLED]（当前为 false，理由在该常量处）。
+     */
+    var readerTemplateEnabled: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.readerTemplateEnabled, ReaderFeatureDefaults.READER_TEMPLATE_ENABLED)
+        set(value) = appCtx.putPrefBoolean(PreferKey.readerTemplateEnabled, value)
+
     val progressBarBehavior: String?
         get() = appCtx.getPrefString(PreferKey.progressBarBehavior, "page")
 

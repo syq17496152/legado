@@ -2,6 +2,7 @@ package io.legado.app.help.config
 
 import io.legado.app.constant.PreferKey
 import io.legado.app.model.localBook.epubcore.template.EpubReaderTemplate
+import io.legado.app.model.localBook.epubcore.template.ReaderTemplateAvailabilityPolicy
 import io.legado.app.model.localBook.epubcore.template.ReaderTemplateSelection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -110,6 +111,24 @@ class ReaderTemplateManagerTest {
         )
         // 无任何可用模板 ⇒ null（调用方据此给提示）
         assertNull(ReaderTemplateManager.resolveEffectiveId(ReaderTemplateSelection.FollowTheme, false, emptyList()))
+    }
+
+    @Test
+    fun `信任级别与免责提示按来源分流`() {
+        // 内置为自研合规素材 ⇒ 导出不打扰；用户库/导入可能含第三方素材 ⇒ 必须有免责
+        val builtin = entry("builtin.a")
+        val user = entry("user.a", name = "我的模板", source = ReaderTemplateManager.Source.USER)
+        assertEquals(ReaderTemplateAvailabilityPolicy.Origin.BUILTIN, ReaderTemplateManager.originOf(builtin))
+        assertEquals(ReaderTemplateAvailabilityPolicy.Origin.USER_EDITED, ReaderTemplateManager.originOf(user))
+        assertTrue("内置导出不得出现免责提示（自研素材无需自担）", ReaderTemplateManager.exportNotice(builtin).isBlank())
+        assertEquals(ReaderTemplateAvailabilityPolicy.ExportDisclaimer, ReaderTemplateManager.exportNotice(user))
+    }
+
+    @Test
+    fun `导入免责文案与策略单源且非空`() {
+        // 4.9：导入必须显式确认 ⇒ 文案非空是与策略一致的最低要求
+        assertTrue(ReaderTemplateManager.importDisclaimer.isNotBlank())
+        assertEquals(ReaderTemplateAvailabilityPolicy.ImportDisclaimer, ReaderTemplateManager.importDisclaimer)
     }
 
     @Test

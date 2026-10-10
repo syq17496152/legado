@@ -33,4 +33,12 @@ class ReaderFeatureDefaultsTest {
         assertTrue("空串即「跟随主题」，非空则等于要求用户先选一套", ReaderFeatureDefaults.READER_TEMPLATE_ID.isBlank())
         assertEquals("readerTemplate", PreferKey.readerTemplate)
     }
+
+    @Test
+    fun `页面模板整体开关默认关闭且键名单源`() {
+        // 4.9：开启 = 文本类内容的默认渲染路径切换（canvas → 模板面）⇒ 属大改，
+        // 必须先有 4.19 防卡顿 / XB.2 性能实测与 4.20 兼容验证，再谈默认翻转。
+        assertFalse("默认关：不给用户造成「看书方式被悄悄换掉」的意外", ReaderFeatureDefaults.READER_TEMPLATE_ENABLED)
+        assertEquals("readerTemplateEnabled", PreferKey.readerTemplateEnabled)
+    }
 }

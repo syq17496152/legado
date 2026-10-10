@@ -3,6 +3,7 @@ package io.legado.app.help.config
 import io.legado.app.constant.AppLog
 import io.legado.app.model.localBook.epubcore.template.EpubReaderTemplate
 import io.legado.app.model.localBook.epubcore.template.ReaderBuiltinTemplateCatalog
+import io.legado.app.model.localBook.epubcore.template.ReaderTemplateAvailabilityPolicy
 import io.legado.app.model.localBook.epubcore.template.ReaderTemplateImportMapper
 import io.legado.app.model.localBook.epubcore.template.ReaderTemplatePreferences
 import io.legado.app.model.localBook.epubcore.template.ReaderTemplateRepository
@@ -102,6 +103,53 @@ object ReaderTemplateManager {
         )
         return Catalog(entries, errors)
     }
+
+    // === 整体开关与可用性（4.9） ===
+
+    /**
+     * 模板系统整体开关。
+     *
+     * 关闭 ⇒ 文本类内容完全走既有 canvas 路径（**等同没有模板系统、无残留**）；
+     * 默认值与其翻转条件见 [ReaderFeatureDefaults.READER_TEMPLATE_ENABLED]。
+     */
+    fun templatesEnabled(): Boolean = AppConfig.readerTemplateEnabled
+
+    fun setTemplatesEnabled(enabled: Boolean) {
+        AppConfig.readerTemplateEnabled = enabled
+    }
+
+    /** 导入前的**免责确认**文案（4.9：默认仅内置可信 ⇒ 用户导入须显式确认）。 */
+    val importDisclaimer: String get() = ReaderTemplateAvailabilityPolicy.ImportDisclaimer
+
+    /** 导出/分享前的**免责提示**（内置为自研合规素材 ⇒ 空串，不打扰用户）。 */
+    fun exportNotice(entry: Entry): String =
+        ReaderTemplateAvailabilityPolicy.exportNotice(originOf(entry))
+
+    /**
+     * 此刻该模板/该内容形态能否使用（4.9 的单一判据入口）。
+     *
+     * `internal`：返回类型属模板包内部策略（仅本模块消费，避免把策略类型暴露成公共 API）。
+     */
+    internal fun availability(
+        contentKind: ReaderTemplateAvailabilityPolicy.ContentKind,
+        origin: ReaderTemplateAvailabilityPolicy.Origin,
+        importConfirmed: Boolean,
+        textReadingModeActive: Boolean
+    ): ReaderTemplateAvailabilityPolicy.Decision = ReaderTemplateAvailabilityPolicy.decide(
+        templatesEnabled = templatesEnabled(),
+        contentKind = contentKind,
+        origin = origin,
+        importConfirmed = importConfirmed,
+        textReadingModeActive = textReadingModeActive
+    )
+
+    /** 模板来源 → 信任级别（内置可信；用户库与导入同口径，均可能含第三方素材）。 */
+    internal fun originOf(entry: Entry): ReaderTemplateAvailabilityPolicy.Origin =
+        if (entry.source == Source.BUILTIN) {
+            ReaderTemplateAvailabilityPolicy.Origin.BUILTIN
+        } else {
+            ReaderTemplateAvailabilityPolicy.Origin.USER_EDITED
+        }
 
     /** 当前可用模板 id 全集（顺序即「最后兜底」优先级）。 */
     fun availableIds(): List<String> = loadCatalog().entries.map { it.id }

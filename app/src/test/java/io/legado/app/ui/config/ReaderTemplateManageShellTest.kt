@@ -52,6 +52,15 @@ class ReaderTemplateManageShellTest {
     }
 
     @Test
+    fun `整体开关与导入导出免责已接线`() {
+        val text = src(activity)
+        listOf("toggleTemplates", "setTemplatesEnabled", "importDisclaimer", "exportNotice").forEach { mark ->
+            assertTrue("4.9 接线缺失：$mark", text.contains(mark))
+        }
+        assertTrue("整体开关必须出现在页面上（否则用户无法关闭模板系统）", src(screen).contains("onToggleTemplates"))
+    }
+
+    @Test
     fun `设置域入口与清单登记齐备`() {
         val theme = src("ui/config/ThemeConfigFragment.kt")
         assertTrue("设置域必须有入口", theme.contains("KEY_READER_TEMPLATE_MANAGE"))

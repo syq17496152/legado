@@ -28,6 +28,11 @@ class PreferKeyReaderTemplateTest {
     }
 
     @Test
+    fun `模板整体开关键与取值按同一口径登记`() {
+        assertEquals("readerTemplateEnabled", pairs()["readerTemplateEnabled"])
+    }
+
+    @Test
     fun `不与文本富渲染开关同值`() {
         val all = pairs()
         val template = all["readerTemplate"]
