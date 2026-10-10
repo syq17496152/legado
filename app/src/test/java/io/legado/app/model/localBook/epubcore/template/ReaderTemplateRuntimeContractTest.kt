@@ -133,7 +133,45 @@ class ReaderTemplateRuntimeContractTest {
         assertTrue("须读滚动视口", flow.contains("[data-reader-scroll-viewport]"))
         assertTrue("须有自研回退分页", flow.contains("settleManualPagination"))
         assertTrue("须回发结算", flow.contains("onFlowSettled"))
-        assertTrue("须有元素扫描上限", flow.contains("MAX_SCAN_ELEMENTS"))
+        assertTrue("页框高须有下限守卫（除零/整章被裁成 1 页）", flow.contains("MIN_PAGE_HEIGHT"))
+        assertTrue("页数须有上限守卫（作者畸形 DOM 不得拖死宿主）", flow.contains("MAX_PAGES"))
+    }
+
+    @Test
+    fun `自研回退分页把正文槽位冻结为页框并纵移翻页`() {
+        // 真机缺口（2026-10-10）：模板只声明正文槽位、作者 CSS 让正文自由增高（素笺 `.mi-body`
+        // 无 height/overflow）⇒ 页数恒 1、翻页无效、后半章溢出读不到。引擎必须自己冻结页框。
+        val flow = asset("template-browser-flow.js")
+        assertTrue("必须冻结页框（固定高）", flow.contains("function freezeSlot("))
+        assertTrue("必须以 border-box 固定高（与量取口径一致，含 padding）", flow.contains("boxSizing = 'border-box'"))
+        assertTrue("必须裁切（overflow:hidden 仍是可编程滚动容器）", flow.contains("overflow = 'hidden'"))
+        assertTrue(
+            "页框高须由「视口高 − 注入前文档高 + 槽位空高」推出（页眉页脚被自然扣掉）",
+            flow.contains("viewportHeight - chromeHeight + slotEmptyHeight")
+        )
+        assertTrue(
+            "自研回退须纵移（用错轴＝点翻页没反应）",
+            flow.contains("slot.scrollTop = target * (slot.clientHeight || 1)")
+        )
+        assertTrue("分栏模板才横移", flow.contains("slot.scrollLeft = target * (slot.clientWidth || 1)"))
+        assertTrue(
+            "页码必须读容器实际滚动位置（回读静态 config.pageIndex ⇒ 翻页后页码不变、边界判据失真）",
+            flow.contains("function scrollIndex(") && flow.contains("scrollIndex(slot.scrollTop, visible)")
+        )
+    }
+
+    @Test
+    fun `运行时在正文注入前量页框并立即结算一次`() {
+        // 两条顺序/完备性不变量，各自对应一类真实失守：
+        // ①先注入后量 ⇒ 正文自身被算进"固定占位"，页框被算成 0 高；
+        // ②不立即结算 ⇒ 无富渲染元素的章节拿不到 stable，宿主只能 8s 超时回落 canvas。
+        val runtime = asset("template-runtime.js")
+        val iInit = runtime.indexOf("flow.initialize(config.flow)")
+        val iBody = runtime.indexOf("applyBody(config.bodyHtml)")
+        assertTrue("continueInit 必须调用 flow.initialize", iInit >= 0)
+        assertTrue("正文注入必须在页框量取之后：$iInit < $iBody", iInit in 0 until iBody)
+        val iSettle = runtime.indexOf("flow.settle(false)")
+        assertTrue("必须在初始化阶段立即结算一次", iSettle > iBody)
     }
 
     @Test

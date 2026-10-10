@@ -3,24 +3,37 @@
  *
  * 运行环境：与 `template-runtime.js` 同在沙箱 iframe 内，仅负责「排版结果」：
  * - `paged`：按模板声明的分栏方式切页（`data-reader-flow-pagination="columns"` ⇒ CSS 多栏；
- *   否则**自研回退**：按正文槽位高度累积切分，保证"复杂内容不断章不错位"）；
+ *   否则**自研回退**：把正文槽位冻结为页框（固定高 + 裁切）并按内容高切页，翻页改 `scrollTop`
+ *   ⇒ 不依赖作者是否给正文加高度约束，"复杂内容不断章不错位"由引擎保证）；
  * - `scroll`：滚动模板固定滚动（`data-reader-scroll-viewport` 唯一，滚动容器不参与正文测量）；
+ * - `initialize()` 必须在**正文注入之前**调用（页框基准＝此刻的文档高，即页眉/页脚等固定占位）；
  * - 完成后回调 `ReaderTemplateRuntime.onFlowSettled(pageIndex,pageCount,costMs)`，
  *   由 runtime 回发 `stable` 消息（宿主据此重测分页，见 AD-28）。
  *
  * 设计约束（与宿主侧 `ReaderTemplateBridgePolicy` 的白名单/上限一致）：
  * - **不做 DOM 之外的副作用**：无网络、无 storage、无宿主调用；
- * - **有界**：扫描元素数与递归深度受限，避免作者巨型 DOM 拖死渲染；
+ * - **有界**：页数与页框高都有下限/上限守卫（`MIN_PAGE_HEIGHT` / `MAX_PAGES`），
+ *   作者畸形 DOM 不得让宿主陷入超长分页或除零；
  * - **异常降级**：流程异常时置「单页」并把错误交给 runtime 回发（不白屏）。
  */
 (function () {
   'use strict';
 
-  var MAX_SCAN_ELEMENTS = 20000;
   var MAX_COLUMN_RETRY = 3;
+
+  /** 页框可用高的下限：低于此值视为"页框不可用"（避免 0/负高导致除零或整章被裁成 1 页）。 */
+  var MIN_PAGE_HEIGHT = 40;
+
+  /** 页数上限（有界：作者畸形 DOM 不得让宿主陷入超长分页）。 */
+  var MAX_PAGES = 5000;
 
   var root = null;
   var config = null;
+
+  // 自研回退分页的**页框基准**：在正文注入**之前**量取（此刻文档高 = 页眉/页脚/内外边距等固定占位）
+  var viewportHeight = 0;
+  var chromeHeight = 0;
+  var slotEmptyHeight = 0;
 
   function bodySlots() {
     var slots = document.querySelectorAll('[data-reader-flow="body"]');
@@ -43,24 +56,48 @@
     var scrollWidth = slot.scrollWidth || slot.getBoundingClientRect().width || 1;
     var pageWidth = slot.clientWidth || 1;
     var pageCount = Math.max(1, Math.ceil(scrollWidth / pageWidth));
-    return { pageIndex: clampIndex(config && config.pageIndex, pageCount), pageCount: pageCount };
+    // 同上：分栏模板的页码同样读实际横移量（不能回读静态 config.pageIndex）
+    return { pageIndex: clampIndex(scrollIndex(slot.scrollLeft, pageWidth), pageCount), pageCount: pageCount };
   }
 
-  /** paged + 自研回退：按行高累积切分（不依赖 CSS 多栏能力）。 */
+  /**
+   * paged + **自研回退分栏**（4.7 默认路径，不依赖 CSS 多栏能力）。
+   *
+   * 为什么要自己冻结页框：模板契约只要求正文槽位带 `data-reader-flow="body"`，作者 CSS 常让正文
+   * **自由增高**（实测素笺 `.mi-body` 无 `height`/`overflow`）⇒ 不冻结就会出现"页数恒 1、
+   * 翻页无效、正文溢出页框（读不到后半章）"。
+   *
+   * 页框高度口径 = **沙箱视口高 − 正文注入前的文档高（页眉/页脚/边距等占位）+ 槽位自身空高**：
+   * 前者让作者写的页眉页脚被自然扣掉（不必额外约定契约），后者还原槽位 padding 的占位（border-box）。
+   * 只在**真的溢出**时才冻结 ⇒ 未溢出的模板外观零改动。
+   */
   function settleManualPagination() {
-    var slot = bodySlots()[0];
+    var slot = bodySlots() ? bodySlots()[0] : null;
     if (!slot) return { pageIndex: 0, pageCount: 1 };
-    var pageHeight = slot.clientHeight || 1;
-    var children = slot.children;
-    var nodes = Math.min(children.length, MAX_SCAN_ELEMENTS);
-    if (!nodes) return { pageIndex: 0, pageCount: 1 };
-    var total = 0;
-    for (var i = 0; i < nodes; i++) {
-      var rect = children[i].getBoundingClientRect ? children[i].getBoundingClientRect() : null;
-      total += rect ? rect.height : 0;
+    var pageHeight = viewportHeight - chromeHeight + slotEmptyHeight;
+    if (!(pageHeight > MIN_PAGE_HEIGHT)) return { pageIndex: 0, pageCount: 1 };
+    if ((slot.scrollHeight || 0) > pageHeight + 1) {
+      freezeSlot(slot, pageHeight);
     }
-    var pageCount = Math.max(1, Math.ceil(total / pageHeight));
-    return { pageIndex: clampIndex(config && config.pageIndex, pageCount), pageCount: pageCount };
+    var visible = slot.clientHeight || pageHeight;
+    if (!(visible > 0)) return { pageIndex: 0, pageCount: 1 };
+    var pageCount = Math.min(MAX_PAGES, Math.max(1, Math.ceil((slot.scrollHeight || visible) / visible)));
+    // ⚠️ 页码必须**读容器实际滚动位置**，不能回读 `config.pageIndex`（后者是 init 时的静态值）：
+    // 否则 `goto` 明明滚过去了，回发的 stable 仍是旧页号 ⇒ 宿主页码/边界判据全部失真
+    // （症状："点了下一页，内容动了但页码不变，到底了也切不了章"——2026-10-10 真机实证）
+    return { pageIndex: clampIndex(scrollIndex(slot.scrollTop, visible), pageCount), pageCount: pageCount };
+  }
+
+  /**
+   * 把正文槽位冻结为**页框**：固定高 + 裁切（border-box ⇒ 含 padding，与量取口径一致）。
+   *
+   * 只改我们用契约拥有的槽位自身（不动作者的结构与后代样式）；`overflow:hidden` 的元素仍是
+   * 可编程滚动容器 ⇒ 翻页只需改 `scrollTop`，无需包裹正文（包裹会破坏作者 `>选择器`）。
+   */
+  function freezeSlot(slot, pageHeight) {
+    slot.style.boxSizing = 'border-box';
+    slot.style.height = Math.floor(pageHeight) + 'px';
+    slot.style.overflow = 'hidden';
   }
 
   function settleScroll() {
@@ -79,9 +116,24 @@
     return Math.max(0, Math.min(pageCount - 1, Math.floor(value)));
   }
 
+  /** 由滚动偏移与可见尺寸推出页码（容器不可滚动时返回 0）。 */
+  function scrollIndex(offset, visible) {
+    if (!(visible > 0)) return 0;
+    var index = Math.floor((offset || 0) / visible);
+    return isFinite(index) ? index : 0;
+  }
+
   function initialize(flowConfig) {
     config = flowConfig || {};
     root = document.getElementById('reader-template-root');
+    // ⚠️ 必须在**正文注入之前**调用（runtime 的 continueInit 已按此顺序）：此刻文档高即固定占位
+    var slot = bodySlots() ? bodySlots()[0] : null;
+    viewportHeight = document.documentElement.clientHeight || window.innerHeight || 0;
+    // ⚠️ 占位高必须量**模板根壳**（`#reader-template-root`）而不是 `documentElement.scrollHeight`：
+    // 后者在"内容比视口短"时会被撑到视口高 ⇒ 占位=整屏 ⇒ 页框被算成几像素 ⇒ 直接放弃分页
+    // （实测症状：页数恒 1，stable 一路 1/1）。根壳是普通流内元素，其 scrollHeight 即真实内容高。
+    chromeHeight = root ? (root.scrollHeight || 0) : (document.body.scrollHeight || 0);
+    slotEmptyHeight = slot ? Math.ceil(slot.getBoundingClientRect().height) : 0;
   }
 
   /**
@@ -142,11 +194,24 @@
         var visible = scrollable.clientHeight || 1;
         scrollable.scrollTop = target * visible;
       } else {
-        var slots = bodySlots();
-        var slot = slots ? slots[0] : null;
+        var slot = bodySlots() ? bodySlots()[0] : null;
         if (slot) {
-          var pageWidth = slot.clientWidth || 1;
-          slot.scrollLeft = target * pageWidth;
+          // 分栏模板横移；自研回退（页框已冻结为纵向裁切）纵移 —— 用错轴 = "点翻页没反应"
+          if (isColumnsMode()) {
+            slot.scrollLeft = target * (slot.clientWidth || 1);
+          } else {
+            slot.scrollTop = target * (slot.clientHeight || 1);
+          }
+          // 翻页结果**自证**：沙箱跨源（宿主读不到它的滚动位置），"有没有真的滚过去"
+          // 只能用消息回发；缺了它只能靠猜（症状与"点击没到宿主"完全一样）
+          if (window.ReaderTemplateRuntime) {
+            window.ReaderTemplateRuntime.send('renderState', {
+              state: 'goto-applied,target=' + target +
+                ',top=' + Math.round(slot.scrollTop || 0) +
+                ',client=' + Math.round(slot.clientHeight || 0) +
+                ',scroll=' + Math.round(slot.scrollHeight || 0)
+            });
+          }
         }
       }
     } catch (error) {
