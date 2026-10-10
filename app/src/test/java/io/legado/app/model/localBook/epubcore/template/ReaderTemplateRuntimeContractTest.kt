@@ -147,7 +147,11 @@ class ReaderTemplateRuntimeContractTest {
         assertTrue("必须裁切（overflow:hidden 仍是可编程滚动容器）", flow.contains("overflow = 'hidden'"))
         assertTrue(
             "页框高须由「视口高 − 注入前文档高 + 槽位空高」推出（页眉页脚被自然扣掉）",
-            flow.contains("viewportHeight - chromeHeight + slotEmptyHeight")
+            flow.contains("(currentViewportHeight() || viewportHeight) - chromeHeight + slotEmptyHeight")
+        )
+        assertTrue(
+            "视口高必须结算时实时读（initialize 那刻沙箱帧可能还没布局完，实测 vp=0 ⇒ 页框算成负数）",
+            flow.contains("function currentViewportHeight(")
         )
         assertTrue(
             "自研回退须纵移（用错轴＝点翻页没反应）",

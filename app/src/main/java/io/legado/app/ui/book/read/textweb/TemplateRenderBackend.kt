@@ -280,6 +280,11 @@ class TemplateRenderBackend(
                 if (token.generation != generation) return@evaluateJavascript
                 if (raw?.contains(ReadyComplete) == true) {
                     sendInit(template, content)
+                    // ⚠️ 必须先按**宿主文档自身视口**以 px 定尺寸，再发 init：真机实测该 WebView
+                    // （Compose `AndroidView` 承载）里 `100vh` 与百分比高度都塌成 0px（样式表已解析、
+                    // `position:absolute` 生效，仅高度为 0）⇒ 沙箱 iframe 高 0 ⇒ 视口 0 ⇒ 页框算成负数
+                    // ⇒ "预览空白且页数恒 1"。px 尺寸来自文档自身的 clientWidth/Height（CSS px，无需换算密度）。
+                    sizeSandboxContainer(view)
                 } else {
                     pollHostReady(token, template, content, attempt + 1)
                 }
@@ -322,6 +327,21 @@ class TemplateRenderBackend(
             )
         }
         scheduleReadyTimeout()
+    }
+
+    /** 沙箱容器按宿主文档视口以 px 定尺寸（见 `pollHostReady` 内的铁证注释）。 */
+    private fun sizeSandboxContainer(view: WebView) {
+        val script = "(function(){var f=document.getElementById('" +
+            ReaderTemplateHostDocument.ContainerId + "');if(!f)return 'no-container';" +
+            "f.style.position='absolute';f.style.left='0';f.style.top='0';" +
+            "f.style.width=document.documentElement.clientWidth+'px';" +
+            "f.style.height=document.documentElement.clientHeight+'px';return 'sized';})()"
+        view.evaluateJavascript(script) { result ->
+            AppLog.putDebugWithTag(
+                AppLog.TAG_READER_TEMPLATE,
+                "sandbox container sized: $result"
+            )
+        }
     }
 
     private fun scheduleReadyTimeout() {

@@ -281,11 +281,18 @@ class ReaderTemplateManageActivity : BaseActivity<ViewBinding>() {
     }
 
     private fun templateActions(entry: ReaderTemplateManager.Entry): List<AppManagementMenuAction> = buildList {
+        // 4.8b：预览走**正式渲染链路**（同一 TemplateRenderBackend + 模板沙箱），非静态示意图
+        add(AppManagementMenuAction("预览") { previewTemplate(entry) })
         add(AppManagementMenuAction("复制新建") { duplicateTemplate(entry, editAfterCopy = false) })
         add(AppManagementMenuAction("导出 JSON") { exportJson(entry) })
         if (entry.source == ReaderTemplateManager.Source.USER) {
             add(AppManagementMenuAction("删除", danger = true) { confirmDelete(entry) })
         }
+    }
+
+    /** 4.8b 预览：把模板序列化进弹窗参数，弹窗内用示例章节真实渲染（所见即所得）。 */
+    private fun previewTemplate(entry: ReaderTemplateManager.Entry) {
+        showDialogFragment(ReaderTemplatePreviewDialog.create(entry.template))
     }
 
     private fun duplicateTemplate(entry: ReaderTemplateManager.Entry, editAfterCopy: Boolean) {

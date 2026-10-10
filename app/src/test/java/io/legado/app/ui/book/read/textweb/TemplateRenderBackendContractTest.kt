@@ -80,4 +80,18 @@ class TemplateRenderBackendContractTest {
         assertTrue("基址必须复用宿主文档常量", s.contains("ReaderTemplateHostDocument.BaseUrl"))
         assertTrue("注入器全局名不得另立", text().contains("MdRichRenderInjector"))
     }
+
+    @Test
+    fun `沙箱承载面必须按视口以 px 显式定尺寸`() {
+        // 真机铁证（2026-10-10，预览弹窗）：Compose `AndroidView` 承载的 WebView 里 vh/百分比高度都塌成 0px
+        // （样式表已解析、position:absolute 生效，仅高度为 0）⇒ 沙箱视口 0 ⇒ 页框算成负数 ⇒ 预览空白且页数恒 1
+        val s = text()
+        assertTrue("必须在 init 之前给容器定尺寸", s.contains("sizeSandboxContainer(view)"))
+        assertTrue("必须用宿主文档视口高以 px 定尺寸（不依赖 vh/百分比）",
+            s.contains("f.style.height=document.documentElement.clientHeight+'px'"))
+        assertTrue("宽度同理", s.contains("f.style.width=document.documentElement.clientWidth+'px'"))
+        val doc = SourceFileProbe.rawText("model/localBook/epubcore/template/ReaderTemplateHostDocument.kt")
+        assertTrue("宿主文档容器不得只靠 inset 百分比链（真机上会塌成 0）",
+            doc.contains("height:100vh") || doc.contains("height:100%"))
+    }
 }

@@ -33,6 +33,22 @@ class ReaderTemplateHostChannelTest {
     }
 
     @Test
+    fun `沙箱帧高必须用 px 显式值`() {
+        // 真机铁证（2026-10-10，预览弹窗）：Compose `AndroidView` 承载的 WebView 里，`100vh` 与百分比高度
+        // 都塌成 0px（样式表已解析、position:absolute 生效，仅高度为 0）⇒ 沙箱视口 0 ⇒ 页框算成负数
+        // ⇒ "预览空白且页数恒 1"。故帧高取**实测 px**（容器实高优先，回落到宿主文档视口高）。
+        val host = SourceFileProbe.assetRawText("md/template-host.js")
+        assertTrue(
+            "帧高必须用 px 显式值",
+            host.contains(
+                "frame.style.height = (container.clientHeight || document.documentElement.clientHeight || 0) + 'px';"
+            )
+        )
+        assertFalse("不得用百分比高度（会塌成 0）", host.contains("frame.style.height = '100%'"))
+        assertFalse("不得用视口单位高度（会塌成 0）", host.contains("frame.style.height = '100vh'"))
+    }
+
+    @Test
     fun `宿主转发 init 必须透传厂商脚本清单`() {
         // 真机实证（2026-10-10）：宿主转发 init 时漏 `vendorUrls` ⇒ 沙箱 `installVendors` 立即完成、
         // mermaid 从未加载 ⇒ 症状是"一切正常但图表计数恒 0"（节点在、无报错）

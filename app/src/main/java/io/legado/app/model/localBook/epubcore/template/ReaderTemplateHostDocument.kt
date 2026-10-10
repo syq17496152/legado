@@ -37,7 +37,12 @@ object ReaderTemplateHostDocument {
         append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">")
         // 宿主文档自身不滚动：滚动/分页由沙箱内部的视口承担（模板契约 data-reader-scroll-viewport）
         append("<style>html,body{margin:0;padding:0;height:100%;overflow:hidden;background:transparent}")
-        append("#").append(ContainerId).append("{position:absolute;left:0;top:0;right:0;bottom:0}</style>")
+        // 沙箱挂载容器：**必须用视口单位定高**（`100vh`），不能用 `height:100%`/inset 百分比链——
+        // 实测在 Compose `AndroidView` 承载的弹窗里，宿主视口是正常的 380，但容器 `height:100%` 解析成 0
+        // （宽度 478 正常、高度 0）⇒ iframe 高 0 ⇒ 沙箱视口 0 ⇒ 页框算成负数 ⇒ "预览空白且页数恒 1"。
+        // `100vh` 直接取宿主视口高，不依赖任何祖先高度是否"确定"（2026-10-10 真机铁证）。
+        append("#").append(ContainerId)
+            .append("{position:absolute;left:0;top:0;width:100%;height:100vh}</style>")
         append("</head><body>")
         append("<div id=\"").append(ContainerId).append("\"></div>")
         appendScript(hostJs)
