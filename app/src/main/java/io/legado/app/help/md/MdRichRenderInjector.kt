@@ -29,6 +29,13 @@ object MdRichRenderInjector {
     const val HighlightLightCssAsset = "md/vendor/hljs-light.min.css"
     const val HighlightDarkCssAsset = "md/vendor/hljs-dark.min.css"
 
+    /**
+     * 模板**装饰层基线 CSS**（epub-md-rich-rendering 阶段 4.8d）：
+     * 按 `<html>` 上的 `data-rp-decoration` / `data-reader-motion` 施加装饰强度与动效闸门。
+     * 只在模板沙箱文档中挂载（普通 md 富渲染面没有模板装饰层，挂上也是死规则）。
+     */
+    const val TemplateDecorationCssAsset = "md/template-decoration.css"
+
     /** 渲染完成信号：宿主在 `onPageFinished` 后轮询该全局变量（避免竞态）。 */
     const val StatusGlobal = "__legadoMdRichRender"
 

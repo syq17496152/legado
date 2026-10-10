@@ -1,5 +1,6 @@
 package io.legado.app.model.localBook.epubcore.template
 
+import io.legado.app.testkit.SourceFileProbe
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -123,6 +124,57 @@ class ReaderTemplateDecorationPolicyTest {
         )
         assertTrue(
             ReaderTemplateDecorationPolicy.decorationChangesLayout(before, before.copy(contentHeightPx = 780))
+        )
+    }
+
+    // ==================== 4.8d：档位字面量与沙箱三处契约 ====================
+
+    @Test
+    fun `档位字面量与档位一一对应`() {
+        assertEquals(
+            listOf("none", "light", "medium", "strong"),
+            ReaderTemplateDecorationPolicy.Intensity.entries.map { it.cssValue }
+        )
+        assertEquals("中档字面量必须与后端默认值同源", "medium", ReaderTemplateDecorationPolicy.DefaultIntensity.cssValue)
+    }
+
+    @Test
+    fun `焦点模式与无档位都下发 none 且停动效`() {
+        val focus = decide(stored = ReaderTemplateDecorationPolicy.Intensity.STRONG, focus = true)
+        assertEquals("none", focus.intensity.cssValue)
+        assertFalse(focus.motionEnabled)
+        val none = decide(stored = ReaderTemplateDecorationPolicy.Intensity.NONE)
+        assertEquals("none", none.intensity.cssValue)
+        assertFalse(none.motionEnabled)
+    }
+
+    @Test
+    fun `沙箱运行时与装饰基线 css 覆盖全部档位字面量`() {
+        // 三处必须同表：Kotlin 枚举（本文件断言）/ 沙箱 runtime 的 DECOR_SCALE / 引擎装饰基线 CSS。
+        // 任一处漏一个档位 ⇒ 该档位在真机上"选了没反应"（且不报错），只有源码级断言能拦住
+        val runtimeJs = SourceFileProbe.assetRawText("md/template-runtime.js")
+        val decorationCss = SourceFileProbe.assetRawText("md/template-decoration.css")
+        assertTrue("runtime 必须下发装饰强度属性", runtimeJs.contains("data-rp-decoration"))
+        assertTrue("runtime 必须下发动效闸门属性", runtimeJs.contains("data-reader-motion"))
+        val scaleBlock = runtimeJs.substringAfter("var DECOR_SCALE =", "").substringBefore(";")
+        assertTrue("runtime 必须定义档位表", scaleBlock.isNotBlank())
+        ReaderTemplateDecorationPolicy.Intensity.entries.forEach { intensity ->
+            assertTrue(
+                "runtime 档位表缺 ${intensity.cssValue}",
+                scaleBlock.contains("${intensity.cssValue}:")
+            )
+            assertTrue(
+                "装饰基线 CSS 缺 html[data-rp-decoration=\"${intensity.cssValue}\"] 规则",
+                decorationCss.contains("data-rp-decoration=\"${intensity.cssValue}\"")
+            )
+        }
+        assertTrue(
+            "动效闸门必须按 data-reader-motion=paused 停用",
+            decorationCss.contains("data-reader-motion=\"paused\"")
+        )
+        assertFalse(
+            "装饰基线 CSS 不得出现脚本/样式闭合与转义敏感序列（沙箱 <style> 直接内联）",
+            decorationCss.contains("</") || decorationCss.contains("<!--")
         )
     }
 }

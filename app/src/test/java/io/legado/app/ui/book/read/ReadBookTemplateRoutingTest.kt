@@ -67,4 +67,21 @@ class ReadBookTemplateRoutingTest {
         )
         assertFalse("不得为模板新增独立承载位节点（避免布局漂移）", s.contains("templateReadView"))
     }
+
+    @Test
+    fun `装饰档位与动效随真值下发且支持系统减少动效`() {
+        // 4.8d：装饰是用户级设置，必须在**每次渲染时**从偏好单源重算（否则改档位后不生效）
+        val s = text()
+        assertTrue("档位必须来自管理门面（单源）", s.contains("ReaderTemplateManager.decorationCssValue(reduceMotion)"))
+        assertTrue("动效必须来自管理门面（单源）", s.contains("ReaderTemplateManager.decorationMotionEnabled(reduceMotion)"))
+        assertTrue("必须探测系统减少动效", s.contains("private fun isSystemReduceMotion()"))
+        assertTrue(
+            "减少动效必须用系统动画缩放判据（与 CSS prefers-reduced-motion 同源）",
+            s.contains("Settings.Global.ANIMATOR_DURATION_SCALE")
+        )
+        assertTrue(
+            "解析日志必须带装饰档位（真机 L2 的宿主侧证据；缺了只能靠猜沙箱有没有收到）",
+            s.contains("decor=\${ReaderTemplateManager.decorationCssValue(isSystemReduceMotion())}")
+        )
+    }
 }

@@ -94,4 +94,19 @@ class TemplateRenderBackendContractTest {
         assertTrue("宿主文档容器不得只靠 inset 百分比链（真机上会塌成 0）",
             doc.contains("height:100vh") || doc.contains("height:100%"))
     }
+
+    @Test
+    fun `装饰强度与动效必须随 init 下发且基线 css 随沙箱挂载`() {
+        // 4.8d：装饰档位/动效是**用户级设置**，若漏下发，症状是"选了档位没反应"且**不报错**
+        // （沙箱跨源，宿主读不到它的 <html> 属性）⇒ 源码层钉住"两侧都接上"
+        val s = text()
+        assertTrue("ReaderValues 必须带装饰档位", s.contains("val decoration: String"))
+        assertTrue("ReaderValues 必须带动效开关", s.contains("val decorationMotion: Boolean"))
+        assertTrue("init 载荷必须下发档位", s.contains("addProperty(\"decoration\", values.decoration)"))
+        assertTrue("init 载荷必须下发动效", s.contains("addProperty(\"motion\", values.decorationMotion)"))
+        assertTrue(
+            "沙箱必须挂载装饰基线 CSS（否则档位下发到 <html> 也没人执行）",
+            s.contains("MdRichRenderInjector.TemplateDecorationCssAsset")
+        )
+    }
 }

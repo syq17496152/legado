@@ -1,5 +1,6 @@
 package io.legado.app.help.md
 
+import io.legado.app.testkit.SourceFileProbe
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -164,6 +165,20 @@ class MdRichRenderInjectorTest {
         assertEquals("md/vendor/highlight.min.js", MdRichRenderInjector.HighlightAsset)
         assertEquals("md/vendor/hljs-light.min.css", MdRichRenderInjector.HighlightLightCssAsset)
         assertEquals("md/vendor/hljs-dark.min.css", MdRichRenderInjector.HighlightDarkCssAsset)
+        assertEquals("md/template-decoration.css", MdRichRenderInjector.TemplateDecorationCssAsset)
+    }
+
+    @Test
+    fun `装饰基线 css 只动观感不动几何且用户设置优先`() {
+        // 4.8d / AD-33：装饰强度**不得**参与正文测量（否则改档位会改页数）。
+        // 该不变量在 CSS 层只能靠"只用 opacity/animation"保证 ⇒ 源码级钉住：
+        // 装饰基线里若出现尺寸/间距/字号声明，说明有人把装饰写成了布局的一部分。
+        val css = SourceFileProbe.assetRawText(MdRichRenderInjector.TemplateDecorationCssAsset)
+        assertTrue("必须存在装饰强度规则", css.contains("data-rp-decoration"))
+        assertTrue("用户设置必须先于作者 CSS（否则选'无'仍可能看到装饰）", css.contains("opacity: 0 !important"))
+        listOf("width:", "height:", "margin", "padding", "font-size").forEach { banned ->
+            assertFalse("装饰基线不得声明 $banned（装饰不参与正文测量）", css.contains(banned))
+        }
     }
 
     @Test

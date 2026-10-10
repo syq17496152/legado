@@ -42,4 +42,28 @@ class PreferKeyReaderTemplateTest {
             template != all["mdRichRender"]
         )
     }
+
+    @Test
+    fun `装饰强度与专注模式键按同一口径登记`() {
+        // 4.8d：这两个键是"装饰强度/专注模式"的唯一落点，被 AppConfig 与阅读页样式弹层双处消费
+        val all = pairs()
+        assertEquals("readerTemplateDecoration", all["readerTemplateDecoration"])
+        assertEquals("readerTemplateFocusMode", all["readerTemplateFocusMode"])
+    }
+
+    @Test
+    fun `装饰档位键不得与布尔开关或选定键同值`() {
+        val all = pairs()
+        val keys = listOf("readerTemplateDecoration", "readerTemplateFocusMode")
+        val occupied = listOf("readerTemplate", "readerTemplateEnabled", "mdRichRender")
+        keys.forEach { key ->
+            assertTrue("$key 必须存在且非空", !all[key].isNullOrBlank())
+            occupied.forEach { other ->
+                assertTrue(
+                    "偏好键 $key 与 $other 同值会让两者互相污染",
+                    all[key] != all[other]
+                )
+            }
+        }
+    }
 }

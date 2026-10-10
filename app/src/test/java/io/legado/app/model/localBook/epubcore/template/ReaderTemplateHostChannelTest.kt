@@ -63,6 +63,34 @@ class ReaderTemplateHostChannelTest {
     }
 
     @Test
+    fun `宿主转发是白名单 漏键即静默丢字段 故逐键比对`() {
+        // 二次真机实证（2026-10-10，4.8d 装饰强度）：`template-host.js` 的 init 转发是**显式白名单**，
+        // 新增字段（decoration/motion）漏加 ⇒ 沙箱按默认档位渲染（decorLevel 恒 medium，而宿主确已下发 strong），
+        // 症状是"选了档位没反应、且不报错"。故把"Kotlin 载荷键 ↔ 宿主转发消费"做成**逐键**契约：
+        // 任何一侧新增字段而另一侧没接，这里立刻红。
+        val hostJs = SourceFileProbe.assetRawText("md/template-host.js")
+        val backend = SourceFileProbe.sourceText("ui/book/read/textweb/TemplateRenderBackend.kt")
+        // 只看 sendInit 的函数体，且只取**顶层**载荷键（12 空格缩进）：
+        // 类的其它方法（templateJson/fieldsJson）与嵌套对象（flow 内的 type）也在 addProperty，
+        // 全量扫描会把它们算进来（首跑即被 `type` 假失败拦下）
+        val sendInitBody = backend.substringAfter("private fun sendInit(").substringBefore("private fun ")
+        val payloadKeys = Regex("""(?m)^ {12}addProperty\("(\w+)"""")
+            .findAll(sendInitBody).map { it.groupValues[1] }.toSet() +
+            Regex("""(?m)^ {12}add\("(\w+)"""")
+                .findAll(sendInitBody).map { it.groupValues[1] }.toSet()
+        assertTrue("必须能取到 init 载荷键（正则失效即本条形同虚设）", payloadKeys.size >= 8)
+        payloadKeys.forEach { key ->
+            assertTrue(
+                "宿主 init 转发未消费载荷键 `$key`（会被静默丢弃）",
+                hostJs.contains("config.$key")
+            )
+        }
+        listOf("decoration", "motion").forEach { key ->
+            assertTrue("装饰档位/动效必须在转发白名单内：$key", payloadKeys.contains(key))
+        }
+    }
+
+    @Test
     fun `宿主脚本中的结束标签被转义`() {
         val doc = ReaderTemplateHostDocument.build("var s=\"</script><b>\";")
         assertFalse("作者/宿主脚本不得提前闭合标签", doc.contains("</script><b>"))

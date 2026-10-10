@@ -1,6 +1,7 @@
 package io.legado.app.help.config
 
 import io.legado.app.constant.PreferKey
+import io.legado.app.model.localBook.epubcore.template.ReaderTemplateDecorationPolicy
 import io.legado.app.model.localBook.epubcore.template.ReaderTemplateSelection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -40,5 +41,26 @@ class ReaderFeatureDefaultsTest {
         // 必须先有 4.19 防卡顿 / XB.2 性能实测与 4.20 兼容验证，再谈默认翻转。
         assertFalse("默认关：不给用户造成「看书方式被悄悄换掉」的意外", ReaderFeatureDefaults.READER_TEMPLATE_ENABLED)
         assertEquals("readerTemplateEnabled", PreferKey.readerTemplateEnabled)
+    }
+
+    @Test
+    fun `装饰强度默认中且与策略层单源`() {
+        // 4.8d / TPL-17②：默认"中"（AD-33 默认克制）。**必须与纯策略的默认档位同值**：
+        // 两处一旦分叉，设置弹层显示的档位与渲染实际档位就会不一致（"设置了没反应"的变体）
+        assertEquals(2, ReaderFeatureDefaults.READER_TEMPLATE_DECORATION)
+        assertEquals(
+            "默认档位必须与 ReaderTemplateDecorationPolicy.DefaultIntensity 同值",
+            ReaderTemplateDecorationPolicy.DefaultIntensity.level,
+            ReaderFeatureDefaults.READER_TEMPLATE_DECORATION
+        )
+        assertEquals("readerTemplateDecoration", PreferKey.readerTemplateDecoration)
+    }
+
+    @Test
+    fun `专注模式默认关闭且键名单源`() {
+        // 4.8d / TPL-17③：专注模式是"我此刻只想看正文"的显式选择 ⇒ 不替用户决定；
+        // 若默认开，装饰强度设置将形同虚设
+        assertFalse(ReaderFeatureDefaults.READER_TEMPLATE_FOCUS_MODE)
+        assertEquals("readerTemplateFocusMode", PreferKey.readerTemplateFocusMode)
     }
 }

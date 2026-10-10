@@ -11,6 +11,7 @@ import android.graphics.Color
 import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.InputDevice
@@ -2722,7 +2723,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         templateResolved = resolved
         AppLog.putDebugWithTag(
             AppLog.TAG_READER_TEMPLATE,
-            "resolve: effective=${resolved?.id ?: "none"}, night=${AppConfig.isNightTheme}"
+            "resolve: effective=${resolved?.id ?: "none"}, night=${AppConfig.isNightTheme}, " +
+                    "decor=${ReaderTemplateManager.decorationCssValue(isSystemReduceMotion())}, " +
+                    "motion=${ReaderTemplateManager.decorationMotionEnabled(isSystemReduceMotion())}, " +
+                    "focus=${ReaderTemplateManager.focusMode()}"
         )
         return resolved
     }
@@ -2731,14 +2735,30 @@ class ReadBookActivity : BaseReadBookActivity(),
         val chapterSize = ReadBook.chapterSize.coerceAtLeast(1)
         val progress = (((ReadBook.durChapterIndex + 1) * 100) / chapterSize).coerceIn(0, 100)
         val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        val reduceMotion = isSystemReduceMotion()
         return TemplateRenderBackend.ReaderValues(
             dark = AppConfig.isNightTheme,
             bookName = ReadBook.book?.name.orEmpty(),
             chapterTitle = textRichChapterRef?.title.orEmpty(),
             progressPercent = progress,
-            hour = hour
+            hour = hour,
+            // 装饰强度/动效（4.8d）：与设置弹层共用 `ReaderTemplateManager.decorationDecision` 单源，
+            // 且**每次渲染都重算**（设置变更后无需重启阅读页，reloadTemplateCurrent 会带上新值）
+            decoration = ReaderTemplateManager.decorationCssValue(reduceMotion),
+            decorationMotion = ReaderTemplateManager.decorationMotionEnabled(reduceMotion)
         )
     }
+
+    /**
+     * 系统"减少动效"（无障碍/开发者选项）：动画缩放为 0 ⇒ 视为 reduce-motion。
+     *
+     * 与 CSS `prefers-reduced-motion` **同一系统判据**（WebView 也按此映射），
+     * 但装饰策略需要的是宿主侧布尔值（决定是否下发 `data-reader-motion="paused"`）。
+     * 读系统设置属容错路径：取不到即按"未开启"处理（不因一次读取失败把动效永久关掉）。
+     */
+    private fun isSystemReduceMotion(): Boolean = runCatching {
+        Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    }.getOrDefault(false)
 
     private fun ensureTemplateBackend(): TemplateRenderBackend {
         templateBackend?.let { return it }
