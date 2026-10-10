@@ -122,6 +122,21 @@ import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.isJsonObject
 import io.legado.app.model.localBook.EpubFile
 import io.legado.app.model.localBook.epubcore.facade.EpubCoreProvider
+import io.legado.app.help.book.isMarkdown
+import io.legado.app.help.md.MdRichRenderInjector
+import io.legado.app.model.localBook.LocalBook
+import io.legado.app.model.reader.render.ChapterRef
+import io.legado.app.model.reader.render.ReaderRenderBackend
+import io.legado.app.model.reader.render.ReadingPosition
+import io.legado.app.model.reader.render.RenderConfig
+import io.legado.app.model.reader.render.RenderFailure
+import io.legado.app.model.reader.render.RenderHost
+import io.legado.app.model.reader.render.RenderToken
+import io.legado.app.model.reader.render.TextRange
+import io.legado.app.ui.book.read.textweb.AssetTextReader
+import io.legado.app.ui.book.read.textweb.TextRichContentProbe
+import io.legado.app.ui.book.read.textweb.TextRichHtmlComposer
+import io.legado.app.ui.book.read.textweb.TextRichRenderBackend
 import io.legado.app.model.localBook.epubcore.layout.EpubCoreLayoutConfig
 import io.legado.app.model.localBook.epubcore.web.EpubWebSelectionAction
 import io.legado.app.model.localBook.MobiFile
@@ -760,6 +775,9 @@ class ReadBookActivity : BaseReadBookActivity(),
         binding.readAloudPlayerPanel.setForegroundActive(false)
         autoPageStop()
         backupJob?.cancel()
+        if (textRichActive) {
+            saveTextRichPosition()
+        }
         ReadBook.upReadTime(forceWidgetUpdate = true)
         if (isFinishing) {
             ImageProvider.clear()
@@ -2152,6 +2170,29 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
             return
         }
+        if (textRichActive) {
+            val backend = textRichBackend
+            val viewport = binding.readView.height.coerceAtLeast(1)
+            when (direction) {
+                // 章内还能滚就滚一屏；到章首/章末才切章（避免"到底了却切不了章"）
+                PageDirection.NEXT ->
+                    if (backend == null || backend.edge().atBottom) {
+                        ReadBook.moveToNextChapter(true)
+                    } else {
+                        backend.scrollByPixels(viewport)
+                    }
+
+                PageDirection.PREV ->
+                    if (backend == null || backend.edge().atTop) {
+                        ReadBook.moveToPrevChapter(true)
+                    } else {
+                        backend.scrollByPixels(-viewport)
+                    }
+
+                else -> Unit
+            }
+            return
+        }
         binding.readView.cancelSelect()
         binding.readView.pageDelegate?.isCancel = false
         binding.readView.pageDelegate?.keyTurnPage(direction)
@@ -2239,6 +2280,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         success: (() -> Unit)?
     ) {
         lifecycleScope.launch {
+            if (isTextRichMode()) {
+                loadTextRichContentAwait(relativePosition, resetPageOffset, success)
+                return@launch
+            }
             if (isEpubCoreMode()) {
                 if (relativePosition != 0) {
                     success?.invoke()
@@ -2276,6 +2321,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         resetPageOffset: Boolean,
         success: (() -> Unit)?
     ) = withContext(Main.immediate) {
+        if (isTextRichMode()) {
+            loadTextRichContentAwait(relativePosition, resetPageOffset, success)
+            return@withContext
+        }
         if (isEpubCoreMode()) {
             if (relativePosition != 0) {
                 success?.invoke()
@@ -2307,6 +2356,11 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     override fun upPageAnim(upRecorder: Boolean) {
+        if (textRichActive) {
+            // 样式/主题变更：富渲染面重载当前章（字号/行高/昼夜经主题变量重新注入）
+            reloadTextRichCurrent()
+            return
+        }
         lifecycleScope.launch {
             binding.readView.upPageAnim(upRecorder)
         }
@@ -2318,8 +2372,10 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     private fun switchEpubCore(active: Boolean) = binding.run {
         epubCoreActive = active
-        epubReadView.isVisible = active
-        readView.isVisible = !active
+        if (active) {
+            switchTextRich(false)
+        }
+        updateRenderSurface()
         if (!active) {
             epubCorePageCount = 0
             epubCoreCommittedChapterIndex = null
@@ -2327,6 +2383,252 @@ class ReadBookActivity : BaseReadBookActivity(),
         if (active) {
             readView.cancelSelect(true)
         }
+    }
+
+    // === 文本富渲染（epub-md-rich-rendering 阶段 3.1/3.2 的宿主接线）===
+
+    private var textRichActive = false
+    private var textRichBackend: TextRichRenderBackend? = null
+    private var textRichPrepared: TextRichContentProbe.RichContent? = null
+    private var textRichPreparedIndex = -1
+    private var textRichChapterRef: ChapterRef? = null
+    private var textRichChapterStart: Long? = null
+    private var textRichChapterEnd: Long? = null
+    private var textRichRestorePending = false
+    private var textRichLoading = false
+    private val textRichAssets by lazy { AssetTextReader(this) }
+
+    /**
+     * 是否走文本富渲染面。
+     *
+     * 一期只放开**本地 Markdown**（`AppConfig.mdRichRender` 默认 true）：md 是我方新增格式，
+     * 无"旧行为被改"的回归面；在线正文的灰度（同一开关）留待阶段 3 后续子步。
+     */
+    private fun isTextRichMode(): Boolean {
+        val book = ReadBook.book ?: return false
+        return !book.isEpub && book.isMarkdown && AppConfig.mdRichRender
+    }
+
+    /** 三个渲染面（canvas / EPUB WebView / 文本富渲染 WebView）互斥可见。 */
+    private fun updateRenderSurface() = binding.run {
+        epubReadView.isVisible = epubCoreActive
+        textRichReadView.isVisible = textRichActive
+        readView.isVisible = !epubCoreActive && !textRichActive
+    }
+
+    private fun switchTextRich(active: Boolean) {
+        if (textRichActive == active) return
+        textRichActive = active
+        if (active) {
+            binding.readView.cancelSelect(true)
+        } else {
+            textRichBackend?.dispose()
+            textRichBackend = null
+            textRichPrepared = null
+            textRichPreparedIndex = -1
+            textRichChapterRef = null
+            textRichRestorePending = false
+            binding.textRichReadView.removeAllViews()
+        }
+        updateRenderSurface()
+    }
+
+    private fun ensureTextRichBackend(): TextRichRenderBackend {
+        textRichBackend?.let { return it }
+        val backend = TextRichRenderBackend(
+            context = this,
+            readerCssProvider = { textRichAssets.read(MdRichRenderInjector.MdReaderCssAsset).orEmpty() },
+            chapterProvider = { ref ->
+                textRichPrepared
+                    ?.takeIf { ref.chapterIndex == textRichPreparedIndex }
+                    ?.let { TextRichRenderBackend.RichChapter(it.html, it.hasMermaid, it.hasMath) }
+            },
+            themeProvider = ::textRichTheme,
+            container = { view ->
+                // 只在未挂载时添加：重复 remove/add 会让 WebView detach→attach，
+                // 可能中断正在进行的页面加载
+                if (view.parent == null) {
+                    binding.textRichReadView.addView(view)
+                }
+            }
+        )
+        backend.attach(object : RenderHost {
+            override fun onRendered(token: RenderToken, chapterIndex: Int, pageCount: Int) {
+                onTextRichRendered(chapterIndex, pageCount)
+            }
+
+            override fun onReMeasured(token: RenderToken, chapterIndex: Int, pageCount: Int) {
+                upSeekBarProgress()
+            }
+
+            override fun onSelection(range: TextRange?) = Unit
+
+            override fun onProgress(position: ReadingPosition) = Unit
+
+            override fun onError(token: RenderToken?, failure: RenderFailure, error: Throwable?) {
+                // 引擎不可用 / 渲染失败 ⇒ 回落 canvas，绝不把用户留在白屏
+                AppLog.putDebug("text rich render error: $failure")
+                switchTextRich(false)
+                binding.readView.upContent(0, true)
+            }
+        })
+        binding.textRichReadView.onTap = ::onTextRichTap
+        textRichBackend = backend
+        return backend
+    }
+
+    /** 点击分区：左 1/3 上一屏、右 1/3 下一屏、中间切换菜单（与 canvas 九宫格同构）。 */
+    private fun onTextRichTap(x: Float, y: Float, width: Int, height: Int) {
+        if (width <= 0 || height <= 0) return
+        when {
+            x < width * 0.33f -> keyPage(PageDirection.PREV)
+            x > width * 0.66f -> keyPage(PageDirection.NEXT)
+            binding.readMenu.isVisible -> binding.readMenu.runMenuOut()
+            else -> showActionMenu()
+        }
+    }
+
+    private fun textRichTheme(): TextRichHtmlComposer.Theme {
+        val sizePx = ReadBookConfig.textSize.toFloat().spToPx()
+        val lineHeight = if (sizePx > 0f) (sizePx + ReadBookConfig.lineSpacingExtra) / sizePx else null
+        return TextRichHtmlComposer.Theme(
+            dark = AppConfig.isNightTheme,
+            fontSizePx = sizePx,
+            lineHeight = lineHeight
+        )
+    }
+
+    private fun textRichRenderConfig(): RenderConfig {
+        val width = binding.readView.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        val height = binding.readView.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
+        val sizePx = ReadBookConfig.textSize.toFloat().spToPx()
+        return RenderConfig(
+            pageWidthPx = width.coerceAtLeast(1),
+            pageHeightPx = height.coerceAtLeast(1),
+            fontSizePx = sizePx.coerceAtLeast(1f),
+            lineHeightPx = (sizePx + ReadBookConfig.lineSpacingExtra).coerceAtLeast(1f),
+            textColor = ReadBookConfig.textColor,
+            scrollMode = true,
+            styleKey = "text-rich"
+        )
+    }
+
+    /**
+     * 载入并渲染文本富渲染章节。
+     *
+     * 非 `<usehtml>` 内容（或章节缺失）⇒ **回落 canvas**，保持既有路径可用（不硬切后端）。
+     */
+    private suspend fun loadTextRichContentAwait(
+        relativePosition: Int,
+        resetPageOffset: Boolean,
+        success: (() -> Unit)?
+    ) {
+        val book = ReadBook.book
+        if (book == null) {
+            success?.invoke()
+            return
+        }
+        val index = ReadBook.durChapterIndex
+        // 同章重复请求 / 正在载入中（回调重入）⇒ 不再重建 WebView：
+        // 重复 render 会推进代际令牌，把上一笔尚未完成的轮询一并作废
+        // （实测症状：图表已渲染但完成回调丢失）。
+        if (textRichLoading ||
+            (textRichActive && textRichPreparedIndex == index && textRichBackend != null)
+        ) {
+            if (relativePosition == 0) upSeekBarProgress()
+            loadStates = false
+            success?.invoke()
+            return
+        }
+        textRichLoading = true
+        try {
+            val chapter = withContext(IO) { appDb.bookChapterDao.getChapter(book.bookUrl, index) }
+            val prepared = chapter?.let {
+                withContext(IO) {
+                    runCatching { TextRichContentProbe.prepare(LocalBook.getContent(book, it)) }.getOrNull()
+                }
+            }
+            if (chapter == null || prepared == null) {
+                AppLog.putDebug("text rich prepare unavailable: chapter=${chapter != null}, prepared=${prepared != null}（回落 canvas）")
+                switchTextRich(false)
+                binding.readView.upContent(relativePosition, resetPageOffset)
+                if (relativePosition == 0) upSeekBarProgress()
+                loadStates = false
+                success?.invoke()
+                return
+            }
+            // 诊断留痕（L2 证据）：富渲染标注与正文体量
+            AppLog.putDebug(
+                "text rich prepare: chapter=$index, mermaid=${prepared.hasMermaid}, " +
+                        "math=${prepared.hasMath}, htmlLen=${prepared.html.length}"
+            )
+            textRichPrepared = prepared
+            textRichPreparedIndex = index
+            textRichChapterRef = ChapterRef(index, chapter.url, chapter.title)
+            textRichChapterStart = chapter.start
+            textRichChapterEnd = chapter.end
+            textRichRestorePending = !resetPageOffset
+            switchTextRich(true)
+            val backend = ensureTextRichBackend()
+            if (resetPageOffset) {
+                textRichRestorePending = false
+                textRichBackend?.scrollToTop()
+            }
+            backend.render(textRichChapterRef!!, null, textRichRenderConfig())
+            if (relativePosition == 0) upSeekBarProgress()
+            loadStates = false
+            success?.invoke()
+        } finally {
+            textRichLoading = false
+        }
+    }
+
+    private fun onTextRichRendered(chapterIndex: Int, pageCount: Int) {
+        val backend = textRichBackend ?: return
+        if (textRichRestorePending) {
+            textRichRestorePending = false
+            restoreTextRichPosition(backend, chapterIndex, pageCount)
+        }
+        upSeekBarProgress()
+    }
+
+    /**
+     * 位置恢复：把既有字符偏移（`ReadBook.durChapterPos`）按**章内字符区间**的比例映射为滚动位置。
+     *
+     * 这是"章内相对比例"兜底路径（AD-14 允许），不做像素级假换算。
+     */
+    private fun restoreTextRichPosition(backend: TextRichRenderBackend, chapterIndex: Int, pageCount: Int) {
+        val start = textRichChapterStart
+        val end = textRichChapterEnd
+        if (start == null || end == null || end <= start || pageCount <= 0) {
+            backend.scrollToTop()
+            return
+        }
+        val ratio = ((ReadBook.durChapterPos - start).toFloat() / (end - start)).coerceIn(0f, 1f)
+        val pageIndex = (ratio * pageCount).toInt().coerceIn(0, pageCount - 1)
+        backend.importPosition(ReadingPosition.Page(chapterIndex, pageIndex, 0f))
+    }
+
+    /** 位置保存：把当前滚动比例折算回字符偏移，交由既有进度/阅读记录机制持久化。 */
+    private fun saveTextRichPosition() {
+        val backend = textRichBackend ?: return
+        val start = textRichChapterStart ?: return
+        val end = textRichChapterEnd ?: return
+        if (end <= start) return
+        val position = backend.exportPosition() as? ReadingPosition.Page ?: return
+        val pageCount = backend.currentPageCount().coerceAtLeast(1)
+        val ratio = ((position.pageIndex + position.inPageRatio) / pageCount).coerceIn(0f, 1f)
+        ReadBook.durChapterPos = (start + ratio * (end - start)).toInt()
+    }
+
+    /** 样式/主题变更后重载当前章（字号/行高/昼夜经主题变量重新注入）。 */
+    private fun reloadTextRichCurrent() {
+        if (!textRichActive) return
+        val backend = textRichBackend ?: return
+        val ref = textRichChapterRef ?: return
+        saveTextRichPosition()
+        textRichRestorePending = true
+        backend.render(ref, null, textRichRenderConfig())
     }
 
     private fun loadEpubCoreContent(
@@ -3408,6 +3710,11 @@ class ReadBookActivity : BaseReadBookActivity(),
      * 更新进度条位置
      */
     private fun upSeekBarProgress() {
+        // 文本富渲染面没有 canvas 页索引 ⇒ 按章进度呈现，避免显示过期页号
+        if (textRichActive) {
+            binding.readMenu.setSeekPage(ReadBook.durChapterIndex)
+            return
+        }
         val progress = when (AppConfig.progressBarBehavior) {
             "page" -> if (epubCoreActive) binding.epubReadView.currentChapterPageIndex() else ReadBook.durPageIndex
             else /* chapter */ -> ReadBook.durChapterIndex
@@ -5138,6 +5445,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             ReadAloudAppCapsuleHost.updateReadBookPanelActive(false)
         }
         clearRestoreProcessState()
+        switchTextRich(false)
         super.onDestroy()
         epubCoreRequestSeq++
         epubCoreLoadJob?.cancel()

@@ -1,4 +1,4 @@
-﻿package io.legado.app.ui.book.read.textweb
+package io.legado.app.ui.book.read.textweb
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -86,13 +86,37 @@ class TextRichRenderBackend(
     private var currentConfig: RenderConfig? = null
     private var pageCount: Int = 1
     private var contentHeight: Int = 0
-    private var rendered = false
+    private var lastReadyRaw: String? = null
+    private var lastLoggedStatus: String? = null
+
+    /** 待注入的厂商脚本（文档就绪后逐条**顶层**执行）。 */
+    private var pendingVendors: List<String> = emptyList()
+
+    /** 待注入的运行时脚本（在厂商脚本之后执行；null = 无脚本或已注入）。 */
+    private var pendingRuntime: String? = null
     private var disposed = false
 
     /** 供宿主挂载（可见 WebView 必须由宿主给出显示位置）。 */
     fun view(): View = ensureWebView()
 
     fun currentPageCount(): Int = pageCount
+
+    /** 当前滚动边界状态（宿主据此决定"章内翻屏"还是"切上/下一章"）。 */
+    fun edge(): TextRichScrollPolicy.Edge = TextRichScrollPolicy.edge(
+        scrollY = webView?.scrollY ?: 0,
+        contentHeight = contentHeight,
+        viewportHeight = currentConfig?.pageHeightPx ?: 0
+    )
+
+    /** 章内滚动一屏（`dy` 为正向下）。 */
+    fun scrollByPixels(dy: Int) {
+        runOnUI { webView?.scrollBy(0, dy) }
+    }
+
+    /** 回到章首（进入新章时用）。 */
+    fun scrollToTop() {
+        runOnUI { webView?.scrollTo(0, 0) }
+    }
 
     override fun attach(host: RenderHost) {
         this.host = host
@@ -109,19 +133,33 @@ class TextRichRenderBackend(
         currentConfig = config
         pageCount = 1
         contentHeight = 0
-        rendered = false
+        AppLog.putDebug("text rich render invoked: chapter=${chapter.chapterIndex}, token=$generation, disposed=$disposed")
         val content = chapterProvider(chapter)
         if (content == null || content.html.isBlank()) {
+            AppLog.putDebug("text rich render empty content: chapter=${chapter.chapterIndex}, contentNull=${content == null}")
             host?.onError(token, RenderFailure.EMPTY_RESULT)
             return token
         }
         runOnUI {
-            if (disposed || token.generation != generation) return@runOnUI
+            if (disposed || token.generation != generation) {
+                AppLog.putDebug("text rich render skipped: disposed=$disposed, token=${token.generation}, gen=$generation")
+                return@runOnUI
+            }
             runCatching {
                 val view = ensureWebView()
                 container(view)
                 view.webViewClient = RichClient(token, config)
-                view.loadDataWithBaseURL(baseUrl, composeDocument(content, config), "text/html", "UTF-8", null)
+                val document = composeDocument(content, config)
+                pendingVendors = document.vendors
+                pendingRuntime = document.runtime.ifBlank { null }
+                view.loadDataWithBaseURL(baseUrl, document.html, "text/html", "UTF-8", null)
+                AppLog.putDebug(
+                    "text rich render start: chapter=${chapter.chapterIndex}, generation=$generation, " +
+                            "vendors=${document.vendors.size}, runtimeLen=${document.runtime.length}"
+                )
+                // 就绪上报走**轮询**而非 onPageFinished：`loadDataWithBaseURL` 场景下 onPageFinished
+                // 不保证回调；轮询 readyState + 注入状态是更可靠的就绪判据（并兼做脚本注入时机）。
+                pollReady(token, chapter.chapterIndex, config)
             }.onFailure { error ->
                 AppLog.putDebug(
                     "text rich render start failed: chapter=${chapter.chapterIndex}, ${error.localizedMessage}",
@@ -200,36 +238,49 @@ class TextRichRenderBackend(
         }
     }
 
-    /** 文档组装：读阅读样式 → 组装富渲染注入 → 合并主题。 */
-    private fun composeDocument(content: RichChapter, config: RenderConfig): String {
-        val injection = runCatching {
-            val assets = readRichAssets(content.hasMermaid, content.hasMath)
-            MdRichRenderInjector.wrapHtml(
-                MdRichRenderInjector.build(
-                    options = MdRichRenderInjector.Options(
-                        mermaidTheme = if (themeProvider().dark) {
-                            MdRichRenderInjector.MermaidThemeDark
-                        } else {
-                            MdRichRenderInjector.MermaidThemeDefault
-                        }
-                    ),
-                    assets = assets,
-                    needsMermaid = content.hasMermaid,
-                    needsMath = content.hasMath
-                )
-            )
-        }.getOrElse { error ->
-            // 注入失败不阻断阅读：正文仍以 BASIC_HTML 呈现（mermaid/公式保留为代码块）
-            AppLog.putDebug("text rich injection build failed: ${error.localizedMessage}", error)
-            ""
+    /** 组装文档：读阅读样式 → 构建富渲染注入（厂商脚本与运行时脚本**分开**）→ 合并主题。 */
+    private fun composeDocument(content: RichChapter, config: RenderConfig): Document {
+        val options = MdRichRenderInjector.Options(
+            mermaidTheme = if (themeProvider().dark) {
+                MdRichRenderInjector.MermaidThemeDark
+            } else {
+                MdRichRenderInjector.MermaidThemeDefault
+            }
+        )
+        val assets = readRichAssets(content.hasMermaid, content.hasMath)
+        val wantMermaid = options.renderMermaid && content.hasMermaid && !assets.mermaidJs.isNullOrBlank()
+        val wantMath = options.renderMath && content.hasMath && !assets.katexJs.isNullOrBlank()
+        val wantHighlight = options.highlightCode && !assets.highlightJs.isNullOrBlank()
+        val any = wantMermaid || wantMath || wantHighlight
+        val css = buildString {
+            if (wantMath) append(assets.katexCss.orEmpty())
+            if (wantHighlight) append(assets.highlightCss.orEmpty())
         }
-        return TextRichHtmlComposer.compose(
-            bodyHtml = content.html,
-            readerCss = runCatching { readerCssProvider() }.getOrDefault(""),
-            richInjectionHtml = injection,
-            theme = themeProvider()
+        return Document(
+            html = TextRichHtmlComposer.compose(
+                bodyHtml = content.html,
+                readerCss = runCatching { readerCssProvider() }.getOrDefault(""),
+                richInjectionHtml = if (css.isNotBlank()) {
+                    MdRichRenderInjector.wrapHtml(MdRichRenderInjector.Injection(css = css, script = ""))
+                } else {
+                    ""
+                },
+                theme = themeProvider()
+            ),
+            // ⚠️ 厂商 JS **必须各自作为顶层脚本**执行（其 `var` 依赖全局作用域，包进函数即失效）；
+            // 内联进 HTML 也不行（会被 `<!--`/`<script` 序列拖入脚本双重转义态）。故二者都经
+            // evaluateJavascript 分流注入：厂商脚本逐条顶层执行，运行时脚本再单独执行。
+            vendors = MdRichRenderInjector.vendorScripts(wantMermaid, wantMath, wantHighlight, assets),
+            runtime = if (any) {
+                MdRichRenderInjector.runtimeScript(options, wantMermaid, wantMath, wantHighlight)
+            } else {
+                ""
+            }
         )
     }
+
+    /** 组装结果：文档 HTML + 厂商脚本（各顶层执行）+ 运行时脚本。 */
+    private data class Document(val html: String, val vendors: List<String>, val runtime: String)
 
     /** 只读需要的资产（无 mermaid 不读 2.4MB 运行时）。 */
     private fun readRichAssets(needsMermaid: Boolean, needsMath: Boolean): MdRichRenderInjector.Assets {
@@ -287,17 +338,8 @@ class TextRichRenderBackend(
         ): WebResourceResponse? = null
 
         override fun onPageFinished(view: WebView, url: String?) {
-            if (token.generation != generation) return
-            rendered = true
-            val chapterIndex = currentChapter?.chapterIndex ?: return
-            // 首帧先回报（富渲染可能尚未完成），随后轮询注入完成信号再重测
-            view.evaluateJavascript(ContentHeightScript) { raw ->
-                if (token.generation != generation) return@evaluateJavascript
-                contentHeight = raw?.trim()?.toDoubleOrNull()?.toInt() ?: 0
-                pageCount = EpubWebDirectPageMath.pageCount(contentHeight, config.pageHeightPx)
-                host?.onRendered(token, chapterIndex, pageCount)
-                pollRichRenderDone(token, chapterIndex, config)
-            }
+            // 仅留痕（完成上报由 pollReady 负责，不依赖本回调）
+            AppLog.putDebug("text rich onPageFinished: chapter=${currentChapter?.chapterIndex}")
         }
 
         override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
@@ -319,24 +361,75 @@ class TextRichRenderBackend(
      * 注入器内部已有超时（[MdRichRenderInjector.DefaultTimeoutMillis]）⇒ 此处只做有界退避重试，
      * 不会永久等待；重试上限后仍**照常回报一次重测**（避免分页永久挂起）。
      */
-    private fun pollRichRenderDone(token: RenderToken, chapterIndex: Int, config: RenderConfig, attempt: Int = 0) {
+    private fun pollReady(token: RenderToken, chapterIndex: Int, config: RenderConfig, attempt: Int = 0) {
         if (disposed || token.generation != generation) return
         if (attempt > MaxPollAttempts) {
+            // 超时也照常回报一次，避免分页永久挂起（内容已可见，只是富渲染未按时完成）
+            AppLog.putDebug("text rich ready timeout: chapter=$chapterIndex, attempt=$attempt, lastRaw=$lastReadyRaw")
             remeasure(token)
+            host?.onRendered(token, chapterIndex, pageCount)
             return
         }
         handler.postDelayed({
             if (disposed || token.generation != generation) return@postDelayed
             val view = webView ?: return@postDelayed
-            view.evaluateJavascript(RichDoneScript) { raw ->
+            view.evaluateJavascript(ReadyScript) { raw ->
                 if (token.generation != generation) return@evaluateJavascript
-                val done = raw?.contains("true") == true
-                if (done) {
-                    AppLog.putDebug("text rich render done: chapter=$chapterIndex, attempt=$attempt")
-                    remeasure(token)
-                } else {
-                    pollRichRenderDone(token, chapterIndex, config, attempt + 1)
+                // readyState|status|height|mermaidNodes|codeNodes
+                val parts = raw?.trim()?.trim('"')?.split('|').orEmpty()
+                lastReadyRaw = raw
+                if (parts.size < 5) {
+                    pollReady(token, chapterIndex, config, attempt + 1)
+                    return@evaluateJavascript
                 }
+                val complete = parts[0] == "complete"
+                val status = parts[1]
+                if (status != lastLoggedStatus) {
+                    lastLoggedStatus = status
+                    AppLog.putDebug(
+                        "text rich status: chapter=$chapterIndex, attempt=$attempt, status=$status, " +
+                                "ready=${parts[0]}, h=${parts[2]}, nodes=${parts[3]}/${parts[4]}, " +
+                                "mermaid=${parts.getOrNull(5)}, katex=${parts.getOrNull(6)}, hljs=${parts.getOrNull(7)}"
+                    )
+                }
+                // 文档就绪且尚未注入 ⇒ 此刻注入：厂商脚本**逐条顶层执行**，再执行运行时脚本
+                if (complete && status == StatusAbsent && (pendingVendors.isNotEmpty() || pendingRuntime != null)) {
+                    val vendors = pendingVendors
+                    val runtime = pendingRuntime
+                    pendingVendors = emptyList()
+                    pendingRuntime = null
+                    AppLog.putDebug(
+                        "text rich inject: chapter=$chapterIndex, vendors=${vendors.size}, " +
+                                "runtimeLen=${runtime?.length ?: 0}"
+                    )
+                    vendors.forEach { view.evaluateJavascript(it, null) }
+                    // 运行时脚本是自建 IIFE，可安全包 try/catch 记录注入期异常
+                    runtime?.let {
+                        view.evaluateJavascript(
+                            "try{" + it + "}catch(e){window.${InjectErrorGlobal}=String((e&&e.stack)||e);}",
+                            null
+                        )
+                    }
+                    pollReady(token, chapterIndex, config, attempt + 1)
+                    return@evaluateJavascript
+                }
+                // 未注入过脚本时 `none` 即"纯 HTML 章节"，视为已就绪；注入过则必须等 done
+                val settled = (status == StatusAbsent && pendingVendors.isEmpty() && pendingRuntime == null) ||
+                    status.startsWith(StatusDonePrefix)
+                if (!complete || !settled) {
+                    pollReady(token, chapterIndex, config, attempt + 1)
+                    return@evaluateJavascript
+                }
+                val height = parts[2].toIntOrNull() ?: 0
+                contentHeight = height
+                pageCount = EpubWebDirectPageMath.pageCount(height, config.pageHeightPx)
+                // 诊断留痕（L2 证据）：status=done|mermaid数|公式数|代码块数|错误
+                AppLog.putDebug(
+                    "text rich ready: chapter=$chapterIndex, attempt=$attempt, status=$status, " +
+                            "mermaidNodes=${parts[3]}, codeNodes=${parts[4]}, height=$height"
+                )
+                host?.onRendered(token, chapterIndex, pageCount)
+                host?.onReMeasured(token, chapterIndex, pageCount)
             }
         }, PollIntervalMillis)
     }
@@ -348,13 +441,40 @@ class TextRichRenderBackend(
     companion object {
         private const val WebViewBlank = "about:blank"
         private const val PollIntervalMillis = 120L
-        private const val MaxPollAttempts = 40          // 40 × 120ms ≈ 4.8s（注入器自带 4s 超时）
+        private const val MaxPollAttempts = 200         // 200 × 120ms ≈ 24s（厂商 JS 首次解析可能偏慢）
         private const val ContentHeightScript =
             "(function(){var d=document;var b=d.body;var e=d.documentElement;" +
                 "return Math.max(b?b.scrollHeight:0,e?e.scrollHeight:0,0);})()"
-        /** 读注入状态：`__legadoMdRichRender.done` 为真即完成（未注入时亦视为完成，直接回报）。 */
-        private const val RichDoneScript =
-            "(function(){var s=window.${MdRichRenderInjector.StatusGlobal};" +
-                "return (!s||s.done===true)?'true':'false';})()"
+        /** 未注入富渲染运行时（纯 HTML 章节）。 */
+        private const val StatusAbsent = "none"
+
+        /** 注入期异常全局变量（宿主注入时包 try/catch 写入，供就绪探针读取）。 */
+        private const val InjectErrorGlobal = "__legadoMdRichErr"
+
+        /** 状态前缀：`1,` = 注入完成（注：状态内层用 `,` 分隔，**不得**用外层分隔符 `|`，否则解析必然错位）。 */
+        private const val StatusDonePrefix = "1,"
+
+        /**
+         * 就绪探针：`readyState|status|内容高|pre.mermaid 节点数|pre code 节点数`。
+         *
+         * - `status` = `done,mermaid数,公式数,代码块数,错误`（[MdRichRenderInjector.StatusGlobal] 缺失时为 [StatusAbsent]）；
+         * - 后两项是 **DOM 侧事实**（选区计数），用来区分"注入脚本跑了但文档里没有目标节点"
+         *   与"注入脚本压根没跑"——是 L2 判定的关键证据。
+         *
+         * ⚠️ 外层字段用 `|`、内层状态用 `,` 是**刻意区分**：早先两者都用 `|`，导致宿主切分错位、
+         * 就绪判定恒为假（真机症状：图表已渲染却始终超时）。
+         */
+        private const val ReadyScript =
+            "(function(){var d=document,s=window.${MdRichRenderInjector.StatusGlobal},e=window.$InjectErrorGlobal;" +
+                "var st;" +
+                "if(e){st='err:'+String(e).slice(0,160);}" +
+                "else if(!s){st='${StatusAbsent}';}" +
+                "else{st=(s.done===true?'1':'0')+','+s.mermaid+','+s.math+','+s.code+','+" +
+                "(s.error?String(s.error).slice(0,60):'');}" +
+                "var q=function(sel){try{return document.querySelectorAll(sel).length}catch(x){return -1}};" +
+                "var t=function(n){try{return typeof window[n]}catch(x){return '?'}};" +
+                "var h=Math.max((d.body?d.body.scrollHeight:0),(d.documentElement?d.documentElement.scrollHeight:0));" +
+                "return d.readyState+'|'+st+'|'+h+'|'+q('pre.mermaid')+'|'+q('pre code')+'|'+" +
+                "t('mermaid')+'|'+t('katex')+'|'+t('hljs');})()"
     }
 }

@@ -165,4 +165,55 @@ class MdRichRenderInjectorTest {
         assertEquals("md/vendor/hljs-light.min.css", MdRichRenderInjector.HighlightLightCssAsset)
         assertEquals("md/vendor/hljs-dark.min.css", MdRichRenderInjector.HighlightDarkCssAsset)
     }
+
+    @Test
+    fun `厂商脚本独立返回且运行时脚本不含厂商本体`() {
+        val assets = MdRichRenderInjector.Assets(
+            mermaidJs = "MERMAID_BLOB",
+            katexJs = "KATEX_BLOB",
+            highlightJs = "HIGHLIGHT_BLOB"
+        )
+        val vendors = MdRichRenderInjector.vendorScripts(true, true, true, assets)
+        assertEquals("三份厂商脚本各自独立返回", 3, vendors.size)
+        assertTrue(vendors[0].contains("MERMAID_BLOB"))
+        assertTrue(vendors[1].contains("KATEX_BLOB"))
+        assertTrue(vendors[2].contains("HIGHLIGHT_BLOB"))
+
+        val runtime = MdRichRenderInjector.runtimeScript(MdRichRenderInjector.Options(), true, true, true)
+        // 关键不变量（真机铁证）：厂商 JS 的 `var` 依赖顶层作用域，被包进 IIFE 即失效
+        // （mermaid 尾部读 globalThis.__esbuild_esm_mermaid.default ⇒ TypeError）
+        assertFalse("运行时脚本不得内嵌厂商 JS 本体", runtime.contains("MERMAID_BLOB"))
+        assertFalse(runtime.contains("KATEX_BLOB"))
+        assertFalse(runtime.contains("HIGHLIGHT_BLOB"))
+        assertTrue("运行时脚本仍是自建 IIFE", runtime.startsWith("(function(){"))
+        assertTrue(runtime.contains("window.${MdRichRenderInjector.StatusGlobal}"))
+    }
+
+    @Test
+    fun `build 把厂商脚本放在 IIFE 之外`() {
+        val assets = MdRichRenderInjector.Assets(mermaidJs = "MERMAID_BLOB", highlightJs = "HIGHLIGHT_BLOB")
+        val injection = MdRichRenderInjector.build(
+            MdRichRenderInjector.Options(),
+            assets,
+            needsMermaid = true,
+            needsMath = false
+        )
+        val vendorAt = injection.script.indexOf("MERMAID_BLOB")
+        val iifeAt = injection.script.indexOf("(function(){")
+        assertTrue("厂商脚本须在场", vendorAt >= 0)
+        assertTrue("厂商脚本必须先于运行时 IIFE 且位于其外", vendorAt < iifeAt)
+    }
+
+    @Test
+    fun `不需要任何运行时则不产出脚本`() {
+        val assets = MdRichRenderInjector.Assets()
+        val injection = MdRichRenderInjector.build(
+            MdRichRenderInjector.Options(),
+            assets,
+            needsMermaid = true,
+            needsMath = true
+        )
+        assertEquals("", injection.script)
+        assertEquals(0, MdRichRenderInjector.vendorScripts(true, true, true, assets).size)
+    }
 }

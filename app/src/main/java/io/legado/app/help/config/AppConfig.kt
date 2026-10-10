@@ -2592,6 +2592,19 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefString(PreferKey.epubCoreScheduleMode, "normal") ?: "normal"
         set(value) = appCtx.putPrefString(PreferKey.epubCoreScheduleMode, value)
 
+    /**
+     * 文本富渲染开关（epub-md-rich-rendering 阶段 3.2）。
+     *
+     * **默认 true（AOAdapt，理由）**：md 是我方**新增**格式，不存在"旧行为被改变"的回归面
+     * （此前 md 根本不被支持）；且分流只在**真含富渲染元素**时才切换渲染面
+     * （普通 md 章节仍走 canvas 快路径），重运行时（mermaid 2.4MB）也只在含 mermaid 时才读。
+     * 关掉即回落 canvas 的 `<usehtml>` HTML 渲染（可用但无 mermaid/公式/代码高亮），
+     * 是**可用的降级**而非功能消失。
+     */
+    var mdRichRender: Boolean
+        get() = appCtx.getPrefBoolean(PreferKey.mdRichRender, ReaderFeatureDefaults.MD_RICH_RENDER)
+        set(value) = appCtx.putPrefBoolean(PreferKey.mdRichRender, value)
+
     val progressBarBehavior: String?
         get() = appCtx.getPrefString(PreferKey.progressBarBehavior, "page")
 
