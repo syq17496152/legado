@@ -102,6 +102,7 @@ import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
 import io.legado.app.help.config.ShareNoteTemplateManager
 import io.legado.app.model.localBook.epubcore.template.EpubReaderTemplate
+import io.legado.app.model.localBook.epubcore.template.ReaderTemplateSeed
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.readaloud.ReadAloudPlaybackState
@@ -772,6 +773,25 @@ class ReadBookActivity : BaseReadBookActivity(),
         binding.readAloudPlayerPanel.post {
             consumeGlobalReadAloudPanelOpen()
         }
+        // 动效生命周期（4.15 C6）：回到前台恢复装饰动效（离页时已停）
+        templateBackend?.setMotionPaused(false)
+    }
+
+    /**
+     * 触摸期间停装饰动效（4.15 C6：拖动/长按跟手 + 省电）。
+     *
+     * 为什么放在 Activity 的派发口：沙箱**看不到**宿主的手势；而"用户此刻在拖"只有宿主知道。
+     * 只在 DOWN/UP/CANCEL 三点下发（每次一条白名单消息，不是每帧），代价可忽略。
+     */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (templateActive) {
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> templateBackend?.setMotionPaused(true)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                    templateBackend?.setMotionPaused(false)
+            }
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onPause() {
@@ -779,6 +799,8 @@ class ReadBookActivity : BaseReadBookActivity(),
         binding.readAloudPlayerPanel.setForegroundActive(false)
         autoPageStop()
         backupJob?.cancel()
+        // 动效生命周期（4.15 C6）：离页即停装饰动效（省电降温；回前台 onResume 恢复）
+        templateBackend?.setMotionPaused(true)
         if (templateActive) {
             saveTemplatePosition()
         } else if (textRichActive) {
@@ -2736,16 +2758,20 @@ class ReadBookActivity : BaseReadBookActivity(),
         val progress = (((ReadBook.durChapterIndex + 1) * 100) / chapterSize).coerceIn(0, 100)
         val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
         val reduceMotion = isSystemReduceMotion()
+        val bookName = ReadBook.book?.name.orEmpty()
+        val chapterTitle = textRichChapterRef?.title.orEmpty()
         return TemplateRenderBackend.ReaderValues(
             dark = AppConfig.isNightTheme,
-            bookName = ReadBook.book?.name.orEmpty(),
-            chapterTitle = textRichChapterRef?.title.orEmpty(),
+            bookName = bookName,
+            chapterTitle = chapterTitle,
             progressPercent = progress,
             hour = hour,
             // 装饰强度/动效（4.8d）：与设置弹层共用 `ReaderTemplateManager.decorationDecision` 单源，
             // 且**每次渲染都重算**（设置变更后无需重启阅读页，reloadTemplateCurrent 会带上新值）
             decoration = ReaderTemplateManager.decorationCssValue(reduceMotion),
-            decorationMotion = ReaderTemplateManager.decorationMotionEnabled(reduceMotion)
+            decorationMotion = ReaderTemplateManager.decorationMotionEnabled(reduceMotion),
+            // 稳定随机（4.15 C4）：同章任何时候同值 ⇒ 装饰"看似随机"但可复现（重排/回首页不重抽）
+            seed = ReaderTemplateSeed.of(bookName, chapterTitle)
         )
     }
 

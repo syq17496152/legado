@@ -57,7 +57,10 @@ internal object ReaderTemplateBridgePolicy {
         "set-theme" to setOf("themeId"),
         // 宿主驱动翻页（4.14 收口）：沙箱 iframe **跨源** ⇒ 只有沙箱内部的 JS 能操作
         // 它自己的滚动视口，宿主只能下指令（否则"点下一页没反应"——N1 同类陷阱）
-        "goto-page" to setOf("pageIndex")
+        "goto-page" to setOf("pageIndex"),
+        // 动效生命周期（4.15 C6）：宿主掌握"用户正在拖动/已离页"这类**沙箱看不到**的事实，
+        // 只有它能下令停动效（`prefers-reduced-motion` 与装饰强度已由 init 下发，此处是**运行时**闸门）
+        "set-motion" to setOf("paused")
     )
 
     fun allowedFields(direction: Direction, type: String): Set<String>? {
