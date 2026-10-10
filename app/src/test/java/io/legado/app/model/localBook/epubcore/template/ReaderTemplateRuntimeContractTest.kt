@@ -1,5 +1,7 @@
 package io.legado.app.model.localBook.epubcore.template
 
+import io.legado.app.help.md.MdRichRenderInjector
+import io.legado.app.help.md.ReaderTemplateSandboxDocument
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -132,6 +134,35 @@ class ReaderTemplateRuntimeContractTest {
         assertTrue("须有自研回退分页", flow.contains("settleManualPagination"))
         assertTrue("须回发结算", flow.contains("onFlowSettled"))
         assertTrue("须有元素扫描上限", flow.contains("MAX_SCAN_ELEMENTS"))
+    }
+
+    @Test
+    fun `沙箱富渲染驱动与注入器全局名单源`() {
+        val runtime = asset("template-runtime.js")
+        // 沙箱跨源 ⇒ 宿主读不到它的 DOM，只能靠它自己驱动注入器并回发消息
+        assertTrue(
+            "沙箱必须驱动阶段 3.8/3.9 注入器（同一全局名；改名漏改 = 注入永不生效）",
+            runtime.contains("window.${MdRichRenderInjector.StatusGlobal}")
+        )
+        assertTrue("必须调用可重复运行入口", runtime.contains("status.run"))
+        assertTrue("完成后须回发 renderState（沙箱不能轮询 DOM）", runtime.contains("'inject-done'"))
+        assertTrue("未注入时须明确回报，不得静默", runtime.contains("'inject-unavailable'"))
+    }
+
+    @Test
+    fun `init 不进沙箱接收白名单而由 bootstrap 转发`() {
+        val runtime = asset("template-runtime.js")
+        assertTrue(
+            "接收类型表须保持为注入/重测/主题四类",
+            runtime.contains("RECEIVE_TYPES = ['inject-mermaid', 'inject-katex', 'remeasure', 'set-theme']")
+        )
+        assertFalse("init 不得进入接收白名单（否则与 bootstrap 双重处理同一消息）", runtime.contains("'init',"))
+        val bootstrap = ReaderTemplateSandboxDocument.bootstrapScript()
+        assertTrue("bootstrap 必须独占 init 转发", bootstrap.contains("data.type!=='init'"))
+        assertTrue(
+            "bootstrap 必须调用沙箱运行时入口",
+            bootstrap.contains("window.ReaderTemplateRuntime.init(data)")
+        )
     }
 
     @Test

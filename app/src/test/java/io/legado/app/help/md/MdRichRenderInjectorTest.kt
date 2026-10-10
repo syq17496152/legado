@@ -216,4 +216,20 @@ class MdRichRenderInjectorTest {
         assertEquals("", injection.script)
         assertEquals(0, MdRichRenderInjector.vendorScripts(true, true, true, assets).size)
     }
+
+    @Test
+    fun `运行时暴露可重复运行入口并仍自动跑一次`() {
+        val assets = MdRichRenderInjector.Assets(mermaidJs = "MERMAID_BLOB", katexJs = "KATEX_BLOB")
+        val script = MdRichRenderInjector.runtimeScript(
+            MdRichRenderInjector.Options(),
+            wantMermaid = true,
+            wantMath = true,
+            wantHighlight = false
+        )
+        // 模板沙箱在正文经 init 注入后必须能再跑一次；且重跑要能覆盖上一轮的失败结论
+        assertTrue("必须暴露 status.run", script.contains("status.run=runAll;"))
+        assertTrue("重跑须重置完成标记", script.contains("status.done=false;status.error=null;"))
+        assertTrue("自动驱动仍须跑一次（文本富渲染面依赖它）", script.contains("whenReady().then(runAll)"))
+        assertTrue("完成标记语义不变（宿主轮询依赖）", script.contains("function finish(){status.done=true;}"))
+    }
 }

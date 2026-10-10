@@ -250,16 +250,21 @@ object MdRichRenderInjector {
         append("}));")
         append("return Promise.all(tasks);")
         append("}")
-        append("function finish(){status.done=true;}")
-        append("var timeout=setTimeout(finish,").append(timeoutMillis.coerceAtLeast(1)).append(");")
-        append("whenReady().then(function(){")
+        // 可重复运行的渲染入口：**模板沙箱**在正文经 init 注入之后必须能再跑一次
+        // （沙箱的自动驱动发生在文档加载时，那时正文还没进来 ⇒ 只跑一次会渲染空文档）。
+        // 重置 done/error，避免上一轮失败标记污染本轮结论。
+        append("function runAll(){")
+        append("status.done=false;status.error=null;")
         append("var chain=Promise.resolve();")
         if (wantMermaid) chainAppend("runMermaid")
         if (wantMath) chainAppend("renderMathIn")
         if (wantHighlight) chainAppend("runHighlight")
         append("return chain;")
-        // 渲染后重测分页由宿主在 finish 后发起（此处只保证信号可见）
-        append("}).then(function(){clearTimeout(timeout);finish();})")
+        append("}")
+        append("status.run=runAll;")
+        append("function finish(){status.done=true;}")
+        append("var timeout=setTimeout(finish,").append(timeoutMillis.coerceAtLeast(1)).append(");")
+        append("whenReady().then(runAll).then(function(){clearTimeout(timeout);finish();})")
         append(".catch(function(e){status.error=String(e);clearTimeout(timeout);finish();});")
     }
 
