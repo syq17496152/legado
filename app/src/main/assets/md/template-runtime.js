@@ -33,7 +33,7 @@
     embeddedInteraction: ['id']
   };
 
-  var RECEIVE_TYPES = ['inject-mermaid', 'inject-katex', 'remeasure', 'set-theme', 'goto-page'];
+  var RECEIVE_TYPES = ['inject-mermaid', 'inject-katex', 'remeasure', 'set-theme', 'goto-page', 'set-motion'];
 
   var state = {
     template: null,
@@ -45,7 +45,9 @@
     themeId: 'day',
     fields: {},
     decoration: 'medium',
-    decorCount: 0
+    decorCount: 0,
+    motion: true,
+    seed: ''
   };
 
   /**
@@ -169,11 +171,30 @@
     var root = document.documentElement;
     var level = config && config.decoration ? String(config.decoration) : 'medium';
     if (!Object.prototype.hasOwnProperty.call(DECOR_SCALE, level)) level = 'medium';
-    var motion = !!(config && config.motion);
     state.decoration = level;
+    var motion = !!(config && config.motion);
+    // 稳定随机种子（4.15 C4）：宿主按书名+章节稳定哈希 ⇒ 同章重排/回首页/读快照不重抽
+    if (config && config.seed !== undefined && config.seed !== null) {
+      state.seed = String(config.seed);
+      root.setAttribute('data-rp-seed', state.seed);
+      root.style.setProperty('--rp-seed', state.seed);
+    }
     root.setAttribute('data-rp-decoration', level);
-    root.setAttribute('data-reader-motion', motion ? 'running' : 'paused');
     root.style.setProperty('--rp-decor-scale', DECOR_SCALE[level]);
+    applyMotion(motion);
+  }
+
+  /**
+   * 动效闸门（4.15 C6）：`html[data-reader-motion]` 是装饰动效的**唯一**开关
+   * （引擎基线 CSS 按它停 `animation`，回到静态帧）。
+   *
+   * 两个来源：①init 时的 reduce-motion/专注模式判定；②运行中的宿主指令
+   * （`set-motion`：用户拖动中 / 已离页 / 翻页结算期间）。后者是本函数存在的理由——
+   * 沙箱**看不到**宿主的手势与生命周期，只能由宿主下令。
+   */
+  function applyMotion(running) {
+    state.motion = !!running;
+    document.documentElement.setAttribute('data-reader-motion', state.motion ? 'running' : 'paused');
   }
 
   /**
@@ -282,7 +303,9 @@
     return ',slots=' + slots.length + ',bodyLen=' + bodyLen + ',nodes=' + nodes +
       // 装饰自证（4.8d）：装饰档位与实际被标记的装饰元素数 —— 缺了它"选了档位却看不出差别"
       // 无法区分"沙箱没收到档位"与"模板本来就没有装饰"
-      ',decor=' + state.decorCount + ',decorLevel=' + state.decoration;
+      ',decor=' + state.decorCount + ',decorLevel=' + state.decoration +
+      // 动效与种子自证（4.15）：改动效/换章后「到底有没有生效」只能靠沙箱回发（跨源读不到 <html>）
+      ',motion=' + (state.motion ? 'running' : 'paused') + ',seed=' + state.seed;
   }
 
   function handleMessage(event) {
@@ -301,6 +324,11 @@
         case 'goto-page':
           // 宿主驱动翻页：沙箱跨源，宿主无法直接操作本帧滚动
           flow.goto(data.pageIndex);
+          break;
+        case 'set-motion':
+          // 动效生命周期（4.15 C6）：拖动中/离页/翻页结算期间由宿主下令停并回静态帧
+          applyMotion(data.paused !== true);
+          send('renderState', { state: 'motion,paused=' + (state.motion ? 0 : 1) });
           break;
         case 'inject-mermaid':
         case 'inject-katex':

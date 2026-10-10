@@ -149,6 +149,7 @@
         // ——2026-10-10 L2 实证（decorLevel 恒 medium，而宿主侧确已下发 strong）
         decoration: config.decoration || 'medium',
         motion: config.motion !== false,
+        seed: config.seed === undefined ? null : config.seed,
         flow: config.flow || {}
       }, '*');
     }, { once: true });
@@ -159,7 +160,7 @@
   /** 宿主 → 沙箱：白名单内的指令（与 `template-runtime.js` 的 RECEIVE_TYPES / Kotlin 侧 TO_WEB 表三方一致）。 */
   function post(type, payload) {
     if (!frame || !frame.contentWindow) return false;
-    if (['inject-mermaid', 'inject-katex', 'remeasure', 'set-theme', 'goto-page'].indexOf(type) < 0) return false;
+    if (['inject-mermaid', 'inject-katex', 'remeasure', 'set-theme', 'goto-page', 'set-motion'].indexOf(type) < 0) return false;
     var message = { type: type, token: session.token, sessionId: session.sessionId };
     if (payload) {
       for (var key in payload) {

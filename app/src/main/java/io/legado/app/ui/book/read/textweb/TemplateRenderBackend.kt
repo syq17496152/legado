@@ -78,7 +78,13 @@ class TemplateRenderBackend(
         /** 装饰强度字面量（`none|light|medium|strong`，4.8d；见 `ReaderTemplateDecorationPolicy`）。 */
         val decoration: String = DecorationMedium,
         /** 装饰动效是否允许（专注模式 / reduce-motion ⇒ false ⇒ 沙箱 `<html data-reader-motion="paused">`）。 */
-        val decorationMotion: Boolean = true
+        val decorationMotion: Boolean = true,
+        /**
+         * 稳定随机种子（4.15 C4）：由书名 + 章节名稳定哈希得出
+         * （`ReaderTemplateSeed.of`），沙箱注入 `--rp-seed` / `data-rp-seed`。
+         * 传 0 表示"本次不注入"（作者读到 0 也不会崩）。
+         */
+        val seed: Int = 0
     ) {
         val themeId: String get() = if (dark) ThemeNight else ThemeDay
     }
@@ -117,6 +123,26 @@ class TemplateRenderBackend(
     fun pageNext() = gotoPage(pageIndex + 1)
 
     fun pagePrev() = gotoPage(pageIndex - 1)
+
+    /**
+     * 动效运行时闸门（4.15 C6）：拖动中 / 离页 / 翻页结算期间停装饰动效并回静态帧。
+     *
+     * 为什么必须由宿主下令：沙箱**看不到**宿主的手势与 Activity 生命周期（跨源、也不共享事件），
+     * 只有宿主知道"用户现在正在拖"。停动效的目的有二：拖动跟手（不抢主线程）+ 省电降温。
+     */
+    fun setMotionPaused(paused: Boolean) {
+        // 渲染就绪前沙箱还没建帧/还没结算 ⇒ 下指令无意义（也不该在 idle 期刷消息）
+        if (!reportedFirstPage) return
+        runOnUI {
+            webView?.evaluateJavascript(
+                ReaderTemplateHostDocument.postScript(
+                    "set-motion",
+                    if (paused) """{"paused":true}""" else """{"paused":false}"""
+                ),
+                null
+            )
+        }
+    }
 
     fun gotoPage(target: Int) {
         val clamped = target.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
@@ -310,6 +336,8 @@ class TemplateRenderBackend(
             // 装饰强度与动效闸门（4.8d）：沙箱 runtime 写到 <html> 上，由 md/template-decoration.css 执行
             addProperty("decoration", values.decoration)
             addProperty("motion", values.decorationMotion)
+            // 稳定随机种子（4.15 C4）：同章任何时候同值 ⇒ 装饰"看似随机"但可复现
+            addProperty("seed", values.seed)
             // 厂商脚本**按 URL 交给沙箱自行加载**（宿主经 shouldInterceptRequest 从 assets 供给）：
             // ①体量走浏览器流式加载，不经消息体（实测 2.4MB postMessage 会静默不达）；
             // ②不内联 srcdoc（`mermaid.min.js` 含 `<!--`，内联会被 HTML 解析器截断）

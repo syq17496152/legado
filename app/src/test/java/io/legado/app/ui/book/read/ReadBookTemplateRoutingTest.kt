@@ -84,4 +84,28 @@ class ReadBookTemplateRoutingTest {
             s.contains("decor=\${ReaderTemplateManager.decorationCssValue(isSystemReduceMotion())}")
         )
     }
+
+    @Test
+    fun `动效生命周期与稳定随机已接线`() {
+        // 4.15 C6：沙箱看不到宿主手势/生命周期 ⇒ 必须由宿主在 DOWN/UP 与 onPause/onResume 下令
+        val s = text()
+        assertTrue("必须有触摸期停动效入口", s.contains("override fun dispatchTouchEvent(ev: MotionEvent)"))
+        assertTrue("按下即停（拖动跟手）", s.contains("MotionEvent.ACTION_DOWN -> templateBackend?.setMotionPaused(true)"))
+        assertTrue(
+            "抬手/取消即恢复",
+            s.contains("MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->") &&
+                s.contains("templateBackend?.setMotionPaused(false)")
+        )
+        assertTrue(
+            "离页必须停（onPause 处下发）",
+            Regex("setMotionPaused\\(true\\)").findAll(s).count() >= 2
+        )
+        assertTrue(
+            "回前台必须恢复（onResume 处下发）",
+            Regex("setMotionPaused\\(false\\)").findAll(s).count() >= 2
+        )
+        // 4.15 C4：稳定随机种子随真值下发（同章同值）
+        assertTrue("种子必须由书名+章节稳定推导", s.contains("ReaderTemplateSeed.of(bookName, chapterTitle)"))
+        assertTrue("种子必须进 ReaderValues", s.contains("seed = ReaderTemplateSeed.of("))
+    }
 }

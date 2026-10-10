@@ -248,9 +248,9 @@ class ReaderTemplateRuntimeContractTest {
     fun `init 不进沙箱接收白名单而由 bootstrap 转发`() {
         val runtime = asset("template-runtime.js")
         assertTrue(
-            "接收类型表须与 Kotlin 侧 TO_WEB 表一致（注入/重测/主题/翻页）",
+            "接收类型表须与 Kotlin 侧 TO_WEB 表一致（注入/重测/主题/翻页/动效）",
             runtime.contains(
-                "RECEIVE_TYPES = ['inject-mermaid', 'inject-katex', 'remeasure', 'set-theme', 'goto-page']"
+                "RECEIVE_TYPES = ['inject-mermaid', 'inject-katex', 'remeasure', 'set-theme', 'goto-page', 'set-motion']"
             )
         )
         assertFalse("init 不得进入接收白名单（否则与 bootstrap 双重处理同一消息）", runtime.contains("'init',"))

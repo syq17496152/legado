@@ -109,4 +109,18 @@ class TemplateRenderBackendContractTest {
             s.contains("MdRichRenderInjector.TemplateDecorationCssAsset")
         )
     }
+
+    @Test
+    fun `动效运行时闸门与稳定随机种子随链路就位`() {
+        // 4.15 C6/C4：动效暂停必须由宿主下 `set-motion`（沙箱看不到手势/生命周期）；
+        // 种子必须随 init 下发并在沙箱注入成属性/变量（否则作者的"看似随机"装饰每次重排都换画面）
+        val s = text()
+        assertTrue("必须提供运行时闸门入口", s.contains("fun setMotionPaused(paused: Boolean)"))
+        assertTrue("必须下 set-motion 白名单指令", s.contains("postScript(") && s.contains("\"set-motion\""))
+        assertTrue("未就绪时不得空刷消息", s.contains("if (!reportedFirstPage) return"))
+        assertTrue("ReaderValues 必须带种子", s.contains("val seed: Int"))
+        assertTrue("init 载荷必须下发种子", s.contains("addProperty(\"seed\", values.seed)"))
+        val host = SourceFileProbe.assetRawText("md/template-host.js")
+        assertTrue("宿主转发必须消费 seed（白名单漏键即静默丢字段）", host.contains("config.seed"))
+    }
 }
