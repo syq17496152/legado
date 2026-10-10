@@ -44,6 +44,8 @@ internal fun ReaderTemplateManageScreen(
     catalogErrors: List<String>,
     appliedId: String,
     effectiveId: String?,
+    templatesEnabled: Boolean,
+    onToggleTemplates: () -> Unit,
     onApply: (ReaderTemplateManager.Entry) -> Unit,
     onApplyFollowTheme: () -> Unit,
     onEdit: (ReaderTemplateManager.Entry) -> Unit,
@@ -68,7 +70,9 @@ internal fun ReaderTemplateManageScreen(
                     catalogErrors = catalogErrors,
                     appliedId = appliedId,
                     effectiveId = effectiveId,
+                    templatesEnabled = templatesEnabled,
                     palette = palette,
+                    onToggleTemplates = onToggleTemplates,
                     onApplyFollowTheme = onApplyFollowTheme,
                     onRestoreDefaults = onRestoreDefaults
                 )
@@ -99,7 +103,9 @@ private fun CurrentTemplateCard(
     catalogErrors: List<String>,
     appliedId: String,
     effectiveId: String?,
+    templatesEnabled: Boolean,
     palette: AppManagementPalette,
+    onToggleTemplates: () -> Unit,
     onApplyFollowTheme: () -> Unit,
     onRestoreDefaults: () -> Unit
 ) {
@@ -111,12 +117,22 @@ private fun CurrentTemplateCard(
         insidePadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Text(
-            text = "当前模板",
+            text = if (templatesEnabled) "页面模板：已启用" else "页面模板：未启用",
             color = palette.settings.primaryText,
             fontSize = MaterialTheme.typography.bodyLarge.fontSize,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = if (templatesEnabled) {
+                "开启后，在线正文 / 本地 txt / md 按选定模板渲染；关闭则完全回到原有排版。"
+            } else {
+                "当前未启用：阅读页完全按原有排版显示，下列选择暂不生效。"
+            },
+            color = palette.settings.secondaryText,
+            fontSize = MaterialTheme.typography.bodySmall.fontSize,
+            modifier = Modifier.padding(top = 4.dp)
         )
         Text(
             text = if (followTheme) {
@@ -153,6 +169,12 @@ private fun CurrentTemplateCard(
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            AppPackageManageActionButton(
+                text = if (templatesEnabled) "关闭页面模板" else "启用页面模板",
+                palette = palette.miuix,
+                selected = templatesEnabled,
+                onClick = onToggleTemplates
+            )
             AppPackageManageActionButton(
                 text = "跟随主题",
                 palette = palette.miuix,

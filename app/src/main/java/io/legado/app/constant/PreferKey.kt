@@ -588,6 +588,9 @@ object PreferKey {
     // 阅读页面模板（epub-md-rich-rendering 阶段 4.8a）：当前应用的模板 id；
     // 空串 = 「跟随主题」（按日夜取默认款，哨兵值单源 ReaderTemplateSelection.FollowTheme）。
     const val readerTemplate = "readerTemplate"
+    // 阅读页面模板**整体开关**（epub-md-rich-rendering 阶段 4.9）：关闭 ⇒ 文本类内容完全走既有
+    // canvas 路径（等同没有模板系统，无残留）；开启 ⇒ 按当前选定模板渲染。
+    const val readerTemplateEnabled = "readerTemplateEnabled"
     const val fastScrollerTouchTargetDp = "fastScrollerTouchTargetDp"
     const val readMenuAlpha = "readMenuAlpha"
     // 管理页背景透明度（ui-theme-governance-polish P6）：单 key 不分日夜（管理页日夜同源背景，

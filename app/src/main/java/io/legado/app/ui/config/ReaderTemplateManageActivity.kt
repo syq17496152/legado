@@ -2,6 +2,7 @@ package io.legado.app.ui.config
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -58,7 +59,11 @@ class ReaderTemplateManageActivity : BaseActivity<ViewBinding>() {
     private val errorsState = mutableStateOf<List<String>>(emptyList())
     private val appliedState = mutableStateOf(ReaderTemplateManager.appliedId())
     private val effectiveState = mutableStateOf<String?>(null)
+    private val templatesEnabledState = mutableStateOf(ReaderTemplateManager.templatesEnabled())
     private var loadJob: Job? = null
+
+    /** 已选中、等待用户确认免责后导入的文件（4.9：导入须显式确认）。 */
+    private var pendingImportUri: Uri? = null
 
     /** 编辑中的模板快照 + 正在编辑的字段（编辑器返回后据此写回）。 */
     private var editingTemplate: EpubReaderTemplate? = null
@@ -66,6 +71,23 @@ class ReaderTemplateManageActivity : BaseActivity<ViewBinding>() {
 
     private val importTemplate = registerForActivityResult(HandleFileContract()) { result ->
         val uri = result.uri ?: return@registerForActivityResult
+        // 4.9：用户导入模板可能含第三方素材 ⇒ **先显式确认**（免责提示在场）再落库
+        pendingImportUri = uri
+        showDialogFragment(
+            ComposeConfirmDialog.create(
+                title = "导入模板",
+                message = ReaderTemplateManager.importDisclaimer,
+                positiveText = "确认导入",
+                negativeText = getString(R.string.cancel),
+                onPositive = {
+                    pendingImportUri?.let(::importFromUri)
+                    pendingImportUri = null
+                }
+            )
+        )
+    }
+
+    private fun importFromUri(uri: Uri) {
         lifecycleScope.launch {
             val outcome = try {
                 withContext(Dispatchers.IO) {
@@ -150,6 +172,8 @@ class ReaderTemplateManageActivity : BaseActivity<ViewBinding>() {
                             catalogErrors = errorsState.value,
                             appliedId = appliedState.value,
                             effectiveId = effectiveState.value,
+                            templatesEnabled = templatesEnabledState.value,
+                            onToggleTemplates = ::toggleTemplates,
                             onApply = ::applyTemplate,
                             onApplyFollowTheme = ::applyFollowTheme,
                             onEdit = ::openTemplateEditor,
@@ -188,7 +212,16 @@ class ReaderTemplateManageActivity : BaseActivity<ViewBinding>() {
             errorsState.value = loaded.first.errors
             appliedState.value = ReaderTemplateManager.appliedId()
             effectiveState.value = loaded.second
+            templatesEnabledState.value = ReaderTemplateManager.templatesEnabled()
         }
+    }
+
+    /** 4.9：整体开关。关闭 ⇒ 阅读页完全回到原有排版（无残留）。 */
+    private fun toggleTemplates() {
+        val next = !ReaderTemplateManager.templatesEnabled()
+        ReaderTemplateManager.setTemplatesEnabled(next)
+        toastOnUi(if (next) "已启用页面模板" else "已关闭页面模板")
+        loadCatalog()
     }
 
     private fun applyTemplate(entry: ReaderTemplateManager.Entry) {
@@ -302,6 +335,24 @@ class ReaderTemplateManageActivity : BaseActivity<ViewBinding>() {
     }
 
     private fun exportJson(entry: ReaderTemplateManager.Entry) {
+        // 4.9：导出/分享前给免责提示（内置模板为自研合规素材 ⇒ 提示为空 ⇒ 不打扰用户）
+        val notice = ReaderTemplateManager.exportNotice(entry)
+        if (notice.isBlank()) {
+            launchExport(entry)
+            return
+        }
+        showDialogFragment(
+            ComposeConfirmDialog.create(
+                title = "导出模板",
+                message = notice,
+                positiveText = "继续导出",
+                negativeText = getString(R.string.cancel),
+                onPositive = { launchExport(entry) }
+            )
+        )
+    }
+
+    private fun launchExport(entry: ReaderTemplateManager.Entry) {
         lifecycleScope.launch {
             val json = withContext(Dispatchers.IO) { ReaderTemplateManager.exportJson(entry.id) }
             if (json == null) {
