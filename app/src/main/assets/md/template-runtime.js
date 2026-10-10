@@ -158,6 +158,36 @@
     if (typeof costMs === 'number') send('metrics', { costMs: costMs });
   }
 
+  /**
+   * 富渲染注入驱动（阶段 4.14）：调用阶段 3.8/3.9 注入器在**沙箱文档内**的运行时。
+   *
+   * 为什么不另写一套：注入器本身就是"对当前 document 里的 pre.mermaid / 公式定界符做渲染"，
+   * 在沙箱里执行 ⇒ 渲染的正是模板正文，单源无分叉。
+   *
+   * ⚠️ 全局名必须与 Kotlin 侧 `MdRichRenderInjector.StatusGlobal` 一致（契约测试锁定）。
+   */
+  function runRichRender() {
+    var status = window.__legadoMdRichRender;
+    if (!status || typeof status.run !== 'function') {
+      // 宿主按需注入（无富渲染元素时不注入运行时）⇒ 明确回报"不可用"，不静默、不报错
+      send('renderState', { state: 'inject-unavailable' });
+      return;
+    }
+    try {
+      Promise.resolve(status.run())
+        .then(function () {
+          send('renderState', { state: 'inject-done' });
+        })
+        .catch(function (error) {
+          reportError('rich-render-failed', error);
+          send('renderState', { state: 'inject-failed' });
+        });
+    } catch (error) {
+      reportError('rich-render-failed', error);
+      send('renderState', { state: 'inject-failed' });
+    }
+  }
+
   function handleMessage(event) {
     var data = event && event.data;
     if (!data || typeof data !== 'object') return;
@@ -173,8 +203,7 @@
           break;
         case 'inject-mermaid':
         case 'inject-katex':
-          // 富渲染注入由宿主侧驱动（阶段 3.8/3.9 的文本渲染文档共用同一注入器）
-          send('renderState', { state: 'inject-pending' });
+          runRichRender();
           break;
         default:
           break;
