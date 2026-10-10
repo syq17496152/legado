@@ -36,6 +36,15 @@ object MdRichRenderInjector {
      */
     const val TemplateDecorationCssAsset = "md/template-decoration.css"
 
+    /**
+     * 模板**布局层基线 CSS**（epub-md-rich-rendering 阶段 4.15）：
+     * C9 响应式收紧（窄屏/横屏缩装饰留正文）+ C10 竖排规格（确定宽高 / 段距走 block 轴 /
+     * 接排不重复缩进 / 独立图片按区域约束）。与装饰基线**职责分离**：装饰基线只动观感、
+     * 绝不声明几何；本文件是几何层，由运行时写在 `<html>` 上的状态开关驱动。
+     * 同样只在模板沙箱文档中挂载。
+     */
+    const val TemplateLayoutCssAsset = "md/template-layout.css"
+
     /** 渲染完成信号：宿主在 `onPageFinished` 后轮询该全局变量（避免竞态）。 */
     const val StatusGlobal = "__legadoMdRichRender"
 
