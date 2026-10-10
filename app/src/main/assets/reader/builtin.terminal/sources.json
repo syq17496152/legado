@@ -1,0 +1,8 @@
+{
+  "id": "builtin.terminal",
+  "name": "终端",
+  "author": "WeAgentChat / Legado（自研）",
+  "license": "随应用分发（自研素材）",
+  "assets": [],
+  "note": "零外部素材：等宽字形用系统字体栈（不打包字体文件），视觉全部由自研 CSS 实现；无第三方 IP 素材、无网络请求。"
+}

@@ -134,6 +134,16 @@ class ReaderBuiltinTemplateCatalogTest {
                 "${builtin.id} 装饰须脱离正文流（分页用绝对定位/伪元素；滚动用固定页眉页脚外壳）",
                 decorationsDetached
             )
+            if (builtin.isScroll) {
+                // 真机铁证（2026-10-10，data-stream 首版）：模板文档 DOM 是
+                // html > body > #reader-template-root > 作者外壳，而**根壳是普通流容器（非定高）**
+                // ⇒ 外壳写 `height:100%` 会塌成"内容高"，滚动画框随之失去滚动（页数恒 1、点击翻页无反应）。
+                // 正确口径：外壳用**视口单位**（`100vh`）定高（既有卷轴模板即如此）。
+                assertTrue(
+                    "${builtin.id} 滚动外壳必须用 100vh 定高（height:100% 会塌陷 ⇒ 画框无滚动、翻页失效）",
+                    css.contains("100vh")
+                )
+            }
             // 装饰带高度预算（蓝图：页眉/页脚各 ≤15% 视口高）：除满高容器（100vh）外，
             // 不得出现 >15vh 的装饰块——插画/装饰带挤占正文正是 archive 观感最大的失分点。
             VH_LENGTH.findAll(css).forEach { match ->
@@ -159,6 +169,25 @@ class ReaderBuiltinTemplateCatalogTest {
                 css.contains("--md-font-size") && css.contains("--md-line-height")
             )
         }
+    }
+
+    @Test
+    fun `首批 11 套齐备且两条渲染路径都在`() {
+        // 资产是"静默少一套"的高发区（打包漏带/改名错配都不会让编译失败）⇒ 逐 id 点到
+        val loaded = load().templates
+        val ids = loaded.map { it.id }.toSet()
+        val required = setOf(
+            "builtin.neon-night",   // A1 旗舰（暗色默认）
+            "builtin.minimal-tech", // A4 极简科技（浅色默认，SP-06）
+            "builtin.terminal", "builtin.glass", "builtin.cyber-city",
+            "builtin.data-stream",  // A6 滚动型
+            "builtin.minimal-ink", "builtin.ink", "builtin.star-chart",
+            "builtin.pixel-grid", "builtin.paper-scroll"
+        )
+        assertEquals("缺失内置模板：${required - ids}", emptySet<String>(), required - ids)
+        assertTrue("首批不得少于 11 套（当前 ${ids.size}）", ids.size >= 11)
+        assertEquals("至少两套滚动模板（scroll 契约需被多套覆盖）", 2, loaded.count { it.isScroll })
+        assertEquals("每套都必须附上来源声明", loaded.size, loaded.count { it.sources.isNotBlank() })
     }
 
     @Test

@@ -151,12 +151,20 @@ class ReaderTemplateRuntimeContractTest {
         )
         assertTrue(
             "自研回退须纵移（用错轴＝点翻页没反应）",
-            flow.contains("slot.scrollTop = target * (slot.clientHeight || 1)")
+            flow.contains("container.scrollTop = target * visible")
         )
-        assertTrue("分栏模板才横移", flow.contains("slot.scrollLeft = target * (slot.clientWidth || 1)"))
+        assertTrue("分栏模板才横移", flow.contains("container.scrollLeft = target * visible"))
         assertTrue(
             "页码必须读容器实际滚动位置（回读静态 config.pageIndex ⇒ 翻页后页码不变、边界判据失真）",
             flow.contains("function scrollIndex(") && flow.contains("scrollIndex(slot.scrollTop, visible)")
+        )
+        assertTrue(
+            "页码必须四舍五入（scrollTop 是小数：floor(782.x/783)=0 ⇒ 已翻页却判成第 1 页，2026-10-10 铁证）",
+            flow.contains("return isFinite(value) ? Math.round(value) : 0;")
+        )
+        assertFalse(
+            "不得再出现 floor(scrollTop/visible) 这类不容错算法",
+            flow.contains("Math.floor(scrollTop / visible)")
         )
     }
 

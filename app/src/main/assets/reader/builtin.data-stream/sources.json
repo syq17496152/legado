@@ -1,0 +1,8 @@
+{
+  "id": "builtin.data-stream",
+  "name": "数据流",
+  "author": "WeAgentChat / Legado（自研）",
+  "license": "随应用分发（自研素材）",
+  "assets": [],
+  "note": "零外部素材：数据带纹理、掩膜与入场动效全部由自研 CSS 实现，并提供 prefers-reduced-motion 静默分支；无第三方 IP 素材、无网络请求。"
+}
