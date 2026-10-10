@@ -86,31 +86,57 @@ object MdRichRenderInjector {
         if (!wantMermaid && !wantMath && !wantHighlight) {
             return Injection(css = css, script = "")
         }
-        val script = buildString {
-            append("(function(){")
-            append("var status={done:false,mermaid:0,math:0,code:0,error:null};")
-            append("window.$StatusGlobal=status;")
-            append("function markFallback(el,kind){")
-            append("if(!el||!el.classList)return;")
-            append("el.classList.add('md-rich-fallback');")
-            append("el.setAttribute('data-md-fallback',kind);")
-            append("}")
-            if (wantMermaid) {
-                append(assets.mermaidJs)
-                append(buildMermaidRuntime(options))
-            }
-            if (wantMath) {
-                append(assets.katexJs)
-                append(buildKatexRuntime(options))
-            }
-            if (wantHighlight) {
-                append(assets.highlightJs)
-                append(buildHighlightRuntime())
-            }
-            append(buildDriver(wantMermaid, wantMath, wantHighlight, options.timeoutMillis))
-            append("})();")
-        }
+        val script = vendorScripts(wantMermaid, wantMath, wantHighlight, assets).joinToString("") +
+            runtimeScript(options, wantMermaid, wantMath, wantHighlight)
         return Injection(css = css, script = script)
+    }
+
+    /**
+     * 厂商运行时脚本（**必须各自作为顶层脚本执行**，绝不能包进函数或 IIFE）。
+     *
+     * ⚠️ 硬事实（2026-10-10 真机铁证）：`mermaid.min.js` 是 esbuild 打包的经典脚本，形如
+     * `"use strict";var __esbuild_esm_mermaid=(()=>{...})()`，其**尾部**再读
+     * `globalThis.__esbuild_esm_mermaid.default` 来挂 `window.mermaid`。这个 `var` 依赖
+     * **顶层（全局）作用域**；一旦被包进 `(function(){ ... })()`，`var` 变成函数作用域 ⇒ 尾部读到
+     * `undefined` ⇒ `TypeError: Cannot read properties of undefined (reading 'default')`，注入整体失效。
+     * 因此宿主必须把它们作为**独立顶层脚本**逐条执行（`evaluateJavascript` 或独立 `<script>`）。
+     */
+    fun vendorScripts(
+        wantMermaid: Boolean,
+        wantMath: Boolean,
+        wantHighlight: Boolean,
+        assets: Assets
+    ): List<String> = buildList {
+        if (wantMermaid) assets.mermaidJs?.takeIf { it.isNotBlank() }?.let(::add)
+        if (wantMath) assets.katexJs?.takeIf { it.isNotBlank() }?.let(::add)
+        if (wantHighlight) assets.highlightJs?.takeIf { it.isNotBlank() }?.let(::add)
+    }
+
+    /**
+     * 运行时与驱动脚本（**不含**厂商 JS 本体；须在 [vendorScripts] 之后执行）。
+     *
+     * 与 [build] 的关系：`build()` = 厂商脚本 + 本函数，二者拼接仅为向后兼容；
+     * 正确用法是宿主把两者**分开**顶层执行（见 [vendorScripts] 的说明）。
+     */
+    fun runtimeScript(
+        options: Options,
+        wantMermaid: Boolean,
+        wantMath: Boolean,
+        wantHighlight: Boolean
+    ): String = buildString {
+        append("(function(){")
+        append("var status={done:false,mermaid:0,math:0,code:0,error:null};")
+        append("window.$StatusGlobal=status;")
+        append("function markFallback(el,kind){")
+        append("if(!el||!el.classList)return;")
+        append("el.classList.add('md-rich-fallback');")
+        append("el.setAttribute('data-md-fallback',kind);")
+        append("}")
+        if (wantMermaid) append(buildMermaidRuntime(options))
+        if (wantMath) append(buildKatexRuntime(options))
+        if (wantHighlight) append(buildHighlightRuntime())
+        append(buildDriver(wantMermaid, wantMath, wantHighlight, options.timeoutMillis))
+        append("})();")
     }
 
     /** 把注入片段包成可直接追加到文档末尾的 HTML（宿主只需 `appendChild`/字符串拼接）。 */

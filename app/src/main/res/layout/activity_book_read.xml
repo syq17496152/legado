@@ -15,6 +15,13 @@
         android:layout_height="match_parent"
         android:visibility="gone" />
 
+    <!-- 文本富渲染承载面（阶段 3.1/3.2）：md / 含富渲染元素的文本类内容走 WebView -->
+    <io.legado.app.ui.book.read.textweb.TextRichReadView
+        android:id="@+id/text_rich_read_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <View
         android:id="@+id/text_menu_position"
         android:layout_width="0dp"
