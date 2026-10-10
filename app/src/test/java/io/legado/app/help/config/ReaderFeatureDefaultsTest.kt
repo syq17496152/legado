@@ -1,6 +1,7 @@
 package io.legado.app.help.config
 
 import io.legado.app.constant.PreferKey
+import io.legado.app.model.localBook.epubcore.template.ReaderTemplateSelection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -23,5 +24,13 @@ class ReaderFeatureDefaultsTest {
     fun `偏好键与 PreferKey 单源一致且非空`() {
         assertEquals("mdRichRender", PreferKey.mdRichRender)
         assertFalse("键名不得为空，否则偏好读写会落到匿名键", PreferKey.mdRichRender.isBlank())
+    }
+
+    @Test
+    fun `阅读页面模板默认值为跟随主题哨兵`() {
+        // 默认跟随主题（而非固定某套）：默认模板是暗色款，浅色主题下会与主题冲撞（SP-06）
+        assertEquals(ReaderTemplateSelection.FollowTheme, ReaderFeatureDefaults.READER_TEMPLATE_ID)
+        assertTrue("空串即「跟随主题」，非空则等于要求用户先选一套", ReaderFeatureDefaults.READER_TEMPLATE_ID.isBlank())
+        assertEquals("readerTemplate", PreferKey.readerTemplate)
     }
 }

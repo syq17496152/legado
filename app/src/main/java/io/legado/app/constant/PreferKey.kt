@@ -585,6 +585,9 @@ object PreferKey {
     // 文本富渲染（epub-md-rich-rendering 阶段 3.2）：md 内容走 WebView 富渲染面（mermaid/公式/代码高亮）。
     // 关闭 ⇒ 回落 canvas 的 <usehtml> HTML 渲染（可用但无 mermaid/公式）。
     const val mdRichRender = "mdRichRender"
+    // 阅读页面模板（epub-md-rich-rendering 阶段 4.8a）：当前应用的模板 id；
+    // 空串 = 「跟随主题」（按日夜取默认款，哨兵值单源 ReaderTemplateSelection.FollowTheme）。
+    const val readerTemplate = "readerTemplate"
     const val fastScrollerTouchTargetDp = "fastScrollerTouchTargetDp"
     const val readMenuAlpha = "readMenuAlpha"
     // 管理页背景透明度（ui-theme-governance-polish P6）：单 key 不分日夜（管理页日夜同源背景，

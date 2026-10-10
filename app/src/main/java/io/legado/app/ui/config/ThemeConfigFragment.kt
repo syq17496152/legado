@@ -156,6 +156,13 @@ class ThemeConfigFragment : ComposeSettingFragment() {
                             onClick = { startActivity<ShareNoteTemplateManageActivity>() }
                         ),
                         SettingActionSpec(
+                            key = KEY_READER_TEMPLATE_MANAGE,
+                            title = "阅读页面模板",
+                            summary = "管理阅读页外观模板（仅作用于在线正文 / 本地 txt / md）",
+                            searchKeys = listOf("页面模板", "阅读模板", "排版模板", "正文模板"),
+                            onClick = { startActivity<ReaderTemplateManageActivity>() }
+                        ),
+                        SettingActionSpec(
                             key = ConfigTag.COVER_CONFIG,
                             title = getString(R.string.cover_config),
                             summary = getString(R.string.cover_config_summary),
@@ -209,5 +216,6 @@ class ThemeConfigFragment : ComposeSettingFragment() {
         private const val KEY_BOOK_INFO_MANAGE = "book_info_manage"
         private const val KEY_BUBBLE_MANAGE = "bubble_manage"
         private const val KEY_SHARE_NOTE_TEMPLATE_MANAGE = "share_note_template_manage"
+        private const val KEY_READER_TEMPLATE_MANAGE = "reader_template_manage"
     }
 }

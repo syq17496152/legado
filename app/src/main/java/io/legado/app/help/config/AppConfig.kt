@@ -2605,6 +2605,19 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
         get() = appCtx.getPrefBoolean(PreferKey.mdRichRender, ReaderFeatureDefaults.MD_RICH_RENDER)
         set(value) = appCtx.putPrefBoolean(PreferKey.mdRichRender, value)
 
+    /**
+     * 当前应用的**阅读页面模板** id（epub-md-rich-rendering 阶段 4.8a）。
+     *
+     * 空串 = 「跟随主题」（默认值，见 [ReaderFeatureDefaults.READER_TEMPLATE_ID]）：
+     * 按当前日夜取默认款（浅色→素笺 / 暗色→霓虹夜行），实际生效 id 由
+     * `ReaderTemplateSelection.resolveId(...)` 解析（选中的模板被删除时回落主题默认，
+     * 不会出现"白屏无模板"）。
+     */
+    var readerTemplate: String
+        get() = appCtx.getPrefString(PreferKey.readerTemplate, ReaderFeatureDefaults.READER_TEMPLATE_ID)
+            ?: ReaderFeatureDefaults.READER_TEMPLATE_ID
+        set(value) = appCtx.putPrefString(PreferKey.readerTemplate, value)
+
     val progressBarBehavior: String?
         get() = appCtx.getPrefString(PreferKey.progressBarBehavior, "page")
 
