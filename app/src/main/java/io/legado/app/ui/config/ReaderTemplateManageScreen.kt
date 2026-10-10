@@ -58,7 +58,7 @@ internal fun ReaderTemplateManageScreen(
     val editText = stringResource(R.string.edit)
     AppPackageManageScreen(
         isNightMode = false,
-        summaryText = "管理阅读页模板：可应用、复制、编辑、导入导出与删除。模板作用于在线正文 / 本地 txt / md（不含出版 EPUB）。",
+        summaryText = "管理阅读页模板：可应用、复制、编辑、导入导出与删除。当前作用于本地 Markdown 阅读；在线正文 / txt 随文本渲染模式一并开放（出版 EPUB 不适用）。",
         addText = "添加模板",
         onSwitchDayNight = {},
         onAdd = onAddClick,

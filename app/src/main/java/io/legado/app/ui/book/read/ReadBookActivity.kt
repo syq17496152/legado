@@ -95,10 +95,12 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.book.update
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.config.ReaderTemplateManager
 import io.legado.app.help.config.BubblePackageManager
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
 import io.legado.app.help.config.ShareNoteTemplateManager
+import io.legado.app.model.localBook.epubcore.template.EpubReaderTemplate
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.readaloud.ReadAloudPlaybackState
@@ -136,6 +138,7 @@ import io.legado.app.model.reader.render.TextRange
 import io.legado.app.ui.book.read.textweb.AssetTextReader
 import io.legado.app.ui.book.read.textweb.TextRichContentProbe
 import io.legado.app.ui.book.read.textweb.TextRichHtmlComposer
+import io.legado.app.ui.book.read.textweb.TemplateRenderBackend
 import io.legado.app.ui.book.read.textweb.TextRichRenderBackend
 import io.legado.app.model.localBook.epubcore.layout.EpubCoreLayoutConfig
 import io.legado.app.model.localBook.epubcore.web.EpubWebSelectionAction
@@ -775,7 +778,9 @@ class ReadBookActivity : BaseReadBookActivity(),
         binding.readAloudPlayerPanel.setForegroundActive(false)
         autoPageStop()
         backupJob?.cancel()
-        if (textRichActive) {
+        if (templateActive) {
+            saveTemplatePosition()
+        } else if (textRichActive) {
             saveTextRichPosition()
         }
         ReadBook.upReadTime(forceWidgetUpdate = true)
@@ -2170,6 +2175,28 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
             return
         }
+        if (templateActive) {
+            // 模板沙箱跨源 ⇒ 翻页必须下指令给沙箱（宿主改不了它的滚动），边界判据用沙箱回发的页码
+            val backend = templateBackend
+            when (direction) {
+                PageDirection.NEXT ->
+                    if (backend == null || backend.edge().atBottom) {
+                        ReadBook.moveToNextChapter(true)
+                    } else {
+                        backend.pageNext()
+                    }
+
+                PageDirection.PREV ->
+                    if (backend == null || backend.edge().atTop) {
+                        ReadBook.moveToPrevChapter(true)
+                    } else {
+                        backend.pagePrev()
+                    }
+
+                else -> Unit
+            }
+            return
+        }
         if (textRichActive) {
             val backend = textRichBackend
             val viewport = binding.readView.height.coerceAtLeast(1)
@@ -2281,7 +2308,12 @@ class ReadBookActivity : BaseReadBookActivity(),
     ) {
         lifecycleScope.launch {
             if (isTextRichMode()) {
-                loadTextRichContentAwait(relativePosition, resetPageOffset, success)
+                // 阶段 4.14：启用页面模板时走模板沙箱面（同一 WebView 承载位），否则走文本富渲染面
+                if (ensureTemplateAwait() != null) {
+                    loadTemplateContentAwait(relativePosition, resetPageOffset, success)
+                } else {
+                    loadTextRichContentAwait(relativePosition, resetPageOffset, success)
+                }
                 return@launch
             }
             if (isEpubCoreMode()) {
@@ -2322,7 +2354,11 @@ class ReadBookActivity : BaseReadBookActivity(),
         success: (() -> Unit)?
     ) = withContext(Main.immediate) {
         if (isTextRichMode()) {
-            loadTextRichContentAwait(relativePosition, resetPageOffset, success)
+            if (ensureTemplateAwait() != null) {
+                loadTemplateContentAwait(relativePosition, resetPageOffset, success)
+            } else {
+                loadTextRichContentAwait(relativePosition, resetPageOffset, success)
+            }
             return@withContext
         }
         if (isEpubCoreMode()) {
@@ -2356,6 +2392,11 @@ class ReadBookActivity : BaseReadBookActivity(),
     }
 
     override fun upPageAnim(upRecorder: Boolean) {
+        if (templateActive) {
+            // 样式/主题变更：模板面重载当前章（日夜切换会换生效模板，故需重解析）
+            reloadTemplateCurrent()
+            return
+        }
         if (textRichActive) {
             // 样式/主题变更：富渲染面重载当前章（字号/行高/昼夜经主题变量重新注入）
             reloadTextRichCurrent()
@@ -2374,6 +2415,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         epubCoreActive = active
         if (active) {
             switchTextRich(false)
+            switchTemplate(false)
         }
         updateRenderSurface()
         if (!active) {
@@ -2412,14 +2454,32 @@ class ReadBookActivity : BaseReadBookActivity(),
     /** 三个渲染面（canvas / EPUB WebView / 文本富渲染 WebView）互斥可见。 */
     private fun updateRenderSurface() = binding.run {
         epubReadView.isVisible = epubCoreActive
-        textRichReadView.isVisible = textRichActive
-        readView.isVisible = !epubCoreActive && !textRichActive
+        textRichReadView.isVisible = textRichActive || templateActive
+        readView.isVisible = !epubCoreActive && !textRichActive && !templateActive
+    }
+
+    /** 模板面与文本富渲染面**共用同一个 WebView 承载位**，二者互斥（同屏只允许一个面）。 */
+    private fun switchTemplate(active: Boolean) {
+        if (templateActive == active) return
+        templateActive = active
+        if (active) {
+            if (textRichActive) switchTextRich(false)
+            binding.readView.cancelSelect(true)
+        } else {
+            templateBackend?.dispose()
+            templateBackend = null
+            templateRestorePending = false
+            binding.textRichReadView.removeAllViews()
+        }
+        updateRenderSurface()
     }
 
     private fun switchTextRich(active: Boolean) {
         if (textRichActive == active) return
         textRichActive = active
         if (active) {
+            // 两面共用同一 WebView 承载位 ⇒ 互斥（否则两个 WebView 会同时挂在同一容器里）
+            if (templateActive) switchTemplate(false)
             binding.readView.cancelSelect(true)
         } else {
             textRichBackend?.dispose()
@@ -2629,6 +2689,215 @@ class ReadBookActivity : BaseReadBookActivity(),
         saveTextRichPosition()
         textRichRestorePending = true
         backend.render(ref, null, textRichRenderConfig())
+    }
+
+    // === 阅读页模板（epub-md-rich-rendering 阶段 4.14 收口）===
+
+    private var templateActive = false
+    private var templateBackend: TemplateRenderBackend? = null
+    private var templateResolved: EpubReaderTemplate? = null
+    private var templateResolvedKey: String? = null
+    private var templateRestorePending = false
+    private var templateLoading = false
+
+    /**
+     * 解析当前书该用哪套模板（含内容本身）。
+     *
+     * **必须与"开关 + 日夜 + 库内容"同批判定**：三者任一变化都会换模板 ⇒ 缓存键含日夜；
+     * 开关关闭或无可用模板一律返回 null（⇒ 完全走既有路径，无残留）（4.9 语义）。
+     */
+    private suspend fun ensureTemplateAwait(): EpubReaderTemplate? {
+        val book = ReadBook.book ?: return null
+        if (!ReaderTemplateManager.templatesEnabled()) {
+            templateResolvedKey = null
+            templateResolved = null
+            return null
+        }
+        val key = "${book.bookUrl}|${AppConfig.isNightTheme}"
+        if (templateResolvedKey == key) return templateResolved
+        val resolved = withContext(IO) {
+            runCatching { ReaderTemplateManager.effectiveTemplate(AppConfig.isNightTheme) }.getOrNull()
+        }
+        templateResolvedKey = key
+        templateResolved = resolved
+        AppLog.putDebugWithTag(
+            AppLog.TAG_READER_TEMPLATE,
+            "resolve: effective=${resolved?.id ?: "none"}, night=${AppConfig.isNightTheme}"
+        )
+        return resolved
+    }
+
+    private fun templateValues(): TemplateRenderBackend.ReaderValues {
+        val chapterSize = ReadBook.chapterSize.coerceAtLeast(1)
+        val progress = (((ReadBook.durChapterIndex + 1) * 100) / chapterSize).coerceIn(0, 100)
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        return TemplateRenderBackend.ReaderValues(
+            dark = AppConfig.isNightTheme,
+            bookName = ReadBook.book?.name.orEmpty(),
+            chapterTitle = textRichChapterRef?.title.orEmpty(),
+            progressPercent = progress,
+            hour = hour
+        )
+    }
+
+    private fun ensureTemplateBackend(): TemplateRenderBackend {
+        templateBackend?.let { return it }
+        val backend = TemplateRenderBackend(
+            context = this,
+            templateProvider = { templateResolved },
+            chapterProvider = { ref ->
+                textRichPrepared
+                    ?.takeIf { ref.chapterIndex == textRichPreparedIndex }
+                    ?.let { TemplateRenderBackend.Chapter(it.html, it.hasMermaid, it.hasMath) }
+            },
+            valuesProvider = ::templateValues,
+            container = { view ->
+                // 与文本富渲染面同一挂载位；只在未挂载时 add（重复 remove/add 会中断页面加载）
+                if (view.parent == null) {
+                    binding.textRichReadView.addView(view)
+                }
+            }
+        )
+        backend.attach(object : RenderHost {
+            override fun onRendered(token: RenderToken, chapterIndex: Int, pageCount: Int) {
+                onTemplateRendered(chapterIndex, pageCount)
+            }
+
+            override fun onReMeasured(token: RenderToken, chapterIndex: Int, pageCount: Int) {
+                upSeekBarProgress()
+            }
+
+            override fun onSelection(range: TextRange?) = Unit
+
+            override fun onProgress(position: ReadingPosition) = Unit
+
+            override fun onError(token: RenderToken?, failure: RenderFailure, error: Throwable?) {
+                // 模板异常/超时/引擎不可用 ⇒ 回落既有渲染（绝不把用户留在白屏或空页）
+                AppLog.putDebugWithTag(AppLog.TAG_READER_TEMPLATE, "template render error: $failure")
+                switchTemplate(false)
+                binding.readView.upContent(0, true)
+            }
+        })
+        binding.textRichReadView.onTap = ::onTextRichTap
+        templateBackend = backend
+        return backend
+    }
+
+    /**
+     * 载入并渲染模板章节。
+     *
+     * 正文仍取"归一化文本渲染文档"（`<usehtml>` 内层正文 + 富渲染标注），
+     * 但**排版与外观交给模板**：正文进模板的 `data-reader-flow="body"` 槽位，
+     * mermaid/公式由沙箱内的注入器渲染。
+     */
+    private suspend fun loadTemplateContentAwait(
+        relativePosition: Int,
+        resetPageOffset: Boolean,
+        success: (() -> Unit)?
+    ) {
+        val book = ReadBook.book
+        if (book == null) {
+            success?.invoke()
+            return
+        }
+        val index = ReadBook.durChapterIndex
+        if (templateLoading ||
+            (templateActive && textRichPreparedIndex == index && templateBackend != null)
+        ) {
+            if (relativePosition == 0) upSeekBarProgress()
+            loadStates = false
+            success?.invoke()
+            return
+        }
+        templateLoading = true
+        try {
+            val chapter = withContext(IO) { appDb.bookChapterDao.getChapter(book.bookUrl, index) }
+            val prepared = chapter?.let {
+                withContext(IO) {
+                    runCatching { TextRichContentProbe.prepare(LocalBook.getContent(book, it)) }.getOrNull()
+                }
+            }
+            if (chapter == null || prepared == null) {
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_READER_TEMPLATE,
+                    "prepare unavailable (chapter=${chapter != null}, prepared=${prepared != null}) ⇒ 回落文本富渲染"
+                )
+                switchTemplate(false)
+                loadTextRichContentAwait(relativePosition, resetPageOffset, success)
+                return
+            }
+            AppLog.putDebugWithTag(
+                AppLog.TAG_READER_TEMPLATE,
+                "prepare: chapter=$index, mermaid=${prepared.hasMermaid}, math=${prepared.hasMath}, " +
+                        "htmlLen=${prepared.html.length}, template=${templateResolved?.id}"
+            )
+            textRichPrepared = prepared
+            textRichPreparedIndex = index
+            textRichChapterRef = ChapterRef(index, chapter.url, chapter.title)
+            textRichChapterStart = chapter.start
+            textRichChapterEnd = chapter.end
+            templateRestorePending = !resetPageOffset
+            switchTemplate(true)
+            val backend = ensureTemplateBackend()
+            if (resetPageOffset) {
+                templateRestorePending = false
+                backend.gotoPage(0)
+            }
+            val ref = textRichChapterRef
+                ?: run {
+                    switchTemplate(false)
+                    binding.readView.upContent(relativePosition, resetPageOffset)
+                    return
+                }
+            backend.render(ref, null, textRichRenderConfig())
+            if (relativePosition == 0) upSeekBarProgress()
+            loadStates = false
+            success?.invoke()
+        } finally {
+            templateLoading = false
+        }
+    }
+
+    private fun onTemplateRendered(chapterIndex: Int, pageCount: Int) {
+        val backend = templateBackend ?: return
+        if (templateRestorePending) {
+            templateRestorePending = false
+            val start = textRichChapterStart
+            val end = textRichChapterEnd
+            if (start != null && end != null && end > start && pageCount > 0) {
+                val ratio = ((ReadBook.durChapterPos - start).toFloat() / (end - start)).coerceIn(0f, 1f)
+                backend.gotoPage((ratio * pageCount).toInt().coerceIn(0, pageCount - 1))
+            } else {
+                backend.gotoPage(0)
+            }
+        }
+        upSeekBarProgress()
+    }
+
+    /** 位置保存：同上（章内相对比例 ⇒ 字符偏移，不做像素级假换算）。 */
+    private fun saveTemplatePosition() {
+        val backend = templateBackend ?: return
+        val start = textRichChapterStart ?: return
+        val end = textRichChapterEnd ?: return
+        if (end <= start) return
+        val position = backend.exportPosition() as? ReadingPosition.Page ?: return
+        val pageCount = backend.currentPageCount().coerceAtLeast(1)
+        val ratio = ((position.pageIndex + position.inPageRatio) / pageCount).coerceIn(0f, 1f)
+        ReadBook.durChapterPos = (start + ratio * (end - start)).toInt()
+    }
+
+    /** 样式/主题变更后重载当前章（日夜切换会换生效模板 ⇒ 先重解析）。 */
+    private fun reloadTemplateCurrent() {
+        if (!templateActive) return
+        val backend = templateBackend ?: return
+        val ref = textRichChapterRef ?: return
+        saveTemplatePosition()
+        templateRestorePending = true
+        lifecycleScope.launch {
+            templateResolvedKey = null
+            ensureTemplateAwait()
+            backend.render(ref, null, textRichRenderConfig())
+        }
     }
 
     private fun loadEpubCoreContent(
@@ -3710,8 +3979,8 @@ class ReadBookActivity : BaseReadBookActivity(),
      * 更新进度条位置
      */
     private fun upSeekBarProgress() {
-        // 文本富渲染面没有 canvas 页索引 ⇒ 按章进度呈现，避免显示过期页号
-        if (textRichActive) {
+        // 文本富渲染/模板面没有 canvas 页索引 ⇒ 按章进度呈现，避免显示过期页号
+        if (textRichActive || templateActive) {
             binding.readMenu.setSeekPage(ReadBook.durChapterIndex)
             return
         }
@@ -5446,6 +5715,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
         clearRestoreProcessState()
         switchTextRich(false)
+        switchTemplate(false)
         super.onDestroy()
         epubCoreRequestSeq++
         epubCoreLoadJob?.cancel()
