@@ -133,6 +133,8 @@ import io.legado.app.help.book.isMarkdown
 import io.legado.app.help.md.MdRichRenderInjector
 import io.legado.app.model.CacheBook
 import io.legado.app.model.localBook.LocalBook
+import io.legado.app.model.reader.render.BackendSelectionPolicy
+import io.legado.app.model.reader.render.BookRenderGovernor
 import io.legado.app.model.reader.render.ChapterRef
 import io.legado.app.model.reader.render.ReaderRenderBackend
 import io.legado.app.model.reader.render.ReaderError
@@ -453,6 +455,12 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
         }
     }
+
+    /**
+     * 书级渲染治理（S6 / AD-28② 接线）：一次「引擎不可用」即**整书**切 canvas，
+     * 避免后续每一章都重试崩溃的 WebView（那会导致逐章抖动 + 反复崩溃）。
+     */
+    private val renderGovernor = BookRenderGovernor()
 
     private var epubCoreActive = false
     private var epubCorePageCount = 0
@@ -2346,7 +2354,8 @@ class ReadBookActivity : BaseReadBookActivity(),
                 }
                 return@launch
             }
-            if (isEpubCoreMode()) {
+            // S6 书级原子降级（AD-28②）：该书已整体降级 ⇒ 一律走 canvas（不再触碰 WebView）
+            if (isEpubCoreMode() && epubCoreAllowedForCurrentBook()) {
                 if (relativePosition != 0) {
                     success?.invoke()
                     return@launch
@@ -2391,7 +2400,8 @@ class ReadBookActivity : BaseReadBookActivity(),
             }
             return@withContext
         }
-        if (isEpubCoreMode()) {
+        // S6 书级原子降级（AD-28②）：该书已整体降级 ⇒ 一律走 canvas（不再触碰 WebView）
+        if (isEpubCoreMode() && epubCoreAllowedForCurrentBook()) {
             if (relativePosition != 0) {
                 success?.invoke()
                 return@withContext
@@ -2439,6 +2449,30 @@ class ReadBookActivity : BaseReadBookActivity(),
 
     private fun isEpubCoreMode(): Boolean {
         return ReadBook.book?.isEpub == true && AppConfig.useExperimentalEpubCore
+    }
+
+    /**
+     * 该书是否已被 [renderGovernor] **整体**降级到 canvas/text（AD-28② 书级原子切换）。
+     *
+     * 未开局（`backendFor` 返回 null）⇒ false：**首章仍按默认后端尝试**，降级只可能发生在
+     * 真实失败之后（不在"还没试过"时就先降级）。
+     */
+    private fun isBookRenderDegradedToCanvas(bookKey: String?): Boolean {
+        val key = bookKey ?: return false
+        val backend = renderGovernor.backendFor(key) ?: return false
+        return backend != BackendSelectionPolicy.Backend.DIRECT_WEB
+    }
+
+    /**
+     * EPUB core 是否对**当前书**放行（S6 / AD-28② 书级原子降级）。
+     *
+     * 降级后**不再尝试 WebView**：否则每翻一章都会重撞一次崩溃的引擎（逐章抖动 + 反复闪回）。
+     * 这里顺带留痕（真机 L2 的**正面**证据：证明"后续章节确实走了 canvas"）。
+     */
+    private fun epubCoreAllowedForCurrentBook(): Boolean {
+        if (!isBookRenderDegradedToCanvas(ReadBook.book?.bookUrl)) return true
+        AppLog.putDebug("EPUB 书级降级 ⇒ 本章走 canvas（不再尝试 WebView）")
+        return false
     }
 
     private fun switchEpubCore(active: Boolean) = binding.run {
@@ -3056,6 +3090,23 @@ class ReadBookActivity : BaseReadBookActivity(),
             onFinish?.invoke()
             return
         }
+        // S6 书级原子降级（AD-28② 接线）：该书已整体降级到 canvas ⇒ **不再触碰 WebView**。
+        // 覆盖不经 upContent 漏斗的入口（字号/页面动画等重排）：有 fallback 交给调用方，
+        // 否则请 ReadBook 触发一次重载（其回调 upContent 已被同一书级闸门拦到 canvas ⇒ 无递归）。
+        if (isBookRenderDegradedToCanvas(book.bookUrl)) {
+            AppLog.putDebug("EPUB 书级降级生效 ⇒ 走 canvas: book=${book.name}")
+            switchEpubCore(false)
+            val canvasFallback = fallback
+            if (canvasFallback != null) canvasFallback() else ReadBook.relayoutCurrentContent("governor-canvas")
+            onFinish?.invoke()
+            return
+        }
+        // 开局/换书：书级后端粘性由 governor 维护（换书自动重置）
+        renderGovernor.startBook(
+            book.bookUrl,
+            if (book.isEpub) BackendSelectionPolicy.Backend.DIRECT_WEB
+            else BackendSelectionPolicy.Backend.CANVAS
+        )
         val chapterIndex = (targetChapterIndex ?: (ReadBook.durChapterIndex + relativePosition)).coerceIn(
             0,
             (ReadBook.chapterSize - 1).coerceAtLeast(0)
@@ -3188,6 +3239,15 @@ class ReadBookActivity : BaseReadBookActivity(),
                     if (it is ReaderError.BackendUnavailable) {
                         // 阶段 2.8 / AD-16：渲染进程崩溃（引擎不可用）⇒ **回落 canvas 标准排版并提示**，
                         // 而不是把用户丢在「本章渲染失败」页（此前该路径只静默降级，属缺口）。
+                        // S6 接线（AD-28②）：上报治理层 ⇒ **整书**原子降级，后续章节不再重试 WebView
+                        //（否则每章都撞一次崩溃的引擎 = 逐章抖动 + 反复闪回）。
+                        val outcome = renderGovernor.onChapterFailure(
+                            book.bookUrl, chapterIndex, RenderFailure.ENGINE_UNAVAILABLE
+                        )
+                        AppLog.putDebug(
+                            "EPUB 引擎不可用 ⇒ 书级降级: degraded=${outcome.degraded}, " +
+                                    "backend=${outcome.backend}, chapter=$chapterIndex"
+                        )
                         switchEpubCore(false)
                         toastOnUi(getString(R.string.epub_render_engine_fallback))
                         fallback?.invoke()
@@ -3475,6 +3535,9 @@ class ReadBookActivity : BaseReadBookActivity(),
     private fun reloadAfterEpubEngineChanged() {
         val book = ReadBook.book ?: return
         if (!book.isEpub) return
+        // 引擎开关变更 ⇒ 清掉书级降级状态：用户显式切换引擎后应重新按新引擎尝试
+        //（否则"上次崩溃降级到 canvas"会粘住，切换引擎也不生效 —— 看起来像引擎开关没用）
+        renderGovernor.dispose()
         cancelEpubCoreForegroundHard(book)
         cancelEpubCorePrefetchHard(book)
         EpubCoreProvider.clearBookCache(book)
@@ -5865,6 +5928,7 @@ class ReadBookActivity : BaseReadBookActivity(),
         clearRestoreProcessState()
         switchTextRich(false)
         switchTemplate(false)
+        renderGovernor.dispose()
         super.onDestroy()
         epubCoreRequestSeq++
         epubCoreLoadJob?.cancel()
