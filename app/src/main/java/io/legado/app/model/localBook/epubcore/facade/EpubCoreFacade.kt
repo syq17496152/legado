@@ -26,6 +26,7 @@ import io.legado.app.model.localBook.epubcore.web.EpubWebSelectionAction
 import io.legado.app.model.localBook.epubcore.web.EpubWebSelectionLayerSession
 import io.legado.app.model.localBook.epubcore.web.EpubWebSelectionPageContext
 import io.legado.app.model.localBook.epubcore.web.EpubWebSelectionPayload
+import io.legado.app.model.reader.render.ReaderError
 import io.legado.app.utils.GSON
 import io.legado.app.utils.MD5Utils
 import android.os.SystemClock
@@ -169,10 +170,17 @@ class EpubCoreFacade private constructor(
                 )
             }
         val readAt = SystemClock.elapsedRealtime()
-        val document = getWebLayoutSession(backgroundSlot).layout(
+        val layoutSession = getWebLayoutSession(backgroundSlot)
+        val document = layoutSession.layout(
             buildWebLayoutRequest(resolvedChapter, config, html)
         )
         if (document == null) {
+            if (layoutSession.rendererCrashed) {
+                // 阶段 2.8：渲染进程崩溃 ⇒ 重试无意义，且不得把降级页写盘（否则引擎恢复后仍见坏页）；
+                // 上抛可识别错误，由宿主回落 canvas 并提示（AD-16「引擎不可用」）。
+                AppLog.putDebug("EPUB 渲染进程崩溃（engine unavailable）：chapter=${chapter.index}")
+                throw ReaderError.BackendUnavailable("EPUB 渲染进程崩溃")
+            }
             return fallbackPages(
                 stage = EpubRenderFallbackPolicy.Stage.WEB_LAYOUT,
                 failure = EpubRenderFallbackPolicy.Failure.LAYOUT_ERROR,

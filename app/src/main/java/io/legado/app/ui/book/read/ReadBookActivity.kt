@@ -135,6 +135,7 @@ import io.legado.app.model.CacheBook
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.reader.render.ChapterRef
 import io.legado.app.model.reader.render.ReaderRenderBackend
+import io.legado.app.model.reader.render.ReaderError
 import io.legado.app.model.reader.render.ReadingPosition
 import io.legado.app.model.reader.render.RenderConfig
 import io.legado.app.model.reader.render.RenderFailure
@@ -3184,7 +3185,13 @@ class ReadBookActivity : BaseReadBookActivity(),
                     binding.epubReadView.clearLoading()
                     binding.epubReadView.clearBoundaryLoadingTurn()
                     AppLog.putDebug("EPUB core render failed: ${it.localizedMessage}", it)
-                    if (keepCurrentPageUntilReady && epubCoreActive) {
+                    if (it is ReaderError.BackendUnavailable) {
+                        // 阶段 2.8 / AD-16：渲染进程崩溃（引擎不可用）⇒ **回落 canvas 标准排版并提示**，
+                        // 而不是把用户丢在「本章渲染失败」页（此前该路径只静默降级，属缺口）。
+                        switchEpubCore(false)
+                        toastOnUi(getString(R.string.epub_render_engine_fallback))
+                        fallback?.invoke()
+                    } else if (keepCurrentPageUntilReady && epubCoreActive) {
                         toastOnUi((it.localizedMessage ?: it.toString()).take(120))
                     } else {
                         binding.epubReadView.layoutConfig = config
@@ -3208,6 +3215,10 @@ class ReadBookActivity : BaseReadBookActivity(),
         return try {
             loadEpubCorePagesOnce(book, chapterIndex, config)
         } catch (e: CancellationException) {
+            throw e
+        } catch (e: ReaderError.BackendUnavailable) {
+            // 阶段 2.8：渲染进程崩溃（引擎不可用）⇒ 同参数重试无意义（与
+            // EpubRenderFallbackPolicy「ENGINE_UNAVAILABLE 跳过 WEB_LAYOUT」同口径），直接上抛由宿主回落
             throw e
         } catch (throwable: Throwable) {
             AppLog.putDebug(

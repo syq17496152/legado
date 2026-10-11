@@ -47,7 +47,21 @@ class EpubWebLayoutSession(
     private var pendingToken: Long? = null
     private var pendingCompletion: ((EpubWebLayoutDocument?) -> Unit)? = null
 
+    @Volatile
+    private var rendererCrashedFlag = false
+
+    /**
+     * 最近一次布局是否因**渲染进程崩溃**（`onRenderProcessGone`）而失败（阶段 2.8）。
+     *
+     * 必须与普通布局失败区分：引擎崩溃时**同参数重试无意义**、且**不得**把降级结果写盘
+     * （否则引擎恢复后用户仍看到"本章渲染失败"页）⇒ 调用方据此上抛可识别错误，
+     * 由宿主回落 canvas 并提示（对应 `EpubRenderFallbackPolicy.Failure.ENGINE_UNAVAILABLE` 语义）。
+     */
+    val rendererCrashed: Boolean
+        get() = rendererCrashedFlag
+
     suspend fun layout(request: EpubWebLayoutRequest): EpubWebLayoutDocument? {
+        rendererCrashedFlag = false
         if (closed) return null
         if (request.html.isBlank() || request.viewportWidthPx <= 0 || request.viewportHeightPx <= 0) {
             return null
@@ -215,6 +229,8 @@ class EpubWebLayoutSession(
         }
 
         override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+            // 阶段 2.8：把"引擎崩溃"这一事实带出会话（区别于普通布局失败），供上层回落 canvas
+            rendererCrashedFlag = true
             if (webView === view) {
                 webView = null
             }

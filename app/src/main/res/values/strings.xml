@@ -3240,6 +3240,7 @@ Selected text or question:
     <string name="dlna_setting_session_memory_only">本会话不写入共享缓存</string>
     <string name="dlna_setting_shared_managed_fmt">由播放器视频缓存设置控制（当前 %1$d MB）</string>
     <!-- 错误与降级 -->
+    <string name="epub_render_engine_fallback">阅读组件异常，已切回基础排版继续阅读</string>
     <string name="dlna_error_no_wifi">请先连接 Wi-Fi</string>
     <string name="dlna_error_no_ip">未获取到局域网 IP，请检查 Wi-Fi 或网络设置</string>
     <string name="dlna_error_multi_ip">检测到多个网络接口，使用的是 %1$s；若电视连接失败请检查网络</string>
