@@ -51,6 +51,17 @@ class RenderBackendStateMachine(
     /** 该 token 是否为当前代际（晚到结果过滤：false ⇒ **必须丢弃**）。 */
     fun isCurrent(token: RenderToken): Boolean = token.generation == generation
 
+    /**
+     * 晚到异步结果准入（AD-28①：需**同时**校验「代际」与「开关」才可生效）。
+     *
+     * 只校验代际不够——用户在结果在途时关掉模板/富渲染开关，旧结果同样必须丢弃，
+     * 否则关开关后仍会被上一代结果「回写」到界面（表现为开关失灵）。
+     *
+     * @param featureEnabled 该功能当前是否仍开启（宿主读设置项得到）。
+     */
+    fun acceptsLateResult(token: RenderToken, featureEnabled: Boolean): Boolean =
+        featureEnabled && isCurrent(token)
+
     /** 开始准备渲染（Idle/Rendered/Failed/Switching → Preparing）。 */
     fun beginPrepare(): RenderToken {
         state = State.Preparing

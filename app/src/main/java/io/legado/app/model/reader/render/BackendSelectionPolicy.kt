@@ -63,6 +63,18 @@ object BackendSelectionPolicy {
     }
 
     /**
+     * 降级链的下一级（AD-16：`WebView → canvas → text → raw`；后端维度只到 `TEXT`，
+     * 再失败由 `EpubRenderFallbackPolicy` 的 RAW 兜底页承担，故 `TEXT` 为后端链终态）。
+     *
+     * 供 [BookRenderGovernor] 做**书级原子降级**（AD-28②）时取下一级。
+     */
+    fun degradeNext(current: Backend): Backend = when (current) {
+        Backend.DIRECT_WEB -> Backend.CANVAS
+        Backend.CANVAS -> Backend.TEXT
+        Backend.TEXT -> Backend.TEXT
+    }
+
+    /**
      * 内容态（与五态分类一一对应；**本层不复用 epubcore 枚举**，避免 model.reader 依赖 epubcore）。
      */
     enum class ContentMode {

@@ -1,5 +1,7 @@
 package io.legado.app.model.reader.render
 
+import kotlin.math.roundToInt
+
 /**
  * 统一坐标（epub-md-rich-rendering 阶段 2.9 / AD-14 修订版）。
  *
@@ -123,5 +125,21 @@ object ReadingPositionPolicy {
     fun anchorFromRatio(chapterIndex: Int, ratio: Float): ReadingPosition {
         val clamped = ratio.coerceIn(0f, 1f)
         return ReadingPosition.Page(chapterIndex = chapterIndex, pageIndex = 0, inPageRatio = clamped)
+    }
+
+    /**
+     * 由章内相对比例与**目标后端页数**推导页索引（XB.5「位置偏差 ≤1 页」的量化基准）。
+     *
+     * 口径：把「章内比例」按**页区间**线性铺开 ⇒ `round(ratio × (pageCount - 1))`。
+     * 该口径与「按页数均分」的朴素口径 `floor(ratio × pageCount)` 之差**恒 ≤1 页**
+     * （ratio∈[0,1]、pageCount≥1），这正是 XB.5 要求的量化保证
+     * （见 `RendererContractTest` 的「两种独立口径推页索引偏差不超过一页」）。
+     *
+     * @param pageCount 目标后端该章总页数；≤0（空章）返回 0。
+     */
+    fun pageIndexFromRatio(ratio: Float, pageCount: Int): Int {
+        if (pageCount <= 0) return 0
+        val clamped = ratio.coerceIn(0f, 1f)
+        return (clamped * (pageCount - 1)).roundToInt().coerceIn(0, pageCount - 1)
     }
 }
