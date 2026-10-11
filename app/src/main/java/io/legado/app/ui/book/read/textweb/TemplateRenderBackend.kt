@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.View
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
@@ -32,6 +33,7 @@ import io.legado.app.model.reader.render.RenderConfig
 import io.legado.app.model.reader.render.RenderFailure
 import io.legado.app.model.reader.render.RenderHost
 import io.legado.app.model.reader.render.RenderToken
+import io.legado.app.model.reader.render.RepaginationDebouncePolicy
 import io.legado.app.model.reader.render.TextRange
 import java.io.ByteArrayInputStream
 import java.io.Closeable
@@ -93,6 +95,9 @@ class TemplateRenderBackend(
 
     private val handler = Handler(Looper.getMainLooper())
     private val assetReader = AssetTextReader(context)
+
+    /** 重测分页防抖（S11 / AD-28⑤）：多次 `remeasure` 请求合并为一次下发。 */
+    private val repagination = RepaginationDebouncePolicy()
 
     private var webView: WebView? = null
     private var host: RenderHost? = null
@@ -181,6 +186,8 @@ class TemplateRenderBackend(
         generation++
         val token = RenderToken(generation)
         currentChapter = chapter
+        // 换章复位防抖（S11）：不留上一章的悬空挂起到本章
+        repagination.reset()
         pageCount = 1
         pageIndex = (position as? ReadingPosition.Page)?.pageIndex ?: initialPageIndex
         reportedFirstPage = false
@@ -237,13 +244,36 @@ class TemplateRenderBackend(
         return token
     }
 
-    /** 模板页数由沙箱 `stable` 回发；宿主只做一次重测请求（内容已由沙箱自管）。 */
+    /** 模板页数由沙箱 `stable` 回发；宿主只做一次重测请求（内容已由沙箱自管）。
+     *
+     * S11 / AD-28⑤：**重测请求先过防抖**（尾沿合并）—— 富渲染注入完成、主题/字号变更、视口变化
+     * 等多个来源可能在短窗口内各来一次，直接透传会让沙箱**连续重排**、用户看到页码反复跳。
+     * 本方法只负责"排定一次延迟触发"；到点由 [remeasureTick] 真正下发（窗口已静默才发）。
+     */
     override fun remeasure(token: RenderToken) {
         if (token.generation != generation) return
-        runOnUI {
-            if (disposed || token.generation != generation) return@runOnUI
-            webView?.evaluateJavascript(ReaderTemplateHostDocument.postScript("remeasure"), null)
+        if (disposed) return
+        if (repagination.onRequest(SystemClock.elapsedRealtime())) {
+            handler.postDelayed(remeasureTick, RepaginationDebouncePolicy.DEFAULT_WINDOW_MS)
         }
+    }
+
+    /** 防抖到点：窗口内无新请求才真正下发 `remeasure`；否则继续等待（不重复排定）。
+     *
+     * ⚠️ 必须**显式标注类型** `Runnable`：体里自引用 `remeasureTick`（顺延时再排定）⇒
+     * 不标注会触发 Kotlin 递归类型推断错误（`Type checking has run into a recursive problem`）。
+     */
+    private val remeasureTick: Runnable = Runnable {
+        if (disposed) return@Runnable
+        if (!repagination.onTimer(SystemClock.elapsedRealtime())) {
+            handler.postDelayed(remeasureTick, RepaginationDebouncePolicy.DEFAULT_WINDOW_MS)
+            return@Runnable
+        }
+        AppLog.putDebugWithTag(
+            AppLog.TAG_READER_TEMPLATE,
+            "remeasure fired: chapter=${currentChapter?.chapterIndex}"
+        )
+        webView?.evaluateJavascript(ReaderTemplateHostDocument.postScript("remeasure"), null)
     }
 
     /** 模板排版由作者 CSS 决定 ⇒ 无可靠字符偏移映射，不假换算（AD-14）。 */
@@ -271,12 +301,14 @@ class TemplateRenderBackend(
     override fun dispose() {
         disposed = true
         generation++
+        repagination.reset()
         host = null
         close()
     }
 
     override fun close() {
         disposed = true
+        repagination.reset()
         handler.removeCallbacksAndMessages(null)
         runOnUI {
             val view = webView
@@ -586,8 +618,9 @@ class TemplateRenderBackend(
                     AppLog.TAG_READER_TEMPLATE,
                     "rich rendered: chapter=${currentChapter?.chapterIndex}, $state"
                 )
-                // 富渲染改变了正文高度 ⇒ 让沙箱重测并回发新的 stable
-                webView?.evaluateJavascript(ReaderTemplateHostDocument.postScript("remeasure"), null)
+                // 富渲染改变了正文高度 ⇒ 让沙箱重测并回发新的 stable。
+                // S11：走**防抖**入口（同一波注入的多次回声合并为一次重排），不再直接透传。
+                remeasure(RenderToken(generation))
             }
 
             state == StateInjectUnavailable -> AppLog.putDebugWithTag(

@@ -137,6 +137,19 @@ li.task-list-item input { margin-right: 0.4em; }
 .katex-display { overflow-x: auto; overflow-y: hidden; }
 .katex { font-size: 1.05em; }
 
+/* 占位高度预算（S11 / AD-28⑤「重测分页防抖：占位高度 + 防抖 + 离屏」）：
+   未渲染完成的 mermaid 先按预算占一个**估计高度**，使**首次分页**就接近终态，
+   从而压缩"首次分页 → 图渲染完成 → 重测分页"之间的可见位移（P-05 二次分页抖动）。
+   渲染完成后由注入器打 `data-md-rendered="mermaid"`（`MdRichRenderInjector.RenderedAttribute`），
+   本规则随即失效、改用图的实际高度。
+   ⚠️ 必须同时排除 `data-md-fallback`（渲染失败态）：`markFallback` **只打 fallback 标记不打
+   rendered 标记**，不排除的话失败图会永远占着 12em 空档（悬空占位）。
+   仅对 mermaid 预算：公式块与代码块的渲染前后高度本就接近（前者约一行，后者字数不变）。
+   预算可被模板以 `--rp-rich-placeholder-h` 覆盖（模板作者可据自身正文行高调参）。 */
+.mermaid:not([data-md-rendered]):not([data-md-fallback]) {
+  min-height: var(--rp-rich-placeholder-h, 12em);
+}
+
 /* 富渲染降级态：渲染失败时保留可读的代码块外观并给出视觉提示 */
 .md-rich-fallback {
   border-left: 3px solid var(--md-border-color);

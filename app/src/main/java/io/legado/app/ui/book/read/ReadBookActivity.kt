@@ -2475,6 +2475,22 @@ class ReadBookActivity : BaseReadBookActivity(),
         return false
     }
 
+    /**
+     * 模板/富渲染面是否对**当前书**放行（S11 / AD-28② 书级原子降级 + 熔断）。
+     *
+     * 与 [epubCoreAllowedForCurrentBook] 同一治理层（[renderGovernor]）：一次模板失败即**整书**切换，
+     * 之后**所有章节**都不再尝试模板面 —— 否则每翻一章都会重撞同一个坏模板（逐章闪回 = "降级反复"）。
+     * 这里顺带留痕（真机 L2 的**正面**证据：证明"降级后后续章节确实没走模板面"）。
+     */
+    private fun templateAllowedForCurrentBook(): Boolean {
+        if (!isBookRenderDegradedToCanvas(ReadBook.book?.bookUrl)) return true
+        AppLog.putDebugWithTag(
+            AppLog.TAG_READER_TEMPLATE,
+            "模板面书级降级 ⇒ 本章走文本富渲染/canvas（不再尝试模板）"
+        )
+        return false
+    }
+
     private fun switchEpubCore(active: Boolean) = binding.run {
         epubCoreActive = active
         if (active) {
@@ -2914,8 +2930,20 @@ class ReadBookActivity : BaseReadBookActivity(),
             override fun onProgress(position: ReadingPosition) = Unit
 
             override fun onError(token: RenderToken?, failure: RenderFailure, error: Throwable?) {
-                // 模板异常/超时/引擎不可用 ⇒ 回落既有渲染（绝不把用户留在白屏或空页）
-                AppLog.putDebugWithTag(AppLog.TAG_READER_TEMPLATE, "template render error: $failure")
+                // 模板异常/超时/引擎不可用 ⇒ 回落既有渲染（绝不把用户留在白屏或空页）。
+                // S11 / AD-28②：同时上报治理层做**书级原子降级 + 同章熔断**（15s 内同章只降一级），
+                // 之后所有章节由 [templateAllowedForCurrentBook] 拦下 ⇒ "降级不反复"。
+                val bookKey = ReadBook.book?.bookUrl
+                val outcome = if (bookKey != null) {
+                    renderGovernor.onChapterFailure(
+                        bookKey, textRichPreparedIndex.coerceAtLeast(0), failure
+                    )
+                } else null
+                AppLog.putDebugWithTag(
+                    AppLog.TAG_READER_TEMPLATE,
+                    "template render error: $failure, degraded=${outcome?.degraded}, " +
+                            "backend=${outcome?.backend}"
+                )
                 switchTemplate(false)
                 binding.readView.upContent(0, true)
             }
@@ -2943,6 +2971,9 @@ class ReadBookActivity : BaseReadBookActivity(),
         lastReadSurfaceKey = key
         // 首次记录（进入阅读页）不触发重载：此时内容会首次加载、本就按新契约走
         if (firstRecord) return
+        // S11：契约（总开关/选中模板/日夜/书）变了 ⇒ 清掉书级降级状态，按**新契约**重新尝试模板面。
+        // 否则"上一个模板失败降级到 canvas"会粘住 ⇒ 用户换了模板也回不到模板面（看起来像"换模板没用"）。
+        renderGovernor.dispose()
         templateResolvedKey = null
         templateResolved = null
         if (templateActive) switchTemplate(false)
@@ -2969,6 +3000,13 @@ class ReadBookActivity : BaseReadBookActivity(),
             return
         }
         val index = ReadBook.durChapterIndex
+        // S11 / AD-28②：该书已因模板失败被**书级原子降级** ⇒ 本章直接走文本富渲染面，
+        // 不再尝试模板（"降级不反复"）。闸门必须在"同章且后端在场即跳过"之前。
+        if (!templateAllowedForCurrentBook()) {
+            switchTemplate(false)
+            loadTextRichContentAwait(relativePosition, resetPageOffset, success)
+            return
+        }
         if (templateLoading ||
             (templateActive && textRichPreparedIndex == index && templateBackend != null)
         ) {
@@ -3011,6 +3049,9 @@ class ReadBookActivity : BaseReadBookActivity(),
             textRichChapterEnd = chapter.end
             templateRestorePending = !resetPageOffset
             switchTemplate(true)
+            // S11：模板面开局（书级后端 DIRECT_WEB）⇒ 后续失败经治理层**整书**降级；
+            // 同书重复调用保持书级粘性（不会把已降级的书又拉回模板面）。
+            renderGovernor.startBook(book.bookUrl, BackendSelectionPolicy.Backend.DIRECT_WEB)
             val backend = ensureTemplateBackend()
             if (resetPageOffset) {
                 templateRestorePending = false
