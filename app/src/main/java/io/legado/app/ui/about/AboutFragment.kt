@@ -99,6 +99,15 @@ class AboutFragment : ComposeSettingFragment() {
                             showMdFile(getString(R.string.license), "LICENSE.md")
                         },
                         action(
+                            key = KEY_THIRD_PARTY_NOTICE,
+                            title = getString(R.string.about_third_party_notice),
+                            summary = getString(R.string.about_third_party_notice_summary)
+                        ) {
+                            // 聚合载体：内置模板的字体（OFL，许可原文随包）/ 图片（CC0·PD，含署名与免责）
+                            // / 富渲染 JS 库（MIT·BSD）——逐项登记在各模板 sources.json（含 SHA-256）
+                            showMdFile(getString(R.string.about_third_party_notice), "NOTICE.md")
+                        },
+                        action(
                             key = KEY_DISCLAIMER,
                             title = getString(R.string.disclaimer),
                             summary = getString(R.string.about_disclaimer_summary)
@@ -263,6 +272,7 @@ class AboutFragment : ComposeSettingFragment() {
         private const val KEY_CHECK_UPDATE = "check_update"
         private const val KEY_UPDATE_ACCELERATION = "update_acceleration"
         private const val KEY_LICENSE = "license"
+        private const val KEY_THIRD_PARTY_NOTICE = "thirdPartyNotice"
         private const val KEY_DISCLAIMER = "disclaimer"
         private const val KEY_PRIVACY_POLICY = "privacyPolicy"
     }

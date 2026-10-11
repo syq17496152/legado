@@ -236,6 +236,8 @@
     <string name="about_update_hours_ago">checked %1$d h ago</string>
     <string name="about_privacy_policy_summary">What data the app reads, stores and shares</string>
     <string name="about_license_summary">Open-source licenses of bundled libraries</string>
+    <string name="about_third_party_notice">Third-party assets &amp; fonts</string>
+    <string name="about_third_party_notice_summary">Licenses and sources of bundled template art, fonts and script libraries</string>
     <string name="about_disclaimer_summary">Scope of responsibility and usage risks</string>
     <string name="about_build_info">Version %1$s (%2$s) · %3$s build</string>
     <string name="share">Share</string>

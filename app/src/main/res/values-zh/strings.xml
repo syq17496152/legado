@@ -235,6 +235,8 @@
     <string name="about_update_hours_ago">%1$d 小时前检查</string>
     <string name="about_privacy_policy_summary">应用读取、保存与分享的数据范围</string>
     <string name="about_license_summary">内置第三方库的开源许可条款</string>
+    <string name="about_third_party_notice">第三方素材与字体</string>
+    <string name="about_third_party_notice_summary">内置模板美术、字体与脚本库的许可与来源</string>
     <string name="about_disclaimer_summary">责任范围与使用风险说明</string>
     <string name="about_build_info">版本 %1$s（%2$s）· %3$s 构建</string>
     <string name="share">分享</string>
